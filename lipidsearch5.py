@@ -91,7 +91,7 @@ if uploaded_f is not None:
     # build the main page
     if confirm:
                     
-        st.subheader("1) Clean, Filter, Normalize & Explore Data")
+        st.subheader("1) Clean & Normalize Data")
         
         expand_raw_data = st.expander("Raw Data")
         with expand_raw_data:
@@ -189,6 +189,8 @@ if uploaded_f is not None:
                                 file_name='normalized_data.csv',
                                 mime='text/csv')
                             
+                        st.subheader("2) Scan Data & Run Quality Checks")
+                        
                         expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
                         with expand_box_plot:
                             box_plot_object = lp.BoxPlot(experiment, continuation_df.copy(deep=True))
@@ -235,7 +237,7 @@ if uploaded_f is not None:
                             elif mode == 'Comparison Mode':
                                 retention_time_object.plot_multi_retention()
                                 
-                        st.subheader("2) Detect & Remove Anomalies")
+                        st.subheader("3) Detect & Remove Anomalies")
                     
                         expand_corr = st.expander('Pairwise Correlation Analysis') 
                         with expand_corr:
@@ -287,7 +289,7 @@ if uploaded_f is not None:
                             pca_object = lp.PCA(continuation_df, experiment)
                             pca_object.plot_pca()
                             
-                        st.subheader("3) Analyze Data & Test Hypothesis")
+                        st.subheader("4) Analyze Data & Test Hypothesis")
                         
                         expand_vol_plot = st.expander("Volcano Plots - Test Hypothesis")
                         with expand_vol_plot:
@@ -389,6 +391,9 @@ if uploaded_f is not None:
                                 st.error('You need at least two conditions with more than one replicate to create a pathway visualization!')
                             
             if dataset_normality_status == 'No':
+                
+                st.subheader("2) Scan Data & Run Quality Checks")
+                
                 expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
                 with expand_box_plot:
                     box_plot_object = lp.BoxPlot(experiment, continuation_df.copy(deep=True))
@@ -435,7 +440,7 @@ if uploaded_f is not None:
                     elif mode == 'Comparison Mode':
                         retention_time_object.plot_multi_retention()
                         
-                st.subheader("2) Detect & Remove Anomalies")
+                st.subheader("3) Detect & Remove Anomalies")
             
                 expand_corr = st.expander('Pairwise Correlation Analysis') 
                 with expand_corr:
@@ -487,7 +492,7 @@ if uploaded_f is not None:
                     pca_object = lp.PCA(continuation_df, experiment)
                     pca_object.plot_pca()
                     
-                st.subheader("3) Analyze Data & Test Hypothesis")
+                st.subheader("4) Analyze Data & Test Hypothesis")
                 
                 expand_vol_plot = st.expander("Volcano Plots - Test Hypothesis")
                 with expand_vol_plot:
@@ -594,6 +599,8 @@ if uploaded_f is not None:
             
             st.warning('You do not have any internal standards. LipidCruncher cannot normalize your data!')
             
+            st.subheader("2) Scan Data & Run Quality Checks")
+            
             expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
             with expand_box_plot:
                 box_plot_object = lp.BoxPlot(experiment, continuation_df.copy(deep=True))
@@ -639,7 +646,7 @@ if uploaded_f is not None:
                 elif mode == 'Comparison Mode':
                     retention_time_object.plot_multi_retention()
                     
-            st.subheader("2) Detect & Remove Anomalies")
+            st.subheader("3) Detect & Remove Anomalies")
         
             expand_corr = st.expander('Pairwise Correlation Analysis') 
             with expand_corr:
@@ -691,7 +698,7 @@ if uploaded_f is not None:
                 pca_object = lp.PCA(continuation_df, experiment)
                 pca_object.plot_pca()
                 
-            st.subheader("3) Analyze Data & Test Hypothesis")
+            st.subheader("4) Analyze Data & Test Hypothesis")
             st.markdown("""
                         The Data Analysis & Hypothesis Testing submodule allows the user to run statistical analysis on the data and test their hypothesis. 
                         """)
