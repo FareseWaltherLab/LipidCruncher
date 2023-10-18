@@ -193,6 +193,7 @@ if uploaded_f is not None:
                         
                         expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
                         with expand_box_plot:
+                            st.write(continuation_df)
                             box_plot_object = lp.BoxPlot(experiment, continuation_df.copy(deep=True))
                             mean_area_df = box_plot_object.create_mean_area_df(box_plot_object.df, experiment.full_samples_list)
                             zero_values_percent_list = box_plot_object.calculate_missing_values_percentage(mean_area_df, experiment.full_samples_list)

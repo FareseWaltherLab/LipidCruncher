@@ -58,11 +58,11 @@ class FilteredData:
         plot.yaxis.axis_label_text_font_size = "15pt"
         plot.xaxis.major_label_text_font_size = "15pt"
         plot.yaxis.major_label_text_font_size = "15pt"
-        return plot
+        return plot, cov_df
     
-    def display_plot(self, plot):
+    def display_plot(self, plot, cov_df):
             st.bokeh_chart(plot)
-            csv_download = self.convert_df(self.df)
+            csv_download = self.convert_df(cov_df)
             st.download_button(
                 label="Download Data",
                 data=csv_download,
@@ -81,8 +81,8 @@ class FilteredData:
         auc = ['MeanArea[' + sample + ']' for sample in BQC_samples_list]
         prepared_df = self.prep_df(self.df.copy(deep=True), auc)
         x, y, species = self.prep_plot_inputs(prepared_df)
-        plot = self.render_plot(x, y, species)
-        self.display_plot(plot)
+        plot, cov_df = self.render_plot(x, y, species)
+        self.display_plot(plot, cov_df)
         reliable_data_percent = round(len(prepared_df[prepared_df['cov'] < 30]) / len(prepared_df) * 100, 1)
         if reliable_data_percent >= 80:
             st.info(str(reliable_data_percent) + "% of the datapoints are highly reliable (CoV < 30%).")
