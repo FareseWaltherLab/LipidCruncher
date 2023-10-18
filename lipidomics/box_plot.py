@@ -44,6 +44,6 @@ class BoxPlot:
         ax.set_title('Box Plot of Non-Zero Values')
         ax.set_xticklabels(a_full_samples_list, rotation=90)
         st.pyplot(fig)
-        return 
+        return
     
         
