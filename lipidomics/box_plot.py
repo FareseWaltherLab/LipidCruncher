@@ -1,49 +1,80 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-from pylab import plot, show, savefig, xlim, figure, ylim, legend, boxplot, setp, axes
-import numpy as np 
+import numpy as np
 
 class BoxPlot:
+    """
+    Class for generating and displaying box plots for lipidomics data analysis.
+    """
     
-    def __init__(self, an_experiment, a_df):
-        self.experiment = an_experiment 
-        self.df = a_df 
-        
+    def __init__(self):
+        pass
+
+    @staticmethod
     @st.cache_data
-    def create_mean_area_df(_self, a_df, a_full_samples_list):
-        return a_df[['MeanArea[' + sample + ']' for sample in a_full_samples_list]] # picks the 'MeanArea[s1]', ..., 'MeanArea[sN]' columns only
+    def create_mean_area_df(df, full_samples_list):
+        """
+        Creates a DataFrame containing only the 'MeanArea' columns from the provided DataFrame.
+
+        Args:
+            df (pd.DataFrame): The dataset to be processed.
+            full_samples_list (list[str]): List of sample names.
+
+        Returns:
+            pd.DataFrame: A DataFrame with the 'MeanArea' columns.
+        """
+        mean_area_cols = ['MeanArea[' + sample + ']' for sample in full_samples_list]
+        return df[mean_area_cols]
+
+    @staticmethod
+    @st.cache_data
+    def calculate_missing_values_percentage(mean_area_df):
+        """
+        Calculates the percentage of missing values for each sample in the experiment.
+
+        Args:
+            mean_area_df (pd.DataFrame): DataFrame containing mean area data for the samples.
+
+        Returns:
+            list: A list containing the percentage of missing values for each sample.
+        """
+        return [len(mean_area_df[mean_area_df[col] == 0]) / len(mean_area_df) * 100 for col in mean_area_df.columns]
     
-    @st.cache_data
-    def calculate_missing_values_percentage(_self, a_mean_area_df, a_full_samples_list):
-        return [len(a_mean_area_df[a_mean_area_df['MeanArea[' + sample + ']'] == 0]) / len(a_mean_area_df) * 100 for sample in a_full_samples_list]
-        
-    @st.cache_data
-    def plot_missing_values(_self, a_full_samples_list, a_zero_values_percent_list):
+    @staticmethod
+    def plot_missing_values(full_samples_list, zero_values_percent_list):
+        """
+        Plots a bar chart of missing values percentage for each sample.
+
+        Args:
+            full_samples_list (list[str]): List of sample names.
+            zero_values_percent_list (list[float]): List of missing value percentages for each sample.
+        """
         plt.rcdefaults()
         fig, ax = plt.subplots()
-        y = a_full_samples_list
-        ax.barh(y, a_zero_values_percent_list)
+        ax.barh(full_samples_list, zero_values_percent_list)
         ax.set_xlabel('Percentage of Missing Values')
         ax.set_ylabel('Sample')
         ax.set_title('Missing Values Distribution')
         st.pyplot(fig)
-        return 
-    
-    @st.cache_data
-    def plot_box_plot(_self, a_mean_area_df, a_full_samples_list):
-        x = []
-        for sample in a_full_samples_list:
-            x.append(list(np.log10(a_mean_area_df[a_mean_area_df['MeanArea[' + sample + ']'] > 0]['MeanArea[' + sample + ']'].values)))
+        return fig
+
+    @staticmethod
+    def plot_box_plot(mean_area_df, full_samples_list):
+        """
+        Plots a box plot for the non-zero values in the mean area DataFrame.
+
+        Args:
+            mean_area_df (pd.DataFrame): DataFrame containing mean area data for the samples.
+            full_samples_list (list[str]): List of sample names.
+        """
+        log_transformed_data = [list(np.log10(mean_area_df[col][mean_area_df[col] > 0])) for col in mean_area_df.columns]
         
         plt.rcdefaults()
         fig, ax = plt.subplots()
-        x_ticks = np.arange(len(a_full_samples_list))
-        plt.boxplot(x)
+        plt.boxplot(log_transformed_data)
         ax.set_xlabel('Sample')
-        ax.set_ylabel('log10(AUC)')
-        ax.set_title('Box Plot of Non-Zero Values')
-        ax.set_xticklabels(a_full_samples_list, rotation=90)
+        ax.set_ylabel('log10(Concentration)')
+        ax.set_title('Box Plot of Non-Zero Concentrations')
+        ax.set_xticklabels(full_samples_list)
         st.pyplot(fig)
-        return
-    
-        
+        return fig
