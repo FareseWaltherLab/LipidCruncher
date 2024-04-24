@@ -485,14 +485,14 @@ def display_box_plots(normalized_df, experiment):
         mean_area_df = lp.BoxPlot.create_mean_area_df(visualization_df, experiment.full_samples_list)
         zero_values_percent_list = lp.BoxPlot.calculate_missing_values_percentage(mean_area_df)
         fig = lp.BoxPlot.plot_missing_values(experiment.full_samples_list, zero_values_percent_list)
-        svg_data = plt_plot_to_svg(fig)  # Convert plot to SVG
-        st.download_button("Download SVG", svg_data, file_name="missing_values_plot.svg", mime="image/svg+xml")
+        #svg_data = plt_plot_to_svg(fig)  # Convert plot to SVG
+        #st.download_button("Download SVG", svg_data, file_name="missing_values_plot.svg", mime="image/svg+xml")
 
         st.write('--------------------------------------------------------------------------------')
 
         fig = lp.BoxPlot.plot_box_plot(mean_area_df, experiment.full_samples_list)
-        svg_data = plt_plot_to_svg(fig)  # Convert plot to SVG
-        st.download_button("Download SVG", svg_data, file_name="box_plot.svg", mime="image/svg+xml")
+        #svg_data = plt_plot_to_svg(fig)  # Convert plot to SVG
+        #st.download_button("Download SVG", svg_data, file_name="box_plot.svg", mime="image/svg+xml")
 
 def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
     """
@@ -515,13 +515,13 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(data_df, experiment, bqc_sample_index)
             
             st.bokeh_chart(scatter_plot)
-            svg_data = bokeh_plot_as_svg(scatter_plot)
-            st.download_button(
-                label="Download SVG",
-                data=svg_data,
-                file_name="scatter_plot.svg",
-                mime="image/svg+xml"
-            )
+            #svg_data = bokeh_plot_as_svg(scatter_plot)
+            #st.download_button(
+                #label="Download SVG",
+                #data=svg_data,
+                #file_name="scatter_plot.svg",
+                #mime="image/svg+xml"
+            #)
 
             csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
             st.download_button(
@@ -574,9 +574,9 @@ def integrate_retention_time_plots(continuation_df):
         for plot, retention_df in plots:
             st.bokeh_chart(plot)
             csv_download = convert_df(retention_df)
-            svg = bokeh_plot_as_svg(plot)  # Using the refactored method to get SVG
+            #svg = bokeh_plot_as_svg(plot)  # Using the refactored method to get SVG
             st.download_button(label="Download Data", data=csv_download, file_name='retention_plot.csv', mime='text/csv')
-            st.download_button(label="Download SVG", data=svg, file_name='retention_plot.svg', mime='image/svg+xml')
+            #st.download_button(label="Download SVG", data=svg, file_name='retention_plot.svg', mime='image/svg+xml')
 
     elif mode == 'Comparison Mode':
         # Handling comparison mode for retention time plots
@@ -587,9 +587,9 @@ def integrate_retention_time_plots(continuation_df):
             if plot:
                 st.bokeh_chart(plot)
                 csv_download = convert_df(retention_df)
-                svg = bokeh_plot_as_svg(plot)  # Using the refactored method to get SVG
+                #svg = bokeh_plot_as_svg(plot)  # Using the refactored method to get SVG
                 st.download_button(label="Download Data", data=csv_download, file_name='Retention_Time_Comparison.csv', mime='text/csv')
-                st.download_button(label="Download SVG", data=svg, file_name='Retention_Time_Comparison.svg', mime='image/svg+xml')
+                #st.download_button(label="Download SVG", data=svg, file_name='Retention_Time_Comparison.svg', mime='image/svg+xml')
 
 def display_retention_time_plots(continuation_df):
     """
@@ -648,8 +648,8 @@ def analyze_pairwise_correlation(continuation_df, experiment):
             correlation_df, v_min, thresh = lp.Correlation.compute_correlation(mean_area_df, sample_type)
             fig = lp.Correlation.render_correlation_plot(correlation_df, v_min, thresh, experiment.conditions_list[condition_index])
             st.pyplot(fig)
-            svg = plt_plot_to_svg(fig)  # Convert matplotlib figure to SVG using the existing function
-            st.download_button(label="Download SVG", data=svg, file_name=f'Correlation_Matrix_{experiment.conditions_list[condition_index]}.svg', mime="image/svg+xml")
+            #svg = plt_plot_to_svg(fig)  # Convert matplotlib figure to SVG using the existing function
+            #st.download_button(label="Download SVG", data=svg, file_name=f'Correlation_Matrix_{experiment.conditions_list[condition_index]}.svg', mime="image/svg+xml")
             
             st.write('Find the exact correlation coefficients in the table below:')
             st.write(correlation_df)
@@ -703,18 +703,6 @@ def display_pca_analysis(continuation_df, experiment):
             mime="text/csv"
         )
 
-        # Save and download the plot as SVG
-        with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as temp_svg_file:
-            export_svg(pca_plot, filename=temp_svg_file.name)
-            temp_svg_file.seek(0)
-            svg_data = temp_svg_file.read()
-            st.download_button(
-                label="Download SVG",
-                data=svg_data,
-                file_name="PCA_plot.svg",
-                mime="image/svg+xml"
-            )
-
 def display_volcano_plot(experiment, continuation_df):
     """
     Display a user interface for creating and interacting with volcano plots in lipidomics data.
@@ -746,8 +734,8 @@ def display_volcano_plot(experiment, continuation_df):
         # Download options
         csv_data = convert_df(merged_df[['LipidMolec', 'FoldChange', '-log10(pValue)', 'ClassKey']])
         st.download_button("Download CSV", csv_data, file_name="volcano_data.csv", mime="text/csv")
-        svg_data = bokeh_plot_as_svg(plot)
-        st.download_button("Download SVG", svg_data, file_name="volcano_plot.svg", mime="image/svg+xml")
+        #svg_data = bokeh_plot_as_svg(plot)
+        #st.download_button("Download SVG", svg_data, file_name="volcano_plot.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
         
         # Generate and display the concentration vs. fold change plot
@@ -758,8 +746,8 @@ def display_volcano_plot(experiment, continuation_df):
         # CSV and SVG download options for concentration vs. fold change plot
         csv_data_for_concentration_plot = convert_df(download_df)
         st.download_button("Download CSV", csv_data_for_concentration_plot, file_name="concentration_vs_fold_change_data.csv", mime="text/csv")
-        svg_data_for_concentration_plot = bokeh_plot_as_svg(concentration_vs_fold_change_plot)
-        st.download_button("Download SVG", svg_data_for_concentration_plot, file_name="concentration_vs_fold_change_plot.svg", mime="image/svg+xml")
+        #svg_data_for_concentration_plot = bokeh_plot_as_svg(concentration_vs_fold_change_plot)
+        #st.download_button("Download SVG", svg_data_for_concentration_plot, file_name="concentration_vs_fold_change_plot.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
         
         # Additional functionality for single lipid concentration distribution
@@ -774,8 +762,8 @@ def display_volcano_plot(experiment, continuation_df):
             st.pyplot(fig)
             csv_data = convert_df(plot_df)
             st.download_button("Download Data", csv_data, file_name=f"{selected_lipid}_concentration.csv", mime="text/csv")
-            svg_data = plt_plot_to_svg(fig)
-            st.download_button("Download SVG", svg_data, f"{selected_lipid}_concentration.svg", "image/svg+xml")
+            #svg_data = plt_plot_to_svg(fig)
+            #st.download_button("Download SVG", svg_data, f"{selected_lipid}_concentration.svg", "image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
 
         # Displaying the table of invalid lipids
@@ -800,11 +788,11 @@ def display_saturation_plots(experiment, df):
                 # Display plots and create download buttons in Streamlit script
                 st.bokeh_chart(main_plot)
                 st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_main.csv', 'text/csv')
-                st.download_button("Download SVG", bokeh_plot_as_svg(main_plot), f'{lipid_class}_saturation_level_plot_main.svg', 'image/svg+xml')
+                #st.download_button("Download SVG", bokeh_plot_as_svg(main_plot), f'{lipid_class}_saturation_level_plot_main.svg', 'image/svg+xml')
 
                 st.bokeh_chart(percentage_plot)
                 st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_percentage.csv', 'text/csv')
-                st.download_button("Download SVG", bokeh_plot_as_svg(percentage_plot), f'{lipid_class}_saturation_level_plot_percentage.svg', 'image/svg+xml')
+                #st.download_button("Download SVG", bokeh_plot_as_svg(percentage_plot), f'{lipid_class}_saturation_level_plot_percentage.svg', 'image/svg+xml')
                 
                 st.write('---------------------------------------------------------')
 
@@ -864,7 +852,7 @@ def display_abundance_bar_chart(experiment, continuation_df):
 
             # Download buttons
             csv_data = convert_df(abundance_df)
-            svg_data = plt_plot_to_svg(fig)
+            #svg_data = plt_plot_to_svg(fig)
 
             st.download_button(
                 label="Download Data",
@@ -872,11 +860,11 @@ def display_abundance_bar_chart(experiment, continuation_df):
                 file_name='abundance_bar_chart.csv',
                 mime='text/csv')
 
-            st.download_button(
-                label="Download SVG",
-                data=svg_data,
-                file_name='abundance_bar_chart.svg',
-                mime='image/svg+xml')
+            #st.download_button(
+                #label="Download SVG",
+                #data=svg_data,
+                #file_name='abundance_bar_chart.svg',
+                #mime='image/svg+xml')
 
 def display_pathway_visualization(experiment, continuation_df):
     """
@@ -927,12 +915,12 @@ def display_pathway_visualization(experiment, continuation_df):
     
                 st.pyplot(fig)
                 
-                svg_data = plt_plot_to_svg(fig)
-                st.download_button(
-                    label="Download SVG",
-                    data=svg_data,
-                    file_name='abundance_bar_chart.svg',
-                    mime='image/svg+xml')
+                #svg_data = plt_plot_to_svg(fig)
+                #st.download_button(
+                    #label="Download SVG",
+                    #data=svg_data,
+                    #file_name='abundance_bar_chart.svg',
+                    #mime='image/svg+xml')
     
                 # Display data and download button
                 pathway_df = pd.DataFrame.from_dict(pathway_dict)
@@ -986,10 +974,10 @@ def display_abundance_pie_charts(experiment, continuation_df):
                     st.plotly_chart(fig)
 
                     # Save plot to SVG
-                    svg_data = pio.to_image(fig, format='svg')
+                    #svg_data = pio.to_image(fig, format='svg')
 
                     # Provide option to download SVG
-                    st.download_button(label="Download SVG", data=svg_data, file_name=f'abundance_pie_chart_{condition}.svg', mime='image/svg+xml')
+                    #st.download_button(label="Download SVG", data=svg_data, file_name=f'abundance_pie_chart_{condition}.svg', mime='image/svg+xml')
 
                     # Provide option to download CSV
                     csv_download = convert_df(df)
@@ -1040,7 +1028,7 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             st.plotly_chart(heatmap_fig, use_container_width=True)
 
             # Download buttons
-            svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
+            #svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
             csv_download = convert_df(z_scores_df.reset_index())
             st.download_button("Download Data", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
 
