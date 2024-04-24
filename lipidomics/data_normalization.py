@@ -1,94 +1,159 @@
-import streamlit as st 
 import pandas as pd
 import numpy as np
+import streamlit as st
 
 class NormalizeData:
+    """
+    Class for normalizing lipidomic data using internal standards.
+    """
+
+    def _filter_data_by_class(self, df, selected_class_list):
+        """
+        Filters the dataset based on the selected lipid classes.
     
-    def __init__(self, a_df, an_intsta_df, an_experiment):
-        self.df = a_df
-        self.intsta_df = an_intsta_df
-        self.experiment = an_experiment 
-        
-    def collect_user_input(self):
-        all_class_lst = self.df['ClassKey'].unique() # list of lipid classes corresponding to all detected lipid species   
-        intsta_species_lst = self.intsta_df['LipidMolec'].tolist() # list of internal standards species 
-        
-        st.write('The following are the detected internal standards species listed above:')
-        for lipid in intsta_species_lst:
-            st.write(lipid)
-        
-        # list of classes selected by the user that can be normalized using the detected internal standards species 
-        selected_class_list = st.multiselect('Remove classes that cannot be normalized with any of the detected internal standards:', all_class_lst, all_class_lst)
-        
-        # function that receives the user input on which internal standards to use for specified lipid classes
-        def pick_intsta(a_selected_class_lst, an_intsta_species_lst): 
-            selected_intsta_lst = [] # list of internal standards species selected by the user to normalize classes in a_selected_class_lst 
-            for lipid_class in a_selected_class_lst:
-                selected_intsta_lst.append(build_intsta_selectbox(lipid_class, intsta_species_lst)) # function defined below 
-            return selected_intsta_lst
-        
-        # function that creates a select box that includes the list of the detected internal standards 
-        def build_intsta_selectbox(a_lipid_class, an_intsta_species_lst):  
-            added_intsta_species = st.selectbox('Pick a internal standard for ' + a_lipid_class + ' species', an_intsta_species_lst)
-            return added_intsta_species
-        
-        st.write('For each lipid class, pick one internal standard that most closely matches it.')
-        added_intsta_species_lst = pick_intsta(selected_class_list, intsta_species_lst)
-        for index, lipid_class in enumerate(selected_class_list):
-            st.write('- ' + lipid_class + ' data will be normalized using ' + added_intsta_species_lst[index])
-        
-        # function for letting the user input the concentration of IS 
-        def build_intsta_concentration_dict(an_added_intsta_species_lst):
-            intsta_concentration_dict = {}
-            for lipid in an_added_intsta_species_lst:
-                if lipid not in intsta_concentration_dict.keys(): 
-                    intsta_concentration_dict[lipid] = build_concentration_input_box(lipid)
-            return intsta_concentration_dict
-        
-        def build_concentration_input_box(a_lipid):
-            concentration = st.number_input('Enter the concentration of ' + a_lipid + ' in micromole', 
-                                      min_value = 0, max_value = 100000, value = 1, step = 1)
-            return concentration 
-        
-        st.write("Now, enter the concentration of each internal standard species:")
-        intsta_concentration_dict = build_intsta_concentration_dict(added_intsta_species_lst)
-        
-        return selected_class_list, added_intsta_species_lst, intsta_concentration_dict
+        Parameters:
+            df (pd.DataFrame): The DataFrame containing the lipidomic data.
+            selected_class_list (list): A list of lipid classes selected for normalization.
     
-    def normalization(self, a_selected_class_list, an_added_intsta_species_lst, an_intsta_concentration_dict):
-        
-        @st.cache_data
-        def prep_df(a_dataframe, a_selected_class_list):
-            return a_dataframe[a_dataframe['ClassKey'].isin(a_selected_class_list)]
-        
-        selected_df = prep_df(self.df, a_selected_class_list) # normalized dataframe
-        
-        full_samples_list = self.experiment.full_samples_list
-        
-        @st.cache_data
-        def compute_normalized_auc(a_selected_df, a_full_samples_list, a_lipid_class, an_intsta_auc, a_concentration):
-            a_temp_df = a_selected_df[['MeanArea[' + sample + ']' for sample in a_full_samples_list]][a_selected_df['ClassKey'] == a_lipid_class]\
-                .apply(lambda auc: auc / an_intsta_auc * a_concentration, axis=1)
-            a_temp_df[['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt']] = \
-                a_selected_df[['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt']][a_selected_df['ClassKey'] == a_lipid_class]
-            return a_temp_df 
+        Returns:
+            pd.DataFrame: A filtered DataFrame containing only the rows with lipid classes from the selected list.
+        """
+        try:
+            return df[df['ClassKey'].isin(selected_class_list)]
+        except KeyError as e:
+            print(f"KeyError in _filter_data_by_class: {e}")
+            return pd.DataFrame()
+
+    def _process_internal_standards(self, selected_df, added_intsta_species_lst, intsta_concentration_dict, intsta_df, full_samples_list, selected_class_list):
+        """
+        Processes the internal standards and performs normalization calculations for each lipid class.
+    
+        Parameters:
+            selected_df (pd.DataFrame): The DataFrame filtered for selected lipid classes.
+            added_intsta_species_lst (list): List of internal standard species selected for each lipid class.
+            intsta_concentration_dict (dict): Dictionary mapping internal standards to their concentrations.
+            intsta_df (pd.DataFrame): DataFrame containing internal standards data.
+            full_samples_list (list): List of all sample names in the experiment.
+            selected_class_list (list): List of selected lipid classes for normalization.
+    
+        Returns:
+            pd.DataFrame: A DataFrame with normalized data for each lipid class based on the internal standards.
+        """
+        norm_df = pd.DataFrame()
+        try:
+            for intsta_species, lipid_class in zip(added_intsta_species_lst, selected_class_list):
+                concentration = intsta_concentration_dict[intsta_species]
+                intsta_auc = self._compute_intsta_auc(intsta_df, intsta_species, full_samples_list)
+                class_norm_df = self._compute_normalized_auc(selected_df, full_samples_list, lipid_class, intsta_auc, concentration)
+                norm_df = pd.concat([norm_df, class_norm_df], axis=0)
+            return norm_df
+        except Exception as e:
+            print(f"Error in _process_internal_standards: {e}")
+            return pd.DataFrame()
+
+    def normalize_data(self, selected_class_list, added_intsta_species_lst, intsta_concentration_dict, df, intsta_df, experiment):
+        """
+        Main method to normalize the data based on selected classes, internal standards, and their concentrations.
+    
+        Parameters:
+            selected_class_list (list): Selected classes for normalization.
+            added_intsta_species_lst (list): Selected internal standards for each class.
+            intsta_concentration_dict (dict): Concentrations of the selected internal standards.
+            df (pd.DataFrame): Main dataset without internal standards.
+            intsta_df (pd.DataFrame): Dataset containing internal standards.
+            experiment: Object containing details about the experiment.
+    
+        Returns:
+            pd.DataFrame: The resulting DataFrame with normalized data.
+        """
+        try:
+            selected_df = self._filter_data_by_class(df, selected_class_list)
+            full_samples_list = experiment.full_samples_list
+            norm_df = self._process_internal_standards(selected_df, added_intsta_species_lst, intsta_concentration_dict, intsta_df, full_samples_list, selected_class_list)
+            norm_df.reset_index(drop=True, inplace=True)
+            norm_df.fillna(0, inplace=True)
+            norm_df.replace([np.inf, -np.inf], 0, inplace=True)
+            return norm_df
+        except Exception as e:
+            print(f"Error in normalize_data: {e}")
+            return pd.DataFrame()
+
+    @st.cache_data
+    def _compute_intsta_auc(_self, intsta_df, intsta_species, full_samples_list):
+        """
+        Computes the average area under curve (AUC) for the selected internal standard.
+
+        Parameters:
+            intsta_df (pd.DataFrame): Dataset containing internal standards.
+            intsta_species (str): Internal standard species.
+            full_samples_list (list): List of all samples.
+
+        Returns:
+            np.array: Array of AUC values for the internal standard.
+        """
+        try:
+            return intsta_df[['MeanArea[' + sample + ']' for sample in full_samples_list]][intsta_df['LipidMolec'] == intsta_species].values.reshape(len(full_samples_list),)
+        except Exception as e:
+            print(f"Error in _compute_intsta_auc: {e}")
+            return np.array([])
+
+    @st.cache_data
+    def _compute_normalized_auc(_self, selected_df, full_samples_list, lipid_class, intsta_auc, concentration):
+        """
+        Normalizes the AUC data for a specific lipid class using the internal standard.
+
+        Parameters:
+            selected_df (pd.DataFrame): Filtered dataset for a selected lipid class.
+            full_samples_list (list): List of all samples.
+            lipid_class (str): Lipid class being normalized.
+            intsta_auc (np.array): AUC values for the internal standard.
+            concentration (float): Concentration of the internal standard.
+
+        Returns:
+            pd.DataFrame: Dataframe with normalized AUC values for the lipid class.
+        """
+        try:
+            # Filter for the specific lipid class
+            class_df = selected_df[selected_df['ClassKey'] == lipid_class]
+    
+            # Extract the 'MeanArea' columns
+            mean_area_cols = ['MeanArea[' + sample + ']' for sample in full_samples_list]
+            mean_area_df = class_df[mean_area_cols]
+    
+            # Perform the normalization calculation using vectorized operations
+            normalized_mean_area_df = (mean_area_df.divide(intsta_auc, axis='columns') * concentration)
+    
+            # Concatenate the non-numeric columns with the calculated normalized data
+            non_numeric_cols = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt']
+            result_df = pd.concat([class_df[non_numeric_cols].reset_index(drop=True), normalized_mean_area_df.reset_index(drop=True)], axis=1)
             
-        def create_normalized_df(a_norm_df):
-            for intsta_species, lipid_class in zip(an_added_intsta_species_lst, a_selected_class_list):
-                concentration = an_intsta_concentration_dict[intsta_species]
-                intsta_auc = self.intsta_df[['MeanArea[' + sample + ']' for sample in self.experiment.full_samples_list]][self.intsta_df['LipidMolec'] == intsta_species]\
-                    .values.reshape(len(self.experiment.full_samples_list),)
-                temp = compute_normalized_auc(selected_df.copy(deep=True), full_samples_list, lipid_class, intsta_auc, concentration)
-                temp = temp[['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt'] + ['MeanArea[' + sample + ']' for sample in self.experiment.full_samples_list]]
-                a_norm_df = pd.concat([a_norm_df, temp], axis=0)
-            return a_norm_df 
+            return result_df
+        except Exception as e:
+            print(f"Error in _compute_normalized_auc: {e}")
+            return pd.DataFrame()
         
-        norm_df = pd.DataFrame(columns = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt'] + \
-                               ['MeanArea[' + sample + ']' for sample in self.experiment.full_samples_list])
-        norm_df = create_normalized_df(norm_df)
-        norm_df.reset_index(inplace=True)
-        norm_df.drop('index', axis=1, inplace=True)
-        norm_df = norm_df.fillna(0)
-        norm_df.replace([np.inf, -np.inf], 0, inplace=True)
-        st.write(norm_df)
-        return norm_df 
+    @st.cache_data
+    def normalize_using_bca(_self, df, protein_df):
+        """
+        Normalize lipid intensities in the DataFrame using protein concentrations from BCA assay.
+        Args:
+            df (pd.DataFrame): DataFrame containing lipidomics data.
+            protein_df (pd.DataFrame): DataFrame with 'Sample' as index and 'Concentration' columns.
+        Returns:
+            pd.DataFrame: DataFrame with normalized lipid intensities.
+        """
+        # Check if 'Sample' is a column and set it as index if true
+        if 'Sample' in protein_df.columns:
+            protein_df.set_index('Sample', inplace=True)
+        elif 'Sample' not in protein_df.index:
+            raise KeyError("Protein DataFrame must have 'Sample' as an index or column.")
+        
+        # Extract sample names from df column names, assuming format like 'MeanArea[s1]'
+        corrected_columns = {col: col[col.find('[')+1:col.find(']')] for col in df.columns if 'MeanArea[' in col}
+    
+        # Apply normalization only to the relevant columns
+        for col, corrected_col in corrected_columns.items():
+            if corrected_col in protein_df.index:
+                df[col] = df[col] / protein_df.loc[corrected_col, 'Concentration']
+        
+        return df

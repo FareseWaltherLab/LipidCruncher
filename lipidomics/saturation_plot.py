@@ -2,204 +2,385 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, Whisker, BasicTickFormatter
-from bokeh.transform import dodge
+from bokeh.models import ColumnDataSource, Whisker, BasicTickFormatter, FactorRange
+from bokeh.transform import dodge, factor_cmap
 
 class SaturationPlot:
-    
-    def __init__(self, an_experiment, a_df):
-        self.experiment = an_experiment
-        self.df = a_df
-        
-    @st.cache_data
-    def convert_df(_self, a_dataframe):
-         return a_dataframe.to_csv().encode('utf-8')
-        
-    @st.cache_data
-    def calculate_FA_ratio(_self, a_mol_structure):
+
+    @staticmethod
+    def _calculate_fa_ratios(mol_structure):
         """
-        The following is an example of a_mol_structrure: PA(16:0_20:4)
+        Calculate the ratios of SFA, MUFA, and PUFA in a molecular structure.
+        Args:
+            mol_structure (str): Molecular structure string, e.g., 'PA(16:0_20:4)'.
+        Returns:
+            tuple: Ratios of SFA, MUFA, and PUFA.
         """
-        a = a_mol_structure.split('(')
-        b = a[1][:-1]
-        c = b.split('_')
-        sfa_ratio = 0
-        mufa_ratio = 0
-        pufa_ratio = 0
-        for item in c:
-            d = item.split(':')[-1]
-            if str(d).strip() == '0':
-                sfa_ratio += 1
-            elif str(d).strip() == '1': 
-                mufa_ratio += 1
-            else: 
-                pufa_ratio += 1
-        total = sfa_ratio + mufa_ratio + pufa_ratio
-        sfa_ratio = sfa_ratio / total
-        mufa_ratio = mufa_ratio / total
-        pufa_ratio = pufa_ratio / total
-        return sfa_ratio, mufa_ratio, pufa_ratio
-    
+        parts = mol_structure.split('(')[1][:-1].split('_')
+        fatty_acids = [fa.split(':')[-1] for fa in parts]
+        ratios = [fatty_acids.count(x) for x in ['0', '1']]
+        pufa_ratio = len(fatty_acids) - sum(ratios)
+        ratios.append(pufa_ratio)
+        total = sum(ratios)
+        return tuple(ratio / total for ratio in ratios)
+
+    @staticmethod
     @st.cache_data
-    def calculate_SFA_MUFA_PUFA(_self, a_df, a_conditions_list, an_individual_samples_list, a_lipid_class, a_condition):
-        index = a_conditions_list.index(a_condition)
-        temp_df = a_df[a_df['ClassKey'] == a_lipid_class]
-        temp_df[a_condition + '_mean_AUC'] = temp_df[['MeanArea[' + sample + ']' for sample in an_individual_samples_list[index]]]\
-            .apply(lambda x: np.mean(x), axis = 1)
-        temp_df[a_condition + '_var_AUC'] = temp_df[['MeanArea[' + sample + ']' for sample in an_individual_samples_list[index]]]\
-            .apply(lambda x: np.var(x), axis = 1)
-        temp_df = temp_df[['LipidMolec', a_condition + '_mean_AUC', a_condition + '_var_AUC']]
-        temp_df['FA_ratio'] = temp_df['LipidMolec'].apply(lambda x: _self.calculate_FA_ratio(x))
-        temp_df['SFA_ratio'] = temp_df['FA_ratio'].apply(lambda x: x[0])
-        temp_df['MUFA_ratio'] = temp_df['FA_ratio'].apply(lambda x: x[1])
-        temp_df['PUFA_ratio'] = temp_df['FA_ratio'].apply(lambda x: x[2])
-        temp_df['SFA_AUC'] = temp_df[[a_condition + '_mean_AUC', 'SFA_ratio']].apply(lambda x: x[0]*x[1], axis = 1)
-        temp_df['MUFA_AUC'] = temp_df[[a_condition + '_mean_AUC', 'MUFA_ratio']].apply(lambda x: x[0]*x[1], axis = 1)
-        temp_df['PUFA_AUC'] = temp_df[[a_condition + '_mean_AUC', 'PUFA_ratio']].apply(lambda x: x[0]*x[1], axis = 1)
-        temp_df['SFA_var'] = temp_df[[a_condition + '_var_AUC', 'SFA_ratio']].apply(lambda x: x[0]*x[1]**2, axis = 1)
-        temp_df['MUFA_var'] = temp_df[[a_condition + '_var_AUC', 'MUFA_ratio']].apply(lambda x: x[0]*x[1]**2, axis = 1)
-        temp_df['PUFA_var'] = temp_df[[a_condition + '_var_AUC', 'PUFA_ratio']].apply(lambda x: x[0]*x[1]**2, axis = 1)
-        sfa = temp_df['SFA_AUC'].sum()
-        sfa_var = temp_df['SFA_var'].sum()
-        mufa = temp_df['MUFA_AUC'].sum()
-        mufa_var = temp_df['MUFA_var'].sum()
-        pufa = temp_df['PUFA_AUC'].sum()
-        pufa_var = temp_df['PUFA_var'].sum()
-        return sfa, mufa, pufa, sfa_var, mufa_var, pufa_var
-        
-    def create_saturation_plot(self, a_selected_conditions_list):
-        
-        def create_sfa_mufa_pufa_lists():
-            a_sfa_lst = []
-            a_mufa_lst = []
-            a_pufa_lst = []
-            a_sfa_var_lst = []
-            a_mufa_var_lst = []
-            a_pufa_var_lst = []
-            for condition in a_selected_conditions_list:
-                sfa, mufa, pufa, sfa_var, mufa_var, pufa_var = self.calculate_SFA_MUFA_PUFA(self.df.copy(deep=True), self.experiment.conditions_list, \
-                                                                                            self.experiment.individual_samples_list, lipid_class, condition)
-                a_sfa_lst.append(sfa)
-                a_mufa_lst.append(mufa)
-                a_pufa_lst.append(pufa)
-                a_sfa_var_lst.append(np.sqrt(sfa_var))
-                a_mufa_var_lst.append(np.sqrt(mufa_var))
-                a_pufa_var_lst.append(np.sqrt(pufa_var))
-            return a_sfa_lst, a_mufa_lst, a_pufa_lst, a_sfa_var_lst, a_mufa_var_lst, a_pufa_var_lst
-        
-        def calculate_saturation_level_percentage(a_sfa_lst, a_mufa_lst, a_pufa_lst):
-            return [a_sfa_lst[i]/(a_sfa_lst[i]+a_mufa_lst[i]+a_pufa_lst[i])*100 for i in range(len(a_selected_conditions_list))],\
-                   [a_mufa_lst[i]/(a_sfa_lst[i]+a_mufa_lst[i]+a_pufa_lst[i])*100 for i in range(len(a_selected_conditions_list))],\
-                   [a_pufa_lst[i]/(a_sfa_lst[i]+a_mufa_lst[i]+a_pufa_lst[i])*100 for i in range(len(a_selected_conditions_list))]
-        
-        def create_main_plot_df(a_sfa_lst, a_mufa_lst, a_pufa_lst, a_sfa_var_lst, a_mufa_var_lst, a_pufa_var_lst):
-            a_main_data_df = {'conditions' : a_selected_conditions_list,
-                    'SFA'   : a_sfa_lst,
-                    'SFA_upper' : [x+e for x,e in zip(a_sfa_lst, a_sfa_var_lst)],
-                    'SFA_lower' : [x-e for x,e in zip(a_sfa_lst, a_sfa_var_lst)],
-                    'MUFA'   : a_mufa_lst,
-                    'MUFA_upper' : [x+e for x,e in zip(a_mufa_lst, a_mufa_var_lst)],
-                    'MUFA_lower' : [x-e for x,e in zip(a_mufa_lst, a_mufa_var_lst)],
-                    'PUFA'   : a_pufa_lst,
-                    'PUFA_upper' : [x+e for x,e in zip(a_pufa_lst, a_pufa_var_lst)],
-                    'PUFA_lower' : [x-e for x,e in zip(a_pufa_lst, a_pufa_var_lst)]}
-            return a_main_data_df
-        
-        def create_percentage_plot_df(a_sfa_percentage_lst, a_mufa_percentage_lst, a_pufa_percentage_lst):
-            a_percentage_data_df = {'conditions' : a_selected_conditions_list,
-                    'SFA'   : a_sfa_percentage_lst,
-                    'MUFA'   : a_mufa_percentage_lst,
-                    'PUFA'   : a_pufa_percentage_lst}
-            return a_percentage_data_df 
-        
-        def render_main_plot(a_lipid_class, a_plot_df, a_sfa_lst, a_mufa_lst, a_pufa_lst):
-            a_plot_df = a_plot_df.fillna(0)
-            max_height = max([max(a_sfa_lst), max(a_mufa_lst), max(a_pufa_lst)])
-            source = ColumnDataSource(data=a_plot_df)
-            p = figure(x_range = a_selected_conditions_list, y_range = (0, max_height * 2), height=250, title="Saturation Level Plot - " + a_lipid_class,
-                       x_axis_label= 'Conditions', y_axis_label= 'Total AUC',toolbar_location='right')
-            p.vbar(x=dodge('conditions', -0.25, range=p.x_range), top='SFA', width=0.2, source=source,
-                       color="#c9d9d3", legend_label="SFA")
-            p.add_layout(Whisker(source=source, base=dodge('conditions', -0.25, range=p.x_range), \
-                                 upper="SFA_upper", lower="SFA_lower", level='overlay'))
-            p.vbar(x=dodge('conditions',  0.0,  range=p.x_range), top='MUFA', width=0.2, source=source,
-                       color="#718dbf", legend_label="MUFA")
-            p.add_layout(Whisker(source=source, base=dodge('conditions', 0.0, range=p.x_range), \
-                                 upper="MUFA_upper", lower="MUFA_lower", level='overlay'))
-            p.vbar(x=dodge('conditions',  0.25, range=p.x_range), top='PUFA', width=0.2, source=source,
-                       color="#e84d60", legend_label="PUFA")
-            p.add_layout(Whisker(source=source, base=dodge('conditions', 0.25, range=p.x_range), \
-                                 upper="PUFA_upper", lower="PUFA_lower", level='overlay'))
-            p.x_range.range_padding = 0.1
-            p.xgrid.grid_line_color = None
-            p.legend.location = "top_center"
-            p.legend.orientation = "horizontal"
-            p.legend.label_text_font_size = "10pt"
-            p.title.text_font_size = "15pt"
-            p.xaxis.axis_label_text_font_size = "15pt"
-            p.yaxis.axis_label_text_font_size = "15pt"
-            p.xaxis.major_label_text_font_size = "15pt"
-            p.yaxis.major_label_text_font_size = "15pt"
-            p.yaxis.formatter = BasicTickFormatter(precision=1)
-            return p 
-        
-        def render_percentage_plot(a_lipid_class, a_plot_df):
-            a_plot_df = a_plot_df.fillna(0)
-            colors = ["#c9d9d3", "#718dbf", "#e84d60"]
-            p = figure(x_range = a_selected_conditions_list, y_range = (0, 100), height=250, title="Saturation Level Plot - " + lipid_class,
-                       x_axis_label= 'Conditions', y_axis_label= 'Percentage',toolbar_location='right')
-            p.vbar_stack(['SFA', 'MUFA', 'PUFA'], x='conditions', color = colors, width=0.2, source=a_plot_df,
-                         legend_label=['SFA', 'MUFA', 'PUFA'])
-            p.x_range.range_padding = 0.1
-            p.xgrid.grid_line_color = None
-            p.legend.location = "center_right"
-            p.legend.orientation = "vertical"
-            p.legend.label_text_font_size = "6.5pt"
-            p.title.text_font_size = "15pt"
-            p.xaxis.axis_label_text_font_size = "15pt"
-            p.yaxis.axis_label_text_font_size = "15pt"
-            p.xaxis.major_label_text_font_size = "15pt"
-            p.yaxis.major_label_text_font_size = "15pt"
-            p.yaxis.formatter = BasicTickFormatter(precision=1)
-            return p
-        
-        def display_plot(a_main_plot, a_sat_df, a_percentage_plot, a_percentage_df):
-            st.bokeh_chart(a_main_plot)
-            csv_download = self.convert_df(a_sat_df)
-            st.download_button(
-                            label="Download Data",
-                            data=csv_download,
-                            file_name='saturation_level_plot_main.csv',
-                            mime='text/csv',
-                            key=lipid_class)
-            
-            st.bokeh_chart(a_percentage_plot)
-            csv_download = self.convert_df(a_percentage_df)
-            st.download_button(
-                            label="Download Data",
-                            data=csv_download,
-                            file_name='saturation_level_plot_percentage.csv',
-                            mime='text/csv',
-                            key=lipid_class+'2')
-            st.write('------------------------------------------------------------------------------------------------')
-            return 
-        
-        for lipid_class in self.df['ClassKey'].unique():
-            sfa_lst, mufa_lst, pufa_lst, sfa_var_lst, mufa_var_lst, pufa_var_lst = create_sfa_mufa_pufa_lists()
-            sfa_percentage_lst, mufa_percentage_lst, pufa_percentage_lst = calculate_saturation_level_percentage(sfa_lst, mufa_lst, pufa_lst)
-            main_data = create_main_plot_df(sfa_lst, mufa_lst, pufa_lst, sfa_var_lst, mufa_var_lst, pufa_var_lst)
-            main_df = pd.DataFrame.from_dict(main_data)
-            percentage_data = create_percentage_plot_df(sfa_percentage_lst, mufa_percentage_lst, pufa_percentage_lst)
-            percentage_df = pd.DataFrame.from_dict(percentage_data)
-            main_plot = render_main_plot(lipid_class, main_df, sfa_lst, mufa_lst, pufa_lst)
-            percentage_plot = render_percentage_plot(lipid_class, percentage_df)
-            sat_df_main = pd.DataFrame({"Conditions": a_selected_conditions_list, "SFA": sfa_lst, "SFA_STDV": sfa_var_lst, "MUFA": mufa_lst, \
-                           "MUFA_STDV": mufa_var_lst, "PUFA": pufa_lst, "PUFA_STDV": pufa_lst})
-            sat_df_percentage = pd.DataFrame({"Conditions": a_selected_conditions_list, "SFA": sfa_percentage_lst, "MUFA": mufa_percentage_lst, \
-                           "PUFA": pufa_percentage_lst})
-            display_plot(main_plot, sat_df_main, percentage_plot, sat_df_percentage)
-        return 
+    def _calculate_sfa_mufa_pufa(df, condition, samples, lipid_class):
+        """
+        Calculates SFA, MUFA, and PUFA values for a specific lipid class under given conditions.
+        Args:
+            df (pd.DataFrame): DataFrame with lipidomics data.
+            condition (str): The experimental condition.
+            samples (list): List of sample names.
+            lipid_class (str): The lipid class to filter for.
+        Returns:
+            tuple: Aggregated AUC values for SFA, MUFA, and PUFA, along with their variances.
+        """
+        filtered_df = SaturationPlot._filter_df_for_lipid_class(df, lipid_class)
+        SaturationPlot._compute_mean_variance_auc(filtered_df, samples)
+        SaturationPlot._calculate_fatty_acid_auc_variance(filtered_df)
+        return SaturationPlot._aggregate_fatty_acid_values(filtered_df)
+
+    @staticmethod
+    def _filter_df_for_lipid_class(df, lipid_class):
+        """
+        Filters the DataFrame for a specific lipid class.
+        Args:
+            df (pd.DataFrame): The DataFrame containing lipidomics data.
+            lipid_class (str): The lipid class to filter for.
+        Returns:
+            pd.DataFrame: A filtered DataFrame containing only data for the specified lipid class.
+        """
+        return df[df['ClassKey'] == lipid_class]
+
+    @staticmethod
+    def _compute_mean_variance_auc(df, samples):
+        """
+        Computes the mean and variance of the area under the curve (AUC) for each lipid across given samples.
+        Args:
+            df (pd.DataFrame): The DataFrame with lipidomics data.
+            samples (list): List of sample names to be considered for computation.
+        Effects:
+            Modifies the input DataFrame to include 'mean_AUC' and 'var_AUC' columns representing the mean and variance of AUC values, respectively.
+        """
+        mean_cols = [f'MeanArea[{sample}]' for sample in samples]
+        df['mean_AUC'] = df[mean_cols].mean(axis=1)
+        df['var_AUC'] = df[mean_cols].var(axis=1)
+
+    @staticmethod
+    @st.cache_data
+    def _calculate_fatty_acid_auc_variance(df):
+        """
+        Calculates the AUC and variance for each type of fatty acid (SFA, MUFA, PUFA) in the DataFrame.
+        Args:
+            df (pd.DataFrame): The DataFrame with lipidomics data, which should include 'mean_AUC' and 'var_AUC' values.
+        Effects:
+            Modifies the DataFrame to include AUC and variance for SFA, MUFA, and PUFA.
+        """
+        df['fa_ratios'] = df['LipidMolec'].apply(SaturationPlot._calculate_fa_ratios)
+        for fatty_acid in ['SFA', 'MUFA', 'PUFA']:
+            idx = ['SFA', 'MUFA', 'PUFA'].index(fatty_acid)
+            df[f'{fatty_acid}_AUC'] = df.apply(lambda x: x['mean_AUC'] * x['fa_ratios'][idx], axis=1)
+            df[f'{fatty_acid}_var'] = df.apply(lambda x: x['var_AUC'] * x['fa_ratios'][idx] ** 2, axis=1)
+
+    @staticmethod
+    def _aggregate_fatty_acid_values(df):
+        """
+        Aggregates the AUC values for SFA, MUFA, and PUFA across all entries in the DataFrame.
+        Args:
+            df (pd.DataFrame): The DataFrame containing AUC values for fatty acids.
+        Returns:
+            tuple: Total AUC values for SFA, MUFA, PUFA, and their variances.
+        """
+        totals = [df[f'{fatty_acid}_AUC'].sum() for fatty_acid in ['SFA', 'MUFA', 'PUFA']]
+        var_totals = [df[f'{fatty_acid}_var'].sum() for fatty_acid in ['SFA', 'MUFA', 'PUFA']]
+        return (*totals, *var_totals)
+
+
+    @staticmethod
+    def create_plots(df, experiment, selected_conditions):
+        """
+        Generates saturation plots for all lipid classes found in the DataFrame, for the given conditions.
+        Args:
+            df (pd.DataFrame): DataFrame with lipidomics data.
+            experiment (Experiment): Experiment object containing conditions and samples information.
+            selected_conditions (list): List of conditions to generate plots for.
+        Returns:
+            dict: A dictionary containing plots and data for each lipid class.
+        """
+        plots = {}
+        for lipid_class in df['ClassKey'].unique():
+            plot_data = SaturationPlot._prepare_plot_data(df, selected_conditions, lipid_class, experiment)
+            # Create the main plot with the original data
+            main_plot = SaturationPlot._create_auc_plot(plot_data, lipid_class)
+            # Prepare a separate DataFrame for the percentage plot
+            percentage_df = SaturationPlot._calculate_percentage_df(plot_data)
+            # Create the percentage plot with the new percentage DataFrame
+            percentage_plot = SaturationPlot._create_percentage_plot(percentage_df, lipid_class)
+            plots[lipid_class] = (main_plot, percentage_plot, plot_data)
+        return plots
+
+    @staticmethod
+    def _prepare_plot_data(df, selected_conditions, lipid_class, experiment):
+        """
+        Prepares plot data for a given lipid class across selected conditions.
+        Args:
+            df (pd.DataFrame): The DataFrame with lipidomics data.
+            selected_conditions (list): List of conditions to include in the analysis.
+            lipid_class (str): The lipid class for which data is being prepared.
+            experiment: An object containing experimental data, including sample lists.
+        Returns:
+            pd.DataFrame: A DataFrame with aggregated values for SFA, MUFA, and PUFA AUC and variance for each condition.
+        """
+        plot_data = []
+        for condition in selected_conditions:
+            samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
+            values = SaturationPlot._calculate_sfa_mufa_pufa(df, condition, samples, lipid_class)
+            plot_data.append(dict(zip(['Condition', 'SFA_AUC', 'MUFA_AUC', 'PUFA_AUC', 'SFA_var', 'MUFA_var', 'PUFA_var'], [condition] + list(values))))
+        return pd.DataFrame(plot_data)
+
+    @staticmethod
+    def _display_saturation_plot(plot_data, lipid_class):
+        """
+        Generates and displays saturation plots for a given lipid class.
+        Args:
+            plot_data (pd.DataFrame): The DataFrame with data specific to a lipid class.
+            lipid_class (str): The lipid class for which plots are being generated.
+        Effects:
+            Creates and displays both the main AUC plot and the percentage distribution plot, along with download buttons for each.
+        """
+        main_df, percentage_df = SaturationPlot._prepare_df_for_plots(plot_data)
+        main_plot = SaturationPlot._create_auc_plot(main_df, lipid_class)
+        percentage_plot = SaturationPlot._create_percentage_plot(percentage_df, lipid_class)
+
+    @staticmethod
+    def _prepare_df_for_plots(plot_data):
+        """
+        Prepares data for both main AUC and percentage distribution plots.
+        Args:
+            plot_data (pd.DataFrame): The DataFrame with plot data.
+        Returns:
+            tuple: Two DataFrames, one for the main AUC plot and one for the percentage distribution plot.
+        """
+        # Prepare data for main and percentage plot
+        main_df = plot_data.copy()
+        main_df = SaturationPlot._calculate_std_dev(main_df)
+        percentage_df = SaturationPlot._calculate_percentage_df(main_df)
+        return main_df, percentage_df
+
+    @staticmethod
+    def _calculate_std_dev(df):
+        """
+        Calculates standard deviations for AUC values in the DataFrame.
+        Args:
+            df (pd.DataFrame): The DataFrame with 'var_AUC' values for fatty acids.
+        Effects:
+            Adds standard deviation columns to the DataFrame for each fatty acid type.
+        """
+        # Calculate standard deviation
+        for fatty_acid in ['SFA', 'MUFA', 'PUFA']:
+            df[f'{fatty_acid}_stdv'] = np.sqrt(df[f'{fatty_acid}_var'])
+        return df
+
+    @staticmethod
+    @st.cache_data
+    def _calculate_percentage_df(main_df):
+        """
+        Calculates the percentage distribution of SFA, MUFA, and PUFA in the dataset.
+        Args:
+            main_df (pd.DataFrame): The DataFrame containing AUC values for fatty acids.
+        Returns:
+            pd.DataFrame: A DataFrame with percentage values of each fatty acid type.
+        """
+        total_auc = main_df[['SFA_AUC', 'MUFA_AUC', 'PUFA_AUC']].sum(axis=1)
+        percentage_df = 100 * main_df[['SFA_AUC', 'MUFA_AUC', 'PUFA_AUC']].div(total_auc, axis=0)
+        percentage_df['Condition'] = main_df['Condition']
+        return percentage_df
+
+    @staticmethod
+    def _create_auc_plot(df, lipid_class):
+        """
+        Creates an AUC plot for a given lipid class.
+        Args:
+            df (pd.DataFrame): The DataFrame containing the data for plotting.
+            lipid_class (str): The lipid class to be plotted.
+        Returns:
+            Bokeh plot object: A plot depicting AUC values with error bars.
+        """
+        df = SaturationPlot._calculate_std_dev(df)
+        df = SaturationPlot._add_error_bounds(df)
+        max_y_value = SaturationPlot._get_max_y_value(df)
+        plot = SaturationPlot._initialize_auc_plot(df, lipid_class, max_y_value)
+        SaturationPlot._add_vbars_and_whiskers_to_plot(plot, df)
+        SaturationPlot._style_auc_plot(plot)
+        SaturationPlot._move_legend_outside_plot(plot)
+        return plot
     
+    @staticmethod
+    def _add_error_bounds(df):
+        """
+        Adds error bounds to the DataFrame for AUC values.
+        Args:
+            df (pd.DataFrame): The DataFrame with AUC and standard deviation data.
+        Effects:
+            Modifies the DataFrame to include upper and lower bounds for error bars.
+        """
+        for fa in ['SFA', 'MUFA', 'PUFA']:
+            df[f'{fa}_upper'] = df[f'{fa}_AUC'] + df[f'{fa}_stdv']
+            df[f'{fa}_lower'] = df[f'{fa}_AUC'] - df[f'{fa}_stdv']
+        return df
     
+    @staticmethod
+    def _get_max_y_value(df):
+        """
+        Calculates the maximum y-value for the AUC plot.
+        Args:
+            df (pd.DataFrame): The DataFrame with upper bound values.
+        Returns:
+            float: A value to be used as the maximum y-value in the plot.
+        """
+        max_upper_bounds = [df[f'{fa}_upper'].max() for fa in ['SFA', 'MUFA', 'PUFA']]
+        return max(max_upper_bounds) * 1.1
     
+    @staticmethod
+    def _initialize_auc_plot(df, lipid_class, max_y_value):
+        """
+        Initializes a Bokeh plot for AUC values.
+        Args:
+            df (pd.DataFrame): The DataFrame containing the plot data.
+            lipid_class (str): The lipid class being plotted.
+            max_y_value (float): The maximum y-value for the plot.
+        Returns:
+            Bokeh plot object: An initialized plot for AUC values.
+        """
+        source = ColumnDataSource(df)
+        return figure(x_range=df['Condition'].tolist(), plot_height=350, 
+                      title=f"Concentration Profile of Fatty Acids in {lipid_class}", 
+                      toolbar_location=None, tools="", y_range=(0, max_y_value))
     
+    @staticmethod
+    def _add_vbars_and_whiskers_to_plot(plot, df):
+        """
+        Adds vertical bars and whiskers to the AUC plot.
+        Args:
+            plot: The Bokeh plot object to modify.
+            df (pd.DataFrame): The DataFrame containing the data for plotting.
+        Effects:
+            Modifies the provided plot by adding vertical bars and whiskers.
+        """
+        colors = {'SFA': '#c9d9d3', 'MUFA': '#718dbf', 'PUFA': '#e84d60'}
+        for idx, fa in enumerate(['SFA', 'MUFA', 'PUFA']):
+            plot.vbar(x=dodge('Condition', -0.25 + idx * 0.25, range=plot.x_range), 
+                      top=f'{fa}_AUC', width=0.2, source=ColumnDataSource(df), 
+                      color=colors[fa], legend_label=fa)
+            plot.add_layout(Whisker(source=ColumnDataSource(df), 
+                                    base=dodge('Condition', -0.25 + idx * 0.25, range=plot.x_range), 
+                                    upper=f'{fa}_upper', lower=f'{fa}_lower', 
+                                    level='overlay', line_color='black'))
+    
+    @staticmethod
+    def _style_auc_plot(plot):
+        """
+        Applies styling to the AUC plot.
+        Args:
+            plot: The Bokeh plot object to be styled.
+        Effects:
+            Modifies the plot with specific visual styles, including font sizes and grid line colors.
+        """
+        plot.xgrid.grid_line_color = None
+        plot.legend.location = "top_right"
+        plot.legend.orientation = "vertical"
+        plot.title.text_font_size = "15pt"
+        plot.xaxis.axis_label_text_font_size = "15pt"
+        plot.yaxis.axis_label_text_font_size = "15pt"
+        plot.xaxis.major_label_text_font_size = "15pt"
+        plot.yaxis.major_label_text_font_size = "15pt"
+    
+    @staticmethod
+    def _move_legend_outside_plot(plot):
+        """
+        Moves the legend of the plot to an external position.
+        Args:
+            plot: The Bokeh plot object whose legend needs repositioning.
+        Effects:
+            Adjusts the layout of the plot to move the legend to the right side, outside the plot area.
+        """
+        plot.add_layout(plot.legend[0], 'right')
+
+    @staticmethod   
+    def _create_percentage_plot(df, lipid_class):
+        """
+        Creates a percentage distribution plot for a given lipid class.
+        Args:
+            df (pd.DataFrame): The DataFrame containing the percentage data.
+            lipid_class (str): The lipid class for which the plot is being created.
+        Returns:
+            Bokeh plot object: A plot showing the percentage distribution of fatty acids.
+        """
+        source = ColumnDataSource(df)
+        plot = SaturationPlot._initialize_percentage_plot(df, lipid_class)
+        SaturationPlot._add_stacked_vbars_to_plot(plot, source)
+        SaturationPlot._style_percentage_plot(plot)
+        SaturationPlot._move_legend_outside_plot(plot)
+        return plot
+    
+    @staticmethod
+    def _initialize_percentage_plot(df, lipid_class):
+        """
+        Initializes a Bokeh plot for percentage distribution values.
+        Args:
+            df (pd.DataFrame): The DataFrame containing the data for the plot.
+            lipid_class (str): The lipid class being visualized.
+        Returns:
+            Bokeh plot object: An initialized plot for percentage distribution values.
+        """
+        return figure(x_range=df['Condition'].tolist(), plot_height=350, 
+                      title=f"Percentage Distribution of Fatty Acids in {lipid_class}",
+                      toolbar_location=None, tools="")
+    
+    @staticmethod
+    def _add_stacked_vbars_to_plot(plot, source):
+        """
+        Adds stacked vertical bars to the percentage plot.
+        Args:
+            plot: The Bokeh plot object to be modified.
+            source (ColumnDataSource): The data source for the plot.
+        Effects:
+            Modifies the provided plot by adding stacked vertical bars representing different fatty acids.
+        """
+        colors = ['#c9d9d3', '#718dbf', '#e84d60']
+        plot.vbar_stack(['SFA_AUC', 'MUFA_AUC', 'PUFA_AUC'], x='Condition', 
+                        width=0.2, color=colors, source=source, 
+                        legend_label=['SFA', 'MUFA', 'PUFA'])
+    
+    @staticmethod
+    def _style_percentage_plot(plot):
+        """
+        Applies styling to the percentage plot.
+        Args:
+            plot: The Bokeh plot object to be styled.
+        Effects:
+            Adjusts the visual style of the plot, including the y-range, grid line color, and font sizes.
+        """
+        plot.y_range.start = 0
+        plot.y_range.end = 100
+        plot.x_range.range_padding = 0.1
+        plot.xgrid.grid_line_color = None
+        plot.title.text_font_size = "15pt"
+        plot.xaxis.axis_label_text_font_size = "15pt"
+        plot.yaxis.axis_label_text_font_size = "15pt"
+        plot.xaxis.major_label_text_font_size = "15pt"
+        plot.yaxis.major_label_text_font_size = "15pt"
+    
+    @staticmethod
+    def _move_legend_outside_plot(plot):
+        """
+        Moves the legend of the percentage plot to an external position.
+        Args:
+            plot: The Bokeh plot object whose legend needs repositioning.
+        Effects:
+            Changes the layout of the plot to position the legend to the right side, outside the plot area.
+        """
+        plot.add_layout(plot.legend[0], 'right')
+

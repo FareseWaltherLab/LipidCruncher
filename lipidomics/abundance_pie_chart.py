@@ -1,0 +1,115 @@
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+class AbundancePieChart:
+    
+    @staticmethod
+    @st.cache_data
+    def calculate_total_abundance(df, full_samples_list):
+        """
+        Calculates the total abundance of each lipid class across all samples.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing lipidomics data.
+            full_samples_list (list): List of all sample names in the experiment.
+
+        Returns:
+            pd.DataFrame: Aggregated DataFrame with total abundance per lipid class.
+        """
+        grouped_df = df.groupby('ClassKey')[["MeanArea[" + sample + ']' for sample in full_samples_list]].sum()
+        return grouped_df
+
+    @staticmethod
+    def get_all_classes(df, full_samples_list):
+        """
+        Retrieves a list of all lipid classes present in the DataFrame.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing lipidomics data.
+            full_samples_list (list): List of all sample names in the experiment.
+
+        Returns:
+            list: List of lipid classes.
+        """
+        return list(AbundancePieChart.calculate_total_abundance(df, full_samples_list).index)
+
+    @staticmethod
+    @st.cache_data
+    def filter_df_for_selected_classes(df, full_samples_list, selected_classes):
+        """
+        Filters the DataFrame to include only the selected lipid classes.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing lipidomics data.
+            full_samples_list (list): List of all sample names in the experiment.
+            selected_classes (list): List of selected lipid classes.
+
+        Returns:
+            pd.DataFrame: Filtered DataFrame with selected lipid classes.
+        """
+        total_abundance_df = AbundancePieChart.calculate_total_abundance(df, full_samples_list)
+        return total_abundance_df[total_abundance_df.index.isin(selected_classes)]
+
+    @staticmethod
+    @st.cache_data
+    def create_pie_chart(df, full_samples_list, condition, samples):
+        """
+        Creates a pie chart for the total abundance of lipid classes under a specific condition.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing lipidomics data.
+            full_samples_list (list): List of all sample names in the experiment.
+            condition (str): The condition to create the pie chart for.
+            samples (list): List of sample names under the given condition.
+
+        Returns:
+            tuple: A tuple containing the Plotly figure object and the DataFrame used.
+        """
+        condition_abundance = df[["MeanArea[" + sample + "]" for sample in samples]].sum(axis=1)
+        sorted_sizes, sorted_labels = AbundancePieChart._sort_pie_chart_data(condition_abundance, df.index)
+
+        custom_labels = [f'{label} - {pct:.1f}%' for label, pct in zip(sorted_labels, 100 * sorted_sizes / sorted_sizes.sum())]
+        fig = AbundancePieChart._configure_pie_chart(sorted_sizes, custom_labels, condition)
+
+        return fig, df
+
+    @staticmethod
+    def _sort_pie_chart_data(sizes, labels):
+        """
+        Sorts pie chart data by size in descending order.
+
+        Args:
+            sizes (np.ndarray): Array of sizes (abundances) for the pie chart.
+            labels (np.ndarray): Array of labels (lipid classes) for the pie chart.
+
+        Returns:
+            tuple: Sorted sizes and labels arrays.
+        """
+        sorted_indices = np.argsort(sizes)[::-1]
+        return sizes[sorted_indices], labels[sorted_indices]
+
+    @staticmethod
+    def _configure_pie_chart(sizes, labels, condition):
+        """
+        Configures the visual aspects of the pie chart.
+
+        Args:
+            sizes (np.ndarray): Array of sizes for the pie chart segments.
+            labels (np.ndarray): Array of labels for the pie chart segments.
+            condition (str): The condition the pie chart represents.
+
+        Returns:
+            plotly.graph_objects.Figure: Configured Plotly figure object for the pie chart.
+        """
+        # Define a color palette that works well with SVG format
+        color_palette = px.colors.qualitative.Plotly
+    
+        fig = px.pie(values=sizes, names=labels, title=f'Total Abundance Pie Chart - {condition}',
+                     color_discrete_sequence=color_palette)
+        hovertemplate = '%{label}<extra>%{percent:.1%}</extra>'
+        fig.update_traces(hovertemplate=hovertemplate, textinfo='none')
+        fig.update_layout(legend_title="Lipid Classes", margin=dict(l=10, r=100, t=40, b=10), width=450, height=300)
+        return fig
+
