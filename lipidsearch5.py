@@ -113,32 +113,33 @@ def process_experiment(df):
     """
     Process the experiment setup and sample grouping based on user input.
 
-    Parameters:
-    df (pd.DataFrame): The DataFrame containing the experiment data.
-
     Returns:
-    tuple: A tuple containing the confirmation status, name DataFrame, and experiment object.
-
-    Note:
-    Errors during the experiment setup should be managed by the caller or within the invoked functions.
+    confirmed (bool): Whether the user has confirmed the inputs.
+    name_df (DataFrame): DataFrame containing name mappings.
+    experiment (Experiment): The configured Experiment object.
+    bqc_label (str or None): Label used for BQC samples, if any.
+    valid_samples (bool): Indicates whether sample validation was successful.
     """
     st.sidebar.subheader("Define Experiment")
     n_conditions = st.sidebar.number_input('Enter the number of conditions', min_value=1, max_value=20, value=1, step=1)
-    conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1} (e.g. WT or KO)') for i in range(n_conditions)]
-    number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i+1}', min_value=1, max_value=1000, value=1, step=1) for i in range(n_conditions)]
+    conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1}') for i in range(n_conditions)]
+    number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', min_value=1, max_value=1000, value=1, step=1) for i in range(n_conditions)]
 
     experiment = lp.Experiment()
     if not experiment.setup_experiment(n_conditions, conditions_list, number_of_samples_list):
         st.sidebar.error("All condition labels must be non-empty.")
-        return False, None, None, None
+        return None, None, None, None, False  # Ensure five values are returned
 
-    # Group samples and ask for BQC samples
-    name_df, group_df = process_group_samples(df, experiment)
+    name_df, group_df, valid_samples = process_group_samples(df, experiment)
+    if not valid_samples:
+        return None, None, None, None, False  # Consistently return five values
+
     bqc_label = specify_bqc_samples(experiment)
-    
-    # Confirm user inputs after specifying BQC samples
-    confirmed = confirm_user_inputs(group_df, experiment)  # Now 'group_df' is defined and passed correctly
-    return confirmed, name_df, experiment, bqc_label
+    confirmed = confirm_user_inputs(group_df, experiment)
+    if not confirmed:
+        return None, None, None, None, False  # Ensure five values are returned
+
+    return confirmed, name_df, experiment, bqc_label, valid_samples
 
 def specify_bqc_samples(experiment):
     """
@@ -183,44 +184,37 @@ def process_group_samples(df, experiment):
     Errors in grouping samples are communicated through user feedback in the Streamlit interface.
     """
     grouped_samples = lp.GroupSamples(experiment)
-
     if not grouped_samples.check_dataset_validity(df):
         st.sidebar.error("This is not a valid LipidSearch 5.0 dataset!")
-        raise Exception("Invalid dataset format.")
+        return None, None, False  # Returning a failure status
 
-    if not validate_total_samples(grouped_samples, experiment, df):
+    valid_samples = validate_total_samples(grouped_samples, experiment, df)
+    if not valid_samples:
         st.sidebar.error("Invalid total number of samples!")
-        raise Exception("Sample count does not match with experiment setup.")
+        return None, None, False  # Early exit with a failure status
 
     st.sidebar.subheader('Group Samples')
     group_df = grouped_samples.build_group_df(df)
     st.sidebar.write(group_df)
 
-    # Ask user if samples are properly grouped
+    # Proceed with allowing the user to interact with grouped samples
     st.sidebar.write('Are your samples properly grouped together?')
     ans = st.sidebar.radio('', ['Yes', 'No'])
-    if ans == 'Yes':
-        st.sidebar.write('Go to the next section!')
-    else:
-        # Collect user selections for re-grouping
+    if ans == 'No':
         selections = {}
         remaining_samples = group_df['sample name'].tolist()
         for condition in experiment.conditions_list:
             selected_samples = st.sidebar.multiselect(f'Pick the samples that belong to condition {condition}', remaining_samples)
             selections[condition] = selected_samples
-            # Update remaining_samples by removing the selected ones
             remaining_samples = [s for s in remaining_samples if s not in selected_samples]
-
-        # Re-group the samples based on user selections
         group_df = grouped_samples.group_samples(group_df, selections)
         st.sidebar.write('Check the updated table below to make sure the samples are properly grouped together:')
         st.sidebar.write(group_df)
 
-    # Update sample names
     name_df = grouped_samples.update_sample_names(group_df)
 
-    # Return the confirmation status, name DataFrame, and the group DataFrame
-    return name_df, group_df
+    # Return the confirmation status, name DataFrame, and the group DataFrame with a success status
+    return name_df, group_df, True
 
 def validate_total_samples(grouped_samples, experiment, df):
     """
@@ -1043,39 +1037,42 @@ def main():
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
 
-    try:
-        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-        if uploaded_file is not None:
-            df = load_data(uploaded_file)
-            confirmed, name_df, experiment, bqc_label = process_experiment(df)
-            if confirmed:
-                st.subheader("1) Clean & Normalize Data")
-                display_raw_data(df)
-                cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
-                
-                proceed_with_analysis, continuation_df = display_normalization_options(cleaned_df, intsta_df, experiment)
+    #try:
+    uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+    if uploaded_file is not None:
+        df = load_data(uploaded_file)
+        confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
+
+        if confirmed and valid_samples:
+            st.subheader("1) Clean & Normalize Data")
+            display_raw_data(df)
+            cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
+            
+            proceed_with_analysis, continuation_df = display_normalization_options(cleaned_df, intsta_df, experiment)
     
-                if proceed_with_analysis:
-                    st.subheader("2) Scan Data & Run Quality Checks")
-                    display_box_plots(continuation_df, experiment)
-                    continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
-                    display_retention_time_plots(continuation_df)
+            if proceed_with_analysis:
+                st.subheader("2) Scan Data & Run Quality Checks")
+                display_box_plots(continuation_df, experiment)
+                continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
+                display_retention_time_plots(continuation_df)
+                
+                st.subheader("3) Detect & Remove Anomalies")
+                analyze_pairwise_correlation(continuation_df, experiment)
+                display_pca_analysis(continuation_df, experiment)
+                
+                st.subheader("4) Analyze Data & Test Hypothesis")
+                display_volcano_plot(experiment, continuation_df)
+                display_abundance_bar_chart(experiment, continuation_df)
+                display_abundance_pie_charts(experiment, continuation_df)
+                display_saturation_plots(experiment, continuation_df)
+                display_pathway_visualization(experiment, continuation_df)
+                display_lipidomic_heatmap(experiment, continuation_df)
+        #else:
+            #st.sidebar.error("Processing cannot continue due to invalid setup or lack of confirmation.")
                     
-                    st.subheader("3) Detect & Remove Anomalies")
-                    analyze_pairwise_correlation(continuation_df, experiment)
-                    display_pca_analysis(continuation_df, experiment)
-                    
-                    st.subheader("4) Analyze Data & Test Hypothesis")
-                    display_volcano_plot(experiment, continuation_df)
-                    display_abundance_bar_chart(experiment, continuation_df)
-                    display_abundance_pie_charts(experiment, continuation_df)
-                    display_saturation_plots(experiment, continuation_df)
-                    display_pathway_visualization(experiment, continuation_df)
-                    display_lipidomic_heatmap(experiment, continuation_df)
-                    
-    except Exception as e:
-        st.error("An error occurred during file upload or data processing.")
-        print(f"Error details: {e}")
+    #except Exception as e:
+        #st.error("An error occurred during file upload or data processing.")
+        #print(f"Error details: {e}")
         
 
 if __name__ == "__main__":
