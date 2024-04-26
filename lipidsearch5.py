@@ -1036,10 +1036,25 @@ def main():
     """
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
+    st.info("""
+            **Dataset Requirements for LipidSearch 5.0 Module**
+            
+            Ensure your dataset includes the following mandatory columns: 
+            - `LipidMolec`: The molecule identifier for the lipid.
+            - `ClassKey`: The classification key for the lipid type.
+            - `CalcMass`: The calculated mass of the lipid molecule.
+            - `BaseRt`: The base retention time.
+            - `TotalGrade`: The overall quality grade of the lipid data.
+            - `TotalSmpIDRate(%)`: The total sample identification rate as a percentage.
+            - `FAKey`: The fatty acid key associated with the lipid.
+            
+            Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
+            """)
 
-    try:
-        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-        if uploaded_file is not None:
+
+    #try:
+    uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+    if uploaded_file is not None:
             df = load_data(uploaded_file)
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
     
@@ -1067,9 +1082,9 @@ def main():
                     display_saturation_plots(experiment, continuation_df)
                     display_pathway_visualization(experiment, continuation_df)
                     display_lipidomic_heatmap(experiment, continuation_df)            
-    except Exception as e:
-        st.error("An error occurred during file upload or data processing.")
-        print(f"Error details: {e}")
+    #except Exception as e:
+        #st.error("An error occurred during file upload or data processing.")
+        #print(f"Error details: {e}")
         
 
 if __name__ == "__main__":
