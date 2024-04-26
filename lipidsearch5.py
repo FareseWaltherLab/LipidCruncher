@@ -594,14 +594,6 @@ def display_retention_time_plots(continuation_df):
     """
     expand_retention = st.expander('View Retention Time Plots: Check Sanity of Data')
     with expand_retention:
-        st.markdown("""
-            The retention time of a lipid species is a function of its degree of hydrophobicity. 
-            The more hydrophobic the lipid species, the longer the retention time. When retention time is 
-            plotted versus molecular mass, lipid species tend to form separate clusters based upon which lipid class they belong to.
-            
-            Inspect the retention time of lipid species within any lipid class and compare with other lipid classes. 
-            Does everything make sense?
-        """)
         integrate_retention_time_plots(continuation_df)
         
 def analyze_pairwise_correlation(continuation_df, experiment):
@@ -619,15 +611,6 @@ def analyze_pairwise_correlation(continuation_df, experiment):
     """
     expand_corr = st.expander('Pairwise Correlation Analysis')
     with expand_corr:
-        st.markdown("""
-            Typically, the AUC's of any sample is highly linearly correlated to those of its biological replicate
-            (i.e., correlation coefficient > 0.8). This linear correlation is expected to be even stronger for technical replicates 
-            (i.e., correlation coefficient > 0.9).
-            A sample that has a weak correlation with its biological replicates is an outlier. That sample might be an outlier because 
-            of natural biological variance or an error during sample preparation.
-            
-            Run a correlation test to inspect the degree of correlation between any two biological or technical replicates:
-            """)
         st.info("LipidCruncher removes the missing values before performing the correlation test.")
 
         # Filter out conditions with only one replicate
@@ -804,11 +787,6 @@ def display_abundance_bar_chart(experiment, continuation_df):
     Uses Streamlit widgets for user interaction and the AbundanceBarChart class for plot generation.
     """
     with st.expander("Class Concentration Bar Chart"):
-        st.markdown("""
-            The total abundance of a class is computed by summing the abundances of all the lipid species belonging 
-            to that class.  
-            """)
-
         # Extract necessary lists from experiment object
         full_samples_list = experiment.full_samples_list
         individual_samples_list = experiment.individual_samples_list
@@ -949,11 +927,6 @@ def display_abundance_pie_charts(experiment, continuation_df):
 
     # Expanding the Streamlit interface section to display pie charts
     with st.expander("Class Concentration Pie Chart"):
-        # Description of the pie chart visualization
-        st.markdown("""
-            The total abundance of each class is displayed as a pie chart for each condition. 
-            Pie charts are only generated for conditions with more than one sample.
-        """)
         # Extract full_samples_list from the experiment object
         full_samples_list = experiment.full_samples_list
 
@@ -1052,9 +1025,9 @@ def main():
             """)
 
 
-    #try:
-    uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-    if uploaded_file is not None:
+    try:
+        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+        if uploaded_file is not None:
             df = load_data(uploaded_file)
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
     
@@ -1082,9 +1055,9 @@ def main():
                     display_saturation_plots(experiment, continuation_df)
                     display_pathway_visualization(experiment, continuation_df)
                     display_lipidomic_heatmap(experiment, continuation_df)            
-    #except Exception as e:
-        #st.error("An error occurred during file upload or data processing.")
-        #print(f"Error details: {e}")
+    except Exception as e:
+        st.error("An error occurred during file upload or data processing.")
+        print(f"Error details: {e}")
         
 
 if __name__ == "__main__":
