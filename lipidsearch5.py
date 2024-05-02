@@ -1024,7 +1024,6 @@ def main():
             Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
             """)
 
-
     try:
         uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
         if uploaded_file is not None:
