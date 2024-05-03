@@ -1024,9 +1024,9 @@ def main():
             Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
             """)
 
-    #try:
-    uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-    if uploaded_file is not None:
+    try:
+        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+        if uploaded_file is not None:
             df = load_data(uploaded_file)
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
     
@@ -1054,9 +1054,9 @@ def main():
                     display_saturation_plots(experiment, continuation_df)
                     display_pathway_visualization(experiment, continuation_df)
                     display_lipidomic_heatmap(experiment, continuation_df)            
-    #except Exception as e:
-        #st.error("An error occurred during file upload or data processing.")
-        #print(f"Error details: {e}")
+    except Exception as e:
+        st.error("An error occurred during file upload or data processing.")
+        print(f"Error details: {e}")
         
 
 if __name__ == "__main__":
