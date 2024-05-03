@@ -9,6 +9,66 @@ from io import BytesIO
 import base64
 import plotly.io as pio
 
+
+def main():
+    """
+    Main function to execute the app. 
+    Manages the file uploading and processing workflow in the Streamlit interface.
+    
+    Raises:
+    Exception: Catches and logs exceptions related to file upload and data processing.
+    """
+    st.header("LipidSearch 5.0 Module")
+    st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
+    st.info("""
+            **Dataset Requirements for LipidSearch 5.0 Module**
+            
+            Ensure your dataset includes the following mandatory columns: 
+            - `LipidMolec`: The molecule identifier for the lipid.
+            - `ClassKey`: The classification key for the lipid type.
+            - `CalcMass`: The calculated mass of the lipid molecule.
+            - `BaseRt`: The base retention time.
+            - `TotalGrade`: The overall quality grade of the lipid data.
+            - `TotalSmpIDRate(%)`: The total sample identification rate as a percentage.
+            - `FAKey`: The fatty acid key associated with the lipid.
+            
+            Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
+            """)
+
+    try:
+        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+        if uploaded_file is not None:
+            df = load_data(uploaded_file)
+            confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
+    
+            if confirmed and valid_samples:
+                st.subheader("1) Clean & Normalize Data")
+                display_raw_data(df)
+                cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
+                
+                proceed_with_analysis, continuation_df = display_normalization_options(cleaned_df, intsta_df, experiment)
+        
+                if proceed_with_analysis:
+                    st.subheader("2) Scan Data & Run Quality Checks")
+                    display_box_plots(continuation_df, experiment)
+                    continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
+                    display_retention_time_plots(continuation_df)
+                    
+                    st.subheader("3) Detect & Remove Anomalies")
+                    analyze_pairwise_correlation(continuation_df, experiment)
+                    display_pca_analysis(continuation_df, experiment)
+                    
+                    st.subheader("4) Analyze Data & Test Hypothesis")
+                    display_volcano_plot(experiment, continuation_df)
+                    display_abundance_bar_chart(experiment, continuation_df)
+                    display_abundance_pie_charts(experiment, continuation_df)
+                    display_saturation_plots(experiment, continuation_df)
+                    display_pathway_visualization(experiment, continuation_df)
+                    display_lipidomic_heatmap(experiment, continuation_df)            
+    except Exception as e:
+        st.error("An error occurred during file upload or data processing.")
+        print(f"Error details: {e}")
+
 @st.cache_data
 def convert_df(df):
     """
@@ -998,65 +1058,6 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             #svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
             csv_download = convert_df(z_scores_df.reset_index())
             st.download_button("Download Data", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
-
-def main():
-    """
-    Main function to execute the app. 
-    Manages the file uploading and processing workflow in the Streamlit interface.
-    
-    Raises:
-    Exception: Catches and logs exceptions related to file upload and data processing.
-    """
-    st.header("LipidSearch 5.0 Module")
-    st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
-    st.info("""
-            **Dataset Requirements for LipidSearch 5.0 Module**
-            
-            Ensure your dataset includes the following mandatory columns: 
-            - `LipidMolec`: The molecule identifier for the lipid.
-            - `ClassKey`: The classification key for the lipid type.
-            - `CalcMass`: The calculated mass of the lipid molecule.
-            - `BaseRt`: The base retention time.
-            - `TotalGrade`: The overall quality grade of the lipid data.
-            - `TotalSmpIDRate(%)`: The total sample identification rate as a percentage.
-            - `FAKey`: The fatty acid key associated with the lipid.
-            
-            Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
-            """)
-
-    try:
-        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-        if uploaded_file is not None:
-            df = load_data(uploaded_file)
-            confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
-    
-            if confirmed and valid_samples:
-                st.subheader("1) Clean & Normalize Data")
-                display_raw_data(df)
-                cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
-                
-                proceed_with_analysis, continuation_df = display_normalization_options(cleaned_df, intsta_df, experiment)
-        
-                if proceed_with_analysis:
-                    st.subheader("2) Scan Data & Run Quality Checks")
-                    display_box_plots(continuation_df, experiment)
-                    continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
-                    display_retention_time_plots(continuation_df)
-                    
-                    st.subheader("3) Detect & Remove Anomalies")
-                    analyze_pairwise_correlation(continuation_df, experiment)
-                    display_pca_analysis(continuation_df, experiment)
-                    
-                    st.subheader("4) Analyze Data & Test Hypothesis")
-                    display_volcano_plot(experiment, continuation_df)
-                    display_abundance_bar_chart(experiment, continuation_df)
-                    display_abundance_pie_charts(experiment, continuation_df)
-                    display_saturation_plots(experiment, continuation_df)
-                    display_pathway_visualization(experiment, continuation_df)
-                    display_lipidomic_heatmap(experiment, continuation_df)            
-    except Exception as e:
-        st.error("An error occurred during file upload or data processing.")
-        print(f"Error details: {e}")
         
 
 if __name__ == "__main__":
