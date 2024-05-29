@@ -12,7 +12,7 @@ import plotly.io as pio
 
 def main():
     """
-    Main function to execute the app. 
+    Main function to execute the app.
     Manages the file uploading and processing workflow in the Streamlit interface.
     
     Raises:
@@ -59,15 +59,27 @@ def main():
                     display_pca_analysis(continuation_df, experiment)
                     
                     st.subheader("4) Analyze Data & Test Hypothesis")
-                    display_volcano_plot(experiment, continuation_df)
-                    display_abundance_bar_chart(experiment, continuation_df)
-                    display_abundance_pie_charts(experiment, continuation_df)
-                    display_saturation_plots(experiment, continuation_df)
-                    display_pathway_visualization(experiment, continuation_df)
-                    display_lipidomic_heatmap(experiment, continuation_df)            
+                    analysis_option = st.radio(
+                        "Select an analysis feature:",
+                        ("Volcano Plot", "Abundance Bar Chart", "Abundance Pie Charts", "Saturation Plots", "Pathway Visualization", "Lipidomic Heatmap")
+                    )
+                    
+                    if analysis_option == "Volcano Plot":
+                        display_volcano_plot(experiment, continuation_df)
+                    elif analysis_option == "Abundance Bar Chart":
+                        display_abundance_bar_chart(experiment, continuation_df)
+                    elif analysis_option == "Abundance Pie Charts":
+                        display_abundance_pie_charts(experiment, continuation_df)
+                    elif analysis_option == "Saturation Plots":
+                        display_saturation_plots(experiment, continuation_df)
+                    elif analysis_option == "Pathway Visualization":
+                        display_pathway_visualization(experiment, continuation_df)
+                    elif analysis_option == "Lipidomic Heatmap":
+                        display_lipidomic_heatmap(experiment, continuation_df)            
     except Exception as e:
         st.error("An error occurred during file upload or data processing.")
         print(f"Error details: {e}")
+
 
 @st.cache_data
 def convert_df(df):
