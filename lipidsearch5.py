@@ -35,14 +35,14 @@ def main():
             Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
             """)
 
-    try:
-        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-        if uploaded_file is not None:
+    #try:
+    uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+    if uploaded_file is not None:
             df = load_data(uploaded_file)
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
     
             if confirmed and valid_samples:
-                st.subheader("1) Clean & Normalize Data")
+                st.subheader("1) Clean, Filter, & Normalize Data")
                 display_raw_data(df)
                 cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
                 
@@ -58,17 +58,17 @@ def main():
                     analyze_pairwise_correlation(continuation_df, experiment)
                     display_pca_analysis(continuation_df, experiment)
                     
-                    st.subheader("4) Analyze Data & Test Hypothesis")
+                    st.subheader("4) Visualize, Interpret, & Analyze Data")
                     analysis_option = st.radio(
                         "Select an analysis feature:",
-                        ("Volcano Plot", "Abundance Bar Chart", "Abundance Pie Charts", "Saturation Plots", "Pathway Visualization", "Lipidomic Heatmap")
+                        ("Volcano Plot", "Bar Chart", "Pie Charts", "Saturation Plots", "Pathway Visualization", "Lipidomic Heatmap")
                     )
                     
                     if analysis_option == "Volcano Plot":
                         display_volcano_plot(experiment, continuation_df)
-                    elif analysis_option == "Abundance Bar Chart":
+                    elif analysis_option == "Bar Chart":
                         display_abundance_bar_chart(experiment, continuation_df)
-                    elif analysis_option == "Abundance Pie Charts":
+                    elif analysis_option == "Pie Charts":
                         display_abundance_pie_charts(experiment, continuation_df)
                     elif analysis_option == "Saturation Plots":
                         display_saturation_plots(experiment, continuation_df)
@@ -76,9 +76,9 @@ def main():
                         display_pathway_visualization(experiment, continuation_df)
                     elif analysis_option == "Lipidomic Heatmap":
                         display_lipidomic_heatmap(experiment, continuation_df)            
-    except Exception as e:
-        st.error("An error occurred during file upload or data processing.")
-        print(f"Error details: {e}")
+    #except Exception as e:
+        #st.error("An error occurred during file upload or data processing.")
+        #print(f"Error details: {e}")
 
 
 @st.cache_data
@@ -864,7 +864,7 @@ def display_abundance_bar_chart(experiment, continuation_df):
 
         # Add unique keys for each multiselect widget
         selected_conditions_list = st.multiselect(
-            'Add or remove conditions  ', 
+            'Add or remove conditions', 
             conditions_list, 
             conditions_list,
             key='conditions_select'
@@ -880,14 +880,14 @@ def display_abundance_bar_chart(experiment, continuation_df):
 
         if selected_conditions_list and selected_classes_list:
             fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
-            continuation_df, 
-            full_samples_list, 
-            individual_samples_list, 
-            conditions_list, 
-            selected_conditions_list, 
-            selected_classes_list, 
-            mode
-        )
+                continuation_df, 
+                full_samples_list, 
+                individual_samples_list, 
+                conditions_list, 
+                selected_conditions_list, 
+                selected_classes_list, 
+                mode
+            )
 
             # Display the plot
             st.pyplot(fig)
