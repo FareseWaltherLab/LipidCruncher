@@ -40,8 +40,9 @@ class AbundanceBarChart:
         """
         grouped_df = AbundanceBarChart.group_and_sum(df, full_samples_list)
         AbundanceBarChart.calculate_mean_std_for_conditions(grouped_df, individual_samples_list, conditions_list, selected_conditions)
+        grouped_df = AbundanceBarChart.filter_by_selected_classes(grouped_df, selected_classes)
         AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
-        return AbundanceBarChart.filter_by_selected_classes(grouped_df, selected_classes)
+        return grouped_df
 
     @staticmethod
     @st.cache_data
@@ -86,9 +87,14 @@ class AbundanceBarChart:
         selected_conditions (list of str): Conditions selected for analysis.
         """
         for condition in selected_conditions:
-            grouped_df[f"log2_mean_AUC_{condition}"] = np.log2(grouped_df[f"mean_AUC_{condition}"].replace(0, np.nan))
-            grouped_df[f"log2_std_AUC_{condition}"] = (np.log2(grouped_df[f"mean_AUC_{condition}"] + grouped_df[f"std_AUC_{condition}"]) - 
-                                                       np.log2(grouped_df[f"mean_AUC_{condition}"] - grouped_df[f"std_AUC_{condition}"]).replace(-np.inf, np.nan)) / 2
+            mean_col = f"mean_AUC_{condition}"
+            std_col = f"std_AUC_{condition}"
+            if mean_col in grouped_df.columns and std_col in grouped_df.columns:
+                grouped_df[f"log2_mean_AUC_{condition}"] = np.log2(grouped_df[mean_col].replace(0, np.nan)).replace(-np.inf, np.nan)
+                grouped_df[f"log2_std_AUC_{condition}"] = (
+                    np.log2(grouped_df[mean_col] + grouped_df[std_col]).replace(-np.inf, np.nan) - 
+                    np.log2(grouped_df[mean_col] - grouped_df[std_col]).replace(-np.inf, np.nan)
+                ).replace(-np.inf, np.nan) / 2
 
     @staticmethod
     def filter_by_selected_classes(grouped_df, selected_classes):
@@ -155,6 +161,8 @@ class AbundanceBarChart:
         multiplier = 0
         for condition in selected_conditions:
             mean, std = AbundanceBarChart.get_mode_specific_values(abundance_df, condition, mode)
+            if mean.isnull().all() or std.isnull().all() or mean.empty or std.empty:
+                continue  # Skip if mean or std are all NaN or empty
             offset = width * multiplier
             ax.barh(y + offset, mean, width, xerr=std, label=condition, align='center')
             multiplier += 1
@@ -173,11 +181,13 @@ class AbundanceBarChart:
         tuple: A tuple containing mean and standard deviation values.
         """
         if mode == 'linear scale':
-            mean = abundance_df[f"mean_AUC_{condition}"]
-            std = abundance_df[f"std_AUC_{condition}"]
+            mean = abundance_df.get(f"mean_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
+            std = abundance_df.get(f"std_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
         elif mode == 'log2 scale':
-            mean = abundance_df[f"log2_mean_AUC_{condition}"]
-            std = abundance_df[f"log2_std_AUC_{condition}"]
+            if f"log2_mean_AUC_{condition}" not in abundance_df.columns:
+                AbundanceBarChart.calculate_log2_values(abundance_df, [condition])
+            mean = abundance_df.get(f"log2_mean_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
+            std = abundance_df.get(f"log2_std_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
         return mean, std
 
     @staticmethod
