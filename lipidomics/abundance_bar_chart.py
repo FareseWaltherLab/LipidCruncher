@@ -127,20 +127,25 @@ class AbundanceBarChart:
         pd.DataFrame: A DataFrame used for the plot.
         """
         abundance_df = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
-        fig, ax = AbundanceBarChart.initialize_plot()
+        fig, ax = AbundanceBarChart.initialize_plot(len(selected_classes))
         AbundanceBarChart.add_bars_to_plot(ax, abundance_df, selected_conditions, mode)
         AbundanceBarChart.style_plot(ax, abundance_df)
         return fig, abundance_df
 
     @staticmethod
-    def initialize_plot():
+    def initialize_plot(num_classes):
         """
-        Initializes a matplotlib plot with a white background.
+        Initializes a matplotlib plot with a white background and dynamic figure size.
+    
+        Parameters:
+        num_classes (int): The number of lipid classes to be plotted.
     
         Returns:
         tuple: A tuple containing a figure and axis object of the plot.
         """
-        fig, ax = plt.subplots()
+        fig_width = 10
+        fig_height = max(5, num_classes * 0.5)  # Adjust height based on number of classes
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
         fig.set_facecolor('white')
         ax.set_facecolor('white')
         return fig, ax
@@ -158,14 +163,18 @@ class AbundanceBarChart:
         """
         y = np.arange(len(abundance_df))
         width = 1 / (len(selected_conditions) + 1)
+        bar_height = 0.8 / len(selected_conditions)  # Adjust bar height to add spacing
         multiplier = 0
         for condition in selected_conditions:
             mean, std = AbundanceBarChart.get_mode_specific_values(abundance_df, condition, mode)
             if mean.isnull().all() or std.isnull().all() or mean.empty or std.empty:
                 continue  # Skip if mean or std are all NaN or empty
             offset = width * multiplier
-            ax.barh(y + offset, mean, width, xerr=std, label=condition, align='center')
+            ax.barh(y + offset, mean, bar_height, xerr=std, label=condition, align='center')
             multiplier += 1
+    
+        ax.set_yticks(y + width * (len(selected_conditions) - 1) / 2)
+        ax.set_yticklabels(abundance_df['ClassKey'].values, rotation=45, ha='right', fontsize=10)
 
     @staticmethod
     def get_mode_specific_values(abundance_df, condition, mode):
@@ -199,12 +208,13 @@ class AbundanceBarChart:
         ax (matplotlib.axes.Axes): The axes object to style.
         abundance_df (pd.DataFrame): DataFrame used for the plot.
         """
-        ax.set_yticks(np.arange(len(abundance_df)))
-        ax.set_yticklabels(abundance_df['ClassKey'].values)
         ax.set_xlabel('Mean Concentration', fontsize=15)
         ax.set_ylabel('Lipid Class', fontsize=15)
-        ax.tick_params(axis='both', which='major', labelsize=15)
-        ax.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=15)
-        ax.set_title('Class Concentration Bar Chart', fontsize=14)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        # Place the legend inside the plot area
+        ax.legend(loc='lower right', fontsize=12)
+        ax.set_title('Class Concentration Bar Chart', fontsize=15)
         for spine in ax.spines.values():
             spine.set_edgecolor('black')
+        # Use the entire plot area for the bars
+        plt.tight_layout(pad=2.0)

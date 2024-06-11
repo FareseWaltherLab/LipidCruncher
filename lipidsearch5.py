@@ -876,7 +876,7 @@ def display_abundance_bar_chart(experiment, continuation_df):
             key='classes_select'
         )
 
-        mode = st.radio('Select a mode', ('linear scale', 'log2 scale'), 1)
+        mode = st.radio('Select a mode', ('linear scale', 'log2 scale'), 0)
 
         if selected_conditions_list and selected_classes_list:
             fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
