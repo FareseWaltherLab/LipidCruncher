@@ -169,7 +169,7 @@ class VolcanoPlot:
         return {class_name: next(colors) for class_name in unique_classes}
 
     @staticmethod
-    def _create_plot(merged_df, color_mapping, q_value_threshold):
+    def _create_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant):
         """
         Create a Bokeh plot for the volcano plot visualization.
         
@@ -177,15 +177,34 @@ class VolcanoPlot:
             merged_df: DataFrame containing data to be plotted.
             color_mapping: Dictionary mapping lipid classes to colors.
             q_value_threshold: The threshold for significance in the plot (-log10 of p-value).
+            hide_non_significant: Boolean indicating whether to hide non-significant data points.
         
         Returns:
             A Bokeh figure object representing the volcano plot.
         """
-        min_x, max_x = merged_df['FoldChange'].min(), merged_df['FoldChange'].max()
-        plot = figure(title="Volcano Plot", x_axis_label='Log2(Fold Change)', y_axis_label='q-value')
-        VolcanoPlot._add_scatter_plots(plot, merged_df, color_mapping)
+        if hide_non_significant:
+            significant_df = merged_df[((merged_df['FoldChange'] < -1) | (merged_df['FoldChange'] > 1)) & (merged_df['-log10(pValue)'] >= q_value_threshold)]
+        else:
+            significant_df = merged_df
+        
+        min_x, max_x = significant_df['FoldChange'].min(), significant_df['FoldChange'].max()
+        min_y, max_y = significant_df['-log10(pValue)'].min(), significant_df['-log10(pValue)'].max()
+        
+        plot = figure(title="Volcano Plot", x_axis_label='Log2(Fold Change)', y_axis_label='-log10(p-value)')
+        
+        # Add scatter plots
+        VolcanoPlot._add_scatter_plots(plot, significant_df, color_mapping)
+        
+        # Add horizontal threshold line for significance
         plot.line(x=[min_x, max_x], y=[q_value_threshold, q_value_threshold], line_dash="dashed", line_color="black")
+        
+        # Add vertical dashed lines at fold change = -1 and 1
+        plot.line(x=[-1, -1], y=[min_y, max_y], line_dash="dashed", line_color="black")
+        plot.line(x=[1, 1], y=[min_y, max_y], line_dash="dashed", line_color="black")
+        
+        # Configure hover tool
         VolcanoPlot._configure_hover_tool(plot)
+        
         return plot
 
     @staticmethod
@@ -237,7 +256,7 @@ class VolcanoPlot:
 
 
     @staticmethod
-    def create_and_display_volcano_plot(experiment, df, control_condition, experimental_condition, selected_classes, q_value_threshold):
+    def create_and_display_volcano_plot(experiment, df, control_condition, experimental_condition, selected_classes, q_value_threshold, hide_non_significant):
         """
         Generates a volcano plot for comparing two conditions in lipidomics data to identify significantly altered lipids.
         
@@ -253,10 +272,12 @@ class VolcanoPlot:
             experimental_condition (str): The name of the experimental condition to be compared against the control.
             selected_classes (list): A list of lipid classes to include in the plot. Only lipids from these classes will be displayed.
             q_value_threshold (float): The threshold for statistical significance, represented as -log10(p-value), used to draw a threshold line on the plot.
+            hide_non_significant (bool): Whether to hide non-significant data points in the plot.
     
         Returns:
             plot (figure): A Bokeh figure object representing the volcano plot.
             merged_df (pd.DataFrame): A DataFrame containing the data used in the plot, including identifiers and computed metrics such as fold changes and p-values.
+            removed_lipids_df (pd.DataFrame): A DataFrame listing lipids excluded from the analysis due to zero concentration in either control or experimental groups.
         """
         control_samples, experimental_samples = VolcanoPlot._get_samples_for_conditions(experiment, control_condition, experimental_condition)
         df_processed, control_cols, experimental_cols = VolcanoPlot._prepare_data(df, control_samples, experimental_samples)
@@ -264,62 +285,97 @@ class VolcanoPlot:
         volcano_df, removed_lipids_df = VolcanoPlot._format_results(df_processed, mean_control, mean_experimental, valid_rows, control_cols, experimental_cols)
         merged_df = VolcanoPlot._merge_and_filter_df(df, volcano_df, selected_classes)
         color_mapping = VolcanoPlot._generate_color_mapping(merged_df)
-        plot = VolcanoPlot._create_plot(merged_df, color_mapping, q_value_threshold)
+        plot = VolcanoPlot._create_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant)
         
         return plot, merged_df, removed_lipids_df
+
     
     @staticmethod
-    def create_concentration_distribution_data(volcano_df, selected_lipid, selected_conditions, experiment):
+    @st.cache_data
+    def get_most_abundant_lipid(df, selected_class):
         """
-        Prepares data for concentration distribution plot of a selected lipid across conditions.
+        Get the most abundant lipid in the selected class.
+        
+        Args:
+            df (pd.DataFrame): DataFrame containing lipidomics data.
+            selected_class (str): The selected lipid class.
+        
+        Returns:
+            str: The most abundant lipid in the selected class.
+        """
+        class_df = df[df['ClassKey'] == selected_class]
+        most_abundant_lipid = class_df.set_index('LipidMolec').sum(axis=1).idxmax()
+        return most_abundant_lipid
 
+    
+    @staticmethod
+    def create_concentration_distribution_data(volcano_df, selected_lipids, selected_conditions, experiment):
+        """
+        Prepares data for concentration distribution plot of selected lipids across conditions.
+    
         Args:
             volcano_df (pd.DataFrame): DataFrame containing volcano plot data.
-            selected_lipid (str): Selected lipid molecule for the plot.
+            selected_lipids (list): List of selected lipid molecules for the plot.
             selected_conditions (list): Conditions selected for the plot.
             experiment (Experiment): Object containing experiment setup details.
-
+    
         Returns:
-            pd.DataFrame: DataFrame containing concentration data for the selected lipid.
+            pd.DataFrame: DataFrame containing concentration data for the selected lipids.
         """
         plot_data = []
         for condition in selected_conditions:
             samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
             for sample in samples:
-                concentration = volcano_df.loc[volcano_df['LipidMolec'] == selected_lipid, f'MeanArea[{sample}]'].values[0]
-                plot_data.append({'Condition': condition, 'Concentration': concentration})
+                concentration_sum = volcano_df.loc[volcano_df['LipidMolec'].isin(selected_lipids), f'MeanArea[{sample}]'].sum()
+                plot_data.append({'Condition': condition, 'Concentration': concentration_sum})
         
         return pd.DataFrame(plot_data)
-    
+
     @staticmethod
-    def _create_concentration_vs_fold_change_plot(merged_df, color_mapping):
+    def _create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant):
         """
-        Create a Bokeh plot for Log2(Fold Change) vs. Log10(Mean Control Concentration).
-        
+        Create a Bokeh plot for Log10(Mean Control Concentration) vs. Log2(Fold Change).
+    
         Args:
             merged_df: DataFrame containing merged data for plotting, including calculated metrics.
             color_mapping: Dictionary mapping lipid classes to colors.
-        
+            q_value_threshold: The threshold for significance in the plot (-log10 of p-value).
+            hide_non_significant: Boolean indicating whether to hide non-significant data points.
+    
         Returns:
             Bokeh figure object representing the new plot.
         """
-        plot = figure(title="Fold Change vs. Mean Control Concentration", x_axis_label='Log10(Mean Control Concentration)', y_axis_label='Log2(Fold Change)')
+        if hide_non_significant:
+            significant_df = merged_df[((merged_df['FoldChange'] < -1) | (merged_df['FoldChange'] > 1)) & (merged_df['-log10(pValue)'] >= q_value_threshold)]
+        else:
+            significant_df = merged_df
+        
+        plot = figure(title="Fold Change vs. Mean Control Concentration", x_axis_label='Log2(Fold Change)', y_axis_label='Log10(Mean Control Concentration)')
         for class_name, color in color_mapping.items():
-            class_df = merged_df[merged_df['ClassKey'] == class_name]
-            plot.scatter(x='Log10MeanControl', y='FoldChange', color=color, legend_label=class_name, source=ColumnDataSource(class_df))
+            class_df = significant_df[significant_df['ClassKey'] == class_name]
+            plot.scatter(x='FoldChange', y='Log10MeanControl', color=color, legend_label=class_name, source=ColumnDataSource(class_df))
         
         VolcanoPlot._configure_hover_tool(plot, "fold_change_vs_control")  # Specify plot type for appropriate tooltips
-        return plot, merged_df[['LipidMolec', 'Log10MeanControl', 'FoldChange', 'ClassKey']]
+        return plot, significant_df[['LipidMolec', 'Log10MeanControl', 'FoldChange', 'ClassKey']]
 
-    def create_concentration_distribution_plot(plot_df, selected_lipid):
+    @staticmethod
+    def create_concentration_distribution_plot(plot_df, selected_lipids):
         """
-        Creates a seaborn strip plot for the concentration distribution of a selected lipid.
+        Creates a seaborn box plot for the concentration distribution of selected lipids.
+    
+        Args:
+            plot_df (pd.DataFrame): DataFrame containing concentration data for the selected lipids.
+            selected_lipids (list): List of selected lipid molecules.
+    
+        Returns:
+            plt.Figure: Matplotlib figure object with the box plot.
         """
         plt.figure()
         sns.set(style="whitegrid")
-        ax = sns.stripplot(x="Condition", y="Concentration", data=plot_df, palette="Set2", jitter=True)
+        ax = sns.boxplot(x="Condition", y="Concentration", data=plot_df, palette="Set2")
         ax.grid(False)
-        plt.title(f"Concentration Distribution for {selected_lipid}", fontsize=15)
+        #lipid_list_str = ", ".join(selected_lipids)
+        plt.title(f"Total Concentration Distribution for Selected Lipids", fontsize=15)
         plt.xlabel("Condition", fontsize=15)
         plt.ylabel("Concentration", fontsize=15)
         plt.xticks(fontsize=14)
