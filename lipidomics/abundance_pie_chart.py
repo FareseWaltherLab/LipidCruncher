@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import itertools
 
 class AbundancePieChart:
     
@@ -54,25 +55,26 @@ class AbundancePieChart:
 
     @staticmethod
     @st.cache_data
-    def create_pie_chart(df, full_samples_list, condition, samples):
+    def create_pie_chart(df, full_samples_list, condition, samples, color_mapping):
         """
         Creates a pie chart for the total abundance of lipid classes under a specific condition.
-
+    
         Args:
             df (pd.DataFrame): DataFrame containing lipidomics data.
             full_samples_list (list): List of all sample names in the experiment.
             condition (str): The condition to create the pie chart for.
             samples (list): List of sample names under the given condition.
-
+            color_mapping (dict): Dictionary mapping lipid class labels to colors.
+    
         Returns:
             tuple: A tuple containing the Plotly figure object and the DataFrame used.
         """
         condition_abundance = df[["MeanArea[" + sample + "]" for sample in samples]].sum(axis=1)
         sorted_sizes, sorted_labels = AbundancePieChart._sort_pie_chart_data(condition_abundance, df.index)
-
+    
         custom_labels = [f'{label} - {pct:.1f}%' for label, pct in zip(sorted_labels, 100 * sorted_sizes / sorted_sizes.sum())]
-        fig = AbundancePieChart._configure_pie_chart(sorted_sizes, custom_labels, condition)
-
+        fig = AbundancePieChart._configure_pie_chart(sorted_sizes, custom_labels, condition, sorted_labels, color_mapping)
+    
         return fig, df
 
     @staticmethod
@@ -91,25 +93,42 @@ class AbundancePieChart:
         return sizes[sorted_indices], labels[sorted_indices]
 
     @staticmethod
-    def _configure_pie_chart(sizes, labels, condition):
+    def _configure_pie_chart(sizes, labels, condition, sorted_labels, color_mapping):
         """
         Configures the visual aspects of the pie chart.
-
+    
         Args:
             sizes (np.ndarray): Array of sizes for the pie chart segments.
             labels (np.ndarray): Array of labels for the pie chart segments.
             condition (str): The condition the pie chart represents.
-
+            sorted_labels (list): Sorted list of labels.
+            color_mapping (dict): Dictionary mapping lipid class labels to colors.
+    
         Returns:
             plotly.graph_objects.Figure: Configured Plotly figure object for the pie chart.
         """
-        # Define a color palette that works well with SVG format
-        color_palette = px.colors.qualitative.Plotly
+        colors = [color_mapping[label] for label in sorted_labels]
     
         fig = px.pie(values=sizes, names=labels, title=f'Total Abundance Pie Chart - {condition}',
-                     color_discrete_sequence=color_palette)
+                     color_discrete_sequence=colors)
         hovertemplate = '%{label}<extra>%{percent:.1%}</extra>'
         fig.update_traces(hovertemplate=hovertemplate, textinfo='none')
         fig.update_layout(legend_title="Lipid Classes", margin=dict(l=10, r=100, t=40, b=10), width=450, height=300)
         return fig
+    
+    @staticmethod
+    def _generate_color_mapping(labels):
+        """
+        Generate a color mapping for different lipid classes to ensure consistent colors across conditions.
+        
+        Args:
+            labels (list): List of lipid class labels.
+        
+        Returns:
+            dict: Dictionary mapping lipid class labels to colors.
+        """
+        color_palette = px.colors.qualitative.Plotly
+        color_cycle = itertools.cycle(color_palette)
+        return {label: next(color_cycle) for label in labels}
+
 
