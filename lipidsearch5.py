@@ -9,7 +9,6 @@ from io import BytesIO
 import base64
 import plotly.io as pio
 
-
 def main():
     """
     Main function to execute the app.
@@ -35,9 +34,9 @@ def main():
             Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
             """)
 
-    #try:
-    uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-    if uploaded_file is not None:
+    try:
+        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+        if uploaded_file is not None:
             df = load_data(uploaded_file)
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
     
@@ -45,40 +44,48 @@ def main():
                 st.subheader("1) Clean, Filter, & Normalize Data")
                 display_raw_data(df)
                 cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
-                
+    
                 proceed_with_analysis, continuation_df = display_normalization_options(cleaned_df, intsta_df, experiment)
-        
+    
                 if proceed_with_analysis:
                     st.subheader("2) Scan Data & Run Quality Checks")
                     display_box_plots(continuation_df, experiment)
                     continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
                     display_retention_time_plots(continuation_df)
-                    
+    
                     st.subheader("3) Detect & Remove Anomalies")
                     analyze_pairwise_correlation(continuation_df, experiment)
                     display_pca_analysis(continuation_df, experiment)
-                    
+    
                     st.subheader("4) Visualize, Interpret, & Analyze Data")
+    
                     analysis_option = st.radio(
                         "Select an analysis feature:",
-                        ("Volcano Plot", "Bar Chart", "Pie Charts", "Saturation Plots", "Pathway Visualization", "Lipidomic Heatmap")
+                        (
+                            "Class Level Breakdown - Bar Chart", 
+                            "Class Level Breakdown - Pie Charts", 
+                            "Class Level Breakdown - Saturation Plots", 
+                            "Class Level Breakdown - Pathway Visualization",
+                            "Species Level Breakdown - Volcano Plot",
+                            "Species Level Breakdown - Lipidomic Heatmap"
+                        )
                     )
-                    
-                    if analysis_option == "Volcano Plot":
-                        display_volcano_plot(experiment, continuation_df)
-                    elif analysis_option == "Bar Chart":
+    
+                    if analysis_option == "Class Level Breakdown - Bar Chart":
                         display_abundance_bar_chart(experiment, continuation_df)
-                    elif analysis_option == "Pie Charts":
+                    elif analysis_option == "Class Level Breakdown - Pie Charts":
                         display_abundance_pie_charts(experiment, continuation_df)
-                    elif analysis_option == "Saturation Plots":
+                    elif analysis_option == "Class Level Breakdown - Saturation Plots":
                         display_saturation_plots(experiment, continuation_df)
-                    elif analysis_option == "Pathway Visualization":
+                    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
                         display_pathway_visualization(experiment, continuation_df)
-                    elif analysis_option == "Lipidomic Heatmap":
-                        display_lipidomic_heatmap(experiment, continuation_df)            
-    #except Exception as e:
-        #st.error("An error occurred during file upload or data processing.")
-        #print(f"Error details: {e}")
+                    elif analysis_option == "Species Level Breakdown - Volcano Plot":
+                        display_volcano_plot(experiment, continuation_df)
+                    elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
+                        display_lipidomic_heatmap(experiment, continuation_df)
+    except Exception as e:
+        st.error("An error occurred during file upload or data processing.")
+        print(f"Error details: {e}")
 
 
 @st.cache_data
