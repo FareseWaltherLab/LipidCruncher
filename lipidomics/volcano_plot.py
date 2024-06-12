@@ -323,12 +323,13 @@ class VolcanoPlot:
             pd.DataFrame: DataFrame containing concentration data for the selected lipids.
         """
         plot_data = []
-        for condition in selected_conditions:
-            samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
-            for sample in samples:
-                concentration_sum = volcano_df.loc[volcano_df['LipidMolec'].isin(selected_lipids), f'MeanArea[{sample}]'].sum()
-                plot_data.append({'Condition': condition, 'Concentration': concentration_sum})
-        
+        for lipid in selected_lipids:
+            for condition in selected_conditions:
+                samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
+                for sample in samples:
+                    concentration = volcano_df.loc[volcano_df['LipidMolec'] == lipid, f'MeanArea[{sample}]'].values[0]
+                    plot_data.append({'Lipid': lipid, 'Condition': condition, 'Concentration': concentration})
+    
         return pd.DataFrame(plot_data)
 
     @staticmethod
@@ -359,26 +360,28 @@ class VolcanoPlot:
         return plot, significant_df[['LipidMolec', 'Log10MeanControl', 'FoldChange', 'ClassKey']]
 
     @staticmethod
-    def create_concentration_distribution_plot(plot_df, selected_lipids):
+    def create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions):
         """
         Creates a seaborn box plot for the concentration distribution of selected lipids.
     
         Args:
             plot_df (pd.DataFrame): DataFrame containing concentration data for the selected lipids.
             selected_lipids (list): List of selected lipid molecules.
+            selected_conditions (list): List of selected conditions.
     
         Returns:
             plt.Figure: Matplotlib figure object with the box plot.
         """
-        plt.figure()
+        plt.figure(figsize=(10, 6))
         sns.set(style="whitegrid")
-        ax = sns.boxplot(x="Condition", y="Concentration", data=plot_df, palette="Set2")
+        ax = sns.boxplot(x="Lipid", y="Concentration", hue="Condition", data=plot_df, palette="Set2")
         ax.grid(False)
-        #lipid_list_str = ", ".join(selected_lipids)
-        plt.title(f"Total Concentration Distribution for Selected Lipids", fontsize=15)
-        plt.xlabel("Condition", fontsize=15)
-        plt.ylabel("Concentration", fontsize=15)
-        plt.xticks(fontsize=14)
+        plt.title("Concentration Distribution for Selected Lipids", fontsize=20)
+        plt.xlabel("Lipid", fontsize=20)
+        plt.ylabel("Concentration", fontsize=20)
+        plt.xticks(fontsize=14, rotation=45, ha='right')
         plt.yticks(fontsize=14)
+        plt.legend(title='Condition', loc='upper right')
         plt.tight_layout()
         return plt.gcf()
+

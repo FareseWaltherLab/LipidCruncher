@@ -777,14 +777,16 @@ def display_volcano_plot(experiment, continuation_df):
         experimental_condition = st.selectbox('Pick the experimental condition', conditions_with_replicates, index=conditions_with_replicates.index(default_experimental))
         selected_classes_list = st.multiselect('Add or remove classes:', list(continuation_df['ClassKey'].value_counts().index), list(continuation_df['ClassKey'].value_counts().index))
         
-        hide_non_significant = st.checkbox('Hide non-significant data points')
-        
+        hide_non_significant = st.checkbox('Hide non-significant data points', value=False)
+
         plot, merged_df, removed_lipids_df = lp.VolcanoPlot.create_and_display_volcano_plot(experiment, continuation_df, control_condition, experimental_condition, selected_classes_list, q_value_threshold, hide_non_significant)
         st.bokeh_chart(plot)
 
         # Download options
         csv_data = convert_df(merged_df[['LipidMolec', 'FoldChange', '-log10(pValue)', 'ClassKey']])
         st.download_button("Download CSV", csv_data, file_name="volcano_data.csv", mime="text/csv")
+        #svg_data = bokeh_plot_as_svg(plot)
+        #st.download_button("Download SVG", svg_data, file_name="volcano_plot.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
         
         # Generate and display the concentration vs. fold change plot
@@ -795,22 +797,27 @@ def display_volcano_plot(experiment, continuation_df):
         # CSV and SVG download options for concentration vs. fold change plot
         csv_data_for_concentration_plot = convert_df(download_df)
         st.download_button("Download CSV", csv_data_for_concentration_plot, file_name="concentration_vs_fold_change_data.csv", mime="text/csv")
+        #svg_data_for_concentration_plot = bokeh_plot_as_svg(concentration_vs_fold_change_plot)
+        #st.download_button("Download SVG", svg_data_for_concentration_vs_fold_change_plot, file_name="concentration_vs_fold_change_plot.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
         
-        # Additional functionality for multiple lipid concentration distribution
-        class_list = list(merged_df['ClassKey'].unique())
-        selected_class = st.selectbox('Select a Lipid Class:', class_list)
-        
-        most_abundant_lipid = lp.VolcanoPlot.get_most_abundant_lipid(merged_df, selected_class)
-        selected_lipids = st.multiselect('Select Lipids:', list(merged_df[merged_df['ClassKey'] == selected_class]['LipidMolec'].unique()), default=[most_abundant_lipid])
-
-        if selected_lipids:
-            selected_conditions = [control_condition, experimental_condition]
-            plot_df = lp.VolcanoPlot.create_concentration_distribution_data(merged_df, selected_lipids, selected_conditions, experiment)
-            fig = lp.VolcanoPlot.create_concentration_distribution_plot(plot_df, selected_lipids)
-            st.pyplot(fig)
-            csv_data = convert_df(plot_df)
-            st.download_button("Download Data", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
+        # Additional functionality for lipid concentration distribution
+        all_classes = list(merged_df['ClassKey'].unique())
+        selected_class = st.selectbox('Select Lipid Class:', all_classes)
+        if selected_class:
+            class_lipids = merged_df[merged_df['ClassKey'] == selected_class]['LipidMolec'].unique().tolist()
+            selected_lipids = st.multiselect('Select Lipids:', class_lipids, default=class_lipids[:1])
+            if selected_lipids:
+                selected_conditions = [control_condition, experimental_condition]
+                plot_df = lp.VolcanoPlot.create_concentration_distribution_data(
+                    merged_df, selected_lipids, selected_conditions, experiment
+                )
+                fig = lp.VolcanoPlot.create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions)
+                st.pyplot(fig)
+                csv_data = convert_df(plot_df)
+                st.download_button("Download Data", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
+                #svg_data = plt_plot_to_svg(fig)
+                #st.download_button("Download SVG", svg_data, f"{'_'.join(selected_lipids)}_concentration.svg", "image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
 
         # Displaying the table of invalid lipids
