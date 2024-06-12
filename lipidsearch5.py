@@ -1012,9 +1012,10 @@ def display_abundance_pie_charts(experiment, continuation_df):
 
         if selected_classes_list:
             filtered_df = lp.AbundancePieChart.filter_df_for_selected_classes(continuation_df, full_samples_list, selected_classes_list)
+            color_mapping = lp.AbundancePieChart._generate_color_mapping(selected_classes_list)
             for condition, samples in zip(experiment.conditions_list, experiment.individual_samples_list):
                 if len(samples) > 1:  # Skip conditions with only one sample
-                    fig, df = lp.AbundancePieChart.create_pie_chart(filtered_df, full_samples_list, condition, samples)
+                    fig, df = lp.AbundancePieChart.create_pie_chart(filtered_df, full_samples_list, condition, samples, color_mapping)
                     st.plotly_chart(fig)
 
                     # Save plot to SVG
