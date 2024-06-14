@@ -5,6 +5,8 @@ import lipidomics as lp
 import matplotlib.pyplot as plt
 import tempfile
 from bokeh.io import export_svg
+from bokeh.io.export import export_svgs
+from bokeh.plotting import figure
 from io import BytesIO
 import base64
 import plotly.io as pio
@@ -34,9 +36,9 @@ def main():
             Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
             """)
 
-    try:
-        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-        if uploaded_file is not None:
+    #try:
+    uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+    if uploaded_file is not None:
             df = load_data(uploaded_file)
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
     
@@ -83,9 +85,9 @@ def main():
                         display_volcano_plot(experiment, continuation_df)
                     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
                         display_lipidomic_heatmap(experiment, continuation_df)
-    except Exception as e:
-        st.error("An error occurred during file upload or data processing.")
-        print(f"Error details: {e}")
+    #except Exception as e:
+        #st.error("An error occurred during file upload or data processing.")
+        #print(f"Error details: {e}")
 
 
 @st.cache_data
@@ -146,11 +148,19 @@ def bokeh_plot_as_svg(plot):
     Returns:
         str: A string containing the SVG representation of the plot.
     """
+    # Ensure the plot has a title, otherwise export_svgs will not work
+    plot.title.text = plot.title.text if plot.title.text else "Plot Title"
+    
+    # Configure plot for SVG export
+    plot.output_backend = "svg"
+    
+    # Export the SVG to a temporary file
     with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as temp_svg_file:
-        export_svg(plot, filename=temp_svg_file.name)
+        export_svgs(plot, filename=temp_svg_file.name)
         temp_svg_file.seek(0)
-        svg_data = temp_svg_file.read()
-        return svg_data
+        svg_data = temp_svg_file.read().decode('utf-8')
+        
+    return svg_data
 
 def svg_download_button(fig, filename):
     """
@@ -589,12 +599,13 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             
             st.bokeh_chart(scatter_plot)
             #svg_data = bokeh_plot_as_svg(scatter_plot)
-            #st.download_button(
-                #label="Download SVG",
-                #data=svg_data,
-                #file_name="scatter_plot.svg",
-                #mime="image/svg+xml"
-            #)
+            #if svg_data:
+                #st.download_button(
+                    #label="Download SVG",
+                    #data=svg_data,
+                    #file_name="scatter_plot.svg",
+                    #mime="image/svg+xml"
+                #)
 
             csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
             st.download_button(
@@ -750,7 +761,8 @@ def display_pca_analysis(continuation_df, experiment):
         # Generate and display the PCA plot
         pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
         st.bokeh_chart(pca_plot)
-        # Download the PCA data as CSV
+        
+        # Convert and download the PCA data as CSV
         csv_data = convert_df(pca_df)
         st.download_button(
             label="Download Data",
@@ -758,6 +770,16 @@ def display_pca_analysis(continuation_df, experiment):
             file_name="PCA_data.csv",
             mime="text/csv"
         )
+
+        # Generate and download the PCA plot as SVG
+        #svg_data = bokeh_plot_as_svg(pca_plot)
+        #if svg_data:
+            #st.download_button(
+                #label="Download SVG",
+                #data=svg_data,
+                #file_name="PCA_plot.svg",
+                #mime="image/svg+xml"
+            #)
 
 def display_volcano_plot(experiment, continuation_df):
     """
