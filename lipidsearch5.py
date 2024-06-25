@@ -36,9 +36,9 @@ def main():
             Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
             """)
 
-    #try:
-    uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-    if uploaded_file is not None:
+    try:
+        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+        if uploaded_file is not None:
             df = load_data(uploaded_file)
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
     
@@ -85,9 +85,9 @@ def main():
                         display_volcano_plot(experiment, continuation_df)
                     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
                         display_lipidomic_heatmap(experiment, continuation_df)
-    #except Exception as e:
-        #st.error("An error occurred during file upload or data processing.")
-        #print(f"Error details: {e}")
+    except Exception as e:
+        st.error("An error occurred during file upload or data processing.")
+        print(f"Error details: {e}")
 
 
 @st.cache_data
@@ -649,7 +649,6 @@ def integrate_retention_time_plots(continuation_df):
 
     Args:
         continuation_df (pd.DataFrame): The DataFrame containing lipidomic data post-cleaning and normalization.
-
     """
     mode = st.radio('Pick a mode', ['Comparison Mode', 'Individual Mode'])
     if mode == 'Individual Mode':
@@ -930,19 +929,21 @@ def display_abundance_bar_chart(experiment, continuation_df):
 
             # Download buttons
             csv_data = convert_df(abundance_df)
-            #svg_data = plt_plot_to_svg(fig)
+            svg_data = plt_plot_to_svg(fig)
 
             st.download_button(
                 label="Download Data",
                 data=csv_data,
                 file_name='abundance_bar_chart.csv',
-                mime='text/csv')
+                mime='text/csv'
+            )
 
-            #st.download_button(
-                #label="Download SVG",
-                #data=svg_data,
-                #file_name='abundance_bar_chart.svg',
-                #mime='image/svg+xml')
+            st.download_button(
+                label="Download SVG",
+                data=svg_data,
+                file_name='abundance_bar_chart.svg',
+                mime='image/svg+xml'
+            )
 
 def display_pathway_visualization(experiment, continuation_df):
     """
