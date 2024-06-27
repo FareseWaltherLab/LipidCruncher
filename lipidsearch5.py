@@ -564,7 +564,7 @@ def collect_protein_concentrations(experiment):
         uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
         
         if uploaded_file is not None:
-            protein_df = pd.read_excel(uploaded_file)
+            protein_df = pd.read_excel(uploaded_file, engine='openpyxl')  # Ensure the correct engine is used
             if len(protein_df) != len(experiment.full_samples_list):
                 st.error(f"The number of concentrations in the file ({len(protein_df)}) does not match the number of samples ({len(experiment.full_samples_list)}). Please upload a valid file.")
                 return None
