@@ -37,8 +37,8 @@ def main():
             """)
 
     try:
-        uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-        if uploaded_file is not None:
+    #uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
+    #if uploaded_file is not None:
             df = load_data(uploaded_file)
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
     
@@ -85,9 +85,9 @@ def main():
                         display_volcano_plot(experiment, continuation_df)
                     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
                         display_lipidomic_heatmap(experiment, continuation_df)
-    except Exception as e:
-        st.error("An error occurred during file upload or data processing.")
-        print(f"Error details: {e}")
+    #except Exception as e:
+        #st.error("An error occurred during file upload or data processing.")
+        #print(f"Error details: {e}")
 
 
 @st.cache_data
@@ -545,7 +545,8 @@ def collect_protein_concentrations(experiment):
     """
     method = st.radio(
         "Select the method for providing protein concentrations:",
-        ["Manual Input", "Upload Excel File"]
+        ["Manual Input", "Upload Excel File"],
+        index=1
     )
     
     if method == "Manual Input":
