@@ -543,14 +543,35 @@ def collect_protein_concentrations(experiment):
     Returns:
         pd.DataFrame: A DataFrame with 'Sample' as a column and 'Concentration' containing the protein concentrations.
     """
-    protein_concentrations = {}
-    for sample in experiment.full_samples_list:
-        concentration = st.number_input(f'Enter protein concentration for {sample} (mg/mL):',
-                                        min_value=0.0, max_value=100000.0, value=1.0, step=0.1,
-                                        key=sample)  # Unique key for each input
-        protein_concentrations[sample] = concentration
+    method = st.radio(
+        "Select the method for providing protein concentrations:",
+        ["Manual Input", "Upload Excel File"]
+    )
+    
+    if method == "Manual Input":
+        protein_concentrations = {}
+        for sample in experiment.full_samples_list:
+            concentration = st.number_input(f'Enter protein concentration for {sample} (mg/mL):',
+                                            min_value=0.0, max_value=100000.0, value=1.0, step=0.1,
+                                            key=sample)  # Unique key for each input
+            protein_concentrations[sample] = concentration
 
-    protein_df = pd.DataFrame(list(protein_concentrations.items()), columns=['Sample', 'Concentration'])
+        protein_df = pd.DataFrame(list(protein_concentrations.items()), columns=['Sample', 'Concentration'])
+    
+    elif method == "Upload Excel File":
+        st.info("Upload an Excel file with a single column named 'Concentration'. Each row should correspond to the protein concentration for each sample in the experiment, in order.")
+        uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
+        
+        if uploaded_file is not None:
+            protein_df = pd.read_excel(uploaded_file)
+            if len(protein_df) != len(experiment.full_samples_list):
+                st.error(f"The number of concentrations in the file ({len(protein_df)}) does not match the number of samples ({len(experiment.full_samples_list)}). Please upload a valid file.")
+                return None
+            protein_df['Sample'] = experiment.full_samples_list
+        else:
+            st.warning("Please upload an Excel file to proceed.")
+            return None
+
     return protein_df
 
 def display_box_plots(normalized_df, experiment):
@@ -826,7 +847,7 @@ def display_volcano_plot(experiment, continuation_df):
         csv_data_for_concentration_plot = convert_df(download_df)
         st.download_button("Download CSV", csv_data_for_concentration_plot, file_name="concentration_vs_fold_change_data.csv", mime="text/csv")
         #svg_data_for_concentration_plot = bokeh_plot_as_svg(concentration_vs_fold_change_plot)
-        #st.download_button("Download SVG", svg_data_for_concentration_vs_fold_change_plot, file_name="concentration_vs_fold_change_plot.svg", mime="image/svg+xml")
+        #st.download_button("Download SVG", svg_data_for_concentration_plot, file_name="concentration_vs_fold_change_plot.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
         
         # Additional functionality for lipid concentration distribution
@@ -845,7 +866,7 @@ def display_volcano_plot(experiment, continuation_df):
                 csv_data = convert_df(plot_df)
                 st.download_button("Download Data", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
                 #svg_data = plt_plot_to_svg(fig)
-                #st.download_button("Download SVG", svg_data, f"{'_'.join(selected_lipids)}_concentration.svg", "image/svg+xml")
+                #st.download_button("Download SVG", svg_data, file_name=f"{'_'.join(selected_lipids)}_concentration.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
 
         # Displaying the table of invalid lipids
@@ -870,11 +891,11 @@ def display_saturation_plots(experiment, df):
                 # Display plots and create download buttons in Streamlit script
                 st.bokeh_chart(main_plot)
                 st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_main.csv', 'text/csv', key=f'download-main-data-{lipid_class}')
-                # st.download_button("Download Main SVG", bokeh_plot_as_svg(main_plot), f'{lipid_class}_saturation_level_plot_main.svg', 'image/svg+xml', key=f'download-main-svg-{lipid_class}')
+                #st.download_button("Download Main SVG", bokeh_plot_as_svg(main_plot), f'{lipid_class}_saturation_level_plot_main.svg', 'image/svg+xml', key=f'download-main-svg-{lipid_class}')
 
                 st.bokeh_chart(percentage_plot)
                 st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_percentage.csv', 'text/csv', key=f'download-percentage-data-{lipid_class}')
-                # st.download_button("Download Percentage SVG", bokeh_plot_as_svg(percentage_plot), f'{lipid_class}_saturation_level_plot_percentage.svg', 'image/svg+xml', key=f'download-percentage-svg-{lipid_class}')
+                #st.download_button("Download Percentage SVG", bokeh_plot_as_svg(percentage_plot), f'{lipid_class}_saturation_level_plot_percentage.svg', 'image/svg+xml', key=f'download-percentage-svg-{lipid_class}')
                 
                 st.write('---------------------------------------------------------')
 
@@ -929,7 +950,7 @@ def display_abundance_bar_chart(experiment, continuation_df):
 
             # Download buttons
             csv_data = convert_df(abundance_df)
-            svg_data = plt_plot_to_svg(fig)
+            #svg_data = plt_plot_to_svg(fig)
 
             st.download_button(
                 label="Download Data",
@@ -938,12 +959,12 @@ def display_abundance_bar_chart(experiment, continuation_df):
                 mime='text/csv'
             )
 
-            st.download_button(
-                label="Download SVG",
-                data=svg_data,
-                file_name='abundance_bar_chart.svg',
-                mime='image/svg+xml'
-            )
+            #st.download_button(
+                #label="Download SVG",
+                #data=svg_data,
+                #file_name='abundance_bar_chart.svg',
+                #mime='image/svg+xml'
+            #)
 
 def display_pathway_visualization(experiment, continuation_df):
     """
