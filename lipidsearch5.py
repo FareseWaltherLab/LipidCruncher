@@ -11,24 +11,26 @@ from io import BytesIO
 import base64
 import plotly.io as pio
 
-if 'cleaned_df' not in st.session_state:
-    st.session_state.cleaned_df = None
-if 'intsta_df' not in st.session_state:
-    st.session_state.intsta_df = None
-if 'continuation_df' not in st.session_state:
-    st.session_state.continuation_df = None
-if 'normalization_method' not in st.session_state:
-    st.session_state.normalization_method = 'None'
-if 'normalization_inputs' not in st.session_state:
-    st.session_state.normalization_inputs = {}
-if 'create_norm_dataset' not in st.session_state:
-    st.session_state.create_norm_dataset = False
-if 'module' not in st.session_state:
-    st.session_state.module = "Data Cleaning"
-
 def main():
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
+
+    module_options = [
+        "Data Cleaning, Filtering, & Normalization",
+        "Quality Check & Anomaly Detection",
+        "Data Visualization, Interpretation, & Analysis"
+    ]
+
+    # Initialize the session state for the module if not already set
+    if 'module' not in st.session_state or st.session_state.module not in module_options:
+        st.session_state.module = module_options[0]
+
+    # Move the module selection dropdown to the main page
+    selected_module = st.selectbox("Choose a module to proceed", module_options, index=module_options.index(st.session_state.module))
+
+    # Update the selected module in the session state immediately if different
+    if selected_module != st.session_state.module:
+        st.session_state.module = selected_module
 
     uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
     if uploaded_file:
@@ -40,28 +42,20 @@ def main():
             st.session_state.experiment = experiment
             st.session_state.bqc_label = bqc_label
 
-            st.sidebar.subheader("Select Module")
-            module = st.sidebar.selectbox("Choose a module to proceed", ["Data Cleaning", "Quality Check", "Anomaly Detection", "Analysis"], index=["Data Cleaning", "Quality Check", "Anomaly Detection", "Analysis"].index(st.session_state.module))
-
-            if st.session_state.module != module:
-                st.session_state.module = module
-
-            if module == "Data Cleaning":
+            # Display the selected module
+            if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
                 cleaned_df, intsta_df = data_cleaning_module(df, experiment, name_df)
                 if cleaned_df is not None and intsta_df is not None:
                     st.session_state.cleaned_df = cleaned_df
                     st.session_state.intsta_df = intsta_df
                     st.session_state.continuation_df = cleaned_df  # Ensure continuation_df is initially the cleaned_df
 
-            if module == "Quality Check" and st.session_state.cleaned_df is not None:
-                continuation_df = quality_check_module(st.session_state.cleaned_df, st.session_state.intsta_df, experiment)
+            elif st.session_state.module == "Quality Check & Anomaly Detection" and st.session_state.cleaned_df is not None:
+                continuation_df = quality_check_and_anomaly_detection_module(st.session_state.cleaned_df, st.session_state.intsta_df, experiment)
                 if continuation_df is not None:
                     st.session_state.continuation_df = continuation_df
 
-            if module == "Anomaly Detection" and st.session_state.continuation_df is not None:
-                anomaly_detection_module(st.session_state.continuation_df, experiment)
-
-            if module == "Analysis" and st.session_state.continuation_df is not None:
+            elif st.session_state.module == "Data Visualization, Interpretation, & Analysis" and st.session_state.continuation_df is not None:
                 analysis_module(st.session_state.continuation_df, experiment)
 
 def data_cleaning_module(df, experiment, name_df):
@@ -74,20 +68,20 @@ def data_cleaning_module(df, experiment, name_df):
         return normalized_df, intsta_df
     return None, None
 
-def quality_check_module(cleaned_df, intsta_df, experiment):
-    st.subheader("2) Scan Data & Run Quality Checks")
+def quality_check_and_anomaly_detection_module(cleaned_df, intsta_df, experiment):
+    st.subheader("2) Quality Check & Anomaly Detection")
     display_box_plots(st.session_state.continuation_df, experiment)  # Use continuation_df for box plots
     continuation_df = conduct_bqc_quality_assessment(st.session_state.bqc_label, st.session_state.continuation_df, experiment)  # Use continuation_df for BQC assessment
     display_retention_time_plots(continuation_df)
-    return continuation_df
-
-def anomaly_detection_module(continuation_df, experiment):
+    
     st.subheader("3) Detect & Remove Anomalies")
     analyze_pairwise_correlation(continuation_df, experiment)
     display_pca_analysis(continuation_df, experiment)
+    
+    return continuation_df
 
 def analysis_module(continuation_df, experiment):
-    st.subheader("4) Visualize, Interpret, & Analyze Data")
+    st.subheader("4) Data Visualization, Interpretation, & Analysis")
     analysis_option = st.radio(
         "Select an analysis feature:",
         (
@@ -483,7 +477,6 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
         tuple: A tuple containing a boolean indicating if normalization dataset is to be created and the normalized DataFrame.
     """
     normalized_data_object = lp.NormalizeData()  # Assume NormalizeData class is properly defined and imported
-    create_norm_dataset = False
     proceed_with_analysis = False
 
     # Use local variables to track changes within the module
@@ -535,22 +528,28 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
         local_create_norm_dataset = st.checkbox("Create, View and Download the Normalized Dataset", value=local_create_norm_dataset)
 
         if local_create_norm_dataset:
-            st.info('The normalized dataset is created!')
+            st.info('The normalized dataset is created! Please confirm your normalization choices to proceed.')
             with st.expander('View & Download Normalized Data'):
                 display_data(normalized_df, 'Normalized Data', 'normalized_data.csv')
             proceed_with_analysis = True  # Only proceed if checkbox is checked
 
-    # Add a button to confirm changes and update session state
-    if st.button("Confirm Normalization Choices"):
-        st.session_state.normalization_method = local_normalization_method
-        st.session_state.normalization_inputs['Internal_Standards'] = local_normalization_inputs
-        st.session_state.create_norm_dataset = local_create_norm_dataset
+            # Add a button to confirm changes and update session state only if create_norm_dataset is checked
+            if st.button("Confirm Normalization Choices"):
+                st.session_state.normalization_method = local_normalization_method
+                st.session_state.normalization_inputs['Internal_Standards'] = local_normalization_inputs
+                st.session_state.create_norm_dataset = local_create_norm_dataset
+
+                st.info("Normalization choices confirmed. You can now proceed with further analysis.")
+        else:
+            st.info('Select "Create, View and Download the Normalized Dataset" to confirm your normalization choices.')
 
     # Add a button to reset selections to default
     if st.button("Reset to Default"):
         st.session_state.normalization_method = 'None'
         st.session_state.normalization_inputs = {}
         st.session_state.create_norm_dataset = False
+
+        st.info("Normalization choices have been reset to default values.")
 
     return proceed_with_analysis, normalized_df
 
