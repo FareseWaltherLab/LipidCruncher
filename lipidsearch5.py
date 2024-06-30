@@ -11,84 +11,107 @@ from io import BytesIO
 import base64
 import plotly.io as pio
 
+if 'cleaned_df' not in st.session_state:
+    st.session_state.cleaned_df = None
+if 'intsta_df' not in st.session_state:
+    st.session_state.intsta_df = None
+if 'continuation_df' not in st.session_state:
+    st.session_state.continuation_df = None
+if 'normalization_method' not in st.session_state:
+    st.session_state.normalization_method = 'None'
+if 'normalization_inputs' not in st.session_state:
+    st.session_state.normalization_inputs = {}
+if 'create_norm_dataset' not in st.session_state:
+    st.session_state.create_norm_dataset = False
+if 'module' not in st.session_state:
+    st.session_state.module = "Data Cleaning"
+
 def main():
-    """
-    Main function to execute the app.
-    Manages the file uploading and processing workflow in the Streamlit interface.
-    
-    Raises:
-    Exception: Catches and logs exceptions related to file upload and data processing.
-    """
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
-    st.info("""
-            **Dataset Requirements for LipidSearch 5.0 Module**
-            
-            Ensure your dataset includes the following mandatory columns: 
-            - `LipidMolec`: The molecule identifier for the lipid.
-            - `ClassKey`: The classification key for the lipid type.
-            - `CalcMass`: The calculated mass of the lipid molecule.
-            - `BaseRt`: The base retention time.
-            - `TotalGrade`: The overall quality grade of the lipid data.
-            - `TotalSmpIDRate(%)`: The total sample identification rate as a percentage.
-            - `FAKey`: The fatty acid key associated with the lipid.
-            
-            Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. For instance, if your dataset comprises 10 samples, you should have the following columns: `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
-            """)
 
-    #try:
     uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
-    if uploaded_file is not None:
-            df = load_data(uploaded_file)
-            confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
-    
-            if confirmed and valid_samples:
-                st.subheader("1) Clean, Filter, & Normalize Data")
-                display_raw_data(df)
-                cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
-    
-                proceed_with_analysis, continuation_df = display_normalization_options(cleaned_df, intsta_df, experiment)
-    
-                if proceed_with_analysis:
-                    st.subheader("2) Scan Data & Run Quality Checks")
-                    display_box_plots(continuation_df, experiment)
-                    continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
-                    display_retention_time_plots(continuation_df)
-    
-                    st.subheader("3) Detect & Remove Anomalies")
-                    analyze_pairwise_correlation(continuation_df, experiment)
-                    display_pca_analysis(continuation_df, experiment)
-    
-                    st.subheader("4) Visualize, Interpret, & Analyze Data")
-    
-                    analysis_option = st.radio(
-                        "Select an analysis feature:",
-                        (
-                            "Class Level Breakdown - Bar Chart", 
-                            "Class Level Breakdown - Pie Charts", 
-                            "Class Level Breakdown - Saturation Plots", 
-                            "Class Level Breakdown - Pathway Visualization",
-                            "Species Level Breakdown - Volcano Plot",
-                            "Species Level Breakdown - Lipidomic Heatmap"
-                        )
-                    )
-    
-                    if analysis_option == "Class Level Breakdown - Bar Chart":
-                        display_abundance_bar_chart(experiment, continuation_df)
-                    elif analysis_option == "Class Level Breakdown - Pie Charts":
-                        display_abundance_pie_charts(experiment, continuation_df)
-                    elif analysis_option == "Class Level Breakdown - Saturation Plots":
-                        display_saturation_plots(experiment, continuation_df)
-                    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
-                        display_pathway_visualization(experiment, continuation_df)
-                    elif analysis_option == "Species Level Breakdown - Volcano Plot":
-                        display_volcano_plot(experiment, continuation_df)
-                    elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
-                        display_lipidomic_heatmap(experiment, continuation_df)
-    #except Exception as e:
-        #st.error("An error occurred during file upload or data processing.")
-        #print(f"Error details: {e}")
+    if uploaded_file:
+        df = load_data(uploaded_file)
+        confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
 
+        if confirmed and valid_samples:
+            st.session_state.name_df = name_df
+            st.session_state.experiment = experiment
+            st.session_state.bqc_label = bqc_label
+
+            st.sidebar.subheader("Select Module")
+            module = st.sidebar.selectbox("Choose a module to proceed", ["Data Cleaning", "Quality Check", "Anomaly Detection", "Analysis"], index=["Data Cleaning", "Quality Check", "Anomaly Detection", "Analysis"].index(st.session_state.module))
+
+            if st.session_state.module != module:
+                st.session_state.module = module
+
+            if module == "Data Cleaning":
+                cleaned_df, intsta_df = data_cleaning_module(df, experiment, name_df)
+                if cleaned_df is not None and intsta_df is not None:
+                    st.session_state.cleaned_df = cleaned_df
+                    st.session_state.intsta_df = intsta_df
+                    st.session_state.continuation_df = cleaned_df  # Ensure continuation_df is initially the cleaned_df
+
+            if module == "Quality Check" and st.session_state.cleaned_df is not None:
+                continuation_df = quality_check_module(st.session_state.cleaned_df, st.session_state.intsta_df, experiment)
+                if continuation_df is not None:
+                    st.session_state.continuation_df = continuation_df
+
+            if module == "Anomaly Detection" and st.session_state.continuation_df is not None:
+                anomaly_detection_module(st.session_state.continuation_df, experiment)
+
+            if module == "Analysis" and st.session_state.continuation_df is not None:
+                analysis_module(st.session_state.continuation_df, experiment)
+
+def data_cleaning_module(df, experiment, name_df):
+    st.subheader("1) Clean, Filter, & Normalize Data")
+    display_raw_data(df)
+    cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
+    proceed_with_analysis, normalized_df = display_normalization_options(cleaned_df, intsta_df, experiment)
+    if proceed_with_analysis:
+        st.session_state.continuation_df = normalized_df  # Store the normalized_df in session state
+        return normalized_df, intsta_df
+    return None, None
+
+def quality_check_module(cleaned_df, intsta_df, experiment):
+    st.subheader("2) Scan Data & Run Quality Checks")
+    display_box_plots(st.session_state.continuation_df, experiment)  # Use continuation_df for box plots
+    continuation_df = conduct_bqc_quality_assessment(st.session_state.bqc_label, st.session_state.continuation_df, experiment)  # Use continuation_df for BQC assessment
+    display_retention_time_plots(continuation_df)
+    return continuation_df
+
+def anomaly_detection_module(continuation_df, experiment):
+    st.subheader("3) Detect & Remove Anomalies")
+    analyze_pairwise_correlation(continuation_df, experiment)
+    display_pca_analysis(continuation_df, experiment)
+
+def analysis_module(continuation_df, experiment):
+    st.subheader("4) Visualize, Interpret, & Analyze Data")
+    analysis_option = st.radio(
+        "Select an analysis feature:",
+        (
+            "Class Level Breakdown - Bar Chart", 
+            "Class Level Breakdown - Pie Charts", 
+            "Class Level Breakdown - Saturation Plots", 
+            "Class Level Breakdown - Pathway Visualization",
+            "Species Level Breakdown - Volcano Plot",
+            "Species Level Breakdown - Lipidomic Heatmap"
+        )
+    )
+
+    if analysis_option == "Class Level Breakdown - Bar Chart":
+        display_abundance_bar_chart(experiment, continuation_df)
+    elif analysis_option == "Class Level Breakdown - Pie Charts":
+        display_abundance_pie_charts(experiment, continuation_df)
+    elif analysis_option == "Class Level Breakdown - Saturation Plots":
+        display_saturation_plots(experiment, continuation_df)
+    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
+        display_pathway_visualization(experiment, continuation_df)
+    elif analysis_option == "Species Level Breakdown - Volcano Plot":
+        display_volcano_plot(experiment, continuation_df)
+    elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
+        display_lipidomic_heatmap(experiment, continuation_df)
 
 @st.cache_data
 def convert_df(df):
@@ -450,7 +473,7 @@ def display_cleaned_data(df, experiment, name_df):
 def display_normalization_options(cleaned_df, intsta_df, experiment):
     """
     Display options for data normalization and process user inputs.
-    
+
     Parameters:
         cleaned_df (pd.DataFrame): The cleaned DataFrame containing the experiment data.
         intsta_df (pd.DataFrame): DataFrame containing the internal standards data.
@@ -463,72 +486,108 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
     create_norm_dataset = False
     proceed_with_analysis = False
 
-    normalization_methods = st.radio(
+    # Use local variables to track changes within the module
+    local_normalization_method = st.radio(
         "Select how you would like to normalize your data:",
-        ['None', 'Internal Standards', 'BCA Assay', 'Both']
+        ['None', 'Internal Standards', 'BCA Assay', 'Both'],
+        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(st.session_state.normalization_method)
     )
 
-    if normalization_methods == 'None':
+    local_normalization_inputs = st.session_state.normalization_inputs.get('Internal_Standards', {})
+    local_create_norm_dataset = st.session_state.create_norm_dataset
+
+    if local_normalization_method == 'None':
         normalized_df = cleaned_df
         proceed_with_analysis = True  # Proceed without further checks
     else:
         normalized_df = cleaned_df.copy()  # Start with a copy of the cleaned data frame
 
-        if normalization_methods in ['BCA Assay', 'Both']:
+        if local_normalization_method in ['BCA Assay', 'Both']:
             with st.expander("Enter Inputs for BCA Assay Data Normalization"):
                 protein_df = collect_protein_concentrations(experiment)
                 if protein_df is not None:
                     normalized_df = normalized_data_object.normalize_using_bca(normalized_df, protein_df)
+                    local_normalization_inputs['BCA'] = protein_df  # Store inputs for BCA Assay
 
-        if normalization_methods in ['Internal Standards', 'Both']:
+        if local_normalization_method in ['Internal Standards', 'Both']:
             with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
-                selected_class_list, added_intsta_species_lst, intsta_concentration_dict = collect_user_input_for_normalization(normalized_df, intsta_df)
-                normalized_df = normalized_data_object.normalize_data(selected_class_list, added_intsta_species_lst, intsta_concentration_dict, normalized_df, intsta_df, experiment)
+                # Retrieve stored values or set defaults
+                all_class_lst = cleaned_df['ClassKey'].unique()
+                selected_class_list = local_normalization_inputs.get('selected_class_list', list(all_class_lst))
+                added_intsta_species_lst = local_normalization_inputs.get('added_intsta_species_lst', [])
+                intsta_concentration_dict = local_normalization_inputs.get('intsta_concentration_dict', {})
 
-        create_norm_dataset = st.checkbox("Create, View and Download the Normalized Dataset")
-        if create_norm_dataset:
+                new_selected_class_list, new_added_intsta_species_lst, new_intsta_concentration_dict = collect_user_input_for_normalization(
+                    normalized_df, intsta_df, selected_class_list, added_intsta_species_lst, intsta_concentration_dict
+                )
+
+                normalized_df = normalized_data_object.normalize_data(
+                    new_selected_class_list, new_added_intsta_species_lst, new_intsta_concentration_dict, normalized_df, intsta_df, experiment
+                )
+
+                # Store new values only if there is a change
+                local_normalization_inputs = {
+                    'selected_class_list': new_selected_class_list,
+                    'added_intsta_species_lst': new_added_intsta_species_lst,
+                    'intsta_concentration_dict': new_intsta_concentration_dict
+                }
+
+        local_create_norm_dataset = st.checkbox("Create, View and Download the Normalized Dataset", value=local_create_norm_dataset)
+
+        if local_create_norm_dataset:
             st.info('The normalized dataset is created!')
             with st.expander('View & Download Normalized Data'):
                 display_data(normalized_df, 'Normalized Data', 'normalized_data.csv')
             proceed_with_analysis = True  # Only proceed if checkbox is checked
 
+    # Add a button to confirm changes and update session state
+    if st.button("Confirm Normalization Choices"):
+        st.session_state.normalization_method = local_normalization_method
+        st.session_state.normalization_inputs['Internal_Standards'] = local_normalization_inputs
+        st.session_state.create_norm_dataset = local_create_norm_dataset
+
+    # Add a button to reset selections to default
+    if st.button("Reset to Default"):
+        st.session_state.normalization_method = 'None'
+        st.session_state.normalization_inputs = {}
+        st.session_state.create_norm_dataset = False
+
     return proceed_with_analysis, normalized_df
 
-def collect_user_input_for_normalization(df, intsta_df):
+def collect_user_input_for_normalization(normalized_df, intsta_df, selected_class_list, added_intsta_species_lst, intsta_concentration_dict):
     """
     Collects user input for normalization process using Streamlit UI.
 
     Parameters:
-        df (pd.DataFrame): Main dataset.
+        normalized_df (pd.DataFrame): Main dataset.
         intsta_df (pd.DataFrame): Dataset containing internal standards.
+        selected_class_list (list): Preselected classes for normalization.
+        added_intsta_species_lst (list): Preselected internal standard species.
+        intsta_concentration_dict (dict): Preselected concentrations of internal standards.
 
     Returns:
         tuple: Contains selected classes, internal standards, and concentrations.
     """
-    all_class_lst = df['ClassKey'].unique()
+    all_class_lst = normalized_df['ClassKey'].unique()
     intsta_species_lst = intsta_df['LipidMolec'].tolist()
-
-    st.write('Detected internal standards species:')
-    for lipid in intsta_species_lst:
-        st.write(lipid)
 
     selected_class_list = st.multiselect(
         'Select lipid classes you would like to analyze. For each selected class, you will choose an internal standard for normalization. '
         'If a matching internal standard lipid species is available, it should be used for normalization. If no direct match is available, '
         'select an internal standard that most closely matches the structure of the lipid class in question from the available options.',
-        all_class_lst, all_class_lst
+        all_class_lst, selected_class_list
     )
 
     added_intsta_species_lst = [
-        st.selectbox(f'Pick an internal standard for {lipid_class} species', intsta_species_lst)
-        for lipid_class in selected_class_list
+        st.selectbox(f'Pick an internal standard for {lipid_class} species', intsta_species_lst, index=intsta_species_lst.index(added_intsta_species_lst[i]) if i < len(added_intsta_species_lst) else 0)
+        for i, lipid_class in enumerate(selected_class_list)
     ]
 
     st.write('Enter the concentration of each internal standard species:')
     intsta_concentration_dict = {
         lipid: st.number_input(
             f'Enter concentration of {lipid} in micromole',
-            min_value=0.0, max_value=100000.0, value=1.0, step=0.1
+            min_value=0.0, max_value=100000.0, value=intsta_concentration_dict.get(lipid, 1.0), step=0.1
         )
         for lipid in set(added_intsta_species_lst)
     }
