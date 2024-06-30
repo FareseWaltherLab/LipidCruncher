@@ -11,6 +11,24 @@ from io import BytesIO
 import base64
 import plotly.io as pio
 
+import streamlit as st
+
+# Initialize session state variables
+if 'cleaned_df' not in st.session_state:
+    st.session_state.cleaned_df = None
+if 'intsta_df' not in st.session_state:
+    st.session_state.intsta_df = None
+if 'continuation_df' not in st.session_state:
+    st.session_state.continuation_df = None
+if 'normalization_method' not in st.session_state:
+    st.session_state.normalization_method = 'None'
+if 'normalization_inputs' not in st.session_state:
+    st.session_state.normalization_inputs = {}
+if 'create_norm_dataset' not in st.session_state:
+    st.session_state.create_norm_dataset = False
+if 'module' not in st.session_state:
+    st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+
 def main():
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
@@ -21,7 +39,7 @@ def main():
         "Data Visualization, Interpretation, & Analysis"
     ]
 
-    # Initialize the session state for the module if not already set
+    # Initialize session state for module if not already set
     if 'module' not in st.session_state or st.session_state.module not in module_options:
         st.session_state.module = module_options[0]
 
@@ -51,12 +69,18 @@ def main():
                     st.session_state.continuation_df = cleaned_df  # Ensure continuation_df is initially the cleaned_df
 
             elif st.session_state.module == "Quality Check & Anomaly Detection" and st.session_state.cleaned_df is not None:
-                continuation_df = quality_check_and_anomaly_detection_module(st.session_state.cleaned_df, st.session_state.intsta_df, experiment)
-                if continuation_df is not None:
-                    st.session_state.continuation_df = continuation_df
+                if st.session_state.proceed_with_analysis:
+                    continuation_df = quality_check_and_anomaly_detection_module(st.session_state.cleaned_df, st.session_state.intsta_df, experiment)
+                    if continuation_df is not None:
+                        st.session_state.continuation_df = continuation_df
+                else:
+                    st.warning("Please confirm your normalization choices in the previous module before proceeding.")
 
             elif st.session_state.module == "Data Visualization, Interpretation, & Analysis" and st.session_state.continuation_df is not None:
-                analysis_module(st.session_state.continuation_df, experiment)
+                if st.session_state.proceed_with_analysis:
+                    analysis_module(st.session_state.continuation_df, experiment)
+                else:
+                    st.warning("Please confirm your normalization choices in the previous module before proceeding.")
 
 def data_cleaning_module(df, experiment, name_df):
     st.subheader("1) Clean, Filter, & Normalize Data")
@@ -491,7 +515,6 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
 
     if local_normalization_method == 'None':
         normalized_df = cleaned_df
-        proceed_with_analysis = True  # Proceed without further checks
     else:
         normalized_df = cleaned_df.copy()  # Start with a copy of the cleaned data frame
 
@@ -525,33 +548,23 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
                     'intsta_concentration_dict': new_intsta_concentration_dict
                 }
 
-        local_create_norm_dataset = st.checkbox("Create, View and Download the Normalized Dataset", value=local_create_norm_dataset)
+        local_create_norm_dataset = st.checkbox("View and Download Normalized Dataset", value=local_create_norm_dataset)
 
         if local_create_norm_dataset:
             st.info('The normalized dataset is created! Please confirm your normalization choices to proceed.')
-            with st.expander('View & Download Normalized Data'):
-                display_data(normalized_df, 'Normalized Data', 'normalized_data.csv')
-            proceed_with_analysis = True  # Only proceed if checkbox is checked
+            display_data(normalized_df, 'Normalized Data', 'normalized_data.csv')
 
-            # Add a button to confirm changes and update session state only if create_norm_dataset is checked
-            if st.button("Confirm Normalization Choices"):
-                st.session_state.normalization_method = local_normalization_method
-                st.session_state.normalization_inputs['Internal_Standards'] = local_normalization_inputs
-                st.session_state.create_norm_dataset = local_create_norm_dataset
+    # Add a button to confirm changes and update session state
+    if st.button("Confirm Normalization Choices"):
+        st.session_state.normalization_method = local_normalization_method
+        st.session_state.normalization_inputs['Internal_Standards'] = local_normalization_inputs
+        st.session_state.create_norm_dataset = local_create_norm_dataset
+        st.session_state.proceed_with_analysis = True
+        st.info("Normalization choices confirmed. You can now proceed with further analysis.")
+    else:
+        st.session_state.proceed_with_analysis = False
 
-                st.info("Normalization choices confirmed. You can now proceed with further analysis.")
-        else:
-            st.info('Select "Create, View and Download the Normalized Dataset" to confirm your normalization choices.')
-
-    # Add a button to reset selections to default
-    if st.button("Reset to Default"):
-        st.session_state.normalization_method = 'None'
-        st.session_state.normalization_inputs = {}
-        st.session_state.create_norm_dataset = False
-
-        st.info("Normalization choices have been reset to default values.")
-
-    return proceed_with_analysis, normalized_df
+    return st.session_state.proceed_with_analysis, normalized_df
 
 def collect_user_input_for_normalization(normalized_df, intsta_df, selected_class_list, added_intsta_species_lst, intsta_concentration_dict):
     """
