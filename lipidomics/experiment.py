@@ -185,12 +185,16 @@ class Experiment:
     
         # Update internal lists
         self.full_samples_list = [sample for sample in self.full_samples_list if sample not in bad_samples]
-        self.update_full_samples_list(bad_samples)
         self.rebuild_extensive_conditions_list()
         self.update_conditions_and_samples()
         self.recalculate_aggregate_samples_list()
         self.generate_individual_samples_list()
         self.n_conditions = len(self.conditions_list)
+    
+        # Remove conditions with no samples
+        self.conditions_list = [cond for cond, samples in zip(self.conditions_list, self.individual_samples_list) if samples]
+        self.individual_samples_list = [samples for samples in self.individual_samples_list if samples]
+        self.number_of_samples_list = [len(samples) for samples in self.individual_samples_list]
     
         return df
 

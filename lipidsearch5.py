@@ -91,17 +91,17 @@ def main():
 
             elif st.session_state.module == "Quality Check & Anomaly Detection" and st.session_state.cleaned_df is not None:
                 if st.session_state.proceed_with_analysis:
-                    continuation_df = quality_check_and_anomaly_detection_module(
+                    continuation_df, updated_experiment = quality_check_and_anomaly_detection_module(
                         st.session_state.cleaned_df, 
                         st.session_state.intsta_df, 
                         st.session_state.experiment
                     )
-                    if continuation_df is not None:
-                        st.session_state.continuation_df = continuation_df
-                        # Update experiment-related session state variables
-                        st.session_state.full_samples_list = st.session_state.experiment.full_samples_list
-                        st.session_state.individual_samples_list = st.session_state.experiment.individual_samples_list
-                        st.session_state.conditions_list = st.session_state.experiment.conditions_list
+                    st.session_state.continuation_df = continuation_df
+                    st.session_state.experiment = updated_experiment
+                    # Update experiment-related session state variables
+                    st.session_state.full_samples_list = updated_experiment.full_samples_list
+                    st.session_state.individual_samples_list = updated_experiment.individual_samples_list
+                    st.session_state.conditions_list = updated_experiment.conditions_list
                 else:
                     st.warning("Please confirm your normalization choices in the previous module before proceeding.")
 
@@ -123,24 +123,29 @@ def data_cleaning_module(df, experiment, name_df):
 
 def quality_check_and_anomaly_detection_module(cleaned_df, intsta_df, experiment):
     st.subheader("2) Quality Check & Anomaly Detection")
-    display_box_plots(st.session_state.continuation_df, experiment)  # Use continuation_df for box plots
-    continuation_df = conduct_bqc_quality_assessment(st.session_state.bqc_label, st.session_state.continuation_df, experiment)  # Use continuation_df for BQC assessment
+    
+    # Perform PCA analysis and get updated DataFrame and experiment object
+    continuation_df, experiment = display_pca_analysis(cleaned_df, experiment, key_prefix="initial_pca")
+    
+    display_box_plots(continuation_df, experiment)
+    continuation_df = conduct_bqc_quality_assessment(st.session_state.bqc_label, continuation_df, experiment)
     display_retention_time_plots(continuation_df)
     
     st.subheader("3) Detect & Remove Anomalies")
     analyze_pairwise_correlation(continuation_df, experiment)
-    continuation_df = display_pca_analysis(continuation_df, experiment)
+    continuation_df, experiment = display_pca_analysis(continuation_df, experiment, key_prefix="final_pca")
     
-    st.session_state.continuation_df = continuation_df  # Store the updated continuation_df in session state
+    st.session_state.continuation_df = continuation_df
+    st.session_state.experiment = experiment
 
     # Add a button to confirm quality check choices
-    if st.button("Confirm Quality Check Choices"):
+    if st.button("Confirm Quality Check Choices", key="confirm_quality_check"):
         st.session_state.proceed_with_analysis_qc = True
         st.info("Quality check choices confirmed. You can now proceed with further analysis.")
     else:
         st.session_state.proceed_with_analysis_qc = False
 
-    return continuation_df
+    return continuation_df, experiment
 
 def analysis_module(continuation_df, experiment):
     st.subheader("4) Data Visualization, Interpretation, & Analysis")
@@ -688,13 +693,6 @@ def collect_protein_concentrations(experiment):
     return protein_df
 
 def display_box_plots(continuation_df, experiment):
-    """
-    Displays box plots and distribution of AUC for given normalized data.
-
-    Args:
-        continuation_df (pd.DataFrame): Normalized data for the experiment.
-        experiment (Experiment): The experiment object with setup details.
-    """
     expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
     with expand_box_plot:
         # Creating a deep copy for visualization to keep the original continuation_df intact
@@ -841,24 +839,46 @@ def analyze_pairwise_correlation(continuation_df, experiment):
         else:
             st.error("No conditions with multiple replicates found.")
 
-def display_pca_analysis(continuation_df, experiment):
+def display_pca_analysis(continuation_df, experiment, key_prefix=""):
     with st.expander("Principal Component Analysis (PCA)"):
-        st.session_state.remove_samples = st.radio("Would you like to remove any samples from the analysis?", ['No', 'Yes'], index=0 if not st.session_state.remove_samples else 1) == 'Yes'
+        # Generate a unique key for this instance of the function
+        unique_key = f"{key_prefix}_{id(continuation_df)}"
+        
+        st.session_state.remove_samples = st.radio(
+            "Would you like to remove any samples from the analysis?",
+            ['No', 'Yes'],
+            index=0 if not st.session_state.get(f'remove_samples_{unique_key}', False) else 1,
+            key=f"remove_samples_radio_{unique_key}"
+        ) == 'Yes'
+        
+        # Store the state in session state with a unique key
+        st.session_state[f'remove_samples_{unique_key}'] = st.session_state.remove_samples
+        
         if st.session_state.remove_samples:
             st.warning('The samples you remove now will be removed for the rest of the analysis.')
-            st.session_state.samples_to_remove = st.multiselect('Pick the sample(s) that you want to remove from the analysis', experiment.full_samples_list, default=st.session_state.samples_to_remove)
-
+            st.session_state.samples_to_remove = st.multiselect(
+                'Pick the sample(s) that you want to remove from the analysis',
+                experiment.full_samples_list,
+                default=st.session_state.get(f'samples_to_remove_{unique_key}', []),
+                key=f"samples_to_remove_multiselect_{unique_key}"
+            )
+            
+            # Store the selected samples in session state with a unique key
+            st.session_state[f'samples_to_remove_{unique_key}'] = st.session_state.samples_to_remove
+            
             if (len(experiment.full_samples_list) - len(st.session_state.samples_to_remove)) >= 2 and len(st.session_state.samples_to_remove) > 0:
-                st.session_state.continuation_df = experiment.remove_bad_samples(st.session_state.samples_to_remove, st.session_state.continuation_df)
+                continuation_df = experiment.remove_bad_samples(st.session_state.samples_to_remove, continuation_df)
                 # Update session state
+                st.session_state.continuation_df = continuation_df
+                st.session_state.experiment = experiment
                 st.session_state.full_samples_list = experiment.full_samples_list
                 st.session_state.individual_samples_list = experiment.individual_samples_list
                 st.session_state.conditions_list = experiment.conditions_list
             elif (len(experiment.full_samples_list) - len(st.session_state.samples_to_remove)) < 2:
                 st.error('At least two samples are required for a meaningful analysis!')
-
+        
         # Generate and display the PCA plot
-        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(st.session_state.continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
+        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
         st.bokeh_chart(pca_plot)
         
         csv_data = convert_df(pca_df)
@@ -866,10 +886,11 @@ def display_pca_analysis(continuation_df, experiment):
             label="Download Data",
             data=csv_data,
             file_name="PCA_data.csv",
-            mime="text/csv"
+            mime="text/csv",
+            key=f"pca_data_download_{unique_key}"
         )
-
-    return st.session_state.continuation_df
+    
+    return continuation_df, experiment
 
 def display_volcano_plot(experiment, continuation_df):
     """
@@ -971,14 +992,18 @@ def display_saturation_plots(experiment, df):
 
 def display_abundance_bar_chart(experiment, continuation_df):
     with st.expander("Class Concentration Bar Chart"):
+        st.write(experiment)
         full_samples_list = st.session_state.full_samples_list
         individual_samples_list = st.session_state.individual_samples_list
         conditions_list = st.session_state.conditions_list
 
+        # Filter out conditions with no samples
+        valid_conditions = [cond for cond, samples in zip(conditions_list, individual_samples_list) if samples]
+
         selected_conditions_list = st.multiselect(
             'Add or remove conditions', 
-            conditions_list, 
-            conditions_list,
+            valid_conditions, 
+            valid_conditions,
             key='conditions_select'
         )
         selected_classes_list = st.multiselect(
@@ -988,7 +1013,7 @@ def display_abundance_bar_chart(experiment, continuation_df):
             key='classes_select'
         )
 
-        mode = st.radio('Select a mode', ('linear scale', 'log2 scale'), 0)
+        mode = st.radio('Select a mode', ('linear scale', 'log2 scale'), 0, key='scale_mode')
 
         if selected_conditions_list and selected_classes_list:
             fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
@@ -1009,7 +1034,8 @@ def display_abundance_bar_chart(experiment, continuation_df):
                         label="Download Data",
                         data=csv_data,
                         file_name='abundance_bar_chart.csv',
-                        mime='text/csv'
+                        mime='text/csv',
+                        key='abundance_chart_download'
                     )
                 except Exception as e:
                     st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
