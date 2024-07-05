@@ -162,32 +162,37 @@ class Experiment:
         """
         self.aggregate_number_of_samples_list = [sum(self.number_of_samples_list[:i+1]) for i in range(len(self.number_of_samples_list))]
 
-    def remove_bad_samples(self, bad_samples, dataframe):
+    def remove_bad_samples(self, bad_samples, df):
         """
         Integrates steps to remove specified bad samples and updates the experiment's attributes.
-
+        
         Parameters:
             bad_samples (list[str]): A list of sample labels considered as bad.
-            dataframe (pd.DataFrame): The DataFrame to be updated.
-
+            df (pd.DataFrame): The DataFrame to be updated.
+        
         Returns:
             pd.DataFrame: The updated DataFrame with bad sample columns removed.
-        
-        This method is a comprehensive approach to removing bad samples, involving 
-        updating the DataFrame, sample lists, and condition lists.
         """
+        # Backup current state before removal
         self.full_samples_list_before_removal = self.full_samples_list.copy()
         self.extensive_conditions_list_before_removal = self.extensive_conditions_list.copy()
-
-        updated_dataframe = self.update_dataframe(bad_samples, dataframe)
+    
+        # Remove bad samples from the DataFrame
+        for sample in bad_samples:
+            mean_area_col = f'MeanArea[{sample}]'
+            if mean_area_col in df.columns:
+                df = df.drop(columns=[mean_area_col])
+    
+        # Update internal lists
+        self.full_samples_list = [sample for sample in self.full_samples_list if sample not in bad_samples]
         self.update_full_samples_list(bad_samples)
         self.rebuild_extensive_conditions_list()
         self.update_conditions_and_samples()
         self.recalculate_aggregate_samples_list()
         self.generate_individual_samples_list()
         self.n_conditions = len(self.conditions_list)
-
-        return updated_dataframe
+    
+        return df
 
     def __repr__(self):
         """

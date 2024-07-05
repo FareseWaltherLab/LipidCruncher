@@ -26,6 +26,26 @@ if 'create_norm_dataset' not in st.session_state:
     st.session_state.create_norm_dataset = False
 if 'module' not in st.session_state:
     st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+if 'proceed_with_analysis' not in st.session_state:
+    st.session_state.proceed_with_analysis = False
+if 'remove_samples' not in st.session_state:
+    st.session_state.remove_samples = False
+if 'samples_to_remove' not in st.session_state:
+    st.session_state.samples_to_remove = []
+if 'filter_data' not in st.session_state:
+    st.session_state.filter_data = False
+if 'cov_threshold' not in st.session_state:
+    st.session_state.cov_threshold = 30
+if 'experiment' not in st.session_state:
+    st.session_state.experiment = None
+if 'full_samples_list' not in st.session_state:
+    st.session_state.full_samples_list = []
+if 'individual_samples_list' not in st.session_state:
+    st.session_state.individual_samples_list = []
+if 'conditions_list' not in st.session_state:
+    st.session_state.conditions_list = []
+if 'proceed_with_analysis_qc' not in st.session_state:
+    st.session_state.proceed_with_analysis_qc = False
 
 def main():
     st.header("LipidSearch 5.0 Module")
@@ -57,10 +77,13 @@ def main():
             st.session_state.name_df = name_df
             st.session_state.experiment = experiment
             st.session_state.bqc_label = bqc_label
+            st.session_state.full_samples_list = experiment.full_samples_list
+            st.session_state.individual_samples_list = experiment.individual_samples_list
+            st.session_state.conditions_list = experiment.conditions_list
 
             # Display the selected module
             if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
-                cleaned_df, intsta_df = data_cleaning_module(df, experiment, name_df)
+                cleaned_df, intsta_df = data_cleaning_module(df, st.session_state.experiment, st.session_state.name_df)
                 if cleaned_df is not None and intsta_df is not None:
                     st.session_state.cleaned_df = cleaned_df
                     st.session_state.intsta_df = intsta_df
@@ -68,17 +91,25 @@ def main():
 
             elif st.session_state.module == "Quality Check & Anomaly Detection" and st.session_state.cleaned_df is not None:
                 if st.session_state.proceed_with_analysis:
-                    continuation_df = quality_check_and_anomaly_detection_module(st.session_state.cleaned_df, st.session_state.intsta_df, experiment)
+                    continuation_df = quality_check_and_anomaly_detection_module(
+                        st.session_state.cleaned_df, 
+                        st.session_state.intsta_df, 
+                        st.session_state.experiment
+                    )
                     if continuation_df is not None:
                         st.session_state.continuation_df = continuation_df
+                        # Update experiment-related session state variables
+                        st.session_state.full_samples_list = st.session_state.experiment.full_samples_list
+                        st.session_state.individual_samples_list = st.session_state.experiment.individual_samples_list
+                        st.session_state.conditions_list = st.session_state.experiment.conditions_list
                 else:
                     st.warning("Please confirm your normalization choices in the previous module before proceeding.")
 
             elif st.session_state.module == "Data Visualization, Interpretation, & Analysis" and st.session_state.continuation_df is not None:
-                if st.session_state.proceed_with_analysis:
-                    analysis_module(st.session_state.continuation_df, experiment)
+                if st.session_state.proceed_with_analysis_qc:
+                    analysis_module(st.session_state.continuation_df, st.session_state.experiment)
                 else:
-                    st.warning("Please confirm your normalization choices in the previous module before proceeding.")
+                    st.warning("Please confirm your quality check choices in the previous module before proceeding.")
 
 def data_cleaning_module(df, experiment, name_df):
     st.subheader("1) Clean, Filter, & Normalize Data")
@@ -98,8 +129,17 @@ def quality_check_and_anomaly_detection_module(cleaned_df, intsta_df, experiment
     
     st.subheader("3) Detect & Remove Anomalies")
     analyze_pairwise_correlation(continuation_df, experiment)
-    display_pca_analysis(continuation_df, experiment)
+    continuation_df = display_pca_analysis(continuation_df, experiment)
     
+    st.session_state.continuation_df = continuation_df  # Store the updated continuation_df in session state
+
+    # Add a button to confirm quality check choices
+    if st.button("Confirm Quality Check Choices"):
+        st.session_state.proceed_with_analysis_qc = True
+        st.info("Quality check choices confirmed. You can now proceed with further analysis.")
+    else:
+        st.session_state.proceed_with_analysis_qc = False
+
     return continuation_df
 
 def analysis_module(continuation_df, experiment):
@@ -143,6 +183,8 @@ def convert_df(df):
     Raises:
     Exception: If the DataFrame conversion to CSV fails.
     """
+    if df is None or df.empty:
+        raise ValueError("The DataFrame provided is empty or None.")
     try:
         return df.to_csv().encode('utf-8')
     except Exception as e:
@@ -558,6 +600,7 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
         st.session_state.normalization_inputs['Internal_Standards'] = local_normalization_inputs
         st.session_state.create_norm_dataset = local_create_norm_dataset
         st.session_state.proceed_with_analysis = True
+        st.session_state.proceed_with_analysis_qc = False  # Reset QC state
         st.info("Normalization choices confirmed. You can now proceed with further analysis.")
     else:
         st.session_state.proceed_with_analysis = False
@@ -644,44 +687,31 @@ def collect_protein_concentrations(experiment):
 
     return protein_df
 
-def display_box_plots(normalized_df, experiment):
+def display_box_plots(continuation_df, experiment):
     """
     Displays box plots and distribution of AUC for given normalized data.
 
     Args:
-        normalized_df (pd.DataFrame): Normalized data for the experiment.
+        continuation_df (pd.DataFrame): Normalized data for the experiment.
         experiment (Experiment): The experiment object with setup details.
     """
     expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
     with expand_box_plot:
-        # Creating a deep copy for visualization to keep the original normalized_df intact
-        visualization_df = normalized_df.copy(deep=True)
-        mean_area_df = lp.BoxPlot.create_mean_area_df(visualization_df, experiment.full_samples_list)
+        # Creating a deep copy for visualization to keep the original continuation_df intact
+        visualization_df = continuation_df.copy(deep=True)
+        
+        # Ensure the columns reflect the current state of the DataFrame
+        current_samples = [sample for sample in experiment.full_samples_list if f'MeanArea[{sample}]' in visualization_df.columns]
+        
+        mean_area_df = lp.BoxPlot.create_mean_area_df(visualization_df, current_samples)
         zero_values_percent_list = lp.BoxPlot.calculate_missing_values_percentage(mean_area_df)
-        fig = lp.BoxPlot.plot_missing_values(experiment.full_samples_list, zero_values_percent_list)
-        #svg_data = plt_plot_to_svg(fig)  # Convert plot to SVG
-        #st.download_button("Download SVG", svg_data, file_name="missing_values_plot.svg", mime="image/svg+xml")
-
+        fig = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
+        
         st.write('--------------------------------------------------------------------------------')
 
-        fig = lp.BoxPlot.plot_box_plot(mean_area_df, experiment.full_samples_list)
-        #svg_data = plt_plot_to_svg(fig)  # Convert plot to SVG
-        #st.download_button("Download SVG", svg_data, file_name="box_plot.svg", mime="image/svg+xml")
+        fig = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
 
 def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
-    """
-    Conducts a quality assessment of the data using Batch Quality Control (BQC) samples.
-
-    Parameters:
-    bqc_label (str): Label identifying BQC samples in the experiment.
-    data_df (pd.DataFrame): DataFrame containing the data to assess.
-    experiment (Experiment): The experiment object with setup details.
-
-    Note:
-    If BQC samples are identified, this function will generate a plot displaying the 
-    coefficient of variation (CoV) across these samples and offer an option to filter 
-    the data based on a CoV threshold. The filtered data can then be viewed and downloaded.
-    """
     if bqc_label is not None:
         expand_quality_check = st.expander("Quality Check Using BQC Samples")
         with expand_quality_check:
@@ -689,15 +719,6 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(data_df, experiment, bqc_sample_index)
             
             st.bokeh_chart(scatter_plot)
-            #svg_data = bokeh_plot_as_svg(scatter_plot)
-            #if svg_data:
-                #st.download_button(
-                    #label="Download SVG",
-                    #data=svg_data,
-                    #file_name="scatter_plot.svg",
-                    #mime="image/svg+xml"
-                #)
-
             csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
             st.download_button(
                 "Download Data",
@@ -714,10 +735,10 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                 st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < 30%).")
 
             if prepared_df is not None and not prepared_df.empty:
-                filter_ans = st.radio('Would you like to filter the data using BQC samples?', ['Yes', 'No'], 1)
-                if filter_ans == 'Yes':
-                    cov_threshold = st.number_input('Enter the maximum acceptable CoV in %', min_value=10, max_value=1000, value=30, step=1)
-                    filtered_df = lp.BQCQualityCheck.filter_dataframe_by_cov_threshold(cov_threshold, prepared_df)
+                st.session_state.filter_data = st.radio('Would you like to filter the data using BQC samples?', ['Yes', 'No'], 1) == 'Yes'
+                if st.session_state.filter_data:
+                    st.session_state.cov_threshold = st.number_input('Enter the maximum acceptable CoV in %', min_value=10, max_value=1000, value=st.session_state.cov_threshold, step=1)
+                    filtered_df = lp.BQCQualityCheck.filter_dataframe_by_cov_threshold(st.session_state.cov_threshold, prepared_df)
                     st.write('View and download the filtered dataset:')
                     st.write(filtered_df)
                     csv_download = convert_df(filtered_df)
@@ -727,7 +748,6 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                         file_name='Filtered_Data.csv',
                         mime='text/csv'
                     )
-                    st.session_state.continuation_df = filtered_df  # Update session state with filtered data
                     return filtered_df
     return data_df
 
@@ -822,39 +842,25 @@ def analyze_pairwise_correlation(continuation_df, experiment):
             st.error("No conditions with multiple replicates found.")
 
 def display_pca_analysis(continuation_df, experiment):
-    """
-    Displays the PCA analysis interface in the Streamlit app and generates a PCA plot.
-
-    This function provides an interactive interface for users to decide if they want to remove any samples 
-    from the PCA analysis. It also handles the generation and display of the PCA plot.
-
-    Args:
-        continuation_df (pd.DataFrame): The DataFrame containing lipidomics data post-cleaning and normalization.
-        experiment (Experiment): The experiment object containing details about the experimental setup.
-
-    Note:
-        If users choose to remove samples, the function uses the `remove_bad_samples` method from the Experiment class. 
-        It ensures there are at least two samples for the PCA analysis to be meaningful.
-    """
     with st.expander("Principal Component Analysis (PCA)"):
-        # Provide option to remove samples
-        remove_ans = st.radio("Would you like to remove any samples from the analysis?", ['Yes', 'No'], 1)
-        if remove_ans == 'Yes':
-            st.warning('The samples you remove now, will be removed for the rest of the analysis.')
-            list_of_bad_samples = st.multiselect('Pick the sample(s) that you want to remove from the analysis', experiment.full_samples_list)
+        st.session_state.remove_samples = st.radio("Would you like to remove any samples from the analysis?", ['No', 'Yes'], index=0 if not st.session_state.remove_samples else 1) == 'Yes'
+        if st.session_state.remove_samples:
+            st.warning('The samples you remove now will be removed for the rest of the analysis.')
+            st.session_state.samples_to_remove = st.multiselect('Pick the sample(s) that you want to remove from the analysis', experiment.full_samples_list, default=st.session_state.samples_to_remove)
 
-            # Check that there are sufficient samples for analysis
-            if (len(experiment.full_samples_list) - len(list_of_bad_samples)) >= 2 and len(list_of_bad_samples) > 0:
-                continuation_df = experiment.remove_bad_samples(list_of_bad_samples, continuation_df)
-                st.session_state.continuation_df = continuation_df  # Update session state with modified continuation_df
-            elif (len(experiment.full_samples_list) - len(list_of_bad_samples)) < 2:
+            if (len(experiment.full_samples_list) - len(st.session_state.samples_to_remove)) >= 2 and len(st.session_state.samples_to_remove) > 0:
+                st.session_state.continuation_df = experiment.remove_bad_samples(st.session_state.samples_to_remove, st.session_state.continuation_df)
+                # Update session state
+                st.session_state.full_samples_list = experiment.full_samples_list
+                st.session_state.individual_samples_list = experiment.individual_samples_list
+                st.session_state.conditions_list = experiment.conditions_list
+            elif (len(experiment.full_samples_list) - len(st.session_state.samples_to_remove)) < 2:
                 st.error('At least two samples are required for a meaningful analysis!')
 
         # Generate and display the PCA plot
-        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
+        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(st.session_state.continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
         st.bokeh_chart(pca_plot)
         
-        # Convert and download the PCA data as CSV
         csv_data = convert_df(pca_df)
         st.download_button(
             label="Download Data",
@@ -862,6 +868,8 @@ def display_pca_analysis(continuation_df, experiment):
             file_name="PCA_data.csv",
             mime="text/csv"
         )
+
+    return st.session_state.continuation_df
 
 def display_volcano_plot(experiment, continuation_df):
     """
@@ -962,25 +970,11 @@ def display_saturation_plots(experiment, df):
                 st.write('---------------------------------------------------------')
 
 def display_abundance_bar_chart(experiment, continuation_df):
-    """
-    Facilitates creation and display of abundance bar charts in a Streamlit app. 
-    Users select lipid classes and conditions from the dataset, and the function 
-    offers linear or log2 scale visualization options. Outputs include interactive 
-    plots and downloadable data in CSV or SVG formats.
-
-    Args:
-    experiment: Object with experiment setup details.
-    continuation_df: DataFrame with lipidomics data.
-
-    Uses Streamlit widgets for user interaction and the AbundanceBarChart class for plot generation.
-    """
     with st.expander("Class Concentration Bar Chart"):
-        # Extract necessary lists from experiment object
-        full_samples_list = experiment.full_samples_list
-        individual_samples_list = experiment.individual_samples_list
-        conditions_list = experiment.conditions_list
+        full_samples_list = st.session_state.full_samples_list
+        individual_samples_list = st.session_state.individual_samples_list
+        conditions_list = st.session_state.conditions_list
 
-        # Add unique keys for each multiselect widget
         selected_conditions_list = st.multiselect(
             'Add or remove conditions', 
             conditions_list, 
@@ -1007,26 +1001,22 @@ def display_abundance_bar_chart(experiment, continuation_df):
                 mode
             )
 
-            # Display the plot
-            st.pyplot(fig)
-
-            # Download buttons
-            csv_data = convert_df(abundance_df)
-            #svg_data = plt_plot_to_svg(fig)
-
-            st.download_button(
-                label="Download Data",
-                data=csv_data,
-                file_name='abundance_bar_chart.csv',
-                mime='text/csv'
-            )
-
-            #st.download_button(
-                #label="Download SVG",
-                #data=svg_data,
-                #file_name='abundance_bar_chart.svg',
-                #mime='image/svg+xml'
-            #)
+            if fig is not None and abundance_df is not None and not abundance_df.empty:
+                st.pyplot(fig)
+                try:
+                    csv_data = convert_df(abundance_df)
+                    st.download_button(
+                        label="Download Data",
+                        data=csv_data,
+                        file_name='abundance_bar_chart.csv',
+                        mime='text/csv'
+                    )
+                except Exception as e:
+                    st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
+            else:
+                st.error("Unable to create the abundance bar chart due to insufficient data.")
+        else:
+            st.warning("Please select at least one condition and one class to create the chart.")
 
 def display_pathway_visualization(experiment, continuation_df):
     """

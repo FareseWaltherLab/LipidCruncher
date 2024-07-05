@@ -29,16 +29,15 @@ class SaturationPlot:
     def _calculate_sfa_mufa_pufa(df, condition, samples, lipid_class):
         """
         Calculates SFA, MUFA, and PUFA values for a specific lipid class under given conditions.
-        Args:
-            df (pd.DataFrame): DataFrame with lipidomics data.
-            condition (str): The experimental condition.
-            samples (list): List of sample names.
-            lipid_class (str): The lipid class to filter for.
-        Returns:
-            tuple: Aggregated AUC values for SFA, MUFA, and PUFA, along with their variances.
         """
         filtered_df = SaturationPlot._filter_df_for_lipid_class(df, lipid_class)
-        SaturationPlot._compute_mean_variance_auc(filtered_df, samples)
+        available_samples = [sample for sample in samples if f'MeanArea[{sample}]' in filtered_df.columns]
+        
+        if not available_samples:
+            st.warning(f"No data available for {lipid_class} in condition {condition}")
+            return (0, 0, 0, 0, 0, 0)  # Return zeros if no data is available
+        
+        SaturationPlot._compute_mean_variance_auc(filtered_df, available_samples)
         SaturationPlot._calculate_fatty_acid_auc_variance(filtered_df)
         return SaturationPlot._aggregate_fatty_acid_values(filtered_df)
 
@@ -58,15 +57,14 @@ class SaturationPlot:
     def _compute_mean_variance_auc(df, samples):
         """
         Computes the mean and variance of the area under the curve (AUC) for each lipid across given samples.
-        Args:
-            df (pd.DataFrame): The DataFrame with lipidomics data.
-            samples (list): List of sample names to be considered for computation.
-        Effects:
-            Modifies the input DataFrame to include 'mean_AUC' and 'var_AUC' columns representing the mean and variance of AUC values, respectively.
         """
-        mean_cols = [f'MeanArea[{sample}]' for sample in samples]
-        df['mean_AUC'] = df[mean_cols].mean(axis=1)
-        df['var_AUC'] = df[mean_cols].var(axis=1)
+        mean_cols = [f'MeanArea[{sample}]' for sample in samples if f'MeanArea[{sample}]' in df.columns]
+        if mean_cols:
+            df['mean_AUC'] = df[mean_cols].mean(axis=1)
+            df['var_AUC'] = df[mean_cols].var(axis=1)
+        else:
+            df['mean_AUC'] = 0
+            df['var_AUC'] = 0
 
     @staticmethod
     @st.cache_data
@@ -102,42 +100,29 @@ class SaturationPlot:
     def create_plots(df, experiment, selected_conditions):
         """
         Generates saturation plots for all lipid classes found in the DataFrame, for the given conditions.
-        Args:
-            df (pd.DataFrame): DataFrame with lipidomics data.
-            experiment (Experiment): Experiment object containing conditions and samples information.
-            selected_conditions (list): List of conditions to generate plots for.
-        Returns:
-            dict: A dictionary containing plots and data for each lipid class.
         """
         plots = {}
         for lipid_class in df['ClassKey'].unique():
             plot_data = SaturationPlot._prepare_plot_data(df, selected_conditions, lipid_class, experiment)
-            # Create the main plot with the original data
-            main_plot = SaturationPlot._create_auc_plot(plot_data, lipid_class)
-            # Prepare a separate DataFrame for the percentage plot
-            percentage_df = SaturationPlot._calculate_percentage_df(plot_data)
-            # Create the percentage plot with the new percentage DataFrame
-            percentage_plot = SaturationPlot._create_percentage_plot(percentage_df, lipid_class)
-            plots[lipid_class] = (main_plot, percentage_plot, plot_data)
+            if not plot_data.empty:
+                main_plot = SaturationPlot._create_auc_plot(plot_data, lipid_class)
+                percentage_df = SaturationPlot._calculate_percentage_df(plot_data)
+                percentage_plot = SaturationPlot._create_percentage_plot(percentage_df, lipid_class)
+                plots[lipid_class] = (main_plot, percentage_plot, plot_data)
         return plots
 
     @staticmethod
     def _prepare_plot_data(df, selected_conditions, lipid_class, experiment):
         """
         Prepares plot data for a given lipid class across selected conditions.
-        Args:
-            df (pd.DataFrame): The DataFrame with lipidomics data.
-            selected_conditions (list): List of conditions to include in the analysis.
-            lipid_class (str): The lipid class for which data is being prepared.
-            experiment: An object containing experimental data, including sample lists.
-        Returns:
-            pd.DataFrame: A DataFrame with aggregated values for SFA, MUFA, and PUFA AUC and variance for each condition.
         """
         plot_data = []
         for condition in selected_conditions:
             samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
-            values = SaturationPlot._calculate_sfa_mufa_pufa(df, condition, samples, lipid_class)
-            plot_data.append(dict(zip(['Condition', 'SFA_AUC', 'MUFA_AUC', 'PUFA_AUC', 'SFA_var', 'MUFA_var', 'PUFA_var'], [condition] + list(values))))
+            if samples:  # Only process if there are samples for this condition
+                values = SaturationPlot._calculate_sfa_mufa_pufa(df, condition, samples, lipid_class)
+                if any(values):  # Only add data if there are non-zero values
+                    plot_data.append(dict(zip(['Condition', 'SFA_AUC', 'MUFA_AUC', 'PUFA_AUC', 'SFA_var', 'MUFA_var', 'PUFA_var'], [condition] + list(values))))
         return pd.DataFrame(plot_data)
 
     @staticmethod
@@ -202,12 +187,10 @@ class SaturationPlot:
     def _create_auc_plot(df, lipid_class):
         """
         Creates an AUC plot for a given lipid class.
-        Args:
-            df (pd.DataFrame): The DataFrame containing the data for plotting.
-            lipid_class (str): The lipid class to be plotted.
-        Returns:
-            Bokeh plot object: A plot depicting AUC values with error bars.
         """
+        if df.empty:
+            return None
+        
         df = SaturationPlot._calculate_std_dev(df)
         df = SaturationPlot._add_error_bounds(df)
         max_y_value = SaturationPlot._get_max_y_value(df)
@@ -312,12 +295,10 @@ class SaturationPlot:
     def _create_percentage_plot(df, lipid_class):
         """
         Creates a percentage distribution plot for a given lipid class.
-        Args:
-            df (pd.DataFrame): The DataFrame containing the percentage data.
-            lipid_class (str): The lipid class for which the plot is being created.
-        Returns:
-            Bokeh plot object: A plot showing the percentage distribution of fatty acids.
         """
+        if df.empty:
+            return None
+        
         source = ColumnDataSource(df)
         plot = SaturationPlot._initialize_percentage_plot(df, lipid_class)
         SaturationPlot._add_stacked_vbars_to_plot(plot, source)
