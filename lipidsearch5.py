@@ -12,54 +12,60 @@ import base64
 import plotly.io as pio
 
 # Initialize session state variables
-if 'cleaned_df' not in st.session_state:
-    st.session_state.cleaned_df = None
-if 'intsta_df' not in st.session_state:
-    st.session_state.intsta_df = None
-if 'continuation_df' not in st.session_state:
-    st.session_state.continuation_df = None
-if 'normalization_method' not in st.session_state:
-    st.session_state.normalization_method = 'None'
-if 'normalization_inputs' not in st.session_state:
-    st.session_state.normalization_inputs = {}
-if 'create_norm_dataset' not in st.session_state:
-    st.session_state.create_norm_dataset = False
-if 'module' not in st.session_state:
-    st.session_state.module = "Data Cleaning, Filtering, & Normalization"
-if 'proceed_with_analysis' not in st.session_state:
-    st.session_state.proceed_with_analysis = False
-if 'remove_samples' not in st.session_state:
-    st.session_state.remove_samples = False
-if 'samples_to_remove' not in st.session_state:
-    st.session_state.samples_to_remove = []
-if 'filter_data' not in st.session_state:
-    st.session_state.filter_data = False
-if 'cov_threshold' not in st.session_state:
-    st.session_state.cov_threshold = 30
-if 'experiment' not in st.session_state:
-    st.session_state.experiment = None
-if 'full_samples_list' not in st.session_state:
-    st.session_state.full_samples_list = []
-if 'individual_samples_list' not in st.session_state:
-    st.session_state.individual_samples_list = []
-if 'conditions_list' not in st.session_state:
-    st.session_state.conditions_list = []
-if 'proceed_with_analysis_qc' not in st.session_state:
-    st.session_state.proceed_with_analysis_qc = False
 
 def main():
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
+
+    # Initialize session state variables
+    if 'module' not in st.session_state:
+        st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+    if 'cleaned_df' not in st.session_state:
+        st.session_state.cleaned_df = None
+    if 'intsta_df' not in st.session_state:
+        st.session_state.intsta_df = None
+    if 'continuation_df' not in st.session_state:
+        st.session_state.continuation_df = None
+    if 'experiment' not in st.session_state:
+        st.session_state.experiment = None
+    if 'full_samples_list' not in st.session_state:
+        st.session_state.full_samples_list = []
+    if 'individual_samples_list' not in st.session_state:
+        st.session_state.individual_samples_list = []
+    if 'conditions_list' not in st.session_state:
+        st.session_state.conditions_list = []
+    if 'extensive_conditions_list' not in st.session_state:
+        st.session_state.extensive_conditions_list = []
+    if 'number_of_samples_list' not in st.session_state:
+        st.session_state.number_of_samples_list = []
+    if 'aggregate_number_of_samples_list' not in st.session_state:
+        st.session_state.aggregate_number_of_samples_list = []
+    if 'proceed_with_analysis' not in st.session_state:
+        st.session_state.proceed_with_analysis = False
+    if 'proceed_with_analysis_qc' not in st.session_state:
+        st.session_state.proceed_with_analysis_qc = False
+    if 'normalization_method' not in st.session_state:
+        st.session_state.normalization_method = 'None'
+    if 'normalization_inputs' not in st.session_state:
+        st.session_state.normalization_inputs = {}
+    if 'create_norm_dataset' not in st.session_state:
+        st.session_state.create_norm_dataset = False
+    if 'proceed_with_analysis' not in st.session_state:
+        st.session_state.proceed_with_analysis = False
+    if 'remove_samples' not in st.session_state:
+        st.session_state.remove_samples = False
+    if 'samples_to_remove' not in st.session_state:
+        st.session_state.samples_to_remove = []
+    if 'filter_data' not in st.session_state:
+        st.session_state.filter_data = False
+    if 'cov_threshold' not in st.session_state:
+        st.session_state.cov_threshold = 30
 
     module_options = [
         "Data Cleaning, Filtering, & Normalization",
         "Quality Check & Anomaly Detection",
         "Data Visualization, Interpretation, & Analysis"
     ]
-
-    # Initialize session state for module if not already set
-    if 'module' not in st.session_state or st.session_state.module not in module_options:
-        st.session_state.module = module_options[0]
 
     # Move the module selection dropdown to the main page
     selected_module = st.selectbox("Choose a module to proceed", module_options, index=module_options.index(st.session_state.module))
@@ -80,6 +86,9 @@ def main():
             st.session_state.full_samples_list = experiment.full_samples_list
             st.session_state.individual_samples_list = experiment.individual_samples_list
             st.session_state.conditions_list = experiment.conditions_list
+            st.session_state.extensive_conditions_list = experiment.extensive_conditions_list
+            st.session_state.number_of_samples_list = experiment.number_of_samples_list
+            st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
 
             # Display the selected module
             if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
@@ -102,6 +111,9 @@ def main():
                     st.session_state.full_samples_list = updated_experiment.full_samples_list
                     st.session_state.individual_samples_list = updated_experiment.individual_samples_list
                     st.session_state.conditions_list = updated_experiment.conditions_list
+                    st.session_state.extensive_conditions_list = updated_experiment.extensive_conditions_list
+                    st.session_state.number_of_samples_list = updated_experiment.number_of_samples_list
+                    st.session_state.aggregate_number_of_samples_list = updated_experiment.aggregate_number_of_samples_list
                 else:
                     st.warning("Please confirm your normalization choices in the previous module before proceeding.")
 
@@ -841,7 +853,6 @@ def analyze_pairwise_correlation(continuation_df, experiment):
 
 def display_pca_analysis(continuation_df, experiment, key_prefix=""):
     with st.expander("Principal Component Analysis (PCA)"):
-        # Generate a unique key for this instance of the function
         unique_key = f"{key_prefix}_{id(continuation_df)}"
         
         st.session_state.remove_samples = st.radio(
@@ -851,22 +862,20 @@ def display_pca_analysis(continuation_df, experiment, key_prefix=""):
             key=f"remove_samples_radio_{unique_key}"
         ) == 'Yes'
         
-        # Store the state in session state with a unique key
         st.session_state[f'remove_samples_{unique_key}'] = st.session_state.remove_samples
         
         if st.session_state.remove_samples:
             st.warning('The samples you remove now will be removed for the rest of the analysis.')
             st.session_state.samples_to_remove = st.multiselect(
                 'Pick the sample(s) that you want to remove from the analysis',
-                experiment.full_samples_list,
+                st.session_state.full_samples_list,
                 default=st.session_state.get(f'samples_to_remove_{unique_key}', []),
                 key=f"samples_to_remove_multiselect_{unique_key}"
             )
             
-            # Store the selected samples in session state with a unique key
             st.session_state[f'samples_to_remove_{unique_key}'] = st.session_state.samples_to_remove
             
-            if (len(experiment.full_samples_list) - len(st.session_state.samples_to_remove)) >= 2 and len(st.session_state.samples_to_remove) > 0:
+            if (len(st.session_state.full_samples_list) - len(st.session_state.samples_to_remove)) >= 2 and len(st.session_state.samples_to_remove) > 0:
                 continuation_df = experiment.remove_bad_samples(st.session_state.samples_to_remove, continuation_df)
                 # Update session state
                 st.session_state.continuation_df = continuation_df
@@ -874,11 +883,14 @@ def display_pca_analysis(continuation_df, experiment, key_prefix=""):
                 st.session_state.full_samples_list = experiment.full_samples_list
                 st.session_state.individual_samples_list = experiment.individual_samples_list
                 st.session_state.conditions_list = experiment.conditions_list
-            elif (len(experiment.full_samples_list) - len(st.session_state.samples_to_remove)) < 2:
+                st.session_state.extensive_conditions_list = experiment.extensive_conditions_list
+                st.session_state.number_of_samples_list = experiment.number_of_samples_list
+                st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
+            elif (len(st.session_state.full_samples_list) - len(st.session_state.samples_to_remove)) < 2:
                 st.error('At least two samples are required for a meaningful analysis!')
         
         # Generate and display the PCA plot
-        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
+        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(st.session_state.continuation_df, st.session_state.full_samples_list, st.session_state.extensive_conditions_list)
         st.bokeh_chart(pca_plot)
         
         csv_data = convert_df(pca_df)
@@ -890,7 +902,7 @@ def display_pca_analysis(continuation_df, experiment, key_prefix=""):
             key=f"pca_data_download_{unique_key}"
         )
     
-    return continuation_df, experiment
+    return st.session_state.continuation_df, st.session_state.experiment
 
 def display_volcano_plot(experiment, continuation_df):
     """
@@ -992,10 +1004,15 @@ def display_saturation_plots(experiment, df):
 
 def display_abundance_bar_chart(experiment, continuation_df):
     with st.expander("Class Concentration Bar Chart"):
+        # Use the most up-to-date experiment object from session state
+        experiment = st.session_state.experiment
+        
+        st.write("Current Experiment State:")
         st.write(experiment)
-        full_samples_list = st.session_state.full_samples_list
-        individual_samples_list = st.session_state.individual_samples_list
-        conditions_list = st.session_state.conditions_list
+
+        full_samples_list = experiment.full_samples_list
+        individual_samples_list = experiment.individual_samples_list
+        conditions_list = experiment.conditions_list
 
         # Filter out conditions with no samples
         valid_conditions = [cond for cond, samples in zip(conditions_list, individual_samples_list) if samples]
