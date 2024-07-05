@@ -11,8 +11,6 @@ from io import BytesIO
 import base64
 import plotly.io as pio
 
-import streamlit as st
-
 # Initialize session state variables
 if 'cleaned_df' not in st.session_state:
     st.session_state.cleaned_df = None
@@ -729,6 +727,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                         file_name='Filtered_Data.csv',
                         mime='text/csv'
                     )
+                    st.session_state.continuation_df = filtered_df  # Update session state with filtered data
                     return filtered_df
     return data_df
 
@@ -847,6 +846,7 @@ def display_pca_analysis(continuation_df, experiment):
             # Check that there are sufficient samples for analysis
             if (len(experiment.full_samples_list) - len(list_of_bad_samples)) >= 2 and len(list_of_bad_samples) > 0:
                 continuation_df = experiment.remove_bad_samples(list_of_bad_samples, continuation_df)
+                st.session_state.continuation_df = continuation_df  # Update session state with modified continuation_df
             elif (len(experiment.full_samples_list) - len(list_of_bad_samples)) < 2:
                 st.error('At least two samples are required for a meaningful analysis!')
 
@@ -862,16 +862,6 @@ def display_pca_analysis(continuation_df, experiment):
             file_name="PCA_data.csv",
             mime="text/csv"
         )
-
-        # Generate and download the PCA plot as SVG
-        #svg_data = bokeh_plot_as_svg(pca_plot)
-        #if svg_data:
-            #st.download_button(
-                #label="Download SVG",
-                #data=svg_data,
-                #file_name="PCA_plot.svg",
-                #mime="image/svg+xml"
-            #)
 
 def display_volcano_plot(experiment, continuation_df):
     """
