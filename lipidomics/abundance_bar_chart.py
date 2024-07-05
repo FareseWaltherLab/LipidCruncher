@@ -25,6 +25,8 @@ class AbundanceBarChart:
             grouped_df = AbundanceBarChart.group_and_sum(df, available_samples)
             
             for condition in selected_conditions:
+                if condition not in conditions_list:
+                    continue  # Skip conditions that are no longer present
                 condition_index = conditions_list.index(condition)
                 individual_samples = [sample for sample in individual_samples_list[condition_index] if sample in available_samples]
                 
@@ -36,13 +38,13 @@ class AbundanceBarChart:
                 grouped_df[f"std_AUC_{condition}"] = grouped_df[mean_cols].std(axis=1)
     
             grouped_df = AbundanceBarChart.filter_by_selected_classes(grouped_df, selected_classes)
-            AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
+            grouped_df, removed_classes = AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
             
-            return grouped_df
+            return grouped_df, removed_classes
     
         except Exception as e:
             st.error(f"Error in create_mean_std_columns: {str(e)}")
-            return pd.DataFrame()  # Return an empty DataFrame in case of error
+            return pd.DataFrame(), []  # Return an empty DataFrame and empty list in case of error
 
     @staticmethod
     @st.cache_data
@@ -80,16 +82,6 @@ class AbundanceBarChart:
     @staticmethod
     @st.cache_data
     def calculate_log2_values(grouped_df, selected_conditions):
-        """
-        Computes log2 transformed mean and standard deviation values for selected conditions.
-
-        Parameters:
-        grouped_df (pd.DataFrame): DataFrame with mean and standard deviation values.
-        selected_conditions (list of str): Conditions selected for analysis.
-
-        Returns:
-        tuple: A tuple containing the filtered DataFrame and a list of removed classes.
-        """
         for condition in selected_conditions:
             mean_col = f"mean_AUC_{condition}"
             std_col = f"std_AUC_{condition}"
@@ -106,7 +98,7 @@ class AbundanceBarChart:
                                                     np.nan)
         
         # Count valid conditions for each class
-        valid_condition_count = grouped_df[[f"log2_mean_AUC_{condition}" for condition in selected_conditions]].notna().sum(axis=1)
+        valid_condition_count = grouped_df[[f"log2_mean_AUC_{condition}" for condition in selected_conditions if f"log2_mean_AUC_{condition}" in grouped_df.columns]].notna().sum(axis=1)
         
         # Filter classes with at least two valid conditions
         filtered_df = grouped_df[valid_condition_count >= 2]
@@ -159,20 +151,14 @@ class AbundanceBarChart:
                 st.error("ClassKey column contains multiple values. Please ensure it's a single value per row.")
                 return None, None
     
+            # Filter out conditions that no longer exist
+            selected_conditions = [cond for cond in selected_conditions if cond in conditions_list]
+    
             # Proceed with grouping and calculations
-            abundance_df = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
+            abundance_df, removed_classes = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
             
             if abundance_df.empty:
                 st.error("No data available after processing for the selected conditions and classes.")
-                return None, None
-    
-            if mode == 'log2 scale':
-                abundance_df, removed_classes = AbundanceBarChart.calculate_log2_values(abundance_df, selected_conditions)
-            else:
-                removed_classes = []
-    
-            if abundance_df.empty:
-                st.error("No valid data available after log2 transformation.")
                 return None, None
     
             fig, ax = AbundanceBarChart.initialize_plot(len(abundance_df))
@@ -183,11 +169,10 @@ class AbundanceBarChart:
             
             if removed_classes:
                 note = (
-                    f"Note: The following classes were removed from the log2 scale plot due to insufficient valid data: {', '.join(removed_classes)}. "
+                    f"Note: The following classes were removed from the plot due to insufficient valid data: {', '.join(removed_classes)}. "
                     "Insufficient valid data means that for these classes, fewer than two of the selected conditions had a mean value greater than its standard deviation. "
                     "This occurs when the data for these classes shows high variability relative to its average, "
-                    "which can lead to unreliable or undefined results in log2 scale. "
-                    "These classes are still included in the linear scale plot if available."
+                    "which can lead to unreliable or undefined results."
                 )
                 st.write(note)
             
