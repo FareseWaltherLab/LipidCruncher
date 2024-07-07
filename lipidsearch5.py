@@ -561,19 +561,28 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
     proceed_with_analysis = False
 
     # Use local variables to track changes within the module
-    local_normalization_method = st.radio(
-        "Select how you would like to normalize your data:",
-        ['None', 'Internal Standards', 'BCA Assay', 'Both'],
-        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(st.session_state.normalization_method)
-    )
-
+    local_normalization_method = st.session_state.normalization_method
     local_normalization_inputs = st.session_state.normalization_inputs.get('Internal_Standards', {})
     local_create_norm_dataset = st.session_state.create_norm_dataset
 
+    # Move class selection outside and before normalization method selection
+    all_class_lst = cleaned_df['ClassKey'].unique()
+    selected_class_list = st.multiselect(
+        'Select lipid classes you would like to analyze:',
+        all_class_lst, 
+        default=local_normalization_inputs.get('selected_class_list', list(all_class_lst))
+    )
+
+    local_normalization_method = st.radio(
+        "Select how you would like to normalize your data:",
+        ['None', 'Internal Standards', 'BCA Assay', 'Both'],
+        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(local_normalization_method)
+    )
+
     if local_normalization_method == 'None':
-        normalized_df = cleaned_df
+        normalized_df = cleaned_df[cleaned_df['ClassKey'].isin(selected_class_list)]
     else:
-        normalized_df = cleaned_df.copy()  # Start with a copy of the cleaned data frame
+        normalized_df = cleaned_df[cleaned_df['ClassKey'].isin(selected_class_list)].copy()
 
         if local_normalization_method in ['BCA Assay', 'Both']:
             with st.expander("Enter Inputs for BCA Assay Data Normalization"):
@@ -584,37 +593,34 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
 
         if local_normalization_method in ['Internal Standards', 'Both']:
             with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
-                # Retrieve stored values or set defaults
-                all_class_lst = cleaned_df['ClassKey'].unique()
-                selected_class_list = local_normalization_inputs.get('selected_class_list', list(all_class_lst))
                 added_intsta_species_lst = local_normalization_inputs.get('added_intsta_species_lst', [])
                 intsta_concentration_dict = local_normalization_inputs.get('intsta_concentration_dict', {})
 
-                new_selected_class_list, new_added_intsta_species_lst, new_intsta_concentration_dict = collect_user_input_for_normalization(
+                new_added_intsta_species_lst, new_intsta_concentration_dict = collect_user_input_for_normalization(
                     normalized_df, intsta_df, selected_class_list, added_intsta_species_lst, intsta_concentration_dict
                 )
 
                 normalized_df = normalized_data_object.normalize_data(
-                    new_selected_class_list, new_added_intsta_species_lst, new_intsta_concentration_dict, normalized_df, intsta_df, experiment
+                    selected_class_list, new_added_intsta_species_lst, new_intsta_concentration_dict, normalized_df, intsta_df, experiment
                 )
 
                 # Store new values only if there is a change
-                local_normalization_inputs = {
-                    'selected_class_list': new_selected_class_list,
+                local_normalization_inputs.update({
                     'added_intsta_species_lst': new_added_intsta_species_lst,
                     'intsta_concentration_dict': new_intsta_concentration_dict
-                }
+                })
 
-        local_create_norm_dataset = st.checkbox("View and Download Normalized Dataset", value=local_create_norm_dataset)
+    local_create_norm_dataset = st.checkbox("View and Download Normalized Dataset", value=local_create_norm_dataset)
 
-        if local_create_norm_dataset:
-            st.info('The normalized dataset is created! Please confirm your normalization choices to proceed.')
-            display_data(normalized_df, 'Normalized Data', 'normalized_data.csv')
+    if local_create_norm_dataset:
+        st.info('The normalized dataset is created! Please confirm your normalization choices to proceed.')
+        display_data(normalized_df, 'Normalized Data', 'normalized_data.csv')
 
     # Add a button to confirm changes and update session state
     if st.button("Confirm Normalization Choices"):
         st.session_state.normalization_method = local_normalization_method
         st.session_state.normalization_inputs['Internal_Standards'] = local_normalization_inputs
+        st.session_state.normalization_inputs['Internal_Standards']['selected_class_list'] = selected_class_list
         st.session_state.create_norm_dataset = local_create_norm_dataset
         st.session_state.proceed_with_analysis = True
         st.session_state.proceed_with_analysis_qc = False  # Reset QC state
@@ -636,17 +642,9 @@ def collect_user_input_for_normalization(normalized_df, intsta_df, selected_clas
         intsta_concentration_dict (dict): Preselected concentrations of internal standards.
 
     Returns:
-        tuple: Contains selected classes, internal standards, and concentrations.
+        tuple: Contains selected internal standards and concentrations.
     """
-    all_class_lst = normalized_df['ClassKey'].unique()
     intsta_species_lst = intsta_df['LipidMolec'].tolist()
-
-    selected_class_list = st.multiselect(
-        'Select lipid classes you would like to analyze. For each selected class, you will choose an internal standard for normalization. '
-        'If a matching internal standard lipid species is available, it should be used for normalization. If no direct match is available, '
-        'select an internal standard that most closely matches the structure of the lipid class in question from the available options.',
-        all_class_lst, selected_class_list
-    )
 
     added_intsta_species_lst = [
         st.selectbox(f'Pick an internal standard for {lipid_class} species', intsta_species_lst, index=intsta_species_lst.index(added_intsta_species_lst[i]) if i < len(added_intsta_species_lst) else 0)
@@ -662,7 +660,7 @@ def collect_user_input_for_normalization(normalized_df, intsta_df, selected_clas
         for lipid in set(added_intsta_species_lst)
     }
 
-    return selected_class_list, added_intsta_species_lst, intsta_concentration_dict
+    return added_intsta_species_lst, intsta_concentration_dict
 
 def collect_protein_concentrations(experiment):
     """
@@ -1008,7 +1006,6 @@ def display_abundance_bar_chart(experiment, continuation_df):
         experiment = st.session_state.experiment
         
         st.write("Current Experiment State:")
-        st.write(experiment)
 
         full_samples_list = experiment.full_samples_list
         individual_samples_list = experiment.individual_samples_list

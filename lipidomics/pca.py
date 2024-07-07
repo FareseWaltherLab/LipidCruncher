@@ -17,7 +17,6 @@ class PCAAnalysis:
     - plot_pca: Coordinates the entire process of generating a PCA plot.
     """
     @staticmethod
-    @st.cache_data
     def run_pca(_df, full_samples_list):
         """
         Perform PCA on the provided DataFrame.
