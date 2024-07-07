@@ -1101,35 +1101,25 @@ def display_pathway_visualization(experiment, continuation_df):
     
             # Check if both conditions are selected
             if control_condition and experimental_condition:
-                # Calculate saturation ratio and fold change
                 class_saturation_ratio_df = lp.PathwayViz.calculate_class_saturation_ratio(continuation_df)
                 class_fold_change_df = lp.PathwayViz.calculate_class_fold_change(continuation_df, experiment, control_condition, experimental_condition)
-    
-                # Generate and display the pathway visualization
+                
                 fig, pathway_dict = lp.PathwayViz.create_pathway_viz(class_fold_change_df, class_saturation_ratio_df, control_condition, experimental_condition)
-    
-                st.pyplot(fig)
                 
-                #svg_data = plt_plot_to_svg(fig)
-                #st.download_button(
-                    #label="Download SVG",
-                    #data=svg_data,
-                    #file_name='abundance_bar_chart.svg',
-                    #mime='image/svg+xml')
-    
-                # Display data and download button
-                pathway_df = pd.DataFrame.from_dict(pathway_dict)
-                pathway_df.set_index('class', inplace=True)
-                st.write(pathway_df)
-                csv_download = convert_df(pathway_df)
-                st.download_button(
-                    label="Download Data",
-                    data=csv_download,
-                    file_name='pathway_df.csv',
-                    mime='text/csv')
-                
-        else:
-            st.error('You need at least two conditions with more than one replicate to create a pathway visualization!')
+                if fig is not None and pathway_dict:
+                    st.pyplot(fig)
+                    
+                    pathway_df = pd.DataFrame.from_dict(pathway_dict)
+                    pathway_df.set_index('class', inplace=True)
+                    st.write(pathway_df)
+                    csv_download = convert_df(pathway_df)
+                    st.download_button(
+                        label="Download Data",
+                        data=csv_download,
+                        file_name='pathway_df.csv',
+                        mime='text/csv')
+                else:
+                    st.warning("Unable to generate pathway visualization due to insufficient data.")
 
 def display_abundance_pie_charts(experiment, continuation_df):
     """
