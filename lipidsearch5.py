@@ -90,7 +90,9 @@ def initialize_session_state():
     if 'aggregate_number_of_samples_list' not in st.session_state:
         st.session_state.aggregate_number_of_samples_list = []
     if 'selected_classes' not in st.session_state:
-        st.session_state.selected_classes = None
+        st.session_state.selected_classes = []
+    if 'all_classes' not in st.session_state:
+        st.session_state.all_classes = []
     if 'normalization_method' not in st.session_state:
         st.session_state.normalization_method = 'None'
     if 'normalization_inputs' not in st.session_state:
@@ -541,40 +543,39 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
     """
     normalized_data_object = lp.NormalizeData()
 
-    # Initialize session state for selected classes if it doesn't exist
-    if 'selected_classes' not in st.session_state:
-        st.session_state.selected_classes = list(cleaned_df['ClassKey'].unique())
+    # Get the full list of classes
+    all_class_lst = list(cleaned_df['ClassKey'].unique())
 
-    # Callback function for class selection
+    # Update all_classes in session state
+    st.session_state.all_classes = all_class_lst
+
+    # Initialize selected_classes if it's empty or contains invalid classes
+    if 'selected_classes' not in st.session_state or not st.session_state.selected_classes or not all(cls in all_class_lst for cls in st.session_state.selected_classes):
+        st.session_state.selected_classes = all_class_lst.copy()
+
+    # Callback function for multiselect
     def update_selected_classes():
         st.session_state.selected_classes = st.session_state.temp_selected_classes
 
-    # Class selection
-    all_class_lst = cleaned_df['ClassKey'].unique()
-    st.multiselect(
+    # Class selection with callback
+    selected_classes = st.multiselect(
         'Select lipid classes you would like to analyze:',
         all_class_lst, 
-        default=st.session_state.selected_classes,  # Use the preserved selection
+        default=st.session_state.selected_classes,
         key='temp_selected_classes',
         on_change=update_selected_classes
     )
 
-    selected_class_list = st.session_state.selected_classes
-
-    # Callback function for normalization method
-    def update_normalization_method():
-        st.session_state.normalization_method = st.session_state.temp_normalization_method
+    # Use selected classes for filtering, defaulting to all if none selected
+    selected_class_list = st.session_state.selected_classes if st.session_state.selected_classes else all_class_lst
 
     # Normalization method selection
-    st.radio(
+    normalization_method = st.radio(
         "Select how you would like to normalize your data:",
         ['None', 'Internal Standards', 'BCA Assay', 'Both'],
-        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(st.session_state.get('normalization_method', 'None')),
-        key='temp_normalization_method',
-        on_change=update_normalization_method
+        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(st.session_state.get('normalization_method', 'None'))
     )
-
-    normalization_method = st.session_state.get('normalization_method', 'None')
+    st.session_state.normalization_method = normalization_method
 
     # Filter DataFrame based on selected classes
     normalized_df = cleaned_df[cleaned_df['ClassKey'].isin(selected_class_list)].copy()
