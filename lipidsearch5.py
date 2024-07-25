@@ -41,7 +41,7 @@ def main():
             elif st.session_state.module == "Quality Check & Anomaly Detection":
                 if st.session_state.cleaned_df is not None:
                     continuation_df, updated_experiment = quality_check_and_anomaly_detection_module(
-                        st.session_state.cleaned_df, 
+                        st.session_state.continuation_df, 
                         st.session_state.intsta_df, 
                         st.session_state.experiment
                     )
@@ -877,7 +877,7 @@ def display_pca_analysis(continuation_df, experiment, key_prefix=""):
                 st.error('At least two samples are required for a meaningful analysis!')
         
         # Generate and display the PCA plot
-        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(st.session_state.continuation_df, st.session_state.full_samples_list, st.session_state.extensive_conditions_list)
+        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
         st.bokeh_chart(pca_plot)
         
         csv_data = convert_df(pca_df)
