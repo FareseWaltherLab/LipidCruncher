@@ -10,6 +10,7 @@ from bokeh.plotting import figure
 from io import BytesIO
 import base64
 import plotly.io as pio
+import copy
 
 def main():
     st.header("LipidSearch 5.0 Module")
@@ -845,6 +846,11 @@ def display_pca_analysis(continuation_df, experiment, key_prefix=""):
     with st.expander("Principal Component Analysis (PCA)"):
         unique_key = f"{key_prefix}_{id(continuation_df)}"
         
+        # Store the original dataframe and experiment state if not already stored
+        if 'original_continuation_df' not in st.session_state:
+            st.session_state.original_continuation_df = continuation_df.copy()
+            st.session_state.original_experiment = copy.deepcopy(experiment)
+        
         # Callback function for multiselect
         def on_multiselect_change():
             st.session_state.samples_to_remove = st.session_state[f"multiselect_samples_to_remove_{unique_key}"]
@@ -861,18 +867,33 @@ def display_pca_analysis(continuation_df, experiment, key_prefix=""):
         if samples_to_remove:
             if (len(st.session_state.full_samples_list) - len(samples_to_remove)) >= 2:
                 st.warning('The selected samples will be removed for the rest of the analysis.')
-                if st.button("Apply Sample Removal"):
-                    continuation_df = experiment.remove_bad_samples(samples_to_remove, continuation_df)
-                    # Update session state
-                    st.session_state.continuation_df = continuation_df
-                    st.session_state.experiment = experiment
-                    st.session_state.full_samples_list = experiment.full_samples_list
-                    st.session_state.individual_samples_list = experiment.individual_samples_list
-                    st.session_state.conditions_list = experiment.conditions_list
-                    st.session_state.extensive_conditions_list = experiment.extensive_conditions_list
-                    st.session_state.number_of_samples_list = experiment.number_of_samples_list
-                    st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
-                    st.experimental_rerun()
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Apply Sample Removal"):
+                        continuation_df = experiment.remove_bad_samples(samples_to_remove, continuation_df)
+                        # Update session state
+                        st.session_state.continuation_df = continuation_df
+                        st.session_state.experiment = experiment
+                        st.session_state.full_samples_list = experiment.full_samples_list
+                        st.session_state.individual_samples_list = experiment.individual_samples_list
+                        st.session_state.conditions_list = experiment.conditions_list
+                        st.session_state.extensive_conditions_list = experiment.extensive_conditions_list
+                        st.session_state.number_of_samples_list = experiment.number_of_samples_list
+                        st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
+                        st.experimental_rerun()
+                with col2:
+                    if st.button("Undo Sample Removal"):
+                        # Restore original state
+                        st.session_state.continuation_df = st.session_state.original_continuation_df.copy()
+                        st.session_state.experiment = copy.deepcopy(st.session_state.original_experiment)
+                        st.session_state.full_samples_list = st.session_state.original_experiment.full_samples_list
+                        st.session_state.individual_samples_list = st.session_state.original_experiment.individual_samples_list
+                        st.session_state.conditions_list = st.session_state.original_experiment.conditions_list
+                        st.session_state.extensive_conditions_list = st.session_state.original_experiment.extensive_conditions_list
+                        st.session_state.number_of_samples_list = st.session_state.original_experiment.number_of_samples_list
+                        st.session_state.aggregate_number_of_samples_list = st.session_state.original_experiment.aggregate_number_of_samples_list
+                        st.session_state.samples_to_remove = []
+                        st.experimental_rerun()
             else:
                 st.error('At least two samples are required for a meaningful analysis!')
         
