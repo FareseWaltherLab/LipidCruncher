@@ -61,8 +61,8 @@ def main():
             elif st.session_state.module == "Data Visualization, Interpretation, & Analysis":
                 analysis_module(st.session_state.continuation_df, st.session_state.experiment)
                 
-                if st.button("Restart Analysis", key="restart_analysis"):
-                    initialize_session_state()
+                if st.button("Go back to quality check and anomaly detection module", key="back_to_qc"):
+                    st.session_state.module = "Quality Check & Anomaly Detection"
                     st.experimental_rerun()
             else:
                 st.error("No cleaned data available. Please complete the data cleaning step first.")
