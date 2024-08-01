@@ -570,7 +570,6 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
         )
 
         if view_download_checkbox:
-            st.info('The normalized dataset is created!')
             display_data(normalized_df, 'Normalized Data', 'normalized_data.csv')
 
         # Update create_norm_dataset in session state
@@ -697,16 +696,22 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                 if filter_option == "Yes":
                     cov_threshold = st.number_input('Enter the maximum acceptable CoV in %', min_value=10, max_value=1000, value=30, step=1)
                     filtered_df = lp.BQCQualityCheck.filter_dataframe_by_cov_threshold(cov_threshold, prepared_df)
-                    st.write('Filtered dataset:')
-                    st.write(filtered_df)
-                    csv_download = convert_df(filtered_df)
-                    st.download_button(
-                        label="Download Filtered Data",
-                        data=csv_download,
-                        file_name='Filtered_Data.csv',
-                        mime='text/csv'
-                    )
-                    return filtered_df
+                    
+                    if filtered_df.empty:
+                        st.error("The filtered dataset is empty. Please try a higher CoV threshold.")
+                        st.warning("Returning the original dataset without filtering.")
+                        return data_df
+                    else:
+                        st.write('Filtered dataset:')
+                        st.write(filtered_df)
+                        csv_download = convert_df(filtered_df)
+                        st.download_button(
+                            label="Download Filtered Data",
+                            data=csv_download,
+                            file_name='Filtered_Data.csv',
+                            mime='text/csv'
+                        )
+                        return filtered_df
     return data_df
 
 def integrate_retention_time_plots(continuation_df):
