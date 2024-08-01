@@ -35,37 +35,22 @@ def main():
                 
                 _, right_column = st.columns([3, 1])
                 with right_column:
-                    if st.button("Next: Quality Check & Anomaly Detection", key="next_to_qc_main"):
-                        st.session_state.module = "Quality Check & Anomaly Detection"
+                    if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
+                        st.session_state.module = "Quality Check & Analysis"
                         st.experimental_rerun()
 
-            elif st.session_state.module == "Quality Check & Anomaly Detection":
+            elif st.session_state.module == "Quality Check & Analysis":
                 if st.session_state.cleaned_df is not None:
-                    continuation_df, updated_experiment = quality_check_and_anomaly_detection_module(
+                    quality_check_and_analysis_module(
                         st.session_state.continuation_df, 
                         st.session_state.intsta_df, 
-                        st.session_state.experiment
+                        st.session_state.experiment,
+                        st.session_state.bqc_label
                     )
-                    update_session_state_after_qc(continuation_df, updated_experiment)
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("Back to Data Cleaning, Filtering, & Normalization", key="back_to_cleaning"):
-                        st.session_state.module = "Data Cleaning, Filtering, & Normalization"
-                        st.experimental_rerun()
-                with col2:
-                    if st.button("Next: Data Visualization, Interpretation, & Analysis", key="next_to_visualization"):
-                        st.session_state.module = "Data Visualization, Interpretation, & Analysis"
-                        st.experimental_rerun()
-
-            elif st.session_state.module == "Data Visualization, Interpretation, & Analysis":
-                analysis_module(st.session_state.continuation_df, st.session_state.experiment)
-                
-                if st.button("Go back to quality check and anomaly detection module", key="back_to_qc"):
-                    st.session_state.module = "Quality Check & Anomaly Detection"
+                if st.button("Back to Data Cleaning, Filtering, & Normalization", key="back_to_cleaning"):
+                    st.session_state.module = "Data Cleaning, Filtering, & Normalization"
                     st.experimental_rerun()
-            else:
-                st.error("No cleaned data available. Please complete the data cleaning step first.")
 
 def initialize_session_state():
     if 'module' not in st.session_state:
@@ -78,34 +63,12 @@ def initialize_session_state():
         st.session_state.continuation_df = None
     if 'experiment' not in st.session_state:
         st.session_state.experiment = None
-    if 'full_samples_list' not in st.session_state:
-        st.session_state.full_samples_list = []
-    if 'individual_samples_list' not in st.session_state:
-        st.session_state.individual_samples_list = []
-    if 'conditions_list' not in st.session_state:
-        st.session_state.conditions_list = []
-    if 'extensive_conditions_list' not in st.session_state:
-        st.session_state.extensive_conditions_list = []
-    if 'number_of_samples_list' not in st.session_state:
-        st.session_state.number_of_samples_list = []
-    if 'aggregate_number_of_samples_list' not in st.session_state:
-        st.session_state.aggregate_number_of_samples_list = []
-    if 'selected_classes' not in st.session_state:
-        st.session_state.selected_classes = []
-    if 'all_classes' not in st.session_state:
-        st.session_state.all_classes = []
-    if 'normalization_method' not in st.session_state:
-        st.session_state.normalization_method = 'None'
-    if 'normalization_inputs' not in st.session_state:
-        st.session_state.normalization_inputs = {}
-    if 'create_norm_dataset' not in st.session_state:
-        st.session_state.create_norm_dataset = False
-    if 'samples_to_remove' not in st.session_state:
-        st.session_state.samples_to_remove = []
-    if 'cov_threshold' not in st.session_state:
-        st.session_state.cov_threshold = 30
     if 'bqc_label' not in st.session_state:
         st.session_state.bqc_label = None
+    if 'normalization_inputs' not in st.session_state:
+        st.session_state.normalization_inputs = {}
+    if 'normalization_method' not in st.session_state:
+        st.session_state.normalization_method = 'None'
 
 def update_session_state(name_df, experiment, bqc_label):
     st.session_state.name_df = name_df
@@ -118,10 +81,6 @@ def update_session_state(name_df, experiment, bqc_label):
     st.session_state.number_of_samples_list = experiment.number_of_samples_list
     st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
 
-def update_session_state_after_qc(continuation_df, updated_experiment):
-    st.session_state.continuation_df = continuation_df
-    st.session_state.experiment = updated_experiment
-
 def data_cleaning_module(df, experiment, name_df):
     st.subheader("1) Clean, Filter, & Normalize Data")
     display_raw_data(df)
@@ -130,22 +89,18 @@ def data_cleaning_module(df, experiment, name_df):
     
     return normalized_df, intsta_df
 
-def quality_check_and_anomaly_detection_module(continuation_df, intsta_df, experiment):
-    st.subheader("2) Quality Check & Anomaly Detection")
+def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bqc_label):
+    st.subheader("2) Quality Check & Analysis")
     
-    # Start with the continuation_df, which is either normalized or cleaned data
-    continuation_df = continuation_df.copy()
-    
+    # Quality Check
     display_box_plots(continuation_df, experiment)
-    continuation_df = conduct_bqc_quality_assessment(st.session_state.bqc_label, continuation_df, experiment)
+    continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
+    display_box_plots(continuation_df, experiment)
     display_retention_time_plots(continuation_df)
     analyze_pairwise_correlation(continuation_df, experiment)
-    continuation_df, experiment = display_pca_analysis(continuation_df, experiment, key_prefix="final_pca")
+    display_pca_analysis(continuation_df, experiment)
     
-    return continuation_df, experiment
-
-def analysis_module(continuation_df, experiment):
-    st.subheader("3) Data Visualization, Interpretation, & Analysis")
+    # Analysis
     analysis_option = st.radio(
         "Select an analysis feature:",
         (
@@ -713,9 +668,11 @@ def display_box_plots(continuation_df, experiment):
         fig = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
 
 def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
+    """
+    Conducts a quality assessment of the data using Batch Quality Control (BQC) samples.
+    """
     if bqc_label is not None:
-        expand_quality_check = st.expander("Quality Check Using BQC Samples")
-        with expand_quality_check:
+        with st.expander("Quality Check Using BQC Samples"):
             bqc_sample_index = experiment.conditions_list.index(bqc_label)
             scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(data_df, experiment, bqc_sample_index)
             
@@ -727,24 +684,24 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                 file_name="CoV_Plot_Data.csv",
                 mime='text/csv'
             )
-
+            
             if reliable_data_percent >= 80:
                 st.info(f"{reliable_data_percent}% of the datapoints are confidently reliable (CoV < 30%).")
             elif reliable_data_percent >= 50:
                 st.warning(f"{reliable_data_percent}% of the datapoints are confidently reliable.")
             else:
                 st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < 30%).")
-
+            
             if prepared_df is not None and not prepared_df.empty:
-                st.session_state.filter_data = st.radio('Would you like to filter the data using BQC samples?', ['Yes', 'No'], 1) == 'Yes'
-                if st.session_state.filter_data:
-                    st.session_state.cov_threshold = st.number_input('Enter the maximum acceptable CoV in %', min_value=10, max_value=1000, value=st.session_state.cov_threshold, step=1)
-                    filtered_df = lp.BQCQualityCheck.filter_dataframe_by_cov_threshold(st.session_state.cov_threshold, prepared_df)
-                    st.write('View and download the filtered dataset:')
+                filter_option = st.radio("Would you like to filter your data using BQC samples?", ("No", "Yes"), index=0)
+                if filter_option == "Yes":
+                    cov_threshold = st.number_input('Enter the maximum acceptable CoV in %', min_value=10, max_value=1000, value=30, step=1)
+                    filtered_df = lp.BQCQualityCheck.filter_dataframe_by_cov_threshold(cov_threshold, prepared_df)
+                    st.write('Filtered dataset:')
                     st.write(filtered_df)
                     csv_download = convert_df(filtered_df)
                     st.download_button(
-                        label="Download Data",
+                        label="Download Filtered Data",
                         data=csv_download,
                         file_name='Filtered_Data.csv',
                         mime='text/csv'
@@ -842,75 +799,31 @@ def analyze_pairwise_correlation(continuation_df, experiment):
         else:
             st.error("No conditions with multiple replicates found.")
 
-def display_pca_analysis(continuation_df, experiment, key_prefix=""):
+def display_pca_analysis(continuation_df, experiment):
+    """
+    Displays the PCA analysis interface in the Streamlit app and generates a PCA plot.
+    """
     with st.expander("Principal Component Analysis (PCA)"):
-        unique_key = f"{key_prefix}_{id(continuation_df)}"
-        
-        # Store the original dataframe and experiment state if not already stored
-        if 'original_continuation_df' not in st.session_state:
-            st.session_state.original_continuation_df = continuation_df.copy()
-            st.session_state.original_experiment = copy.deepcopy(experiment)
-        
-        # Callback function for multiselect
-        def on_multiselect_change():
-            st.session_state.samples_to_remove = st.session_state[f"multiselect_samples_to_remove_{unique_key}"]
-        
-        # Create the multiselect for sample removal
-        samples_to_remove = st.multiselect(
-            'Select samples to remove from the analysis (optional):',
-            st.session_state.full_samples_list,
-            default=st.session_state.samples_to_remove,
-            key=f"multiselect_samples_to_remove_{unique_key}",
-            on_change=on_multiselect_change
-        )
+        samples_to_remove = st.multiselect('Select samples to remove from the analysis (optional):', experiment.full_samples_list)
         
         if samples_to_remove:
-            if (len(st.session_state.full_samples_list) - len(samples_to_remove)) >= 2:
-                st.warning('The selected samples will be removed for the rest of the analysis.')
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("Apply Sample Removal"):
-                        continuation_df = experiment.remove_bad_samples(samples_to_remove, continuation_df)
-                        # Update session state
-                        st.session_state.continuation_df = continuation_df
-                        st.session_state.experiment = experiment
-                        st.session_state.full_samples_list = experiment.full_samples_list
-                        st.session_state.individual_samples_list = experiment.individual_samples_list
-                        st.session_state.conditions_list = experiment.conditions_list
-                        st.session_state.extensive_conditions_list = experiment.extensive_conditions_list
-                        st.session_state.number_of_samples_list = experiment.number_of_samples_list
-                        st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
-                        st.experimental_rerun()
-                with col2:
-                    if st.button("Undo Sample Removal"):
-                        # Restore original state
-                        st.session_state.continuation_df = st.session_state.original_continuation_df.copy()
-                        st.session_state.experiment = copy.deepcopy(st.session_state.original_experiment)
-                        st.session_state.full_samples_list = st.session_state.original_experiment.full_samples_list
-                        st.session_state.individual_samples_list = st.session_state.original_experiment.individual_samples_list
-                        st.session_state.conditions_list = st.session_state.original_experiment.conditions_list
-                        st.session_state.extensive_conditions_list = st.session_state.original_experiment.extensive_conditions_list
-                        st.session_state.number_of_samples_list = st.session_state.original_experiment.number_of_samples_list
-                        st.session_state.aggregate_number_of_samples_list = st.session_state.original_experiment.aggregate_number_of_samples_list
-                        st.session_state.samples_to_remove = []
-                        st.experimental_rerun()
+            if (len(experiment.full_samples_list) - len(samples_to_remove)) >= 2:
+                continuation_df = experiment.remove_bad_samples(samples_to_remove, continuation_df)
             else:
                 st.error('At least two samples are required for a meaningful analysis!')
         
-        # Generate and display the PCA plot
         pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
         st.bokeh_chart(pca_plot)
         
         csv_data = convert_df(pca_df)
         st.download_button(
-            label="Download Data",
+            label="Download PCA Data",
             data=csv_data,
             file_name="PCA_data.csv",
-            mime="text/csv",
-            key=f"pca_data_download_{unique_key}"
+            mime="text/csv"
         )
-    
-    return st.session_state.continuation_df, st.session_state.experiment
+
+    return continuation_df
 
 def display_volcano_plot(experiment, continuation_df):
     """
