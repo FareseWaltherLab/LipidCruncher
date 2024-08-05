@@ -55,7 +55,6 @@ class BoxPlot:
         ax.set_xlabel('Percentage of Missing Values')
         ax.set_ylabel('Sample')
         ax.set_title('Missing Values Distribution')
-        st.pyplot(fig)
         return fig
 
     @staticmethod
@@ -76,5 +75,4 @@ class BoxPlot:
         ax.set_ylabel('log10(Concentration)')
         ax.set_title('Box Plot of Non-Zero Concentrations')
         ax.set_xticklabels(full_samples_list)
-        st.pyplot(fig)
         return fig

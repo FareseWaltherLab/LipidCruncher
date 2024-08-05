@@ -11,6 +11,11 @@ from io import BytesIO
 import base64
 import plotly.io as pio
 import copy
+import io
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
+import hashlib
 
 def main():
     st.header("LipidSearch 5.0 Module")
@@ -95,7 +100,6 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # Quality Check
     display_box_plots(continuation_df, experiment)
     continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
-    display_box_plots(continuation_df, experiment)
     display_retention_time_plots(continuation_df)
     analyze_pairwise_correlation(continuation_df, experiment)
     display_pca_analysis(continuation_df, experiment)
@@ -650,6 +654,16 @@ def collect_protein_concentrations(experiment):
     return protein_df
 
 def display_box_plots(continuation_df, experiment):
+    # Initialize a counter in session state if it doesn't exist
+    if 'box_plot_counter' not in st.session_state:
+        st.session_state.box_plot_counter = 0
+    
+    # Increment the counter
+    st.session_state.box_plot_counter += 1
+    
+    # Generate a unique identifier based on the current data and counter
+    unique_id = hashlib.md5(f"{str(continuation_df.index.tolist())}_{st.session_state.box_plot_counter}".encode()).hexdigest()
+    
     expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
     with expand_box_plot:
         # Creating a deep copy for visualization to keep the original continuation_df intact
@@ -660,11 +674,50 @@ def display_box_plots(continuation_df, experiment):
         
         mean_area_df = lp.BoxPlot.create_mean_area_df(visualization_df, current_samples)
         zero_values_percent_list = lp.BoxPlot.calculate_missing_values_percentage(mean_area_df)
-        fig = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
+        
+        # Generate and display the first plot (Missing Values Distribution)
+        fig1 = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
+        st.pyplot(fig1)
         
         st.write('--------------------------------------------------------------------------------')
-
-        fig = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
+        
+        # Generate and display the second plot (Box Plot)
+        fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
+        st.pyplot(fig2)
+        
+        # Generate PDF
+        pdf_buffer = io.BytesIO()
+        pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
+        
+        # Save the first plot to the PDF
+        img_buffer1 = io.BytesIO()
+        fig1.savefig(img_buffer1, format='png')
+        img_buffer1.seek(0)
+        img1 = ImageReader(img_buffer1)
+        pdf.drawImage(img1, 50, 400, width=500, height=350)
+        
+        # Save the second plot to the PDF
+        img_buffer2 = io.BytesIO()
+        fig2.savefig(img_buffer2, format='png')
+        img_buffer2.seek(0)
+        img2 = ImageReader(img_buffer2)
+        pdf.drawImage(img2, 50, 50, width=500, height=350)
+        
+        pdf.save()
+        pdf_buffer.seek(0)
+        
+        # Provide the PDF for download
+        st.download_button(
+            label="Download plots as PDF",
+            data=pdf_buffer,
+            file_name="box_plots.pdf",
+            mime="application/pdf",
+            key=f"download_box_plots_pdf_button_{unique_id}"
+        )
+        
+        # Close the figures
+        plt.close(fig1)
+        plt.close(fig2)
 
 def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
     """
