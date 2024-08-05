@@ -6,16 +6,19 @@ import matplotlib.pyplot as plt
 import tempfile
 from bokeh.io import export_svg
 from bokeh.io.export import export_svgs
+from bokeh.io import export_png
 from bokeh.plotting import figure
 from io import BytesIO
 import base64
 import plotly.io as pio
 import copy
 import io
+import os
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
 import hashlib
+from bokeh.plotting import Figure as BokehFigure
 
 def main():
     st.header("LipidSearch 5.0 Module")
@@ -97,9 +100,14 @@ def data_cleaning_module(df, experiment, name_df):
 def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bqc_label):
     st.subheader("2) Quality Check & Analysis")
     
+    # Initialize variables
+    box_plot_fig1 = None
+    box_plot_fig2 = None
+    bqc_scatter_plot = None
+
     # Quality Check
-    display_box_plots(continuation_df, experiment)
-    continuation_df = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
+    box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
+    continuation_df, bqc_scatter_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
     display_retention_time_plots(continuation_df)
     analyze_pairwise_correlation(continuation_df, experiment)
     display_pca_analysis(continuation_df, experiment)
@@ -129,6 +137,90 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         display_volcano_plot(experiment, continuation_df)
     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
         display_lipidomic_heatmap(experiment, continuation_df)
+
+    # Generate and provide PDF report for download
+    if box_plot_fig1 and box_plot_fig2 and bqc_scatter_plot:
+        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_scatter_plot)
+        st.download_button(
+            label="Download Quality Check Report (PDF)",
+            data=pdf_buffer,
+            file_name="quality_check_report.pdf",
+            mime="application/pdf",
+        )
+    else:
+        st.warning("Some plots are missing. Unable to generate PDF report.")
+
+    # Close the figures to free up memory
+    if box_plot_fig1:
+        plt.close(box_plot_fig1)
+    if box_plot_fig2:
+        plt.close(box_plot_fig2)
+        
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_scatter_plot):
+    pdf_buffer = io.BytesIO()
+    pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
+    
+    # Save the first box plot to the PDF
+    img_buffer1 = io.BytesIO()
+    box_plot_fig1.savefig(img_buffer1, format='png')
+    img_buffer1.seek(0)
+    img1 = ImageReader(img_buffer1)
+    pdf.drawImage(img1, 50, 500, width=500, height=300)
+    
+    # Save the second box plot to the PDF
+    img_buffer2 = io.BytesIO()
+    box_plot_fig2.savefig(img_buffer2, format='png')
+    img_buffer2.seek(0)
+    img2 = ImageReader(img_buffer2)
+    pdf.drawImage(img2, 50, 150, width=500, height=300)
+    
+    # Add a new page for the BQC scatter plot
+    pdf.showPage()
+    
+    # Export Bokeh plot to PNG and add to PDF
+    if isinstance(bqc_scatter_plot, BokehFigure):
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
+            temp_filename = tmpfile.name
+        
+        # Export the Bokeh plot to the temporary file
+        export_png(bqc_scatter_plot, filename=temp_filename)
+        
+        # Read the temporary file into the PDF
+        pdf.drawImage(temp_filename, 50, 200, width=500, height=400)
+        
+        # Remove the temporary file
+        os.unlink(temp_filename)
+    else:
+        # If it's not a Bokeh figure, assume it's a matplotlib figure
+        bqc_img_buffer = io.BytesIO()
+        bqc_scatter_plot.savefig(bqc_img_buffer, format='png')
+        bqc_img_buffer.seek(0)
+        bqc_img = ImageReader(bqc_img_buffer)
+        pdf.drawImage(bqc_img, 50, 200, width=500, height=400)
+    
+    pdf.save()
+    pdf_buffer.seek(0)
+    return pdf_buffer
+    
+    # Export Bokeh plot to PNG and add to PDF
+    if isinstance(bqc_scatter_plot, BokehFigure):
+        bqc_img_buffer = io.BytesIO()
+        export_png(bqc_scatter_plot, filename=bqc_img_buffer)
+        bqc_img_buffer.seek(0)
+        bqc_img = ImageReader(bqc_img_buffer)
+        pdf.drawImage(bqc_img, 50, 200, width=500, height=400)
+    else:
+        # If it's not a Bokeh figure, assume it's a matplotlib figure
+        bqc_img_buffer = io.BytesIO()
+        bqc_scatter_plot.savefig(bqc_img_buffer, format='png')
+        bqc_img_buffer.seek(0)
+        bqc_img = ImageReader(bqc_img_buffer)
+        pdf.drawImage(bqc_img, 50, 200, width=500, height=400)
+    
+    pdf.save()
+    pdf_buffer.seek(0)
+    return pdf_buffer
 
 @st.cache_data
 def convert_df(df):
@@ -685,44 +777,22 @@ def display_box_plots(continuation_df, experiment):
         fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
         st.pyplot(fig2)
         
-        # Generate PDF
-        pdf_buffer = io.BytesIO()
-        pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
-        
-        # Save the first plot to the PDF
-        img_buffer1 = io.BytesIO()
-        fig1.savefig(img_buffer1, format='png')
-        img_buffer1.seek(0)
-        img1 = ImageReader(img_buffer1)
-        pdf.drawImage(img1, 50, 400, width=500, height=350)
-        
-        # Save the second plot to the PDF
-        img_buffer2 = io.BytesIO()
-        fig2.savefig(img_buffer2, format='png')
-        img_buffer2.seek(0)
-        img2 = ImageReader(img_buffer2)
-        pdf.drawImage(img2, 50, 50, width=500, height=350)
-        
-        pdf.save()
-        pdf_buffer.seek(0)
-        
-        # Provide the PDF for download
+        # Provide option to download the raw data
+        csv_data = convert_df(mean_area_df)
         st.download_button(
-            label="Download plots as PDF",
-            data=pdf_buffer,
-            file_name="box_plots.pdf",
-            mime="application/pdf",
-            key=f"download_box_plots_pdf_button_{unique_id}"
+            label="Download Box Plot Data",
+            data=csv_data,
+            file_name="box_plot_data.csv",
+            mime='text/csv',
+            key=f"download_box_plot_data_{unique_id}"
         )
-        
-        # Close the figures
-        plt.close(fig1)
-        plt.close(fig2)
+    
+    # Return the figure objects for later use in PDF generation
+    return fig1, fig2
 
 def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
-    """
-    Conducts a quality assessment of the data using Batch Quality Control (BQC) samples.
-    """
+    scatter_plot = None  # Initialize scatter_plot to None
+    
     if bqc_label is not None:
         with st.expander("Quality Check Using BQC Samples"):
             bqc_sample_index = experiment.conditions_list.index(bqc_label)
@@ -753,7 +823,6 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                     if filtered_df.empty:
                         st.error("The filtered dataset is empty. Please try a higher CoV threshold.")
                         st.warning("Returning the original dataset without filtering.")
-                        return data_df
                     else:
                         st.write('Filtered dataset:')
                         st.write(filtered_df)
@@ -764,8 +833,9 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                             file_name='Filtered_Data.csv',
                             mime='text/csv'
                         )
-                        return filtered_df
-    return data_df
+                        data_df = filtered_df  # Update data_df with the filtered dataset
+
+    return data_df, scatter_plot  # Always return a tuple
 
 def integrate_retention_time_plots(continuation_df):
     """
