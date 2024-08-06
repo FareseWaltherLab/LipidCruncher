@@ -1270,7 +1270,7 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             st.plotly_chart(heatmap_fig, use_container_width=True)
 
             # Download buttons
-            #svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
+            svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
             csv_download = convert_df(z_scores_df.reset_index())
             st.download_button("Download Data", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
             
