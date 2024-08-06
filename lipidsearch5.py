@@ -156,6 +156,19 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         plt.close(box_plot_fig1)
     if box_plot_fig2:
         plt.close(box_plot_fig2)
+        
+def display_selected_analysis(analysis_option, experiment, continuation_df):
+    if analysis_option == "Class Level Breakdown - Bar Chart":
+        display_abundance_bar_chart(experiment, continuation_df)
+    elif analysis_option == "Class Level Breakdown - Pie Charts":
+        display_abundance_pie_charts(experiment, continuation_df)
+    elif analysis_option == "Class Level Breakdown - Saturation Plots":
+        display_saturation_plots(experiment, continuation_df)
+    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
+        display_pathway_visualization(experiment, continuation_df)
+    elif analysis_option == "Species Level Breakdown - Volcano Plot":
+        display_volcano_plot(experiment, continuation_df)
+    # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
 def generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig=None):
     st.write("Debug: Starting PDF generation")
