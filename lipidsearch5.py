@@ -15,10 +15,12 @@ import copy
 import io
 import os
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.utils import ImageReader
 import hashlib
 from bokeh.plotting import Figure as BokehFigure
+from plotly.io import to_image
+import plotly.io as pio
 
 def main():
     st.header("LipidSearch 5.0 Module")
@@ -103,11 +105,11 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # Initialize variables
     box_plot_fig1 = None
     box_plot_fig2 = None
-    bqc_scatter_plot = None
+    heatmap_fig = None
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
-    continuation_df, bqc_scatter_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
+    continuation_df, _ = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
     display_retention_time_plots(continuation_df)
     analyze_pairwise_correlation(continuation_df, experiment)
     display_pca_analysis(continuation_df, experiment)
@@ -136,11 +138,11 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     elif analysis_option == "Species Level Breakdown - Volcano Plot":
         display_volcano_plot(experiment, continuation_df)
     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
-        display_lipidomic_heatmap(experiment, continuation_df)
+        heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
 
     # Generate and provide PDF report for download
-    if box_plot_fig1 and box_plot_fig2 and bqc_scatter_plot:
-        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_scatter_plot)
+    if box_plot_fig1 and box_plot_fig2:
+        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig)
         st.download_button(
             label="Download Quality Check Report (PDF)",
             data=pdf_buffer,
@@ -155,68 +157,43 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         plt.close(box_plot_fig1)
     if box_plot_fig2:
         plt.close(box_plot_fig2)
-        
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_scatter_plot):
+
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig=None):
     pdf_buffer = io.BytesIO()
     pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
     
     # Save the first box plot to the PDF
     img_buffer1 = io.BytesIO()
-    box_plot_fig1.savefig(img_buffer1, format='png')
+    box_plot_fig1.savefig(img_buffer1, format='png', dpi=300, bbox_inches='tight')
     img_buffer1.seek(0)
     img1 = ImageReader(img_buffer1)
-    pdf.drawImage(img1, 50, 500, width=500, height=300)
+    pdf.drawImage(img1, 50, 400, width=500, height=300, preserveAspectRatio=True)
     
     # Save the second box plot to the PDF
     img_buffer2 = io.BytesIO()
-    box_plot_fig2.savefig(img_buffer2, format='png')
+    box_plot_fig2.savefig(img_buffer2, format='png', dpi=300, bbox_inches='tight')
     img_buffer2.seek(0)
     img2 = ImageReader(img_buffer2)
-    pdf.drawImage(img2, 50, 150, width=500, height=300)
+    pdf.drawImage(img2, 50, 50, width=500, height=300, preserveAspectRatio=True)
     
-    # Add a new page for the BQC scatter plot
-    pdf.showPage()
-    
-    # Export Bokeh plot to PNG and add to PDF
-    if isinstance(bqc_scatter_plot, BokehFigure):
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
-            temp_filename = tmpfile.name
+    # Add heatmap if available
+    if heatmap_fig is not None:
+        pdf.showPage()
+        pdf.setPageSize(landscape(letter))  # Set to landscape for more width
         
-        # Export the Bokeh plot to the temporary file
-        export_png(bqc_scatter_plot, filename=temp_filename)
+        # Adjust the Plotly figure layout for better fit
+        heatmap_fig.update_layout(
+            margin=dict(l=80, r=20, t=50, b=50),  # Increase left margin
+            width=900,  # Increase width
+            height=600  # Adjust height
+        )
         
-        # Read the temporary file into the PDF
-        pdf.drawImage(temp_filename, 50, 200, width=500, height=400)
-        
-        # Remove the temporary file
-        os.unlink(temp_filename)
-    else:
-        # If it's not a Bokeh figure, assume it's a matplotlib figure
-        bqc_img_buffer = io.BytesIO()
-        bqc_scatter_plot.savefig(bqc_img_buffer, format='png')
-        bqc_img_buffer.seek(0)
-        bqc_img = ImageReader(bqc_img_buffer)
-        pdf.drawImage(bqc_img, 50, 200, width=500, height=400)
-    
-    pdf.save()
-    pdf_buffer.seek(0)
-    return pdf_buffer
-    
-    # Export Bokeh plot to PNG and add to PDF
-    if isinstance(bqc_scatter_plot, BokehFigure):
-        bqc_img_buffer = io.BytesIO()
-        export_png(bqc_scatter_plot, filename=bqc_img_buffer)
-        bqc_img_buffer.seek(0)
-        bqc_img = ImageReader(bqc_img_buffer)
-        pdf.drawImage(bqc_img, 50, 200, width=500, height=400)
-    else:
-        # If it's not a Bokeh figure, assume it's a matplotlib figure
-        bqc_img_buffer = io.BytesIO()
-        bqc_scatter_plot.savefig(bqc_img_buffer, format='png')
-        bqc_img_buffer.seek(0)
-        bqc_img = ImageReader(bqc_img_buffer)
-        pdf.drawImage(bqc_img, 50, 200, width=500, height=400)
+        try:
+            heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
+            heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
+            pdf.drawImage(heatmap_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+        except Exception as e:
+            print(f"Error adding heatmap to PDF: {str(e)}")
     
     pdf.save()
     pdf_buffer.seek(0)
@@ -1252,6 +1229,14 @@ def display_lipidomic_heatmap(experiment, continuation_df):
                 heatmap_fig = lp.LipidomicHeatmap.generate_clustered_heatmap(clustered_df, selected_samples)
             else:  # Regular heatmap
                 heatmap_fig = lp.LipidomicHeatmap.generate_regular_heatmap(z_scores_df, selected_samples)
+                
+            # Adjust heatmap layout for better fit
+            heatmap_fig.update_layout(
+                width=800,
+                height=600,
+                margin=dict(l=80, r=20, t=50, b=50),
+                xaxis_tickangle=-45
+            )
 
             # Display the heatmap
             st.plotly_chart(heatmap_fig, use_container_width=True)
@@ -1260,6 +1245,8 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             #svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
             csv_download = convert_df(z_scores_df.reset_index())
             st.download_button("Download Data", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
+            
+            return heatmap_fig
         
 
 if __name__ == "__main__":
