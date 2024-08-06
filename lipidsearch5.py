@@ -21,6 +21,7 @@ import hashlib
 from bokeh.plotting import Figure as BokehFigure
 from plotly.io import to_image
 import plotly.io as pio
+import sys
 
 def main():
     st.header("LipidSearch 5.0 Module")
@@ -127,28 +128,26 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         )
     )
 
-    if analysis_option == "Class Level Breakdown - Bar Chart":
-        display_abundance_bar_chart(experiment, continuation_df)
-    elif analysis_option == "Class Level Breakdown - Pie Charts":
-        display_abundance_pie_charts(experiment, continuation_df)
-    elif analysis_option == "Class Level Breakdown - Saturation Plots":
-        display_saturation_plots(experiment, continuation_df)
-    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
-        display_pathway_visualization(experiment, continuation_df)
-    elif analysis_option == "Species Level Breakdown - Volcano Plot":
-        display_volcano_plot(experiment, continuation_df)
-    elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
+    if analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
+        st.write("Debug: Generating lipidomic heatmap")
         heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
+        st.write(f"Debug: Heatmap figure generated: {heatmap_fig is not None}")
+    else:
+        display_selected_analysis(analysis_option, experiment, continuation_df)
 
     # Generate and provide PDF report for download
     if box_plot_fig1 and box_plot_fig2:
+        st.write(f"Debug: Generating PDF with heatmap: {heatmap_fig is not None}")
         pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig)
-        st.download_button(
-            label="Download Quality Check Report (PDF)",
-            data=pdf_buffer,
-            file_name="quality_check_report.pdf",
-            mime="application/pdf",
-        )
+        if pdf_buffer:
+            st.download_button(
+                label="Download Quality Check Report (PDF)",
+                data=pdf_buffer,
+                file_name="quality_check_report.pdf",
+                mime="application/pdf",
+            )
+        else:
+            st.error("Failed to generate PDF report. Please check the logs for details.")
     else:
         st.warning("Some plots are missing. Unable to generate PDF report.")
 
@@ -159,44 +158,60 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         plt.close(box_plot_fig2)
 
 def generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig=None):
+    st.write("Debug: Starting PDF generation")
     pdf_buffer = io.BytesIO()
-    pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
     
-    # Save the first box plot to the PDF
-    img_buffer1 = io.BytesIO()
-    box_plot_fig1.savefig(img_buffer1, format='png', dpi=300, bbox_inches='tight')
-    img_buffer1.seek(0)
-    img1 = ImageReader(img_buffer1)
-    pdf.drawImage(img1, 50, 400, width=500, height=300, preserveAspectRatio=True)
-    
-    # Save the second box plot to the PDF
-    img_buffer2 = io.BytesIO()
-    box_plot_fig2.savefig(img_buffer2, format='png', dpi=300, bbox_inches='tight')
-    img_buffer2.seek(0)
-    img2 = ImageReader(img_buffer2)
-    pdf.drawImage(img2, 50, 50, width=500, height=300, preserveAspectRatio=True)
-    
-    # Add heatmap if available
-    if heatmap_fig is not None:
-        pdf.showPage()
-        pdf.setPageSize(landscape(letter))  # Set to landscape for more width
+    try:
+        pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
         
-        # Adjust the Plotly figure layout for better fit
-        heatmap_fig.update_layout(
-            margin=dict(l=80, r=20, t=50, b=50),  # Increase left margin
-            width=900,  # Increase width
-            height=600  # Adjust height
-        )
+        # Save the first box plot to the PDF
+        st.write("Debug: Adding first box plot")
+        img_buffer1 = io.BytesIO()
+        box_plot_fig1.savefig(img_buffer1, format='png', dpi=300, bbox_inches='tight')
+        img_buffer1.seek(0)
+        img1 = ImageReader(img_buffer1)
+        pdf.drawImage(img1, 50, 400, width=500, height=300, preserveAspectRatio=True)
         
-        try:
-            heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
-            heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
-            pdf.drawImage(heatmap_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
-        except Exception as e:
-            print(f"Error adding heatmap to PDF: {str(e)}")
-    
-    pdf.save()
-    pdf_buffer.seek(0)
+        # Save the second box plot to the PDF
+        st.write("Debug: Adding second box plot")
+        img_buffer2 = io.BytesIO()
+        box_plot_fig2.savefig(img_buffer2, format='png', dpi=300, bbox_inches='tight')
+        img_buffer2.seek(0)
+        img2 = ImageReader(img_buffer2)
+        pdf.drawImage(img2, 50, 50, width=500, height=300, preserveAspectRatio=True)
+        
+        # Add heatmap if available
+        if heatmap_fig is not None:
+            st.write("Debug: Attempting to add heatmap")
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
+            
+            try:
+                st.write(f"Debug: Heatmap figure type: {type(heatmap_fig)}")
+                st.write(f"Debug: Heatmap figure layout: {heatmap_fig.layout}")
+                heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
+                st.write(f"Debug: Heatmap image size: {len(heatmap_bytes)} bytes")
+                heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
+                pdf.drawImage(heatmap_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+                st.write("Debug: Heatmap added successfully")
+            except Exception as e:
+                st.write(f"Error adding heatmap to PDF: {str(e)}")
+                st.write(f"Error type: {type(e).__name__}")
+                st.write(f"Error traceback: {sys.exc_info()[2]}")
+        else:
+            st.write("Debug: No heatmap figure provided")
+        
+        st.write("Debug: Saving PDF")
+        pdf.save()
+        pdf_buffer.seek(0)
+        st.write("Debug: PDF saved successfully")
+        
+    except Exception as e:
+        st.write(f"Error in PDF generation: {str(e)}")
+        st.write(f"Error type: {type(e).__name__}")
+        st.write(f"Error traceback: {sys.exc_info()[2]}")
+        return None
+
     return pdf_buffer
 
 @st.cache_data
