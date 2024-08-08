@@ -304,16 +304,24 @@ def bokeh_plot_as_svg(plot):
 def svg_download_button(fig, filename):
     """
     Creates a Streamlit download button for the SVG format of a plotly figure.
-
     Args:
         fig (plotly.graph_objs.Figure): Plotly figure object to be converted into SVG.
         filename (str): The desired name of the downloadable SVG file.
     """
-    svg = fig.to_image(format="svg")
-    b64 = base64.b64encode(svg).decode()
+    # Convert the figure to SVG format
+    svg_bytes = fig.to_image(format="svg")
+    
+    # Decode the bytes to a string
+    svg_string = svg_bytes.decode('utf-8')
+    
+    # Ensure the SVG string starts with the correct XML declaration
+    if not svg_string.startswith('<?xml'):
+        svg_string = '<?xml version="1.0" encoding="utf-8"?>\n' + svg_string
+    
+    # Create a download button
     st.download_button(
         label="Download SVG",
-        data=b64,
+        data=svg_string,
         file_name=filename,
         mime="image/svg+xml"
     )
