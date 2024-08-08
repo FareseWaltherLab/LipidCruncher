@@ -1,42 +1,64 @@
-import pandas as pd
-import numpy as np
-import streamlit as st
-import lipidomics as lp
-import matplotlib.pyplot as plt
-import tempfile
-from bokeh.io import export_svg
-from bokeh.io.export import export_svgs
-from bokeh.io import export_png
-from bokeh.plotting import figure
-from io import BytesIO
+# Standard library imports
 import base64
-import plotly.io as pio
 import copy
+import hashlib
 import io
 import os
-from reportlab.pdfgen import canvas
+import sys
+import tempfile
+
+# Third-party imports
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import plotly.io as pio
+import streamlit as st
+
+from bokeh.io import export_png, export_svg
+from bokeh.io.export import export_svgs
+from bokeh.plotting import Figure as BokehFigure, figure
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.utils import ImageReader
-import hashlib
-from bokeh.plotting import Figure as BokehFigure
-from plotly.io import to_image
-import plotly.io as pio
-import sys
+from reportlab.pdfgen import canvas
+
+# Local imports
+import lipidomics as lp
 
 def main():
+    """
+    Main function for the LipidSearch 5.0 Module Streamlit application.
+
+    This function sets up the user interface and orchestrates the workflow of the application.
+    It handles file uploading, data processing, and navigation between different modules.
+
+    The application consists of two main modules:
+    1. Data Cleaning, Filtering, & Normalization
+    2. Quality Check & Analysis
+
+    The function uses Streamlit's session state to maintain data and application state
+    across reruns.
+
+    Workflow:
+    1. Initialize session state
+    2. Allow user to upload a LipidSearch 5.0 dataset
+    3. Process the uploaded data
+    4. Based on the current module:
+       - Perform data cleaning and normalization
+       - Or perform quality check and analysis
+    5. Provide navigation between modules
+
+    Note: This function is designed to be the entry point of a Streamlit application
+    and should be called when the script is run.
+    """
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
-
     initialize_session_state()
-
     uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
     if uploaded_file:
         df = load_data(uploaded_file)
         confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
-
         if confirmed and valid_samples:
             update_session_state(name_df, experiment, bqc_label)
-
             if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
                 cleaned_df, intsta_df = data_cleaning_module(df, st.session_state.experiment, st.session_state.name_df)
                 if cleaned_df is not None and intsta_df is not None:
@@ -49,7 +71,6 @@ def main():
                     if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
                         st.session_state.module = "Quality Check & Analysis"
                         st.experimental_rerun()
-
             elif st.session_state.module == "Quality Check & Analysis":
                 if st.session_state.cleaned_df is not None:
                     quality_check_and_analysis_module(
@@ -64,6 +85,27 @@ def main():
                     st.experimental_rerun()
 
 def initialize_session_state():
+    """
+    Initialize the Streamlit session state with default values.
+
+    This function sets up the initial state for various session variables
+    used throughout the application. It ensures that all necessary state
+    variables are present and set to their default values if they haven't
+    been initialized yet.
+
+    The following session state variables are initialized:
+    - module: Current module of the application
+    - cleaned_df: Cleaned dataframe
+    - intsta_df: Internal standard dataframe
+    - continuation_df: Continuation dataframe
+    - experiment: Experiment object
+    - bqc_label: Batch Quality Control label
+    - normalization_inputs: Dictionary for normalization inputs
+    - normalization_method: Selected normalization method
+
+    Note: This function should be called at the beginning of the Streamlit app
+    to ensure proper state management.
+    """
     if 'module' not in st.session_state:
         st.session_state.module = "Data Cleaning, Filtering, & Normalization"
     if 'cleaned_df' not in st.session_state:
@@ -82,6 +124,28 @@ def initialize_session_state():
         st.session_state.normalization_method = 'None'
 
 def update_session_state(name_df, experiment, bqc_label):
+    """
+    Update the Streamlit session state with experiment-related information.
+
+    This function updates several session state variables with information
+    derived from the experiment setup and naming dataframe.
+
+    Args:
+        name_df (pd.DataFrame): DataFrame containing naming information.
+        experiment (Experiment): Experiment object containing experimental setup details.
+        bqc_label (str): Label for Batch Quality Control samples.
+
+    The following session state variables are updated:
+    - name_df: DataFrame with naming information
+    - experiment: Experiment object
+    - bqc_label: Batch Quality Control label
+    - full_samples_list: List of all samples
+    - individual_samples_list: List of individual samples for each condition
+    - conditions_list: List of experimental conditions
+    - extensive_conditions_list: Detailed list of conditions
+    - number_of_samples_list: Number of samples for each condition
+    - aggregate_number_of_samples_list: Aggregated number of samples
+    """
     st.session_state.name_df = name_df
     st.session_state.experiment = experiment
     st.session_state.bqc_label = bqc_label
@@ -93,6 +157,25 @@ def update_session_state(name_df, experiment, bqc_label):
     st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
 
 def data_cleaning_module(df, experiment, name_df):
+    """
+    Perform data cleaning, filtering, and normalization on the input dataframe.
+
+    This function orchestrates the data cleaning process, including displaying
+    raw data, cleaning and filtering the data, and applying normalization.
+
+    Args:
+        df (pd.DataFrame): The raw input dataframe.
+        experiment (Experiment): Experiment object containing experimental setup details.
+        name_df (pd.DataFrame): DataFrame containing naming information.
+
+    Returns:
+        tuple: A tuple containing two pandas DataFrames:
+            - normalized_df: The cleaned, filtered, and normalized dataframe.
+            - intsta_df: The internal standard dataframe.
+
+    Note: This function uses Streamlit to display various UI elements and
+    intermediate results during the data cleaning process.
+    """
     st.subheader("1) Clean, Filter, & Normalize Data")
     display_raw_data(df)
     cleaned_df, intsta_df = display_cleaned_data(df, experiment, name_df)
@@ -129,15 +212,12 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     )
 
     if analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
-        st.write("Debug: Generating lipidomic heatmap")
         heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
-        st.write(f"Debug: Heatmap figure generated: {heatmap_fig is not None}")
     else:
         display_selected_analysis(analysis_option, experiment, continuation_df)
 
     # Generate and provide PDF report for download
     if box_plot_fig1 and box_plot_fig2:
-        st.write(f"Debug: Generating PDF with heatmap: {heatmap_fig is not None}")
         pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig)
         if pdf_buffer:
             st.download_button(
@@ -171,14 +251,12 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
 def generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig=None):
-    st.write("Debug: Starting PDF generation")
     pdf_buffer = io.BytesIO()
     
     try:
         pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
         
         # Save the first box plot to the PDF
-        st.write("Debug: Adding first box plot")
         img_buffer1 = io.BytesIO()
         box_plot_fig1.savefig(img_buffer1, format='png', dpi=300, bbox_inches='tight')
         img_buffer1.seek(0)
@@ -186,7 +264,6 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig=None):
         pdf.drawImage(img1, 50, 400, width=500, height=300, preserveAspectRatio=True)
         
         # Save the second box plot to the PDF
-        st.write("Debug: Adding second box plot")
         img_buffer2 = io.BytesIO()
         box_plot_fig2.savefig(img_buffer2, format='png', dpi=300, bbox_inches='tight')
         img_buffer2.seek(0)
@@ -195,36 +272,19 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig=None):
         
         # Add heatmap if available
         if heatmap_fig is not None:
-            st.write("Debug: Attempting to add heatmap")
             pdf.showPage()
             pdf.setPageSize(landscape(letter))
             
-            try:
-                st.write(f"Debug: Heatmap figure type: {type(heatmap_fig)}")
-                st.write(f"Debug: Heatmap figure layout: {heatmap_fig.layout}")
-                heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
-                st.write(f"Debug: Heatmap image size: {len(heatmap_bytes)} bytes")
-                heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
-                pdf.drawImage(heatmap_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
-                st.write("Debug: Heatmap added successfully")
-            except Exception as e:
-                st.write(f"Error adding heatmap to PDF: {str(e)}")
-                st.write(f"Error type: {type(e).__name__}")
-                st.write(f"Error traceback: {sys.exc_info()[2]}")
-        else:
-            st.write("Debug: No heatmap figure provided")
+            heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
+            heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
+            pdf.drawImage(heatmap_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
         
-        st.write("Debug: Saving PDF")
         pdf.save()
         pdf_buffer.seek(0)
-        st.write("Debug: PDF saved successfully")
         
     except Exception as e:
-        st.write(f"Error in PDF generation: {str(e)}")
-        st.write(f"Error type: {type(e).__name__}")
-        st.write(f"Error traceback: {sys.exc_info()[2]}")
         return None
-
+    
     return pdf_buffer
 
 @st.cache_data
