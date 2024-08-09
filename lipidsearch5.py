@@ -52,6 +52,24 @@ def main():
     """
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
+    
+    st.info("""
+    **Dataset Requirements for LipidSearch 5.0 Module**
+    
+    Ensure your dataset includes the following mandatory columns:
+    * `LipidMolec`: The molecule identifier for the lipid.
+    * `ClassKey`: The classification key for the lipid type.
+    * `CalcMass`: The calculated mass of the lipid molecule.
+    * `BaseRt`: The base retention time.
+    * `TotalGrade`: The overall quality grade of the lipid data.
+    * `TotalSmpIDRate(%)`: The total sample identification rate as a percentage.
+    * `FAKey`: The fatty acid key associated with the lipid.
+    
+    Additionally, each sample in your dataset must have a corresponding `MeanArea` column to represent intensity values. 
+    For instance, if your dataset comprises 10 samples, you should have the following columns: 
+    `MeanArea[s1]`, `MeanArea[s2]`, ..., `MeanArea[s10]` for each respective sample intensity.
+    """)
+    
     initialize_session_state()
     uploaded_file = st.sidebar.file_uploader('Upload your LipidSearch 5.0 dataset', type=['csv', 'txt'])
     if uploaded_file:
@@ -694,26 +712,31 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
     # Use selected classes for filtering, defaulting to all if none selected
     selected_class_list = st.session_state.selected_classes if st.session_state.selected_classes else all_class_lst
 
-    # Normalization method selection
+    # Callback function for normalization method
+    def update_normalization_method():
+        st.session_state.normalization_method = st.session_state.temp_normalization_method
+
+    # Normalization method selection with callback
     normalization_method = st.radio(
         "Select how you would like to normalize your data:",
         ['None', 'Internal Standards', 'BCA Assay', 'Both'],
-        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(st.session_state.get('normalization_method', 'None'))
+        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(st.session_state.get('normalization_method', 'None')),
+        key='temp_normalization_method',
+        on_change=update_normalization_method
     )
-    st.session_state.normalization_method = normalization_method
 
     # Filter DataFrame based on selected classes
     normalized_df = cleaned_df[cleaned_df['ClassKey'].isin(selected_class_list)].copy()
 
-    if normalization_method != 'None':
-        if normalization_method in ['BCA Assay', 'Both']:
+    if st.session_state.normalization_method != 'None':
+        if st.session_state.normalization_method in ['BCA Assay', 'Both']:
             with st.expander("Enter Inputs for BCA Assay Data Normalization"):
                 protein_df = collect_protein_concentrations(experiment)
                 if protein_df is not None:
                     normalized_df = normalized_data_object.normalize_using_bca(normalized_df, protein_df)
                     st.session_state.normalization_inputs['BCA'] = protein_df
 
-        if normalization_method in ['Internal Standards', 'Both']:
+        if st.session_state.normalization_method in ['Internal Standards', 'Both']:
             with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
                 added_intsta_species_lst = st.session_state.normalization_inputs.get('Internal_Standards', {}).get('added_intsta_species_lst', [])
                 intsta_concentration_dict = st.session_state.normalization_inputs.get('Internal_Standards', {}).get('intsta_concentration_dict', {})
