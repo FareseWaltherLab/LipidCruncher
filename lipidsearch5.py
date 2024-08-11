@@ -202,7 +202,7 @@ def data_cleaning_module(df, experiment, name_df):
     return normalized_df, intsta_df
 
 def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bqc_label):
-    st.subheader("2) Quality Check & Analysis")
+    st.subheader("2) Quality Check & Anomaly Detection")
     
     # Initialize variables
     box_plot_fig1 = None
@@ -216,6 +216,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     analyze_pairwise_correlation(continuation_df, experiment)
     display_pca_analysis(continuation_df, experiment)
     
+    st.subheader("3) Data Visualization, Interpretation, and Analysis ")
     # Analysis
     analysis_option = st.radio(
         "Select an analysis feature:",
@@ -866,6 +867,17 @@ def display_box_plots(continuation_df, experiment):
         # Generate and display the first plot (Missing Values Distribution)
         fig1 = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
         st.pyplot(fig1)
+
+        # Data for download (Missing Values)
+        missing_values_data = np.vstack((current_samples, zero_values_percent_list)).T
+        missing_values_csv = convert_df(pd.DataFrame(missing_values_data, columns=["Sample", "Percentage Missing"]))
+        st.download_button(
+            label="Download Missing Values Data",
+            data=missing_values_csv,
+            file_name="missing_values_data.csv",
+            mime='text/csv',
+            key=f"download_missing_values_data_{unique_id}"
+        )
         
         st.write('--------------------------------------------------------------------------------')
         
@@ -873,7 +885,7 @@ def display_box_plots(continuation_df, experiment):
         fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
         st.pyplot(fig2)
         
-        # Provide option to download the raw data
+        # Provide option to download the raw data for Box Plot
         csv_data = convert_df(mean_area_df)
         st.download_button(
             label="Download Box Plot Data",
