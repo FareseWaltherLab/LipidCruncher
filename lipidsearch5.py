@@ -210,6 +210,12 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     bqc_plot = None
     heatmap_fig = None
 
+    # Initialize session state for heatmap
+    if 'heatmap_generated' not in st.session_state:
+        st.session_state.heatmap_generated = False
+    if 'heatmap_fig' not in st.session_state:
+        st.session_state.heatmap_fig = None
+
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
     continuation_df, bqc_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
@@ -233,8 +239,14 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
 
     if analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
         heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
+        st.session_state.heatmap_generated = True
+        st.session_state.heatmap_fig = heatmap_fig
     else:
         display_selected_analysis(analysis_option, experiment, continuation_df)
+
+    # Use the stored heatmap if it was generated before
+    if st.session_state.heatmap_generated:
+        heatmap_fig = st.session_state.heatmap_fig
 
     # Generate and provide PDF report for download
     if box_plot_fig1 and box_plot_fig2:
