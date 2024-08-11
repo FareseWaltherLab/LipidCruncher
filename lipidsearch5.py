@@ -207,11 +207,12 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # Initialize variables
     box_plot_fig1 = None
     box_plot_fig2 = None
+    bqc_plot = None
     heatmap_fig = None
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
-    continuation_df, _ = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
+    continuation_df, bqc_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
     display_retention_time_plots(continuation_df)
     analyze_pairwise_correlation(continuation_df, experiment)
     display_pca_analysis(continuation_df, experiment)
@@ -237,7 +238,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
 
     # Generate and provide PDF report for download
     if box_plot_fig1 and box_plot_fig2:
-        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig)
+        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, heatmap_fig)
         if pdf_buffer:
             st.download_button(
                 label="Download Quality Check Report (PDF)",
@@ -269,31 +270,36 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
         display_volcano_plot(experiment, continuation_df)
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig=None):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, heatmap_fig):
     pdf_buffer = io.BytesIO()
     
     try:
         pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
         
-        # Save the first box plot to the PDF
+        # Page 1: Box Plots
         img_buffer1 = io.BytesIO()
         box_plot_fig1.savefig(img_buffer1, format='png', dpi=300, bbox_inches='tight')
         img_buffer1.seek(0)
         img1 = ImageReader(img_buffer1)
         pdf.drawImage(img1, 50, 400, width=500, height=300, preserveAspectRatio=True)
         
-        # Save the second box plot to the PDF
         img_buffer2 = io.BytesIO()
         box_plot_fig2.savefig(img_buffer2, format='png', dpi=300, bbox_inches='tight')
         img_buffer2.seek(0)
         img2 = ImageReader(img_buffer2)
         pdf.drawImage(img2, 50, 50, width=500, height=300, preserveAspectRatio=True)
         
-        # Add heatmap if available
+        # Page 2: BQC Plot
+        pdf.showPage()
+        if bqc_plot is not None:
+            bqc_bytes = pio.to_image(bqc_plot, format='png', width=800, height=600, scale=2)
+            bqc_img = ImageReader(io.BytesIO(bqc_bytes))
+            pdf.drawImage(bqc_img, 50, 100, width=500, height=400, preserveAspectRatio=True)
+        
+        # Page 3: Lipidomic Heatmap
+        pdf.showPage()
+        pdf.setPageSize(landscape(letter))
         if heatmap_fig is not None:
-            pdf.showPage()
-            pdf.setPageSize(landscape(letter))
-            
             heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
             heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
             pdf.drawImage(heatmap_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
@@ -302,6 +308,7 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, heatmap_fig=None):
         pdf_buffer.seek(0)
         
     except Exception as e:
+        print(f"Error generating PDF: {str(e)}")
         return None
     
     return pdf_buffer
@@ -909,7 +916,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             st.plotly_chart(scatter_plot, use_container_width=True)
             csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
             st.download_button(
-                "Download Data",
+                "Download BQC Data",
                 data=csv_data,
                 file_name="CoV_Plot_Data.csv",
                 mime='text/csv'
