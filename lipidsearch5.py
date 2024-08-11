@@ -966,11 +966,10 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
 
 def integrate_retention_time_plots(continuation_df):
     """
-    Integrates retention time plots into the Streamlit app.
-
+    Integrates retention time plots into the Streamlit app using Plotly.
     Based on the user's choice, this function either plots individual retention 
     times for each lipid class or allows for comparison across different classes. 
-    It also provides options for downloading the plot data in CSV and SVG formats.
+    It also provides options for downloading the plot data in CSV format.
 
     Args:
         continuation_df (pd.DataFrame): The DataFrame containing lipidomic data post-cleaning and normalization.
@@ -980,12 +979,9 @@ def integrate_retention_time_plots(continuation_df):
         # Handling individual retention time plots
         plots = lp.RetentionTime.plot_single_retention(continuation_df)
         for plot, retention_df in plots:
-            st.bokeh_chart(plot)
+            st.plotly_chart(plot, use_container_width=True)
             csv_download = convert_df(retention_df)
-            #svg = bokeh_plot_as_svg(plot)  # Using the refactored method to get SVG
-            st.download_button(label="Download Data", data=csv_download, file_name='retention_plot.csv', mime='text/csv')
-            #st.download_button(label="Download SVG", data=svg, file_name='retention_plot.svg', mime='image/svg+xml')
-
+            st.download_button(label="Download Retention Time Data", data=csv_download, file_name='retention_plot.csv', mime='text/csv')
     elif mode == 'Comparison Mode':
         # Handling comparison mode for retention time plots
         all_lipid_classes_lst = continuation_df['ClassKey'].value_counts().index.tolist()
@@ -993,15 +989,13 @@ def integrate_retention_time_plots(continuation_df):
         if selected_classes_list:  # Ensuring that selected_classes_list is not empty
             plot, retention_df = lp.RetentionTime.plot_multi_retention(continuation_df, selected_classes_list)
             if plot:
-                st.bokeh_chart(plot)
+                st.plotly_chart(plot, use_container_width=True)
                 csv_download = convert_df(retention_df)
-                #svg = bokeh_plot_as_svg(plot)  # Using the refactored method to get SVG
-                st.download_button(label="Download Data", data=csv_download, file_name='Retention_Time_Comparison.csv', mime='text/csv')
-                #st.download_button(label="Download SVG", data=svg, file_name='Retention_Time_Comparison.svg', mime='image/svg+xml')
+                st.download_button(label="Download Retention Time Data", data=csv_download, file_name='Retention_Time_Comparison.csv', mime='text/csv')
 
 def display_retention_time_plots(continuation_df):
     """
-    Displays retention time plots for lipid species within the Streamlit interface.
+    Displays retention time plots for lipid species within the Streamlit interface using Plotly.
 
     Args:
         continuation_df (pd.DataFrame): The DataFrame containing lipidomic data after any necessary transformations.
