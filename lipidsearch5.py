@@ -906,7 +906,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             bqc_sample_index = experiment.conditions_list.index(bqc_label)
             scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(data_df, experiment, bqc_sample_index)
             
-            st.bokeh_chart(scatter_plot)
+            st.plotly_chart(scatter_plot, use_container_width=True)
             csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
             st.download_button(
                 "Download Data",
