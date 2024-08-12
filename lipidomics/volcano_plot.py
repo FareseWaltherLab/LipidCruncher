@@ -1,13 +1,12 @@
+import plotly.graph_objects as go
+import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 import numpy as np
 from scipy import stats
-from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool
-import itertools
-from bokeh.palettes import Category20 as palette
 import streamlit as st
-import matplotlib.pyplot as plt
-import seaborn as sns
+import itertools
 
 class VolcanoPlot:
     """
@@ -156,7 +155,7 @@ class VolcanoPlot:
     @staticmethod
     def _generate_color_mapping(merged_df):
         """
-        Generate a color mapping for different lipid classes in the plot.
+        Generate a color mapping for different lipid classes in the plot using Plotly's color sequences.
         
         Args:
             merged_df: DataFrame that contains merged data for plotting, including lipid classes.
@@ -165,13 +164,13 @@ class VolcanoPlot:
             A dictionary mapping lipid classes to colors.
         """
         unique_classes = list(merged_df['ClassKey'].unique())
-        colors = itertools.cycle(palette[20])
+        colors = itertools.cycle(px.colors.qualitative.Plotly)
         return {class_name: next(colors) for class_name in unique_classes}
 
     @staticmethod
     def _create_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant):
         """
-        Create a Bokeh plot for the volcano plot visualization.
+        Create a Plotly figure for the volcano plot visualization.
         
         Args:
             merged_df: DataFrame containing data to be plotted.
@@ -180,32 +179,51 @@ class VolcanoPlot:
             hide_non_significant: Boolean indicating whether to hide non-significant data points.
         
         Returns:
-            A Bokeh figure object representing the volcano plot.
+            A Plotly figure object representing the volcano plot.
         """
         if hide_non_significant:
             significant_df = merged_df[((merged_df['FoldChange'] < -1) | (merged_df['FoldChange'] > 1)) & (merged_df['-log10(pValue)'] >= q_value_threshold)]
         else:
             significant_df = merged_df
         
-        min_x, max_x = significant_df['FoldChange'].min(), significant_df['FoldChange'].max()
-        min_y, max_y = significant_df['-log10(pValue)'].min(), significant_df['-log10(pValue)'].max()
-        
-        plot = figure(title="Volcano Plot", x_axis_label='Log2(Fold Change)', y_axis_label='-log10(p-value)')
-        
-        # Add scatter plots
-        VolcanoPlot._add_scatter_plots(plot, significant_df, color_mapping)
-        
-        # Add horizontal threshold line for significance
-        plot.line(x=[min_x, max_x], y=[q_value_threshold, q_value_threshold], line_dash="dashed", line_color="black")
-        
-        # Add vertical dashed lines at fold change = -1 and 1
-        plot.line(x=[-1, -1], y=[min_y, max_y], line_dash="dashed", line_color="black")
-        plot.line(x=[1, 1], y=[min_y, max_y], line_dash="dashed", line_color="black")
-        
-        # Configure hover tool
-        VolcanoPlot._configure_hover_tool(plot)
-        
-        return plot
+        fig = go.Figure()
+
+        for class_name, color in color_mapping.items():
+            class_df = significant_df[significant_df['ClassKey'] == class_name]
+            fig.add_trace(go.Scatter(
+                x=class_df['FoldChange'],
+                y=class_df['-log10(pValue)'],
+                mode='markers',
+                name=class_name,
+                marker=dict(color=color, size=5),
+                text=class_df['LipidMolec'],
+                hovertemplate='<b>Lipid:</b> %{text}<br>' +
+                              '<b>Fold Change:</b> %{x:.2f}<br>' +
+                              '<b>-log10(p-value):</b> %{y:.2f}<extra></extra>'
+            ))
+
+        fig.add_shape(type="line", x0=merged_df['FoldChange'].min(), x1=merged_df['FoldChange'].max(),
+                      y0=q_value_threshold, y1=q_value_threshold, line=dict(dash="dash", color="black"))
+        fig.add_shape(type="line", x0=-1, x1=-1, y0=0, y1=merged_df['-log10(pValue)'].max(), line=dict(dash="dash", color="black"))
+        fig.add_shape(type="line", x0=1, x1=1, y0=0, y1=merged_df['-log10(pValue)'].max(), line=dict(dash="dash", color="black"))
+
+        fig.update_layout(
+            title=dict(text="Volcano Plot", font=dict(size=24, color='black')),
+            xaxis_title=dict(text="Log2(Fold Change)", font=dict(size=18, color='black')),
+            yaxis_title=dict(text="-log10(p-value)", font=dict(size=18, color='black')),
+            xaxis=dict(tickfont=dict(size=14, color='black')),
+            yaxis=dict(tickfont=dict(size=14, color='black')),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            legend=dict(font=dict(size=12, color='black')),
+            height=600,
+            margin=dict(t=50, r=50, b=50, l=50)
+        )
+
+        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+
+        return fig
 
     @staticmethod
     def _add_scatter_plots(plot, merged_df, color_mapping):
@@ -335,7 +353,7 @@ class VolcanoPlot:
     @staticmethod
     def _create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant):
         """
-        Create a Bokeh plot for Log10(Mean Control Concentration) vs. Log2(Fold Change).
+        Create a Plotly figure for Log10(Mean Control Concentration) vs. Log2(Fold Change).
     
         Args:
             merged_df: DataFrame containing merged data for plotting, including calculated metrics.
@@ -344,20 +362,46 @@ class VolcanoPlot:
             hide_non_significant: Boolean indicating whether to hide non-significant data points.
     
         Returns:
-            Bokeh figure object representing the new plot.
+            Plotly figure object representing the new plot.
         """
         if hide_non_significant:
             significant_df = merged_df[((merged_df['FoldChange'] < -1) | (merged_df['FoldChange'] > 1)) & (merged_df['-log10(pValue)'] >= q_value_threshold)]
         else:
             significant_df = merged_df
         
-        plot = figure(title="Fold Change vs. Mean Control Concentration", x_axis_label='Log2(Fold Change)', y_axis_label='Log10(Mean Control Concentration)')
+        fig = go.Figure()
+
         for class_name, color in color_mapping.items():
             class_df = significant_df[significant_df['ClassKey'] == class_name]
-            plot.scatter(x='FoldChange', y='Log10MeanControl', color=color, legend_label=class_name, source=ColumnDataSource(class_df))
-        
-        VolcanoPlot._configure_hover_tool(plot, "fold_change_vs_control")  # Specify plot type for appropriate tooltips
-        return plot, significant_df[['LipidMolec', 'Log10MeanControl', 'FoldChange', 'ClassKey']]
+            fig.add_trace(go.Scatter(
+                x=class_df['FoldChange'],
+                y=class_df['Log10MeanControl'],
+                mode='markers',
+                name=class_name,
+                marker=dict(color=color, size=5),
+                text=class_df['LipidMolec'],
+                hovertemplate='<b>Lipid:</b> %{text}<br>' +
+                              '<b>Fold Change:</b> %{x:.2f}<br>' +
+                              '<b>Log10(Mean Control):</b> %{y:.2f}<extra></extra>'
+            ))
+
+        fig.update_layout(
+            title=dict(text="Fold Change vs. Mean Control Concentration", font=dict(size=24, color='black')),
+            xaxis_title=dict(text="Log2(Fold Change)", font=dict(size=18, color='black')),
+            yaxis_title=dict(text="Log10(Mean Control Concentration)", font=dict(size=18, color='black')),
+            xaxis=dict(tickfont=dict(size=14, color='black')),
+            yaxis=dict(tickfont=dict(size=14, color='black')),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            legend=dict(font=dict(size=12, color='black')),
+            height=600,
+            margin=dict(t=50, r=50, b=50, l=50)
+        )
+
+        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+
+        return fig, significant_df[['LipidMolec', 'Log10MeanControl', 'FoldChange', 'ClassKey']]
 
     @staticmethod
     def create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions):
