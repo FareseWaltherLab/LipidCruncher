@@ -130,9 +130,6 @@ class AbundanceBarChart:
             # Check for missing columns before filtering
             expected_columns = ['ClassKey'] + [f"MeanArea[{sample}]" for sample in full_samples_list]
             missing_columns = [col for col in expected_columns if col not in df.columns]
-            
-            if missing_columns:
-                st.warning(f"The following columns are missing from the dataset: {', '.join(missing_columns)}. These samples may have been removed in a previous step.")
                 
             # Filter for only available columns
             valid_columns = ['ClassKey'] + [col for col in expected_columns if col in df.columns and col != 'ClassKey']

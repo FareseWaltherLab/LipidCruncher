@@ -212,15 +212,18 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     box_plot_fig2 = None
     bqc_plot = None
     retention_time_plot = None
+    pca_plot = None
     heatmap_fig = None
 
-    # Initialize session state for heatmap and correlation plots
+    # Initialize session state for plots
     if 'heatmap_generated' not in st.session_state:
         st.session_state.heatmap_generated = False
     if 'heatmap_fig' not in st.session_state:
         st.session_state.heatmap_fig = None
     if 'correlation_plots' not in st.session_state:
         st.session_state.correlation_plots = {}
+    if 'abundance_bar_charts' not in st.session_state:
+        st.session_state.abundance_bar_charts = {'linear': None, 'log2': None}
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
@@ -232,7 +235,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     if selected_condition and corr_fig:
         st.session_state.correlation_plots[selected_condition] = corr_fig
     
-    display_pca_analysis(continuation_df, experiment)
+    # PCA Analysis
+    continuation_df, pca_plot = display_pca_analysis(continuation_df, experiment)
     
     st.subheader("3) Data Visualization, Interpretation, and Analysis ")
     # Analysis
@@ -248,7 +252,13 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         )
     )
 
-    if analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
+    if analysis_option == "Class Level Breakdown - Bar Chart":
+        linear_chart, log2_chart = display_abundance_bar_charts(experiment, continuation_df)
+        if linear_chart:
+            st.session_state.abundance_bar_charts['linear'] = linear_chart
+        if log2_chart:
+            st.session_state.abundance_bar_charts['log2'] = log2_chart
+    elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
         heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
         st.session_state.heatmap_generated = True
         st.session_state.heatmap_fig = heatmap_fig
@@ -265,7 +275,10 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     if generate_pdf == 'Yes':
         if box_plot_fig1 and box_plot_fig2:
             with st.spinner('Generating PDF report...'):
-                pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig, st.session_state.correlation_plots)
+                pdf_buffer = generate_pdf_report(
+                    box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
+                    heatmap_fig, st.session_state.correlation_plots, st.session_state.abundance_bar_charts
+                )
             if pdf_buffer:
                 st.download_button(
                     label="Download Quality Check Report (PDF)",
@@ -297,7 +310,7 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
         display_volcano_plot(experiment, continuation_df)
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig, correlation_plots):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_fig, correlation_plots, abundance_bar_charts):
     pdf_buffer = io.BytesIO()
     
     try:
@@ -327,13 +340,16 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
         pdf.showPage()
         pdf.setPageSize(landscape(letter))
         if retention_time_plot is not None:
-            # Convert Plotly figure to SVG
             svg_bytes = pio.to_image(retention_time_plot, format='svg')
-            
-            # Use svglib to convert SVG to ReportLab drawing
             drawing = svg2rlg(io.BytesIO(svg_bytes))
-            
-            # Render the drawing on the PDF
+            renderPDF.draw(drawing, pdf, 50, 50)
+        
+        # Page 4: PCA Plot
+        pdf.showPage()
+        pdf.setPageSize(landscape(letter))
+        if pca_plot is not None:
+            svg_bytes = pio.to_image(pca_plot, format='svg')
+            drawing = svg2rlg(io.BytesIO(svg_bytes))
             renderPDF.draw(drawing, pdf, 50, 50)
         
         # Pages for Correlation Plots
@@ -346,6 +362,18 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
             img = ImageReader(img_buffer)
             pdf.drawImage(img, 50, 100, width=500, height=500, preserveAspectRatio=True)
             pdf.drawString(50, 50, f"Correlation Plot for {condition}")
+        
+        # Add Abundance Bar Charts
+        for scale, chart in abundance_bar_charts.items():
+            if chart is not None:
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                img_buffer = io.BytesIO()
+                chart.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+                img_buffer.seek(0)
+                img = ImageReader(img_buffer)
+                pdf.drawImage(img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 30, f"Abundance Bar Chart ({scale} scale)")
         
         # Last Page: Lipidomic Heatmap
         pdf.showPage()
@@ -1098,7 +1126,15 @@ def analyze_pairwise_correlation(continuation_df, experiment):
 def display_pca_analysis(continuation_df, experiment):
     """
     Displays the PCA analysis interface in the Streamlit app and generates a PCA plot using Plotly.
+    
+    Args:
+        continuation_df (pd.DataFrame): The DataFrame containing the normalized or cleaned data.
+        experiment (Experiment): The experiment object with details of the conditions and samples.
+    
+    Returns:
+        tuple: A tuple containing the updated continuation_df and the PCA plot.
     """
+    pca_plot = None
     with st.expander("Principal Component Analysis (PCA)"):
         samples_to_remove = st.multiselect('Select samples to remove from the analysis (optional):', experiment.full_samples_list)
         
@@ -1118,7 +1154,7 @@ def display_pca_analysis(continuation_df, experiment):
             file_name="PCA_data.csv",
             mime="text/csv"
         )
-    return continuation_df
+    return continuation_df, pca_plot
 
 def display_volcano_plot(experiment, continuation_df):
     """
@@ -1201,7 +1237,7 @@ def display_saturation_plots(experiment, df):
                 
                 st.write('---------------------------------------------------------')
 
-def display_abundance_bar_chart(experiment, continuation_df):
+def display_abundance_bar_charts(experiment, continuation_df):
     with st.expander("Class Concentration Bar Chart"):
         # Use the most up-to-date experiment object from session state
         experiment = st.session_state.experiment
@@ -1226,36 +1262,65 @@ def display_abundance_bar_chart(experiment, continuation_df):
             key='classes_select'
         )
 
-        mode = st.radio('Select a mode', ('linear scale', 'log2 scale'), 0, key='scale_mode')
+        linear_fig, log2_fig = None, None
 
         if selected_conditions_list and selected_classes_list:
-            fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
+            # Generate linear scale chart
+            linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
                 continuation_df, 
                 full_samples_list, 
                 individual_samples_list, 
                 conditions_list, 
                 selected_conditions_list, 
                 selected_classes_list, 
-                mode
+                'linear scale'
             )
 
-            if fig is not None and abundance_df is not None and not abundance_df.empty:
-                st.pyplot(fig)
+            if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
+                st.pyplot(linear_fig)
+                st.write("Linear Scale")
                 try:
                     csv_data = convert_df(abundance_df)
                     st.download_button(
-                        label="Download Data",
+                        label="Download Linear Scale Data",
                         data=csv_data,
-                        file_name='abundance_bar_chart.csv',
+                        file_name='abundance_bar_chart_linear.csv',
                         mime='text/csv',
-                        key='abundance_chart_download'
+                        key='abundance_chart_download_linear'
                     )
                 except Exception as e:
                     st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
-            else:
-                st.error("Unable to create the abundance bar chart due to insufficient data.")
+
+            # Generate log2 scale chart
+            log2_fig, abundance_df_log2 = lp.AbundanceBarChart.create_abundance_bar_chart(
+                continuation_df, 
+                full_samples_list, 
+                individual_samples_list, 
+                conditions_list, 
+                selected_conditions_list, 
+                selected_classes_list, 
+                'log2 scale'
+            )
+
+            if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
+                st.pyplot(log2_fig)
+                st.write("Log2 Scale")
+                try:
+                    csv_data_log2 = convert_df(abundance_df_log2)
+                    st.download_button(
+                        label="Download Log2 Scale Data",
+                        data=csv_data_log2,
+                        file_name='abundance_bar_chart_log2.csv',
+                        mime='text/csv',
+                        key='abundance_chart_download_log2'
+                    )
+                except Exception as e:
+                    st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
+
         else:
-            st.warning("Please select at least one condition and one class to create the chart.")
+            st.warning("Please select at least one condition and one class to create the charts.")
+
+        return linear_fig, log2_fig
 
 def display_pathway_visualization(experiment, continuation_df):
     """
