@@ -213,7 +213,6 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     bqc_plot = None
     retention_time_plot = None
     heatmap_fig = None
-    correlation_plots = {}
 
     # Initialize session state for heatmap and correlation plots
     if 'heatmap_generated' not in st.session_state:
@@ -260,20 +259,24 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     if st.session_state.heatmap_generated:
         heatmap_fig = st.session_state.heatmap_fig
 
-    # Generate and provide PDF report for download
-    if box_plot_fig1 and box_plot_fig2:
-        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig, st.session_state.correlation_plots)
-        if pdf_buffer:
-            st.download_button(
-                label="Download Quality Check Report (PDF)",
-                data=pdf_buffer,
-                file_name="quality_check_report.pdf",
-                mime="application/pdf",
-            )
+    # Ask user if they want to generate a PDF report
+    generate_pdf = st.radio("Generate PDF Report?", ('No', 'Yes'), index=0)
+
+    if generate_pdf == 'Yes':
+        if box_plot_fig1 and box_plot_fig2:
+            with st.spinner('Generating PDF report...'):
+                pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig, st.session_state.correlation_plots)
+            if pdf_buffer:
+                st.download_button(
+                    label="Download Quality Check Report (PDF)",
+                    data=pdf_buffer,
+                    file_name="quality_check_report.pdf",
+                    mime="application/pdf",
+                )
+            else:
+                st.error("Failed to generate PDF report. Please check the logs for details.")
         else:
-            st.error("Failed to generate PDF report. Please check the logs for details.")
-    else:
-        st.warning("Some plots are missing. Unable to generate PDF report.")
+            st.warning("Some plots are missing. Unable to generate PDF report.")
 
     # Close the figures to free up memory
     if box_plot_fig1:
