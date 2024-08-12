@@ -20,7 +20,6 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
-# New imports for SVG handling
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPDF
 
@@ -451,12 +450,20 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
                 pdf.drawString(50, 80, "Concentration Distribution Plot")
         
         # Last Page: Lipidomic Heatmap
-        pdf.showPage()
-        pdf.setPageSize(landscape(letter))
         if heatmap_fig is not None:
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
+            # Decrease the width of the heatmap image and adjust height to maintain aspect ratio
             heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
             heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
-            pdf.drawImage(heatmap_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+            # Adjust the positioning and size of the heatmap on the page
+            page_width, page_height = landscape(letter)
+            img_width = 700  # Decreased width
+            img_height = (img_width / 900) * 600  # Maintain aspect ratio
+            x_position = (page_width - img_width) / 2  # Center horizontally
+            y_position = (page_height - img_height) / 2  # Center vertically
+            pdf.drawImage(heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
+            pdf.drawString(x_position, y_position - 20, "Lipidomic Heatmap")
         
         pdf.save()
         pdf_buffer.seek(0)
@@ -1531,12 +1538,18 @@ def display_lipidomic_heatmap(experiment, continuation_df):
                 
             # Adjust heatmap layout for better fit
             heatmap_fig.update_layout(
-                width=800,
+                width=900,  # Decreased width
                 height=600,
-                margin=dict(l=80, r=20, t=50, b=50),
-                xaxis_tickangle=-45
+                margin=dict(l=150, r=50, t=50, b=100),  # Adjusted margins
+                xaxis_tickangle=-45,
+                yaxis_title="Lipid Molecules",
+                xaxis_title="Samples",
+                title="Lipidomic Heatmap",
+                font=dict(size=10)  # Decreased font size
             )
-
+            # Adjust colorbar
+            heatmap_fig.update_traces(colorbar=dict(len=0.9, thickness=15))  # Made colorbar thinner
+            
             # Display the heatmap
             st.plotly_chart(heatmap_fig, use_container_width=True)
 
@@ -1545,8 +1558,7 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             csv_download = convert_df(z_scores_df.reset_index())
             st.download_button("Download Data", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
             
-            return heatmap_fig
-        
+            return heatmap_fig   
 
 if __name__ == "__main__":
     main()
