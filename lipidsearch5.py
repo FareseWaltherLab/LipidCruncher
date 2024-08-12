@@ -226,6 +226,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         st.session_state.abundance_bar_charts = {'linear': None, 'log2': None}
     if 'abundance_pie_charts' not in st.session_state:
         st.session_state.abundance_pie_charts = {}
+    if 'saturation_plots' not in st.session_state:
+        st.session_state.saturation_plots = {}
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
@@ -263,6 +265,9 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     elif analysis_option == "Class Level Breakdown - Pie Charts":
         pie_charts = display_abundance_pie_charts(experiment, continuation_df)
         st.session_state.abundance_pie_charts.update(pie_charts)
+    elif analysis_option == "Class Level Breakdown - Saturation Plots":
+        saturation_plots = display_saturation_plots(experiment, continuation_df)
+        st.session_state.saturation_plots.update(saturation_plots)
     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
         heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
         st.session_state.heatmap_generated = True
@@ -283,7 +288,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
                 pdf_buffer = generate_pdf_report(
                     box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
                     heatmap_fig, st.session_state.correlation_plots, st.session_state.abundance_bar_charts,
-                    st.session_state.abundance_pie_charts
+                    st.session_state.abundance_pie_charts, st.session_state.saturation_plots
                 )
             if pdf_buffer:
                 st.download_button(
@@ -316,7 +321,7 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
         display_volcano_plot(experiment, continuation_df)
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_fig, correlation_plots, abundance_bar_charts, abundance_pie_charts):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_fig, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots):
     pdf_buffer = io.BytesIO()
     
     try:
@@ -389,6 +394,24 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
             pie_img = ImageReader(io.BytesIO(pie_bytes))
             pdf.drawImage(pie_img, 50, 100, width=500, height=500, preserveAspectRatio=True)
             pdf.drawString(50, 50, f"Abundance Pie Chart for {condition}")
+        
+        # Add Saturation Plots
+        for lipid_class, plots in saturation_plots.items():
+            # Main plot
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
+            main_bytes = pio.to_image(plots['main'], format='png', width=1000, height=700, scale=2)
+            main_img = ImageReader(io.BytesIO(main_bytes))
+            pdf.drawImage(main_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 80, f"Saturation Plot (Main) for {lipid_class}")
+            
+            # Percentage plot
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
+            percentage_bytes = pio.to_image(plots['percentage'], format='png', width=1000, height=700, scale=2)
+            percentage_img = ImageReader(io.BytesIO(percentage_bytes))
+            pdf.drawImage(percentage_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 80, f"Saturation Plot (Percentage) for {lipid_class}")
         
         # Last Page: Lipidomic Heatmap
         pdf.showPage()
@@ -1238,19 +1261,25 @@ def display_saturation_plots(experiment, df):
     Args:
         experiment: Experiment object containing conditions and samples.
         df: DataFrame with the lipidomics data.
+    Returns:
+        dict: A dictionary containing the generated plots for each lipid class.
     """
+    saturation_plots = {}
     with st.expander("Investigate the Saturation Profile of Different Lipid Classes"):
         selected_conditions = st.multiselect('Select conditions for analysis:', experiment.conditions_list, experiment.conditions_list)
         if selected_conditions:
             plots = lp.SaturationPlot.create_plots(df, experiment, selected_conditions)
             for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
-                # Display plots and create download buttons in Streamlit script
                 st.plotly_chart(main_plot, use_container_width=True)
                 st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_main.csv', 'text/csv', key=f'download-main-data-{lipid_class}')
                 st.plotly_chart(percentage_plot, use_container_width=True)
                 st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_percentage.csv', 'text/csv', key=f'download-percentage-data-{lipid_class}')
                 
                 st.write('---------------------------------------------------------')
+                
+                saturation_plots[lipid_class] = {'main': main_plot, 'percentage': percentage_plot}
+    
+    return saturation_plots
 
 def display_abundance_bar_charts(experiment, continuation_df):
     with st.expander("Class Concentration Bar Chart"):
