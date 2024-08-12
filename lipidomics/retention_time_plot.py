@@ -1,6 +1,7 @@
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+import colorsys
 import itertools
 import streamlit as st
 
@@ -92,33 +93,53 @@ class RetentionTime:
             }))
         return pd.concat(plot_data, ignore_index=True)
 
+    def get_distinct_colors(n):
+        """
+        Generate n visually distinct colors.
+        
+        Args:
+            n (int): Number of colors to generate.
+        
+        Returns:
+            list: List of RGB color tuples.
+        """
+        hue_partition = 1.0 / (n + 1)
+        return [colorsys.hsv_to_rgb(hue_partition * value, 1.0, 1.0) for value in range(n)]
+    
     @staticmethod
     def render_multi_plot(retention_df):
         """
         Create a multi-class retention time comparison plot using Plotly.
-
+    
         Args:
             retention_df (pd.DataFrame): DataFrame with data for the plot.
-
+    
         Returns:
             plotly.graph_objs._figure.Figure: A Plotly figure object for comparing multiple classes.
         """
         fig = go.Figure()
-
-        for lipid_class in retention_df['Class'].unique():
+    
+        # Get the number of unique classes
+        num_classes = len(retention_df['Class'].unique())
+    
+        # Generate distinct colors for each class
+        colors = RetentionTime.get_distinct_colors(num_classes)  # Changed this line
+        color_palette = [f'rgb({int(r*255)},{int(g*255)},{int(b*255)})' for r, g, b in colors]
+    
+        for i, lipid_class in enumerate(retention_df['Class'].unique()):
             class_df = retention_df[retention_df['Class'] == lipid_class]
             fig.add_trace(go.Scatter(
                 x=class_df["Mass"],
                 y=class_df["Retention"],
                 mode='markers',
-                marker=dict(size=6),
+                marker=dict(size=6, color=color_palette[i]),
                 name=lipid_class,
                 text=class_df["LipidMolec"],
                 hovertemplate='<b>Mass</b>: %{x:.4f}<br>' +
                               '<b>Retention time</b>: %{y:.2f}<br>' +
                               '<b>Lipid Molecule</b>: %{text}<extra></extra>'
             ))
-
+    
         fig.update_layout(
             title=dict(text='Retention Time vs. Mass - Comparison Mode', font=dict(size=24, color='black')),
             xaxis_title=dict(text='Calculated Mass', font=dict(size=18, color='black')),
@@ -130,10 +151,10 @@ class RetentionTime:
             legend=dict(font=dict(size=12, color='black')),
             margin=dict(t=50, r=50, b=50, l=50)
         )
-
+    
         fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
         fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-
+    
         return fig
 
     @staticmethod

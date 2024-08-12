@@ -1,4 +1,4 @@
-# Standard library imports
+# Existing imports
 import base64
 import copy
 import hashlib
@@ -7,7 +7,6 @@ import os
 import sys
 import tempfile
 
-# Third-party imports
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,6 +19,10 @@ from bokeh.plotting import Figure as BokehFigure, figure
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+
+# New imports for SVG handling
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPDF
 
 # Local imports
 import lipidomics as lp
@@ -208,6 +211,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     box_plot_fig1 = None
     box_plot_fig2 = None
     bqc_plot = None
+    retention_time_plot = None
     heatmap_fig = None
 
     # Initialize session state for heatmap
@@ -219,7 +223,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
     continuation_df, bqc_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
-    display_retention_time_plots(continuation_df)
+    retention_time_plot = display_retention_time_plots(continuation_df)
     analyze_pairwise_correlation(continuation_df, experiment)
     display_pca_analysis(continuation_df, experiment)
     
@@ -250,7 +254,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
 
     # Generate and provide PDF report for download
     if box_plot_fig1 and box_plot_fig2:
-        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, heatmap_fig)
+        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig)
         if pdf_buffer:
             st.download_button(
                 label="Download Quality Check Report (PDF)",
@@ -282,7 +286,7 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
         display_volcano_plot(experiment, continuation_df)
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, heatmap_fig):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig):
     pdf_buffer = io.BytesIO()
     
     try:
@@ -308,7 +312,20 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, heatmap_fig):
             bqc_img = ImageReader(io.BytesIO(bqc_bytes))
             pdf.drawImage(bqc_img, 50, 100, width=500, height=400, preserveAspectRatio=True)
         
-        # Page 3: Lipidomic Heatmap
+        # Page 3: Retention Time Plot
+        pdf.showPage()
+        pdf.setPageSize(landscape(letter))
+        if retention_time_plot is not None:
+            # Convert Plotly figure to SVG
+            svg_bytes = pio.to_image(retention_time_plot, format='svg')
+            
+            # Use svglib to convert SVG to ReportLab drawing
+            drawing = svg2rlg(io.BytesIO(svg_bytes))
+            
+            # Render the drawing on the PDF
+            renderPDF.draw(drawing, pdf, 50, 50)
+        
+        # Page 4: Lipidomic Heatmap
         pdf.showPage()
         pdf.setPageSize(landscape(letter))
         if heatmap_fig is not None:
@@ -973,6 +990,9 @@ def integrate_retention_time_plots(continuation_df):
 
     Args:
         continuation_df (pd.DataFrame): The DataFrame containing lipidomic data post-cleaning and normalization.
+
+    Returns:
+        plotly.graph_objs._figure.Figure or None: The multi-class retention time comparison plot if in Comparison Mode, else None.
     """
     mode = st.radio('Pick a mode', ['Comparison Mode', 'Individual Mode'])
     if mode == 'Individual Mode':
@@ -982,6 +1002,7 @@ def integrate_retention_time_plots(continuation_df):
             st.plotly_chart(plot, use_container_width=True)
             csv_download = convert_df(retention_df)
             st.download_button(label="Download Retention Time Data", data=csv_download, file_name='retention_plot.csv', mime='text/csv')
+        return None
     elif mode == 'Comparison Mode':
         # Handling comparison mode for retention time plots
         all_lipid_classes_lst = continuation_df['ClassKey'].value_counts().index.tolist()
@@ -992,6 +1013,8 @@ def integrate_retention_time_plots(continuation_df):
                 st.plotly_chart(plot, use_container_width=True)
                 csv_download = convert_df(retention_df)
                 st.download_button(label="Download Retention Time Data", data=csv_download, file_name='Retention_Time_Comparison.csv', mime='text/csv')
+                return plot
+    return None
 
 def display_retention_time_plots(continuation_df):
     """
@@ -999,10 +1022,13 @@ def display_retention_time_plots(continuation_df):
 
     Args:
         continuation_df (pd.DataFrame): The DataFrame containing lipidomic data after any necessary transformations.
+
+    Returns:
+        plotly.graph_objs._figure.Figure or None: The multi-class retention time comparison plot if generated, else None.
     """
     expand_retention = st.expander('View Retention Time Plots: Check Sanity of Data')
     with expand_retention:
-        integrate_retention_time_plots(continuation_df)
+        return integrate_retention_time_plots(continuation_df)
         
 def analyze_pairwise_correlation(continuation_df, experiment):
     """
