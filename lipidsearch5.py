@@ -1075,15 +1075,7 @@ def display_pca_analysis(continuation_df, experiment):
 
 def display_volcano_plot(experiment, continuation_df):
     """
-    Display a user interface for creating and interacting with volcano plots in lipidomics data.
-
-    Args:
-        experiment: An object containing experiment details such as conditions and sample lists.
-        continuation_df: DataFrame containing continuation data for volcano plot creation.
-
-    This function creates a user interface section for volcano plots. It allows users to select control and experimental 
-    conditions, set significance levels, choose lipid classes for the plot, and view the resulting plot. Users can also 
-    download the plot data in CSV and SVG formats.
+    Display a user interface for creating and interacting with volcano plots in lipidomics data using Plotly.
     """
     with st.expander("Volcano Plots - Test Hypothesis"):
         conditions_with_replicates = [condition for index, condition in enumerate(experiment.conditions_list) if experiment.number_of_samples_list[index] > 1]
@@ -1101,25 +1093,21 @@ def display_volcano_plot(experiment, continuation_df):
         hide_non_significant = st.checkbox('Hide non-significant data points', value=False)
 
         plot, merged_df, removed_lipids_df = lp.VolcanoPlot.create_and_display_volcano_plot(experiment, continuation_df, control_condition, experimental_condition, selected_classes_list, q_value_threshold, hide_non_significant)
-        st.bokeh_chart(plot)
+        st.plotly_chart(plot, use_container_width=True)
 
         # Download options
         csv_data = convert_df(merged_df[['LipidMolec', 'FoldChange', '-log10(pValue)', 'ClassKey']])
         st.download_button("Download CSV", csv_data, file_name="volcano_data.csv", mime="text/csv")
-        #svg_data = bokeh_plot_as_svg(plot)
-        #st.download_button("Download SVG", svg_data, file_name="volcano_plot.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
         
         # Generate and display the concentration vs. fold change plot
         color_mapping = lp.VolcanoPlot._generate_color_mapping(merged_df)
         concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant)
-        st.bokeh_chart(concentration_vs_fold_change_plot)
+        st.plotly_chart(concentration_vs_fold_change_plot, use_container_width=True)
 
-        # CSV and SVG download options for concentration vs. fold change plot
+        # CSV download option for concentration vs. fold change plot
         csv_data_for_concentration_plot = convert_df(download_df)
         st.download_button("Download CSV", csv_data_for_concentration_plot, file_name="concentration_vs_fold_change_data.csv", mime="text/csv")
-        #svg_data_for_concentration_plot = bokeh_plot_as_svg(concentration_vs_fold_change_plot)
-        #st.download_button("Download SVG", svg_data_for_concentration_plot, file_name="concentration_vs_fold_change_plot.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
         
         # Additional functionality for lipid concentration distribution
@@ -1137,8 +1125,6 @@ def display_volcano_plot(experiment, continuation_df):
                 st.pyplot(fig)
                 csv_data = convert_df(plot_df)
                 st.download_button("Download Data", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
-                #svg_data = plt_plot_to_svg(fig)
-                #st.download_button("Download SVG", svg_data, file_name=f"{'_'.join(selected_lipids)}_concentration.svg", mime="image/svg+xml")
         st.write('------------------------------------------------------------------------------------')
 
         # Displaying the table of invalid lipids
