@@ -224,6 +224,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         st.session_state.correlation_plots = {}
     if 'abundance_bar_charts' not in st.session_state:
         st.session_state.abundance_bar_charts = {'linear': None, 'log2': None}
+    if 'abundance_pie_charts' not in st.session_state:
+        st.session_state.abundance_pie_charts = {}
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
@@ -258,6 +260,9 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
             st.session_state.abundance_bar_charts['linear'] = linear_chart
         if log2_chart:
             st.session_state.abundance_bar_charts['log2'] = log2_chart
+    elif analysis_option == "Class Level Breakdown - Pie Charts":
+        pie_charts = display_abundance_pie_charts(experiment, continuation_df)
+        st.session_state.abundance_pie_charts.update(pie_charts)
     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
         heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
         st.session_state.heatmap_generated = True
@@ -277,7 +282,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
             with st.spinner('Generating PDF report...'):
                 pdf_buffer = generate_pdf_report(
                     box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
-                    heatmap_fig, st.session_state.correlation_plots, st.session_state.abundance_bar_charts
+                    heatmap_fig, st.session_state.correlation_plots, st.session_state.abundance_bar_charts,
+                    st.session_state.abundance_pie_charts
                 )
             if pdf_buffer:
                 st.download_button(
@@ -310,7 +316,7 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
         display_volcano_plot(experiment, continuation_df)
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_fig, correlation_plots, abundance_bar_charts):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_fig, correlation_plots, abundance_bar_charts, abundance_pie_charts):
     pdf_buffer = io.BytesIO()
     
     try:
@@ -374,6 +380,15 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
                 img = ImageReader(img_buffer)
                 pdf.drawImage(img, 50, 50, width=700, height=500, preserveAspectRatio=True)
                 pdf.drawString(50, 30, f"Abundance Bar Chart ({scale} scale)")
+        
+        # Add Abundance Pie Charts
+        for condition, pie_chart in abundance_pie_charts.items():
+            pdf.showPage()
+            pdf.setPageSize(letter)
+            pie_bytes = pio.to_image(pie_chart, format='png', width=800, height=600, scale=2)
+            pie_img = ImageReader(io.BytesIO(pie_bytes))
+            pdf.drawImage(pie_img, 50, 100, width=500, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 50, f"Abundance Pie Chart for {condition}")
         
         # Last Page: Lipidomic Heatmap
         pdf.showPage()
@@ -1383,30 +1398,11 @@ def display_pathway_visualization(experiment, continuation_df):
                     st.warning("Unable to generate pathway visualization due to insufficient data.")
 
 def display_abundance_pie_charts(experiment, continuation_df):
-    """
-    Displays abundance pie charts in the Streamlit app interface for selected lipid classes.
-
-    This function provides an interactive component in the Streamlit application where users can
-    select specific lipid classes to visualize their abundance distribution across different conditions.
-    Pie charts are generated for each condition, provided that the condition has more than one sample.
-    Additionally, the function allows for downloading the visualized data in both SVG (for the pie charts)
-    and CSV formats.
-
-    Args:
-        experiment (Experiment): Object containing details about the experiment setup.
-        continuation_df (pd.DataFrame): DataFrame containing the lipidomics data after processing.
-
-    The function uses the AbundancePieChart class to perform data manipulation and visualization.
-    """
-
-    # Expanding the Streamlit interface section to display pie charts
+    pie_charts = {}
     with st.expander("Class Concentration Pie Chart"):
-        # Extract full_samples_list from the experiment object
         full_samples_list = experiment.full_samples_list
-
         all_classes = lp.AbundancePieChart.get_all_classes(continuation_df, full_samples_list)
         selected_classes_list = st.multiselect('Select classes for the chart:', all_classes, all_classes)
-
         if selected_classes_list:
             filtered_df = lp.AbundancePieChart.filter_df_for_selected_classes(continuation_df, full_samples_list, selected_classes_list)
             color_mapping = lp.AbundancePieChart._generate_color_mapping(selected_classes_list)
@@ -1414,16 +1410,10 @@ def display_abundance_pie_charts(experiment, continuation_df):
                 if len(samples) > 1:  # Skip conditions with only one sample
                     fig, df = lp.AbundancePieChart.create_pie_chart(filtered_df, full_samples_list, condition, samples, color_mapping)
                     st.plotly_chart(fig)
-
-                    # Save plot to SVG
-                    #svg_data = pio.to_image(fig, format='svg')
-
-                    # Provide option to download SVG
-                    #st.download_button(label="Download SVG", data=svg_data, file_name=f'abundance_pie_chart_{condition}.svg', mime='image/svg+xml')
-
-                    # Provide option to download CSV
+                    pie_charts[condition] = fig
                     csv_download = convert_df(df)
                     st.download_button("Download Data", csv_download, f'abundance_pie_chart_{condition}.csv', 'text/csv')
+    return pie_charts
 
 def display_lipidomic_heatmap(experiment, continuation_df):
     """
