@@ -228,6 +228,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         st.session_state.abundance_pie_charts = {}
     if 'saturation_plots' not in st.session_state:
         st.session_state.saturation_plots = {}
+    if 'volcano_plots' not in st.session_state:
+        st.session_state.volcano_plots = {}
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
@@ -268,6 +270,9 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     elif analysis_option == "Class Level Breakdown - Saturation Plots":
         saturation_plots = display_saturation_plots(experiment, continuation_df)
         st.session_state.saturation_plots.update(saturation_plots)
+    elif analysis_option == "Species Level Breakdown - Volcano Plot":
+        volcano_plots = display_volcano_plot(experiment, continuation_df)
+        st.session_state.volcano_plots.update(volcano_plots)
     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
         heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
         st.session_state.heatmap_generated = True
@@ -288,7 +293,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
                 pdf_buffer = generate_pdf_report(
                     box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
                     heatmap_fig, st.session_state.correlation_plots, st.session_state.abundance_bar_charts,
-                    st.session_state.abundance_pie_charts, st.session_state.saturation_plots
+                    st.session_state.abundance_pie_charts, st.session_state.saturation_plots,
+                    st.session_state.volcano_plots
                 )
             if pdf_buffer:
                 st.download_button(
@@ -321,7 +327,7 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
         display_volcano_plot(experiment, continuation_df)
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_fig, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_fig, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots, volcano_plots):
     pdf_buffer = io.BytesIO()
     
     try:
@@ -412,6 +418,37 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
             percentage_img = ImageReader(io.BytesIO(percentage_bytes))
             pdf.drawImage(percentage_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
             pdf.drawString(50, 80, f"Saturation Plot (Percentage) for {lipid_class}")
+        
+        # Add Volcano Plots
+        if volcano_plots:
+            # Main Volcano Plot
+            if 'main' in volcano_plots:
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                main_bytes = pio.to_image(volcano_plots['main'], format='png', width=1000, height=700, scale=2)
+                main_img = ImageReader(io.BytesIO(main_bytes))
+                pdf.drawImage(main_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, "Volcano Plot")
+
+            # Concentration vs Fold Change Plot
+            if 'concentration_vs_fold_change' in volcano_plots:
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                conc_bytes = pio.to_image(volcano_plots['concentration_vs_fold_change'], format='png', width=1000, height=700, scale=2)
+                conc_img = ImageReader(io.BytesIO(conc_bytes))
+                pdf.drawImage(conc_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, "Concentration vs Fold Change Plot")
+
+            # Concentration Distribution Plot
+            if 'concentration_distribution' in volcano_plots:
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                dist_buffer = io.BytesIO()
+                volcano_plots['concentration_distribution'].savefig(dist_buffer, format='png', dpi=300, bbox_inches='tight')
+                dist_buffer.seek(0)
+                dist_img = ImageReader(dist_buffer)
+                pdf.drawImage(dist_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, "Concentration Distribution Plot")
         
         # Last Page: Lipidomic Heatmap
         pdf.showPage()
@@ -1197,13 +1234,15 @@ def display_pca_analysis(continuation_df, experiment):
 def display_volcano_plot(experiment, continuation_df):
     """
     Display a user interface for creating and interacting with volcano plots in lipidomics data using Plotly.
+    Returns a dictionary containing the generated plots.
     """
+    volcano_plots = {}
     with st.expander("Volcano Plots - Test Hypothesis"):
         conditions_with_replicates = [condition for index, condition in enumerate(experiment.conditions_list) if experiment.number_of_samples_list[index] > 1]
         if len(conditions_with_replicates) <= 1:
             st.error('You need at least two conditions with more than one replicate to create a volcano plot.')
-            return
-        
+            return volcano_plots
+
         p_value_threshold = st.number_input('Enter the significance level for Volcano Plot', min_value=0.001, max_value=0.1, value=0.05, step=0.001, key="volcano_plot_p_value_threshold")
         q_value_threshold = -np.log10(p_value_threshold)
         control_condition = st.selectbox('Pick the control condition', conditions_with_replicates)
@@ -1215,6 +1254,7 @@ def display_volcano_plot(experiment, continuation_df):
 
         plot, merged_df, removed_lipids_df = lp.VolcanoPlot.create_and_display_volcano_plot(experiment, continuation_df, control_condition, experimental_condition, selected_classes_list, q_value_threshold, hide_non_significant)
         st.plotly_chart(plot, use_container_width=True)
+        volcano_plots['main'] = plot
 
         # Download options
         csv_data = convert_df(merged_df[['LipidMolec', 'FoldChange', '-log10(pValue)', 'ClassKey']])
@@ -1225,6 +1265,7 @@ def display_volcano_plot(experiment, continuation_df):
         color_mapping = lp.VolcanoPlot._generate_color_mapping(merged_df)
         concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant)
         st.plotly_chart(concentration_vs_fold_change_plot, use_container_width=True)
+        volcano_plots['concentration_vs_fold_change'] = concentration_vs_fold_change_plot
 
         # CSV download option for concentration vs. fold change plot
         csv_data_for_concentration_plot = convert_df(download_df)
@@ -1244,6 +1285,7 @@ def display_volcano_plot(experiment, continuation_df):
                 )
                 fig = lp.VolcanoPlot.create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions)
                 st.pyplot(fig)
+                volcano_plots['concentration_distribution'] = fig
                 csv_data = convert_df(plot_df)
                 st.download_button("Download Data", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
         st.write('------------------------------------------------------------------------------------')
@@ -1254,6 +1296,8 @@ def display_volcano_plot(experiment, continuation_df):
             st.dataframe(removed_lipids_df)
         else:
             st.write("No invalid lipids found.")
+
+    return volcano_plots
         
 def display_saturation_plots(experiment, df):
     """
