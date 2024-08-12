@@ -1,10 +1,8 @@
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool
-import itertools
-from bokeh.palettes import Category20 as palette
+import plotly.graph_objects as go
+import plotly.express as px
 import streamlit as st
 
 class PCAAnalysis:
@@ -25,33 +23,52 @@ class PCAAnalysis:
 
     @staticmethod
     @st.cache_data
-    def _generate_color_mapping(conditions):
+    def generate_color_mapping(conditions):
         unique_conditions = sorted(set(conditions))
-        colors = itertools.cycle(palette[20])
-        return {condition: next(colors) for condition in unique_conditions}
+        return {condition: px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)] 
+                for i, condition in enumerate(unique_conditions)}
 
     @staticmethod
-    def _create_scatter_plot(df, pc_names, color_mapping):
-        plot = figure(title="PCA Plot", x_axis_label=pc_names[0], y_axis_label=pc_names[1])
-        for condition, color in color_mapping.items():
+    def create_scatter_plot(df, pc_names, color_mapping):
+        fig = go.Figure()
+
+        for condition in df['Condition'].unique():
             cond_df = df[df['Condition'] == condition]
-            cond_source = ColumnDataSource(cond_df)
-            plot.scatter(x='PC1', y='PC2', source=cond_source, legend_label=condition, color=color)
-        hover = HoverTool(tooltips=[('Sample', '@Sample'), ('PC1', '@PC1'), ('PC2', '@PC2')])
-        plot.add_tools(hover)
-        plot.legend.click_policy = 'hide'
-        plot.title.text_font_size = "15pt"
-        plot.xaxis.axis_label_text_font_size = "15pt"
-        plot.yaxis.axis_label_text_font_size = "15pt"
-        plot.xaxis.major_label_text_font_size = "15pt"
-        plot.yaxis.major_label_text_font_size = "15pt"
-        return plot
+            fig.add_trace(go.Scatter(
+                x=cond_df['PC1'],
+                y=cond_df['PC2'],
+                mode='markers',
+                name=condition,
+                marker=dict(color=color_mapping[condition], size=5),  # Reduced marker size from default (10) to 7
+                text=cond_df['Sample'],
+                hovertemplate='<b>Sample:</b> %{text}<br>' +
+                              '<b>PC1:</b> %{x:.4f}<br>' +
+                              '<b>PC2:</b> %{y:.4f}<br>' +
+                              '<extra></extra>'
+            ))
+
+        fig.update_layout(
+            title=dict(text="PCA Plot", font=dict(size=24, color='black')),
+            xaxis_title=dict(text=pc_names[0], font=dict(size=18, color='black')),
+            yaxis_title=dict(text=pc_names[1], font=dict(size=18, color='black')),
+            xaxis=dict(tickfont=dict(size=14, color='black')),
+            yaxis=dict(tickfont=dict(size=14, color='black')),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            legend=dict(font=dict(size=12, color='black')),
+            margin=dict(t=50, r=50, b=50, l=50)
+        )
+
+        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+
+        return fig
 
     @staticmethod
     def plot_pca(df, full_samples_list, extensive_conditions_list):
         pc_df, pc_names, available_samples = PCAAnalysis.run_pca(df, full_samples_list)
         pc_df['Sample'] = available_samples
         pc_df['Condition'] = [extensive_conditions_list[full_samples_list.index(sample)] for sample in available_samples]
-        color_mapping = PCAAnalysis._generate_color_mapping(pc_df['Condition'])
-        plot = PCAAnalysis._create_scatter_plot(pc_df, pc_names, color_mapping)
+        color_mapping = PCAAnalysis.generate_color_mapping(pc_df['Condition'])
+        plot = PCAAnalysis.create_scatter_plot(pc_df, pc_names, color_mapping)
         return plot, pc_df

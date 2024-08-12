@@ -1050,7 +1050,7 @@ def analyze_pairwise_correlation(continuation_df, experiment):
 
 def display_pca_analysis(continuation_df, experiment):
     """
-    Displays the PCA analysis interface in the Streamlit app and generates a PCA plot.
+    Displays the PCA analysis interface in the Streamlit app and generates a PCA plot using Plotly.
     """
     with st.expander("Principal Component Analysis (PCA)"):
         samples_to_remove = st.multiselect('Select samples to remove from the analysis (optional):', experiment.full_samples_list)
@@ -1062,7 +1062,7 @@ def display_pca_analysis(continuation_df, experiment):
                 st.error('At least two samples are required for a meaningful analysis!')
         
         pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
-        st.bokeh_chart(pca_plot)
+        st.plotly_chart(pca_plot, use_container_width=True)
         
         csv_data = convert_df(pca_df)
         st.download_button(
@@ -1071,7 +1071,6 @@ def display_pca_analysis(continuation_df, experiment):
             file_name="PCA_data.csv",
             mime="text/csv"
         )
-
     return continuation_df
 
 def display_volcano_plot(experiment, continuation_df):
@@ -1176,8 +1175,6 @@ def display_abundance_bar_chart(experiment, continuation_df):
     with st.expander("Class Concentration Bar Chart"):
         # Use the most up-to-date experiment object from session state
         experiment = st.session_state.experiment
-        
-        st.write("Current Experiment State:")
 
         full_samples_list = experiment.full_samples_list
         individual_samples_list = experiment.individual_samples_list
