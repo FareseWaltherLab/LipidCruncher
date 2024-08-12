@@ -213,18 +213,26 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     bqc_plot = None
     retention_time_plot = None
     heatmap_fig = None
+    correlation_plots = {}
 
-    # Initialize session state for heatmap
+    # Initialize session state for heatmap and correlation plots
     if 'heatmap_generated' not in st.session_state:
         st.session_state.heatmap_generated = False
     if 'heatmap_fig' not in st.session_state:
         st.session_state.heatmap_fig = None
+    if 'correlation_plots' not in st.session_state:
+        st.session_state.correlation_plots = {}
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
     continuation_df, bqc_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
     retention_time_plot = display_retention_time_plots(continuation_df)
-    analyze_pairwise_correlation(continuation_df, experiment)
+    
+    # Pairwise Correlation Analysis
+    selected_condition, corr_fig = analyze_pairwise_correlation(continuation_df, experiment)
+    if selected_condition and corr_fig:
+        st.session_state.correlation_plots[selected_condition] = corr_fig
+    
     display_pca_analysis(continuation_df, experiment)
     
     st.subheader("3) Data Visualization, Interpretation, and Analysis ")
@@ -254,7 +262,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
 
     # Generate and provide PDF report for download
     if box_plot_fig1 and box_plot_fig2:
-        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig)
+        pdf_buffer = generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig, st.session_state.correlation_plots)
         if pdf_buffer:
             st.download_button(
                 label="Download Quality Check Report (PDF)",
@@ -286,7 +294,7 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
         display_volcano_plot(experiment, continuation_df)
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, heatmap_fig, correlation_plots):
     pdf_buffer = io.BytesIO()
     
     try:
@@ -325,7 +333,18 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
             # Render the drawing on the PDF
             renderPDF.draw(drawing, pdf, 50, 50)
         
-        # Page 4: Lipidomic Heatmap
+        # Pages for Correlation Plots
+        for condition, corr_fig in correlation_plots.items():
+            pdf.showPage()
+            pdf.setPageSize(letter)
+            img_buffer = io.BytesIO()
+            corr_fig.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            img = ImageReader(img_buffer)
+            pdf.drawImage(img, 50, 100, width=500, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 50, f"Correlation Plot for {condition}")
+        
+        # Last Page: Lipidomic Heatmap
         pdf.showPage()
         pdf.setPageSize(landscape(letter))
         if heatmap_fig is not None:
@@ -1033,34 +1052,31 @@ def display_retention_time_plots(continuation_df):
 def analyze_pairwise_correlation(continuation_df, experiment):
     """
     Analyzes pairwise correlations for given conditions in the experiment data.
-
     This function creates a Streamlit expander for displaying pairwise correlation analysis.
     It allows the user to select a condition from those with multiple replicates and a sample type.
     The function then computes and displays a correlation heatmap for the selected condition.
-
+    
     Args:
         continuation_df (pd.DataFrame): The DataFrame containing the normalized or cleaned data.
         experiment (Experiment): The experiment object with details of the conditions and samples.
-
+    
+    Returns:
+        tuple: A tuple containing the selected condition and the matplotlib figure, or (None, None) if no plot was generated.
     """
     expand_corr = st.expander('Pairwise Correlation Analysis')
     with expand_corr:
         st.info("LipidCruncher removes the missing values before performing the correlation test.")
-
         # Filter out conditions with only one replicate
         multi_replicate_conditions = [condition for condition, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1]
-
         # Ensure there are multi-replicate conditions before proceeding
         if multi_replicate_conditions:
-            condition_index = experiment.conditions_list.index(st.selectbox('Select a condition', multi_replicate_conditions))
+            selected_condition = st.selectbox('Select a condition', multi_replicate_conditions)
+            condition_index = experiment.conditions_list.index(selected_condition)
             sample_type = st.selectbox('Select the type of your samples', ['biological replicates', 'Technical replicates'])
-
             mean_area_df = lp.Correlation.prepare_data_for_correlation(continuation_df, experiment.individual_samples_list, condition_index)
             correlation_df, v_min, thresh = lp.Correlation.compute_correlation(mean_area_df, sample_type)
             fig = lp.Correlation.render_correlation_plot(correlation_df, v_min, thresh, experiment.conditions_list[condition_index])
             st.pyplot(fig)
-            #svg = plt_plot_to_svg(fig)  # Convert matplotlib figure to SVG using the existing function
-            #st.download_button(label="Download SVG", data=svg, file_name=f'Correlation_Matrix_{experiment.conditions_list[condition_index]}.svg', mime="image/svg+xml")
             
             st.write('Find the exact correlation coefficients in the table below:')
             st.write(correlation_df)
@@ -1071,8 +1087,10 @@ def analyze_pairwise_correlation(continuation_df, experiment):
                 file_name='Correlation_Matrix_' + experiment.conditions_list[condition_index] + '.csv',
                 mime='text/csv'
             )
+            return selected_condition, fig
         else:
             st.error("No conditions with multiple replicates found.")
+            return None, None
 
 def display_pca_analysis(continuation_df, experiment):
     """
