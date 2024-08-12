@@ -1150,7 +1150,7 @@ def display_volcano_plot(experiment, continuation_df):
         
 def display_saturation_plots(experiment, df):
     """
-    Create and display saturation plots in the Streamlit app.
+    Create and display saturation plots in the Streamlit app using Plotly.
     Args:
         experiment: Experiment object containing conditions and samples.
         df: DataFrame with the lipidomics data.
@@ -1161,13 +1161,10 @@ def display_saturation_plots(experiment, df):
             plots = lp.SaturationPlot.create_plots(df, experiment, selected_conditions)
             for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
                 # Display plots and create download buttons in Streamlit script
-                st.bokeh_chart(main_plot)
+                st.plotly_chart(main_plot, use_container_width=True)
                 st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_main.csv', 'text/csv', key=f'download-main-data-{lipid_class}')
-                #st.download_button("Download Main SVG", bokeh_plot_as_svg(main_plot), f'{lipid_class}_saturation_level_plot_main.svg', 'image/svg+xml', key=f'download-main-svg-{lipid_class}')
-
-                st.bokeh_chart(percentage_plot)
+                st.plotly_chart(percentage_plot, use_container_width=True)
                 st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_percentage.csv', 'text/csv', key=f'download-percentage-data-{lipid_class}')
-                #st.download_button("Download Percentage SVG", bokeh_plot_as_svg(percentage_plot), f'{lipid_class}_saturation_level_plot_percentage.svg', 'image/svg+xml', key=f'download-percentage-svg-{lipid_class}')
                 
                 st.write('---------------------------------------------------------')
 
