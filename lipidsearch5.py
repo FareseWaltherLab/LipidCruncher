@@ -495,60 +495,28 @@ def convert_df(df):
     except Exception as e:
         raise Exception(f"Failed to convert DataFrame to CSV: {e}")
         
-def plt_plot_to_svg(fig):
+def matplotlib_svg_download_button(fig, filename):
     """
-    Converts a matplotlib figure to an SVG string.
-
-    This function takes a matplotlib figure object and converts it into an SVG string. 
-    It uses a BytesIO stream as an intermediary buffer. After the figure is saved 
-    into this buffer in SVG format, the buffer's content is decoded from bytes to a 
-    UTF-8 string, which is the standard encoding for SVG content. The figure is closed 
-    after saving to free up resources.
-
-    Parameters:
-    fig (matplotlib.figure.Figure): A matplotlib figure object to be converted into SVG.
-
-    Returns:
-    str: The SVG representation of the input figure as a string. This string can be 
-         directly used for displaying in web interfaces or saved to an SVG file.
-
-    Note:
-    This function is especially useful when working with web frameworks or applications 
-    like Streamlit, where it is often required to convert plots to SVG format for better 
-    rendering in web browsers.
-    """
-    output = BytesIO()
-    fig.savefig(output, format='svg')
-    plt.close(fig)
-    output.seek(0)
-    svg_data = output.getvalue().decode('utf-8')  # Decoding bytes to string
-    return svg_data  # Returning SVG data as string
-
-def bokeh_plot_as_svg(plot):
-    """
-    Save a Bokeh plot as an SVG string and return the SVG data.
-
+    Creates a Streamlit download button for the SVG format of a matplotlib figure.
     Args:
-        plot (Bokeh.plotting.figure): Bokeh plot to be saved as SVG.
-    
-    Returns:
-        str: A string containing the SVG representation of the plot.
+        fig (matplotlib.figure.Figure): Matplotlib figure object to be converted into SVG.
+        filename (str): The desired name of the downloadable SVG file.
     """
-    # Ensure the plot has a title, otherwise export_svgs will not work
-    plot.title.text = plot.title.text if plot.title.text else "Plot Title"
+    # Save the figure to a BytesIO object
+    buf = io.BytesIO()
+    fig.savefig(buf, format='svg', bbox_inches='tight')
+    buf.seek(0)
     
-    # Configure plot for SVG export
-    plot.output_backend = "svg"
-    
-    # Export the SVG to a temporary file
-    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as temp_svg_file:
-        export_svgs(plot, filename=temp_svg_file.name)
-        temp_svg_file.seek(0)
-        svg_data = temp_svg_file.read().decode('utf-8')
-        
-    return svg_data
+    # Read the SVG data and create a download button
+    svg_string = buf.getvalue().decode('utf-8')
+    st.download_button(
+        label="Download SVG",
+        data=svg_string,
+        file_name=filename,
+        mime="image/svg+xml"
+    )
 
-def svg_download_button(fig, filename):
+def plotly_svg_download_button(fig, filename):
     """
     Creates a Streamlit download button for the SVG format of a plotly figure.
     Args:
@@ -1262,6 +1230,9 @@ def display_volcano_plot(experiment, continuation_df):
         plot, merged_df, removed_lipids_df = lp.VolcanoPlot.create_and_display_volcano_plot(experiment, continuation_df, control_condition, experimental_condition, selected_classes_list, q_value_threshold, hide_non_significant)
         st.plotly_chart(plot, use_container_width=True)
         volcano_plots['main'] = plot
+        
+        # Add SVG download button for the main volcano plot
+        plotly_svg_download_button(plot, "volcano_plot.svg")
 
         # Download options
         csv_data = convert_df(merged_df[['LipidMolec', 'FoldChange', '-log10(pValue)', 'ClassKey']])
@@ -1273,6 +1244,9 @@ def display_volcano_plot(experiment, continuation_df):
         concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant)
         st.plotly_chart(concentration_vs_fold_change_plot, use_container_width=True)
         volcano_plots['concentration_vs_fold_change'] = concentration_vs_fold_change_plot
+        
+        # Add SVG download button for the concentration vs fold change plot
+        plotly_svg_download_button(concentration_vs_fold_change_plot, "concentration_vs_fold_change_plot.svg")
 
         # CSV download option for concentration vs. fold change plot
         csv_data_for_concentration_plot = convert_df(download_df)
@@ -1293,8 +1267,12 @@ def display_volcano_plot(experiment, continuation_df):
                 fig = lp.VolcanoPlot.create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions)
                 st.pyplot(fig)
                 volcano_plots['concentration_distribution'] = fig
+                
+                # Add SVG download button for the concentration distribution plot (matplotlib)
+                matplotlib_svg_download_button(fig, "concentration_distribution_plot.svg")
+                
                 csv_data = convert_df(plot_df)
-                st.download_button("Download Data", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
+                st.download_button("Download CSV", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
         st.write('------------------------------------------------------------------------------------')
 
         # Displaying the table of invalid lipids
@@ -1554,7 +1532,7 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             st.plotly_chart(heatmap_fig, use_container_width=True)
 
             # Download buttons
-            svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
+            plotly_svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
             csv_download = convert_df(z_scores_df.reset_index())
             st.download_button("Download Data", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
             
