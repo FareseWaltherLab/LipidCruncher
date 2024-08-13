@@ -1344,14 +1344,11 @@ def display_abundance_bar_charts(experiment, continuation_df):
     with st.expander("Class Concentration Bar Chart"):
         # Use the most up-to-date experiment object from session state
         experiment = st.session_state.experiment
-
         full_samples_list = experiment.full_samples_list
         individual_samples_list = experiment.individual_samples_list
         conditions_list = experiment.conditions_list
-
         # Filter out conditions with no samples
         valid_conditions = [cond for cond, samples in zip(conditions_list, individual_samples_list) if samples]
-
         selected_conditions_list = st.multiselect(
             'Add or remove conditions', 
             valid_conditions, 
@@ -1364,9 +1361,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
             list(continuation_df['ClassKey'].value_counts().index),
             key='classes_select'
         )
-
         linear_fig, log2_fig = None, None
-
         if selected_conditions_list and selected_classes_list:
             # Generate linear scale chart
             linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
@@ -1378,14 +1373,17 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 selected_classes_list, 
                 'linear scale'
             )
-
             if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
                 st.pyplot(linear_fig)
                 st.write("Linear Scale")
+                
+                # Add SVG download button for linear scale chart
+                matplotlib_svg_download_button(linear_fig, "abundance_bar_chart_linear.svg")
+                
                 try:
                     csv_data = convert_df(abundance_df)
                     st.download_button(
-                        label="Download Linear Scale Data",
+                        label="Download CSV",
                         data=csv_data,
                         file_name='abundance_bar_chart_linear.csv',
                         mime='text/csv',
@@ -1393,7 +1391,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
                     )
                 except Exception as e:
                     st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
-
+            
             # Generate log2 scale chart
             log2_fig, abundance_df_log2 = lp.AbundanceBarChart.create_abundance_bar_chart(
                 continuation_df, 
@@ -1404,14 +1402,17 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 selected_classes_list, 
                 'log2 scale'
             )
-
             if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
                 st.pyplot(log2_fig)
                 st.write("Log2 Scale")
+                
+                # Add SVG download button for log2 scale chart
+                matplotlib_svg_download_button(log2_fig, "abundance_bar_chart_log2.svg")
+                
                 try:
                     csv_data_log2 = convert_df(abundance_df_log2)
                     st.download_button(
-                        label="Download Log2 Scale Data",
+                        label="Download CSV",
                         data=csv_data_log2,
                         file_name='abundance_bar_chart_log2.csv',
                         mime='text/csv',
@@ -1419,10 +1420,8 @@ def display_abundance_bar_charts(experiment, continuation_df):
                     )
                 except Exception as e:
                     st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
-
         else:
             st.warning("Please select at least one condition and one class to create the charts.")
-
         return linear_fig, log2_fig
 
 def display_pathway_visualization(experiment, continuation_df):
@@ -1502,10 +1501,24 @@ def display_abundance_pie_charts(experiment, continuation_df):
             for condition, samples in zip(experiment.conditions_list, experiment.individual_samples_list):
                 if len(samples) > 1:  # Skip conditions with only one sample
                     fig, df = lp.AbundancePieChart.create_pie_chart(filtered_df, full_samples_list, condition, samples, color_mapping)
+                    st.subheader(f"Abundance Pie Chart for {condition}")
                     st.plotly_chart(fig)
-                    pie_charts[condition] = fig
+                    
+                    # Add SVG download button for the pie chart
+                    plotly_svg_download_button(fig, f"abundance_pie_chart_{condition}.svg")
+                    
+                    # Add CSV download button for the pie chart data
                     csv_download = convert_df(df)
-                    st.download_button("Download Data", csv_download, f'abundance_pie_chart_{condition}.csv', 'text/csv')
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_download,
+                        file_name=f'abundance_pie_chart_{condition}.csv',
+                        mime='text/csv'
+                    )
+                    
+                    pie_charts[condition] = fig
+                    
+                    st.markdown("---")  # Add a separator between charts
     return pie_charts
 
 def display_lipidomic_heatmap(experiment, continuation_df):
