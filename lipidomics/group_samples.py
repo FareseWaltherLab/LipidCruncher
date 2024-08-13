@@ -75,7 +75,7 @@ class GroupSamples:
         """
         return len(self.build_mean_area_col_list(df)) == len(self.experiment.full_samples_list)
         
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def build_mean_area_col_list(_self, df):
         """
         Extracts and caches the list of mean area columns from the dataset.

@@ -7,7 +7,7 @@ import streamlit as st
 class Correlation:
     
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def prepare_data_for_correlation(df, individual_samples_list, condition_index):
         """
         Prepares data for correlation analysis by selecting mean area columns and renaming them.
@@ -25,7 +25,7 @@ class Correlation:
         return mean_area_df
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def compute_correlation(df, sample_type):
         """
         Computes the correlation matrix for the given DataFrame and sample type.

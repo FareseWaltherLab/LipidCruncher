@@ -11,7 +11,7 @@ class BoxPlot:
         pass
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def create_mean_area_df(df, full_samples_list):
         """
         Creates a DataFrame containing only the 'MeanArea' columns from the provided DataFrame.
@@ -27,7 +27,7 @@ class BoxPlot:
         return df[mean_area_cols]
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_missing_values_percentage(mean_area_df):
         """
         Calculates the percentage of missing values for each sample in the experiment.
@@ -55,7 +55,6 @@ class BoxPlot:
         ax.set_xlabel('Percentage of Missing Values')
         ax.set_ylabel('Sample')
         ax.set_title('Missing Values Distribution')
-        st.pyplot(fig)
         return fig
 
     @staticmethod
@@ -76,5 +75,4 @@ class BoxPlot:
         ax.set_ylabel('log10(Concentration)')
         ax.set_title('Box Plot of Non-Zero Concentrations')
         ax.set_xticklabels(full_samples_list)
-        st.pyplot(fig)
         return fig

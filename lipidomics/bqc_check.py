@@ -1,8 +1,7 @@
 import streamlit as st 
 import pandas as pd
 import numpy as np
-from bokeh.plotting import figure, output_file, save
-from bokeh.models import ColumnDataSource, HoverTool, NumeralTickFormatter
+import plotly.graph_objects as go
 
 class BQCQualityCheck:
     """
@@ -55,7 +54,7 @@ class BQCQualityCheck:
         return np.log10(series[series > 0])
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def prepare_dataframe_for_plot(dataframe, area_under_curve_columns):
         """
         Prepare a DataFrame for plotting by calculating CoV and mean values for specified columns.
@@ -90,7 +89,7 @@ class BQCQualityCheck:
     @staticmethod
     def create_cov_scatter_plot(mean_concentrations, coefficients_of_variation, lipid_species):
         """
-        Create a scatter plot showing the coefficient of variation for lipid species.
+        Create a scatter plot showing the coefficient of variation for lipid species using Plotly.
 
         Args:
             mean_concentrations (array): Array of mean concentrations.
@@ -98,66 +97,76 @@ class BQCQualityCheck:
             lipid_species (array): Array of lipid species names.
 
         Returns:
-            tuple: A Bokeh figure object and a DataFrame used for the plot.
+            tuple: A Plotly Figure object and a DataFrame used for the plot.
         """
-        scatter_plot = figure(
-            title='CoV - All lipid Species', 
-            x_axis_label='Log10 of Mean BQC Concentration', 
-            y_axis_label='CoV(%)'
-        )
-        
         cov_df = pd.DataFrame({
             "Mean_concentration": mean_concentrations, 
             "CoV": coefficients_of_variation, 
             'Species': lipid_species
         })
 
-        source = ColumnDataSource(cov_df)
-        scatter_plot.scatter(
-            x="Mean_concentration", 
-            y="CoV", 
-            source=source, 
-            name='cov'
+        fig = go.Figure(data=go.Scatter(
+            x=cov_df["Mean_concentration"],
+            y=cov_df["CoV"],
+            mode='markers',
+            marker=dict(size=5, color='blue'),  # Reduced marker size
+            text=cov_df['Species'],
+            hovertemplate=
+            '<b>Species:</b> %{text}<br>' +
+            '<b>Mean concentration:</b> %{x:.4f}<br>' +
+            '<b>CoV:</b> %{y:.2f}%<br>' +
+            '<extra></extra>'
+        ))
+
+        fig.update_layout(
+            title={
+                'text': 'CoV - All lipid Species',
+                'font': {'size': 24, 'color': 'black'}  # Larger, black title
+            },
+            xaxis_title='Log10 of Mean BQC Concentration',
+            yaxis_title='CoV(%)',
+            xaxis=dict(
+                title_font=dict(size=18, color='black'),  # Larger, black axis title
+                tickfont=dict(size=14, color='black'),  # Larger, black tick labels
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                mirror=True
+            ),
+            yaxis=dict(
+                title_font=dict(size=18, color='black'),  # Larger, black axis title
+                tickfont=dict(size=14, color='black'),  # Larger, black tick labels
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                mirror=True
+            ),
+            plot_bgcolor='white',  # White background
+            paper_bgcolor='white',  # White surrounding area
+            showlegend=False,
+            margin=dict(t=50, r=50, b=50, l=50)  # Add some margin
         )
 
-        hover_tool = HoverTool(
-            tooltips=[
-                ('Mean_concentration', '@Mean_concentration'), 
-                ('CoV', "@CoV"), 
-                ('Species', "@Species")
-            ], 
-            names=['cov']
-        )
+        # Add a frame around the plot
+        fig.update_xaxes(zeroline=False)
+        fig.update_yaxes(zeroline=False)
 
-        scatter_plot.add_tools(hover_tool)
-
-        # Set font sizes for axes labels
-        scatter_plot.xaxis.axis_label_text_font_size = "15pt"
-        scatter_plot.yaxis.axis_label_text_font_size = "15pt"
-
-        # Set font sizes for axis ticks
-        scatter_plot.xaxis.major_label_text_font_size = "12pt"
-        scatter_plot.yaxis.major_label_text_font_size = "12pt"
-
-        scatter_plot.title.text_font_size = "15pt"
-
-        return scatter_plot, cov_df
+        return fig, cov_df
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def generate_cov_plot_data(dataframe, individual_samples_list, bqc_sample_index):
         """
         Prepare data for generating a CoV scatter plot.
         
         Args:
             dataframe (pd.DataFrame): The DataFrame containing lipidomics data.
-            _experiment_details (Experiment): An object containing details about the experiment setup. Prefixed with _ to avoid hashing.
+            individual_samples_list (list): A list of individual samples.
             bqc_sample_index (int): The index of BQC samples in the experiment's sample list.
         
         Returns:
             pd.DataFrame: The DataFrame prepared for plotting.
         """
-        #bqc_samples_list = _experiment_details.individual_samples_list[bqc_sample_index]
         bqc_samples_list = individual_samples_list[bqc_sample_index]
         auc = ['MeanArea[' + sample + ']' for sample in bqc_samples_list]
         return BQCQualityCheck.prepare_dataframe_for_plot(dataframe.copy(), auc)
@@ -173,7 +182,7 @@ class BQCQualityCheck:
             bqc_sample_index (int): The index of BQC samples in the experiment's sample list.
     
         Returns:
-            tuple: A Bokeh figure object for the scatter plot, the DataFrame used for plotting, and the reliable data percentage.
+            tuple: A Plotly Figure object for the scatter plot, the DataFrame used for plotting, and the reliable data percentage.
         """
         prepared_df = BQCQualityCheck.generate_cov_plot_data(dataframe, experiment_details.individual_samples_list, bqc_sample_index)
         mean_concentrations, coefficients_of_variation, lipid_species = BQCQualityCheck.prepare_plot_inputs(prepared_df)
@@ -184,7 +193,7 @@ class BQCQualityCheck:
         return scatter_plot, prepared_df, reliable_data_percent
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def filter_dataframe_by_cov_threshold(threshold, prepared_df):
         """
         Filter a DataFrame based on a specified CoV threshold.

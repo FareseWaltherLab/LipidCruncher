@@ -1,94 +1,74 @@
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool
-import itertools
-from bokeh.palettes import Category20 as palette
+import plotly.graph_objects as go
+import plotly.express as px
 import streamlit as st
 
 class PCAAnalysis:
-    """
-    A class for performing Principal Component Analysis (PCA) on lipidomics data.
-
-    Methods:
-    - run_pca: Runs PCA on the provided DataFrame.
-    - _generate_color_mapping: Generates a color mapping for different conditions.
-    - _create_scatter_plot: Creates a scatter plot based on PCA results.
-    - plot_pca: Coordinates the entire process of generating a PCA plot.
-    """
-
     @staticmethod
-    @st.cache_data
-    def run_pca(df, full_samples_list):
-        """
-        Perform PCA on the provided DataFrame.
-
-        Args:
-            df (pd.DataFrame): DataFrame containing lipidomics data.
-            full_samples_list (list): List of all sample names in the experiment.
-
-        Returns:
-            tuple: A tuple of a DataFrame with PCA scores and a list of PCA component names with explained variance.
-        """
-        mean_area_df = df[['MeanArea[' + sample + ']' for sample in full_samples_list]].T
+    def run_pca(_df, full_samples_list):
+        if isinstance(_df, tuple):
+            df = _df[0]
+        else:
+            df = _df
+        available_samples = [sample for sample in full_samples_list if f'MeanArea[{sample}]' in df.columns]
+        mean_area_df = df[['MeanArea[' + sample + ']' for sample in available_samples]].T
         scaled_data = StandardScaler().fit_transform(mean_area_df)
         pca = PCA(n_components=2)
         principal_components = pca.fit_transform(scaled_data)
         explained_variance = pca.explained_variance_ratio_
         pc_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
-        return pc_df, [f'PC{i+1} ({var:.0%})' for i, var in enumerate(explained_variance)]
+        return pc_df, [f'PC{i+1} ({var:.0%})' for i, var in enumerate(explained_variance)], available_samples
 
     @staticmethod
-    @st.cache_data
-    def _generate_color_mapping(conditions):
-        """
-        Generate a mapping of conditions to unique colors.
-
-        Args:
-            conditions (list): A list of condition names.
-
-        Returns:
-            dict: A dictionary mapping conditions to colors.
-        """
+    @st.cache_data(ttl=3600)
+    def generate_color_mapping(conditions):
         unique_conditions = sorted(set(conditions))
-        colors = itertools.cycle(palette[20])
-        return {condition: next(colors) for condition in unique_conditions}
+        return {condition: px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)] 
+                for i, condition in enumerate(unique_conditions)}
 
     @staticmethod
-    def _create_scatter_plot(df, pc_names, color_mapping):
-        """
-        Creates a scatter plot based on PCA results and color mapping.
+    def create_scatter_plot(df, pc_names, color_mapping):
+        fig = go.Figure()
 
-        Args:
-            df (pd.DataFrame): DataFrame containing PCA scores and sample information.
-            pc_names (list): Names of the principal components.
-            color_mapping (dict): A dictionary mapping conditions to colors.
-
-        Returns:
-            bokeh.plotting.figure: A Bokeh plot figure.
-        """
-        plot = figure(title="PCA Plot", x_axis_label=pc_names[0], y_axis_label=pc_names[1])
-        for condition, color in color_mapping.items():
+        for condition in df['Condition'].unique():
             cond_df = df[df['Condition'] == condition]
-            cond_source = ColumnDataSource(cond_df)
-            plot.scatter(x='PC1', y='PC2', source=cond_source, legend_label=condition, color=color)
+            fig.add_trace(go.Scatter(
+                x=cond_df['PC1'],
+                y=cond_df['PC2'],
+                mode='markers',
+                name=condition,
+                marker=dict(color=color_mapping[condition], size=5),  # Reduced marker size from default (10) to 7
+                text=cond_df['Sample'],
+                hovertemplate='<b>Sample:</b> %{text}<br>' +
+                              '<b>PC1:</b> %{x:.4f}<br>' +
+                              '<b>PC2:</b> %{y:.4f}<br>' +
+                              '<extra></extra>'
+            ))
 
-        hover = HoverTool(tooltips=[('Sample', '@Sample'), ('PC1', '@PC1'), ('PC2', '@PC2')])
-        plot.add_tools(hover)
-        plot.legend.click_policy = 'hide'
-        plot.title.text_font_size = "15pt"
-        plot.xaxis.axis_label_text_font_size = "15pt"
-        plot.yaxis.axis_label_text_font_size = "15pt"
-        plot.xaxis.major_label_text_font_size = "15pt"
-        plot.yaxis.major_label_text_font_size = "15pt"
-        return plot
+        fig.update_layout(
+            title=dict(text="PCA Plot", font=dict(size=24, color='black')),
+            xaxis_title=dict(text=pc_names[0], font=dict(size=18, color='black')),
+            yaxis_title=dict(text=pc_names[1], font=dict(size=18, color='black')),
+            xaxis=dict(tickfont=dict(size=14, color='black')),
+            yaxis=dict(tickfont=dict(size=14, color='black')),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            legend=dict(font=dict(size=12, color='black')),
+            margin=dict(t=50, r=50, b=50, l=50)
+        )
+
+        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+
+        return fig
 
     @staticmethod
     def plot_pca(df, full_samples_list, extensive_conditions_list):
-        pc_df, pc_names = PCAAnalysis.run_pca(df, full_samples_list)
-        pc_df['Sample'] = full_samples_list
-        pc_df['Condition'] = extensive_conditions_list
-        color_mapping = PCAAnalysis._generate_color_mapping(pc_df['Condition'])
-        plot = PCAAnalysis._create_scatter_plot(pc_df, pc_names, color_mapping)
-        return plot, pc_df  # Returning both the plot and the DataFrame
+        pc_df, pc_names, available_samples = PCAAnalysis.run_pca(df, full_samples_list)
+        pc_df['Sample'] = available_samples
+        pc_df['Condition'] = [extensive_conditions_list[full_samples_list.index(sample)] for sample in available_samples]
+        color_mapping = PCAAnalysis.generate_color_mapping(pc_df['Condition'])
+        plot = PCAAnalysis.create_scatter_plot(pc_df, pc_names, color_mapping)
+        return plot, pc_df

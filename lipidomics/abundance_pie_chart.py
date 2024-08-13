@@ -7,10 +7,10 @@ import itertools
 class AbundancePieChart:
     
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_total_abundance(df, full_samples_list):
         """
-        Calculates the total abundance of each lipid class across all samples.
+        Calculates the total abundance of each lipid class across all available samples.
 
         Args:
             df (pd.DataFrame): DataFrame containing lipidomics data.
@@ -19,7 +19,12 @@ class AbundancePieChart:
         Returns:
             pd.DataFrame: Aggregated DataFrame with total abundance per lipid class.
         """
-        grouped_df = df.groupby('ClassKey')[["MeanArea[" + sample + ']' for sample in full_samples_list]].sum()
+        available_samples = [sample for sample in full_samples_list if f"MeanArea[{sample}]" in df.columns]
+        if not available_samples:
+            st.warning("No sample columns found in the dataset.")
+            return pd.DataFrame()
+        
+        grouped_df = df.groupby('ClassKey')[[f"MeanArea[{sample}]" for sample in available_samples]].sum()
         return grouped_df
 
     @staticmethod
@@ -34,10 +39,13 @@ class AbundancePieChart:
         Returns:
             list: List of lipid classes.
         """
-        return list(AbundancePieChart.calculate_total_abundance(df, full_samples_list).index)
+        total_abundance_df = AbundancePieChart.calculate_total_abundance(df, full_samples_list)
+        if total_abundance_df.empty:
+            return []
+        return list(total_abundance_df.index)
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def filter_df_for_selected_classes(df, full_samples_list, selected_classes):
         """
         Filters the DataFrame to include only the selected lipid classes.
@@ -54,7 +62,7 @@ class AbundancePieChart:
         return total_abundance_df[total_abundance_df.index.isin(selected_classes)]
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def create_pie_chart(df, full_samples_list, condition, samples, color_mapping):
         """
         Creates a pie chart for the total abundance of lipid classes under a specific condition.
@@ -69,7 +77,12 @@ class AbundancePieChart:
         Returns:
             tuple: A tuple containing the Plotly figure object and the DataFrame used.
         """
-        condition_abundance = df[["MeanArea[" + sample + "]" for sample in samples]].sum(axis=1)
+        available_samples = [sample for sample in samples if f"MeanArea[{sample}]" in df.columns]
+        if not available_samples:
+            st.warning(f"No sample columns found for condition: {condition}")
+            return None, df
+        
+        condition_abundance = df[[f"MeanArea[{sample}]" for sample in available_samples]].sum(axis=1)
         sorted_sizes, sorted_labels = AbundancePieChart._sort_pie_chart_data(condition_abundance, df.index)
     
         custom_labels = [f'{label} - {pct:.1f}%' for label, pct in zip(sorted_labels, 100 * sorted_sizes / sorted_sizes.sum())]
@@ -130,5 +143,3 @@ class AbundancePieChart:
         color_palette = px.colors.qualitative.Plotly
         color_cycle = itertools.cycle(color_palette)
         return {label: next(color_cycle) for label in labels}
-
-

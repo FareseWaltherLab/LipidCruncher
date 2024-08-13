@@ -11,7 +11,7 @@ class CleanData:
     def __init__(self):
         pass
         
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _extract_relevant_columns(_self, df, full_samples_list):
         """
         Extracts relevant columns for analysis from the DataFrame.
@@ -44,7 +44,7 @@ class CleanData:
             return pd.DataFrame()  # Return an empty DataFrame or handle as needed
 
 
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _update_column_names(_self, df, name_df):
         """
         Updates column names in the DataFrame to reflect new sample names based on the name mapping DataFrame.
@@ -66,7 +66,7 @@ class CleanData:
             return pd.DataFrame()  # Return an empty DataFrame or handle as needed
 
 
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _create_rename_dict(_self, name_df):
         """
         Creates a dictionary for renaming DataFrame columns based on a mapping in name_df.
@@ -92,7 +92,7 @@ class CleanData:
             return {}  # Return an empty dictionary or handle as needed
 
 
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _convert_columns_to_numeric(_self, df, full_samples_list):
         """
         Converts abundance data columns in the DataFrame to numeric type, with non-numeric values replaced by zeros.
@@ -123,7 +123,7 @@ class CleanData:
             return pd.DataFrame()  # Return an empty DataFrame or handle as needed
 
 
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _apply_filter(_self, df):
         """
         Filters the DataFrame based on 'TotalGrade' values to retain only high-quality lipidomics data.
@@ -263,7 +263,7 @@ class CleanData:
             return pd.DataFrame()  # Return an empty DataFrame or handle as needed
 
 
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _initialize_clean_df(_self, full_samples_list):
         """
         Initializes a DataFrame structured for cleaned data, based on experiment setup.
@@ -292,7 +292,7 @@ class CleanData:
             return pd.DataFrame()  # Return an empty DataFrame or handle as needed
 
     
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _process_lipid_grades(_self, df, clean_df, grades, sample_names, additional_condition=None):
         """
         Processes and updates the DataFrame based on lipid grades and additional conditions.
@@ -357,7 +357,7 @@ class CleanData:
             print(f"Error in updating clean DataFrame: {e}")
             return clean_df  # Return the original DataFrame or handle as needed
  
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _remove_missing_fa_keys(_self, df):
         """
         Removes rows from the DataFrame where the FAKey is None.
@@ -427,7 +427,7 @@ class CleanData:
             print(f"An error occurred during data cleaning: {e}")
             return pd.DataFrame()  # Return an empty DataFrame in case of an error
 
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def extract_internal_standards(_self, df):
         """
         Separates the internal standards from the dataset.
@@ -451,7 +451,7 @@ class CleanData:
     
         return non_standards_df, internal_standards_df
     
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def log_transform_df(_self, df, number_of_samples):
         """
         Applies a logarithmic transformation to abundance columns in the dataset.
