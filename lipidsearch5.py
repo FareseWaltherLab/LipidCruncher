@@ -300,17 +300,14 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # PDF Generation Section
     st.subheader("Generate PDF Report")
     st.warning(
-       "⚠️ Important: Generating a PDF report is a computationally intensive task. "
-       "Please follow these guidelines:\n\n"
-       "1. Only generate the PDF at the end of your session, after completing all analyses.\n"
-       "2. Generate the PDF before clearing the cache.\n"
-       "3. Avoid interacting with the app while the PDF is being generated.\n"
-       "4. If you're not at the end of your session, please select 'No'.\n"
-       "5. Only analyses that you have generated at least once will be included in the PDF. "
-       "For example, if you never viewed the regular heatmap, it will not be in the report.\n"
-       "6. Ensure you've generated all desired analyses before creating the PDF."
-   )
-
+        "⚠️ Important: PDF Report Generation Guidelines\n\n"
+        "1. Generate the PDF only after completing all desired analyses.\n"
+        "2. Ensure all analyses you want in the report have been viewed at least once.\n"
+        "3. Use this feature instead of downloading plots individually - it's more efficient for multiple downloads.\n"
+        "4. Generate the PDF before clearing the cache.\n"
+        "5. Avoid interacting with the app during PDF generation.\n"
+        "6. Select 'No' if you're not ready to end your session."
+    )
 
     generate_pdf = st.radio("Are you ready to generate the PDF report?", ('No', 'Yes'), index=0)
 
@@ -331,9 +328,9 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
                 if pdf_buffer:
                     st.success("PDF report generated successfully!")
                     st.download_button(
-                        label="Download Quality Check Report (PDF)",
+                        label="Download Quality Check & Analysis Report (PDF)",
                         data=pdf_buffer,
-                        file_name="quality_check_report.pdf",
+                        file_name="quality_check_and_analysis_report.pdf",
                         mime="application/pdf",
                     )
                     st.info(
