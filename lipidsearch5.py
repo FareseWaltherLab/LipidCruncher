@@ -278,10 +278,18 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         volcano_plots = display_volcano_plot(experiment, continuation_df)
         st.session_state.volcano_plots.update(volcano_plots)
     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
-        heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
-        if heatmap_fig:
+        heatmap_result = display_lipidomic_heatmap(experiment, continuation_df)
+        if isinstance(heatmap_result, tuple) and len(heatmap_result) == 2:
+            regular_heatmap, clustered_heatmap = heatmap_result
+        else:
+            regular_heatmap = heatmap_result
+            clustered_heatmap = None
+        
+        if regular_heatmap:
             st.session_state.heatmap_generated = True
-            st.session_state.heatmap_fig[heatmap_fig.layout.title.text] = heatmap_fig
+            st.session_state.heatmap_fig['Regular Heatmap'] = regular_heatmap
+        if clustered_heatmap:
+            st.session_state.heatmap_fig['Clustered Heatmap'] = clustered_heatmap
 
     # Ask user if they want to generate a PDF report
     generate_pdf = st.radio("Generate PDF Report?", ('No', 'Yes'), index=0)
@@ -463,18 +471,26 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
             pdf.drawString(50, 30, "Lipid Pathway Visualization")
         
         # Add Lipidomic Heatmaps
-        for heatmap_title, heatmap_fig in heatmap_figs.items():
+        if 'Regular Heatmap' in heatmap_figs:
             pdf.showPage()
             pdf.setPageSize(landscape(letter))
-            heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
-            heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
+            regular_heatmap_bytes = pio.to_image(heatmap_figs['Regular Heatmap'], format='png', width=900, height=600, scale=2)
+            regular_heatmap_img = ImageReader(io.BytesIO(regular_heatmap_bytes))
             page_width, page_height = landscape(letter)
             img_width = 700
             img_height = (img_width / 900) * 600
             x_position = (page_width - img_width) / 2
             y_position = (page_height - img_height) / 2
-            pdf.drawImage(heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
-            pdf.drawString(x_position, y_position - 20, heatmap_title)
+            pdf.drawImage(regular_heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
+            pdf.drawString(x_position, y_position - 20, "Regular Lipidomic Heatmap")
+        
+        if 'Clustered Heatmap' in heatmap_figs:
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
+            clustered_heatmap_bytes = pio.to_image(heatmap_figs['Clustered Heatmap'], format='png', width=900, height=600, scale=2)
+            clustered_heatmap_img = ImageReader(io.BytesIO(clustered_heatmap_bytes))
+            pdf.drawImage(clustered_heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
+            pdf.drawString(x_position, y_position - 20, "Clustered Lipidomic Heatmap")
         
         pdf.save()
         pdf_buffer.seek(0)
@@ -1549,22 +1565,23 @@ def display_lipidomic_heatmap(experiment, continuation_df):
     """
     Displays a lipidomic heatmap in the Streamlit app, offering an interactive interface for users to 
     select specific conditions and lipid classes for visualization. This function facilitates the exploration 
-    of lipidomic data by generating either clustered or regular heatmaps based on user input. The clustered heatmap 
-    organizes lipid molecules based on hierarchical clustering, while the regular heatmap presents data in its 
-    original order. Users can also download the heatmap as an SVG file and the data used for the heatmap as a CSV file.
+    of lipidomic data by generating both clustered and regular heatmaps based on user input.
 
     Args:
-        experiment (Experiment): An object containing detailed information about the experiment setup. This includes 
-                                 information about conditions, samples, and other experimental parameters.
-        continuation_df (pd.DataFrame): A DataFrame containing processed lipidomics data, which includes information 
-                                        about various lipid molecules, their classes, and abundance across different samples.
+        experiment (Experiment): An object containing detailed information about the experiment setup.
+        continuation_df (pd.DataFrame): A DataFrame containing processed lipidomics data.
+
+    Returns:
+        tuple: A tuple containing the regular heatmap figure and the clustered heatmap figure (if generated).
     """
+    regular_heatmap = None
+    clustered_heatmap = None
+
     with st.expander("Lipidomic Heatmap"):
         # UI for selecting conditions and classes
         all_conditions = experiment.conditions_list
         selected_conditions = st.multiselect("Select conditions:", all_conditions, default=all_conditions)
         selected_conditions = [condition for condition in selected_conditions if len(experiment.individual_samples_list[experiment.conditions_list.index(condition)]) > 1]
-
         all_classes = continuation_df['ClassKey'].unique()
         selected_classes = st.multiselect("Select lipid classes:", all_classes, default=all_classes)
         
@@ -1572,43 +1589,42 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             # Extract sample names based on selected conditions
             selected_samples = [sample for condition in selected_conditions 
                                 for sample in experiment.individual_samples_list[experiment.conditions_list.index(condition)]]
-
             # Process data for heatmap generation
             filtered_df, _ = lp.LipidomicHeatmap.filter_data(continuation_df, selected_conditions, selected_classes, experiment.conditions_list, experiment.individual_samples_list)
             z_scores_df = lp.LipidomicHeatmap.compute_z_scores(filtered_df)
-
-            # Allow users to choose between clustered and regular heatmap
-            heatmap_type = st.radio("Select Heatmap Type", ["Clustered", "Regular"])
-
-            if heatmap_type == "Clustered":
-                clustered_df = lp.LipidomicHeatmap.perform_clustering(z_scores_df)
-                heatmap_fig = lp.LipidomicHeatmap.generate_clustered_heatmap(clustered_df, selected_samples)
-            else:  # Regular heatmap
-                heatmap_fig = lp.LipidomicHeatmap.generate_regular_heatmap(z_scores_df, selected_samples)
-                
+            
+            # Generate both regular and clustered heatmaps
+            regular_heatmap = lp.LipidomicHeatmap.generate_regular_heatmap(z_scores_df, selected_samples)
+            clustered_df = lp.LipidomicHeatmap.perform_clustering(z_scores_df)
+            clustered_heatmap = lp.LipidomicHeatmap.generate_clustered_heatmap(clustered_df, selected_samples)
+            
+            # Allow users to choose which heatmap to display
+            heatmap_type = st.radio("Select Heatmap Type", ["Clustered", "Regular"], index=0)
+            current_heatmap = clustered_heatmap if heatmap_type == "Clustered" else regular_heatmap
+            
             # Adjust heatmap layout for better fit
-            heatmap_fig.update_layout(
-                width=900,  # Decreased width
+            current_heatmap.update_layout(
+                width=900,
                 height=600,
-                margin=dict(l=150, r=50, t=50, b=100),  # Adjusted margins
+                margin=dict(l=150, r=50, t=50, b=100),
                 xaxis_tickangle=-45,
                 yaxis_title="Lipid Molecules",
                 xaxis_title="Samples",
-                title="Lipidomic Heatmap",
-                font=dict(size=10)  # Decreased font size
+                title=f"Lipidomic Heatmap ({heatmap_type})",
+                font=dict(size=10)
             )
             # Adjust colorbar
-            heatmap_fig.update_traces(colorbar=dict(len=0.9, thickness=15))  # Made colorbar thinner
+            current_heatmap.update_traces(colorbar=dict(len=0.9, thickness=15))
             
-            # Display the heatmap
-            st.plotly_chart(heatmap_fig, use_container_width=True)
-
+            # Display the selected heatmap
+            st.plotly_chart(current_heatmap, use_container_width=True)
+            
             # Download buttons
-            plotly_svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
+            plotly_svg_download_button(current_heatmap, f"Lipidomic_{heatmap_type}_Heatmap.svg")
             csv_download = convert_df(z_scores_df.reset_index())
             st.download_button("Download CSV", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
-            
-            return heatmap_fig   
+
+    return regular_heatmap, clustered_heatmap   
 
 if __name__ == "__main__":
     main()
