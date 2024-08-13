@@ -1284,30 +1284,60 @@ def display_volcano_plot(experiment, continuation_df):
 
     return volcano_plots
         
-def display_saturation_plots(experiment, df):
-    """
-    Create and display saturation plots in the Streamlit app using Plotly.
-    Args:
-        experiment: Experiment object containing conditions and samples.
-        df: DataFrame with the lipidomics data.
-    Returns:
-        dict: A dictionary containing the generated plots for each lipid class.
-    """
+def display_saturation_plots(experiment, continuation_df):
     saturation_plots = {}
-    with st.expander("Investigate the Saturation Profile of Different Lipid Classes"):
-        selected_conditions = st.multiselect('Select conditions for analysis:', experiment.conditions_list, experiment.conditions_list)
-        if selected_conditions:
-            plots = lp.SaturationPlot.create_plots(df, experiment, selected_conditions)
-            for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
-                st.plotly_chart(main_plot, use_container_width=True)
-                st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_main.csv', 'text/csv', key=f'download-main-data-{lipid_class}')
-                st.plotly_chart(percentage_plot, use_container_width=True)
-                st.download_button("Download Data", convert_df(plot_data), f'{lipid_class}_saturation_level_plot_percentage.csv', 'text/csv', key=f'download-percentage-data-{lipid_class}')
+    with st.expander("Saturation Plots"):
+        full_samples_list = experiment.full_samples_list
+        
+        # Get all unique classes from the DataFrame
+        all_classes = continuation_df['ClassKey'].unique().tolist()
+        
+        selected_classes_list = st.multiselect('Select classes for the saturation plot:', all_classes, all_classes)
+        
+        if selected_classes_list:
+            # Filter the DataFrame for selected classes
+            filtered_df = continuation_df[continuation_df['ClassKey'].isin(selected_classes_list)]
+            
+            selected_conditions = st.multiselect('Select conditions for the saturation plot:', experiment.conditions_list, experiment.conditions_list)
+            
+            if selected_conditions:
+                plots = lp.SaturationPlot.create_plots(filtered_df, experiment, selected_conditions)
                 
-                st.write('---------------------------------------------------------')
-                
-                saturation_plots[lipid_class] = {'main': main_plot, 'percentage': percentage_plot}
-    
+                for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
+                    st.subheader(f"Saturation Plot for {lipid_class}")
+                    
+                    # Display and add download button for main plot
+                    st.plotly_chart(main_plot)
+                    plotly_svg_download_button(main_plot, f"saturation_plot_main_{lipid_class}.svg")
+                    
+                    # Add CSV download button for the main plot data
+                    main_csv_download = convert_df(plot_data)
+                    st.download_button(
+                        label="Download CSV",
+                        data=main_csv_download,
+                        file_name=f'saturation_plot_main_data_{lipid_class}.csv',
+                        mime='text/csv'
+                    )
+                    
+                    # Display and add download button for percentage plot
+                    st.plotly_chart(percentage_plot)
+                    plotly_svg_download_button(percentage_plot, f"saturation_plot_percentage_{lipid_class}.svg")
+                    
+                    # Calculate percentage data for CSV download
+                    percentage_data = lp.SaturationPlot._calculate_percentage_df(plot_data)
+                    percentage_csv_download = convert_df(percentage_data)
+                    st.download_button(
+                        label="Download CSV",
+                        data=percentage_csv_download,
+                        file_name=f'saturation_plot_percentage_data_{lipid_class}.csv',
+                        mime='text/csv'
+                    )
+                    
+                    # Add plots to the saturation_plots dictionary
+                    saturation_plots[lipid_class] = (main_plot, percentage_plot)
+                    
+                    st.markdown("---")  # Add a separator between plots
+
     return saturation_plots
 
 def display_abundance_bar_charts(experiment, continuation_df):
@@ -1443,17 +1473,22 @@ def display_pathway_visualization(experiment, continuation_df):
                 if fig is not None and pathway_dict:
                     st.pyplot(fig)
                     
+                    # Add SVG download button for the pathway visualization
+                    matplotlib_svg_download_button(fig, f"pathway_visualization_{control_condition}_vs_{experimental_condition}.svg")
+                    
                     pathway_df = pd.DataFrame.from_dict(pathway_dict)
                     pathway_df.set_index('class', inplace=True)
                     st.write(pathway_df)
                     csv_download = convert_df(pathway_df)
                     st.download_button(
-                        label="Download Data",
+                        label="Download CSV",
                         data=csv_download,
                         file_name='pathway_df.csv',
                         mime='text/csv')
                 else:
                     st.warning("Unable to generate pathway visualization due to insufficient data.")
+        else:
+            st.warning("At least two conditions with more than one replicate are required for pathway visualization.")
 
 def display_abundance_pie_charts(experiment, continuation_df):
     pie_charts = {}
@@ -1534,7 +1569,7 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             # Download buttons
             plotly_svg_download_button(heatmap_fig, f"Lipidomic_{heatmap_type}_Heatmap.svg")
             csv_download = convert_df(z_scores_df.reset_index())
-            st.download_button("Download Data", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
+            st.download_button("Download CSV", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
             
             return heatmap_fig   
 
