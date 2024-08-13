@@ -98,10 +98,9 @@ def main():
         st.sidebar.success("Cache cleared successfully!")
         st.session_state.clear_cache = False  # Reset the flag
     
-    st.info(
-        "ℹ️ Tip: When you're done, please click 'End Session and Clear Cache' in the sidebar. "
-        "This ensures each session starts fresh and can help maintain optimal app performance."
-    )
+    st.info("""
+            **Tip:** When you're done, please click 'End Session and Clear Cache' in the sidebar. This ensures each session starts fresh and can help maintain optimal app performance. Additionally, if the app crashes and you are forced to restart the session, clearing the cache can help prevent further issues.
+            """)
 
 def clear_streamlit_cache():
     """
