@@ -1003,12 +1003,13 @@ def display_box_plots(continuation_df, experiment):
         # Generate and display the first plot (Missing Values Distribution)
         fig1 = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
         st.pyplot(fig1)
+        matplotlib_svg_download_button(fig1, "missing_values_distribution.svg")
 
         # Data for download (Missing Values)
         missing_values_data = np.vstack((current_samples, zero_values_percent_list)).T
         missing_values_csv = convert_df(pd.DataFrame(missing_values_data, columns=["Sample", "Percentage Missing"]))
         st.download_button(
-            label="Download Missing Values Data",
+            label="Download CSV",
             data=missing_values_csv,
             file_name="missing_values_data.csv",
             mime='text/csv',
@@ -1020,11 +1021,12 @@ def display_box_plots(continuation_df, experiment):
         # Generate and display the second plot (Box Plot)
         fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
         st.pyplot(fig2)
+        matplotlib_svg_download_button(fig2, "box_plot.svg")
         
         # Provide option to download the raw data for Box Plot
         csv_data = convert_df(mean_area_df)
         st.download_button(
-            label="Download Box Plot Data",
+            label="Download CSV",
             data=csv_data,
             file_name="box_plot_data.csv",
             mime='text/csv',
@@ -1043,9 +1045,10 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(data_df, experiment, bqc_sample_index)
             
             st.plotly_chart(scatter_plot, use_container_width=True)
+            plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg")
             csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
             st.download_button(
-                "Download BQC Data",
+                "Download CSV",
                 data=csv_data,
                 file_name="CoV_Plot_Data.csv",
                 mime='text/csv'
@@ -1100,8 +1103,9 @@ def integrate_retention_time_plots(continuation_df):
         plots = lp.RetentionTime.plot_single_retention(continuation_df)
         for plot, retention_df in plots:
             st.plotly_chart(plot, use_container_width=True)
+            plotly_svg_download_button(plot, f"retention_time_plot_{i+1}.svg")
             csv_download = convert_df(retention_df)
-            st.download_button(label="Download Retention Time Data", data=csv_download, file_name='retention_plot.csv', mime='text/csv')
+            st.download_button(label="Download CSV", data=csv_download, file_name='retention_plot.csv', mime='text/csv')
         return None
     elif mode == 'Comparison Mode':
         # Handling comparison mode for retention time plots
@@ -1111,8 +1115,9 @@ def integrate_retention_time_plots(continuation_df):
             plot, retention_df = lp.RetentionTime.plot_multi_retention(continuation_df, selected_classes_list)
             if plot:
                 st.plotly_chart(plot, use_container_width=True)
+                plotly_svg_download_button(plot, "retention_time_comparison.svg")
                 csv_download = convert_df(retention_df)
-                st.download_button(label="Download Retention Time Data", data=csv_download, file_name='Retention_Time_Comparison.csv', mime='text/csv')
+                st.download_button(label="Download CSV", data=csv_download, file_name='Retention_Time_Comparison.csv', mime='text/csv')
                 return plot
     return None
 
@@ -1158,12 +1163,13 @@ def analyze_pairwise_correlation(continuation_df, experiment):
             correlation_df, v_min, thresh = lp.Correlation.compute_correlation(mean_area_df, sample_type)
             fig = lp.Correlation.render_correlation_plot(correlation_df, v_min, thresh, experiment.conditions_list[condition_index])
             st.pyplot(fig)
+            matplotlib_svg_download_button(fig, f"correlation_plot_{experiment.conditions_list[condition_index]}.svg")
             
             st.write('Find the exact correlation coefficients in the table below:')
             st.write(correlation_df)
             csv_download = convert_df(correlation_df)
             st.download_button(
-                label="Download Data",
+                label="Download CSV",
                 data=csv_download,
                 file_name='Correlation_Matrix_' + experiment.conditions_list[condition_index] + '.csv',
                 mime='text/csv'
@@ -1196,10 +1202,11 @@ def display_pca_analysis(continuation_df, experiment):
         
         pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
         st.plotly_chart(pca_plot, use_container_width=True)
+        plotly_svg_download_button(pca_plot, "pca_plot.svg")
         
         csv_data = convert_df(pca_df)
         st.download_button(
-            label="Download PCA Data",
+            label="Download CSV",
             data=csv_data,
             file_name="PCA_data.csv",
             mime="text/csv"
