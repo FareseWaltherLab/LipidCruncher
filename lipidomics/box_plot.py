@@ -11,7 +11,7 @@ class BoxPlot:
         pass
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def create_mean_area_df(df, full_samples_list):
         """
         Creates a DataFrame containing only the 'MeanArea' columns from the provided DataFrame.
@@ -27,7 +27,7 @@ class BoxPlot:
         return df[mean_area_cols]
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_missing_values_percentage(mean_area_df):
         """
         Calculates the percentage of missing values for each sample in the experiment.

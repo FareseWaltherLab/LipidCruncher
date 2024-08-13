@@ -30,7 +30,7 @@ class LipidomicHeatmap:
         return filtered_df, selected_samples
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def compute_z_scores(filtered_df):
         """
         Calculates Z-scores for each lipid molecule in the filtered DataFrame.
@@ -50,7 +50,7 @@ class LipidomicHeatmap:
         return z_scores_df
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def perform_clustering(z_scores_df):
         """
         Performs hierarchical clustering on the lipidomic data based on Z-scores.

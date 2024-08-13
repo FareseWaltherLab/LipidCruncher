@@ -33,7 +33,7 @@ class VolcanoPlot:
         return experiment.individual_samples_list[control_index], experiment.individual_samples_list[experimental_index]
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _prepare_data(df, control_samples, experimental_samples):
         """
         Prepare data by selecting necessary columns based on control and experimental samples.
@@ -52,7 +52,7 @@ class VolcanoPlot:
         return df[selected_cols], control_cols, experimental_cols
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _calculate_stats(df, control_cols, experimental_cols):
         """
         Calculate mean values and identify valid rows where neither mean control nor mean experimental values are zero.
@@ -71,7 +71,7 @@ class VolcanoPlot:
         return df, mean_control, mean_experimental, valid_rows
     
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _format_results(df, mean_control, mean_experimental, valid_rows, control_cols, experimental_cols):
         """
         Format the results of volcano plot data preparation by calculating fold changes, p-values, and logging mean control concentrations.
@@ -134,7 +134,7 @@ class VolcanoPlot:
         return volcano_df, removed_lipids_df
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _merge_and_filter_df(df, volcano_df, selected_classes):
         """
         Merge the original DataFrame with volcano plot data and filter based on selected classes.
@@ -309,7 +309,7 @@ class VolcanoPlot:
 
     
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def get_most_abundant_lipid(df, selected_class):
         """
         Get the most abundant lipid in the selected class.

@@ -11,7 +11,7 @@ class RetentionTime:
     """
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def prep_single_plot_inputs(df, lipid_class):
         """
         Prepare the input data for a single retention time plot.
@@ -68,7 +68,7 @@ class RetentionTime:
         return fig
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def prep_multi_plot_input(df, selected_classes_list, unique_color_list):
         """
         Prepare the input data for a multi-class retention time comparison plot.

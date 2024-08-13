@@ -54,7 +54,7 @@ class BQCQualityCheck:
         return np.log10(series[series > 0])
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def prepare_dataframe_for_plot(dataframe, area_under_curve_columns):
         """
         Prepare a DataFrame for plotting by calculating CoV and mean values for specified columns.
@@ -154,7 +154,7 @@ class BQCQualityCheck:
         return fig, cov_df
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def generate_cov_plot_data(dataframe, individual_samples_list, bqc_sample_index):
         """
         Prepare data for generating a CoV scatter plot.
@@ -193,7 +193,7 @@ class BQCQualityCheck:
         return scatter_plot, prepared_df, reliable_data_percent
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def filter_dataframe_by_cov_threshold(threshold, prepared_df):
         """
         Filter a DataFrame based on a specified CoV threshold.
