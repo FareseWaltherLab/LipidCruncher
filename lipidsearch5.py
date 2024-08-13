@@ -212,13 +212,12 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     bqc_plot = None
     retention_time_plot = None
     pca_plot = None
-    heatmap_fig = None
 
     # Initialize session state for plots
     if 'heatmap_generated' not in st.session_state:
         st.session_state.heatmap_generated = False
     if 'heatmap_fig' not in st.session_state:
-        st.session_state.heatmap_fig = None
+        st.session_state.heatmap_fig = {}
     if 'correlation_plots' not in st.session_state:
         st.session_state.correlation_plots = {}
     if 'abundance_bar_charts' not in st.session_state:
@@ -229,6 +228,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         st.session_state.saturation_plots = {}
     if 'volcano_plots' not in st.session_state:
         st.session_state.volcano_plots = {}
+    if 'pathway_visualization' not in st.session_state:
+        st.session_state.pathway_visualization = None
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
@@ -269,19 +270,18 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     elif analysis_option == "Class Level Breakdown - Saturation Plots":
         saturation_plots = display_saturation_plots(experiment, continuation_df)
         st.session_state.saturation_plots.update(saturation_plots)
+    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
+        pathway_fig = display_pathway_visualization(experiment, continuation_df)
+        if pathway_fig:
+            st.session_state.pathway_visualization = pathway_fig
     elif analysis_option == "Species Level Breakdown - Volcano Plot":
         volcano_plots = display_volcano_plot(experiment, continuation_df)
         st.session_state.volcano_plots.update(volcano_plots)
     elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
         heatmap_fig = display_lipidomic_heatmap(experiment, continuation_df)
-        st.session_state.heatmap_generated = True
-        st.session_state.heatmap_fig = heatmap_fig
-    else:
-        display_selected_analysis(analysis_option, experiment, continuation_df)
-
-    # Use the stored heatmap if it was generated before
-    if st.session_state.heatmap_generated:
-        heatmap_fig = st.session_state.heatmap_fig
+        if heatmap_fig:
+            st.session_state.heatmap_generated = True
+            st.session_state.heatmap_fig[heatmap_fig.layout.title.text] = heatmap_fig
 
     # Ask user if they want to generate a PDF report
     generate_pdf = st.radio("Generate PDF Report?", ('No', 'Yes'), index=0)
@@ -291,9 +291,10 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
             with st.spinner('Generating PDF report...'):
                 pdf_buffer = generate_pdf_report(
                     box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
-                    heatmap_fig, st.session_state.correlation_plots, st.session_state.abundance_bar_charts,
-                    st.session_state.abundance_pie_charts, st.session_state.saturation_plots,
-                    st.session_state.volcano_plots
+                    st.session_state.heatmap_fig, st.session_state.correlation_plots, 
+                    st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts, 
+                    st.session_state.saturation_plots, st.session_state.volcano_plots,
+                    st.session_state.pathway_visualization
                 )
             if pdf_buffer:
                 st.download_button(
@@ -326,7 +327,7 @@ def display_selected_analysis(analysis_option, experiment, continuation_df):
         display_volcano_plot(experiment, continuation_df)
     # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_fig, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots, volcano_plots):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots, volcano_plots, pathway_visualization):
     pdf_buffer = io.BytesIO()
     
     try:
@@ -402,21 +403,22 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
         
         # Add Saturation Plots
         for lipid_class, plots in saturation_plots.items():
-            # Main plot
-            pdf.showPage()
-            pdf.setPageSize(landscape(letter))
-            main_bytes = pio.to_image(plots['main'], format='png', width=1000, height=700, scale=2)
-            main_img = ImageReader(io.BytesIO(main_bytes))
-            pdf.drawImage(main_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
-            pdf.drawString(50, 80, f"Saturation Plot (Main) for {lipid_class}")
-            
-            # Percentage plot
-            pdf.showPage()
-            pdf.setPageSize(landscape(letter))
-            percentage_bytes = pio.to_image(plots['percentage'], format='png', width=1000, height=700, scale=2)
-            percentage_img = ImageReader(io.BytesIO(percentage_bytes))
-            pdf.drawImage(percentage_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
-            pdf.drawString(50, 80, f"Saturation Plot (Percentage) for {lipid_class}")
+            if isinstance(plots, dict) and 'main' in plots and 'percentage' in plots:
+                # Main plot
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                main_bytes = pio.to_image(plots['main'], format='png', width=1000, height=700, scale=2)
+                main_img = ImageReader(io.BytesIO(main_bytes))
+                pdf.drawImage(main_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, f"Saturation Plot (Main) for {lipid_class}")
+                
+                # Percentage plot
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                percentage_bytes = pio.to_image(plots['percentage'], format='png', width=1000, height=700, scale=2)
+                percentage_img = ImageReader(io.BytesIO(percentage_bytes))
+                pdf.drawImage(percentage_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, f"Saturation Plot (Percentage) for {lipid_class}")
         
         # Add Volcano Plots
         if volcano_plots:
@@ -449,27 +451,38 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
                 pdf.drawImage(dist_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
                 pdf.drawString(50, 80, "Concentration Distribution Plot")
         
-        # Last Page: Lipidomic Heatmap
-        if heatmap_fig is not None:
+        # Add Pathway Visualization
+        if pathway_visualization is not None:
             pdf.showPage()
             pdf.setPageSize(landscape(letter))
-            # Decrease the width of the heatmap image and adjust height to maintain aspect ratio
+            img_buffer = io.BytesIO()
+            pathway_visualization.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            img = ImageReader(img_buffer)
+            pdf.drawImage(img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 30, "Lipid Pathway Visualization")
+        
+        # Add Lipidomic Heatmaps
+        for heatmap_title, heatmap_fig in heatmap_figs.items():
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
             heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
             heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
-            # Adjust the positioning and size of the heatmap on the page
             page_width, page_height = landscape(letter)
-            img_width = 700  # Decreased width
-            img_height = (img_width / 900) * 600  # Maintain aspect ratio
-            x_position = (page_width - img_width) / 2  # Center horizontally
-            y_position = (page_height - img_height) / 2  # Center vertically
+            img_width = 700
+            img_height = (img_width / 900) * 600
+            x_position = (page_width - img_width) / 2
+            y_position = (page_height - img_height) / 2
             pdf.drawImage(heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
-            pdf.drawString(x_position, y_position - 20, "Lipidomic Heatmap")
+            pdf.drawString(x_position, y_position - 20, heatmap_title)
         
         pdf.save()
         pdf_buffer.seek(0)
         
     except Exception as e:
         print(f"Error generating PDF: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
     
     return pdf_buffer
@@ -1340,11 +1353,10 @@ def display_saturation_plots(experiment, continuation_df):
                         mime='text/csv'
                     )
                     
-                    # Add plots to the saturation_plots dictionary
-                    saturation_plots[lipid_class] = (main_plot, percentage_plot)
+                    # Store plots in the saturation_plots dictionary
+                    saturation_plots[lipid_class] = {'main': main_plot, 'percentage': percentage_plot}
                     
                     st.markdown("---")  # Add a separator between plots
-
     return saturation_plots
 
 def display_abundance_bar_charts(experiment, continuation_df):
@@ -1491,10 +1503,15 @@ def display_pathway_visualization(experiment, continuation_df):
                         data=csv_download,
                         file_name='pathway_df.csv',
                         mime='text/csv')
+                    
+                    return fig
+                    
                 else:
                     st.warning("Unable to generate pathway visualization due to insufficient data.")
         else:
             st.warning("At least two conditions with more than one replicate are required for pathway visualization.")
+            
+        return None
 
 def display_abundance_pie_charts(experiment, continuation_df):
     pie_charts = {}
