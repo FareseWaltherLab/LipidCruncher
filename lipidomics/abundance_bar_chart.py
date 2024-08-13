@@ -16,36 +16,38 @@ class AbundanceBarChart:
     """
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes):
-        """
-        Aggregates and computes mean and standard deviation for selected lipid classes 
-        across specific conditions using provided sample lists.
-
-        This method groups the data by lipid classes and calculates the mean and standard 
-        deviation of the mean areas for each condition, then computes log2 values for 
-        improved visualization and analysis. The results are filtered for the selected classes.
-
-        Parameters:
-        df (pd.DataFrame): The DataFrame containing lipidomics data.
-        full_samples_list (list): List of all sample names in the dataset.
-        individual_samples_list (list of list): List of sample names categorized by condition.
-        conditions_list (list): List of experimental conditions.
-        selected_conditions (list of str): Conditions selected for analysis.
-        selected_classes (list of str): Lipid classes selected for analysis.
-
-        Returns:
-        pd.DataFrame: DataFrame with aggregated mean, standard deviation, and log2 values 
-                      for the selected classes and conditions.
-        """
-        grouped_df = AbundanceBarChart.group_and_sum(df, full_samples_list)
-        AbundanceBarChart.calculate_mean_std_for_conditions(grouped_df, individual_samples_list, conditions_list, selected_conditions)
-        grouped_df = AbundanceBarChart.filter_by_selected_classes(grouped_df, selected_classes)
-        AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
-        return grouped_df
+        try:
+            # Ensure we're only working with available columns
+            available_samples = [sample for sample in full_samples_list if f"MeanArea[{sample}]" in df.columns]
+            
+            grouped_df = AbundanceBarChart.group_and_sum(df, available_samples)
+            
+            for condition in selected_conditions:
+                if condition not in conditions_list:
+                    continue  # Skip conditions that are no longer present
+                condition_index = conditions_list.index(condition)
+                individual_samples = [sample for sample in individual_samples_list[condition_index] if sample in available_samples]
+                
+                if not individual_samples:
+                    continue  # Skip this condition if no samples are available
+                
+                mean_cols = [f"MeanArea[{sample}]" for sample in individual_samples]
+                grouped_df[f"mean_AUC_{condition}"] = grouped_df[mean_cols].mean(axis=1)
+                grouped_df[f"std_AUC_{condition}"] = grouped_df[mean_cols].std(axis=1)
+    
+            grouped_df = AbundanceBarChart.filter_by_selected_classes(grouped_df, selected_classes)
+            grouped_df, removed_classes = AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
+            
+            return grouped_df, removed_classes
+    
+        except Exception as e:
+            st.error(f"Error in create_mean_std_columns: {str(e)}")
+            return pd.DataFrame(), []  # Return an empty DataFrame and empty list in case of error
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def group_and_sum(df, full_samples_list):
         """
         Groups and sums the mean area values for each lipid class based on the full sample list.
@@ -78,18 +80,8 @@ class AbundanceBarChart:
             grouped_df[f"std_AUC_{condition}"] = grouped_df[mean_cols].std(axis=1)
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_log2_values(grouped_df, selected_conditions):
-        """
-        Computes log2 transformed mean and standard deviation values for selected conditions.
-
-        Parameters:
-        grouped_df (pd.DataFrame): DataFrame with mean and standard deviation values.
-        selected_conditions (list of str): Conditions selected for analysis.
-
-        Returns:
-        tuple: A tuple containing the filtered DataFrame and a list of removed classes.
-        """
         for condition in selected_conditions:
             mean_col = f"mean_AUC_{condition}"
             std_col = f"std_AUC_{condition}"
@@ -106,7 +98,7 @@ class AbundanceBarChart:
                                                     np.nan)
         
         # Count valid conditions for each class
-        valid_condition_count = grouped_df[[f"log2_mean_AUC_{condition}" for condition in selected_conditions]].notna().sum(axis=1)
+        valid_condition_count = grouped_df[[f"log2_mean_AUC_{condition}" for condition in selected_conditions if f"log2_mean_AUC_{condition}" in grouped_df.columns]].notna().sum(axis=1)
         
         # Filter classes with at least two valid conditions
         filtered_df = grouped_df[valid_condition_count >= 2]
@@ -132,44 +124,60 @@ class AbundanceBarChart:
 
     @staticmethod
     def create_abundance_bar_chart(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes, mode):
-        """
-        Creates an abundance bar chart for the selected lipid classes and conditions.
-
-        Parameters:
-        df (pd.DataFrame): The DataFrame containing lipidomics data.
-        full_samples_list (list): List of all sample names in the dataset.
-        individual_samples_list (list of list): List of sample names categorized by condition.
-        conditions_list (list): List of experimental conditions.
-        selected_conditions (list of str): Conditions selected for analysis.
-        selected_classes (list of str): Lipid classes selected for analysis.
-        mode (str): The mode for value calculation ('linear scale' or 'log2 scale').
-
-        Returns:
-        tuple: A tuple containing the matplotlib figure and the DataFrame used for plotting.
-        """
-        abundance_df = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
-        
-        if mode == 'log2 scale':
-            abundance_df, removed_classes = AbundanceBarChart.calculate_log2_values(abundance_df, selected_conditions)
-        else:
-            removed_classes = []
-        
-        fig, ax = AbundanceBarChart.initialize_plot(len(abundance_df))
-        AbundanceBarChart.add_bars_to_plot(ax, abundance_df, selected_conditions, mode)
-        AbundanceBarChart.style_plot(ax, abundance_df)
-        
-        # Add note about removed classes if any
-        if removed_classes:
-            note = (
-                f"Note: The following classes were removed from the log2 scale plot due to insufficient valid data: {', '.join(removed_classes)}. "
-                "Insufficient valid data means that for these classes, fewer than two of the selected conditions had a mean value greater than its standard deviation. "
-                "This occurs when the data for these classes shows high variability relative to its average, "
-                "which can lead to unreliable or undefined results in log2 scale. "
-                "These classes are still included in the linear scale plot if available."
-            )
-            st.write(note)
-        
-        return fig, abundance_df
+        full_samples_list = st.session_state.full_samples_list if 'full_samples_list' in st.session_state else full_samples_list
+    
+        try:
+            # Check for missing columns before filtering
+            expected_columns = ['ClassKey'] + [f"MeanArea[{sample}]" for sample in full_samples_list]
+            missing_columns = [col for col in expected_columns if col not in df.columns]
+                
+            # Filter for only available columns
+            valid_columns = ['ClassKey'] + [col for col in expected_columns if col in df.columns and col != 'ClassKey']
+            df = df[valid_columns]
+    
+            if df.empty or len(valid_columns) <= 1:  # Only ClassKey column present
+                st.error("No valid data available to create the abundance bar chart.")
+                return None, None
+    
+            # Ensure ClassKey is present and is a single column
+            if 'ClassKey' not in df.columns:
+                st.error("ClassKey column is missing from the dataset.")
+                return None, None
+            
+            if df['ClassKey'].dtype == 'object' and df['ClassKey'].str.contains(',').any():
+                st.error("ClassKey column contains multiple values. Please ensure it's a single value per row.")
+                return None, None
+    
+            # Filter out conditions that no longer exist
+            selected_conditions = [cond for cond in selected_conditions if cond in conditions_list]
+    
+            # Proceed with grouping and calculations
+            abundance_df, removed_classes = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
+            
+            if abundance_df.empty:
+                st.error("No data available after processing for the selected conditions and classes.")
+                return None, None
+    
+            fig, ax = AbundanceBarChart.initialize_plot(len(abundance_df))
+            
+            AbundanceBarChart.add_bars_to_plot(ax, abundance_df, selected_conditions, mode)
+            
+            AbundanceBarChart.style_plot(ax, abundance_df)
+            
+            if removed_classes:
+                note = (
+                    f"Note: The following classes were removed from the plot due to insufficient valid data: {', '.join(removed_classes)}. "
+                    "Insufficient valid data means that for these classes, fewer than two of the selected conditions had a mean value greater than its standard deviation. "
+                    "This occurs when the data for these classes shows high variability relative to its average, "
+                    "which can lead to unreliable or undefined results."
+                )
+                st.write(note)
+            
+            return fig, abundance_df
+    
+        except Exception as e:
+            st.error(f"An unexpected error occurred while creating the abundance bar chart: {str(e)}")
+            return None, None
 
     @staticmethod
     def initialize_plot(num_classes):
