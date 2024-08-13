@@ -499,25 +499,10 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
         
         # Add Lipidomic Heatmaps
         if 'Regular Heatmap' in heatmap_figs:
-            pdf.showPage()
-            pdf.setPageSize(landscape(letter))
-            regular_heatmap_bytes = pio.to_image(heatmap_figs['Regular Heatmap'], format='png', width=900, height=600, scale=2)
-            regular_heatmap_img = ImageReader(io.BytesIO(regular_heatmap_bytes))
-            page_width, page_height = landscape(letter)
-            img_width = 700
-            img_height = (img_width / 900) * 600
-            x_position = (page_width - img_width) / 2
-            y_position = (page_height - img_height) / 2
-            pdf.drawImage(regular_heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
-            pdf.drawString(x_position, y_position - 20, "Regular Lipidomic Heatmap")
+            add_heatmap_to_pdf(pdf, heatmap_figs['Regular Heatmap'], "Regular Lipidomic Heatmap")
         
         if 'Clustered Heatmap' in heatmap_figs:
-            pdf.showPage()
-            pdf.setPageSize(landscape(letter))
-            clustered_heatmap_bytes = pio.to_image(heatmap_figs['Clustered Heatmap'], format='png', width=900, height=600, scale=2)
-            clustered_heatmap_img = ImageReader(io.BytesIO(clustered_heatmap_bytes))
-            pdf.drawImage(clustered_heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
-            pdf.drawString(x_position, y_position - 20, "Clustered Lipidomic Heatmap")
+            add_heatmap_to_pdf(pdf, heatmap_figs['Clustered Heatmap'], "Clustered Lipidomic Heatmap")
         
         pdf.save()
         pdf_buffer.seek(0)
@@ -529,6 +514,19 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
         return None
     
     return pdf_buffer
+
+def add_heatmap_to_pdf(pdf, heatmap_fig, title):
+    pdf.showPage()
+    pdf.setPageSize(landscape(letter))
+    heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
+    heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
+    page_width, page_height = landscape(letter)
+    img_width = 700
+    img_height = (img_width / 900) * 600
+    x_position = (page_width - img_width) / 2
+    y_position = (page_height - img_height) / 2
+    pdf.drawImage(heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
+    pdf.drawString(x_position, y_position - 20, title)
 
 @st.cache_data(ttl=3600)
 def convert_df(df):
@@ -1593,11 +1591,9 @@ def display_lipidomic_heatmap(experiment, continuation_df):
     Displays a lipidomic heatmap in the Streamlit app, offering an interactive interface for users to 
     select specific conditions and lipid classes for visualization. This function facilitates the exploration 
     of lipidomic data by generating both clustered and regular heatmaps based on user input.
-
     Args:
         experiment (Experiment): An object containing detailed information about the experiment setup.
         continuation_df (pd.DataFrame): A DataFrame containing processed lipidomics data.
-
     Returns:
         tuple: A tuple containing the regular heatmap figure and the clustered heatmap figure (if generated).
     """
@@ -1625,23 +1621,23 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             clustered_df = lp.LipidomicHeatmap.perform_clustering(z_scores_df)
             clustered_heatmap = lp.LipidomicHeatmap.generate_clustered_heatmap(clustered_df, selected_samples)
             
+            # Apply layout updates to both heatmaps
+            for heatmap, heatmap_type in [(regular_heatmap, "Regular"), (clustered_heatmap, "Clustered")]:
+                heatmap.update_layout(
+                    width=900,
+                    height=600,
+                    margin=dict(l=150, r=50, t=50, b=100),
+                    xaxis_tickangle=-45,
+                    yaxis_title="Lipid Molecules",
+                    xaxis_title="Samples",
+                    title=f"Lipidomic Heatmap ({heatmap_type})",
+                    font=dict(size=10)
+                )
+                heatmap.update_traces(colorbar=dict(len=0.9, thickness=15))
+            
             # Allow users to choose which heatmap to display
             heatmap_type = st.radio("Select Heatmap Type", ["Clustered", "Regular"], index=0)
             current_heatmap = clustered_heatmap if heatmap_type == "Clustered" else regular_heatmap
-            
-            # Adjust heatmap layout for better fit
-            current_heatmap.update_layout(
-                width=900,
-                height=600,
-                margin=dict(l=150, r=50, t=50, b=100),
-                xaxis_tickangle=-45,
-                yaxis_title="Lipid Molecules",
-                xaxis_title="Samples",
-                title=f"Lipidomic Heatmap ({heatmap_type})",
-                font=dict(size=10)
-            )
-            # Adjust colorbar
-            current_heatmap.update_traces(colorbar=dict(len=0.9, thickness=15))
             
             # Display the selected heatmap
             st.plotly_chart(current_heatmap, use_container_width=True)
