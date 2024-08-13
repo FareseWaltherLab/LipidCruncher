@@ -97,6 +97,11 @@ def main():
         clear_streamlit_cache()
         st.sidebar.success("Cache cleared successfully!")
         st.session_state.clear_cache = False  # Reset the flag
+    
+    st.info(
+        "ℹ️ Tip: When you're done, please click 'End Session and Clear Cache' in the sidebar. "
+        "This ensures each session starts fresh and can help maintain optimal app performance."
+    )
 
 def clear_streamlit_cache():
     """
@@ -292,36 +297,60 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         if clustered_heatmap:
             st.session_state.heatmap_fig['Clustered Heatmap'] = clustered_heatmap
 
-    # Ask user if they want to generate a PDF report
-    generate_pdf = st.radio("Generate PDF Report?", ('No', 'Yes'), index=0)
+    # PDF Generation Section
+    st.subheader("Generate PDF Report")
+    st.warning(
+       "⚠️ Important: Generating a PDF report is a computationally intensive task. "
+       "Please follow these guidelines:\n\n"
+       "1. Only generate the PDF at the end of your session, after completing all analyses.\n"
+       "2. Generate the PDF before clearing the cache.\n"
+       "3. Avoid interacting with the app while the PDF is being generated.\n"
+       "4. If you're not at the end of your session, please select 'No'.\n"
+       "5. Only analyses that you have generated at least once will be included in the PDF. "
+       "For example, if you never viewed the regular heatmap, it will not be in the report.\n"
+       "6. Ensure you've generated all desired analyses before creating the PDF."
+   )
+
+
+    generate_pdf = st.radio("Are you ready to generate the PDF report?", ('No', 'Yes'), index=0)
 
     if generate_pdf == 'Yes':
-        if box_plot_fig1 and box_plot_fig2:
-            with st.spinner('Generating PDF report...'):
-                pdf_buffer = generate_pdf_report(
-                    box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
-                    st.session_state.heatmap_fig, st.session_state.correlation_plots, 
-                    st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts, 
-                    st.session_state.saturation_plots, st.session_state.volcano_plots,
-                    st.session_state.pathway_visualization
-                )
-            if pdf_buffer:
-                st.download_button(
-                    label="Download Quality Check Report (PDF)",
-                    data=pdf_buffer,
-                    file_name="quality_check_report.pdf",
-                    mime="application/pdf",
-                )
+        st.info("Please confirm that you have completed all analyses and are ready to end your session.")
+        confirm_generate = st.checkbox("I confirm that I'm ready to generate the PDF and end my session.")
+        
+        if confirm_generate:
+            if box_plot_fig1 and box_plot_fig2:
+                with st.spinner('Generating PDF report... Please do not interact with the app.'):
+                    pdf_buffer = generate_pdf_report(
+                        box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
+                        st.session_state.heatmap_fig, st.session_state.correlation_plots, 
+                        st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts, 
+                        st.session_state.saturation_plots, st.session_state.volcano_plots,
+                        st.session_state.pathway_visualization
+                    )
+                if pdf_buffer:
+                    st.success("PDF report generated successfully!")
+                    st.download_button(
+                        label="Download Quality Check Report (PDF)",
+                        data=pdf_buffer,
+                        file_name="quality_check_report.pdf",
+                        mime="application/pdf",
+                    )
+                    st.info(
+                        "You can now download your PDF report. After downloading, please use the "
+                        "'End Session and Clear Cache' button in the sidebar to conclude your session."
+                    )
+                    
+                    # Close the figures to free up memory after PDF generation
+                    plt.close(box_plot_fig1)
+                    plt.close(box_plot_fig2)
+                    plt.close('all')  # This closes all remaining matplotlib figures
+                else:
+                    st.error("Failed to generate PDF report. Please check the logs for details.")
             else:
-                st.error("Failed to generate PDF report. Please check the logs for details.")
+                st.warning("Some plots are missing. Unable to generate PDF report.")
         else:
-            st.warning("Some plots are missing. Unable to generate PDF report.")
-
-    # Close the figures to free up memory
-    if box_plot_fig1:
-        plt.close(box_plot_fig1)
-    if box_plot_fig2:
-        plt.close(box_plot_fig2)
+            st.info("Please confirm when you're ready to generate the PDF report.")
         
 def display_selected_analysis(analysis_option, experiment, continuation_df):
     if analysis_option == "Class Level Breakdown - Bar Chart":
@@ -808,7 +837,7 @@ def display_data(df, title, filename):
     st.write(f'View the {title}:')
     st.write(df)
     csv_download = convert_df(df)
-    st.download_button(label="Download Data", data=csv_download, file_name=filename, mime='text/csv')
+    st.download_button(label="Download CSV", data=csv_download, file_name=filename, mime='text/csv')
 
 def display_cleaned_data(df, experiment, name_df):
     """
