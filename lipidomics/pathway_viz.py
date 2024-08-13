@@ -30,7 +30,7 @@ class PathwayViz:
         return tuple(sat_unsat_count)
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_total_number_of_saturated_and_unsaturated_chains_for_each_class(df):
         """
         Calculates the total number of saturated and unsaturated chains for each lipid class in a DataFrame.
@@ -48,7 +48,7 @@ class PathwayViz:
         return df
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def add_saturation_ratio_column(df):
         """
         Adds a saturation ratio column to a DataFrame grouped by lipid class.
@@ -64,7 +64,7 @@ class PathwayViz:
         return saturation_ratio_df
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_class_saturation_ratio(df):
         """
        Calculates the saturation ratio for each lipid class in a DataFrame.
@@ -82,7 +82,7 @@ class PathwayViz:
         return saturation_ratio_df.reset_index(name='saturation_ratio')
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_total_class_abundance(df, full_samples_list):
         """
         Calculates the total abundance of each lipid class based on given sample names.
@@ -105,7 +105,7 @@ class PathwayViz:
         return df.groupby('ClassKey')[mean_area_cols].sum()
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def get_fold_change(abundance_df, control_samples, experimental_samples):
         """
        Calculates the fold change between control and experimental samples for each lipid class.
@@ -122,7 +122,7 @@ class PathwayViz:
                 abundance_df[[f'MeanArea[{sample}]' for sample in control_samples]].mean(axis=1))
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def add_fold_change_column(df, control, experimental, control_samples, experimental_samples):
         """
         Adds a column for fold change between control and experimental samples to a DataFrame.
@@ -168,7 +168,7 @@ class PathwayViz:
         return PathwayViz.add_fold_change_column(class_abundance_df, control, experimental, control_samples, experimental_samples)
     
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def create_pathway_viz(class_fold_change_df, class_saturation_ratio_df, control, experimental):
         """
         Constructs and returns a complete lipid pathway visualization plot along with its corresponding data dictionary. 
@@ -337,7 +337,7 @@ class PathwayViz:
         return 
         
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def create_pathway_dictionary(class_fold_change_df, class_saturation_ratio_df, control, experimental):
         """
         Creates a dictionary for lipid pathway visualization with classes, abundance ratios, and saturation ratios.

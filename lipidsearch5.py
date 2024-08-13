@@ -29,31 +29,14 @@ import lipidomics as lp
 def main():
     """
     Main function for the LipidSearch 5.0 Module Streamlit application.
-
-    This function sets up the user interface and orchestrates the workflow of the application.
-    It handles file uploading, data processing, and navigation between different modules.
-
-    The application consists of two main modules:
-    1. Data Cleaning, Filtering, & Normalization
-    2. Quality Check & Analysis
-
-    The function uses Streamlit's session state to maintain data and application state
-    across reruns.
-
-    Workflow:
-    1. Initialize session state
-    2. Allow user to upload a LipidSearch 5.0 dataset
-    3. Process the uploaded data
-    4. Based on the current module:
-       - Perform data cleaning and normalization
-       - Or perform quality check and analysis
-    5. Provide navigation between modules
-
-    Note: This function is designed to be the entry point of a Streamlit application
-    and should be called when the script is run.
     """
+
     st.header("LipidSearch 5.0 Module")
     st.markdown("Process, visualize and analyze LipidSearch 5.0 data.")
+    
+    # Initialize session state for cache clearing
+    if 'clear_cache' not in st.session_state:
+        st.session_state.clear_cache = False
     
     st.info("""
     **Dataset Requirements for LipidSearch 5.0 Module**
@@ -103,6 +86,24 @@ def main():
                 if st.button("Back to Data Cleaning, Filtering, & Normalization", key="back_to_cleaning"):
                     st.session_state.module = "Data Cleaning, Filtering, & Normalization"
                     st.experimental_rerun()
+    
+    # Place the cache clearing button in the sidebar
+    if st.sidebar.button("End Session and Clear Cache"):
+        st.session_state.clear_cache = True
+        st.experimental_rerun()
+
+    # Check if cache should be cleared
+    if st.session_state.clear_cache:
+        clear_streamlit_cache()
+        st.sidebar.success("Cache cleared successfully!")
+        st.session_state.clear_cache = False  # Reset the flag
+
+def clear_streamlit_cache():
+    """
+    Clear all Streamlit caches.
+    """
+    st.cache_data.clear()
+    st.cache_resource.clear()
 
 def initialize_session_state():
     """
@@ -503,7 +504,7 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
     
     return pdf_buffer
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def convert_df(df):
     """
     Convert a DataFrame to CSV format and encode it for downloading.
@@ -570,7 +571,7 @@ def plotly_svg_download_button(fig, filename):
         mime="image/svg+xml"
     )
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_data(file_object):
     """
     Load data from a file object into a DataFrame.

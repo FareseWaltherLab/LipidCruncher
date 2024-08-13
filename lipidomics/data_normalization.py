@@ -78,7 +78,7 @@ class NormalizeData:
             print(f"Error in normalize_data: {e}")
             return pd.DataFrame()
 
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _compute_intsta_auc(_self, intsta_df, intsta_species, full_samples_list):
         """
         Computes the average area under curve (AUC) for the selected internal standard.
@@ -97,7 +97,7 @@ class NormalizeData:
             print(f"Error in _compute_intsta_auc: {e}")
             return np.array([])
 
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _compute_normalized_auc(_self, selected_df, full_samples_list, lipid_class, intsta_auc, concentration):
         """
         Normalizes the AUC data for a specific lipid class using the internal standard.
@@ -132,7 +132,7 @@ class NormalizeData:
             print(f"Error in _compute_normalized_auc: {e}")
             return pd.DataFrame()
         
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def normalize_using_bca(_self, df, protein_df):
         """
         Normalize lipid intensities in the DataFrame using protein concentrations from BCA assay.

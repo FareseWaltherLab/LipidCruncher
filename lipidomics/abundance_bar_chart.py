@@ -16,7 +16,7 @@ class AbundanceBarChart:
     """
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes):
         try:
             # Ensure we're only working with available columns
@@ -47,7 +47,7 @@ class AbundanceBarChart:
             return pd.DataFrame(), []  # Return an empty DataFrame and empty list in case of error
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def group_and_sum(df, full_samples_list):
         """
         Groups and sums the mean area values for each lipid class based on the full sample list.
@@ -80,7 +80,7 @@ class AbundanceBarChart:
             grouped_df[f"std_AUC_{condition}"] = grouped_df[mean_cols].std(axis=1)
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_log2_values(grouped_df, selected_conditions):
         for condition in selected_conditions:
             mean_col = f"mean_AUC_{condition}"

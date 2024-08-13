@@ -22,7 +22,7 @@ class PCAAnalysis:
         return pc_df, [f'PC{i+1} ({var:.0%})' for i, var in enumerate(explained_variance)], available_samples
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def generate_color_mapping(conditions):
         unique_conditions = sorted(set(conditions))
         return {condition: px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)] 

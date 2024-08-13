@@ -7,7 +7,7 @@ import itertools
 class AbundancePieChart:
     
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def calculate_total_abundance(df, full_samples_list):
         """
         Calculates the total abundance of each lipid class across all available samples.
@@ -45,7 +45,7 @@ class AbundancePieChart:
         return list(total_abundance_df.index)
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def filter_df_for_selected_classes(df, full_samples_list, selected_classes):
         """
         Filters the DataFrame to include only the selected lipid classes.
@@ -62,7 +62,7 @@ class AbundancePieChart:
         return total_abundance_df[total_abundance_df.index.isin(selected_classes)]
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def create_pie_chart(df, full_samples_list, condition, samples, color_mapping):
         """
         Creates a pie chart for the total abundance of lipid classes under a specific condition.

@@ -23,7 +23,7 @@ class SaturationPlot:
         return tuple(ratio / total for ratio in ratios)
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _calculate_sfa_mufa_pufa(df, condition, samples, lipid_class):
         """
         Calculates SFA, MUFA, and PUFA values for a specific lipid class under given conditions.
@@ -65,7 +65,7 @@ class SaturationPlot:
             df['var_AUC'] = 0
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _calculate_fatty_acid_auc_variance(df):
         """
         Calculates the AUC and variance for each type of fatty acid (SFA, MUFA, PUFA) in the DataFrame.
@@ -167,7 +167,7 @@ class SaturationPlot:
         return df
 
     @staticmethod
-    @st.cache_data
+    @st.cache_data(ttl=3600)
     def _calculate_percentage_df(main_df):
         """
         Calculates the percentage distribution of SFA, MUFA, and PUFA in the dataset.
