@@ -23,7 +23,6 @@ class SaturationPlot:
         return tuple(ratio / total for ratio in ratios)
 
     @staticmethod
-    @st.cache_data(ttl=3600)
     def _calculate_sfa_mufa_pufa(df, condition, samples, lipid_class):
         """
         Calculates SFA, MUFA, and PUFA values for a specific lipid class under given conditions.
@@ -65,7 +64,6 @@ class SaturationPlot:
             df['var_AUC'] = 0
 
     @staticmethod
-    @st.cache_data(ttl=3600)
     def _calculate_fatty_acid_auc_variance(df):
         """
         Calculates the AUC and variance for each type of fatty acid (SFA, MUFA, PUFA) in the DataFrame.
@@ -89,10 +87,26 @@ class SaturationPlot:
         Returns:
             tuple: Total AUC values for SFA, MUFA, PUFA, and their variances.
         """
-        totals = [df[f'{fatty_acid}_AUC'].sum() for fatty_acid in ['SFA', 'MUFA', 'PUFA']]
-        var_totals = [df[f'{fatty_acid}_var'].sum() for fatty_acid in ['SFA', 'MUFA', 'PUFA']]
+        totals = []
+        var_totals = []
+        
+        for fatty_acid in ['SFA', 'MUFA', 'PUFA']:
+            auc_col = f'{fatty_acid}_AUC'
+            var_col = f'{fatty_acid}_var'
+            
+            if auc_col not in df.columns:
+                totals.append(0)
+            else:
+                total = df[auc_col].sum()
+                totals.append(total)
+            
+            if var_col not in df.columns:
+                var_totals.append(0)
+            else:
+                var_total = df[var_col].sum()
+                var_totals.append(var_total)
+         
         return (*totals, *var_totals)
-
 
     @staticmethod
     def create_plots(df, experiment, selected_conditions):

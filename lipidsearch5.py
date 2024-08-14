@@ -10,16 +10,13 @@ import tempfile
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-from bokeh.io import export_png, export_svg
-from bokeh.io.export import export_svgs
-from bokeh.plotting import Figure as BokehFigure, figure
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
-
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPDF
 
@@ -347,19 +344,6 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
                 st.warning("Some plots are missing. Unable to generate PDF report.")
         else:
             st.info("Please confirm when you're ready to generate the PDF report.")
-        
-def display_selected_analysis(analysis_option, experiment, continuation_df):
-    if analysis_option == "Class Level Breakdown - Bar Chart":
-        display_abundance_bar_chart(experiment, continuation_df)
-    elif analysis_option == "Class Level Breakdown - Pie Charts":
-        display_abundance_pie_charts(experiment, continuation_df)
-    elif analysis_option == "Class Level Breakdown - Saturation Plots":
-        display_saturation_plots(experiment, continuation_df)
-    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
-        display_pathway_visualization(experiment, continuation_df)
-    elif analysis_option == "Species Level Breakdown - Volcano Plot":
-        display_volcano_plot(experiment, continuation_df)
-    # Note: We don't need to handle the heatmap option here as it's handled separately in the main function
 
 def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots, volcano_plots, pathway_visualization):
     pdf_buffer = io.BytesIO()
