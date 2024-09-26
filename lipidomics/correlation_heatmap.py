@@ -37,8 +37,9 @@ class Correlation:
         Returns:
             tuple: A tuple containing the correlation DataFrame, vmin, and threshold values for heatmap plotting.
         """
-        v_min = 0.5 if sample_type == 'biological replicates' else 0.75
-        thresh = 0.8 if sample_type == 'biological replicates' else 0.9
+        #v_min = 0.5 if sample_type == 'biological replicates' else 0.75
+        v_min = 0.5
+        thresh = 0.7 if sample_type == 'biological replicates' else 0.8
         correlation_df = df.corr()
         return correlation_df, v_min, thresh
 
