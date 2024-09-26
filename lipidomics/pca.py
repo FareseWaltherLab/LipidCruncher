@@ -4,6 +4,8 @@ from sklearn.decomposition import PCA
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
+import numpy as np 
+from scipy.stats import chi2
 
 class PCAAnalysis:
     @staticmethod
@@ -31,7 +33,7 @@ class PCAAnalysis:
     @staticmethod
     def create_scatter_plot(df, pc_names, color_mapping):
         fig = go.Figure()
-
+        
         for condition in df['Condition'].unique():
             cond_df = df[df['Condition'] == condition]
             fig.add_trace(go.Scatter(
@@ -39,13 +41,18 @@ class PCAAnalysis:
                 y=cond_df['PC2'],
                 mode='markers',
                 name=condition,
-                marker=dict(color=color_mapping[condition], size=5),  # Reduced marker size from default (10) to 7
+                marker=dict(color=color_mapping[condition], size=5),
                 text=cond_df['Sample'],
                 hovertemplate='<b>Sample:</b> %{text}<br>' +
                               '<b>PC1:</b> %{x:.4f}<br>' +
                               '<b>PC2:</b> %{y:.4f}<br>' +
                               '<extra></extra>'
             ))
+            
+            # Add confidence ellipse
+            x = cond_df['PC1']
+            y = cond_df['PC2']
+            PCAAnalysis.add_confidence_ellipse(fig, x, y, color_mapping[condition], condition)
 
         fig.update_layout(
             title=dict(text="PCA Plot", font=dict(size=24, color='black')),
@@ -58,11 +65,52 @@ class PCAAnalysis:
             legend=dict(font=dict(size=12, color='black')),
             margin=dict(t=50, r=50, b=50, l=50)
         )
-
         fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
         fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-
         return fig
+
+    @staticmethod
+    def add_confidence_ellipse(fig, x, y, color, name, n_std=2.0):
+        if len(x) < 2:  # We need at least two points to define an ellipse
+            return
+
+        cov = np.cov(x, y)
+        pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+        
+        # Eigenvalues and eigenvectors
+        eig_vals, eig_vecs = np.linalg.eig(cov)
+        
+        # Sort eigenvalues in descending order
+        order = eig_vals.argsort()[::-1]
+        eig_vals = eig_vals[order]
+        eig_vecs = eig_vecs[:, order]
+        
+        # Calculate angles
+        angle = np.degrees(np.arctan2(*eig_vecs[:, 0][::-1]))
+        
+        # Width and height of ellipse
+        width, height = 2 * n_std * np.sqrt(eig_vals)
+        
+        # Generate points on a circle
+        theta = np.linspace(0, 2*np.pi, 100)
+        circle = np.array([np.cos(theta), np.sin(theta)])
+        
+        # Transform circle to ellipse
+        ellipse = np.dot(eig_vecs, circle * np.array([[width/2], [height/2]]))
+        
+        # Shift to center
+        center = np.mean(list(zip(x, y)), axis=0)
+        ellipse[0] += center[0]
+        ellipse[1] += center[1]
+        
+        fig.add_trace(go.Scatter(
+            x=ellipse[0],
+            y=ellipse[1],
+            mode='lines',
+            line=dict(color=color, width=1),
+            name=f'{name} Confidence Ellipse',
+            showlegend=False
+        ))
 
     @staticmethod
     def plot_pca(df, full_samples_list, extensive_conditions_list):
