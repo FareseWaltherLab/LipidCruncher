@@ -19,32 +19,31 @@ class AbundanceBarChart:
     @st.cache_data(ttl=3600)
     def create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes):
         try:
-            # Ensure we're only working with available columns
             available_samples = [sample for sample in full_samples_list if f"MeanArea[{sample}]" in df.columns]
             
             grouped_df = AbundanceBarChart.group_and_sum(df, available_samples)
             
             for condition in selected_conditions:
                 if condition not in conditions_list:
-                    continue  # Skip conditions that are no longer present
+                    continue
                 condition_index = conditions_list.index(condition)
                 individual_samples = [sample for sample in individual_samples_list[condition_index] if sample in available_samples]
                 
                 if not individual_samples:
-                    continue  # Skip this condition if no samples are available
+                    continue
                 
                 mean_cols = [f"MeanArea[{sample}]" for sample in individual_samples]
                 grouped_df[f"mean_AUC_{condition}"] = grouped_df[mean_cols].mean(axis=1)
                 grouped_df[f"std_AUC_{condition}"] = grouped_df[mean_cols].std(axis=1)
     
             grouped_df = AbundanceBarChart.filter_by_selected_classes(grouped_df, selected_classes)
-            grouped_df, removed_classes = AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
+            grouped_df = AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
             
-            return grouped_df, removed_classes
+            return grouped_df
     
         except Exception as e:
             st.error(f"Error in create_mean_std_columns: {str(e)}")
-            return pd.DataFrame(), []  # Return an empty DataFrame and empty list in case of error
+            return pd.DataFrame()
 
     @staticmethod
     @st.cache_data(ttl=3600)
@@ -89,24 +88,10 @@ class AbundanceBarChart:
                 log2_mean_col = f"log2_mean_AUC_{condition}"
                 log2_std_col = f"log2_std_AUC_{condition}"
                 
-                grouped_df[log2_mean_col] = np.where(grouped_df[mean_col] > grouped_df[std_col],
-                                                     np.log2(grouped_df[mean_col]),
-                                                     np.nan)
-                grouped_df[log2_std_col] = np.where(grouped_df[mean_col] > grouped_df[std_col],
-                                                    (np.log2(grouped_df[mean_col] + grouped_df[std_col]) - 
-                                                     np.log2(grouped_df[mean_col] - grouped_df[std_col])) / 2,
-                                                    np.nan)
+                grouped_df[log2_mean_col] = np.log2(grouped_df[mean_col].replace(0, np.nan))
+                grouped_df[log2_std_col] = grouped_df[std_col] / (grouped_df[mean_col] * np.log(2))
         
-        # Count valid conditions for each class
-        valid_condition_count = grouped_df[[f"log2_mean_AUC_{condition}" for condition in selected_conditions if f"log2_mean_AUC_{condition}" in grouped_df.columns]].notna().sum(axis=1)
-        
-        # Filter classes with at least two valid conditions
-        filtered_df = grouped_df[valid_condition_count >= 2]
-        
-        # Identify removed classes
-        removed_classes = grouped_df[valid_condition_count < 2]['ClassKey'].tolist()
-        
-        return filtered_df, removed_classes
+        return grouped_df
 
     @staticmethod
     def filter_by_selected_classes(grouped_df, selected_classes):
@@ -127,19 +112,14 @@ class AbundanceBarChart:
         full_samples_list = st.session_state.full_samples_list if 'full_samples_list' in st.session_state else full_samples_list
     
         try:
-            # Check for missing columns before filtering
             expected_columns = ['ClassKey'] + [f"MeanArea[{sample}]" for sample in full_samples_list]
-            missing_columns = [col for col in expected_columns if col not in df.columns]
-                
-            # Filter for only available columns
             valid_columns = ['ClassKey'] + [col for col in expected_columns if col in df.columns and col != 'ClassKey']
             df = df[valid_columns]
     
-            if df.empty or len(valid_columns) <= 1:  # Only ClassKey column present
+            if df.empty or len(valid_columns) <= 1:
                 st.error("No valid data available to create the abundance bar chart.")
                 return None, None
     
-            # Ensure ClassKey is present and is a single column
             if 'ClassKey' not in df.columns:
                 st.error("ClassKey column is missing from the dataset.")
                 return None, None
@@ -148,11 +128,9 @@ class AbundanceBarChart:
                 st.error("ClassKey column contains multiple values. Please ensure it's a single value per row.")
                 return None, None
     
-            # Filter out conditions that no longer exist
             selected_conditions = [cond for cond in selected_conditions if cond in conditions_list]
     
-            # Proceed with grouping and calculations
-            abundance_df, removed_classes = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
+            abundance_df = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
             
             if abundance_df.empty:
                 st.error("No data available after processing for the selected conditions and classes.")
@@ -163,15 +141,6 @@ class AbundanceBarChart:
             AbundanceBarChart.add_bars_to_plot(ax, abundance_df, selected_conditions, mode)
             
             AbundanceBarChart.style_plot(ax, abundance_df)
-            
-            if removed_classes:
-                note = (
-                    f"Note: The following classes were removed from the plot due to insufficient valid data: {', '.join(removed_classes)}. "
-                    "Insufficient valid data means that for these classes, fewer than two of the selected conditions had a mean value greater than its standard deviation. "
-                    "This occurs when the data for these classes shows high variability relative to its average, "
-                    "which can lead to unreliable or undefined results."
-                )
-                st.write(note)
             
             return fig, abundance_df
     

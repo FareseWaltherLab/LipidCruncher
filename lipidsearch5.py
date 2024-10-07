@@ -1385,13 +1385,11 @@ def display_saturation_plots(experiment, continuation_df):
 
 def display_abundance_bar_charts(experiment, continuation_df):
     with st.expander("Class Concentration Bar Chart"):
-        # Use the most up-to-date experiment object from session state
         experiment = st.session_state.experiment
-        full_samples_list = experiment.full_samples_list
-        individual_samples_list = experiment.individual_samples_list
-        conditions_list = experiment.conditions_list
-        # Filter out conditions with no samples
-        valid_conditions = [cond for cond, samples in zip(conditions_list, individual_samples_list) if samples]
+        
+        # Filter out conditions with only one sample
+        valid_conditions = [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1]
+        
         selected_conditions_list = st.multiselect(
             'Add or remove conditions', 
             valid_conditions, 
@@ -1409,9 +1407,9 @@ def display_abundance_bar_charts(experiment, continuation_df):
             # Generate linear scale chart
             linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
                 continuation_df, 
-                full_samples_list, 
-                individual_samples_list, 
-                conditions_list, 
+                experiment.full_samples_list, 
+                experiment.individual_samples_list, 
+                experiment.conditions_list, 
                 selected_conditions_list, 
                 selected_classes_list, 
                 'linear scale'
@@ -1420,7 +1418,6 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 st.pyplot(linear_fig)
                 st.write("Linear Scale")
                 
-                # Add SVG download button for linear scale chart
                 matplotlib_svg_download_button(linear_fig, "abundance_bar_chart_linear.svg")
                 
                 try:
@@ -1438,9 +1435,9 @@ def display_abundance_bar_charts(experiment, continuation_df):
             # Generate log2 scale chart
             log2_fig, abundance_df_log2 = lp.AbundanceBarChart.create_abundance_bar_chart(
                 continuation_df, 
-                full_samples_list, 
-                individual_samples_list, 
-                conditions_list, 
+                experiment.full_samples_list, 
+                experiment.individual_samples_list, 
+                experiment.conditions_list, 
                 selected_conditions_list, 
                 selected_classes_list, 
                 'log2 scale'
@@ -1449,7 +1446,6 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 st.pyplot(log2_fig)
                 st.write("Log2 Scale")
                 
-                # Add SVG download button for log2 scale chart
                 matplotlib_svg_download_button(log2_fig, "abundance_bar_chart_log2.svg")
                 
                 try:
@@ -1463,6 +1459,11 @@ def display_abundance_bar_charts(experiment, continuation_df):
                     )
                 except Exception as e:
                     st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
+            
+            # Check if any conditions were removed due to having only one sample
+            removed_conditions = set(experiment.conditions_list) - set(valid_conditions)
+            if removed_conditions:
+                st.warning(f"The following conditions were excluded due to having only one sample: {', '.join(removed_conditions)}")
         else:
             st.warning("Please select at least one condition and one class to create the charts.")
         return linear_fig, log2_fig
