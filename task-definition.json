@@ -1,0 +1,22 @@
+{
+  "family": "lipidcruncher-task",
+  "networkMode": "awsvpc",
+  "executionRoleArn": "arn:aws:iam::266735825011:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "lipidcruncher-container",
+      "image": "266735825011.dkr.ecr.us-east-1.amazonaws.com/lipidcruncher_repo:latest",
+      "portMappings": [
+        {
+          "containerPort": 8501,
+          "hostPort": 8501,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true
+    }
+  ],
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "4096",
+  "memory": "8192"
+}
