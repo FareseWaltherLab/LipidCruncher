@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+from scipy import stats
 
 class AbundanceBarChart:
     """
@@ -106,9 +107,35 @@ class AbundanceBarChart:
         pd.DataFrame: Filtered DataFrame containing only data for selected lipid classes.
         """
         return grouped_df[grouped_df['ClassKey'].isin(selected_classes)]
+    
+    @staticmethod
+    def perform_two_way_anova(continuation_df, experiment, selected_conditions, selected_classes):
+        anova_results = {}
+        
+        for lipid_class in selected_classes:
+            class_df = continuation_df[continuation_df['ClassKey'] == lipid_class]
+            
+            data = []
+            species = []
+            conditions = []
+            
+            for condition in selected_conditions:
+                condition_samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
+                for sample in condition_samples:
+                    col_name = f"MeanArea[{sample}]"
+                    if col_name in class_df.columns:
+                        data.extend(class_df[col_name])
+                        species.extend(class_df['LipidMolec'])
+                        conditions.extend([condition] * len(class_df))
+            
+            if len(data) > 0:
+                f_value, p_value = stats.f_oneway(*[group for name, group in pd.DataFrame({'data': data, 'condition': conditions}).groupby('condition')['data']])
+                anova_results[lipid_class] = {'F-value': f_value, 'p-value': p_value}
+        
+        return anova_results
 
     @staticmethod
-    def create_abundance_bar_chart(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes, mode):
+    def create_abundance_bar_chart(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes, mode, anova_results=None):
         full_samples_list = st.session_state.full_samples_list if 'full_samples_list' in st.session_state else full_samples_list
     
         try:
@@ -131,7 +158,7 @@ class AbundanceBarChart:
             selected_conditions = [cond for cond in selected_conditions if cond in conditions_list]
     
             abundance_df = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
-            
+        
             if abundance_df.empty:
                 st.error("No data available after processing for the selected conditions and classes.")
                 return None, None
@@ -141,6 +168,25 @@ class AbundanceBarChart:
             AbundanceBarChart.add_bars_to_plot(ax, abundance_df, selected_conditions, mode)
             
             AbundanceBarChart.style_plot(ax, abundance_df)
+            
+            # Add significance indicators directly to the plot
+            y_positions = np.arange(len(abundance_df))
+            for i, lipid_class in enumerate(abundance_df['ClassKey']):
+                if lipid_class in anova_results:
+                    p_value = anova_results[lipid_class]['p-value']
+                    significance = ''
+                    if p_value < 0.001:
+                        significance = '***'
+                    elif p_value < 0.01:
+                        significance = '**'
+                    elif p_value < 0.05:
+                        significance = '*'
+                    
+                    if significance:
+                        ax.text(ax.get_xlim()[1], y_positions[i], significance, ha='left', va='center')
+            
+            # Add a legend for significance
+            ax.text(1.05, -0.05, '* p < 0.05\n** p < 0.01\n*** p < 0.001', transform=ax.transAxes, ha='left', va='top')
             
             return fig, abundance_df
     
