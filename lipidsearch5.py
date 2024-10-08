@@ -1404,6 +1404,14 @@ def display_abundance_bar_charts(experiment, continuation_df):
         )
         linear_fig, log2_fig = None, None
         if selected_conditions_list and selected_classes_list:
+            # Perform ANOVA once
+            anova_results = lp.AbundanceBarChart.perform_two_way_anova(
+                continuation_df, 
+                experiment, 
+                selected_conditions_list, 
+                selected_classes_list
+            )
+
             # Generate linear scale chart
             linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
                 continuation_df, 
@@ -1412,7 +1420,8 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 experiment.conditions_list, 
                 selected_conditions_list, 
                 selected_classes_list, 
-                'linear scale'
+                'linear scale',
+                anova_results
             )
             if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
                 st.pyplot(linear_fig)
@@ -1440,7 +1449,8 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 experiment.conditions_list, 
                 selected_conditions_list, 
                 selected_classes_list, 
-                'log2 scale'
+                'log2 scale',
+                anova_results
             )
             if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
                 st.pyplot(log2_fig)
