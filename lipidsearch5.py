@@ -1411,6 +1411,14 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 selected_conditions_list, 
                 selected_classes_list
             )
+            
+            # Display significance interpretation
+            st.markdown("""
+            **Significance levels:**
+            * \* p < 0.05
+            * \*\* p < 0.01
+            * \*\*\* p < 0.001
+            """)
 
             # Generate linear scale chart
             linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(

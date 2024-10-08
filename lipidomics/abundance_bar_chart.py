@@ -185,9 +185,6 @@ class AbundanceBarChart:
                     if significance:
                         ax.text(ax.get_xlim()[1], y_positions[i], significance, ha='left', va='center')
             
-            # Add a legend for significance
-            ax.text(1.05, -0.05, '* p < 0.05\n** p < 0.01\n*** p < 0.001', transform=ax.transAxes, ha='left', va='top')
-            
             return fig, abundance_df
     
         except Exception as e:
@@ -236,7 +233,7 @@ class AbundanceBarChart:
             multiplier += 1
     
         ax.set_yticks(y + width * (len(selected_conditions) - 1) / 2)
-        ax.set_yticklabels(abundance_df['ClassKey'].values, rotation=45, ha='right', fontsize=10)
+        ax.set_yticklabels(abundance_df['ClassKey'].values, rotation=45, ha='right', fontsize=20)
 
     @staticmethod
     def get_mode_specific_values(abundance_df, condition, mode):
