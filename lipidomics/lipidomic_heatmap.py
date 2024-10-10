@@ -2,8 +2,9 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.figure_factory as ff
-from scipy.cluster.hierarchy import linkage, leaves_list
+from scipy.cluster.hierarchy import linkage, leaves_list, fcluster
 from scipy.spatial.distance import pdist
+import plotly.graph_objects as go
 import streamlit as st
 
 class LipidomicHeatmap:
@@ -51,63 +52,82 @@ class LipidomicHeatmap:
 
     @staticmethod
     @st.cache_data(ttl=3600)
-    def perform_clustering(z_scores_df):
-        """
-        Performs hierarchical clustering on the lipidomic data based on Z-scores.
-    
-        This method uses Ward's method for hierarchical clustering to organize lipid molecules 
-        in a way that groups together molecules with similar abundance patterns.
-    
-        Args:
-            z_scores_df (pd.DataFrame): DataFrame containing Z-scores for lipid molecules.
-    
-        Returns:
-            pd.DataFrame: Clustered DataFrame with lipid molecules reordered according to the clustering result.
-        """
+    def perform_clustering(z_scores_df, n_clusters):
         linkage_matrix = linkage(pdist(z_scores_df, 'euclidean'), method='ward')
+        cluster_labels = fcluster(linkage_matrix, n_clusters, criterion='maxclust')
         dendrogram_order = leaves_list(linkage_matrix)
-        clustered_df = z_scores_df.iloc[dendrogram_order]
-        return clustered_df
-
+        return linkage_matrix, cluster_labels, dendrogram_order
+    
     @staticmethod
-    def generate_clustered_heatmap(z_scores_df, selected_samples):
-        """
-        Generates a clustered heatmap based on the hierarchical clustering of Z-scores.
+    def identify_clusters_and_percentages(z_scores_df, n_clusters):
+        _, cluster_labels, _ = LipidomicHeatmap.perform_clustering(z_scores_df, n_clusters)
+        
+        clustered_df = z_scores_df.copy()
+        clustered_df['Cluster'] = cluster_labels
+        
+        class_percentages = clustered_df.groupby('Cluster').apply(
+            lambda x: x.index.get_level_values('ClassKey').value_counts(normalize=True)
+        ).unstack(fill_value=0) * 100
+        
+        return n_clusters, class_percentages
     
-        The heatmap visualizes the abundance patterns of lipid molecules across different samples, 
-        with the molecules reordered according to the clustering results to highlight patterns 
-        and relationships.
-    
-        Args:
-            z_scores_df (pd.DataFrame): DataFrame containing clustered Z-scores.
-            selected_samples (list): List of sample names to be included in the heatmap.
-            save_svg_path (str, optional): Path to save the heatmap as an SVG file.
-    
-        Returns:
-            plotly.graph_objects.Figure: Plotly figure object representing the clustered heatmap.
-        """
-        z_scores_array = z_scores_df.to_numpy()
-        fig = px.imshow(
-            z_scores_array, 
-            labels=dict(color="Z-score"),
+    @staticmethod
+    def generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters):
+        linkage_matrix, cluster_labels, dendrogram_order = LipidomicHeatmap.perform_clustering(z_scores_df, n_clusters)
+        clustered_df = z_scores_df.iloc[dendrogram_order]
+        clustered_df['Cluster'] = cluster_labels
+
+        z_scores_array = clustered_df.drop('Cluster', axis=1).to_numpy()
+
+        # Ensure z_scores_array is a 2D numpy array
+        if z_scores_array.ndim == 1:
+            z_scores_array = z_scores_array.reshape(-1, 1)
+
+        # Calculate the color scale range
+        vmin = np.nanmin(z_scores_array)
+        vmax = np.nanmax(z_scores_array)
+        abs_max = max(abs(vmin), abs(vmax))
+
+        # Create the heatmap
+        fig = go.Figure(data=go.Heatmap(
+            z=z_scores_array,
             x=selected_samples,
-            y=z_scores_df.index.get_level_values('LipidMolec'),
-            aspect="auto",
-            color_continuous_scale="RdBu_r"
-        )
+            y=clustered_df.index.get_level_values('LipidMolec'),
+            colorscale='RdBu_r',
+            zmin=-abs_max,
+            zmax=abs_max,
+            colorbar=dict(title="Z-score")
+        ))
+
+        # Add cluster boundaries
+        cluster_sizes = clustered_df['Cluster'].value_counts().sort_index()
+        cumulative_sizes = np.cumsum(cluster_sizes.values[:-1])  # We don't need a line after the last cluster
+        
+        for size in cumulative_sizes:
+            fig.add_shape(
+                type="line",
+                x0=-0.5,
+                y0=size - 0.5,
+                x1=len(selected_samples) - 0.5,
+                y1=size - 0.5,
+                line=dict(color="black", width=2, dash="dash")
+            )
 
         fig.update_layout(
-            title='Lipidomic Heatmap',
-            coloraxis_colorbar=dict(title="Z-score"),
+            title='Clustered Lipidomic Heatmap',
             xaxis_title="Samples",
             yaxis_title="Lipid Molecules",
-            margin=dict(l=100, r=100, t=50, b=50)  # Increased margins
+            margin=dict(l=100, r=100, t=50, b=50)
         )
 
         fig.update_xaxes(tickangle=45)
-        fig.update_yaxes(tickmode='array')
+        fig.update_yaxes(tickmode='array', autorange="reversed")
 
-        return fig
+        class_percentages = clustered_df.groupby('Cluster').apply(
+            lambda x: x.index.get_level_values('ClassKey').value_counts(normalize=True)
+        ).unstack(fill_value=0) * 100
+
+        return fig, class_percentages
     
     @staticmethod
     def generate_regular_heatmap(z_scores_df, selected_samples):
