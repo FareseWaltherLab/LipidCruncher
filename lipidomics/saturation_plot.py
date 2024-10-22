@@ -358,36 +358,21 @@ class SaturationPlot:
     @staticmethod
     def _perform_statistical_tests(plot_data, lipid_class):
         """
-        Performs statistical tests on the plot data and displays debugging information using Streamlit.
-        Now includes the lipid class in the debug output.
+        Performs statistical tests on the plot data.
         """
         results = {}
         for fa in ['SFA', 'MUFA', 'PUFA']:
-            st.write(f"### Debugging statistical tests for {fa} in {lipid_class}:")
             if f'{fa}_values' in plot_data.columns and len(plot_data['Condition']) >= 2:
                 if len(plot_data['Condition']) == 2:
                     results[fa] = SaturationPlot._perform_t_test(plot_data, fa, lipid_class)
-                    st.write(f"T-test result for {lipid_class}: p-value = {results[fa]['p_value']:.4f}")
-                    if results[fa]['p_value'] < 0.05:
-                        conditions = plot_data['Condition'].tolist()
-                        st.write(f"Significant difference in {lipid_class} between {conditions[0]} and {conditions[1]}")
                 elif len(plot_data['Condition']) > 2:
                     results[fa] = SaturationPlot._perform_anova(plot_data, fa, lipid_class)
-                    st.write(f"ANOVA result for {lipid_class}: p-value = {results[fa]['p_value']:.4f}")
-                    if results[fa]['p_value'] < 0.05 and results[fa]['posthoc'] is not None:
-                        st.write(f"Significant pairwise comparisons for {lipid_class}:")
-                        posthoc_results = results[fa]['posthoc']
-                        for row in posthoc_results.summary().data[1:]:
-                            group1, group2, _, p_value = row[:4]
-                            if float(p_value) < 0.05:
-                                st.write(f"  {group1} vs {group2}: p-value = {p_value:.4f}")
             else:
                 results[fa] = {'test': 'insufficient_data'}
-                st.write(f"Insufficient data for statistical testing of {fa} in {lipid_class}")
         return results
-
+    
     @staticmethod
-    def _perform_t_test(plot_data, fa):
+    def _perform_t_test(plot_data, fa, lipid_class):
         """
         Performs a t-test for a given fatty acid type between two conditions.
         """
@@ -396,60 +381,39 @@ class SaturationPlot:
         group2 = plot_data[plot_data['Condition'] == conditions[1]][f'{fa}_values'].iloc[0]
         
         t_statistic, p_value = stats.ttest_ind(group1, group2, equal_var=False)
-        st.write(f"T-test details: t-statistic = {t_statistic:.4f}, p-value = {p_value:.4f}")
         return {'test': 't-test', 't_statistic': t_statistic, 'p_value': p_value}
-
+    
     @staticmethod
     def _perform_anova(plot_data, fa, lipid_class):
         """
         Performs ANOVA for a given fatty acid type across multiple conditions.
-        Now includes the lipid class in the debug output.
         """
         groups = [group[f'{fa}_values'].iloc[0] for _, group in plot_data.groupby('Condition')]
         f_statistic, p_value = stats.f_oneway(*groups)
-        st.write(f"ANOVA details for {lipid_class}: f-statistic = {f_statistic:.4f}, p-value = {p_value:.4f}")
         
         posthoc = None
         if p_value < 0.05:
             posthoc = SaturationPlot._perform_tukey_test(plot_data, fa, lipid_class)
         
         return {'test': 'ANOVA', 'f_statistic': f_statistic, 'p_value': p_value, 'posthoc': posthoc}
-
-    @staticmethod
-    def _perform_t_test(plot_data, fa, lipid_class):
-        """
-        Performs a t-test for a given fatty acid type between two conditions.
-        Now includes the lipid class in the debug output.
-        """
-        conditions = plot_data['Condition'].unique()
-        group1 = plot_data[plot_data['Condition'] == conditions[0]][f'{fa}_values'].iloc[0]
-        group2 = plot_data[plot_data['Condition'] == conditions[1]][f'{fa}_values'].iloc[0]
-        
-        t_statistic, p_value = stats.ttest_ind(group1, group2, equal_var=False)
-        st.write(f"T-test details for {lipid_class}: t-statistic = {t_statistic:.4f}, p-value = {p_value:.4f}")
-        return {'test': 't-test', 't_statistic': t_statistic, 'p_value': p_value}
     
     @staticmethod
     def _perform_tukey_test(plot_data, fa, lipid_class):
         """
         Performs Tukey's HSD test for pairwise comparisons.
-        Now includes the lipid class in the debug output.
         """
         values = [val for group in plot_data[f'{fa}_values'] for val in group]
-        conditions = [cond for cond, group in zip(plot_data['Condition'], plot_data[f'{fa}_values']) for _ in range(len(group))]
+        conditions = [cond for cond, group in zip(plot_data['Condition'], plot_data[f'{fa}_values']) 
+                     for _ in range(len(group))]
         
-        tukey_result = pairwise_tukeyhsd(values, conditions)
-        st.write(f"Tukey's HSD test results for {lipid_class}:")
-        st.write(tukey_result)
-        return tukey_result
-                    
+        return pairwise_tukeyhsd(values, conditions)
+    
     @staticmethod
     def _add_statistical_annotations(fig, df, statistical_results, lipid_class):
         """
         Adds statistical significance annotations to the plot with improved y-axis range adjustment
         and better placement of significance indicators.
         """
-        # Calculate the maximum and minimum y-values including error bars
         y_max = max(
             df[f'{fa}_AUC'].max() + df[f'{fa}_stdv'].max() 
             for fa in ['SFA', 'MUFA', 'PUFA'] 
@@ -464,13 +428,16 @@ class SaturationPlot:
         y_range = y_max - y_min
         
         # Calculate the number of significant comparisons
-        num_significant = sum(
-            len([p for p in result.get('posthoc', []) if p < 0.05])
-            for result in statistical_results.values()
-            if isinstance(result, dict) and 'p_value' in result and result['p_value'] < 0.05
-        )
+        num_significant = 0
+        for result in statistical_results.values():
+            if isinstance(result, dict) and 'p_value' in result:
+                if result['test'] == 't-test' and result['p_value'] < 0.05:
+                    num_significant += 1
+                elif result['test'] == 'ANOVA' and result['posthoc'] is not None:
+                    for row in result['posthoc'].summary().data[1:]:
+                        if len(row) >= 4 and float(row[3]) < 0.05:
+                            num_significant += 1
         
-        # Adjust y_increment based on the number of significant comparisons
         y_increment = y_range * 0.15 * max(num_significant, 1)
         
         # Add annotations
@@ -479,25 +446,18 @@ class SaturationPlot:
             if fa in statistical_results:
                 result = statistical_results[fa]
                 if result['test'] == 't-test':
-                    annotation_count = SaturationPlot._add_t_test_annotation(fig, df, fa, result, y_increment, y_max, annotation_count)
+                    annotation_count = SaturationPlot._add_t_test_annotation(
+                        fig, df, fa, result, y_increment, y_max, annotation_count)
                 elif result['test'] == 'ANOVA':
-                    annotation_count = SaturationPlot._add_anova_annotation(fig, df, fa, result, y_increment, y_max, annotation_count)
+                    annotation_count = SaturationPlot._add_anova_annotation(
+                        fig, df, fa, result, y_increment, y_max, annotation_count)
     
-        # Adjust y-axis range to accommodate all annotations and ensure full visibility
-        y_axis_min = max(0, y_min - y_range * 0.05)  # 5% padding below, but not less than 0
-        y_axis_max = y_max + y_increment * (annotation_count + 1)  # Extra space for annotations
-        
-        # Ensure y_axis_max is at least 30% higher than y_max
+        y_axis_min = max(0, y_min - y_range * 0.05)
+        y_axis_max = y_max + y_increment * (annotation_count + 1)
         y_axis_max = max(y_axis_max, y_max * 1.3)
         
         fig.update_layout(yaxis_range=[y_axis_min, y_axis_max])
     
-        # Add debug information
-        st.write(f"Lipid Class: {lipid_class}")
-        st.write(f"Y-axis range: {y_axis_min:.2f} to {y_axis_max:.2f}")
-        st.write(f"Number of significant comparisons: {num_significant}")
-        st.write(f"Number of annotations added: {annotation_count}")
-        
     @staticmethod
     def _add_t_test_annotation(fig, df, fa, result, y_increment, y_max, annotation_count):
         """
@@ -512,7 +472,7 @@ class SaturationPlot:
         y = y_max + y_increment * (annotation_count + 1)
         p_value = result['p_value']
         
-        if p_value < 0.05:  # Only add annotation if the result is significant
+        if p_value < 0.05:
             fig.add_shape(
                 type="line",
                 x0=x0, y0=y, x1=x1, y1=y,
@@ -526,10 +486,8 @@ class SaturationPlot:
                 font=dict(size=24, color=colors[fa])
             )
             
-            # Debug information
-            st.write(f"Added t-test annotation for {fa} at y={y:.2f}")
             annotation_count += 1
-    
+        
         return annotation_count
     
     @staticmethod
@@ -542,22 +500,27 @@ class SaturationPlot:
         offsets = {'SFA': -bar_width, 'MUFA': 0, 'PUFA': bar_width}
     
         if result['p_value'] < 0.05 and result['posthoc'] is not None:
-            posthoc_results = result['posthoc']
-            for idx, row in enumerate(posthoc_results.summary().data[1:]):
-                group1, group2, _, p_value = row[:4]
-                x0 = df[df['Condition'] == group1].index[0] + offsets[fa]
-                x1 = df[df['Condition'] == group2].index[0] + offsets[fa]
-                y = y_max + y_increment * (annotation_count + 1)
-                
-                if float(p_value) < 0.05:  # Only add annotation if the pairwise comparison is significant
-                    fig.add_shape(type="line", x0=x0, y0=y, x1=x1, y1=y, line=dict(color=colors[fa], width=2))
-                    fig.add_annotation(x=(x0+x1)/2, y=y+y_increment*0.1, 
-                                       text=SaturationPlot._get_significance_symbol(float(p_value)), 
-                                       showarrow=False,
-                                       font=dict(size=24, color=colors[fa]))
+            tukey_summary = result['posthoc'].summary().data[1:]
+            for row in tukey_summary:
+                group1, group2, _, p_value, *_ = row
+                if float(p_value) < 0.05:
+                    x0 = df[df['Condition'] == group1].index[0] + offsets[fa]
+                    x1 = df[df['Condition'] == group2].index[0] + offsets[fa]
+                    y = y_max + y_increment * (annotation_count + 1)
                     
-                    # Debug information
-                    st.write(f"Added ANOVA annotation for {fa} between {group1} and {group2} at y={y:.2f}")
+                    fig.add_shape(
+                        type="line",
+                        x0=x0, y0=y, x1=x1, y1=y,
+                        line=dict(color=colors[fa], width=2)
+                    )
+                    
+                    fig.add_annotation(
+                        x=(x0+x1)/2, y=y+y_increment*0.1,
+                        text=SaturationPlot._get_significance_symbol(float(p_value)),
+                        showarrow=False,
+                        font=dict(size=24, color=colors[fa])
+                    )
+                    
                     annotation_count += 1
     
         return annotation_count
