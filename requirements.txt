@@ -13,3 +13,4 @@ pillow==9.5.0
 reportlab==3.6.12
 selenium==4.10.0
 svglib==1.5.1
+statsmodels==0.14.0
