@@ -109,36 +109,170 @@ class AbundanceBarChart:
         return grouped_df[grouped_df['ClassKey'].isin(selected_classes)]
     
     @staticmethod
-    def perform_two_way_anova(continuation_df, experiment, selected_conditions, selected_classes):
-        anova_results = {}
+    def perform_statistical_tests(continuation_df, experiment, selected_conditions, selected_classes):
+        """
+        Performs appropriate statistical tests based on number of conditions.
+        """
+        from statsmodels.stats.multicomp import pairwise_tukeyhsd
+        statistical_results = {}
+        
+        # Statistical testing guidance
+        if len(selected_conditions) > 2:
+            st.info("""
+            📊 **Statistical Testing Note:**
+            - Multiple conditions detected: Using ANOVA + Tukey's test
+            - This is the correct approach when interested in multiple comparisons
+            - Do NOT run separate t-tests by unselecting conditions - this would inflate the false positive rate
+            - The current analysis automatically adjusts significance thresholds to maintain a 5% false positive rate across all comparisons
+            """)
+        elif len(selected_conditions) == 2:
+            st.info("""
+            📊 **Statistical Testing Note:**
+            - Two conditions detected: Using t-test
+            - This is appropriate ONLY for a single pre-planned comparison
+            - If you plan to compare multiple conditions, please select all relevant conditions to use ANOVA + Tukey's test
+            """)
         
         for lipid_class in selected_classes:
-            class_df = continuation_df[continuation_df['ClassKey'] == lipid_class]
-            
-            data = []
-            species = []
-            conditions = []
-            
-            for condition in selected_conditions:
-                condition_samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
-                for sample in condition_samples:
-                    col_name = f"MeanArea[{sample}]"
-                    if col_name in class_df.columns:
-                        data.extend(class_df[col_name])
-                        species.extend(class_df['LipidMolec'])
-                        conditions.extend([condition] * len(class_df))
-            
-            if len(data) > 0:
-                f_value, p_value = stats.f_oneway(*[group for name, group in pd.DataFrame({'data': data, 'condition': conditions}).groupby('condition')['data']])
-                anova_results[lipid_class] = {'F-value': f_value, 'p-value': p_value}
+            try:
+                # Filter for current lipid class
+                class_df = continuation_df[continuation_df['ClassKey'] == lipid_class].copy()
+                
+                # Prepare data for statistical testing
+                data_for_stats = []
+                conditions_for_stats = []
+                
+                for condition in selected_conditions:
+                    condition_idx = experiment.conditions_list.index(condition)
+                    condition_samples = experiment.individual_samples_list[condition_idx]
+                    
+                    # Get data columns for this condition
+                    sample_columns = [f"MeanArea[{sample}]" for sample in condition_samples 
+                                    if f"MeanArea[{sample}]" in class_df.columns]
+                    
+                    if sample_columns:
+                        condition_data = class_df[sample_columns].sum(axis=1).values
+                        data_for_stats.extend(condition_data)
+                        conditions_for_stats.extend([condition] * len(condition_data))
+                
+                if len(selected_conditions) == 2:
+                    # Perform t-test
+                    group1 = [x for x, c in zip(data_for_stats, conditions_for_stats) 
+                             if c == selected_conditions[0]]
+                    group2 = [x for x, c in zip(data_for_stats, conditions_for_stats) 
+                             if c == selected_conditions[1]]
+                    
+                    if len(group1) > 0 and len(group2) > 0:
+                        t_stat, p_value = stats.ttest_ind(group1, group2, equal_var=False)
+                        statistical_results[lipid_class] = {
+                            'test': 't-test',
+                            'statistic': t_stat,
+                            'p-value': p_value
+                        }
+                else:
+                    # Perform ANOVA
+                    groups = []
+                    for condition in selected_conditions:
+                        group = [x for x, c in zip(data_for_stats, conditions_for_stats) 
+                                if c == condition]
+                        if group:
+                            groups.append(group)
+                    
+                    if len(groups) > 1:
+                        f_stat, p_value = stats.f_oneway(*groups)
+                        
+                        # Perform Tukey's test if ANOVA is significant
+                        tukey_results = None
+                        if p_value < 0.05:
+                            tukey = pairwise_tukeyhsd(data_for_stats, conditions_for_stats)
+                            tukey_results = {
+                                'group1': [],
+                                'group2': [],
+                                'p_values': []
+                            }
+                            
+                            for row in tukey._results_table[1:]:
+                                tukey_results['group1'].append(str(row[0]))
+                                tukey_results['group2'].append(str(row[1]))
+                                # Handle p-value carefully
+                                try:
+                                    if isinstance(row[3], (float, int)):
+                                        p_val = float(row[3])
+                                    elif isinstance(row[3], str):
+                                        if row[3].lower() == 'cell':
+                                            p_val = 1.0  # Use 1.0 for non-significant results
+                                        else:
+                                            p_val = float(row[3])
+                                    else:
+                                        p_val = 1.0
+                                    tukey_results['p_values'].append(p_val)
+                                except (ValueError, TypeError):
+                                    tukey_results['p_values'].append(1.0)
+                        
+                        statistical_results[lipid_class] = {
+                            'test': 'ANOVA',
+                            'statistic': f_stat,
+                            'p-value': p_value,
+                            'tukey_results': tukey_results
+                        }
+                
+            except Exception as e:
+                st.warning(f"Could not perform statistical test for {lipid_class}: {str(e)}")
+                continue
         
-        return anova_results
+        return statistical_results
+
+    @staticmethod
+    def display_statistical_details(statistical_results, selected_conditions):
+        """
+        Displays detailed statistical results in a formatted way.
+        """
+        st.write("### Detailed Statistical Analysis")
+        
+        if len(selected_conditions) == 2:
+            st.write(f"Comparing conditions: {selected_conditions[0]} vs {selected_conditions[1]}")
+            st.write("Method: Independent t-test (Welch's t-test)")
+        else:
+            st.write(f"Comparing {len(selected_conditions)} conditions using ANOVA + Tukey's test")
+            st.write("Note: P-values are adjusted for multiple comparisons")
+        
+        for lipid_class, results in statistical_results.items():
+            st.write(f"\n#### {lipid_class}")
+            p_value = results['p-value']
+            
+            if results['test'] == 't-test':
+                st.write(f"t-statistic: {results['statistic']:.3f}")
+                st.write(f"p-value: {p_value:.3f}")
+            else:  # ANOVA
+                st.write(f"F-statistic: {results['statistic']:.3f}")
+                st.write(f"p-value: {p_value:.3f}")
+                
+                if results.get('tukey_results') and p_value < 0.05:
+                    st.write("\nSignificant pairwise comparisons (Tukey's test):")
+                    tukey = results['tukey_results']
+                    for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
+                        if p < 0.05:
+                            st.write(f"- {g1} vs {g2}: p = {p:.3f}")
 
     @staticmethod
     def create_abundance_bar_chart(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes, mode, anova_results=None):
+        """
+        Creates an abundance bar chart with statistical significance indicators.
+        
+        Parameters:
+        df (pd.DataFrame): The input DataFrame containing lipid data
+        full_samples_list (list): List of all samples
+        individual_samples_list (list): List of samples for each condition
+        conditions_list (list): List of all conditions
+        selected_conditions (list): List of conditions selected for analysis
+        selected_classes (list): List of lipid classes selected for analysis
+        mode (str): Display mode ('linear scale' or 'log2 scale')
+        anova_results (dict): Results from statistical testing
+        """
         full_samples_list = st.session_state.full_samples_list if 'full_samples_list' in st.session_state else full_samples_list
     
         try:
+            # Validate and prepare data
             expected_columns = ['ClassKey'] + [f"MeanArea[{sample}]" for sample in full_samples_list]
             valid_columns = ['ClassKey'] + [col for col in expected_columns if col in df.columns and col != 'ClassKey']
             df = df[valid_columns]
@@ -157,34 +291,90 @@ class AbundanceBarChart:
     
             selected_conditions = [cond for cond in selected_conditions if cond in conditions_list]
     
-            abundance_df = AbundanceBarChart.create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes)
+            # Create mean and std columns for selected conditions
+            abundance_df = AbundanceBarChart.create_mean_std_columns(
+                df, full_samples_list, individual_samples_list, 
+                conditions_list, selected_conditions, selected_classes
+            )
         
             if abundance_df.empty:
                 st.error("No data available after processing for the selected conditions and classes.")
                 return None, None
     
+            # Create plot
             fig, ax = AbundanceBarChart.initialize_plot(len(abundance_df))
             
-            AbundanceBarChart.add_bars_to_plot(ax, abundance_df, selected_conditions, mode)
+            # Add bars to plot
+            y = np.arange(len(abundance_df))
+            width = 1 / (len(selected_conditions) + 1)
+            bar_height = 0.8 / len(selected_conditions)
+            multiplier = 0
             
-            AbundanceBarChart.style_plot(ax, abundance_df)
-            
-            # Add significance indicators directly to the plot
-            y_positions = np.arange(len(abundance_df))
-            for i, lipid_class in enumerate(abundance_df['ClassKey']):
-                if lipid_class in anova_results:
-                    p_value = anova_results[lipid_class]['p-value']
-                    significance = ''
-                    if p_value < 0.001:
-                        significance = '***'
-                    elif p_value < 0.01:
-                        significance = '**'
-                    elif p_value < 0.05:
-                        significance = '*'
+            for condition in selected_conditions:
+                mean, std = AbundanceBarChart.get_mode_specific_values(abundance_df, condition, mode)
+                if mean.isnull().all() or std.isnull().all() or mean.empty or std.empty:
+                    continue
+                offset = width * multiplier
+                ax.barh(y + offset, mean, bar_height, xerr=std, label=condition, align='center')
+                multiplier += 1
+    
+            ax.set_yticks(y + width * (len(selected_conditions) - 1) / 2)
+            ax.set_yticklabels(abundance_df['ClassKey'].values, rotation=45, ha='right', fontsize=20)
+    
+            # Style the plot
+            ax.set_xlabel('Mean Concentration', fontsize=15)
+            ax.set_ylabel('Lipid Class', fontsize=15)
+            ax.tick_params(axis='both', which='major', labelsize=12)
+            ax.legend(loc='lower right', fontsize=12)
+            ax.set_title('Class Concentration Bar Chart', fontsize=15)
+            for spine in ax.spines.values():
+                spine.set_edgecolor('black')
+    
+            # Add statistical significance annotations
+            if anova_results:
+                y_positions = np.arange(len(abundance_df))
+                max_x = ax.get_xlim()[1]
+                
+                # Add a legend for significance levels
+                if any(result['p-value'] < 0.05 for result in anova_results.values()):
+                    significance_legend = [
+                        "Statistical Significance:",
+                        "* p < 0.05",
+                        "** p < 0.01",
+                        "*** p < 0.001"
+                    ]
                     
-                    if significance:
-                        ax.text(ax.get_xlim()[1], y_positions[i], significance, ha='left', va='center')
-            
+                    # Add testing method used
+                    if len(selected_conditions) == 2:
+                        significance_legend.insert(0, "Method: t-test")
+                    else:
+                        significance_legend.insert(0, "Method: ANOVA + Tukey test")
+                    
+                    # Add legend text to plot
+                    legend_y = -0.2  # Adjust based on your plot layout
+                    for i, text in enumerate(significance_legend):
+                        plt.figtext(0.7, legend_y - i*0.03, text, fontsize=8)
+                
+                for i, lipid_class in enumerate(abundance_df['ClassKey']):
+                    if lipid_class in anova_results:
+                        result = anova_results[lipid_class]
+                        p_value = result['p-value']
+                        
+                        # Get significance level
+                        significance = ''
+                        if p_value < 0.001:
+                            significance = '***'
+                        elif p_value < 0.01:
+                            significance = '**'
+                        elif p_value < 0.05:
+                            significance = '*'
+                        
+                        if significance:
+                            # Add overall significance
+                            ax.text(max_x, y_positions[i], significance, 
+                                   ha='left', va='center')
+    
+            plt.tight_layout(pad=2.0)
             return fig, abundance_df
     
         except Exception as e:

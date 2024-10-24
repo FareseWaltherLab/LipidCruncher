@@ -1402,23 +1402,23 @@ def display_abundance_bar_charts(experiment, continuation_df):
             list(continuation_df['ClassKey'].value_counts().index),
             key='classes_select'
         )
+        
         linear_fig, log2_fig = None, None
         if selected_conditions_list and selected_classes_list:
-            # Perform ANOVA once
-            anova_results = lp.AbundanceBarChart.perform_two_way_anova(
+            # Perform statistical tests
+            statistical_results = lp.AbundanceBarChart.perform_statistical_tests(
                 continuation_df, 
                 experiment, 
                 selected_conditions_list, 
                 selected_classes_list
             )
             
-            # Display significance interpretation
-            st.markdown("""
-            **Significance levels:**
-            * \* p < 0.05
-            * \*\* p < 0.01
-            * \*\*\* p < 0.001
-            """)
+            # Optional detailed statistical results
+            if st.checkbox("Show detailed statistical analysis"):
+                lp.AbundanceBarChart.display_statistical_details(
+                    statistical_results, 
+                    selected_conditions_list
+                )
 
             # Generate linear scale chart
             linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
@@ -1429,7 +1429,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 selected_conditions_list, 
                 selected_classes_list, 
                 'linear scale',
-                anova_results
+                statistical_results
             )
             if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
                 st.pyplot(linear_fig)
@@ -1458,7 +1458,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 selected_conditions_list, 
                 selected_classes_list, 
                 'log2 scale',
-                anova_results
+                statistical_results
             )
             if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
                 st.pyplot(log2_fig)
@@ -1482,8 +1482,44 @@ def display_abundance_bar_charts(experiment, continuation_df):
             removed_conditions = set(experiment.conditions_list) - set(valid_conditions)
             if removed_conditions:
                 st.warning(f"The following conditions were excluded due to having only one sample: {', '.join(removed_conditions)}")
+            
+            # Add export option for statistical results
+            if st.button("Export Statistical Results"):
+                # Convert statistical results to DataFrame for export
+                stats_data = []
+                for lipid_class, results in statistical_results.items():
+                    row = {
+                        'Lipid Class': lipid_class,
+                        'Test Type': results['test'],
+                        'Statistic': results['statistic'],
+                        'P-value': results['p-value']
+                    }
+                    if results.get('tukey_results'):
+                        tukey = results['tukey_results']
+                        significant_pairs = [
+                            f"{g1} vs {g2} (p={p:.3f})"
+                            for g1, g2, p in zip(
+                                tukey['group1'],
+                                tukey['group2'],
+                                tukey['p_values']
+                            )
+                            if p < 0.05
+                        ]
+                        row['Significant Comparisons'] = '; '.join(significant_pairs)
+                    stats_data.append(row)
+                
+                stats_df = pd.DataFrame(stats_data)
+                csv_stats = convert_df(stats_df)
+                st.download_button(
+                    label="Download Statistical Results CSV",
+                    data=csv_stats,
+                    file_name='statistical_results.csv',
+                    mime='text/csv',
+                    key='stats_download'
+                )
         else:
             st.warning("Please select at least one condition and one class to create the charts.")
+        
         return linear_fig, log2_fig
 
 def display_pathway_visualization(experiment, continuation_df):
