@@ -1405,6 +1405,23 @@ def display_abundance_bar_charts(experiment, continuation_df):
         
         linear_fig, log2_fig = None, None
         if selected_conditions_list and selected_classes_list:
+            # Statistical testing guidance
+            if len(selected_conditions_list) > 2:
+                st.info("""
+                📊 **Statistical Testing Note:**
+                - Multiple conditions detected: Using ANOVA + Tukey's test
+                - This is the correct approach when interested in multiple comparisons
+                - Do NOT run separate t-tests by unselecting conditions - this would inflate the false positive rate
+                - The current analysis automatically adjusts significance thresholds to maintain a 5% false positive rate across all comparisons
+                """)
+            elif len(selected_conditions_list) == 2:
+                st.info("""
+                📊 **Statistical Testing Note:**
+                - Two conditions detected: Using t-test
+                - This is appropriate ONLY for a single pre-planned comparison
+                - If you plan to compare multiple conditions, please select all relevant conditions to use ANOVA + Tukey's test
+                """)
+            
             # Perform statistical tests
             statistical_results = lp.AbundanceBarChart.perform_statistical_tests(
                 continuation_df, 
@@ -1413,9 +1430,31 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 selected_classes_list
             )
             
+            # Display statistical testing information
+            if statistical_results:
+                if len(selected_conditions_list) == 2:
+                    st.info("""
+                    📊 **Statistical Testing Information**
+                    - Method: Independent t-test (Welch's t-test)
+                    - Significance levels:
+                         * p < 0.05
+                        - ** p < 0.01
+                        - *** p < 0.001
+                    """)
+                else:
+                    st.info("""
+                    📊 **Statistical Testing Information**
+                    - Method: ANOVA + Tukey's test
+                    - Multiple comparison correction applied
+                    - Significance levels:
+                         * p < 0.05
+                        - ** p < 0.01
+                        - *** p < 0.001
+                    """)
+            
             # Optional detailed statistical results
             if st.checkbox("Show detailed statistical analysis"):
-                lp.AbundanceBarChart.display_statistical_details(
+                display_statistical_details(
                     statistical_results, 
                     selected_conditions_list
                 )
@@ -1482,45 +1521,41 @@ def display_abundance_bar_charts(experiment, continuation_df):
             removed_conditions = set(experiment.conditions_list) - set(valid_conditions)
             if removed_conditions:
                 st.warning(f"The following conditions were excluded due to having only one sample: {', '.join(removed_conditions)}")
-            
-            # Add export option for statistical results
-            if st.button("Export Statistical Results"):
-                # Convert statistical results to DataFrame for export
-                stats_data = []
-                for lipid_class, results in statistical_results.items():
-                    row = {
-                        'Lipid Class': lipid_class,
-                        'Test Type': results['test'],
-                        'Statistic': results['statistic'],
-                        'P-value': results['p-value']
-                    }
-                    if results.get('tukey_results'):
-                        tukey = results['tukey_results']
-                        significant_pairs = [
-                            f"{g1} vs {g2} (p={p:.3f})"
-                            for g1, g2, p in zip(
-                                tukey['group1'],
-                                tukey['group2'],
-                                tukey['p_values']
-                            )
-                            if p < 0.05
-                        ]
-                        row['Significant Comparisons'] = '; '.join(significant_pairs)
-                    stats_data.append(row)
                 
-                stats_df = pd.DataFrame(stats_data)
-                csv_stats = convert_df(stats_df)
-                st.download_button(
-                    label="Download Statistical Results CSV",
-                    data=csv_stats,
-                    file_name='statistical_results.csv',
-                    mime='text/csv',
-                    key='stats_download'
-                )
         else:
             st.warning("Please select at least one condition and one class to create the charts.")
         
         return linear_fig, log2_fig
+
+def display_statistical_details(statistical_results, selected_conditions):
+    """Display detailed statistical analysis"""
+    st.write("### Detailed Statistical Analysis")
+    
+    if len(selected_conditions) == 2:
+        st.write(f"Comparing conditions: {selected_conditions[0]} vs {selected_conditions[1]}")
+        st.write("Method: Independent t-test (Welch's t-test)")
+    else:
+        st.write(f"Comparing {len(selected_conditions)} conditions using ANOVA + Tukey's test")
+        st.write("Note: P-values are adjusted for multiple comparisons")
+    
+    for lipid_class, results in statistical_results.items():
+        st.write(f"\n#### {lipid_class}")
+        p_value = results['p-value']
+        
+        if results['test'] == 't-test':
+            st.write(f"t-statistic: {results['statistic']:.3f}")
+            st.write(f"p-value: {p_value:.3f}")
+        else:  # ANOVA
+            st.write(f"F-statistic: {results['statistic']:.3f}")
+            st.write(f"p-value: {p_value:.3f}")
+            
+            if results.get('tukey_results'):
+                st.write("\nTukey's test pairwise comparisons:")
+                tukey = results['tukey_results']
+                for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
+                    st.write(f"- {g1} vs {g2}: p = {p:.3f}")
+            else:
+                st.write("No pairwise comparisons available (ANOVA p-value > 0.05)")
 
 def display_pathway_visualization(experiment, continuation_df):
     """

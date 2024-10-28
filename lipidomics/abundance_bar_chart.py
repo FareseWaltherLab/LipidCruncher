@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 from scipy import stats
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+
 
 class AbundanceBarChart:
     """
@@ -21,12 +23,12 @@ class AbundanceBarChart:
     def create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes):
         try:
             available_samples = [sample for sample in full_samples_list if f"MeanArea[{sample}]" in df.columns]
-            
-            grouped_df = AbundanceBarChart.group_and_sum(df, available_samples)
+            grouped_df = pd.DataFrame()
             
             for condition in selected_conditions:
                 if condition not in conditions_list:
                     continue
+                    
                 condition_index = conditions_list.index(condition)
                 individual_samples = [sample for sample in individual_samples_list[condition_index] if sample in available_samples]
                 
@@ -34,14 +36,43 @@ class AbundanceBarChart:
                     continue
                 
                 mean_cols = [f"MeanArea[{sample}]" for sample in individual_samples]
-                grouped_df[f"mean_AUC_{condition}"] = grouped_df[mean_cols].mean(axis=1)
-                grouped_df[f"std_AUC_{condition}"] = grouped_df[mean_cols].std(axis=1)
-    
+                n_samples = len(mean_cols)
+                
+                # Calculate statistics for each class
+                class_stats = []
+                for class_name in selected_classes:
+                    # Filter for current class
+                    class_df = df[df['ClassKey'] == class_name]
+                    
+                    if not class_df.empty:
+                        # Calculate variance for each species
+                        species_variances = class_df[mean_cols].var(axis=1)
+                        
+                        # Sum the mean values and variances for the class
+                        class_mean = class_df[mean_cols].sum().mean()  # Mean of sums across replicates
+                        class_total_variance = species_variances.sum()  # Sum of individual variances
+                        
+                        # Calculate SEM
+                        class_sem = np.sqrt(class_total_variance) / np.sqrt(n_samples)
+                        
+                        class_stats.append({
+                            'ClassKey': class_name,
+                            f'mean_AUC_{condition}': class_mean,
+                            f'sem_AUC_{condition}': class_sem
+                        })
+                
+                # Create/update grouped_df
+                if not grouped_df.empty:
+                    temp_df = pd.DataFrame(class_stats)
+                    grouped_df = grouped_df.merge(temp_df, on='ClassKey', how='outer')
+                else:
+                    grouped_df = pd.DataFrame(class_stats)
+            
             grouped_df = AbundanceBarChart.filter_by_selected_classes(grouped_df, selected_classes)
             grouped_df = AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
             
             return grouped_df
-    
+            
         except Exception as e:
             st.error(f"Error in create_mean_std_columns: {str(e)}")
             return pd.DataFrame()
@@ -84,13 +115,14 @@ class AbundanceBarChart:
     def calculate_log2_values(grouped_df, selected_conditions):
         for condition in selected_conditions:
             mean_col = f"mean_AUC_{condition}"
-            std_col = f"std_AUC_{condition}"
-            if mean_col in grouped_df.columns and std_col in grouped_df.columns:
+            sem_col = f"sem_AUC_{condition}"  # Changed from std_col to sem_col
+            if mean_col in grouped_df.columns and sem_col in grouped_df.columns:
                 log2_mean_col = f"log2_mean_AUC_{condition}"
-                log2_std_col = f"log2_std_AUC_{condition}"
+                log2_sem_col = f"log2_sem_AUC_{condition}"  # Changed from log2_std_col to log2_sem_col
                 
                 grouped_df[log2_mean_col] = np.log2(grouped_df[mean_col].replace(0, np.nan))
-                grouped_df[log2_std_col] = grouped_df[std_col] / (grouped_df[mean_col] * np.log(2))
+                # Error propagation for SEM in log2 scale
+                grouped_df[log2_sem_col] = grouped_df[sem_col] / (grouped_df[mean_col] * np.log(2))
         
         return grouped_df
 
@@ -113,25 +145,7 @@ class AbundanceBarChart:
         """
         Performs appropriate statistical tests based on number of conditions.
         """
-        from statsmodels.stats.multicomp import pairwise_tukeyhsd
         statistical_results = {}
-        
-        # Statistical testing guidance
-        if len(selected_conditions) > 2:
-            st.info("""
-            📊 **Statistical Testing Note:**
-            - Multiple conditions detected: Using ANOVA + Tukey's test
-            - This is the correct approach when interested in multiple comparisons
-            - Do NOT run separate t-tests by unselecting conditions - this would inflate the false positive rate
-            - The current analysis automatically adjusts significance thresholds to maintain a 5% false positive rate across all comparisons
-            """)
-        elif len(selected_conditions) == 2:
-            st.info("""
-            📊 **Statistical Testing Note:**
-            - Two conditions detected: Using t-test
-            - This is appropriate ONLY for a single pre-planned comparison
-            - If you plan to compare multiple conditions, please select all relevant conditions to use ANOVA + Tukey's test
-            """)
         
         for lipid_class in selected_classes:
             try:
@@ -191,23 +205,13 @@ class AbundanceBarChart:
                                 'p_values': []
                             }
                             
-                            for row in tukey._results_table[1:]:
+                            # Fixed: Directly access the p-values from the Tukey results
+                            for idx, row in enumerate(tukey._results_table[1:]):
                                 tukey_results['group1'].append(str(row[0]))
                                 tukey_results['group2'].append(str(row[1]))
-                                # Handle p-value carefully
-                                try:
-                                    if isinstance(row[3], (float, int)):
-                                        p_val = float(row[3])
-                                    elif isinstance(row[3], str):
-                                        if row[3].lower() == 'cell':
-                                            p_val = 1.0  # Use 1.0 for non-significant results
-                                        else:
-                                            p_val = float(row[3])
-                                    else:
-                                        p_val = 1.0
-                                    tukey_results['p_values'].append(p_val)
-                                except (ValueError, TypeError):
-                                    tukey_results['p_values'].append(1.0)
+                                # Get p-value directly from the pvalues attribute
+                                p_val = tukey.pvalues[idx]
+                                tukey_results['p_values'].append(p_val)
                         
                         statistical_results[lipid_class] = {
                             'test': 'ANOVA',
@@ -223,51 +227,14 @@ class AbundanceBarChart:
         return statistical_results
 
     @staticmethod
-    def display_statistical_details(statistical_results, selected_conditions):
-        """
-        Displays detailed statistical results in a formatted way.
-        """
-        st.write("### Detailed Statistical Analysis")
-        
-        if len(selected_conditions) == 2:
-            st.write(f"Comparing conditions: {selected_conditions[0]} vs {selected_conditions[1]}")
-            st.write("Method: Independent t-test (Welch's t-test)")
-        else:
-            st.write(f"Comparing {len(selected_conditions)} conditions using ANOVA + Tukey's test")
-            st.write("Note: P-values are adjusted for multiple comparisons")
-        
-        for lipid_class, results in statistical_results.items():
-            st.write(f"\n#### {lipid_class}")
-            p_value = results['p-value']
-            
-            if results['test'] == 't-test':
-                st.write(f"t-statistic: {results['statistic']:.3f}")
-                st.write(f"p-value: {p_value:.3f}")
-            else:  # ANOVA
-                st.write(f"F-statistic: {results['statistic']:.3f}")
-                st.write(f"p-value: {p_value:.3f}")
-                
-                if results.get('tukey_results') and p_value < 0.05:
-                    st.write("\nSignificant pairwise comparisons (Tukey's test):")
-                    tukey = results['tukey_results']
-                    for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
-                        if p < 0.05:
-                            st.write(f"- {g1} vs {g2}: p = {p:.3f}")
-
-    @staticmethod
     def create_abundance_bar_chart(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes, mode, anova_results=None):
         """
         Creates an abundance bar chart with statistical significance indicators.
         
-        Parameters:
-        df (pd.DataFrame): The input DataFrame containing lipid data
-        full_samples_list (list): List of all samples
-        individual_samples_list (list): List of samples for each condition
-        conditions_list (list): List of all conditions
-        selected_conditions (list): List of conditions selected for analysis
-        selected_classes (list): List of lipid classes selected for analysis
-        mode (str): Display mode ('linear scale' or 'log2 scale')
-        anova_results (dict): Results from statistical testing
+        Returns:
+            tuple: (fig, abundance_df)
+                - fig: matplotlib figure or None if error
+                - abundance_df: processed DataFrame or None if error
         """
         full_samples_list = st.session_state.full_samples_list if 'full_samples_list' in st.session_state else full_samples_list
     
@@ -278,16 +245,13 @@ class AbundanceBarChart:
             df = df[valid_columns]
     
             if df.empty or len(valid_columns) <= 1:
-                st.error("No valid data available to create the abundance bar chart.")
-                return None, None
+                raise ValueError("No valid data available to create the abundance bar chart.")
     
             if 'ClassKey' not in df.columns:
-                st.error("ClassKey column is missing from the dataset.")
-                return None, None
+                raise ValueError("ClassKey column is missing from the dataset.")
             
             if df['ClassKey'].dtype == 'object' and df['ClassKey'].str.contains(',').any():
-                st.error("ClassKey column contains multiple values. Please ensure it's a single value per row.")
-                return None, None
+                raise ValueError("ClassKey column contains multiple values. Please ensure it's a single value per row.")
     
             selected_conditions = [cond for cond in selected_conditions if cond in conditions_list]
     
@@ -298,8 +262,7 @@ class AbundanceBarChart:
             )
         
             if abundance_df.empty:
-                st.error("No data available after processing for the selected conditions and classes.")
-                return None, None
+                raise ValueError("No data available after processing for the selected conditions and classes.")
     
             # Create plot
             fig, ax = AbundanceBarChart.initialize_plot(len(abundance_df))
@@ -330,30 +293,10 @@ class AbundanceBarChart:
             for spine in ax.spines.values():
                 spine.set_edgecolor('black')
     
-            # Add statistical significance annotations
+            # Add statistical significance annotations (only the asterisks)
             if anova_results:
                 y_positions = np.arange(len(abundance_df))
                 max_x = ax.get_xlim()[1]
-                
-                # Add a legend for significance levels
-                if any(result['p-value'] < 0.05 for result in anova_results.values()):
-                    significance_legend = [
-                        "Statistical Significance:",
-                        "* p < 0.05",
-                        "** p < 0.01",
-                        "*** p < 0.001"
-                    ]
-                    
-                    # Add testing method used
-                    if len(selected_conditions) == 2:
-                        significance_legend.insert(0, "Method: t-test")
-                    else:
-                        significance_legend.insert(0, "Method: ANOVA + Tukey test")
-                    
-                    # Add legend text to plot
-                    legend_y = -0.2  # Adjust based on your plot layout
-                    for i, text in enumerate(significance_legend):
-                        plt.figtext(0.7, legend_y - i*0.03, text, fontsize=8)
                 
                 for i, lipid_class in enumerate(abundance_df['ClassKey']):
                     if lipid_class in anova_results:
@@ -378,7 +321,7 @@ class AbundanceBarChart:
             return fig, abundance_df
     
         except Exception as e:
-            st.error(f"An unexpected error occurred while creating the abundance bar chart: {str(e)}")
+            logging.error(f"Error in create_abundance_bar_chart: {str(e)}")
             return None, None
 
     @staticmethod
@@ -428,23 +371,15 @@ class AbundanceBarChart:
     @staticmethod
     def get_mode_specific_values(abundance_df, condition, mode):
         """
-        Retrieves mean and standard deviation values based on the selected mode.
-
-        Parameters:
-        abundance_df (pd.DataFrame): DataFrame with calculated mean and std values.
-        condition (str): Specific condition for which to retrieve values.
-        mode (str): The mode for value calculation ('linear scale' or 'log2 scale').
-
-        Returns:
-        tuple: A tuple containing mean and standard deviation values.
+        Retrieves mean and SEM values based on the selected mode.
         """
         if mode == 'linear scale':
             mean = abundance_df.get(f"mean_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
-            std = abundance_df.get(f"std_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
+            sem = abundance_df.get(f"sem_AUC_{condition}", pd.Series(dtype=float)).fillna(0)  # Changed from std
         elif mode == 'log2 scale':
             mean = abundance_df.get(f"log2_mean_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
-            std = abundance_df.get(f"log2_std_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
-        return mean, std
+            sem = abundance_df.get(f"log2_sem_AUC_{condition}", pd.Series(dtype=float)).fillna(0)  # Changed from std
+        return mean, sem
 
     @staticmethod
     def style_plot(ax, abundance_df):
