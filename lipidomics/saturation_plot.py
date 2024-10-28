@@ -374,7 +374,7 @@ class SaturationPlot:
     @staticmethod
     def _perform_t_test(plot_data, fa, lipid_class):
         """
-        Performs a t-test for a given fatty acid type between two conditions.
+        Performs a Welch's t-test for a given fatty acid type between two conditions.
         """
         conditions = plot_data['Condition'].unique()
         group1 = plot_data[plot_data['Condition'] == conditions[0]][f'{fa}_values'].iloc[0]
