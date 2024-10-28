@@ -1345,16 +1345,41 @@ def display_saturation_plots(experiment, continuation_df):
             selected_conditions = st.multiselect('Select conditions for the saturation plot:', experiment.conditions_list, experiment.conditions_list)
             
             if selected_conditions:
+                # Add statistical testing guidance based on number of conditions
+                if len(selected_conditions) > 2:
+                    st.info("""
+                    📊 **Statistical Testing for Fatty Acid Comparisons:**
+                    - Multiple conditions detected: Using ANOVA + Tukey's test
+                    - Each fatty acid type (SFA, MUFA, PUFA) is tested separately
+                    - ANOVA determines if there are any differences between conditions
+                    - If ANOVA is significant (p < 0.05), Tukey's test shows which specific conditions differ
+                    - The analysis automatically adjusts significance thresholds to maintain a 5% false positive rate
+                    - Stars (★) indicate significance levels:
+                        * ★ p < 0.05
+                        * ★★ p < 0.01
+                        * ★★★ p < 0.001
+                    """)
+                elif len(selected_conditions) == 2:
+                    st.info("""
+                    📊 **Statistical Testing for Fatty Acid Comparisons:**
+                    - Two conditions detected: Using Welch's t-test
+                    - Each fatty acid type (SFA, MUFA, PUFA) is tested separately
+                    - The t-test determines if there are significant differences between conditions
+                    - Stars (★) indicate significance levels:
+                        * ★ p < 0.05
+                        * ★★ p < 0.01
+                        * ★★★ p < 0.001
+                    - Note: If you plan to compare multiple conditions, select all relevant conditions to use ANOVA
+                    """)
+
                 plots = lp.SaturationPlot.create_plots(filtered_df, experiment, selected_conditions)
                 
                 for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
                     st.subheader(f"Saturation Plot for {lipid_class}")
                     
-                    # Display and add download button for main plot
                     st.plotly_chart(main_plot)
                     plotly_svg_download_button(main_plot, f"saturation_plot_main_{lipid_class}.svg")
                     
-                    # Add CSV download button for the main plot data
                     main_csv_download = convert_df(plot_data)
                     st.download_button(
                         label="Download CSV",
@@ -1363,11 +1388,9 @@ def display_saturation_plots(experiment, continuation_df):
                         mime='text/csv'
                     )
                     
-                    # Display and add download button for percentage plot
                     st.plotly_chart(percentage_plot)
                     plotly_svg_download_button(percentage_plot, f"saturation_plot_percentage_{lipid_class}.svg")
                     
-                    # Calculate percentage data for CSV download
                     percentage_data = lp.SaturationPlot._calculate_percentage_df(plot_data)
                     percentage_csv_download = convert_df(percentage_data)
                     st.download_button(
@@ -1377,10 +1400,9 @@ def display_saturation_plots(experiment, continuation_df):
                         mime='text/csv'
                     )
                     
-                    # Store plots in the saturation_plots dictionary
                     saturation_plots[lipid_class] = {'main': main_plot, 'percentage': percentage_plot}
                     
-                    st.markdown("---")  # Add a separator between plots
+                    st.markdown("---")
     return saturation_plots
 
 def display_abundance_bar_charts(experiment, continuation_df):

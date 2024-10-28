@@ -196,12 +196,12 @@ class SaturationPlot:
         return main_df, percentage_df
 
     @staticmethod
-    def _calculate_std_dev(df):
+    def _calculate_sem(df):
         """
-        Calculates standard deviations for AUC values in the DataFrame.
+        Calculates standard error of the mean for AUC values in the DataFrame.
         """
         for fatty_acid in ['SFA', 'MUFA', 'PUFA']:
-            df[f'{fatty_acid}_stdv'] = df[f'{fatty_acid}_values'].apply(np.std, ddof=1)
+            df[f'{fatty_acid}_sem'] = df[f'{fatty_acid}_values'].apply(lambda x: np.std(x, ddof=1) / np.sqrt(len(x)))
         return df
 
     @staticmethod
@@ -227,7 +227,7 @@ class SaturationPlot:
         if df.empty:
             return None
         
-        df = SaturationPlot._calculate_std_dev(df)
+        df = SaturationPlot._calculate_sem(df)  # Changed from _calculate_std_dev to _calculate_sem
         
         fig = go.Figure()
         
@@ -244,7 +244,7 @@ class SaturationPlot:
                 marker_color=colors[fa],
                 error_y=dict(
                     type='data',
-                    array=df[f'{fa}_stdv'],
+                    array=df[f'{fa}_sem'],  # Changed from _stdv to _sem
                     visible=True
                 ),
                 width=bar_width,
@@ -407,7 +407,7 @@ class SaturationPlot:
                      for _ in range(len(group))]
         
         return pairwise_tukeyhsd(values, conditions)
-    
+
     @staticmethod
     def _add_statistical_annotations(fig, df, statistical_results, lipid_class):
         """
@@ -415,14 +415,14 @@ class SaturationPlot:
         and better placement of significance indicators.
         """
         y_max = max(
-            df[f'{fa}_AUC'].max() + df[f'{fa}_stdv'].max() 
+            df[f'{fa}_AUC'].max() + df[f'{fa}_sem'].max() 
             for fa in ['SFA', 'MUFA', 'PUFA'] 
-            if f'{fa}_AUC' in df.columns and f'{fa}_stdv' in df.columns
+            if f'{fa}_AUC' in df.columns and f'{fa}_sem' in df.columns
         )
         y_min = min(
-            df[f'{fa}_AUC'].min() - df[f'{fa}_stdv'].max()
+            df[f'{fa}_AUC'].min() - df[f'{fa}_sem'].max()
             for fa in ['SFA', 'MUFA', 'PUFA'] 
-            if f'{fa}_AUC' in df.columns and f'{fa}_stdv' in df.columns
+            if f'{fa}_AUC' in df.columns and f'{fa}_sem' in df.columns
         )
         
         y_range = y_max - y_min
@@ -457,7 +457,7 @@ class SaturationPlot:
         y_axis_max = max(y_axis_max, y_max * 1.3)
         
         fig.update_layout(yaxis_range=[y_axis_min, y_axis_max])
-    
+        
     @staticmethod
     def _add_t_test_annotation(fig, df, fa, result, y_increment, y_max, annotation_count):
         """
