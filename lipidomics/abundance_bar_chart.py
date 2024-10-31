@@ -45,15 +45,12 @@ class AbundanceBarChart:
                     class_df = df[df['ClassKey'] == class_name]
                     
                     if not class_df.empty:
-                        # Calculate variance for each species
-                        species_variances = class_df[mean_cols].var(axis=1)
+                        # Calculate total abundance per sample by summing across species (rows)
+                        total_abundance_per_sample = class_df[mean_cols].sum(axis=0)
                         
-                        # Sum the mean values and variances for the class
-                        class_mean = class_df[mean_cols].sum().mean()  # Mean of sums across replicates
-                        class_total_variance = species_variances.sum()  # Sum of individual variances
-                        
-                        # Calculate SEM
-                        class_sem = np.sqrt(class_total_variance) / np.sqrt(n_samples)
+                        # Calculate mean and SEM across samples
+                        class_mean = total_abundance_per_sample.mean()
+                        class_sem = total_abundance_per_sample.sem()
                         
                         class_stats.append({
                             'ClassKey': class_name,
@@ -144,9 +141,12 @@ class AbundanceBarChart:
     def perform_statistical_tests(continuation_df, experiment, selected_conditions, selected_classes):
         """
         Performs appropriate statistical tests based on number of conditions.
+        Statistical testing is performed on the total abundance per sample (summed across species).
+        Adjusts p-values for multiple testing across lipid classes using the Benjamini-Hochberg procedure.
         """
         statistical_results = {}
-        
+        all_p_values = []
+    
         for lipid_class in selected_classes:
             try:
                 # Filter for current lipid class
@@ -162,19 +162,20 @@ class AbundanceBarChart:
                     
                     # Get data columns for this condition
                     sample_columns = [f"MeanArea[{sample}]" for sample in condition_samples 
-                                    if f"MeanArea[{sample}]" in class_df.columns]
+                                      if f"MeanArea[{sample}]" in class_df.columns]
                     
                     if sample_columns:
-                        condition_data = class_df[sample_columns].sum(axis=1).values
-                        data_for_stats.extend(condition_data)
-                        conditions_for_stats.extend([condition] * len(condition_data))
-                
+                        # Sum across all species for each sample
+                        sample_sums = class_df[sample_columns].sum()  # Sum all species per sample
+                        data_for_stats.extend(sample_sums.values)
+                        conditions_for_stats.extend([condition] * len(sample_sums))
+                    
                 if len(selected_conditions) == 2:
                     # Perform t-test
                     group1 = [x for x, c in zip(data_for_stats, conditions_for_stats) 
-                             if c == selected_conditions[0]]
+                              if c == selected_conditions[0]]
                     group2 = [x for x, c in zip(data_for_stats, conditions_for_stats) 
-                             if c == selected_conditions[1]]
+                              if c == selected_conditions[1]]
                     
                     if len(group1) > 0 and len(group2) > 0:
                         t_stat, p_value = stats.ttest_ind(group1, group2, equal_var=False)
@@ -183,47 +184,76 @@ class AbundanceBarChart:
                             'statistic': t_stat,
                             'p-value': p_value
                         }
+                        all_p_values.append(p_value)
                 else:
                     # Perform ANOVA
                     groups = []
                     for condition in selected_conditions:
                         group = [x for x, c in zip(data_for_stats, conditions_for_stats) 
-                                if c == condition]
+                                 if c == condition]
                         if group:
                             groups.append(group)
                     
                     if len(groups) > 1:
                         f_stat, p_value = stats.f_oneway(*groups)
                         
-                        # Perform Tukey's test if ANOVA is significant
-                        tukey_results = None
-                        if p_value < 0.05:
-                            tukey = pairwise_tukeyhsd(data_for_stats, conditions_for_stats)
-                            tukey_results = {
-                                'group1': [],
-                                'group2': [],
-                                'p_values': []
-                            }
-                            
-                            # Fixed: Directly access the p-values from the Tukey results
-                            for idx, row in enumerate(tukey._results_table[1:]):
-                                tukey_results['group1'].append(str(row[0]))
-                                tukey_results['group2'].append(str(row[1]))
-                                # Get p-value directly from the pvalues attribute
-                                p_val = tukey.pvalues[idx]
-                                tukey_results['p_values'].append(p_val)
-                        
+                        # Store the p-value for multiple testing correction
                         statistical_results[lipid_class] = {
                             'test': 'ANOVA',
                             'statistic': f_stat,
                             'p-value': p_value,
-                            'tukey_results': tukey_results
+                            'tukey_results': None  # Will update after correction
                         }
-                
+                        all_p_values.append(p_value)
+                        
             except Exception as e:
                 st.warning(f"Could not perform statistical test for {lipid_class}: {str(e)}")
                 continue
-        
+    
+        # Apply multiple testing correction
+        if all_p_values:
+            from statsmodels.stats.multitest import multipletests
+            # Adjust p-values using Benjamini-Hochberg procedure
+            adjusted = multipletests(all_p_values, alpha=0.05, method='fdr_bh')
+            adjusted_p_values = adjusted[1]
+            significance_flags = adjusted[0]
+    
+            # Update statistical_results with adjusted p-values and significance
+            for i, lipid_class in enumerate(statistical_results):
+                statistical_results[lipid_class]['adjusted p-value'] = adjusted_p_values[i]
+                statistical_results[lipid_class]['significant'] = significance_flags[i]
+    
+                # For ANOVA, perform Tukey's test if adjusted p-value is significant
+                if statistical_results[lipid_class]['test'] == 'ANOVA' and significance_flags[i]:
+                    data_for_stats = []
+                    conditions_for_stats = []
+                    class_df = continuation_df[continuation_df['ClassKey'] == lipid_class].copy()
+    
+                    for condition in selected_conditions:
+                        condition_idx = experiment.conditions_list.index(condition)
+                        condition_samples = experiment.individual_samples_list[condition_idx]
+                        sample_columns = [f"MeanArea[{sample}]" for sample in condition_samples 
+                                          if f"MeanArea[{sample}]" in class_df.columns]
+    
+                        if sample_columns:
+                            sample_sums = class_df[sample_columns].sum()
+                            data_for_stats.extend(sample_sums.values)
+                            conditions_for_stats.extend([condition] * len(sample_sums))
+    
+                    tukey = pairwise_tukeyhsd(data_for_stats, conditions_for_stats)
+                    tukey_results = {
+                        'group1': [],
+                        'group2': [],
+                        'p_values': []
+                    }
+                    for idx, res in enumerate(tukey._results_table[1:]):
+                        tukey_results['group1'].append(str(res[0]))
+                        tukey_results['group2'].append(str(res[1]))
+                        p_val = tukey.pvalues[idx]
+                        tukey_results['p_values'].append(p_val)
+    
+                    statistical_results[lipid_class]['tukey_results'] = tukey_results
+    
         return statistical_results
 
     @staticmethod
@@ -301,7 +331,8 @@ class AbundanceBarChart:
                 for i, lipid_class in enumerate(abundance_df['ClassKey']):
                     if lipid_class in anova_results:
                         result = anova_results[lipid_class]
-                        p_value = result['p-value']
+                        # Use adjusted p-value for significance
+                        p_value = result.get('adjusted p-value', result['p-value'])
                         
                         # Get significance level
                         significance = ''
