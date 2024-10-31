@@ -1457,7 +1457,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 if len(selected_conditions_list) == 2:
                     st.info("""
                     📊 **Statistical Testing Information**
-                    - Method: Independent t-test (Welch's t-test)
+                    - Method: Student t-test
                     - Significance levels:
                          * p < 0.05
                         - ** p < 0.01

@@ -178,7 +178,7 @@ class AbundanceBarChart:
                               if c == selected_conditions[1]]
                     
                     if len(group1) > 0 and len(group2) > 0:
-                        t_stat, p_value = stats.ttest_ind(group1, group2, equal_var=False)
+                        t_stat, p_value = stats.ttest_ind(group1, group2, equal_var=True)
                         statistical_results[lipid_class] = {
                             'test': 't-test',
                             'statistic': t_stat,
