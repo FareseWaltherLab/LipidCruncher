@@ -359,14 +359,14 @@ class AbundanceBarChart:
     def initialize_plot(num_classes):
         """
         Initializes a matplotlib plot with a white background and dynamic figure size.
-
+    
         Parameters:
         num_classes (int): The number of lipid classes to be plotted.
-
+    
         Returns:
         tuple: A tuple containing a figure and axis object of the plot.
         """
-        fig_width = 10
+        fig_width = 12  # Increased width to accommodate legend
         fig_height = max(5, num_classes * 0.5)  # Adjust height based on number of classes
         fig, ax = plt.subplots(figsize=(fig_width, fig_height))
         fig.set_facecolor('white')
@@ -416,7 +416,7 @@ class AbundanceBarChart:
     def style_plot(ax, abundance_df):
         """
         Styles the plot with labels, title, legend, and a frame.
-
+    
         Parameters:
         ax (matplotlib.axes.Axes): The axes object to style.
         abundance_df (pd.DataFrame): DataFrame used for the plot.
@@ -424,8 +424,10 @@ class AbundanceBarChart:
         ax.set_xlabel('Mean Concentration', fontsize=15)
         ax.set_ylabel('Lipid Class', fontsize=15)
         ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.legend(loc='lower right', fontsize=12)
+        # Move legend outside the plot to the right
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12)
         ax.set_title('Class Concentration Bar Chart', fontsize=15)
         for spine in ax.spines.values():
             spine.set_edgecolor('black')
-        plt.tight_layout(pad=2.0)
+        # Adjust layout to prevent legend cutoff
+        plt.tight_layout(rect=[0, 0, 0.9, 1])  # Reserves space for the legend
