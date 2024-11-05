@@ -6,7 +6,7 @@ bokeh==2.4.3
 matplotlib==3.7.1
 seaborn==0.12.2
 click==8.0.4
-plotly==5.15.0
+plotly==5.18.0  # Updated from 5.15.0
 kaleido==0.2.1
 openpyxl==3.1.2
 pillow==9.5.0

@@ -131,28 +131,54 @@ class SaturationPlot:
     def create_plots(df, experiment, selected_conditions):
         """
         Generates saturation plots for all lipid classes found in the DataFrame, for the given conditions.
+        Now filters out single sample conditions.
         """
         plots = {}
+        single_sample_conditions = []
+        valid_conditions = []
+    
+        # First check sample counts for each condition
+        for condition in selected_conditions:
+            samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
+            if len(samples) <= 1:
+                single_sample_conditions.append(condition)
+            else:
+                valid_conditions.append(condition)
+        
+        # Alert user about excluded conditions
+        if single_sample_conditions:
+            st.warning(f"The following conditions were excluded due to having only one sample: {', '.join(single_sample_conditions)}")
+        
+        # Proceed only if we have valid conditions
+        if not valid_conditions:
+            st.error("No conditions with multiple samples available for statistical analysis. Please ensure each condition has at least 2 samples.")
+            return plots
+        
+        # Create plots only for valid conditions
         for lipid_class in df['ClassKey'].unique():
-            plot_data = SaturationPlot._prepare_plot_data(df, selected_conditions, lipid_class, experiment)
+            plot_data = SaturationPlot._prepare_plot_data(df, valid_conditions, lipid_class, experiment)
             if not plot_data.empty:
                 statistical_results = SaturationPlot._perform_statistical_tests(plot_data, lipid_class)
                 main_plot = SaturationPlot._create_auc_plot(plot_data, lipid_class, statistical_results)
                 percentage_df = SaturationPlot._calculate_percentage_df(plot_data)
                 percentage_plot = SaturationPlot._create_percentage_plot(percentage_df, lipid_class)
                 plots[lipid_class] = (main_plot, percentage_plot, plot_data)
+        
         return plots
 
     @staticmethod
-    def _prepare_plot_data(df, selected_conditions, lipid_class, experiment):
+    def _prepare_plot_data(df, valid_conditions, lipid_class, experiment):
         """
-        Prepares plot data for a given lipid class across selected conditions.
+        Prepares plot data for a given lipid class across valid conditions.
+        Only processes conditions with multiple samples.
         """
         plot_data = []
-        for condition in selected_conditions:
+        for condition in valid_conditions:
             samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
-            if samples:  # Only process if there are samples for this condition
-                sfa_values, mufa_values, pufa_values, sfa_mean, mufa_mean, pufa_mean = SaturationPlot._calculate_sfa_mufa_pufa(df, condition, samples, lipid_class)
+            if len(samples) > 1:  # Double-check we're only processing multiple sample conditions
+                sfa_values, mufa_values, pufa_values, sfa_mean, mufa_mean, pufa_mean = (
+                    SaturationPlot._calculate_sfa_mufa_pufa(df, condition, samples, lipid_class)
+                )
                 if any(sfa_values + mufa_values + pufa_values):  # Only add data if there are non-zero values
                     plot_data.append({
                         'Condition': condition,
@@ -161,9 +187,20 @@ class SaturationPlot:
                         'PUFA_AUC': pufa_mean,
                         'SFA_values': sfa_values,
                         'MUFA_values': mufa_values,
-                        'PUFA_values': pufa_values
+                        'PUFA_values': pufa_values,
+                        'n_samples': len(samples)  # Add sample count for reference
                     })
-        return pd.DataFrame(plot_data)
+        
+        # Create DataFrame and add sample size to condition labels
+        plot_df = pd.DataFrame(plot_data)
+        if not plot_df.empty:
+            plot_df['Condition'] = plot_df.apply(
+                lambda row: f"{row['Condition']} (n={row['n_samples']})", 
+                axis=1
+            )
+            plot_df.drop('n_samples', axis=1, inplace=True)
+        
+        return plot_df
 
     @staticmethod
     def _display_saturation_plot(plot_data, lipid_class, experiment):
@@ -181,6 +218,28 @@ class SaturationPlot:
         percentage_plot = SaturationPlot._create_percentage_plot(percentage_df, lipid_class)
 
     @staticmethod
+    def display_summary(experiment, selected_conditions):
+        """
+        New method to display a summary of condition sample sizes before plotting
+        """
+        st.write("### Sample Size Summary")
+        summary_data = []
+        for condition in selected_conditions:
+            samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
+            summary_data.append({
+                'Condition': condition,
+                'Number of Samples': len(samples),
+                'Status': 'Included' if len(samples) > 1 else 'Excluded (single sample)'
+            })
+        
+        summary_df = pd.DataFrame(summary_data)
+        st.dataframe(summary_df)
+        
+        excluded_count = sum(1 for row in summary_data if row['Status'].startswith('Excluded'))
+        if excluded_count > 0:
+            st.info(f"Statistical analysis will proceed with {len(selected_conditions) - excluded_count} conditions that have multiple samples.")
+
+    @staticmethod
     def _prepare_df_for_plots(plot_data):
         """
         Prepares data for both main AUC and percentage distribution plots.
@@ -190,7 +249,6 @@ class SaturationPlot:
             tuple: Two DataFrames, one for the main AUC plot and one for the percentage distribution plot.
         """
         # Prepare data for main and percentage plot
-        main_df = plot_data.copy()
         main_df = SaturationPlot._calculate_std_dev(main_df)
         percentage_df = SaturationPlot._calculate_percentage_df(main_df)
         return main_df, percentage_df
@@ -380,7 +438,7 @@ class SaturationPlot:
         group1 = plot_data[plot_data['Condition'] == conditions[0]][f'{fa}_values'].iloc[0]
         group2 = plot_data[plot_data['Condition'] == conditions[1]][f'{fa}_values'].iloc[0]
         
-        t_statistic, p_value = stats.ttest_ind(group1, group2, equal_var=False)
+        t_statistic, p_value = stats.ttest_ind(group1, group2, equal_var=True)
         return {'test': 't-test', 't_statistic': t_statistic, 'p_value': p_value}
     
     @staticmethod
