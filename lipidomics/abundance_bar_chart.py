@@ -318,10 +318,14 @@ class AbundanceBarChart:
             ax.set_xlabel('Mean Concentration', fontsize=15)
             ax.set_ylabel('Lipid Class', fontsize=15)
             ax.tick_params(axis='both', which='major', labelsize=12)
-            ax.legend(loc='lower right', fontsize=12)
+            ax.legend(bbox_to_anchor=(1.15, 1), loc='upper left', fontsize=12)  # Move legend outside
             ax.set_title('Class Concentration Bar Chart', fontsize=15)
             for spine in ax.spines.values():
                 spine.set_edgecolor('black')
+
+            # Adjust layout to make room for legend
+            plt.tight_layout()
+            plt.subplots_adjust(right=0.85)  # Adjust this value to make more space for the legend
     
             # Add statistical significance annotations (only the asterisks)
             if anova_results:
@@ -372,7 +376,7 @@ class AbundanceBarChart:
         fig.set_facecolor('white')
         ax.set_facecolor('white')
         return fig, ax
-
+    
     @staticmethod
     def add_bars_to_plot(ax, abundance_df, selected_conditions, mode):
         """
