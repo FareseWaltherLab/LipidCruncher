@@ -13,3 +13,5 @@ from .pathway_viz import PathwayViz
 from .box_plot import BoxPlot
 from .abundance_pie_chart import AbundancePieChart
 from .lipidomic_heatmap import LipidomicHeatmap
+from .clean_generic_data import CleanDataGeneric
+from .data_format_handler import DataFormatHandler
