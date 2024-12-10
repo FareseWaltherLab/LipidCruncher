@@ -24,9 +24,14 @@ def main():
         df = load_and_validate_data(uploaded_file, data_format)
         if df is not None:
             confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
+            
+            # Only proceed with cleaning and displaying data if user has confirmed inputs
             if confirmed and valid_samples:
                 cleaned_df, intsta_df = clean_data(df, name_df, experiment, data_format)
-                display_cleaned_data(cleaned_df, intsta_df)
+                if cleaned_df is not None:  # Add check for successful cleaning
+                    display_cleaned_data(cleaned_df, intsta_df)
+            elif not confirmed and valid_samples:
+                st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
 
 def initialize_session_state():
     """Initialize the Streamlit session state."""
@@ -75,8 +80,6 @@ def load_and_validate_data(uploaded_file, data_format):
         df = pd.read_csv(uploaded_file)
         st.success("File uploaded successfully!")
         
-        st.subheader("Clean, Filter and Normalize Data")
-            
         df, success, message = lp.DataFormatHandler.validate_and_preprocess(
             df,
             'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
@@ -142,13 +145,13 @@ def process_group_samples(df, experiment):
     grouped_samples = lp.GroupSamples(experiment)
     
     if not grouped_samples.check_dataset_validity(df):
-        st.error("Invalid dataset format!")
-        return None, None, False  # Return three values to match expected unpacking
+        st.sidebar.error("Invalid dataset format!")
+        return None, None, False
 
     mean_area_cols = grouped_samples.build_mean_area_col_list(df)
     if len(mean_area_cols) != len(experiment.full_samples_list):
-        st.error("Number of samples in data doesn't match experiment setup!")
-        return None, None, False  # Return three values to match expected unpacking
+        st.sidebar.error("Number of samples in data doesn't match experiment setup!")
+        return None, None, False
 
     st.sidebar.subheader('Group Samples')
     group_df = grouped_samples.build_group_df(df)
@@ -157,7 +160,7 @@ def process_group_samples(df, experiment):
     group_df = handle_manual_grouping(group_df, experiment, grouped_samples)
     name_df = grouped_samples.update_sample_names(group_df)
     
-    return name_df, group_df, True  # Return three values: name_df, group_df, and success status
+    return name_df, group_df, True
 
 def handle_manual_grouping(group_df, experiment, grouped_samples):
     """Handle manual sample grouping if needed."""
@@ -201,16 +204,14 @@ def process_experiment(df):
     experiment = lp.Experiment()
     if not experiment.setup_experiment(n_conditions, conditions_list, number_of_samples_list):
         st.sidebar.error("All condition labels must be non-empty.")
-        return None, None, None, None, False  # Ensure five values are returned
+        return False, None, None, None, False
 
     name_df, group_df, valid_samples = process_group_samples(df, experiment)
     if not valid_samples:
-        return None, None, None, None, False  # Consistently return five values
+        return False, None, None, None, False
 
     bqc_label = specify_bqc_samples(experiment)
     confirmed = confirm_user_inputs(group_df, experiment)
-    if not confirmed:
-        return None, None, None, None, False  # Ensure five values are returned
 
     return confirmed, name_df, experiment, bqc_label, valid_samples
 
@@ -266,8 +267,10 @@ def clean_data(df, name_df, experiment, data_format):
     Returns:
         tuple: (cleaned_df, intsta_df)
     """
+    st.subheader("Clean, Filter and Normalize Data")
+    
     if data_format == 'LipidSearch 5.0':
-        cleaner = lp.CleanData()
+        cleaner = lp.CleanLipidSearchData()
     else:
         cleaner = lp.CleanDataGeneric()
         

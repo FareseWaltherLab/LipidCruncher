@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import re 
 
-class CleanData:
+class CleanLipidSearchData:
     """
         Class for cleaning and preprocessing lipidomics data.
     """
