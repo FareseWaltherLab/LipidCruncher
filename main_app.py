@@ -27,13 +27,10 @@ def main():
             if confirmed and valid_samples:
                 cleaned_df, intsta_df = clean_data(df, name_df, experiment, data_format)
                 display_cleaned_data(cleaned_df, intsta_df)
-            
-    handle_cache_clearing()
 
 def initialize_session_state():
     """Initialize the Streamlit session state."""
-    if 'clear_cache' not in st.session_state:
-        st.session_state.clear_cache = False
+    pass
 
 def display_format_selection():
     """Display data format selection in sidebar."""
@@ -78,8 +75,7 @@ def load_and_validate_data(uploaded_file, data_format):
         df = pd.read_csv(uploaded_file)
         st.success("File uploaded successfully!")
         
-        with st.expander("Raw Data"):
-            st.write(df)
+        st.subheader("Clean, Filter and Normalize Data")
             
         df, success, message = lp.DataFormatHandler.validate_and_preprocess(
             df,
@@ -281,30 +277,28 @@ def clean_data(df, name_df, experiment, data_format):
     return cleaned_df, intsta_df
 
 def display_cleaned_data(cleaned_df, intsta_df):
-    """Display cleaned data and provide download options."""
+    """Display cleaned data and internal standards data in expanders with download options."""
     if cleaned_df is not None:
-        st.subheader("Cleaned Data")
-        st.write(cleaned_df)
-        
-        csv = cleaned_df.to_csv(index=False)
-        st.download_button(
-            label="Download Cleaned Data as CSV",
-            data=csv,
-            file_name="cleaned_data.csv",
-            mime="text/csv"
-        )
-        
-        if not intsta_df.empty:
-            st.subheader("Internal Standards")
-            st.write(intsta_df)
-            
-            csv_intsta = intsta_df.to_csv(index=False)
+        with st.expander("View Cleaned Data"):
+            st.write(cleaned_df)
+            csv = cleaned_df.to_csv(index=False)
             st.download_button(
-                label="Download Internal Standards Data as CSV",
-                data=csv_intsta,
-                file_name="internal_standards.csv",
+                label="Download Data",
+                data=csv,
+                file_name="cleaned_data.csv",
                 mime="text/csv"
             )
+        
+        if not intsta_df.empty:
+            with st.expander("View Internal Standards"):
+                st.write(intsta_df)
+                csv_intsta = intsta_df.to_csv(index=False)
+                st.download_button(
+                    label="Download Data",
+                    data=csv_intsta,
+                    file_name="internal_standards.csv",
+                    mime="text/csv"
+                )
 
 def handle_cache_clearing():
     """Handle cache clearing functionality."""
