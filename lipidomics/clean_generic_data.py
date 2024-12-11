@@ -27,9 +27,20 @@ class CleanGenericData:
         """
         try:
             static_cols = ['LipidMolec']
-            mean_area_cols = ['MeanArea[' + sample + ']' for sample in full_samples_list]
-            relevant_cols = static_cols + mean_area_cols
-            return df[relevant_cols]
+            intensity_cols = ['intensity[' + sample + ']' for sample in full_samples_list]
+            relevant_cols = static_cols + intensity_cols
+            
+            # Extract columns
+            result_df = df[relevant_cols].copy()
+            
+            # Rename intensity columns to standardized format
+            rename_dict = {
+                f'intensity[{sample}]': f'intensity[s{i+1}]'
+                for i, sample in enumerate(full_samples_list)
+            }
+            result_df = result_df.rename(columns=rename_dict)
+            
+            return result_df
         except KeyError as e:
             print(f"Error in extracting columns: {e}")
             return pd.DataFrame()
@@ -48,8 +59,8 @@ class CleanGenericData:
         """
         try:
             rename_dict = {
-                f'MeanArea[{old}]': f'MeanArea[{new}]' 
-                for old, new in zip(name_df['old name'], name_df['updated name'])
+                f'intensity[{old_name}]': f'intensity[s{i+1}]'
+                for i, (old_name, _) in enumerate(zip(name_df['old name'], name_df['updated name']))
             }
             return df.rename(columns=rename_dict)
         except KeyError as e:
@@ -69,9 +80,9 @@ class CleanGenericData:
             pd.DataFrame: DataFrame with numeric abundance columns
         """
         try:
-            auc_cols = [f'MeanArea[{sample}]' for sample in full_samples_list]
+            intensity_cols = [f'intensity[s{i+1}]' for i in range(len(full_samples_list))]
             df_copy = df.copy()
-            df_copy[auc_cols] = df_copy[auc_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+            df_copy[intensity_cols] = df_copy[intensity_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
             return df_copy
         except KeyError as e:
             print(f"Error in converting columns to numeric: {e}")

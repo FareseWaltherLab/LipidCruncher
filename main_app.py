@@ -66,7 +66,7 @@ def display_format_requirements(data_format):
         
         Required columns:
         * `LipidMolec`: The molecule identifier for the lipid
-        * `MeanArea[sample_name]`: One column per sample with intensity values
+        * `intensity[sample_name]`: One column per sample with intensity values
         """)
 
 def load_and_validate_data(uploaded_file, data_format):
@@ -302,13 +302,6 @@ def display_cleaned_data(cleaned_df, intsta_df):
                     file_name="internal_standards.csv",
                     mime="text/csv"
                 )
-
-def handle_cache_clearing():
-    """Handle cache clearing functionality."""
-    if st.sidebar.button("Clear Cache"):
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        st.success("Cache cleared!")
 
 def process_and_display_data(df, data_format):
     """Process and display the data after validation."""

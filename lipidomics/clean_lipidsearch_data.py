@@ -39,9 +39,8 @@ class CleanLipidSearchData:
             relevant_cols = static_cols + mean_area_cols
             return df[relevant_cols]
         except KeyError as e:
-            # Log the error and return an empty DataFrame
             print(f"Error in extracting columns: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame or handle as needed
+            return pd.DataFrame()
 
 
     @st.cache_data(ttl=3600)
@@ -58,13 +57,14 @@ class CleanLipidSearchData:
             pd.DataFrame: The DataFrame with updated column names, or an empty DataFrame if an error occurs.
         """
         try:
-            rename_dict = _self._create_rename_dict(name_df)
-            df.rename(columns=rename_dict, inplace=True)
-            return df
+            rename_dict = {
+                f'MeanArea[{old_name}]': f'MeanArea[{new_name}]'
+                for old_name, new_name in zip(name_df['old name'], name_df['updated name'])
+            }
+            return df.rename(columns=rename_dict)
         except KeyError as e:
             print(f"Error in updating column names: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame or handle as needed
-
+            return pd.DataFrame()
 
     @st.cache_data(ttl=3600)
     def _create_rename_dict(_self, name_df):
@@ -419,37 +419,55 @@ class CleanLipidSearchData:
             # Select the highest quality peak for each unique lipid
             df = self._select_AUC(df, experiment)
     
-            # Perform final cleanup steps on the DataFrame
+            # Perform final cleanup steps
             df = self.final_cleanup(df)
+            
+            # Final step: rename MeanArea columns to intensity format
+            rename_dict = {
+                f'MeanArea[{sample}]': f'intensity[s{i+1}]'
+                for i, sample in enumerate(experiment.full_samples_list)
+            }
+            df = df.rename(columns=rename_dict)
     
             return df
         except Exception as e:
             print(f"An error occurred during data cleaning: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame in case of an error
+            return pd.DataFrame()
 
     @st.cache_data(ttl=3600)
     def extract_internal_standards(_self, df):
         """
-        Separates the internal standards from the dataset.
+        Separates internal standards and renames columns to intensity format.
         
         Args:
-            df (pd.DataFrame): The DataFrame containing lipidomics data including internal standards.
-        
+            df (pd.DataFrame): Input DataFrame with MeanArea columns
+            
         Returns:
-            tuple: Two DataFrames, the first being the dataset without internal standards 
-                   and the second being the DataFrame of only internal standards.
-        
-        Note:
-            Internal standards are identified by the presence of ':(s)' in the 'LipidMolec' column.
+            tuple: Two DataFrames (non_standards, standards) with intensity columns
         """
         try:
+            # First separate the standards using original column names
             internal_standards_df = df[df['LipidMolec'].str.contains(r':\(s\)')].reset_index(drop=True)
             non_standards_df = df[~df['LipidMolec'].str.contains(r':\(s\)')].reset_index(drop=True)
+            
+            # Get the MeanArea columns
+            mean_area_cols = [col for col in df.columns if col.startswith('MeanArea[')]
+            
+            # Create renaming dictionary
+            rename_dict = {
+                f'MeanArea[s{i+1}]': f'intensity[s{i+1}]'
+                for i in range(len(mean_area_cols))
+            }
+            
+            # Apply renaming to both DataFrames
+            internal_standards_df = internal_standards_df.rename(columns=rename_dict)
+            non_standards_df = non_standards_df.rename(columns=rename_dict)
+            
+            return non_standards_df, internal_standards_df
+            
         except Exception as e:
             print(f"Error separating internal standards: {e}")
-            return pd.DataFrame(), pd.DataFrame()  # Return empty DataFrames in case of error
-    
-        return non_standards_df, internal_standards_df
+            return pd.DataFrame(), pd.DataFrame()
     
     @st.cache_data(ttl=3600)
     def log_transform_df(_self, df, number_of_samples):
