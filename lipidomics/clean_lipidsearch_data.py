@@ -437,32 +437,56 @@ class CleanLipidSearchData:
     @st.cache_data(ttl=3600)
     def extract_internal_standards(_self, df):
         """
-        Separates internal standards and renames columns to intensity format.
+        Separates internal standards from other lipids in the dataset.
+        
+        Internal standards typically contain:
+        - Deuterated forms (e.g., +D3, +D4, +D7)
+        - ':(s)' suffix
+        - 13C labeled forms (e.g., +13C)
+        - 15N labeled forms
         
         Args:
-            df (pd.DataFrame): Input DataFrame with MeanArea columns
-            
+            df (pd.DataFrame): Input DataFrame with intensity/MeanArea columns
+                
         Returns:
-            tuple: Two DataFrames (non_standards, standards) with intensity columns
+            tuple: (non_standards_df, internal_standards_df)
+            - non_standards_df: DataFrame containing regular lipids
+            - internal_standards_df: DataFrame containing internal standards
         """
         try:
-            # First separate the standards using original column names
-            internal_standards_df = df[df['LipidMolec'].str.contains(r':\(s\)')].reset_index(drop=True)
-            non_standards_df = df[~df['LipidMolec'].str.contains(r':\(s\)')].reset_index(drop=True)
+            # Define patterns for internal standards
+            internal_std_patterns = [
+                r'\+D\d+',      # Matches deuterated forms like +D3, +D7
+                r':\(s\)',      # Matches :(s) suffix
+                r'\+\d*C\d*',   # Matches carbon labeling like +13C
+                r'\+\d*N\d*',   # Matches nitrogen labeling like +15N
+                r'SPLASH'       # Matches SPLASH standards
+            ]
             
-            # Get the MeanArea columns
-            mean_area_cols = [col for col in df.columns if col.startswith('MeanArea[')]
+            # Combine patterns into a single regex
+            combined_pattern = '|'.join(f'(?:{pattern})' for pattern in internal_std_patterns)
+            
+            # Separate standards using the combined pattern
+            internal_standards_df = df[df['LipidMolec'].str.contains(combined_pattern, regex=True, na=False)].reset_index(drop=True)
+            non_standards_df = df[~df['LipidMolec'].str.contains(combined_pattern, regex=True, na=False)].reset_index(drop=True)
+            
+            # Get columns to rename (either MeanArea or intensity)
+            value_cols = [col for col in df.columns if col.startswith(('MeanArea[', 'intensity['))]
             
             # Create renaming dictionary
             rename_dict = {
-                f'MeanArea[s{i+1}]': f'intensity[s{i+1}]'
-                for i in range(len(mean_area_cols))
+                col: f'intensity[s{i+1}]'
+                for i, col in enumerate(value_cols)
             }
             
             # Apply renaming to both DataFrames
             internal_standards_df = internal_standards_df.rename(columns=rename_dict)
             non_standards_df = non_standards_df.rename(columns=rename_dict)
             
+            # Validate separation
+            if len(df) != len(internal_standards_df) + len(non_standards_df):
+                raise ValueError("Row count mismatch after separation")
+                
             return non_standards_df, internal_standards_df
             
         except Exception as e:
