@@ -5,18 +5,12 @@ import numpy as np
 class CleanGenericData:
     """
     Handles cleaning and preprocessing of generic format lipidomics data.
-    Provides a simplified version of data cleaning compared to LipidSearch format.
     """
     
-    def __init__(self):
-        """Initialize the CleanGenericData class."""
-        pass
-        
     @st.cache_data(ttl=3600)
-    def _extract_relevant_columns(self, df, full_samples_list):
+    def _extract_relevant_columns(_self, df, full_samples_list):
         """
         Extracts relevant columns for analysis from the DataFrame.
-        For generic format, only LipidMolec and MeanArea columns are needed.
         
         Args:
             df (pd.DataFrame): The dataset to be processed
@@ -25,113 +19,61 @@ class CleanGenericData:
         Returns:
             pd.DataFrame: DataFrame containing only the essential columns
         """
-        try:
+        try:        
             static_cols = ['LipidMolec']
-            intensity_cols = ['intensity[' + sample + ']' for sample in full_samples_list]
+            intensity_cols = [f'Intensity[s{i+1}]' for i in range(len(full_samples_list))]
             relevant_cols = static_cols + intensity_cols
             
-            # Extract columns
-            result_df = df[relevant_cols].copy()
+            # Check if all required columns exist
+            missing_cols = [col for col in relevant_cols if col not in df.columns]
+            if missing_cols:
+                raise KeyError(f"Missing columns: {missing_cols}")
             
-            # Rename intensity columns to standardized format
-            rename_dict = {
-                f'intensity[{sample}]': f'intensity[s{i+1}]'
-                for i, sample in enumerate(full_samples_list)
-            }
-            result_df = result_df.rename(columns=rename_dict)
+            return df[relevant_cols].copy()
             
-            return result_df
         except KeyError as e:
-            print(f"Error in extracting columns: {e}")
             return pd.DataFrame()
 
-    @st.cache_data(ttl=3600)
     def _update_column_names(self, df, name_df):
-        """
-        Updates column names in the DataFrame to reflect new sample names.
-        
-        Args:
-            df (pd.DataFrame): DataFrame with columns to be renamed
-            name_df (pd.DataFrame): DataFrame containing old and updated sample names
-            
-        Returns:
-            pd.DataFrame: DataFrame with updated column names
-        """
+        """Updates column names in the DataFrame."""
         try:
             rename_dict = {
-                f'intensity[{old_name}]': f'intensity[s{i+1}]'
+                f'Intensity[{old_name}]': f'intensity[s{i+1}]'
                 for i, (old_name, _) in enumerate(zip(name_df['old name'], name_df['updated name']))
             }
             return df.rename(columns=rename_dict)
-        except KeyError as e:
-            print(f"Error in updating column names: {e}")
+        except KeyError:
             return pd.DataFrame()
 
-    @st.cache_data(ttl=3600)
     def _convert_columns_to_numeric(self, df, full_samples_list):
-        """
-        Converts abundance data columns to numeric type.
-        
-        Args:
-            df (pd.DataFrame): DataFrame containing the data
-            full_samples_list (list): List of all sample names
-            
-        Returns:
-            pd.DataFrame: DataFrame with numeric abundance columns
-        """
+        """Converts intensity data columns to numeric type."""
         try:
             intensity_cols = [f'intensity[s{i+1}]' for i in range(len(full_samples_list))]
             df_copy = df.copy()
             df_copy[intensity_cols] = df_copy[intensity_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
             return df_copy
-        except KeyError as e:
-            print(f"Error in converting columns to numeric: {e}")
+        except KeyError:
             return pd.DataFrame()
 
     def data_cleaner(self, df, name_df, experiment):
-        """
-        Main method to clean generic format data.
-        Simplified version of LipidSearch cleaning process.
-        
-        Args:
-            df (pd.DataFrame): The DataFrame to be cleaned
-            name_df (pd.DataFrame): DataFrame with old and new sample names for renaming
-            experiment (Experiment): Object containing experiment setup details
-            
-        Returns:
-            pd.DataFrame: Cleaned DataFrame ready for analysis
-        """
+        """Main method to clean generic format data."""
         try:
-            # Create a copy of the input DataFrame to avoid modifying the original
             cleaned_df = df.copy()
             
-            # Update column names based on the name mapping DataFrame
-            cleaned_df = self._update_column_names(cleaned_df, name_df)
-            
-            # Extract relevant columns based on the experiment's sample list
             cleaned_df = self._extract_relevant_columns(cleaned_df, experiment.full_samples_list)
-            
-            # Convert specified columns to numeric type
+            if cleaned_df.empty:
+                return cleaned_df
+                
+            cleaned_df = self._update_column_names(cleaned_df, name_df)
             cleaned_df = self._convert_columns_to_numeric(cleaned_df, experiment.full_samples_list)
-            
-            # Reset index for clean output
             cleaned_df = cleaned_df.reset_index(drop=True)
             
             return cleaned_df
             
-        except Exception as e:
-            print(f"An error occurred during data cleaning: {e}")
+        except Exception:
+            st.error("Error in data cleaning. Please ensure your data follows the generic format requirements.")
             return pd.DataFrame()
 
     def extract_internal_standards(self, df):
-        """
-        For generic format, no internal standards processing is needed.
-        Returns the same dataframe as non-standards and empty dataframe as standards.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            tuple: (original DataFrame, empty DataFrame for standards)
-        """
+        """For generic format, no internal standards processing is needed."""
         return df, pd.DataFrame(columns=df.columns)

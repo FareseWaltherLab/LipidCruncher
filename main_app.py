@@ -23,7 +23,10 @@ def main():
     if uploaded_file:
         df = load_and_validate_data(uploaded_file, data_format)
         if df is not None:
-            confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df)
+            # Convert UI format selection to internal format string
+            format_type = 'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
+            
+            confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df, format_type)
             
             # Only proceed with cleaning and displaying data if user has confirmed inputs
             if confirmed and valid_samples:
@@ -135,21 +138,26 @@ def setup_experiment():
         
     return experiment, True
 
-def process_group_samples(df, experiment):
+def process_group_samples(df, experiment, data_format):
     """
     Process and validate sample grouping.
+    
+    Args:
+        df (pd.DataFrame): The dataset to process
+        experiment (Experiment): The experiment setup
+        data_format (str): Either 'lipidsearch' or 'generic'
     
     Returns:
         tuple: (name_df, group_df, success status)
     """
-    grouped_samples = lp.GroupSamples(experiment)
+    grouped_samples = lp.GroupSamples(experiment, data_format)
     
     if not grouped_samples.check_dataset_validity(df):
         st.sidebar.error("Invalid dataset format!")
         return None, None, False
 
-    mean_area_cols = grouped_samples.build_mean_area_col_list(df)
-    if len(mean_area_cols) != len(experiment.full_samples_list):
+    value_cols = grouped_samples.build_mean_area_col_list(df)
+    if len(value_cols) != len(experiment.full_samples_list):
         st.sidebar.error("Number of samples in data doesn't match experiment setup!")
         return None, None, False
 
@@ -185,16 +193,20 @@ def handle_manual_grouping(group_df, experiment, grouped_samples):
     
     return group_df
 
-def process_experiment(df):
+def process_experiment(df, data_format='lipidsearch'):
     """
     Process the experiment setup and sample grouping based on user input.
 
+    Args:
+        df (pd.DataFrame): The dataset to be processed
+        data_format (str): The data format ('lipidsearch' or 'generic')
+
     Returns:
-    confirmed (bool): Whether the user has confirmed the inputs.
-    name_df (DataFrame): DataFrame containing name mappings.
-    experiment (Experiment): The configured Experiment object.
-    bqc_label (str or None): Label used for BQC samples, if any.
-    valid_samples (bool): Indicates whether sample validation was successful.
+        confirmed (bool): Whether the user has confirmed the inputs.
+        name_df (DataFrame): DataFrame containing name mappings.
+        experiment (Experiment): The configured Experiment object.
+        bqc_label (str or None): Label used for BQC samples, if any.
+        valid_samples (bool): Indicates whether sample validation was successful.
     """
     st.sidebar.subheader("Define Experiment")
     n_conditions = st.sidebar.number_input('Enter the number of conditions', min_value=1, max_value=20, value=1, step=1)
@@ -206,7 +218,7 @@ def process_experiment(df):
         st.sidebar.error("All condition labels must be non-empty.")
         return False, None, None, None, False
 
-    name_df, group_df, valid_samples = process_group_samples(df, experiment)
+    name_df, group_df, valid_samples = process_group_samples(df, experiment, data_format)
     if not valid_samples:
         return False, None, None, None, False
 
@@ -272,7 +284,7 @@ def clean_data(df, name_df, experiment, data_format):
     if data_format == 'LipidSearch 5.0':
         cleaner = lp.CleanLipidSearchData()
     else:
-        cleaner = lp.CleanDataGeneric()
+        cleaner = lp.CleanGenericData()
         
     cleaned_df = cleaner.data_cleaner(df, name_df, experiment)
     cleaned_df, intsta_df = cleaner.extract_internal_standards(cleaned_df)

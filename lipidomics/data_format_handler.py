@@ -21,7 +21,7 @@ class DataFormatHandler:
             return DataFormatHandler._validate_generic(df)
     
     @staticmethod
-    def _validate_lipidsearch(df):
+    def _validate_lipidsearch(df):  # Fixed method name here
         """Validates LipidSearch format data"""
         required_cols = [
             'LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt',
@@ -39,13 +39,14 @@ class DataFormatHandler:
         return df, True, "Valid LipidSearch format"
     
     @staticmethod
-    def _validate_generic(df):
+    def _validate_generic(df):  # Already correct method name
         """Validates generic format data"""
         # Check minimum requirements
         if 'LipidMolec' not in df.columns:
             return None, False, "Missing required column: LipidMolec"
             
-        if not any(col.startswith('MeanArea[') for col in df.columns):
-            return None, False, "No MeanArea columns found"
+        # Check for intensity columns - case insensitive
+        if not any(col.lower().startswith('intensity[') for col in df.columns):
+            return None, False, "No intensity columns found"
             
         return df, True, "Valid generic format"
