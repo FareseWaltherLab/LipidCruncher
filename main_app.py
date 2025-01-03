@@ -29,10 +29,13 @@ def main():
             if df is not None:
                 format_type = 'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
                 
-                confirmed, name_df, experiment, bqc_label, valid_samples = process_experiment(df, format_type)
+                # Updated to handle the new returned updated_df
+                confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, format_type)
                 
                 if confirmed and valid_samples:
-                    cleaned_df, intsta_df = clean_data(df, name_df, experiment, data_format)
+                    # Use updated_df instead of df if it exists
+                    df_to_clean = updated_df if updated_df is not None else df
+                    cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
                     if cleaned_df is not None:
                         display_cleaned_data(cleaned_df, intsta_df)
                 elif not confirmed and valid_samples:
@@ -54,6 +57,8 @@ def initialize_session_state():
         st.session_state.initialized = True
     if 'last_downloaded_state' not in st.session_state:
         st.session_state.last_downloaded_state = None
+    if 'grouping_complete' not in st.session_state:
+        st.session_state.grouping_complete = True
 
 def display_format_selection():
     """Display data format selection in sidebar."""
@@ -163,84 +168,144 @@ def process_group_samples(df, experiment, data_format):
         data_format (str): Either 'lipidsearch' or 'generic'
     
     Returns:
-        tuple: (name_df, group_df, success status)
+        tuple: (name_df, group_df, valid_samples)
     """
     grouped_samples = lp.GroupSamples(experiment, data_format)
     
     if not grouped_samples.check_dataset_validity(df):
         st.sidebar.error("Invalid dataset format!")
-        return None, None, False
+        return None, None, None, False
 
     value_cols = grouped_samples.build_mean_area_col_list(df)
     if len(value_cols) != len(experiment.full_samples_list):
         st.sidebar.error("Number of samples in data doesn't match experiment setup!")
-        return None, None, False
+        return None, None, None, False
 
     st.sidebar.subheader('Group Samples')
     group_df = grouped_samples.build_group_df(df)
     st.sidebar.write(group_df)
 
-    group_df = handle_manual_grouping(group_df, experiment, grouped_samples)
+    # Now handle_manual_grouping returns both group_df and updated df
+    group_df, updated_df = handle_manual_grouping(group_df, experiment, grouped_samples, df)
     name_df = grouped_samples.update_sample_names(group_df)
     
-    return name_df, group_df, True
+    return name_df, group_df, updated_df, True
 
-def handle_manual_grouping(group_df, experiment, grouped_samples):
-    """Handle manual sample grouping if needed."""
+def handle_manual_grouping(group_df, experiment, grouped_samples, df):
+    """Handle manual sample grouping if needed."""    
     st.sidebar.write('Are your samples properly grouped together?')
     ans = st.sidebar.radio('', ['Yes', 'No'])
     
     if ans == 'No':
+        st.session_state.grouping_complete = False
         selections = {}
         remaining_samples = group_df['sample name'].tolist()
         
+        # Keep track of expected samples per condition
+        expected_samples = dict(zip(experiment.conditions_list, 
+                                  experiment.number_of_samples_list))
+        
         for condition in experiment.conditions_list:
+            st.sidebar.write(f"Select {expected_samples[condition]} samples for {condition}")
+            
             selected_samples = st.sidebar.multiselect(
-                f'Pick the samples that belong to condition {condition}', 
+                f'Pick the samples that belong to condition {condition}',
                 remaining_samples
             )
-            selections[condition] = selected_samples
-            remaining_samples = [s for s in remaining_samples if s not in selected_samples]
             
-        group_df = grouped_samples.group_samples(group_df, selections)
-        st.sidebar.write('Updated sample grouping:')
-        st.sidebar.write(group_df)
+            if len(selected_samples) > expected_samples[condition]:
+                st.sidebar.error(f"Too many samples selected for {condition}. Please select exactly {expected_samples[condition]} samples.")
+                return group_df, df
+            
+            selections[condition] = selected_samples
+            
+            if len(selected_samples) == expected_samples[condition]:
+                remaining_samples = [s for s in remaining_samples if s not in selected_samples]
+        
+        if all(len(selections[condition]) == expected_samples[condition] 
+               for condition in experiment.conditions_list):
+            try:
+                # Update the group_df with new sample ordering
+                group_df = grouped_samples.group_samples(group_df, selections)
+                
+                # Create the new ordered sample list based on selections
+                new_ordered_samples = []
+                for condition in experiment.conditions_list:
+                    new_ordered_samples.extend(selections[condition])
+                
+                # Create DataFrame copy with reordered intensity columns
+                df_reordered = df.copy()
+                
+                # Add intensity columns in the new order
+                prefix = 'MeanArea' if grouped_samples.data_format == 'lipidsearch' else 'Intensity'
+                intensity_cols = [f"{prefix}[{sample}]" for sample in new_ordered_samples]
+                
+                # Get name_df for display
+                name_df = grouped_samples.update_sample_names(group_df)
+                
+                st.sidebar.success('Sample grouping updated successfully!')
+                
+                # Display the new grouping information as a DataFrame
+                st.sidebar.write("\nNew Sample Grouping:")
+                st.sidebar.dataframe(name_df)
+                
+                st.session_state.grouping_complete = True
+                
+                return group_df, df_reordered
+                
+            except ValueError as e:
+                st.sidebar.error(f"Error updating groups: {str(e)}")
+                st.session_state.grouping_complete = False
+        else:
+            incorrect_conditions = [
+                f"{cond} (selected {len(selections[cond])}/{expected_samples[cond]} samples)"
+                for cond in experiment.conditions_list
+                if len(selections[cond]) != expected_samples[cond]
+            ]
+            st.sidebar.error(
+                f"Please select the correct number of samples for:\n"
+                f"{', '.join(incorrect_conditions)}"
+            )
+            st.session_state.grouping_complete = False
+    else:
+        st.session_state.grouping_complete = True
     
-    return group_df
+    return group_df, df
 
 def process_experiment(df, data_format='lipidsearch'):
     """
     Process the experiment setup and sample grouping based on user input.
-
-    Args:
-        df (pd.DataFrame): The dataset to be processed
-        data_format (str): The data format ('lipidsearch' or 'generic')
-
-    Returns:
-        confirmed (bool): Whether the user has confirmed the inputs.
-        name_df (DataFrame): DataFrame containing name mappings.
-        experiment (Experiment): The configured Experiment object.
-        bqc_label (str or None): Label used for BQC samples, if any.
-        valid_samples (bool): Indicates whether sample validation was successful.
     """
     st.sidebar.subheader("Define Experiment")
-    n_conditions = st.sidebar.number_input('Enter the number of conditions', min_value=1, max_value=20, value=1, step=1)
-    conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1}') for i in range(n_conditions)]
-    number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', min_value=1, max_value=1000, value=1, step=1) for i in range(n_conditions)]
+    n_conditions = st.sidebar.number_input('Enter the number of conditions', 
+                                         min_value=1, max_value=20, value=1, step=1)
+    
+    conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1}') 
+                      for i in range(n_conditions)]
+    
+    number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', 
+                                                     min_value=1, max_value=1000, value=1, step=1) 
+                             for i in range(n_conditions)]
 
     experiment = lp.Experiment()
     if not experiment.setup_experiment(n_conditions, conditions_list, number_of_samples_list):
         st.sidebar.error("All condition labels must be non-empty.")
-        return False, None, None, None, False
+        return False, None, None, None, False, None
 
-    name_df, group_df, valid_samples = process_group_samples(df, experiment, data_format)
+    name_df, group_df, updated_df, valid_samples = process_group_samples(df, experiment, data_format)
     if not valid_samples:
-        return False, None, None, None, False
+        return False, None, None, None, False, None
 
-    bqc_label = specify_bqc_samples(experiment)
-    confirmed = confirm_user_inputs(group_df, experiment)
+    # Only show BQC selection and confirmation if grouping is complete
+    if st.session_state.grouping_complete:
+        bqc_label = specify_bqc_samples(experiment)
+        confirmed = confirm_user_inputs(group_df, experiment)
+    else:
+        bqc_label = None
+        confirmed = False
+        st.sidebar.error("Please complete sample grouping before proceeding.")
 
-    return confirmed, name_df, experiment, bqc_label, valid_samples
+    return confirmed, name_df, experiment, bqc_label, valid_samples, updated_df
 
 def specify_bqc_samples(experiment):
     """
