@@ -38,15 +38,19 @@ def main():
                     cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
                     if cleaned_df is not None:
                         display_cleaned_data(cleaned_df, intsta_df)
+                        # Add normalization step
+                        normalized_df = handle_data_normalization(cleaned_df, intsta_df, experiment, format_type)
                 elif not confirmed and valid_samples:
                     st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
         else:
             # Use existing data from session state
             display_cleaned_data(None, None)  # Will use session state values
+            if hasattr(st.session_state, 'normalized_df') and st.session_state.normalized_df is not None:
+                display_normalized_data()
 
 def initialize_session_state():
     """Initialize the Streamlit session state."""
-    # Only initialize if they don't exist at all
+    # Existing initializations
     if 'cleaned_df' not in st.session_state:
         st.session_state.cleaned_df = None
     if 'intsta_df' not in st.session_state:
@@ -59,6 +63,13 @@ def initialize_session_state():
         st.session_state.last_downloaded_state = None
     if 'grouping_complete' not in st.session_state:
         st.session_state.grouping_complete = True
+    # Add normalization states
+    if 'normalization_inputs' not in st.session_state:
+        st.session_state.normalization_inputs = {}
+    if 'normalization_method' not in st.session_state:
+        st.session_state.normalization_method = 'None'
+    if 'normalized_df' not in st.session_state:
+        st.session_state.normalized_df = None
 
 def display_format_selection():
     """Display data format selection in sidebar."""
@@ -505,6 +516,215 @@ def process_and_display_data(df, data_format):
         if group_success:
             cleaned_df, intsta_df = clean_data(df, name_df, experiment, data_format)
             display_cleaned_data(cleaned_df, intsta_df)
+            
+def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
+    """Handle data normalization based on format type."""
+    st.subheader("Data Normalization")
+    
+    # Full normalization for LipidSearch or data with ClassKey
+    if format_type == 'lipidsearch' or 'ClassKey' in cleaned_df.columns:
+        normalized_df = display_normalization_options(cleaned_df, intsta_df, experiment)
+        if normalized_df is not None:
+            st.session_state.normalized_df = normalized_df
+            return normalized_df
+    # Limited normalization (BCA only) for other formats
+    else:
+        st.warning("Normalization using internal standards requires lipid class information. Only BCA normalization is available for this format.")
+        if st.checkbox("Normalize using BCA assay"):
+            with st.expander("Enter Inputs for BCA Assay Data Normalization"):
+                protein_df = collect_protein_concentrations(experiment)
+                if protein_df is not None:
+                    normalized_data_object = lp.NormalizeData()
+                    normalized_df = normalized_data_object.normalize_using_bca(cleaned_df, protein_df)
+                    st.session_state.normalized_df = normalized_df
+                    st.session_state.normalization_inputs['BCA'] = protein_df
+                    return normalized_df
+    return None
+
+def display_normalization_options(cleaned_df, intsta_df, experiment):
+    """
+    Display options for data normalization and process user inputs.
+
+    Parameters:
+        cleaned_df (pd.DataFrame): The cleaned DataFrame containing the experiment data.
+        intsta_df (pd.DataFrame): DataFrame containing the internal standards data.
+        experiment (Experiment): The experiment object with setup details.
+
+    Returns:
+        pd.DataFrame: The normalized DataFrame or original DataFrame with renamed columns.
+    """
+    normalized_data_object = lp.NormalizeData()
+
+    # Get the full list of classes
+    all_class_lst = list(cleaned_df['ClassKey'].unique())
+    st.session_state.all_classes = all_class_lst
+
+    # Initialize or update selected classes
+    if 'selected_classes' not in st.session_state or not st.session_state.selected_classes:
+        st.session_state.selected_classes = all_class_lst.copy()
+
+    # Class selection
+    def update_selected_classes():
+        st.session_state.selected_classes = st.session_state.temp_selected_classes
+
+    selected_classes = st.multiselect(
+        'Select lipid classes you would like to analyze:',
+        all_class_lst, 
+        default=st.session_state.selected_classes,
+        key='temp_selected_classes',
+        on_change=update_selected_classes
+    )
+
+    # Use selected classes for filtering
+    selected_class_list = st.session_state.selected_classes if st.session_state.selected_classes else all_class_lst
+    
+    # Filter DataFrame based on selected classes
+    filtered_df = cleaned_df[cleaned_df['ClassKey'].isin(selected_class_list)].copy()
+
+    # Normalization method selection
+    def update_normalization_method():
+        st.session_state.normalization_method = st.session_state.temp_normalization_method
+
+    normalization_method = st.radio(
+        "Select how you would like to normalize your data:",
+        ['None', 'Internal Standards', 'BCA Assay', 'Both'],
+        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(st.session_state.get('normalization_method', 'None')),
+        key='temp_normalization_method',
+        on_change=update_normalization_method
+    )
+
+    # Initialize final DataFrame
+    normalized_df = filtered_df.copy()
+
+    if st.session_state.normalization_method != 'None':
+        if st.session_state.normalization_method in ['BCA Assay', 'Both']:
+            with st.expander("Enter Inputs for BCA Assay Data Normalization"):
+                protein_df = collect_protein_concentrations(experiment)
+                if protein_df is not None:
+                    normalized_df = normalized_data_object.normalize_using_bca(normalized_df, protein_df)
+                    st.session_state.normalization_inputs['BCA'] = protein_df
+
+        if st.session_state.normalization_method in ['Internal Standards', 'Both']:
+            with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
+                added_intsta_species_lst = st.session_state.normalization_inputs.get('Internal_Standards', {}).get('added_intsta_species_lst', [])
+                intsta_concentration_dict = st.session_state.normalization_inputs.get('Internal_Standards', {}).get('intsta_concentration_dict', {})
+
+                new_added_intsta_species_lst, new_intsta_concentration_dict = collect_user_input_for_normalization(
+                    normalized_df, intsta_df, selected_class_list, added_intsta_species_lst, intsta_concentration_dict
+                )
+
+                normalized_df = normalized_data_object.normalize_data(
+                    selected_class_list, new_added_intsta_species_lst, new_intsta_concentration_dict, normalized_df, intsta_df, experiment
+                )
+
+                st.session_state.normalization_inputs.setdefault('Internal_Standards', {}).update({
+                    'added_intsta_species_lst': new_added_intsta_species_lst,
+                    'intsta_concentration_dict': new_intsta_concentration_dict
+                })
+    else:
+        # If no normalization selected, just rename the columns
+        normalized_df = normalized_data_object._rename_intensity_columns(normalized_df)
+
+    # Display the dataset using the existing display_data function
+    st.subheader("View Dataset")
+    display_data(normalized_df, "Processed Data", "processed_data.csv")
+
+    return normalized_df
+
+def collect_user_input_for_normalization(normalized_df, intsta_df, selected_class_list, added_intsta_species_lst, intsta_concentration_dict):
+    """
+    Collects user input for normalization process using Streamlit UI.
+
+    Parameters:
+        normalized_df (pd.DataFrame): Main dataset.
+        intsta_df (pd.DataFrame): Dataset containing internal standards.
+        selected_class_list (list): Preselected classes for normalization.
+        added_intsta_species_lst (list): Preselected internal standard species.
+        intsta_concentration_dict (dict): Preselected concentrations of internal standards.
+
+    Returns:
+        tuple: Contains selected internal standards and concentrations.
+    """
+    intsta_species_lst = intsta_df['LipidMolec'].tolist()
+
+    added_intsta_species_lst = [
+        st.selectbox(f'Pick an internal standard for {lipid_class} species', intsta_species_lst, index=intsta_species_lst.index(added_intsta_species_lst[i]) if i < len(added_intsta_species_lst) else 0)
+        for i, lipid_class in enumerate(selected_class_list)
+    ]
+
+    st.write('Enter the concentration of each internal standard species:')
+    intsta_concentration_dict = {
+        lipid: st.number_input(
+            f'Enter concentration of {lipid} in micromole',
+            min_value=0.0, max_value=100000.0, value=intsta_concentration_dict.get(lipid, 1.0), step=0.1
+        )
+        for lipid in set(added_intsta_species_lst)
+    }
+
+    return added_intsta_species_lst, intsta_concentration_dict
+
+def collect_protein_concentrations(experiment):
+    """
+    Collects protein concentrations for each sample using Streamlit's UI.
+    Args:
+        experiment (Experiment): The experiment object containing the list of sample names.
+    Returns:
+        pd.DataFrame: A DataFrame with 'Sample' as a column and 'Concentration' containing the protein concentrations.
+    """
+    method = st.radio(
+        "Select the method for providing protein concentrations:",
+        ["Manual Input", "Upload Excel File"],
+        index=1
+    )
+    
+    if method == "Manual Input":
+        protein_concentrations = {}
+        for sample in experiment.full_samples_list:
+            concentration = st.number_input(f'Enter protein concentration for {sample} (mg/mL):',
+                                            min_value=0.0, max_value=100000.0, value=1.0, step=0.1,
+                                            key=sample)  # Unique key for each input
+            protein_concentrations[sample] = concentration
+
+        protein_df = pd.DataFrame(list(protein_concentrations.items()), columns=['Sample', 'Concentration'])
+    
+    elif method == "Upload Excel File":
+        st.info("Upload an Excel file with a single column named 'Concentration'. Each row should correspond to the protein concentration for each sample in the experiment, in order.")
+        uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
+        
+        if uploaded_file is not None:
+            protein_df = pd.read_excel(uploaded_file, engine='openpyxl')  # Ensure the correct engine is used
+            if len(protein_df) != len(experiment.full_samples_list):
+                st.error(f"The number of concentrations in the file ({len(protein_df)}) does not match the number of samples ({len(experiment.full_samples_list)}). Please upload a valid file.")
+                return None
+            protein_df['Sample'] = experiment.full_samples_list
+        else:
+            st.warning("Please upload an Excel file to proceed.")
+            return None
+
+    return protein_df
+
+def display_normalized_data():
+    """Display normalized data if it exists in session state."""
+    if st.checkbox("View and Download Normalized Dataset", value=True):
+        display_data(st.session_state.normalized_df, 'Normalized Data', 'normalized_data.csv')
+        
+def display_data(df, title, filename):
+    """
+    Display a DataFrame in an expander with download option.
+    
+    Parameters:
+        df (pd.DataFrame): DataFrame to display
+        title (str): Title for the data section
+        filename (str): Name of file for download
+    """
+    st.write(df)
+    csv = df.to_csv(index=False)
+    st.download_button(
+        label=f"Download {title}",
+        data=csv,
+        file_name=filename,
+        mime="text/csv"
+    )
 
 if __name__ == "__main__":
     main()
