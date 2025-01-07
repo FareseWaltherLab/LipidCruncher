@@ -5,6 +5,7 @@ import streamlit as st
 class NormalizeData:
     """
     Class for normalizing lipidomic data using internal standards and BCA assay data.
+    Format-agnostic implementation focusing only on essential columns for normalization.
     """
     
     def _filter_data_by_class(self, df, selected_class_list):
@@ -26,8 +27,10 @@ class NormalizeData:
         intensity_df = class_df[intensity_cols]
         normalized_intensity_df = (intensity_df.divide(intsta_auc, axis='columns') * concentration)
         
-        non_numeric_cols = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt']
-        result_df = pd.concat([class_df[non_numeric_cols].reset_index(drop=True), 
+        # Only keep essential columns needed for normalization
+        essential_cols = ['LipidMolec', 'ClassKey']
+        
+        result_df = pd.concat([class_df[essential_cols].reset_index(drop=True), 
                              normalized_intensity_df.reset_index(drop=True)], axis=1)
         return result_df
 
@@ -51,17 +54,6 @@ class NormalizeData:
     def normalize_data(self, selected_class_list, added_intsta_species_lst, intsta_concentration_dict, df, intsta_df, experiment):
         """
         Normalize data using internal standards.
-        
-        Parameters:
-            selected_class_list (list): List of lipid classes to normalize
-            added_intsta_species_lst (list): List of internal standards for each class
-            intsta_concentration_dict (dict): Concentrations of internal standards
-            df (pd.DataFrame): Main dataset without internal standards
-            intsta_df (pd.DataFrame): Dataset containing internal standards
-            experiment: Experiment object containing sample information
-            
-        Returns:
-            pd.DataFrame: Normalized dataset with renamed concentration columns
         """
         selected_df = self._filter_data_by_class(df, selected_class_list)
         full_samples_list = experiment.full_samples_list
@@ -81,26 +73,30 @@ class NormalizeData:
     def normalize_using_bca(self, df, protein_df):
         """
         Normalize lipid intensities using protein concentrations from BCA assay.
-        
-        Parameters:
-            df (pd.DataFrame): DataFrame containing lipidomics data
-            protein_df (pd.DataFrame): DataFrame with 'Sample' and 'Concentration' columns
-            
-        Returns:
-            pd.DataFrame: DataFrame with normalized lipid intensities
         """
-        if 'Sample' in protein_df.columns:
-            protein_df.set_index('Sample', inplace=True)
+        try:
+            normalized_df = df.copy()
             
-        # Find intensity columns and normalize them
-        intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
-        normalized_df = df.copy()
-        
-        for col in intensity_cols:
-            sample_name = col[col.find('[')+1:col.find(']')]
-            if sample_name in protein_df.index:
-                normalized_df[col] = df[col] / protein_df.loc[sample_name, 'Concentration']
-        
-        # Rename intensity columns to concentration
-        normalized_df = self._rename_intensity_columns(normalized_df)
-        return normalized_df
+            # Set up protein concentrations
+            if 'Sample' in protein_df.columns:
+                protein_df.set_index('Sample', inplace=True)
+                
+            # Find and normalize intensity columns
+            intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
+            
+            for col in intensity_cols:
+                sample_name = col[col.find('[')+1:col.find(']')]
+                if sample_name in protein_df.index:
+                    conc_value = protein_df.loc[sample_name, 'Concentration']
+                    if conc_value <= 0:
+                        st.warning(f"Skipping {sample_name} - protein concentration is zero or negative")
+                        continue
+                    normalized_df[col] = df[col] / conc_value
+            
+            # Rename the columns to concentration after normalization
+            normalized_df = self._rename_intensity_columns(normalized_df)
+            return normalized_df
+            
+        except Exception as e:
+            st.error(f"Error in BCA normalization: {str(e)}")
+            return df

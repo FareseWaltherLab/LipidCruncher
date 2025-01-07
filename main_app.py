@@ -21,32 +21,36 @@ def main():
     )
     
     if uploaded_file:
-        # Only process new data if we haven't already or if the standards haven't been modified
-        if (st.session_state.cleaned_df is None or 
-            not st.session_state.standards_modified):
-            
+        # Process new data if we haven't already processed it
+        if st.session_state.cleaned_df is None:
             df = load_and_validate_data(uploaded_file, data_format)
             if df is not None:
                 format_type = 'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
                 
-                # Updated to handle the new returned updated_df
                 confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, format_type)
                 
                 if confirmed and valid_samples:
-                    # Use updated_df instead of df if it exists
                     df_to_clean = updated_df if updated_df is not None else df
                     cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
                     if cleaned_df is not None:
+                        st.session_state.experiment = experiment  # Store experiment in session state
+                        st.session_state.format_type = format_type  # Store format type
                         display_cleaned_data(cleaned_df, intsta_df)
-                        # Add normalization step
                         normalized_df = handle_data_normalization(cleaned_df, intsta_df, experiment, format_type)
                 elif not confirmed and valid_samples:
                     st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
         else:
-            # Use existing data from session state
+            # Use existing data from session state and show all sections
             display_cleaned_data(None, None)  # Will use session state values
-            if hasattr(st.session_state, 'normalized_df') and st.session_state.normalized_df is not None:
-                display_normalized_data()
+            
+            # Always show normalization options after cleaning
+            if hasattr(st.session_state, 'experiment') and hasattr(st.session_state, 'format_type'):
+                normalized_df = handle_data_normalization(
+                    st.session_state.cleaned_df,
+                    st.session_state.intsta_df,
+                    st.session_state.experiment,
+                    st.session_state.format_type
+                )
 
 def initialize_session_state():
     """Initialize the Streamlit session state."""
@@ -386,12 +390,8 @@ def display_cleaned_data(cleaned_df, intsta_df):
     """
     Display cleaned data and internal standards data in expanders with download options.
     """
-    # Initialize button click tracker in session state
-    if 'remove_button_clicked' not in st.session_state:
-        st.session_state.remove_button_clicked = False
-        
-    # Only update session state if we're passed new data
-    if cleaned_df is not None and intsta_df is not None:
+    # Initialize session state if new data is provided
+    if cleaned_df is not None:
         st.session_state.cleaned_df = cleaned_df.copy()
         st.session_state.intsta_df = intsta_df.copy() if intsta_df is not None else pd.DataFrame()
         st.session_state.standards_modified = False
@@ -408,13 +408,67 @@ def display_cleaned_data(cleaned_df, intsta_df):
             mime="text/csv"
         )
 
-    # Internal standards management
+    # Internal standards management - always show this section
     with st.expander("Manage Internal Standards"):
         if not st.session_state.intsta_df.empty:
             st.write("Current Internal Standards:")
             st.write(st.session_state.intsta_df)
+        else:
+            st.info("No internal standards detected. You can add standards below.")
 
-            # Handle removals
+        # Add new standards section
+        st.subheader("Add New Standard")
+        if 'ClassKey' in st.session_state.cleaned_df.columns:
+            lipid_classes = sorted(st.session_state.cleaned_df['ClassKey'].unique())
+            
+            selected_class = st.selectbox(
+                "Select Lipid Class",
+                lipid_classes,
+                key='add_standard_class'
+            )
+
+            if selected_class:
+                current_standards = {}
+                if not st.session_state.intsta_df.empty:
+                    current_standards = dict(zip(
+                        st.session_state.intsta_df['ClassKey'],
+                        st.session_state.intsta_df['LipidMolec']
+                    ))
+                
+                just_added = getattr(st.session_state, 'just_added_standard', None)
+                
+                if selected_class in current_standards and not just_added:
+                    st.warning(f"Class {selected_class} already has a standard: {current_standards[selected_class]}")
+                else:
+                    potential_standards = st.session_state.cleaned_df[
+                        st.session_state.cleaned_df['ClassKey'] == selected_class
+                    ]['LipidMolec'].tolist()
+            
+                    if potential_standards:
+                        selected_standard = st.selectbox(
+                            "Select Species to Use as Standard",
+                            sorted(potential_standards),
+                            key='add_standard_species'
+                        )
+            
+                        if st.button("Add as Standard", key="add_button"):
+                            new_cleaned_df, new_intsta_df = lp.StandardsManager.add_standard(
+                                st.session_state.cleaned_df,
+                                st.session_state.intsta_df,
+                                selected_class,
+                                selected_standard
+                            )
+                            
+                            if new_cleaned_df is not None and new_intsta_df is not None:
+                                st.session_state.cleaned_df = new_cleaned_df.copy()
+                                st.session_state.intsta_df = new_intsta_df.copy()
+                                st.session_state.standards_modified = True
+                                st.session_state.just_added_standard = True
+                                st.success(f"Added standard {selected_standard} for class {selected_class}")
+                                st.experimental_rerun()
+
+        # Handle standard removal if standards exist
+        if not st.session_state.intsta_df.empty:
             st.subheader("Remove Standards")
             current_standards = st.session_state.intsta_df['LipidMolec'].tolist()
             
@@ -436,77 +490,18 @@ def display_cleaned_data(cleaned_df, intsta_df):
                         st.session_state.cleaned_df = new_cleaned_df.copy()
                         st.session_state.intsta_df = new_intsta_df.copy()
                         st.session_state.standards_modified = True
-                        st.success(f"Removed {len(standards_to_remove)} standards")
                         st.experimental_rerun()
 
-            # Add new standards section
-            st.subheader("Add New Standard")
-            if 'ClassKey' in st.session_state.cleaned_df.columns:
-                lipid_classes = sorted(st.session_state.cleaned_df['ClassKey'].unique())
-                
-                selected_class = st.selectbox(
-                    "Select Lipid Class",
-                    lipid_classes,
-                    key='add_standard_class'
-                )
-
-                if selected_class:
-                    current_standards = dict(zip(
-                        st.session_state.intsta_df['ClassKey'],
-                        st.session_state.intsta_df['LipidMolec']
-                    ))
-                    
-                    # Add a check for the just_added flag
-                    just_added = getattr(st.session_state, 'just_added_standard', None)
-                    
-                    if selected_class in current_standards and not just_added:
-                        st.warning(f"Class {selected_class} already has a standard: {current_standards[selected_class]}")
-                    else:
-                        potential_standards = st.session_state.cleaned_df[
-                            st.session_state.cleaned_df['ClassKey'] == selected_class
-                        ]['LipidMolec'].tolist()
-                
-                        if potential_standards:
-                            selected_standard = st.selectbox(
-                                "Select Species to Use as Standard",
-                                sorted(potential_standards),
-                                key='add_standard_species'
-                            )
-                
-                            if st.button("Add as Standard", key="add_button"):
-                                new_cleaned_df, new_intsta_df = lp.StandardsManager.add_standard(
-                                    st.session_state.cleaned_df,
-                                    st.session_state.intsta_df,
-                                    selected_class,
-                                    selected_standard
-                                )
-                                
-                                if new_cleaned_df is not None and new_intsta_df is not None:
-                                    st.session_state.cleaned_df = new_cleaned_df.copy()
-                                    st.session_state.intsta_df = new_intsta_df.copy()
-                                    st.session_state.standards_modified = True
-                                    st.session_state.just_added_standard = True  # Set the flag
-                                    st.success(f"Added standard {selected_standard} for class {selected_class}")
-                                    st.experimental_rerun()
-                
-                    # Clear the just_added flag at the end of the function
-                    if just_added:
-                        del st.session_state.just_added_standard
-
-            # Download internal standards
-            if not st.session_state.intsta_df.empty:
-                download_df = st.session_state.intsta_df.copy()
-                csv_intsta = download_df.to_csv(index=False)
-                
-                st.download_button(
-                    label="Download Internal Standards Data",
-                    data=csv_intsta,
-                    file_name="internal_standards.csv",
-                    mime="text/csv",
-                    key=f"download_standards_{st.session_state.intsta_df.shape[0]}"
-                )
-
-        return st.session_state.cleaned_df, st.session_state.intsta_df
+            # Download internal standards button
+            download_df = st.session_state.intsta_df.copy()
+            csv_intsta = download_df.to_csv(index=False)
+            st.download_button(
+                label="Download Internal Standards Data",
+                data=csv_intsta,
+                file_name="internal_standards.csv",
+                mime="text/csv",
+                key=f"download_standards_{st.session_state.intsta_df.shape[0]}"
+            )
 
 def process_and_display_data(df, data_format):
     """Process and display the data after validation."""
@@ -521,38 +516,114 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     """Handle data normalization based on format type."""
     st.subheader("Data Normalization")
     
-    # Full normalization for LipidSearch or data with ClassKey
-    if format_type == 'lipidsearch' or 'ClassKey' in cleaned_df.columns:
-        normalized_df = display_normalization_options(cleaned_df, intsta_df, experiment)
-        if normalized_df is not None:
-            st.session_state.normalized_df = normalized_df
-            return normalized_df
-    # Limited normalization (BCA only) for other formats
+    if 'ClassKey' not in cleaned_df.columns:
+        st.error("ClassKey column is required for normalization. Please ensure your data includes lipid class information.")
+        return None
+
+    # Check if standards exist or have been added
+    has_standards = not st.session_state.intsta_df.empty
+    
+    # Get the full list of classes
+    all_class_lst = list(cleaned_df['ClassKey'].unique())
+    
+    # Class selection
+    selected_classes = st.multiselect(
+        'Select lipid classes you would like to analyze:',
+        all_class_lst,
+        default=all_class_lst
+    )
+
+    if not selected_classes:
+        st.warning("Please select at least one lipid class to proceed with normalization.")
+        return None
+
+    # Filter DataFrame based on selected classes
+    filtered_df = cleaned_df[cleaned_df['ClassKey'].isin(selected_classes)].copy()
+
+    # Determine available normalization options
+    if has_standards:
+        normalization_options = ['None', 'Internal Standards', 'BCA Assay', 'Both']
+        st.info("Internal standards are available for normalization.")
     else:
-        st.warning("Normalization using internal standards requires lipid class information. Only BCA normalization is available for this format.")
-        if st.checkbox("Normalize using BCA assay"):
+        normalization_options = ['None', 'BCA Assay']
+        st.warning("No internal standards available. Add standards in the 'Manage Internal Standards' section if needed.")
+
+    # Normalization method selection
+    normalization_method = st.radio(
+        "Select normalization method:",
+        normalization_options,
+        key='normalization_method'
+    )
+
+    normalized_df = filtered_df.copy()
+    normalized_data_object = lp.NormalizeData()
+
+    if normalization_method != 'None':
+        if normalization_method in ['BCA Assay', 'Both']:
             with st.expander("Enter Inputs for BCA Assay Data Normalization"):
                 protein_df = collect_protein_concentrations(experiment)
                 if protein_df is not None:
-                    normalized_data_object = lp.NormalizeData()
-                    normalized_df = normalized_data_object.normalize_using_bca(cleaned_df, protein_df)
-                    st.session_state.normalized_df = normalized_df
+                    normalized_df = normalized_data_object.normalize_using_bca(normalized_df, protein_df)
                     st.session_state.normalization_inputs['BCA'] = protein_df
-                    return normalized_df
-    return None
+                    st.success("BCA normalization applied successfully.")
+
+        if has_standards and normalization_method in ['Internal Standards', 'Both']:
+            with st.expander("Enter Inputs For Internal Standards Normalization"):
+                added_intsta_species_lst = []
+                intsta_concentration_dict = {}
+
+                # For each selected class, allow selection of a standard
+                for lipid_class in selected_classes:
+                    st.subheader(f"Standard for {lipid_class}")
+                    available_standards = st.session_state.intsta_df[
+                        st.session_state.intsta_df['ClassKey'] == lipid_class
+                    ]['LipidMolec'].tolist()
+
+                    if available_standards:
+                        selected_standard = st.selectbox(
+                            f"Select standard for {lipid_class}",
+                            available_standards,
+                            key=f"standard_{lipid_class}"
+                        )
+                        
+                        concentration = st.number_input(
+                            f"Concentration (µM) for {selected_standard}",
+                            min_value=0.0,
+                            value=1.0,
+                            step=0.1,
+                            key=f"conc_{lipid_class}"
+                        )
+                        
+                        added_intsta_species_lst.append(selected_standard)
+                        intsta_concentration_dict[selected_standard] = concentration
+                    else:
+                        st.warning(f"No standards available for {lipid_class}")
+
+                if added_intsta_species_lst:
+                    normalized_df = normalized_data_object.normalize_data(
+                        selected_classes,
+                        added_intsta_species_lst,
+                        intsta_concentration_dict,
+                        normalized_df,
+                        st.session_state.intsta_df,
+                        experiment
+                    )
+                    st.success("Internal standards normalization applied successfully.")
+    else:
+        # If no normalization selected, just rename the columns
+        normalized_df = normalized_data_object._rename_intensity_columns(normalized_df)
+        st.info("No normalization applied. Only column names have been standardized.")
+
+    # Store and display the normalized data
+    if normalized_df is not None:
+        st.session_state.normalized_df = normalized_df.copy()
+        st.subheader("View Normalized Dataset")
+        display_data(normalized_df, "Normalized Data", "normalized_data.csv")
+
+    return normalized_df
 
 def display_normalization_options(cleaned_df, intsta_df, experiment):
-    """
-    Display options for data normalization and process user inputs.
-
-    Parameters:
-        cleaned_df (pd.DataFrame): The cleaned DataFrame containing the experiment data.
-        intsta_df (pd.DataFrame): DataFrame containing the internal standards data.
-        experiment (Experiment): The experiment object with setup details.
-
-    Returns:
-        pd.DataFrame: The normalized DataFrame or original DataFrame with renamed columns.
-    """
+    """Display options for data normalization and process user inputs."""
     normalized_data_object = lp.NormalizeData()
 
     # Get the full list of classes
@@ -581,30 +652,35 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
     # Filter DataFrame based on selected classes
     filtered_df = cleaned_df[cleaned_df['ClassKey'].isin(selected_class_list)].copy()
 
-    # Normalization method selection
-    def update_normalization_method():
-        st.session_state.normalization_method = st.session_state.temp_normalization_method
+    # Check if we have any internal standards
+    has_standards = not intsta_df.empty
 
+    # Adjust normalization options based on available standards
+    if has_standards:
+        options = ['None', 'Internal Standards', 'BCA Assay', 'Both']
+    else:
+        options = ['None', 'BCA Assay']
+        st.warning("No internal standards available. Only BCA normalization is available. Add internal standards in the 'Manage Internal Standards' section if needed.")
+
+    # Normalization method selection
     normalization_method = st.radio(
-        "Select how you would like to normalize your data:",
-        ['None', 'Internal Standards', 'BCA Assay', 'Both'],
-        index=['None', 'Internal Standards', 'BCA Assay', 'Both'].index(st.session_state.get('normalization_method', 'None')),
-        key='temp_normalization_method',
-        on_change=update_normalization_method
+        "Select normalization method:",
+        options,
+        key='normalization_method'
     )
 
     # Initialize final DataFrame
     normalized_df = filtered_df.copy()
 
-    if st.session_state.normalization_method != 'None':
-        if st.session_state.normalization_method in ['BCA Assay', 'Both']:
+    if normalization_method != 'None':
+        if normalization_method in ['BCA Assay', 'Both']:
             with st.expander("Enter Inputs for BCA Assay Data Normalization"):
                 protein_df = collect_protein_concentrations(experiment)
                 if protein_df is not None:
                     normalized_df = normalized_data_object.normalize_using_bca(normalized_df, protein_df)
                     st.session_state.normalization_inputs['BCA'] = protein_df
 
-        if st.session_state.normalization_method in ['Internal Standards', 'Both']:
+        if has_standards and normalization_method in ['Internal Standards', 'Both']:
             with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
                 added_intsta_species_lst = st.session_state.normalization_inputs.get('Internal_Standards', {}).get('added_intsta_species_lst', [])
                 intsta_concentration_dict = st.session_state.normalization_inputs.get('Internal_Standards', {}).get('intsta_concentration_dict', {})
@@ -614,7 +690,8 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
                 )
 
                 normalized_df = normalized_data_object.normalize_data(
-                    selected_class_list, new_added_intsta_species_lst, new_intsta_concentration_dict, normalized_df, intsta_df, experiment
+                    selected_class_list, new_added_intsta_species_lst, new_intsta_concentration_dict, 
+                    normalized_df, intsta_df, experiment
                 )
 
                 st.session_state.normalization_inputs.setdefault('Internal_Standards', {}).update({
@@ -625,7 +702,7 @@ def display_normalization_options(cleaned_df, intsta_df, experiment):
         # If no normalization selected, just rename the columns
         normalized_df = normalized_data_object._rename_intensity_columns(normalized_df)
 
-    # Display the dataset using the existing display_data function
+    # Display the dataset
     st.subheader("View Dataset")
     display_data(normalized_df, "Processed Data", "processed_data.csv")
 
@@ -669,7 +746,7 @@ def collect_protein_concentrations(experiment):
     Args:
         experiment (Experiment): The experiment object containing the list of sample names.
     Returns:
-        pd.DataFrame: A DataFrame with 'Sample' as a column and 'Concentration' containing the protein concentrations.
+        pd.DataFrame: A DataFrame with 'Sample' and 'Concentration' columns
     """
     method = st.radio(
         "Select the method for providing protein concentrations:",
@@ -680,28 +757,57 @@ def collect_protein_concentrations(experiment):
     if method == "Manual Input":
         protein_concentrations = {}
         for sample in experiment.full_samples_list:
-            concentration = st.number_input(f'Enter protein concentration for {sample} (mg/mL):',
-                                            min_value=0.0, max_value=100000.0, value=1.0, step=0.1,
-                                            key=sample)  # Unique key for each input
+            concentration = st.number_input(
+                f'Enter protein concentration for {sample} (mg/mL):',
+                min_value=0.0, max_value=100000.0, 
+                value=1.0, 
+                step=0.1,
+                key=sample
+            )
             protein_concentrations[sample] = concentration
 
-        protein_df = pd.DataFrame(list(protein_concentrations.items()), columns=['Sample', 'Concentration'])
+        protein_df = pd.DataFrame(list(protein_concentrations.items()), 
+                                columns=['Sample', 'Concentration'])
+        return protein_df
     
     elif method == "Upload Excel File":
         st.info("Upload an Excel file with a single column named 'Concentration'. Each row should correspond to the protein concentration for each sample in the experiment, in order.")
+        
         uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
         
         if uploaded_file is not None:
-            protein_df = pd.read_excel(uploaded_file, engine='openpyxl')  # Ensure the correct engine is used
-            if len(protein_df) != len(experiment.full_samples_list):
-                st.error(f"The number of concentrations in the file ({len(protein_df)}) does not match the number of samples ({len(experiment.full_samples_list)}). Please upload a valid file.")
+            try:
+                # Read the Excel file
+                protein_df = pd.read_excel(uploaded_file, engine='openpyxl')
+                
+                # Basic validations
+                if 'Concentration' not in protein_df.columns:
+                    st.error("Excel file must contain a single column named 'Concentration'")
+                    st.write("Found columns:", list(protein_df.columns))
+                    return None
+                    
+                if len(protein_df) != len(experiment.full_samples_list):
+                    st.error(f"Number of concentrations ({len(protein_df)}) does not match "
+                            f"number of samples ({len(experiment.full_samples_list)})")
+                    return None
+                
+                # Convert concentration values to numeric
+                protein_df['Concentration'] = pd.to_numeric(protein_df['Concentration'], errors='coerce')
+                if protein_df['Concentration'].isna().any():
+                    st.error("Some concentration values could not be converted to numbers")
+                    return None
+                
+                # Add sample names in the correct order
+                protein_df['Sample'] = experiment.full_samples_list
+                
+                return protein_df
+                
+            except Exception as e:
+                st.error(f"Error reading Excel file: {str(e)}")
                 return None
-            protein_df['Sample'] = experiment.full_samples_list
         else:
             st.warning("Please upload an Excel file to proceed.")
             return None
-
-    return protein_df
 
 def display_normalized_data():
     """Display normalized data if it exists in session state."""
