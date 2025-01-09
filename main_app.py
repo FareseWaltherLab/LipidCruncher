@@ -108,7 +108,10 @@ def display_format_requirements(data_format):
         * `TotalGrade`: The overall quality grade of the lipid data
         * `TotalSmpIDRate(%)`: The total sample identification rate
         * `FAKey`: The fatty acid key associated with the lipid
-        * `MeanArea[sample_name]`: One column per sample with intensity values
+        
+        Additionally, each sample in your dataset must have a corresponding MeanArea column to represent intensity values. 
+        For instance, if your dataset comprises 10 samples, you should have the following columns: 
+        MeanArea[s1], MeanArea[s2], ..., MeanArea[s10] for each respective sample intensity.
         """)
     else:
         st.info("""
@@ -398,6 +401,50 @@ def clean_data(df, name_df, experiment, data_format):
     
     return cleaned_df, intsta_df
 
+def handle_standards_upload(normalizer):
+    """Handle the upload and processing of custom standards file."""
+    st.info("""
+    You can upload your own standards file. Requirements:
+    - Excel file (.xlsx)
+    - Must contain column: 'LipidMolec'
+    - The standards must exist in your dataset
+    
+    """)
+    
+    uploaded_file = st.file_uploader("Upload Excel file with standards", type=['xlsx'])
+    if uploaded_file is not None:
+        try:
+            standards_df = pd.read_excel(uploaded_file)
+            return normalizer.process_standards_file(standards_df, st.session_state.cleaned_df)
+        except ValueError as ve:
+            st.error(str(ve))
+        except Exception as e:
+            st.error(f"Error reading standards file: {str(e)}")
+    return None
+
+def manage_internal_standards(normalizer):
+    """Handle internal standards management workflow."""
+    standards_source = st.radio(
+        "Select standards source:",
+        ["Automatic Detection", "Upload Custom Standards"],
+        index=0
+    )
+    
+    if standards_source == "Automatic Detection":
+        if not st.session_state.intsta_df.empty:
+            st.success(f"✓ Found {len(st.session_state.intsta_df)} standards")
+            st.write("Current standards:")
+            display_data(st.session_state.intsta_df, "Current Standards", "current_standards.csv")
+        else:
+            st.info("No internal standards were automatically detected in the dataset")
+    else:
+        new_standards_df = handle_standards_upload(normalizer)
+        if new_standards_df is not None:
+            st.session_state.intsta_df = new_standards_df
+            st.success(f"✓ Successfully loaded {len(new_standards_df)} custom standards")
+            st.write("Loaded custom standards:")
+            display_data(new_standards_df, "Current Standards", "current_standards.csv")
+
 def display_cleaned_data(cleaned_df, intsta_df):
     """
     Display cleaned data and manage internal standards with simplified workflow.
@@ -407,84 +454,16 @@ def display_cleaned_data(cleaned_df, intsta_df):
         st.session_state.cleaned_df = cleaned_df.copy()
         st.session_state.intsta_df = intsta_df.copy() if intsta_df is not None else pd.DataFrame()
 
+    # Create normalizer instance
+    normalizer = lp.NormalizeData()
+
     # Display cleaned data
     with st.expander("View Cleaned Data"):
-        st.write(st.session_state.cleaned_df)
-        csv = st.session_state.cleaned_df.to_csv(index=False)
-        st.download_button(
-            label="Download Cleaned Data",
-            data=csv,
-            file_name="cleaned_data.csv",
-            mime="text/csv"
-        )
+        display_data(st.session_state.cleaned_df, "Cleaned Data", "cleaned_data.csv")
 
-    # Simplified internal standards management
+    # Internal standards management
     with st.expander("Manage Internal Standards"):
-        # First, check and display automatically detected standards
-        if not st.session_state.intsta_df.empty:
-            st.success(f"✓ Found {len(st.session_state.intsta_df)} automatically detected standards")
-            st.write("Currently detected standards:")
-            st.write(st.session_state.intsta_df)
-            
-            # Download detected standards button
-            csv_intsta = st.session_state.intsta_df.to_csv(index=False)
-            st.download_button(
-                label="Download Current Standards",
-                data=csv_intsta,
-                file_name="current_standards.csv",
-                mime="text/csv"
-            )
-        else:
-            st.info("No internal standards were automatically detected in the dataset")
-
-        # Always show option to upload custom standards
-        st.markdown("---")  # Visual separator
-        st.markdown("### Upload Custom Standards")
-        st.info("""
-        You can upload your own standards file. Requirements:
-        - Excel file (.xlsx)
-        - Must contain columns: 'LipidMolec' and 'ClassKey'
-        - The standards must exist in your dataset
-        
-        Note: Uploading a standards file will replace any automatically detected standards.
-        """)
-        
-        uploaded_file = st.file_uploader("Upload Excel file with standards", type=['xlsx'])
-        if uploaded_file is not None:
-            try:
-                standards_df = pd.read_excel(uploaded_file)
-                
-                # Validate required columns
-                required_cols = ['LipidMolec', 'ClassKey']
-                if not all(col in standards_df.columns for col in required_cols):
-                    st.error("Standards file must contain 'LipidMolec' and 'ClassKey' columns")
-                    return
-
-                # Validate standards exist in dataset
-                valid_standards = standards_df['LipidMolec'].isin(st.session_state.cleaned_df['LipidMolec'])
-                if not valid_standards.all():
-                    invalid_standards = standards_df[~valid_standards]['LipidMolec'].tolist()
-                    st.error(f"The following standards were not found in the dataset: {', '.join(invalid_standards)}")
-                    return
-                
-                # Replace existing standards with uploaded ones
-                st.session_state.intsta_df = standards_df.copy()
-                st.success(f"✓ Successfully loaded {len(standards_df)} custom standards (previous standards were replaced)")
-                
-                # Display and allow download of standards
-                st.write("Loaded custom standards:")
-                st.write(standards_df)
-                csv_standards = standards_df.to_csv(index=False)
-                st.download_button(
-                    label="Download Current Standards",
-                    data=csv_standards,
-                    file_name="current_standards.csv",
-                    mime="text/csv"
-                )
-                
-            except Exception as e:
-                st.error(f"Error reading standards file: {str(e)}")
-                return
+        manage_internal_standards(normalizer)
             
 def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     """

@@ -54,13 +54,28 @@ class NormalizeData:
     def normalize_data(self, selected_class_list, added_intsta_species_lst, intsta_concentration_dict, df, intsta_df, experiment):
         """
         Normalize data using internal standards.
+        
+        Args:
+            selected_class_list (list): List of lipid classes to normalize
+            added_intsta_species_lst (list): List of standards used for normalization
+            intsta_concentration_dict (dict): Dictionary of standard concentrations
+            df (pd.DataFrame): DataFrame to normalize
+            intsta_df (pd.DataFrame): DataFrame containing standards data
+            experiment (Experiment): Experiment object containing sample information
+            
+        Returns:
+            pd.DataFrame: Normalized DataFrame with standards removed
         """
         selected_df = self._filter_data_by_class(df, selected_class_list)
         full_samples_list = experiment.full_samples_list
         
+        # Remove standards from the dataset before normalization
+        standards_to_remove = set(added_intsta_species_lst)
+        selected_df = selected_df[~selected_df['LipidMolec'].isin(standards_to_remove)]
+        
         norm_df = self._process_internal_standards(selected_df, added_intsta_species_lst,
-                                                 intsta_concentration_dict, intsta_df,
-                                                 full_samples_list, selected_class_list)
+                                                intsta_concentration_dict, intsta_df,
+                                                full_samples_list, selected_class_list)
         
         if not norm_df.empty:
             norm_df.reset_index(drop=True, inplace=True)
@@ -110,3 +125,63 @@ class NormalizeData:
         except Exception as e:
             st.error(f"Error in BCA normalization: {str(e)}")
             return df
+        
+    def process_standards_file(self, standards_df, cleaned_df):
+        """
+        Process and validate uploaded standards file.
+        
+        Args:
+            standards_df (pd.DataFrame): DataFrame containing standards data
+            cleaned_df (pd.DataFrame): DataFrame containing the cleaned dataset
+            
+        Returns:
+            pd.DataFrame or None: Processed standards DataFrame if valid, None otherwise
+        """
+        if 'LipidMolec' not in standards_df.columns:
+            raise ValueError("Standards file must contain 'LipidMolec' column")
+
+        # Extract ClassKey from LipidMolec
+        standards_df['ClassKey'] = standards_df['LipidMolec'].apply(
+            lambda x: x.split('(')[0] if '(' in x else x
+        )
+
+        # Validate standards exist in dataset
+        valid_standards = standards_df['LipidMolec'].isin(cleaned_df['LipidMolec'])
+        if not valid_standards.all():
+            invalid_standards = standards_df[~valid_standards]['LipidMolec'].tolist()
+            raise ValueError(f"The following standards were not found in the dataset: {', '.join(invalid_standards)}")
+        
+        # Get intensity columns from cleaned_df
+        intensity_cols = [col for col in cleaned_df.columns if col.startswith('intensity[')]
+        if not intensity_cols:
+            raise ValueError("No intensity columns found in the cleaned dataset")
+            
+        # Create result DataFrame with standards and their intensity values
+        result_df = pd.DataFrame()
+        for standard in standards_df['LipidMolec']:
+            # Get the row from cleaned_df for this standard
+            standard_data = cleaned_df[cleaned_df['LipidMolec'] == standard].copy()
+            if not standard_data.empty:
+                # Add ClassKey if not present
+                if 'ClassKey' not in standard_data.columns:
+                    standard_data['ClassKey'] = standards_df[standards_df['LipidMolec'] == standard]['ClassKey'].values[0]
+                result_df = pd.concat([result_df, standard_data[['LipidMolec', 'ClassKey'] + intensity_cols]], ignore_index=True)
+            
+        return result_df
+
+    def validate_standards(self, standards_df):
+        """
+        Validate that standards DataFrame has required columns and format.
+        
+        Args:
+            standards_df (pd.DataFrame): DataFrame containing standards data
+            
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        required_cols = ['LipidMolec', 'ClassKey']
+        if not all(col in standards_df.columns for col in required_cols):
+            return False
+            
+        # Add any additional validation logic here
+        return True
