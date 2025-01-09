@@ -15,4 +15,3 @@ from .abundance_pie_chart import AbundancePieChart
 from .lipidomic_heatmap import LipidomicHeatmap
 from .clean_generic_data import CleanGenericData
 from .data_format_handler import DataFormatHandler
-from .standards_manager import StandardsManager
