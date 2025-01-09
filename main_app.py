@@ -489,15 +489,6 @@ def display_cleaned_data(cleaned_df, intsta_df):
 def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     """
     Handle data normalization based on selected standards and normalization methods.
-    
-    Args:
-        cleaned_df (pd.DataFrame): The cleaned dataset
-        intsta_df (pd.DataFrame): DataFrame containing internal standards
-        experiment (Experiment): Experiment object containing sample information
-        format_type (str): The format type of the data
-        
-    Returns:
-        pd.DataFrame: Normalized DataFrame or None if normalization fails
     """
     st.subheader("Data Normalization")
     
@@ -544,101 +535,55 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     try:
         # Apply normalizations based on selection
         if normalization_method != 'None':
-            # Handle BCA Assay normalization
+            # Track whether we need to do standards normalization
+            do_standards = normalization_method in ['Internal Standards', 'Both'] and has_standards
+            
+            # Handle BCA Assay normalization first if selected
             if normalization_method in ['BCA Assay', 'Both']:
                 with st.expander("Enter BCA Assay Data"):
                     protein_df = collect_protein_concentrations(experiment)
                     if protein_df is not None:
                         try:
-                            normalized_df = normalized_data_object.normalize_using_bca(normalized_df, protein_df)
+                            # Apply BCA normalization but keep intensity column format
+                            normalized_df = normalized_data_object.normalize_using_bca(normalized_df, protein_df, preserve_prefix=True)
                             st.success("BCA normalization applied successfully")
                         except Exception as e:
                             st.error(f"Error during BCA normalization: {str(e)}")
                             return None
 
-            # Inside handle_data_normalization function, replace the internal standards section with:
-            if has_standards and normalization_method in ['Internal Standards', 'Both']:
+            # Then handle internal standards normalization if selected
+            if do_standards:
                 with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
+                    # Ensure intsta_df has standardized column names
+                    intensity_cols = [col for col in intsta_df.columns if col.startswith('intensity[')]
+                    if not intensity_cols:
+                        st.error("Internal standards data does not contain properly formatted intensity columns")
+                        return None
+
                     # Group standards by their ClassKey
                     standards_by_class = {}
                     if 'ClassKey' in st.session_state.intsta_df.columns:
                         standards_by_class = st.session_state.intsta_df.groupby('ClassKey')['LipidMolec'].apply(list).to_dict()
             
-                    # Dictionary to store class-standard mapping
-                    class_to_standard_map = {}
-            
-                    # Process each selected class
-                    for lipid_class in selected_classes:
-                        # Get available standards for this class
-                        available_standards = standards_by_class.get(
-                            lipid_class,
-                            list(st.session_state.intsta_df['LipidMolec'].unique())
-                        )
-                        
-                        if not available_standards:
-                            st.error(f"No standards available for class '{lipid_class}'")
-                            continue
-                            
-                        # Default to first standard in list
-                        default_idx = 0
-                        selected_standard = st.selectbox(
-                            f'Select internal standard for {lipid_class}',
-                            available_standards,
-                            index=default_idx
-                        )
-                        
-                        class_to_standard_map[lipid_class] = selected_standard
-            
-                    # Only proceed if we have mapped all classes to standards
-                    if len(class_to_standard_map) == len(selected_classes):
-                        # Create ordered list of standards matching selected_classes order
-                        added_intsta_species_lst = [class_to_standard_map[cls] for cls in selected_classes]
-                        
-                        # Get unique standards that were selected
-                        selected_standards = set(added_intsta_species_lst)
-                        
-                        # Collect concentrations for selected standards
-                        st.write("Enter the concentration of each selected internal standard (µM):")
-                        intsta_concentration_dict = {}
-                        all_concentrations_entered = True
-                        
-                        for standard in selected_standards:
-                            concentration = st.number_input(
-                                f"Concentration (µM) for {standard}",
-                                min_value=0.0,
-                                value=1.0,
-                                step=0.1,
-                                key=f"conc_{standard}"
-                            )
-                            if concentration <= 0:
-                                st.error(f"Please enter a valid concentration for {standard}")
-                                all_concentrations_entered = False
-                            intsta_concentration_dict[standard] = concentration
-            
-                        if all_concentrations_entered:
-                            try:
-                                # Apply the normalization
-                                normalized_df = normalized_data_object.normalize_data(
-                                    selected_classes,
-                                    added_intsta_species_lst,
-                                    intsta_concentration_dict,
-                                    normalized_df,
-                                    st.session_state.intsta_df,
-                                    experiment
-                                )
-                                st.success("Internal standards normalization applied successfully")
-                            except Exception as e:
-                                st.error(f"Error during internal standards normalization: {str(e)}")
-                                return None
-                        else:
-                            st.error("Please enter valid concentrations for all standards")
-                            return None
-                    else:
-                        st.error("Please select standards for all lipid classes to proceed with normalization")
+                    # Process each selected class with mapped standards
+                    class_to_standard_map = process_class_standards(selected_classes, standards_by_class, st.session_state.intsta_df)
+                    if not class_to_standard_map:
                         return None
 
-        # Ensure column names are properly renamed
-        normalized_df = normalized_data_object._rename_intensity_columns(normalized_df)
+                    # Get concentrations and apply normalization
+                    normalized_df = apply_standards_normalization(
+                        normalized_df, 
+                        class_to_standard_map, 
+                        selected_classes, 
+                        st.session_state.intsta_df, 
+                        normalized_data_object,
+                        experiment
+                    )
+                    if normalized_df is None:
+                        return None
+
+            # Finally rename all intensity columns to concentration
+            normalized_df = rename_intensity_to_concentration(normalized_df)
 
         # Display the normalized data
         if normalized_df is not None:
@@ -656,6 +601,87 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
 
     except Exception as e:
         st.error(f"An unexpected error occurred during normalization: {str(e)}")
+        return None
+
+def rename_intensity_to_concentration(df):
+    """Renames intensity columns to concentration columns at the end of normalization"""
+    df = df.copy()
+    rename_dict = {
+        col: col.replace('intensity[', 'concentration[')
+        for col in df.columns if col.startswith('intensity[')
+    }
+    return df.rename(columns=rename_dict)
+
+def process_class_standards(selected_classes, standards_by_class, intsta_df):
+    """Helper function to process class-standard mapping"""
+    class_to_standard_map = {}
+    
+    for lipid_class in selected_classes:
+        available_standards = standards_by_class.get(
+            lipid_class,
+            list(intsta_df['LipidMolec'].unique())
+        )
+        
+        if not available_standards:
+            st.error(f"No standards available for class '{lipid_class}'")
+            return None
+            
+        default_idx = 0
+        selected_standard = st.selectbox(
+            f'Select internal standard for {lipid_class}',
+            available_standards,
+            index=default_idx
+        )
+        
+        class_to_standard_map[lipid_class] = selected_standard
+
+    if len(class_to_standard_map) != len(selected_classes):
+        st.error("Please select standards for all lipid classes to proceed with normalization")
+        return None
+        
+    return class_to_standard_map
+
+def apply_standards_normalization(df, class_to_standard_map, selected_classes, intsta_df, normalizer, experiment):
+    """Helper function to apply standards normalization"""
+    # Create ordered list of standards matching selected_classes order
+    added_intsta_species_lst = [class_to_standard_map[cls] for cls in selected_classes]
+    
+    # Get unique standards and their concentrations
+    selected_standards = set(added_intsta_species_lst)
+    intsta_concentration_dict = {}
+    all_concentrations_entered = True
+    
+    st.write("Enter the concentration of each selected internal standard (µM):")
+    for standard in selected_standards:
+        concentration = st.number_input(
+            f"Concentration (µM) for {standard}",
+            min_value=0.0,
+            value=1.0,
+            step=0.1,
+            key=f"conc_{standard}"
+        )
+        if concentration <= 0:
+            st.error(f"Please enter a valid concentration for {standard}")
+            all_concentrations_entered = False
+        intsta_concentration_dict[standard] = concentration
+
+    if not all_concentrations_entered:
+        st.error("Please enter valid concentrations for all standards")
+        return None
+
+    try:
+        normalized_df = normalizer.normalize_data(
+            selected_classes,
+            added_intsta_species_lst,
+            intsta_concentration_dict,
+            df,
+            intsta_df,
+            experiment
+        )
+        st.success("Internal standards normalization applied successfully")
+        return normalized_df
+    except Exception as e:
+        st.error(f"Error during internal standards normalization: {str(e)}")
         return None
 
 def collect_protein_concentrations(experiment):

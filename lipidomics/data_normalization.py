@@ -70,9 +70,17 @@ class NormalizeData:
             
         return norm_df
 
-    def normalize_using_bca(self, df, protein_df):
+    def normalize_using_bca(self, df, protein_df, preserve_prefix=False):
         """
         Normalize lipid intensities using protein concentrations from BCA assay.
+        
+        Args:
+            df (pd.DataFrame): DataFrame to normalize
+            protein_df (pd.DataFrame): DataFrame with protein concentrations
+            preserve_prefix (bool): If True, keeps 'intensity[' prefix instead of changing to 'concentration['
+            
+        Returns:
+            pd.DataFrame: Normalized DataFrame
         """
         try:
             normalized_df = df.copy()
@@ -93,8 +101,10 @@ class NormalizeData:
                         continue
                     normalized_df[col] = df[col] / conc_value
             
-            # Rename the columns to concentration after normalization
-            normalized_df = self._rename_intensity_columns(normalized_df)
+            # Only rename columns if not preserving prefix
+            if not preserve_prefix:
+                normalized_df = self._rename_intensity_columns(normalized_df)
+            
             return normalized_df
             
         except Exception as e:

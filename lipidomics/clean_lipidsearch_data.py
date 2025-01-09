@@ -15,28 +15,13 @@ class CleanLipidSearchData:
     def _extract_relevant_columns(_self, df, full_samples_list):
         """
         Extracts relevant columns for analysis from the DataFrame.
-    
-        This method focuses on keeping columns essential for lipidomics analysis,
-        including static columns and dynamic 'MeanArea' columns based on the given
-        experiment's sample list.
-    
-        Args:
-            df (pd.DataFrame): The dataset to be processed.
-            experiment (Experiment): Object containing details about the experiment setup.
-    
-        Returns:
-            pd.DataFrame: A DataFrame containing only the essential columns for analysis.
-    
-        Note:
-            The 'FAKey' column is included as it is crucial for further data processing steps.
-    
-        Raises:
-            KeyError: If one or more expected columns are not present in the DataFrame.
+        Works with standardized intensity column format.
         """
         try:
-            static_cols = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'TotalGrade', 'TotalSmpIDRate(%)', 'FAKey']
-            mean_area_cols = ['MeanArea[' + sample + ']' for sample in full_samples_list]
-            relevant_cols = static_cols + mean_area_cols
+            static_cols = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 
+                          'TotalGrade', 'TotalSmpIDRate(%)', 'FAKey']
+            value_cols = ['intensity[' + sample + ']' for sample in full_samples_list]
+            relevant_cols = static_cols + value_cols
             return df[relevant_cols]
         except KeyError as e:
             print(f"Error in extracting columns: {e}")
@@ -45,20 +30,10 @@ class CleanLipidSearchData:
 
     @st.cache_data(ttl=3600)
     def _update_column_names(_self, df, name_df):
-        """
-        Updates column names in the DataFrame to reflect new sample names based on the name mapping DataFrame.
-        Handles potential mismatches or missing columns gracefully.
-    
-        Args:
-            df (pd.DataFrame): The dataset with columns to be renamed.
-            name_df (pd.DataFrame): DataFrame containing old and updated sample names.
-    
-        Returns:
-            pd.DataFrame: The DataFrame with updated column names, or an empty DataFrame if an error occurs.
-        """
+        """Updates column names in the DataFrame."""
         try:
             rename_dict = {
-                f'MeanArea[{old_name}]': f'MeanArea[{new_name}]'
+                f'intensity[{old_name}]': f'intensity[{new_name}]'
                 for old_name, new_name in zip(name_df['old name'], name_df['updated name'])
             }
             return df.rename(columns=rename_dict)
@@ -94,33 +69,21 @@ class CleanLipidSearchData:
 
     @st.cache_data(ttl=3600)
     def _convert_columns_to_numeric(_self, df, full_samples_list):
-        """
-        Converts abundance data columns in the DataFrame to numeric type, with non-numeric values replaced by zeros.
-    
-        Args:
-            df (pd.DataFrame): The DataFrame containing the data.
-            experiment (Experiment): Object with details about the experiment setup.
-    
-        Returns:
-            pd.DataFrame: The DataFrame with abundance columns converted to numeric type.
-    
-        Raises:
-            KeyError: If any required column is missing.
-        """
+        """Converts intensity data columns to numeric type."""
         try:
-            auc_cols = [f'MeanArea[{sample}]' for sample in full_samples_list]
+            value_cols = [f'intensity[{sample}]' for sample in full_samples_list]
     
-            # Verify if all required columns are present in the DataFrame
-            missing_cols = set(auc_cols) - set(df.columns)
+            # Verify if all required columns are present
+            missing_cols = set(value_cols) - set(df.columns)
             if missing_cols:
                 raise KeyError(f"Missing columns in DataFrame: {missing_cols}")
     
-            # Efficiently convert columns to numeric type
-            df[auc_cols] = df[auc_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+            # Convert columns to numeric type
+            df[value_cols] = df[value_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
             return df
         except KeyError as e:
             print(f"Error in converting columns to numeric: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame or handle as needed
+            return pd.DataFrame()
 
 
     @st.cache_data(ttl=3600)
@@ -229,23 +192,7 @@ class CleanLipidSearchData:
 
 
     def _select_AUC(self, df, experiment):
-        """
-        Selects the highest quality peak for each unique lipid in the dataset.
-    
-        This method processes lipids based on their quality grade ('A', 'B', or 'C'), ensuring
-        that only the best data is used for analysis. Special attention is given to SM and LPC lipids
-        for 'C' grade processing.
-    
-        Args:
-            df (pd.DataFrame): The DataFrame containing lipidomics data.
-            experiment (Experiment): The experiment object containing sample information.
-    
-        Returns:
-            pd.DataFrame: The cleaned DataFrame with selected lipids based on peak quality.
-    
-        Raises:
-            ValueError: If the DataFrame is empty or the experiment object is not provided.
-        """
+        """Selects the highest quality peak for each unique lipid."""
         try:
             if df.empty or not experiment:
                 raise ValueError("Empty DataFrame or missing experiment details provided.")
@@ -255,41 +202,28 @@ class CleanLipidSearchData:
     
             for grade in ['A', 'B', 'C']:
                 additional_condition = ['LPC', 'SM'] if grade == 'C' else None
-                clean_df = self._process_lipid_grades(df, clean_df, [grade], sample_names, additional_condition)
+                clean_df = self._process_lipid_grades(df, clean_df, [grade], 
+                                                    sample_names, additional_condition)
     
             return clean_df
         except Exception as e:
             print(f"Error in selecting AUC: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame or handle as needed
+            return pd.DataFrame()
 
 
     @st.cache_data(ttl=3600)
     def _initialize_clean_df(_self, full_samples_list):
-        """
-        Initializes a DataFrame structured for cleaned data, based on experiment setup.
-    
-        This method creates a DataFrame with essential columns, including lipid molecule information
-        and abundance data columns for each sample in the experiment.
-    
-        Args:
-            full_samples_list (list): A list of sample names from the experiment.
-    
-        Returns:
-            pd.DataFrame: An initialized DataFrame with specified columns but no data.
-    
-        Raises:
-            ValueError: If the full_samples_list is empty or not provided.
-        """
+        """Initializes a DataFrame with standardized column names."""
         try:
             if not full_samples_list:
                 raise ValueError("No sample names provided for initializing DataFrame.")
             
             columns = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'TotalSmpIDRate(%)'] + \
-                      [f'MeanArea[{sample}]' for sample in full_samples_list]
+                      [f'intensity[{sample}]' for sample in full_samples_list]
             return pd.DataFrame(columns=columns)
         except Exception as e:
             print(f"Error in initializing DataFrame: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame or handle as needed
+            return pd.DataFrame()
 
     
     @st.cache_data(ttl=3600)
@@ -322,24 +256,8 @@ class CleanLipidSearchData:
         
         return clean_df
 
-
-    
     def _add_lipid_to_clean_df(self, temp_df, clean_df, lipid, sample_names):
-        """
-        Updates the clean DataFrame with the highest quality data for a given lipid.
-    
-        This function finds the lipid in the temporary DataFrame and updates the clean DataFrame
-        with the highest quality data. It either updates an existing row or adds a new row.
-    
-        Args:
-            temp_df (pd.DataFrame): Temporary DataFrame containing data for a specific grade.
-            clean_df (pd.DataFrame): DataFrame to be updated with the highest quality lipid data.
-            lipid (str): The lipid molecule to be updated.
-            sample_names (list): List of sample names for extracting abundance data.
-    
-        Returns:
-            pd.DataFrame: Updated clean DataFrame with the lipid data.
-        """
+        """Updates the clean DataFrame with the highest quality data."""
         try:
             isolated_df = temp_df[temp_df['LipidMolec'] == lipid]
             max_peak_quality = max(isolated_df['TotalSmpIDRate(%)'])
@@ -347,15 +265,16 @@ class CleanLipidSearchData:
     
             row_index = clean_df.index[clean_df['LipidMolec'] == lipid].tolist()
             if row_index:
-                for col in ['ClassKey', 'CalcMass', 'BaseRt', 'TotalSmpIDRate(%)'] + [f'MeanArea[{sample}]' for sample in sample_names]:
+                for col in ['ClassKey', 'CalcMass', 'BaseRt', 'TotalSmpIDRate(%)'] + \
+                          [f'intensity[{sample}]' for sample in sample_names]:
                     clean_df.at[row_index[0], col] = isolated_row[col]
             else:
                 new_row = {col: isolated_row[col] for col in clean_df.columns}
-                clean_df = clean_df.append(new_row, ignore_index=True)
+                clean_df = pd.concat([clean_df, pd.DataFrame([new_row])], ignore_index=True)
             return clean_df
         except Exception as e:
             print(f"Error in updating clean DataFrame: {e}")
-            return clean_df  # Return the original DataFrame or handle as needed
+            return clean_df
  
     @st.cache_data(ttl=3600)
     def _remove_missing_fa_keys(_self, df):
@@ -421,13 +340,6 @@ class CleanLipidSearchData:
     
             # Perform final cleanup steps
             df = self.final_cleanup(df)
-            
-            # Final step: rename MeanArea columns to intensity format
-            rename_dict = {
-                f'MeanArea[{sample}]': f'intensity[s{i+1}]'
-                for i, sample in enumerate(experiment.full_samples_list)
-            }
-            df = df.rename(columns=rename_dict)
     
             return df
         except Exception as e:

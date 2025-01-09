@@ -12,26 +12,25 @@ class GroupSamples:
         
     def check_dataset_validity(self, df):
         """Validates dataset columns based on format."""
+        # Check for required static columns based on format
         if self.data_format == 'lipidsearch':
             required_static_columns = {'LipidMolec', 'ClassKey', 'BaseRt', 'FAKey'}
-            prefix = 'MeanArea'
         else:
             required_static_columns = {'LipidMolec'}
-            prefix = 'Intensity'
             
         if not required_static_columns.issubset(df.columns):
             return False
 
-        value_columns = [col for col in df.columns if col.startswith(f"{prefix}[")]
+        # Check for intensity columns (now standardized format for both types)
+        value_columns = [col for col in df.columns if col.startswith('intensity[')]
         return bool(value_columns)
 
     def _extract_sample_names(self, df):
         """Extracts sample names from the value columns."""
-        prefix = 'MeanArea' if self.data_format == 'lipidsearch' else 'intensity'
         sample_names = set()
         
         for col in df.columns:
-            match = re.match(f"{prefix}\[(.+)\]$", col)
+            match = re.match(r"intensity\[(.+)\]$", col)
             if match:
                 sample_names.add(match.group(1))
                 
@@ -43,17 +42,15 @@ class GroupSamples:
         
     def build_mean_area_col_list(self, df):
         """Returns list of sample indices from value columns."""
-        prefix = 'MeanArea' if self.data_format == 'lipidsearch' else 'Intensity'
         value_cols = []
         
         for col in df.columns:
-            match = re.match(f"{prefix}\[s(\d+)\]$", col)
+            match = re.match(r"intensity\[s(\d+)\]$", col)
             if match:
                 value_cols.append(int(match.group(1)))
     
         if not value_cols:
-            prefix_name = "MeanArea" if self.data_format == 'lipidsearch' else "Intensity"
-            raise ValueError(f"No {prefix_name} columns found or they follow an unexpected format")
+            raise ValueError("No intensity columns found or they follow an unexpected format")
 
         return sorted(value_cols)
     
