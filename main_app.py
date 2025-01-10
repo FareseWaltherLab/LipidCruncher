@@ -559,23 +559,37 @@ def rename_intensity_to_concentration(df):
     return df.rename(columns=rename_dict)
 
 def process_class_standards(selected_classes, standards_by_class, intsta_df):
-    """Helper function to process class-standard mapping"""
+    """
+    Helper function to process class-standard mapping with flexible standard selection.
+    
+    Args:
+        selected_classes (list): List of selected lipid classes
+        standards_by_class (dict): Dictionary mapping classes to their standards
+        intsta_df (pd.DataFrame): DataFrame containing internal standards
+    
+    Returns:
+        dict: Mapping of lipid classes to selected standards
+    """
     class_to_standard_map = {}
+    all_available_standards = list(intsta_df['LipidMolec'].unique())
     
     for lipid_class in selected_classes:
-        available_standards = standards_by_class.get(
-            lipid_class,
-            list(intsta_df['LipidMolec'].unique())
-        )
+        # Get class-specific standards if available
+        class_specific_standards = standards_by_class.get(lipid_class, [])
         
-        if not available_standards:
-            st.error(f"No standards available for class '{lipid_class}'")
-            return None
-            
+        # Set default index based on class-specific standard
         default_idx = 0
+        if class_specific_standards:
+            # If we have a class-specific standard, find its index in all_available_standards
+            try:
+                default_idx = all_available_standards.index(class_specific_standards[0])
+            except ValueError:
+                default_idx = 0
+        
         selected_standard = st.selectbox(
-            f'Select internal standard for {lipid_class}',
-            available_standards,
+            f'Select internal standard for {lipid_class}' + 
+            (' (default shown)' if class_specific_standards else ''),
+            all_available_standards,
             index=default_idx
         )
         
