@@ -193,15 +193,6 @@ def process_group_samples(df, experiment, data_format):
 def handle_manual_grouping(group_df, experiment, grouped_samples, df):
     """
     Handle manual sample grouping if needed.
-    
-    Args:
-        group_df (pd.DataFrame): DataFrame containing sample grouping information
-        experiment (Experiment): Experiment object containing setup information
-        grouped_samples (GroupSamples): GroupSamples object for sample management
-        df (pd.DataFrame): Main data DataFrame
-        
-    Returns:
-        tuple: (updated group_df, updated DataFrame)
     """
     st.sidebar.write('Are your samples properly grouped together?')
     ans = st.sidebar.radio('', ['Yes', 'No'])
@@ -217,26 +208,19 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
         
         # Keep track of expected samples per condition
         expected_samples = dict(zip(experiment.conditions_list, 
-                                  experiment.number_of_samples_list))
+                                    experiment.number_of_samples_list))
         
         # Process each condition
         for condition in experiment.conditions_list:
             st.sidebar.write(f"Select {expected_samples[condition]} samples for {condition}")
             
-            # Allow user to select samples for this condition
             selected_samples = st.sidebar.multiselect(
                 f'Pick the samples that belong to condition {condition}',
                 remaining_samples
             )
             
-            # Validate selection count
-            if len(selected_samples) > expected_samples[condition]:
-                st.sidebar.error(f"Too many samples selected for {condition}. Please select exactly {expected_samples[condition]} samples.")
-                return group_df, df
-            
             selections[condition] = selected_samples
             
-            # Remove selected samples from remaining options if correct number selected
             if len(selected_samples) == expected_samples[condition]:
                 remaining_samples = [s for s in remaining_samples if s not in selected_samples]
         
@@ -244,40 +228,13 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
         if all(len(selections[condition]) == expected_samples[condition] 
                for condition in experiment.conditions_list):
             try:
-                # Update the group_df with new sample ordering
-                group_df = grouped_samples.group_samples(group_df, selections)
+                # Update the group_df and get column mapping
+                group_df, old_to_new = grouped_samples.group_samples(group_df, selections)
                 
-                # Create the new ordered sample list based on selections
-                new_ordered_samples = []
-                for condition in experiment.conditions_list:
-                    new_ordered_samples.extend(selections[condition])
-                
-                # Create DataFrame copy
-                df_reordered = df.copy()
-                
-                # Get correct prefix based on data format
-                prefix = 'MeanArea' if grouped_samples.data_format == 'lipidsearch' else 'intensity'
-                
-                # Separate static and intensity columns
-                static_cols = [col for col in df.columns if not col.startswith(prefix)]
-                
-                # Create new intensity columns in the correct order
-                intensity_cols = [f"{prefix}[{sample}]" for sample in new_ordered_samples]
-                
-                # Reorder the columns in df_reordered
-                df_reordered = df_reordered.reindex(columns=static_cols + intensity_cols)
-                
-                # Get name_df for display
-                name_df = grouped_samples.update_sample_names(group_df)
-                
-                st.sidebar.success('Sample grouping updated successfully!')
-                
-                # Display the new grouping information
-                st.sidebar.write("\nNew Sample Grouping:")
-                st.sidebar.dataframe(name_df)
+                # Reorder and rename columns in the DataFrame
+                df_reordered = grouped_samples.reorder_intensity_columns(df, old_to_new)
                 
                 st.session_state.grouping_complete = True
-                
                 return group_df, df_reordered
                 
             except ValueError as e:
@@ -285,21 +242,10 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
                 st.session_state.grouping_complete = False
                 return group_df, df
         else:
-            # Show which conditions need attention
-            incorrect_conditions = [
-                f"{cond} (selected {len(selections[cond])}/{expected_samples[cond]} samples)"
-                for cond in experiment.conditions_list
-                if len(selections[cond]) != expected_samples[cond]
-            ]
-            st.sidebar.error(
-                f"Please select the correct number of samples for:\n"
-                f"{', '.join(incorrect_conditions)}"
-            )
             st.session_state.grouping_complete = False
             return group_df, df
     else:
         st.session_state.grouping_complete = True
-        # If we have stored original order, restore it
         if st.session_state.original_column_order is not None:
             df = df.reindex(columns=st.session_state.original_column_order)
     
@@ -387,13 +333,8 @@ def build_replicate_condition_pair(condition, experiment):
 
 def clean_data(df, name_df, experiment, data_format):
     """
-    Clean data using appropriate cleaner based on format.
-    
-    Returns:
-        tuple: (cleaned_df, intsta_df)
+    Clean data using appropriate cleaner based on the format.
     """
-    st.subheader("Clean, Filter and Normalize Data")
-    
     if data_format == 'LipidSearch 5.0':
         cleaner = lp.CleanLipidSearchData()
     else:
@@ -403,6 +344,7 @@ def clean_data(df, name_df, experiment, data_format):
     cleaned_df, intsta_df = cleaner.extract_internal_standards(cleaned_df)
     
     return cleaned_df, intsta_df
+
 
 def handle_standards_upload(normalizer):
     """Handle the upload and processing of custom standards file."""
