@@ -11,26 +11,41 @@ class CleanGenericData:
     def _extract_relevant_columns(_self, df, full_samples_list):
         """
         Extracts relevant columns for analysis from the DataFrame.
-        
-        Args:
-            df (pd.DataFrame): The dataset to be processed
-            full_samples_list (list): List of all sample names in the experiment
-            
-        Returns:
-            pd.DataFrame: DataFrame containing only the essential columns
+        Preserves correct case for ClassKey.
         """
         try:        
-            # Updated static columns to include ClassKey
-            static_cols = ['LipidMolec', 'ClassKey']
-            intensity_cols = [f'Intensity[s{i+1}]' for i in range(len(full_samples_list))]
-            relevant_cols = static_cols + intensity_cols
+            # Create case-insensitive column mapping
+            col_map = {col.lower(): col for col in df.columns}
             
-            # Check if all required columns exist
-            missing_cols = [col for col in relevant_cols if col not in df.columns]
-            if missing_cols:
-                raise KeyError(f"Missing columns: {missing_cols}")
+            # Define the exact case we want for static columns
+            static_cols = {'lipidmolec': 'LipidMolec', 'classkey': 'ClassKey'}
+            static_col_mapping = {}
             
-            return df[relevant_cols].copy()
+            for col_lower, col_desired in static_cols.items():
+                if col_lower in col_map:
+                    static_col_mapping[col_map[col_lower]] = col_desired
+                else:
+                    raise KeyError(f"Missing column: {col_desired}")
+            
+            # Handle intensity columns
+            intensity_col_mapping = {}
+            for sample in full_samples_list:
+                expected_col = f'intensity[{sample}]'.lower()
+                found = False
+                for actual_col in df.columns:
+                    if actual_col.lower() == expected_col:
+                        intensity_col_mapping[actual_col] = f'intensity[{sample}]'
+                        found = True
+                        break
+                if not found:
+                    raise KeyError(f"Missing column: intensity[{sample}]")
+            
+            # Combine mappings and create new DataFrame
+            rename_dict = {**static_col_mapping, **intensity_col_mapping}
+            result_df = df[list(rename_dict.keys())].copy()
+            result_df = result_df.rename(columns=rename_dict)
+            
+            return result_df
             
         except KeyError as e:
             st.error(f"Error extracting columns: {str(e)}")
@@ -51,7 +66,7 @@ class CleanGenericData:
     def _convert_columns_to_numeric(self, df, full_samples_list):
         """Converts intensity data columns to numeric type."""
         try:
-            intensity_cols = [f'intensity[s{i+1}]' for i in range(len(full_samples_list))]
+            intensity_cols = [f'intensity[{sample}]' for sample in full_samples_list]
             df_copy = df.copy()
             df_copy[intensity_cols] = df_copy[intensity_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
             return df_copy
@@ -78,14 +93,17 @@ class CleanGenericData:
         except Exception as e:
             st.error(f"Error in data cleaning: {str(e)}")
             return pd.DataFrame()
-
+    
     def extract_internal_standards(self, df):
-        """
-        Extract internal standards based on ClassKey, similar to LipidSearch format.
-        Now processes internal standards since we have ClassKey information.
-        """
+        """Extract internal standards based on ClassKey."""
         try:
-            # Create a mask for internal standard rows (customize this based on your criteria)
+            # Find ClassKey column with case-insensitive search if needed
+            if 'ClassKey' not in df.columns:
+                col_map = {col.lower(): col for col in df.columns}
+                if 'classkey' in col_map:
+                    df = df.rename(columns={col_map['classkey']: 'ClassKey'})
+            
+            # Case insensitive check for internal standards
             is_standard = df['ClassKey'].str.contains('ISTD', case=False, na=False)
             
             if is_standard.any():
@@ -98,3 +116,4 @@ class CleanGenericData:
         except Exception as e:
             st.error(f"Error extracting internal standards: {str(e)}")
             return df, pd.DataFrame(columns=df.columns)
+    

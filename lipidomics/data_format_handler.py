@@ -70,21 +70,25 @@ class DataFormatHandler:
     @staticmethod
     def _validate_generic(df):
         """
-        Validates generic format data.
-        
-        Returns:
-            tuple: (success, message)
+        Validates generic format data with case-insensitive column matching.
         """
-        required_cols = ['LipidMolec', 'ClassKey']
+        # Create case-insensitive column mapping
+        col_map = {col.lower(): col for col in df.columns}
         
-        # Check required columns
-        missing_cols = [col for col in required_cols if col not in df.columns]
+        # Check required columns case-insensitively
+        required_cols = ['lipidmolec', 'classkey']
+        missing_cols = []
+        
+        for col in required_cols:
+            if col not in col_map:
+                missing_cols.append(col.title())
+                
         if missing_cols:
             return False, f"Missing required columns: {', '.join(missing_cols)}"
             
         # Check for intensity columns - case insensitive
-        intensity_cols = [col for col in df.columns if 'intensity[' in col.lower()]
-        if not intensity_cols:
+        has_intensity = any('intensity[' in col.lower().replace(' ', '') for col in df.columns)
+        if not has_intensity:
             return False, "No intensity columns found"
             
         return True, "Valid generic format"
@@ -115,20 +119,38 @@ class DataFormatHandler:
     def _standardize_generic(df):
         """
         Standardizes generic format ensuring consistent intensity column naming.
+        Case insensitive matching with flexible spacing.
         """
         df = df.copy()
         
-        # Get all intensity columns (case insensitive)
-        intensity_cols = [col for col in df.columns if 'intensity[' in col.lower()]
+        # Create case-insensitive column mapping for required columns
         rename_dict = {}
         
+        # Standardize LipidMolec and ClassKey
+        col_map = {col.lower(): col for col in df.columns}
+        if 'lipidmolec' in col_map:
+            rename_dict[col_map['lipidmolec']] = 'LipidMolec'
+        if 'classkey' in col_map:
+            rename_dict[col_map['classkey']] = 'ClassKey'
+        
+        # Handle intensity columns with case insensitive matching
+        intensity_cols = [
+            col for col in df.columns 
+            if 'intensity[' in col.lower().replace(' ', '')
+        ]
+        
         for col in intensity_cols:
-            # Extract sample name and create standardized name
-            sample_name = col[col.lower().find('[')+1:col.lower().find(']')]
-            new_col = f'intensity[{sample_name}]'
-            if col != new_col:
-                rename_dict[col] = new_col
-                
+            # Extract sample name ignoring case and spaces
+            col_clean = col.lower().replace(' ', '')
+            start_idx = col_clean.find('[') + 1
+            end_idx = col_clean.find(']')
+            
+            if start_idx > 0 and end_idx > start_idx:
+                sample_name = col[start_idx:end_idx].strip()
+                new_col = f'intensity[{sample_name}]'
+                if col != new_col:
+                    rename_dict[col] = new_col
+        
         # Rename columns if needed
         if rename_dict:
             df = df.rename(columns=rename_dict)
