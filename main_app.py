@@ -12,6 +12,7 @@ def main():
     
     initialize_session_state()
     
+    # Always show format selection in sidebar
     data_format = display_format_selection()
     display_format_requirements(data_format)
     
@@ -21,15 +22,19 @@ def main():
     )
     
     if uploaded_file:
-        # Process new data if we haven't already processed it
-        if st.session_state.cleaned_df is None:
-            df = load_and_validate_data(uploaded_file, data_format)
-            if df is not None:
-                format_type = 'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
-                
-                confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, format_type)
-                
-                if confirmed and valid_samples:
+        df = load_and_validate_data(uploaded_file, data_format)
+        if df is not None:
+            format_type = 'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
+            
+            # Always process experiment setup regardless of confirmation
+            confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, format_type)
+            
+            # Update confirmation state
+            st.session_state.confirmed = confirmed
+            
+            if valid_samples:
+                # Only proceed with data processing if confirmed
+                if confirmed:
                     # Use updated_df if available, otherwise use original df
                     df_to_clean = updated_df if updated_df is not None else df
                     cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
@@ -38,6 +43,8 @@ def main():
                         # Store essential data in session state
                         st.session_state.experiment = experiment
                         st.session_state.format_type = format_type
+                        st.session_state.cleaned_df = cleaned_df
+                        st.session_state.intsta_df = intsta_df
                         
                         # Display cleaned data and manage standards
                         display_cleaned_data(cleaned_df, intsta_df)
@@ -45,34 +52,28 @@ def main():
                         # Handle normalization
                         normalized_df = handle_data_normalization(
                             cleaned_df, 
-                            st.session_state.intsta_df,  # Use session state version for standards
+                            st.session_state.intsta_df,
                             experiment, 
                             format_type
                         )
                         
                         if normalized_df is not None:
                             st.session_state.normalized_df = normalized_df
-                            
-                elif not confirmed and valid_samples:
-                    st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
-        else:
-            # Use existing data from session state
-            display_cleaned_data(None, None)  # Will use session state values
-            
-            # Always show normalization options after cleaning if we have the required data
-            if hasattr(st.session_state, 'experiment') and hasattr(st.session_state, 'format_type'):
-                normalized_df = handle_data_normalization(
-                    st.session_state.cleaned_df,
-                    st.session_state.intsta_df,
-                    st.session_state.experiment,
-                    st.session_state.format_type
-                )
                 
-                if normalized_df is not None:
-                    st.session_state.normalized_df = normalized_df
-
+                else:
+                    # Clear processed data when unconfirmed
+                    st.session_state.cleaned_df = None
+                    st.session_state.intsta_df = None
+                    st.session_state.normalized_df = None
+                    st.session_state.experiment = None
+                    st.session_state.format_type = None
+                    st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
+            
+            else:
+                st.error("Please ensure your samples are valid before proceeding.")
+                
 def initialize_session_state():
-    """Initialize the Streamlit session state."""
+    """Initialize the Streamlit session state with default values."""
     # Data related states
     if 'cleaned_df' not in st.session_state:
         st.session_state.cleaned_df = None
@@ -80,12 +81,18 @@ def initialize_session_state():
         st.session_state.intsta_df = None
     if 'normalized_df' not in st.session_state:
         st.session_state.normalized_df = None
-        
+    
     # Process control states
     if 'grouping_complete' not in st.session_state:
         st.session_state.grouping_complete = True
     if 'initialized' not in st.session_state:
         st.session_state.initialized = True
+    if 'confirmed' not in st.session_state:
+        st.session_state.confirmed = False
+    if 'experiment' not in st.session_state:
+        st.session_state.experiment = None
+    if 'format_type' not in st.session_state:
+        st.session_state.format_type = None
 
 def display_format_selection():
     """Display data format selection in sidebar."""
@@ -147,46 +154,6 @@ def load_and_validate_data(uploaded_file, data_format):
     except Exception as e:
         st.error(f"Error reading file: {str(e)}")
         return None
-
-def setup_experiment():
-    """
-    Set up experiment parameters through sidebar inputs.
-    
-    Returns:
-        tuple: (experiment object, success status)
-    """
-    st.sidebar.subheader("Define Experiment")
-    n_conditions = st.sidebar.number_input(
-        'Enter the number of conditions', 
-        min_value=1, 
-        max_value=20, 
-        value=1, 
-        step=1
-    )
-    
-    conditions_list = []
-    number_of_samples_list = []
-    
-    for i in range(n_conditions):
-        condition = st.sidebar.text_input(f'Create a label for condition #{i + 1}')
-        n_samples = st.sidebar.number_input(
-            f'Number of samples for condition #{i + 1}', 
-            min_value=1, 
-            max_value=1000, 
-            value=1, 
-            step=1
-        )
-        conditions_list.append(condition)
-        number_of_samples_list.append(n_samples)
-
-    experiment = lp.Experiment()
-    success = experiment.setup_experiment(n_conditions, conditions_list, number_of_samples_list)
-    
-    if not success:
-        st.sidebar.error("All condition labels must be non-empty.")
-        return None, False
-        
-    return experiment, True
 
 def process_group_samples(df, experiment, data_format):
     """
