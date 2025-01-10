@@ -193,6 +193,15 @@ def process_group_samples(df, experiment, data_format):
 def handle_manual_grouping(group_df, experiment, grouped_samples, df):
     """
     Handle manual sample grouping if needed.
+    
+    Args:
+        group_df (pd.DataFrame): DataFrame containing sample group information
+        experiment (Experiment): Experiment object containing setup information
+        grouped_samples (GroupSamples): GroupSamples object for handling sample grouping
+        df (pd.DataFrame): Main data DataFrame
+        
+    Returns:
+        tuple: (Updated group_df, Updated DataFrame)
     """
     st.sidebar.write('Are your samples properly grouped together?')
     ans = st.sidebar.radio('', ['Yes', 'No'])
@@ -208,7 +217,7 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
         
         # Keep track of expected samples per condition
         expected_samples = dict(zip(experiment.conditions_list, 
-                                    experiment.number_of_samples_list))
+                                  experiment.number_of_samples_list))
         
         # Process each condition
         for condition in experiment.conditions_list:
@@ -221,12 +230,15 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
             
             selections[condition] = selected_samples
             
+            # Update remaining samples only if correct number selected
             if len(selected_samples) == expected_samples[condition]:
                 remaining_samples = [s for s in remaining_samples if s not in selected_samples]
         
         # Verify all conditions have correct number of samples
-        if all(len(selections[condition]) == expected_samples[condition] 
-               for condition in experiment.conditions_list):
+        all_correct = all(len(selections[condition]) == expected_samples[condition] 
+                         for condition in experiment.conditions_list)
+        
+        if all_correct:
             try:
                 # Update the group_df and get column mapping
                 group_df, old_to_new = grouped_samples.group_samples(group_df, selections)
@@ -235,6 +247,12 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
                 df_reordered = grouped_samples.reorder_intensity_columns(df, old_to_new)
                 
                 st.session_state.grouping_complete = True
+                
+                # Generate and display name_df to show the new sample order
+                name_df = grouped_samples.update_sample_names(group_df)
+                st.sidebar.write("New sample order after regrouping:")
+                st.sidebar.write(name_df)
+                
                 return group_df, df_reordered
                 
             except ValueError as e:
