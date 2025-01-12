@@ -524,8 +524,8 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
                     if normalized_df is None:
                         return None
 
-            # Finally rename all intensity columns to concentration
-            normalized_df = rename_intensity_to_concentration(normalized_df)
+        # Always rename intensity columns to concentration, regardless of normalization method
+        normalized_df = rename_intensity_to_concentration(normalized_df)
 
         # Display the normalized data
         if normalized_df is not None:
