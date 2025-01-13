@@ -125,11 +125,20 @@ def display_format_requirements(data_format):
     else:
         st.info("""
         **Dataset Requirements for Generic Format**
-        
+
         Required columns:
         * `LipidMolec`: The molecule identifier for the lipid
+            * Expected naming format: Class(chain details)
+            * Examples:
+                - AcCa(16:0)
+                - CL(18:2/16:0/18:1/18:2)
+                - Cer(d18:1/24:0)
+                - CerG1(d13:0/25:2)
         * `intensity[sample_name]`: One column per sample with intensity values
-        """)
+        
+        The lipid class (e.g., AcCa, CL, Cer, CerG1) will be automatically extracted from the LipidMolec column to create the ClassKey. 
+        The naming format should be consistent across all entries, with the class name followed by chain details in parentheses.
+                """)
 
 def load_and_validate_data(uploaded_file, data_format):
     """

@@ -79,8 +79,6 @@ class CleanLipidSearchData:
 
     def data_cleaner(self, df, name_df, experiment):
         df = self._remove_missing_fa_keys(df)
-        #df = self._update_column_names(df, name_df)
-        #df = self._extract_relevant_columns(df, experiment.full_samples_list)
         df = self._convert_columns_to_numeric(df, experiment.full_samples_list)
         df = self._apply_filter(df)
         df = self._correct_lipid_molec_column(df)
