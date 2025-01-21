@@ -26,6 +26,10 @@ def main():
         if df is not None:
             format_type = 'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
             
+            # Display column mapping for generic format
+            if format_type == 'generic':
+                display_column_mapping()
+            
             # Always process experiment setup regardless of confirmation
             confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, format_type)
             
@@ -126,18 +130,28 @@ def display_format_requirements(data_format):
         st.info("""
         **Dataset Requirements for Generic Format**
 
-        Required columns:
-        * `LipidMolec`: The molecule identifier for the lipid
-            * Expected naming format: Class(chain details)
-            * Examples:
-                - AcCa(16:0)
-                - CL(18:2/16:0/18:1/18:2)
-                - Cer(d18:1/24:0)
-                - CerG1(d13:0/25:2)
-        * `intensity[sample_name]`: One column per sample with intensity values
+        IMPORTANT: Your dataset must contain ONLY these columns in this order:
         
-        The lipid class (e.g., AcCa, CL, Cer, CerG1) will be automatically extracted from the LipidMolec column to create the ClassKey. 
-        The naming format should be consistent across all entries, with the class name followed by chain details in parentheses.
+        1. **First Column - Lipid Names:**
+           * Can have any column name
+           * Must contain lipid molecule identifiers
+           * Will be standardized to match these formats:
+             - LPC O-17:4         -> LPC(O-17:4)
+             - Cer d18:0/C24:0    -> Cer(d18:0_C24:0)
+             - CE 14:0;0          -> CE(14:0)
+             - CerG1(d13:0_25:2)  -> CerG1(d13:0_25:2)
+             - PA 16:0/18:1+O     -> PA(16:0_18:1+O)
+             
+        2. **Remaining Columns - Intensity Values Only:**
+           * Can have any column names
+           * Each column should contain intensity values for one sample
+           * The number of intensity columns must match the total number of samples in your experiment
+           * These columns will be automatically standardized to: intensity[s1], intensity[s2], ..., intensity[sN]
+        
+        ⚠️ If your dataset contains any additional columns, please remove them before uploading.
+        Only the lipid names column followed by intensity columns should be present.
+        
+        Note: The lipid class (e.g., LPC, Cer, CE) will be automatically extracted from the lipid names to create the ClassKey.
                 """)
 
 def load_and_validate_data(uploaded_file, data_format):
@@ -292,6 +306,19 @@ def process_experiment(df, data_format='lipidsearch'):
     number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', 
                                                      min_value=1, max_value=1000, value=1, step=1) 
                              for i in range(n_conditions)]
+    
+    # For generic format, validate number of intensity columns matches total samples
+    if data_format == 'generic':
+        total_samples = sum(number_of_samples_list)
+        n_intensity_cols = st.session_state.get('n_intensity_cols', 0)
+        
+        if n_intensity_cols != total_samples:
+            st.sidebar.error(
+                f"Number of intensity columns ({n_intensity_cols}) does not match "
+                f"total number of samples ({total_samples}). Please check your input data "
+                "and sample counts."
+            )
+            return False, None, None, None, False, None
 
     experiment = lp.Experiment()
     if not experiment.setup_experiment(n_conditions, conditions_list, number_of_samples_list):
@@ -312,6 +339,15 @@ def process_experiment(df, data_format='lipidsearch'):
         st.sidebar.error("Please complete sample grouping before proceeding.")
 
     return confirmed, name_df, experiment, bqc_label, valid_samples, updated_df
+
+def display_column_mapping():
+    """Display the mapping between original and standardized column names in the sidebar."""
+    if st.session_state.get('column_mapping') is not None:
+        st.sidebar.subheader("Column Name Standardization")
+        st.sidebar.dataframe(
+            st.session_state.column_mapping.reset_index(drop=True),
+            use_container_width=True
+        )
 
 def specify_bqc_samples(experiment):
     """
