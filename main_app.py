@@ -113,21 +113,31 @@ def display_format_requirements(data_format):
         st.info("""
         **Dataset Requirements for Metabolomics Workbench Format**
         
-        The file should contain:
+        The file must be a CSV containing:
         1. Required section markers:
            * MS_METABOLITE_DATA_START
            * MS_METABOLITE_DATA_END
            
         2. Three essential rows in the data section:
            * Row 1: Sample names
-           * Row 2: Experimental conditions in format "Factor1:Value1 | Factor2:Value2"
+           * Row 2: Experimental conditions - one condition string per sample
            * Row 3+: Lipid measurements with lipid names in first column
            
+        Example:
+        ```
+        MS_METABOLITE_DATA_START
+        Samples,Sample1,Sample2,Sample3,Sample4
+        Factors,WT,WT,KO,KO
+        LPC(16:0),234.5,256.7,189.3,201.4
+        PE(18:0_20:4),456.7,478.2,390.1,405.6
+        MS_METABOLITE_DATA_END
+        ```
+        
         The data will be automatically processed to:
         * Extract the tabular data section
-        * Standardize lipid names
-        * Create intensity columns
-        * Suggest experimental setup based on conditions
+        * Standardize lipid names (e.g., "LPC 16:0" → "LPC(16:0)")
+        * Create intensity columns (named as intensity[s1], intensity[s2], etc.)
+        * Use the condition strings to suggest experimental setup
         """)
     elif data_format == 'LipidSearch 5.0':
         st.info("""
@@ -149,7 +159,6 @@ def display_format_requirements(data_format):
     else:
         st.info("""
         **Dataset Requirements for Generic Format**
-
         IMPORTANT: Your dataset must contain ONLY these columns in this order:
         
         1. **First Column - Lipid Names:**

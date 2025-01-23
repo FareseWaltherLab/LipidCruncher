@@ -332,22 +332,14 @@ class DataFormatHandler:
     @staticmethod
     def _parse_workbench_conditions(conditions):
         """
-        Parses condition strings from Metabolomics Workbench format.
-        Example: "Diet:Normal | BileAcid:water" -> {'Diet': 'Normal', 'BileAcid': 'water'}
+        Handles conditions from Metabolomics Workbench format.
+        Each condition string is treated as a complete condition, without parsing.
+        Examples:
+            "WT" -> "WT"
+            "Diet:Normal | BileAcid:water" -> "Diet:Normal | BileAcid:water"
         """
-        parsed_conditions = {}
+        unique_conditions = set()
         for condition in conditions:
             if isinstance(condition, str):
-                factors = condition.split('|')
-                for factor in factors:
-                    factor = factor.strip()
-                    if ':' in factor:
-                        key, value = factor.split(':')
-                        key = key.strip()
-                        value = value.strip()
-                        if key not in parsed_conditions:
-                            parsed_conditions[key] = []
-                        if value not in parsed_conditions[key]:
-                            parsed_conditions[key].append(value)
-        
-        return parsed_conditions
+                unique_conditions.add(condition.strip())
+        return list(unique_conditions)
