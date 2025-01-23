@@ -95,7 +95,7 @@ class CleanGenericData:
             return pd.DataFrame()
     
     def extract_internal_standards(self, df):
-        """Extract internal standards based on ClassKey."""
+        """Extract internal standards based on ClassKey and deuterated standards."""
         try:
             # Find ClassKey column with case-insensitive search if needed
             if 'ClassKey' not in df.columns:
@@ -103,8 +103,23 @@ class CleanGenericData:
                 if 'classkey' in col_map:
                     df = df.rename(columns={col_map['classkey']: 'ClassKey'})
             
-            # Case insensitive check for internal standards
-            is_standard = df['ClassKey'].str.contains('ISTD', case=False, na=False)
+            # Define patterns for internal standards
+            patterns = [
+                r'\(d\d+\)',  # Matches deuterated standards like (d7)
+                r'ISTD',      # Case-insensitive ISTD in ClassKey
+                r':\(s\)',    # Standards marked with :(s)
+                r'\+D\d+',    # Alternative deuterated format
+                r'SPLASH'     # SPLASH standards
+            ]
+            
+            # Create combined pattern
+            combined_pattern = '|'.join(f'(?:{pattern})' for pattern in patterns)
+            
+            # Check both ClassKey and LipidMolec for standards
+            is_standard = (
+                df['ClassKey'].str.contains('ISTD', case=False, na=False) |
+                df['LipidMolec'].str.contains(combined_pattern, regex=True, na=False)
+            )
             
             if is_standard.any():
                 intsta_df = df[is_standard].copy()

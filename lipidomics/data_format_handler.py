@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+import io
 import streamlit as st
 
 class DataFormatHandler:
@@ -80,8 +81,8 @@ class DataFormatHandler:
         Validates and standardizes data format.
         
         Args:
-            df (pd.DataFrame): Input dataframe
-            data_format (str): Either 'lipidsearch' or 'generic'
+            df (pd.DataFrame or str): Input dataframe or raw text for Metabolomics Workbench
+            data_format (str): 'lipidsearch', 'generic', or 'metabolomics_workbench'
             
         Returns:
             tuple: (standardized_df, success, message)
@@ -92,19 +93,24 @@ class DataFormatHandler:
                 success, message = DataFormatHandler._validate_lipidsearch(df)
                 if not success:
                     return None, False, message
-                    
-                # Standardize LipidSearch format
                 standardized_df = DataFormatHandler._standardize_lipidsearch(df)
+                
+            elif data_format == 'Metabolomics Workbench':
+                if isinstance(df, str):
+                    success, message = DataFormatHandler._validate_metabolomics_workbench(df)
+                    if not success:
+                        return None, False, message
+                    standardized_df = DataFormatHandler._standardize_metabolomics_workbench(df)
+                else:
+                    return None, False, "Invalid input type for Metabolomics Workbench format"
                 
             else:  # generic format
                 success, message = DataFormatHandler._validate_generic(df)
                 if not success:
                     return None, False, message
-                    
-                # Standardize generic format
                 standardized_df = DataFormatHandler._standardize_generic(df)
             
-            return standardized_df, True, "Data successfully standardized to generic format"
+            return standardized_df, True, "Data successfully standardized"
             
         except Exception as e:
             return None, False, f"Error during preprocessing: {str(e)}"
@@ -210,3 +216,123 @@ class DataFormatHandler:
         df['ClassKey'] = df['LipidMolec'].apply(DataFormatHandler._infer_class_key)
         
         return df
+    
+    @staticmethod
+    def _validate_metabolomics_workbench(text_data):
+        """
+        Validates Metabolomics Workbench format text data.
+        """
+        try:
+            # Check for required section markers
+            if 'MS_METABOLITE_DATA_START' not in text_data or 'MS_METABOLITE_DATA_END' not in text_data:
+                return False, "Missing required data section markers"
+            
+            # Extract data section
+            start_idx = text_data.find('MS_METABOLITE_DATA_START')
+            end_idx = text_data.find('MS_METABOLITE_DATA_END')
+            
+            if start_idx == -1 or end_idx == -1 or start_idx >= end_idx:
+                return False, "Invalid data section markers"
+            
+            # Get the data section
+            data_lines = text_data[start_idx:end_idx].strip().split('\n')
+            data_lines = [line.strip() for line in data_lines if line.strip()]
+            
+            # Need at least marker + samples + factors + one data row
+            if len(data_lines) < 4:
+                return False, "Insufficient data rows"
+                
+            return True, "Valid Metabolomics Workbench format"
+            
+        except Exception as e:
+            return False, f"Validation error: {str(e)}"
+
+    @staticmethod
+    def _standardize_metabolomics_workbench(text_data):
+        """
+        Standardizes Metabolomics Workbench format data.
+        """
+        try:
+            # Find the data section
+            start_idx = text_data.find('MS_METABOLITE_DATA_START')
+            end_idx = text_data.find('MS_METABOLITE_DATA_END')
+            
+            # Extract and split the data section into lines
+            data_section = text_data[start_idx:end_idx].strip().split('\n')
+            data_section = [line.strip() for line in data_section if line.strip()]
+            
+            # Remove the MS_METABOLITE_DATA_START line
+            data_section = [line for line in data_section if 'MS_METABOLITE_DATA_START' not in line]
+            
+            # Parse header rows and split by comma since file is CSV
+            samples_line = data_section[0].split(',')
+            factors_line = data_section[1].split(',')
+            
+            # Extract sample names and conditions, skipping the first column header
+            sample_names = samples_line[1:]  # Skip 'Samples' column
+            conditions = factors_line[1:]    # Skip 'Factors' column
+            
+            # Create list of data rows
+            data_rows = []
+            for line in data_section[2:]:  # Skip header rows
+                if line.strip():  # Ignore empty lines
+                    values = line.split(',')  # Split by comma
+                    if len(values) == len(sample_names) + 1:  # +1 for lipid name column
+                        data_rows.append(values)
+            
+            # Create DataFrame
+            columns = ['LipidMolec'] + [f'intensity[s{i+1}]' for i in range(len(sample_names))]
+            df = pd.DataFrame(data_rows, columns=columns)
+            
+            # Store experimental conditions and sample names in session state
+            st.session_state.workbench_conditions = {
+                f's{i+1}': condition.strip() 
+                for i, condition in enumerate(conditions)
+            }
+            st.session_state.workbench_samples = {
+                f's{i+1}': name.strip() 
+                for i, name in enumerate(sample_names)
+            }
+            
+            # Clean and standardize lipid names
+            df['LipidMolec'] = df['LipidMolec'].apply(DataFormatHandler._standardize_lipid_name)
+            
+            # Infer ClassKey from standardized LipidMolec
+            df['ClassKey'] = df['LipidMolec'].apply(DataFormatHandler._infer_class_key)
+            
+            # Convert intensity columns to numeric, replacing any non-numeric values with NaN
+            intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
+            for col in intensity_cols:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+            # Replace NaN with 0
+            df[intensity_cols] = df[intensity_cols].fillna(0)
+            
+            return df
+            
+        except Exception as e:
+            st.error(f"Error in standardize_metabolomics_workbench: {str(e)}")
+            return pd.DataFrame()
+
+    @staticmethod
+    def _parse_workbench_conditions(conditions):
+        """
+        Parses condition strings from Metabolomics Workbench format.
+        Example: "Diet:Normal | BileAcid:water" -> {'Diet': 'Normal', 'BileAcid': 'water'}
+        """
+        parsed_conditions = {}
+        for condition in conditions:
+            if isinstance(condition, str):
+                factors = condition.split('|')
+                for factor in factors:
+                    factor = factor.strip()
+                    if ':' in factor:
+                        key, value = factor.split(':')
+                        key = key.strip()
+                        value = value.strip()
+                        if key not in parsed_conditions:
+                            parsed_conditions[key] = []
+                        if value not in parsed_conditions[key]:
+                            parsed_conditions[key].append(value)
+        
+        return parsed_conditions

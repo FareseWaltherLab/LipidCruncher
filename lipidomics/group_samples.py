@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+import streamlit as st
 
 class GroupSamples:
     """Handles grouping of samples for lipidomics data analysis."""
@@ -9,16 +10,35 @@ class GroupSamples:
         Initialize with experiment setup.
         """
         self.experiment = experiment
+        self.data_format = data_format
 
     def check_dataset_validity(self, df):
         """Validates dataset columns."""
-        required_static_columns = {'LipidMolec'}
-        if not required_static_columns.issubset(df.columns):
+        try:
+            # Check for LipidMolec column (case-insensitive)
+            if 'LipidMolec' not in df.columns:
+                st.error("Missing LipidMolec column")
+                return False
+            
+            # Check for intensity columns in standardized format
+            value_columns = [col for col in df.columns if col.startswith('intensity[')]
+            if not value_columns:
+                st.error("No intensity columns found")
+                return False
+                
+            # Verify number of intensity columns matches experiment setup
+            expected_samples = len(self.experiment.full_samples_list)
+            actual_samples = len(value_columns)
+            
+            if expected_samples != actual_samples:
+                st.error(f"Number of samples in data ({actual_samples}) doesn't match experiment setup ({expected_samples})!")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            st.error(f"Error checking dataset validity: {str(e)}")
             return False
-        
-        # Check for intensity columns in standardized format
-        value_columns = [col for col in df.columns if col.startswith('intensity[')]
-        return bool(value_columns)
 
     def extract_sample_names(self, df):
         """Extracts sample names from the standardized intensity columns."""
@@ -36,22 +56,51 @@ class GroupSamples:
 
     def build_mean_area_col_list(self, df):
         """Returns list of sample indices from standardized intensity columns."""
-        value_cols = [
-            int(match.group(1)) for col in df.columns
-            if (match := re.match(r"intensity\[s(\d+)\]$", col))
-        ]
-        if not value_cols:
-            raise ValueError("No intensity columns found or they follow an unexpected format")
-        return sorted(value_cols)
+        try:
+            value_cols = []
+            for col in df.columns:
+                if col.startswith('intensity['):
+                    # Extract the sample number from intensity[sN]
+                    match = re.match(r"intensity\[s(\d+)\]$", col)
+                    if match:
+                        value_cols.append(int(match.group(1)))
+            
+            if not value_cols:
+                raise ValueError("No intensity columns found")
+                
+            return sorted(value_cols)
+            
+        except Exception as e:
+            st.error(f"Error building column list: {str(e)}")
+            return []
 
     def build_group_df(self, df):
         """Constructs sample-to-condition mapping DataFrame."""
-        sample_names = ['s' + str(i) for i in self.build_mean_area_col_list(df)]
-        group_df = pd.DataFrame({
-            'sample name': sample_names,
-            'condition': self.experiment.extensive_conditions_list
-        })
-        return group_df
+        try:
+            # Get ordered list of samples
+            sample_numbers = self.build_mean_area_col_list(df)
+            sample_names = ['s' + str(i) for i in sample_numbers]
+            
+            # If we have Metabolomics Workbench data with conditions, use them
+            if self.data_format == 'Metabolomics Workbench' and 'workbench_conditions' in st.session_state:
+                conditions = []
+                for sample in sample_names:
+                    condition = st.session_state.workbench_conditions.get(sample, '')
+                    conditions.append(condition)
+            else:
+                # Use conditions from experiment setup
+                conditions = self.experiment.extensive_conditions_list
+            
+            group_df = pd.DataFrame({
+                'sample name': sample_names,
+                'condition': conditions
+            })
+            
+            return group_df
+            
+        except Exception as e:
+            st.error(f"Error building group DataFrame: {str(e)}")
+            return pd.DataFrame()
 
     def group_samples(self, group_df, selections):
         """

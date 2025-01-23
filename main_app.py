@@ -16,22 +16,23 @@ def main():
     data_format = display_format_selection()
     display_format_requirements(data_format)
     
+    # Update file type options based on format
+    file_types = ['csv'] if data_format == 'Metabolomics Workbench' else ['csv', 'txt']
+    
     uploaded_file = st.sidebar.file_uploader(
         f'Upload your {data_format} dataset', 
-        type=['csv', 'txt']
+        type=file_types
     )
     
     if uploaded_file:
         df = load_and_validate_data(uploaded_file, data_format)
         if df is not None:
-            format_type = 'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
-            
             # Display column mapping for generic format
-            if format_type == 'generic':
+            if data_format == 'Generic Format':
                 display_column_mapping()
             
             # Always process experiment setup regardless of confirmation
-            confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, format_type)
+            confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, data_format)
             
             # Update confirmation state
             st.session_state.confirmed = confirmed
@@ -46,7 +47,7 @@ def main():
                     if cleaned_df is not None:
                         # Store essential data in session state
                         st.session_state.experiment = experiment
-                        st.session_state.format_type = format_type
+                        st.session_state.format_type = data_format
                         st.session_state.cleaned_df = cleaned_df
                         st.session_state.intsta_df = intsta_df
                         
@@ -58,7 +59,7 @@ def main():
                             cleaned_df, 
                             st.session_state.intsta_df,
                             experiment, 
-                            format_type
+                            data_format
                         )
                         
                         if normalized_df is not None:
@@ -101,15 +102,34 @@ def initialize_session_state():
         st.session_state.format_type = None
 
 def display_format_selection():
-    """Display data format selection in sidebar."""
     return st.sidebar.selectbox(
         'Select Data Format',
-        ['LipidSearch 5.0', 'Generic Format']
+        ['LipidSearch 5.0', 'Generic Format', 'Metabolomics Workbench']
     )
 
 def display_format_requirements(data_format):
     """Display format-specific requirements."""
-    if data_format == 'LipidSearch 5.0':
+    if data_format == 'Metabolomics Workbench':
+        st.info("""
+        **Dataset Requirements for Metabolomics Workbench Format**
+        
+        The file should contain:
+        1. Required section markers:
+           * MS_METABOLITE_DATA_START
+           * MS_METABOLITE_DATA_END
+           
+        2. Three essential rows in the data section:
+           * Row 1: Sample names
+           * Row 2: Experimental conditions in format "Factor1:Value1 | Factor2:Value2"
+           * Row 3+: Lipid measurements with lipid names in first column
+           
+        The data will be automatically processed to:
+        * Extract the tabular data section
+        * Standardize lipid names
+        * Create intensity columns
+        * Suggest experimental setup based on conditions
+        """)
+    elif data_format == 'LipidSearch 5.0':
         st.info("""
         **Dataset Requirements for LipidSearch 5.0 Module**
         
@@ -157,25 +177,41 @@ def display_format_requirements(data_format):
 def load_and_validate_data(uploaded_file, data_format):
     """
     Load and validate uploaded data file.
-    
-    Returns:
-        pd.DataFrame or None: Validated dataframe or None if validation fails
     """
     try:
-        df = pd.read_csv(uploaded_file)
-        st.success("File uploaded successfully!")
-        
-        df, success, message = lp.DataFormatHandler.validate_and_preprocess(
-            df,
-            'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
-        )
-        
-        if not success:
-            st.error(message)
-            return None
+        if data_format == 'Metabolomics Workbench':
+            # Read as text for Metabolomics Workbench format
+            text_content = uploaded_file.getvalue().decode('utf-8')
             
-        return df
-        
+            # Validate format
+            df, success, message = lp.DataFormatHandler.validate_and_preprocess(
+                text_content,
+                data_format
+            )
+            
+            if not success:
+                st.error(message)
+                return None
+                
+            st.success("File uploaded and processed successfully!")
+            return df
+            
+        else:
+            # Standard CSV processing for other formats
+            df = pd.read_csv(uploaded_file)
+            st.success("File uploaded successfully!")
+            
+            df, success, message = lp.DataFormatHandler.validate_and_preprocess(
+                df,
+                'lipidsearch' if data_format == 'LipidSearch 5.0' else 'generic'
+            )
+            
+            if not success:
+                st.error(message)
+                return None
+                
+            return df
+            
     except Exception as e:
         st.error(f"Error reading file: {str(e)}")
         return None
@@ -187,10 +223,10 @@ def process_group_samples(df, experiment, data_format):
     Args:
         df (pd.DataFrame): The dataset to process
         experiment (Experiment): The experiment setup
-        data_format (str): Either 'lipidsearch' or 'generic'
+        data_format (str): The format of the data
     
     Returns:
-        tuple: (name_df, group_df, valid_samples)
+        tuple: (name_df, group_df, updated_df, valid_samples)
     """
     grouped_samples = lp.GroupSamples(experiment, data_format)
     
@@ -199,12 +235,16 @@ def process_group_samples(df, experiment, data_format):
         return None, None, None, False
 
     value_cols = grouped_samples.build_mean_area_col_list(df)
-    if len(value_cols) != len(experiment.full_samples_list):
-        st.sidebar.error("Number of samples in data doesn't match experiment setup!")
+    if not value_cols:
+        st.sidebar.error("Error processing intensity columns!")
         return None, None, None, False
 
     st.sidebar.subheader('Group Samples')
     group_df = grouped_samples.build_group_df(df)
+    if group_df.empty:
+        st.sidebar.error("Error building sample groups!")
+        return None, None, None, False
+        
     st.sidebar.write(group_df)
 
     # Now handle_manual_grouping returns both group_df and updated df
@@ -297,28 +337,56 @@ def process_experiment(df, data_format='lipidsearch'):
     Process the experiment setup and sample grouping based on user input.
     """
     st.sidebar.subheader("Define Experiment")
-    n_conditions = st.sidebar.number_input('Enter the number of conditions', 
-                                         min_value=1, max_value=20, value=1, step=1)
     
-    conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1}') 
-                      for i in range(n_conditions)]
-    
-    number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', 
-                                                     min_value=1, max_value=1000, value=1, step=1) 
-                             for i in range(n_conditions)]
-    
-    # For generic format, validate number of intensity columns matches total samples
-    if data_format == 'generic':
-        total_samples = sum(number_of_samples_list)
-        n_intensity_cols = st.session_state.get('n_intensity_cols', 0)
+    if data_format == 'Metabolomics Workbench' and 'workbench_conditions' in st.session_state:
+        # Parse conditions from the data (but don't display the parsed values)
+        parsed_conditions = lp.DataFormatHandler._parse_workbench_conditions(
+            set(st.session_state.workbench_conditions.values())
+        )
         
-        if n_intensity_cols != total_samples:
-            st.sidebar.error(
-                f"Number of intensity columns ({n_intensity_cols}) does not match "
-                f"total number of samples ({total_samples}). Please check your input data "
-                "and sample counts."
-            )
-            return False, None, None, None, False, None
+        use_detected = st.sidebar.checkbox("Use detected experimental setup", value=True)
+        
+        if use_detected:
+            # Use the detected conditions
+            unique_conditions = set(st.session_state.workbench_conditions.values())
+            n_conditions = len(unique_conditions)
+            conditions_list = list(unique_conditions)
+            
+            # Count samples per condition
+            sample_counts = {}
+            for condition in conditions_list:
+                count = sum(1 for x in st.session_state.workbench_conditions.values() if x == condition)
+                sample_counts[condition] = count
+                
+            number_of_samples_list = [sample_counts[condition] for condition in conditions_list]
+            
+            # Display the detected setup
+            st.sidebar.write("Using detected setup:")
+            for cond, count in zip(conditions_list, number_of_samples_list):
+                st.sidebar.write(f"* {cond}: {count} samples")
+            
+        else:
+            # Allow manual setup
+            n_conditions = st.sidebar.number_input('Enter the number of conditions', 
+                                                 min_value=1, max_value=20, value=1, step=1)
+            
+            conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1}') 
+                             for i in range(n_conditions)]
+            
+            number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', 
+                                                            min_value=1, max_value=1000, value=1, step=1) 
+                                    for i in range(n_conditions)]
+    else:
+        # Standard manual setup for other formats
+        n_conditions = st.sidebar.number_input('Enter the number of conditions', 
+                                             min_value=1, max_value=20, value=1, step=1)
+        
+        conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1}') 
+                         for i in range(n_conditions)]
+        
+        number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', 
+                                                         min_value=1, max_value=1000, value=1, step=1) 
+                                 for i in range(n_conditions)]
 
     experiment = lp.Experiment()
     if not experiment.setup_experiment(n_conditions, conditions_list, number_of_samples_list):
