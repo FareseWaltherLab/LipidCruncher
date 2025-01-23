@@ -13,12 +13,12 @@ class DataFormatHandler:
     @staticmethod
     def _standardize_lipid_name(lipid_name):
         """
-        Standardizes lipid names to a consistent format: Class(chain details with underscore separator)
+        Standardizes lipid names to a consistent format: Class(chain details)(modifications)
         Examples:
             LPC O-17:4 -> LPC(O-17:4)
             Cer d18:0/C24:0 -> Cer(d18:0_C24:0)
             CE 14:0;0 -> CE(14:0)
-            DAG 10:0;0_16:0;0 -> DAG(10:0_16:0)
+            LPC 18:1(d7) -> LPC(18:1)(d7)
             CerG1(d13:0_25:2) -> CerG1(d13:0_25:2)
         """
         try:
@@ -28,8 +28,15 @@ class DataFormatHandler:
             
             lipid_name = str(lipid_name).strip()
             
-            # Remove all ;0 suffixes, not just at the end
+            # Remove all ;0 suffixes
             lipid_name = re.sub(r';0(?=[\s/_)]|$)', '', lipid_name)
+            
+            # Extract deuteration or other modifications if present
+            modification = ""
+            mod_match = re.search(r'\(d\d+\)', lipid_name)
+            if mod_match:
+                modification = mod_match.group()
+                lipid_name = lipid_name.replace(modification, '').strip()
             
             # If already in standard format Class(chains), just clean up the separators
             if '(' in lipid_name and ')' in lipid_name:
@@ -37,38 +44,46 @@ class DataFormatHandler:
                 chain_info = lipid_name[lipid_name.find('(')+1:lipid_name.find(')')]
                 # Convert separators to underscore
                 chain_info = chain_info.replace('/', '_')
-                return f"{class_name}({chain_info})"
+                result = f"{class_name}({chain_info})"
+            else:
+                # Handle space-separated format
+                if ' ' in lipid_name:
+                    parts = lipid_name.split(maxsplit=1)
+                    class_name = parts[0]
+                    chain_info = parts[1]
+                    result = f"{class_name}({chain_info})"
+                else:
+                    # If no obvious separation, try to find where class name ends
+                    match = re.match(r'^([A-Za-z][A-Za-z0-9]*)[- ]?(.*)', lipid_name)
+                    if match:
+                        class_name, chain_info = match.groups()
+                        chain_info = chain_info.replace('/', '_')
+                        result = f"{class_name}({chain_info})"
+                    else:
+                        result = lipid_name
             
-            # Handle space-separated format (e.g., "CE 14:0" or "LPC O-17:4")
-            if ' ' in lipid_name:
-                parts = lipid_name.split(maxsplit=1)
-                class_name = parts[0]
-                chain_info = parts[1]
-                return f"{class_name}({chain_info})"
+            # Add back modification if present
+            if modification:
+                result = f"{result}{modification}"
             
-            # If no obvious separation, try to find where class name ends
-            match = re.match(r'^([A-Za-z][A-Za-z0-9]*)[- ]?(.*)', lipid_name)
-            if match:
-                class_name, chain_info = match.groups()
-                chain_info = chain_info.replace('/', '_')
-                return f"{class_name}({chain_info})"
-            
-            return lipid_name
-            
+            return result
+                
         except Exception as e:
             print(f"Error standardizing lipid name '{lipid_name}': {str(e)}")
             return lipid_name
-
+    
     @staticmethod
     def _infer_class_key(lipid_molec):
         """
         Infers ClassKey from LipidMolec naming convention.
-        Expected format: Class(chain details)
-        Example: CL(18:2/16:0/18:1/18:2) -> CL
+        Expected format: Class(chain details)(modifications)
+        Examples:
+            CL(18:2/16:0/18:1/18:2) -> CL
+            LPC(18:1)(d7) -> LPC
         """
         try:
-            # Extract everything before the first parenthesis
-            match = re.match(r'^([^(]+)', lipid_molec)
+            # Extract everything before the first parenthesis or space
+            match = re.match(r'^([A-Za-z][A-Za-z0-9]*)', lipid_molec)
             if match:
                 return match.group(1).strip()
             return "Unknown"
