@@ -20,7 +20,7 @@ class Correlation:
         Returns:
             pd.DataFrame: A DataFrame with selected mean area columns.
         """
-        mean_area_df = df[['MeanArea[' + sample + ']' for sample in individual_samples_list[condition_index]]]
+        mean_area_df = df[['concentration[' + sample + ']' for sample in individual_samples_list[condition_index]]]
         mean_area_df.columns = individual_samples_list[condition_index]
         return mean_area_df
 

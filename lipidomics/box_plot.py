@@ -14,17 +14,15 @@ class BoxPlot:
     @st.cache_data(ttl=3600)
     def create_mean_area_df(df, full_samples_list):
         """
-        Creates a DataFrame containing only the 'MeanArea' columns from the provided DataFrame.
-
+        Creates a DataFrame containing only the 'concentration' columns from the provided DataFrame.
         Args:
             df (pd.DataFrame): The dataset to be processed.
             full_samples_list (list[str]): List of sample names.
-
         Returns:
-            pd.DataFrame: A DataFrame with the 'MeanArea' columns.
+            pd.DataFrame: A DataFrame with the 'concentration' columns.
         """
-        mean_area_cols = ['MeanArea[' + sample + ']' for sample in full_samples_list]
-        return df[mean_area_cols]
+        concentration_cols = [f'concentration[{sample}]' for sample in full_samples_list]
+        return df[concentration_cols]
 
     @staticmethod
     @st.cache_data(ttl=3600)

@@ -1,6 +1,26 @@
-import streamlit as st
-import pandas as pd
+# Existing imports
+import base64
+import copy
+import hashlib
+import io
+import os
+import sys
+import tempfile
+
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import plotly.io as pio
+import streamlit as st
+
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPDF
+
+# Local imports
 import lipidomics as lp
 
 def main():
@@ -10,11 +30,18 @@ def main():
     st.header("Lipidomics Analysis Module")
     st.markdown("Process and clean lipidomics data from multiple sources.")
     
+    # Initialize session state for cache clearing
+    if 'clear_cache' not in st.session_state:
+        st.session_state.clear_cache = False
+    
     initialize_session_state()
     
     # Always show format selection in sidebar
     data_format = display_format_selection()
     display_format_requirements(data_format)
+    
+    # Store the format type in session state for later use
+    st.session_state.format_type = data_format
     
     # Update file type options based on format
     file_types = ['csv'] if data_format == 'Metabolomics Workbench' else ['csv', 'txt']
@@ -31,52 +58,89 @@ def main():
             if data_format == 'Generic Format':
                 display_column_mapping()
             
-            # Always process experiment setup regardless of confirmation
+            # Process experiment setup
             confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, data_format)
             
             # Update confirmation state
             st.session_state.confirmed = confirmed
             
             if valid_samples:
-                # Only proceed with data processing if confirmed
                 if confirmed:
+                    # Update session state with experiment information
+                    update_session_state(name_df, experiment, bqc_label)
+                    
                     # Use updated_df if available, otherwise use original df
                     df_to_clean = updated_df if updated_df is not None else df
-                    cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
                     
-                    if cleaned_df is not None:
-                        # Store essential data in session state
-                        st.session_state.experiment = experiment
-                        st.session_state.format_type = data_format
-                        st.session_state.cleaned_df = cleaned_df
-                        st.session_state.intsta_df = intsta_df
+                    if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
+                        cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
                         
-                        # Display cleaned data and manage standards
-                        display_cleaned_data(cleaned_df, intsta_df)
+                        if cleaned_df is not None:
+                            # Store essential data in session state
+                            st.session_state.experiment = experiment
+                            st.session_state.format_type = data_format
+                            st.session_state.cleaned_df = cleaned_df
+                            st.session_state.intsta_df = intsta_df
+                            st.session_state.continuation_df = cleaned_df
+                            
+                            # Display cleaned data and manage standards
+                            display_cleaned_data(cleaned_df, intsta_df)
+                            
+                            # Handle normalization
+                            normalized_df = handle_data_normalization(
+                                cleaned_df, 
+                                st.session_state.intsta_df,
+                                experiment, 
+                                data_format  # Pass format type to normalization
+                            )
+                            
+                            if normalized_df is not None:
+                                st.session_state.normalized_df = normalized_df
+                                st.session_state.continuation_df = normalized_df
+                                
+                                # Add navigation button to next page
+                                _, right_column = st.columns([3, 1])
+                                with right_column:
+                                    if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
+                                        st.session_state.module = "Quality Check & Analysis"
+                                        st.experimental_rerun()
+                                        
+                    elif st.session_state.module == "Quality Check & Analysis":
+                        if st.session_state.cleaned_df is not None:
+                            quality_check_and_analysis_module(
+                                st.session_state.continuation_df, 
+                                st.session_state.intsta_df, 
+                                st.session_state.experiment,
+                                st.session_state.bqc_label,
+                                st.session_state.format_type  # Pass format type to quality check module
+                            )
                         
-                        # Handle normalization
-                        normalized_df = handle_data_normalization(
-                            cleaned_df, 
-                            st.session_state.intsta_df,
-                            experiment, 
-                            data_format
-                        )
-                        
-                        if normalized_df is not None:
-                            st.session_state.normalized_df = normalized_df
+                        if st.button("Back to Data Cleaning, Filtering, & Normalization", key="back_to_cleaning"):
+                            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+                            st.experimental_rerun()
                 
                 else:
                     # Clear processed data when unconfirmed
-                    st.session_state.cleaned_df = None
-                    st.session_state.intsta_df = None
-                    st.session_state.normalized_df = None
-                    st.session_state.experiment = None
-                    st.session_state.format_type = None
+                    clear_session_state()
                     st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
-            
             else:
                 st.error("Please ensure your samples are valid before proceeding.")
-                
+    
+    # Place the cache clearing button in the sidebar
+    if st.sidebar.button("End Session and Clear Cache"):
+        st.session_state.clear_cache = True
+        st.experimental_rerun()
+
+    # Check if cache should be cleared
+    if st.session_state.clear_cache:
+        clear_streamlit_cache()
+        st.sidebar.success("Cache cleared successfully!")
+        st.session_state.clear_cache = False  # Reset the flag
+    
+    st.info("""
+            **Tip:** When you're done, please click 'End Session and Clear Cache' in the sidebar. This ensures each session starts fresh and can help maintain optimal app performance. Additionally, if the app crashes and you are forced to restart the session, clearing the cache can help prevent further issues.
+            """)
+
 def initialize_session_state():
     """Initialize the Streamlit session state with default values."""
     # Data related states
@@ -86,10 +150,16 @@ def initialize_session_state():
         st.session_state.intsta_df = None
     if 'normalized_df' not in st.session_state:
         st.session_state.normalized_df = None
+    if 'continuation_df' not in st.session_state:
+        st.session_state.continuation_df = None
     if 'original_column_order' not in st.session_state:
         st.session_state.original_column_order = None
+    if 'bqc_label' not in st.session_state:
+        st.session_state.bqc_label = None
     
     # Process control states
+    if 'module' not in st.session_state:
+        st.session_state.module = "Data Cleaning, Filtering, & Normalization"
     if 'grouping_complete' not in st.session_state:
         st.session_state.grouping_complete = True
     if 'initialized' not in st.session_state:
@@ -100,6 +170,48 @@ def initialize_session_state():
         st.session_state.experiment = None
     if 'format_type' not in st.session_state:
         st.session_state.format_type = None
+        
+def clear_session_state():
+    """Clear processed data from session state."""
+    st.session_state.cleaned_df = None
+    st.session_state.intsta_df = None
+    st.session_state.normalized_df = None
+    st.session_state.continuation_df = None
+    st.session_state.experiment = None
+    st.session_state.format_type = None
+    
+def update_session_state(name_df, experiment, bqc_label):
+    """
+    Update the Streamlit session state with experiment-related information.
+
+    This function updates several session state variables with information
+    derived from the experiment setup and naming dataframe.
+
+    Args:
+        name_df (pd.DataFrame): DataFrame containing naming information.
+        experiment (Experiment): Experiment object containing experimental setup details.
+        bqc_label (str): Label for Batch Quality Control samples.
+
+    The following session state variables are updated:
+    - name_df: DataFrame with naming information
+    - experiment: Experiment object
+    - bqc_label: Batch Quality Control label
+    - full_samples_list: List of all samples
+    - individual_samples_list: List of individual samples for each condition
+    - conditions_list: List of experimental conditions
+    - extensive_conditions_list: Detailed list of conditions
+    - number_of_samples_list: Number of samples for each condition
+    - aggregate_number_of_samples_list: Aggregated number of samples
+    """
+    st.session_state.name_df = name_df
+    st.session_state.experiment = experiment
+    st.session_state.bqc_label = bqc_label
+    st.session_state.full_samples_list = experiment.full_samples_list
+    st.session_state.individual_samples_list = experiment.individual_samples_list
+    st.session_state.conditions_list = experiment.conditions_list
+    st.session_state.extensive_conditions_list = experiment.extensive_conditions_list
+    st.session_state.number_of_samples_list = experiment.number_of_samples_list
+    st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
 
 def display_format_selection():
     return st.sidebar.selectbox(
@@ -556,6 +668,12 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     """
     st.subheader("Data Normalization")
     
+    # Store essential columns before normalization only for LipidSearch 5.0
+    stored_columns = {}
+    if format_type == 'LipidSearch 5.0':
+        essential_columns = ['CalcMass', 'BaseRt']
+        stored_columns = {col: cleaned_df[col] for col in essential_columns if col in cleaned_df.columns}
+    
     # Validate required columns
     if 'ClassKey' not in cleaned_df.columns:
         st.error("ClassKey column is required for normalization. Please ensure your data includes lipid class information.")
@@ -648,6 +766,11 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
 
         # Always rename intensity columns to concentration, regardless of normalization method
         normalized_df = rename_intensity_to_concentration(normalized_df)
+        
+        # After normalization, add back the essential columns only for LipidSearch 5.0
+        if normalized_df is not None and format_type == 'LipidSearch 5.0':
+            for col, values in stored_columns.items():
+                normalized_df[col] = values
 
         # Display the normalized data
         if normalized_df is not None:
@@ -848,6 +971,838 @@ def display_data(df, title, filename):
         file_name=filename,
         mime="text/csv"
     )
+    
+def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bqc_label, format_type):
+    """
+    Performs quality check and analysis on the data.
+    
+    Args:
+        continuation_df (pd.DataFrame): The data to analyze
+        intsta_df (pd.DataFrame): Internal standards data
+        experiment (Experiment): Experiment setup information
+        bqc_label (str): Label for batch quality control samples
+        format_type (str): The format of the input data (e.g., 'LipidSearch 5.0')
+    """
+    st.subheader("2) Quality Check & Anomaly Detection")
+    
+    # Initialize variables
+    box_plot_fig1 = None
+    box_plot_fig2 = None
+    bqc_plot = None
+    retention_time_plot = None
+    pca_plot = None
+
+    # Initialize session state for plots if not already done
+    if 'heatmap_generated' not in st.session_state:
+        st.session_state.heatmap_generated = False
+    if 'heatmap_fig' not in st.session_state:
+        st.session_state.heatmap_fig = {}
+    if 'correlation_plots' not in st.session_state:
+        st.session_state.correlation_plots = {}
+    if 'abundance_bar_charts' not in st.session_state:
+        st.session_state.abundance_bar_charts = {'linear': None, 'log2': None}
+    if 'abundance_pie_charts' not in st.session_state:
+        st.session_state.abundance_pie_charts = {}
+    if 'saturation_plots' not in st.session_state:
+        st.session_state.saturation_plots = {}
+    if 'volcano_plots' not in st.session_state:
+        st.session_state.volcano_plots = {}
+    if 'pathway_visualization' not in st.session_state:
+        st.session_state.pathway_visualization = None
+
+    # Quality Check
+    box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
+    continuation_df, bqc_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
+    
+    # Only show retention time plots for LipidSearch 5.0
+    if format_type == 'LipidSearch 5.0':
+        retention_time_plot = display_retention_time_plots(continuation_df, format_type)
+    
+    # Pairwise Correlation Analysis
+    selected_condition, corr_fig = analyze_pairwise_correlation(continuation_df, experiment)
+    if selected_condition and corr_fig:
+        st.session_state.correlation_plots[selected_condition] = corr_fig
+    
+    # PCA Analysis
+    continuation_df, pca_plot = display_pca_analysis(continuation_df, experiment)
+    
+    st.subheader("3) Data Visualization, Interpretation, and Analysis ")
+    # Analysis
+    analysis_option = st.radio(
+        "Select an analysis feature:",
+        (
+            "Class Level Breakdown - Bar Chart", 
+            "Class Level Breakdown - Pie Charts", 
+            "Class Level Breakdown - Saturation Plots", 
+            "Class Level Breakdown - Pathway Visualization",
+            "Species Level Breakdown - Volcano Plot",
+            "Species Level Breakdown - Lipidomic Heatmap"
+        )
+    )
+
+    if analysis_option == "Class Level Breakdown - Bar Chart":
+        linear_chart, log2_chart = display_abundance_bar_charts(experiment, continuation_df)
+        if linear_chart:
+            st.session_state.abundance_bar_charts['linear'] = linear_chart
+        if log2_chart:
+            st.session_state.abundance_bar_charts['log2'] = log2_chart
+    elif analysis_option == "Class Level Breakdown - Pie Charts":
+        pie_charts = display_abundance_pie_charts(experiment, continuation_df)
+        st.session_state.abundance_pie_charts.update(pie_charts)
+    elif analysis_option == "Class Level Breakdown - Saturation Plots":
+        saturation_plots = display_saturation_plots(experiment, continuation_df)
+        st.session_state.saturation_plots.update(saturation_plots)
+    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
+        pathway_fig = display_pathway_visualization(experiment, continuation_df)
+        if pathway_fig:
+            st.session_state.pathway_visualization = pathway_fig
+    elif analysis_option == "Species Level Breakdown - Volcano Plot":
+        volcano_plots = display_volcano_plot(experiment, continuation_df)
+        st.session_state.volcano_plots.update(volcano_plots)
+    elif analysis_option == "Species Level Breakdown - Lipidomic Heatmap":
+        heatmap_result = display_lipidomic_heatmap(experiment, continuation_df)
+        if isinstance(heatmap_result, tuple) and len(heatmap_result) == 2:
+            regular_heatmap, clustered_heatmap = heatmap_result
+        else:
+            regular_heatmap = heatmap_result
+            clustered_heatmap = None
+        
+        if regular_heatmap:
+            st.session_state.heatmap_generated = True
+            st.session_state.heatmap_fig['Regular Heatmap'] = regular_heatmap
+        if clustered_heatmap:
+            st.session_state.heatmap_fig['Clustered Heatmap'] = clustered_heatmap
+
+    # PDF Generation Section
+    st.subheader("Generate PDF Report")
+    st.warning(
+        "⚠️ Important: PDF Report Generation Guidelines\n\n"
+        "1. Generate the PDF only after completing all desired analyses.\n"
+        "2. Ensure all analyses you want in the report have been viewed at least once.\n"
+        "3. Use this feature instead of downloading plots individually - it's more efficient for multiple downloads.\n"
+        "4. Generate the PDF before clearing the cache.\n"
+        "5. Avoid interacting with the app during PDF generation.\n"
+        "6. Select 'No' if you're not ready to end your session."
+    )
+
+    generate_pdf = st.radio("Are you ready to generate the PDF report?", ('No', 'Yes'), index=0)
+
+    if generate_pdf == 'Yes':
+        st.info("Please confirm that you have completed all analyses and are ready to end your session.")
+        confirm_generate = st.checkbox("I confirm that I'm ready to generate the PDF and end my session.")
+        
+        if confirm_generate:
+            if box_plot_fig1 and box_plot_fig2:
+                with st.spinner('Generating PDF report... Please do not interact with the app.'):
+                    pdf_buffer = generate_pdf_report(
+                        box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
+                        st.session_state.heatmap_fig, st.session_state.correlation_plots, 
+                        st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts, 
+                        st.session_state.saturation_plots, st.session_state.volcano_plots,
+                        st.session_state.pathway_visualization
+                    )
+                if pdf_buffer:
+                    st.success("PDF report generated successfully!")
+                    st.download_button(
+                        label="Download Quality Check & Analysis Report (PDF)",
+                        data=pdf_buffer,
+                        file_name="quality_check_and_analysis_report.pdf",
+                        mime="application/pdf",
+                    )
+                    st.info(
+                        "You can now download your PDF report. After downloading, please use the "
+                        "'End Session and Clear Cache' button in the sidebar to conclude your session."
+                    )
+                    
+                    # Close the figures to free up memory after PDF generation
+                    plt.close(box_plot_fig1)
+                    plt.close(box_plot_fig2)
+                    plt.close('all')  # This closes all remaining matplotlib figures
+                else:
+                    st.error("Failed to generate PDF report. Please check the logs for details.")
+            else:
+                st.warning("Some plots are missing. Unable to generate PDF report.")
+        else:
+            st.info("Please confirm when you're ready to generate the PDF report.")
+            
+def display_box_plots(continuation_df, experiment):
+    # Initialize a counter in session state if it doesn't exist
+    if 'box_plot_counter' not in st.session_state:
+        st.session_state.box_plot_counter = 0
+    
+    # Increment the counter
+    st.session_state.box_plot_counter += 1
+    
+    # Generate a unique identifier based on the current data and counter
+    unique_id = hashlib.md5(f"{str(continuation_df.index.tolist())}_{st.session_state.box_plot_counter}".encode()).hexdigest()
+    
+    expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
+    with expand_box_plot:
+        # Creating a deep copy for visualization to keep the original continuation_df intact
+        visualization_df = continuation_df.copy(deep=True)
+        
+        # Ensure the columns reflect the current state of the DataFrame
+        current_samples = [sample for sample in experiment.full_samples_list if f'concentration[{sample}]' in visualization_df.columns]
+        
+        mean_area_df = lp.BoxPlot.create_mean_area_df(visualization_df, current_samples)
+        zero_values_percent_list = lp.BoxPlot.calculate_missing_values_percentage(mean_area_df)
+        
+        # Generate and display the first plot (Missing Values Distribution)
+        fig1 = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
+        st.pyplot(fig1)
+        matplotlib_svg_download_button(fig1, "missing_values_distribution.svg")
+
+        # Data for download (Missing Values)
+        missing_values_data = np.vstack((current_samples, zero_values_percent_list)).T
+        missing_values_csv = convert_df(pd.DataFrame(missing_values_data, columns=["Sample", "Percentage Missing"]))
+        st.download_button(
+            label="Download CSV",
+            data=missing_values_csv,
+            file_name="missing_values_data.csv",
+            mime='text/csv',
+            key=f"download_missing_values_data_{unique_id}"
+        )
+        
+        st.write('--------------------------------------------------------------------------------')
+        
+        # Generate and display the second plot (Box Plot)
+        fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
+        st.pyplot(fig2)
+        matplotlib_svg_download_button(fig2, "box_plot.svg")
+        
+        # Provide option to download the raw data for Box Plot
+        csv_data = convert_df(mean_area_df)
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name="box_plot_data.csv",
+            mime='text/csv',
+            key=f"download_box_plot_data_{unique_id}"
+        )
+    
+    # Return the figure objects for later use in PDF generation
+    return fig1, fig2
+
+def matplotlib_svg_download_button(fig, filename):
+    """
+    Creates a Streamlit download button for the SVG format of a matplotlib figure.
+    Args:
+        fig (matplotlib.figure.Figure): Matplotlib figure object to be converted into SVG.
+        filename (str): The desired name of the downloadable SVG file.
+    """
+    # Save the figure to a BytesIO object
+    buf = io.BytesIO()
+    fig.savefig(buf, format='svg', bbox_inches='tight')
+    buf.seek(0)
+    
+    # Read the SVG data and create a download button
+    svg_string = buf.getvalue().decode('utf-8')
+    st.download_button(
+        label="Download SVG",
+        data=svg_string,
+        file_name=filename,
+        mime="image/svg+xml"
+    )
+
+def plotly_svg_download_button(fig, filename):
+    """
+    Creates a Streamlit download button for the SVG format of a plotly figure.
+    Args:
+        fig (plotly.graph_objs.Figure): Plotly figure object to be converted into SVG.
+        filename (str): The desired name of the downloadable SVG file.
+    """
+    # Convert the figure to SVG format
+    svg_bytes = fig.to_image(format="svg")
+    
+    # Decode the bytes to a string
+    svg_string = svg_bytes.decode('utf-8')
+    
+    # Ensure the SVG string starts with the correct XML declaration
+    if not svg_string.startswith('<?xml'):
+        svg_string = '<?xml version="1.0" encoding="utf-8"?>\n' + svg_string
+    
+    # Create a download button
+    st.download_button(
+        label="Download SVG",
+        data=svg_string,
+        file_name=filename,
+        mime="image/svg+xml"
+    )
+    
+@st.cache_data(ttl=3600)
+def convert_df(df):
+    """
+    Convert a DataFrame to CSV format and encode it for downloading.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame to be converted.
+
+    Returns:
+    bytes: A CSV-formatted byte string of the DataFrame.
+
+    Raises:
+    Exception: If the DataFrame conversion to CSV fails.
+    """
+    if df is None or df.empty:
+        raise ValueError("The DataFrame provided is empty or None.")
+    try:
+        return df.to_csv().encode('utf-8')
+    except Exception as e:
+        raise Exception(f"Failed to convert DataFrame to CSV: {e}")
+        
+def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
+    scatter_plot = None  # Initialize scatter_plot to None
+    
+    if bqc_label is not None:
+        with st.expander("Quality Check Using BQC Samples"):
+            bqc_sample_index = experiment.conditions_list.index(bqc_label)
+            scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(data_df, experiment, bqc_sample_index)
+            
+            st.plotly_chart(scatter_plot, use_container_width=True)
+            plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg")
+            csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
+            st.download_button(
+                "Download CSV",
+                data=csv_data,
+                file_name="CoV_Plot_Data.csv",
+                mime='text/csv'
+            )
+            
+            if reliable_data_percent >= 80:
+                st.info(f"{reliable_data_percent}% of the datapoints are confidently reliable (CoV < 30%).")
+            elif reliable_data_percent >= 50:
+                st.warning(f"{reliable_data_percent}% of the datapoints are confidently reliable.")
+            else:
+                st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < 30%).")
+            
+            if prepared_df is not None and not prepared_df.empty:
+                filter_option = st.radio("Would you like to filter your data using BQC samples?", ("No", "Yes"), index=0)
+                if filter_option == "Yes":
+                    cov_threshold = st.number_input('Enter the maximum acceptable CoV in %', min_value=10, max_value=1000, value=30, step=1)
+                    filtered_df = lp.BQCQualityCheck.filter_dataframe_by_cov_threshold(cov_threshold, prepared_df)
+                    
+                    if filtered_df.empty:
+                        st.error("The filtered dataset is empty. Please try a higher CoV threshold.")
+                        st.warning("Returning the original dataset without filtering.")
+                    else:
+                        st.write('Filtered dataset:')
+                        st.write(filtered_df)
+                        csv_download = convert_df(filtered_df)
+                        st.download_button(
+                            label="Download Filtered Data",
+                            data=csv_download,
+                            file_name='Filtered_Data.csv',
+                            mime='text/csv'
+                        )
+                        data_df = filtered_df  # Update data_df with the filtered dataset
+
+    return data_df, scatter_plot  # Always return a tuple
+
+def integrate_retention_time_plots(continuation_df):
+    """
+    Integrates retention time plots into the Streamlit app using Plotly.
+    Based on the user's choice, this function either plots individual retention 
+    times for each lipid class or allows for comparison across different classes. 
+    It also provides options for downloading the plot data in CSV format.
+
+    Args:
+        continuation_df (pd.DataFrame): The DataFrame containing lipidomic data post-cleaning and normalization.
+
+    Returns:
+        plotly.graph_objs._figure.Figure or None: The multi-class retention time comparison plot if in Comparison Mode, else None.
+    """
+    mode = st.radio('Pick a mode', ['Comparison Mode', 'Individual Mode'])
+    if mode == 'Individual Mode':
+        # Handling individual retention time plots
+        plots = lp.RetentionTime.plot_single_retention(continuation_df)
+        for idx, (plot, retention_df) in enumerate(plots, 1):
+            st.plotly_chart(plot, use_container_width=True)
+            plotly_svg_download_button(plot, f"retention_time_plot_{idx}.svg")
+            csv_download = convert_df(retention_df)
+            st.download_button(label="Download CSV", data=csv_download, file_name=f'retention_plot_{idx}.csv', mime='text/csv')
+        return None
+    elif mode == 'Comparison Mode':
+        # Handling comparison mode for retention time plots
+        all_lipid_classes_lst = continuation_df['ClassKey'].value_counts().index.tolist()
+        selected_classes_list = st.multiselect('Add/Remove classes:', all_lipid_classes_lst, all_lipid_classes_lst)
+        if selected_classes_list:  # Ensuring that selected_classes_list is not empty
+            plot, retention_df = lp.RetentionTime.plot_multi_retention(continuation_df, selected_classes_list)
+            if plot:
+                st.plotly_chart(plot, use_container_width=True)
+                plotly_svg_download_button(plot, "retention_time_comparison.svg")
+                csv_download = convert_df(retention_df)
+                st.download_button(label="Download CSV", data=csv_download, file_name='Retention_Time_Comparison.csv', mime='text/csv')
+                return plot
+    return None
+
+def display_retention_time_plots(continuation_df, format_type):
+    """
+    Displays retention time plots for lipid species within the Streamlit interface using Plotly.
+
+    Args:
+        continuation_df (pd.DataFrame): The DataFrame containing lipidomic data after any necessary transformations.
+        format_type (str): The format of the input data (e.g., 'LipidSearch 5.0')
+
+    Returns:
+        plotly.graph_objs._figure.Figure or None: The multi-class retention time comparison plot if generated, else None.
+    """
+    if format_type == 'LipidSearch 5.0':
+        expand_retention = st.expander('View Retention Time Plots: Check Sanity of Data')
+        with expand_retention:
+            return integrate_retention_time_plots(continuation_df)
+    else:
+        # For other formats, return None (retention time plots not applicable)
+        return None
+    
+def analyze_pairwise_correlation(continuation_df, experiment):
+    """
+    Analyzes pairwise correlations for given conditions in the experiment data.
+    This function creates a Streamlit expander for displaying pairwise correlation analysis.
+    It allows the user to select a condition from those with multiple replicates and a sample type.
+    The function then computes and displays a correlation heatmap for the selected condition.
+    
+    Args:
+        continuation_df (pd.DataFrame): The DataFrame containing the normalized or cleaned data.
+        experiment (Experiment): The experiment object with details of the conditions and samples.
+    
+    Returns:
+        tuple: A tuple containing the selected condition and the matplotlib figure, or (None, None) if no plot was generated.
+    """
+    expand_corr = st.expander('Pairwise Correlation Analysis')
+    with expand_corr:
+        st.info("LipidCruncher removes the missing values before performing the correlation test.")
+        # Filter out conditions with only one replicate
+        multi_replicate_conditions = [condition for condition, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1]
+        # Ensure there are multi-replicate conditions before proceeding
+        if multi_replicate_conditions:
+            selected_condition = st.selectbox('Select a condition', multi_replicate_conditions)
+            condition_index = experiment.conditions_list.index(selected_condition)
+            sample_type = st.selectbox('Select the type of your samples', ['biological replicates', 'Technical replicates'])
+            mean_area_df = lp.Correlation.prepare_data_for_correlation(continuation_df, experiment.individual_samples_list, condition_index)
+            correlation_df, v_min, thresh = lp.Correlation.compute_correlation(mean_area_df, sample_type)
+            fig = lp.Correlation.render_correlation_plot(correlation_df, v_min, thresh, experiment.conditions_list[condition_index])
+            st.pyplot(fig)
+            matplotlib_svg_download_button(fig, f"correlation_plot_{experiment.conditions_list[condition_index]}.svg")
+            
+            st.write('Find the exact correlation coefficients in the table below:')
+            st.write(correlation_df)
+            csv_download = convert_df(correlation_df)
+            st.download_button(
+                label="Download CSV",
+                data=csv_download,
+                file_name='Correlation_Matrix_' + experiment.conditions_list[condition_index] + '.csv',
+                mime='text/csv'
+            )
+            return selected_condition, fig
+        else:
+            st.error("No conditions with multiple replicates found.")
+            return None, None
+        
+def display_pca_analysis(continuation_df, experiment):
+    """
+    Displays the PCA analysis interface in the Streamlit app and generates a PCA plot using Plotly.
+    
+    Args:
+        continuation_df (pd.DataFrame): The DataFrame containing the normalized or cleaned data.
+        experiment (Experiment): The experiment object with details of the conditions and samples.
+    
+    Returns:
+        tuple: A tuple containing the updated continuation_df and the PCA plot.
+    """
+    pca_plot = None
+    with st.expander("Principal Component Analysis (PCA)"):
+        samples_to_remove = st.multiselect('Select samples to remove from the analysis (optional):', experiment.full_samples_list)
+        
+        if samples_to_remove:
+            if (len(experiment.full_samples_list) - len(samples_to_remove)) >= 2:
+                continuation_df = experiment.remove_bad_samples(samples_to_remove, continuation_df)
+            else:
+                st.error('At least two samples are required for a meaningful analysis!')
+        
+        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
+        st.plotly_chart(pca_plot, use_container_width=True)
+        plotly_svg_download_button(pca_plot, "pca_plot.svg")
+        
+        csv_data = convert_df(pca_df)
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name="PCA_data.csv",
+            mime="text/csv"
+        )
+    return continuation_df, pca_plot
+
+def display_abundance_bar_charts(experiment, continuation_df):
+    with st.expander("Class Concentration Bar Chart"):
+        experiment = st.session_state.experiment
+        
+        # Filter out conditions with only one sample
+        valid_conditions = [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1]
+        
+        selected_conditions_list = st.multiselect(
+            'Add or remove conditions', 
+            valid_conditions, 
+            valid_conditions,
+            key='conditions_select'
+        )
+        selected_classes_list = st.multiselect(
+            'Add or remove classes:',
+            list(continuation_df['ClassKey'].value_counts().index), 
+            list(continuation_df['ClassKey'].value_counts().index),
+            key='classes_select'
+        )
+        
+        linear_fig, log2_fig = None, None
+        if selected_conditions_list and selected_classes_list:
+            # Statistical testing guidance
+            if len(selected_conditions_list) > 2:
+                st.info("""
+                📊 **Statistical Testing Note:**
+                - Multiple conditions detected: Using ANOVA + Tukey's test
+                - This is the correct approach when interested in multiple comparisons
+                - Do NOT run separate t-tests by unselecting conditions - this would inflate the false positive rate
+                - The current analysis automatically adjusts significance thresholds to maintain a 5% false positive rate across all comparisons
+                """)
+            elif len(selected_conditions_list) == 2:
+                st.info("""
+                📊 **Statistical Testing Note:**
+                - Two conditions detected: Using t-test
+                - This is appropriate ONLY for a single pre-planned comparison
+                - If you plan to compare multiple conditions, please select all relevant conditions to use ANOVA + Tukey's test
+                """)
+            
+            # Perform statistical tests
+            statistical_results = lp.AbundanceBarChart.perform_statistical_tests(
+                continuation_df, 
+                experiment, 
+                selected_conditions_list, 
+                selected_classes_list
+            )
+            
+            # Display statistical testing information
+            if statistical_results:
+                if len(selected_conditions_list) == 2:
+                    st.info("""
+                    📊 **Statistical Testing Information**
+                    - Method: Student t-test
+                    - Significance levels:
+                         * p < 0.05
+                        - ** p < 0.01
+                        - *** p < 0.001
+                    """)
+                else:
+                    st.info("""
+                    📊 **Statistical Testing Information**
+                    - Method: ANOVA + Tukey's test
+                    - Multiple comparison correction applied
+                    - Significance levels:
+                         * p < 0.05
+                        - ** p < 0.01
+                        - *** p < 0.001
+                    """)
+            
+            # Optional detailed statistical results
+            if st.checkbox("Show detailed statistical analysis"):
+                display_statistical_details(
+                    statistical_results, 
+                    selected_conditions_list
+                )
+
+            # Generate linear scale chart
+            linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
+                continuation_df, 
+                experiment.full_samples_list, 
+                experiment.individual_samples_list, 
+                experiment.conditions_list, 
+                selected_conditions_list, 
+                selected_classes_list, 
+                'linear scale',
+                statistical_results
+            )
+            if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
+                st.pyplot(linear_fig)
+                st.write("Linear Scale")
+                
+                matplotlib_svg_download_button(linear_fig, "abundance_bar_chart_linear.svg")
+                
+                try:
+                    csv_data = convert_df(abundance_df)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_data,
+                        file_name='abundance_bar_chart_linear.csv',
+                        mime='text/csv',
+                        key='abundance_chart_download_linear'
+                    )
+                except Exception as e:
+                    st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
+            
+            # Generate log2 scale chart
+            log2_fig, abundance_df_log2 = lp.AbundanceBarChart.create_abundance_bar_chart(
+                continuation_df, 
+                experiment.full_samples_list, 
+                experiment.individual_samples_list, 
+                experiment.conditions_list, 
+                selected_conditions_list, 
+                selected_classes_list, 
+                'log2 scale',
+                statistical_results
+            )
+            if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
+                st.pyplot(log2_fig)
+                st.write("Log2 Scale")
+                
+                matplotlib_svg_download_button(log2_fig, "abundance_bar_chart_log2.svg")
+                
+                try:
+                    csv_data_log2 = convert_df(abundance_df_log2)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_data_log2,
+                        file_name='abundance_bar_chart_log2.csv',
+                        mime='text/csv',
+                        key='abundance_chart_download_log2'
+                    )
+                except Exception as e:
+                    st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
+            
+            # Check if any conditions were removed due to having only one sample
+            removed_conditions = set(experiment.conditions_list) - set(valid_conditions)
+            if removed_conditions:
+                st.warning(f"The following conditions were excluded due to having only one sample: {', '.join(removed_conditions)}")
+                
+        else:
+            st.warning("Please select at least one condition and one class to create the charts.")
+        
+        return linear_fig, log2_fig
+
+def display_statistical_details(statistical_results, selected_conditions):
+    """Display detailed statistical analysis"""
+    st.write("### Detailed Statistical Analysis")
+    
+    if len(selected_conditions) == 2:
+        st.write(f"Comparing conditions: {selected_conditions[0]} vs {selected_conditions[1]}")
+        st.write("Method: Independent t-test (Welch's t-test)")
+    else:
+        st.write(f"Comparing {len(selected_conditions)} conditions using ANOVA + Tukey's test")
+        st.write("Note: P-values are adjusted for multiple comparisons")
+    
+    for lipid_class, results in statistical_results.items():
+        st.write(f"\n#### {lipid_class}")
+        p_value = results['p-value']
+        
+        if results['test'] == 't-test':
+            st.write(f"t-statistic: {results['statistic']:.3f}")
+            st.write(f"p-value: {p_value:.3f}")
+        else:  # ANOVA
+            st.write(f"F-statistic: {results['statistic']:.3f}")
+            st.write(f"p-value: {p_value:.3f}")
+            
+            if results.get('tukey_results'):
+                st.write("\nTukey's test pairwise comparisons:")
+                tukey = results['tukey_results']
+                for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
+                    st.write(f"- {g1} vs {g2}: p = {p:.3f}")
+            else:
+                st.write("No pairwise comparisons available (ANOVA p-value > 0.05)")
+                
+def display_abundance_pie_charts(experiment, continuation_df):
+    pie_charts = {}
+    with st.expander("Class Concentration Pie Chart"):
+        full_samples_list = experiment.full_samples_list
+        all_classes = lp.AbundancePieChart.get_all_classes(continuation_df, full_samples_list)
+        selected_classes_list = st.multiselect('Select classes for the chart:', all_classes, all_classes)
+        if selected_classes_list:
+            filtered_df = lp.AbundancePieChart.filter_df_for_selected_classes(continuation_df, full_samples_list, selected_classes_list)
+            color_mapping = lp.AbundancePieChart._generate_color_mapping(selected_classes_list)
+            for condition, samples in zip(experiment.conditions_list, experiment.individual_samples_list):
+                if len(samples) > 1:  # Skip conditions with only one sample
+                    fig, df = lp.AbundancePieChart.create_pie_chart(filtered_df, full_samples_list, condition, samples, color_mapping)
+                    st.subheader(f"Abundance Pie Chart for {condition}")
+                    st.plotly_chart(fig)
+                    
+                    # Add SVG download button for the pie chart
+                    plotly_svg_download_button(fig, f"abundance_pie_chart_{condition}.svg")
+                    
+                    # Add CSV download button for the pie chart data
+                    csv_download = convert_df(df)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_download,
+                        file_name=f'abundance_pie_chart_{condition}.csv',
+                        mime='text/csv'
+                    )
+                    
+                    pie_charts[condition] = fig
+                    
+                    st.markdown("---")  # Add a separator between charts
+    return pie_charts
+                
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots, volcano_plots, pathway_visualization):
+    pdf_buffer = io.BytesIO()
+    
+    try:
+        pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
+        
+        # Page 1: Box Plots
+        img_buffer1 = io.BytesIO()
+        box_plot_fig1.savefig(img_buffer1, format='png', dpi=300, bbox_inches='tight')
+        img_buffer1.seek(0)
+        img1 = ImageReader(img_buffer1)
+        pdf.drawImage(img1, 50, 400, width=500, height=300, preserveAspectRatio=True)
+        
+        img_buffer2 = io.BytesIO()
+        box_plot_fig2.savefig(img_buffer2, format='png', dpi=300, bbox_inches='tight')
+        img_buffer2.seek(0)
+        img2 = ImageReader(img_buffer2)
+        pdf.drawImage(img2, 50, 50, width=500, height=300, preserveAspectRatio=True)
+        
+        # Page 2: BQC Plot
+        pdf.showPage()
+        if bqc_plot is not None:
+            bqc_bytes = pio.to_image(bqc_plot, format='png', width=800, height=600, scale=2)
+            bqc_img = ImageReader(io.BytesIO(bqc_bytes))
+            pdf.drawImage(bqc_img, 50, 100, width=500, height=400, preserveAspectRatio=True)
+        
+        # Page 3: Retention Time Plot
+        pdf.showPage()
+        pdf.setPageSize(landscape(letter))
+        if retention_time_plot is not None:
+            svg_bytes = pio.to_image(retention_time_plot, format='svg')
+            drawing = svg2rlg(io.BytesIO(svg_bytes))
+            renderPDF.draw(drawing, pdf, 50, 50)
+        
+        # Page 4: PCA Plot
+        pdf.showPage()
+        pdf.setPageSize(landscape(letter))
+        if pca_plot is not None:
+            svg_bytes = pio.to_image(pca_plot, format='svg')
+            drawing = svg2rlg(io.BytesIO(svg_bytes))
+            renderPDF.draw(drawing, pdf, 50, 50)
+        
+        # Pages for Correlation Plots
+        for condition, corr_fig in correlation_plots.items():
+            pdf.showPage()
+            pdf.setPageSize(letter)
+            img_buffer = io.BytesIO()
+            corr_fig.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            img = ImageReader(img_buffer)
+            pdf.drawImage(img, 50, 100, width=500, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 50, f"Correlation Plot for {condition}")
+        
+        # Add Abundance Bar Charts
+        for scale, chart in abundance_bar_charts.items():
+            if chart is not None:
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                img_buffer = io.BytesIO()
+                chart.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+                img_buffer.seek(0)
+                img = ImageReader(img_buffer)
+                pdf.drawImage(img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 30, f"Abundance Bar Chart ({scale} scale)")
+        
+        # Add Abundance Pie Charts
+        for condition, pie_chart in abundance_pie_charts.items():
+            pdf.showPage()
+            pdf.setPageSize(letter)
+            pie_bytes = pio.to_image(pie_chart, format='png', width=800, height=600, scale=2)
+            pie_img = ImageReader(io.BytesIO(pie_bytes))
+            pdf.drawImage(pie_img, 50, 100, width=500, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 50, f"Abundance Pie Chart for {condition}")
+        
+        # Add Saturation Plots
+        for lipid_class, plots in saturation_plots.items():
+            if isinstance(plots, dict) and 'main' in plots and 'percentage' in plots:
+                # Main plot
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                main_bytes = pio.to_image(plots['main'], format='png', width=1000, height=700, scale=2)
+                main_img = ImageReader(io.BytesIO(main_bytes))
+                pdf.drawImage(main_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, f"Saturation Plot (Main) for {lipid_class}")
+                
+                # Percentage plot
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                percentage_bytes = pio.to_image(plots['percentage'], format='png', width=1000, height=700, scale=2)
+                percentage_img = ImageReader(io.BytesIO(percentage_bytes))
+                pdf.drawImage(percentage_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, f"Saturation Plot (Percentage) for {lipid_class}")
+        
+        # Add Volcano Plots
+        if volcano_plots:
+            # Main Volcano Plot
+            if 'main' in volcano_plots:
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                main_bytes = pio.to_image(volcano_plots['main'], format='png', width=1000, height=700, scale=2)
+                main_img = ImageReader(io.BytesIO(main_bytes))
+                pdf.drawImage(main_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, "Volcano Plot")
+
+            # Concentration vs Fold Change Plot
+            if 'concentration_vs_fold_change' in volcano_plots:
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                conc_bytes = pio.to_image(volcano_plots['concentration_vs_fold_change'], format='png', width=1000, height=700, scale=2)
+                conc_img = ImageReader(io.BytesIO(conc_bytes))
+                pdf.drawImage(conc_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, "Concentration vs Fold Change Plot")
+
+            # Concentration Distribution Plot
+            if 'concentration_distribution' in volcano_plots:
+                pdf.showPage()
+                pdf.setPageSize(landscape(letter))
+                dist_buffer = io.BytesIO()
+                volcano_plots['concentration_distribution'].savefig(dist_buffer, format='png', dpi=300, bbox_inches='tight')
+                dist_buffer.seek(0)
+                dist_img = ImageReader(dist_buffer)
+                pdf.drawImage(dist_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
+                pdf.drawString(50, 80, "Concentration Distribution Plot")
+        
+        # Add Pathway Visualization
+        if pathway_visualization is not None:
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
+            img_buffer = io.BytesIO()
+            pathway_visualization.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            img = ImageReader(img_buffer)
+            pdf.drawImage(img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 30, "Lipid Pathway Visualization")
+        
+        # Add Lipidomic Heatmaps
+        if 'Regular Heatmap' in heatmap_figs:
+            add_heatmap_to_pdf(pdf, heatmap_figs['Regular Heatmap'], "Regular Lipidomic Heatmap")
+        
+        if 'Clustered Heatmap' in heatmap_figs:
+            add_heatmap_to_pdf(pdf, heatmap_figs['Clustered Heatmap'], "Clustered Lipidomic Heatmap")
+        
+        pdf.save()
+        pdf_buffer.seek(0)
+        
+    except Exception as e:
+        print(f"Error generating PDF: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+    
+    return pdf_buffer
+
+def add_heatmap_to_pdf(pdf, heatmap_fig, title):
+    pdf.showPage()
+    pdf.setPageSize(landscape(letter))
+    heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
+    heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
+    page_width, page_height = landscape(letter)
+    img_width = 700
+    img_height = (img_width / 900) * 600
+    x_position = (page_width - img_width) / 2
+    y_position = (page_height - img_height) / 2
+    pdf.drawImage(heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
+    pdf.drawString(x_position, y_position - 20, title)
 
 if __name__ == "__main__":
     main()

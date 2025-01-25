@@ -14,8 +14,8 @@ class PCAAnalysis:
             df = _df[0]
         else:
             df = _df
-        available_samples = [sample for sample in full_samples_list if f'MeanArea[{sample}]' in df.columns]
-        mean_area_df = df[['MeanArea[' + sample + ']' for sample in available_samples]].T
+        available_samples = [sample for sample in full_samples_list if f'concentration[{sample}]' in df.columns]
+        mean_area_df = df[['concentration[' + sample + ']' for sample in available_samples]].T
         scaled_data = StandardScaler().fit_transform(mean_area_df)
         pca = PCA(n_components=2)
         principal_components = pca.fit_transform(scaled_data)
