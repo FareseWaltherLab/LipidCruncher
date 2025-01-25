@@ -26,7 +26,7 @@ class LipidomicHeatmap:
         """
         selected_samples = [sample for condition in selected_conditions 
                             for sample in individual_samples_list[conditions_list.index(condition)]]
-        abundance_cols = ['MeanArea[' + sample + ']' for sample in selected_samples]
+        abundance_cols = ['concentration[' + sample + ']' for sample in selected_samples]
         filtered_df = df[df['ClassKey'].isin(selected_classes)][['LipidMolec', 'ClassKey'] + abundance_cols]
         return filtered_df, selected_samples
 

@@ -23,10 +23,50 @@ from reportlab.graphics import renderPDF
 # Local imports
 import lipidomics as lp
 
+# Modify the initialize_session_state function to include all necessary state variables
+def initialize_session_state():
+    """Initialize the Streamlit session state with default values."""
+    # Data related states
+    if 'cleaned_df' not in st.session_state:
+        st.session_state.cleaned_df = None
+    if 'intsta_df' not in st.session_state:
+        st.session_state.intsta_df = None
+    if 'normalized_df' not in st.session_state:
+        st.session_state.normalized_df = None
+    if 'continuation_df' not in st.session_state:
+        st.session_state.continuation_df = None
+    if 'original_column_order' not in st.session_state:
+        st.session_state.original_column_order = None
+    if 'bqc_label' not in st.session_state:
+        st.session_state.bqc_label = None
+    
+    # Process control states
+    if 'module' not in st.session_state:
+        st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+    if 'grouping_complete' not in st.session_state:
+        st.session_state.grouping_complete = True
+    if 'initialized' not in st.session_state:
+        st.session_state.initialized = True
+    if 'confirmed' not in st.session_state:
+        st.session_state.confirmed = False
+    if 'experiment' not in st.session_state:
+        st.session_state.experiment = None
+    if 'format_type' not in st.session_state:
+        st.session_state.format_type = None
+        
+    # Normalization related states
+    if 'normalization_inputs' not in st.session_state:
+        st.session_state.normalization_inputs = {}
+    if 'normalization_method' not in st.session_state:
+        st.session_state.normalization_method = 'None'
+    if 'selected_classes' not in st.session_state:
+        st.session_state.selected_classes = []
+    if 'create_norm_dataset' not in st.session_state:
+        st.session_state.create_norm_dataset = False
+
+# Modify the main function to preserve state when switching modules
 def main():
-    """
-    Main function for the Lipidomics Analysis Module Streamlit application.
-    """
+    """Main function for the Lipidomics Analysis Module Streamlit application."""
     st.header("Lipidomics Analysis Module")
     st.markdown("Process and clean lipidomics data from multiple sources.")
     
@@ -91,7 +131,7 @@ def main():
                                 cleaned_df, 
                                 st.session_state.intsta_df,
                                 experiment, 
-                                data_format  # Pass format type to normalization
+                                data_format
                             )
                             
                             if normalized_df is not None:
@@ -112,11 +152,22 @@ def main():
                                 st.session_state.intsta_df, 
                                 st.session_state.experiment,
                                 st.session_state.bqc_label,
-                                st.session_state.format_type  # Pass format type to quality check module
+                                st.session_state.format_type
                             )
                         
+                        # Add back button with state preservation
                         if st.button("Back to Data Cleaning, Filtering, & Normalization", key="back_to_cleaning"):
                             st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+                            # Preserve the current state
+                            st.session_state.preserved_data = {
+                                'cleaned_df': st.session_state.cleaned_df,
+                                'intsta_df': st.session_state.intsta_df,
+                                'normalized_df': st.session_state.normalized_df,
+                                'continuation_df': st.session_state.continuation_df,
+                                'normalization_method': st.session_state.normalization_method,
+                                'selected_classes': st.session_state.selected_classes,
+                                'create_norm_dataset': st.session_state.create_norm_dataset
+                            }
                             st.experimental_rerun()
                 
                 else:
@@ -125,7 +176,13 @@ def main():
                     st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
             else:
                 st.error("Please ensure your samples are valid before proceeding.")
-    
+
+    # Restore preserved state if returning from Quality Check & Analysis
+    if 'preserved_data' in st.session_state and st.session_state.module == "Data Cleaning, Filtering, & Normalization":
+        for key, value in st.session_state.preserved_data.items():
+            setattr(st.session_state, key, value)
+        del st.session_state.preserved_data
+
     # Place the cache clearing button in the sidebar
     if st.sidebar.button("End Session and Clear Cache"):
         st.session_state.clear_cache = True
@@ -135,41 +192,7 @@ def main():
     if st.session_state.clear_cache:
         clear_streamlit_cache()
         st.sidebar.success("Cache cleared successfully!")
-        st.session_state.clear_cache = False  # Reset the flag
-    
-    st.info("""
-            **Tip:** When you're done, please click 'End Session and Clear Cache' in the sidebar. This ensures each session starts fresh and can help maintain optimal app performance. Additionally, if the app crashes and you are forced to restart the session, clearing the cache can help prevent further issues.
-            """)
-
-def initialize_session_state():
-    """Initialize the Streamlit session state with default values."""
-    # Data related states
-    if 'cleaned_df' not in st.session_state:
-        st.session_state.cleaned_df = None
-    if 'intsta_df' not in st.session_state:
-        st.session_state.intsta_df = None
-    if 'normalized_df' not in st.session_state:
-        st.session_state.normalized_df = None
-    if 'continuation_df' not in st.session_state:
-        st.session_state.continuation_df = None
-    if 'original_column_order' not in st.session_state:
-        st.session_state.original_column_order = None
-    if 'bqc_label' not in st.session_state:
-        st.session_state.bqc_label = None
-    
-    # Process control states
-    if 'module' not in st.session_state:
-        st.session_state.module = "Data Cleaning, Filtering, & Normalization"
-    if 'grouping_complete' not in st.session_state:
-        st.session_state.grouping_complete = True
-    if 'initialized' not in st.session_state:
-        st.session_state.initialized = True
-    if 'confirmed' not in st.session_state:
-        st.session_state.confirmed = False
-    if 'experiment' not in st.session_state:
-        st.session_state.experiment = None
-    if 'format_type' not in st.session_state:
-        st.session_state.format_type = None
+        st.session_state.clear_cache = False
         
 def clear_session_state():
     """Clear processed data from session state."""
@@ -662,10 +685,17 @@ def display_cleaned_data(cleaned_df, intsta_df):
     with st.expander("Manage Internal Standards"):
         manage_internal_standards(normalizer)
             
+def rename_intensity_to_concentration(df):
+    """Renames intensity columns to concentration columns at the end of normalization"""
+    df = df.copy()
+    rename_dict = {
+        col: col.replace('intensity[', 'concentration[')
+        for col in df.columns if col.startswith('intensity[')
+    }
+    return df.rename(columns=rename_dict)
+
 def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
-    """
-    Handle data normalization based on selected standards and normalization methods.
-    """
+    """Handle data normalization with consistent session state usage."""
     st.subheader("Data Normalization")
     
     # Store essential columns before normalization only for LipidSearch 5.0
@@ -676,18 +706,26 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     
     # Validate required columns
     if 'ClassKey' not in cleaned_df.columns:
-        st.error("ClassKey column is required for normalization. Please ensure your data includes lipid class information.")
+        st.error("ClassKey column is required for normalization.")
         return None
 
     # Get the full list of classes
     all_class_lst = list(cleaned_df['ClassKey'].unique())
     
-    # Class selection
+    # Initialize selected_classes with all classes only if it doesn't exist in session state
+    if 'selected_classes' not in st.session_state:
+        st.session_state.selected_classes = all_class_lst.copy()  # Initialize with all classes
+    
+    # Class selection with session state persistence - use saved selection as default
     selected_classes = st.multiselect(
         'Select lipid classes you would like to analyze:',
         all_class_lst,
-        default=all_class_lst
+        default=st.session_state.selected_classes,  # Use saved selection instead of all_class_lst
+        key='class_selection'
     )
+    
+    # Update session state with current selection
+    st.session_state.selected_classes = selected_classes
 
     if not selected_classes:
         st.warning("Please select at least one lipid class to proceed with normalization.")
@@ -699,44 +737,61 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     # Check if we have standards from earlier selection
     has_standards = not st.session_state.intsta_df.empty
 
-    # Determine available normalization options based on standards availability
-    if has_standards:
-        normalization_options = ['None', 'Internal Standards', 'BCA Assay', 'Both']
-    else:
-        normalization_options = ['None', 'BCA Assay']
+    # Determine available normalization options
+    normalization_options = ['None', 'Internal Standards', 'BCA Assay', 'Both'] if has_standards else ['None', 'BCA Assay']
+    if not has_standards:
         st.warning("No internal standards available. Only BCA normalization is available.")
 
+    # Initialize or retrieve normalization method from session state
+    if 'normalization_method' not in st.session_state:
+        st.session_state.normalization_method = 'None'
+    
+    # Select normalization method with session state persistence
     normalization_method = st.radio(
         "Select normalization method:",
-        options=normalization_options
+        options=normalization_options,
+        key='norm_method_selection',
+        index=normalization_options.index(st.session_state.normalization_method)
     )
+    
+    # Update session state
+    st.session_state.normalization_method = normalization_method
 
     normalized_df = filtered_df.copy()
     normalized_data_object = lp.NormalizeData()
 
     try:
-        # Apply normalizations based on selection
         if normalization_method != 'None':
+            # Store normalization settings in session state
+            if 'normalization_settings' not in st.session_state:
+                st.session_state.normalization_settings = {}
+            
             # Track whether we need to do standards normalization
             do_standards = normalization_method in ['Internal Standards', 'Both'] and has_standards
             
-            # Handle BCA Assay normalization first if selected
+            # Handle BCA Assay normalization
             if normalization_method in ['BCA Assay', 'Both']:
                 with st.expander("Enter BCA Assay Data"):
                     protein_df = collect_protein_concentrations(experiment)
                     if protein_df is not None:
                         try:
-                            # Apply BCA normalization but keep intensity column format
-                            normalized_df = normalized_data_object.normalize_using_bca(normalized_df, protein_df, preserve_prefix=True)
+                            normalized_df = normalized_data_object.normalize_using_bca(
+                                normalized_df, 
+                                protein_df, 
+                                preserve_prefix=True
+                            )
+                            # Store BCA normalization settings
+                            st.session_state.normalization_settings['bca'] = {
+                                'protein_df': protein_df
+                            }
                             st.success("BCA normalization applied successfully")
                         except Exception as e:
                             st.error(f"Error during BCA normalization: {str(e)}")
                             return None
 
-            # Then handle internal standards normalization if selected
+            # Handle internal standards normalization
             if do_standards:
                 with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
-                    # Ensure intsta_df has standardized column names
                     intensity_cols = [col for col in intsta_df.columns if col.startswith('intensity[')]
                     if not intensity_cols:
                         st.error("Internal standards data does not contain properly formatted intensity columns")
@@ -747,12 +802,21 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
                     if 'ClassKey' in st.session_state.intsta_df.columns:
                         standards_by_class = st.session_state.intsta_df.groupby('ClassKey')['LipidMolec'].apply(list).to_dict()
             
-                    # Process each selected class with mapped standards
-                    class_to_standard_map = process_class_standards(selected_classes, standards_by_class, st.session_state.intsta_df)
+                    # Process standards with session state preservation
+                    class_to_standard_map = process_class_standards(
+                        selected_classes, 
+                        standards_by_class, 
+                        st.session_state.intsta_df,
+                        st.session_state.get('class_standard_map', {})
+                    )
+                    
                     if not class_to_standard_map:
                         return None
 
-                    # Get concentrations and apply normalization
+                    # Store the standards mapping
+                    st.session_state.class_standard_map = class_to_standard_map
+
+                    # Apply normalization
                     normalized_df = apply_standards_normalization(
                         normalized_df, 
                         class_to_standard_map, 
@@ -764,15 +828,15 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
                     if normalized_df is None:
                         return None
 
-        # Always rename intensity columns to concentration, regardless of normalization method
+        # Rename intensity columns to concentration
         normalized_df = rename_intensity_to_concentration(normalized_df)
         
-        # After normalization, add back the essential columns only for LipidSearch 5.0
+        # Add back LipidSearch essential columns if needed
         if normalized_df is not None and format_type == 'LipidSearch 5.0':
             for col, values in stored_columns.items():
                 normalized_df[col] = values
 
-        # Display the normalized data
+        # Display normalized data (always show it)
         if normalized_df is not None:
             st.subheader("View Normalized Dataset")
             st.write(normalized_df)
@@ -790,77 +854,73 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
         st.error(f"An unexpected error occurred during normalization: {str(e)}")
         return None
 
-def rename_intensity_to_concentration(df):
-    """Renames intensity columns to concentration columns at the end of normalization"""
-    df = df.copy()
-    rename_dict = {
-        col: col.replace('intensity[', 'concentration[')
-        for col in df.columns if col.startswith('intensity[')
-    }
-    return df.rename(columns=rename_dict)
-
-def process_class_standards(selected_classes, standards_by_class, intsta_df):
+def process_class_standards(selected_classes, standards_by_class, intsta_df, saved_mappings=None):
     """
-    Helper function to process class-standard mapping with flexible standard selection.
-    
-    Args:
-        selected_classes (list): List of selected lipid classes
-        standards_by_class (dict): Dictionary mapping classes to their standards
-        intsta_df (pd.DataFrame): DataFrame containing internal standards
-    
-    Returns:
-        dict: Mapping of lipid classes to selected standards
+    Process class-standard mapping with session state preservation.
     """
     class_to_standard_map = {}
     all_available_standards = list(intsta_df['LipidMolec'].unique())
     
     for lipid_class in selected_classes:
-        # Get class-specific standards if available
-        class_specific_standards = standards_by_class.get(lipid_class, [])
-        
-        # Set default index based on class-specific standard
-        default_idx = 0
-        if class_specific_standards:
-            # If we have a class-specific standard, find its index in all_available_standards
+        # Get previously selected standard if available
+        default_standard = None
+        if saved_mappings and lipid_class in saved_mappings:
+            default_standard = saved_mappings[lipid_class]
             try:
-                default_idx = all_available_standards.index(class_specific_standards[0])
+                default_idx = all_available_standards.index(default_standard)
             except ValueError:
                 default_idx = 0
+        else:
+            # Try to use class-specific standard
+            class_specific_standards = standards_by_class.get(lipid_class, [])
+            default_idx = all_available_standards.index(class_specific_standards[0]) if class_specific_standards else 0
         
         selected_standard = st.selectbox(
-            f'Select internal standard for {lipid_class}' + 
-            (' (default shown)' if class_specific_standards else ''),
+            f'Select internal standard for {lipid_class}',
             all_available_standards,
-            index=default_idx
+            index=default_idx,
+            key=f'standard_selection_{lipid_class}'
         )
         
         class_to_standard_map[lipid_class] = selected_standard
 
     if len(class_to_standard_map) != len(selected_classes):
-        st.error("Please select standards for all lipid classes to proceed with normalization")
+        st.error("Please select standards for all lipid classes")
         return None
         
     return class_to_standard_map
 
 def apply_standards_normalization(df, class_to_standard_map, selected_classes, intsta_df, normalizer, experiment):
-    """Helper function to apply standards normalization"""
-    # Create ordered list of standards matching selected_classes order
+    """Apply standards normalization with session state preservation."""
+    # Create ordered list of standards
     added_intsta_species_lst = [class_to_standard_map[cls] for cls in selected_classes]
     
-    # Get unique standards and their concentrations
+    # Get unique standards
     selected_standards = set(added_intsta_species_lst)
+    
+    # Initialize or retrieve concentration values from session state
+    if 'standard_concentrations' not in st.session_state:
+        st.session_state.standard_concentrations = {}
+    
     intsta_concentration_dict = {}
     all_concentrations_entered = True
     
     st.write("Enter the concentration of each selected internal standard (µM):")
     for standard in selected_standards:
+        # Use previously entered value as default if available
+        default_value = st.session_state.standard_concentrations.get(standard, 1.0)
+        
         concentration = st.number_input(
             f"Concentration (µM) for {standard}",
             min_value=0.0,
-            value=1.0,
+            value=default_value,
             step=0.1,
             key=f"conc_{standard}"
         )
+        
+        # Store current value in session state
+        st.session_state.standard_concentrations[standard] = concentration
+        
         if concentration <= 0:
             st.error(f"Please enter a valid concentration for {standard}")
             all_concentrations_entered = False
@@ -1637,7 +1697,304 @@ def display_abundance_pie_charts(experiment, continuation_df):
                     
                     st.markdown("---")  # Add a separator between charts
     return pie_charts
+
+def display_saturation_plots(experiment, continuation_df):
+    saturation_plots = {}
+    with st.expander("Saturation Plots"):
+        full_samples_list = experiment.full_samples_list
+        
+        # Get all unique classes from the DataFrame
+        all_classes = continuation_df['ClassKey'].unique().tolist()
+        
+        selected_classes_list = st.multiselect('Select classes for the saturation plot:', all_classes, all_classes)
+        
+        if selected_classes_list:
+            # Filter the DataFrame for selected classes
+            filtered_df = continuation_df[continuation_df['ClassKey'].isin(selected_classes_list)]
+            
+            selected_conditions = st.multiselect('Select conditions for the saturation plot:', experiment.conditions_list, experiment.conditions_list)
+            
+            if selected_conditions:
+                # Add statistical testing guidance based on number of conditions
+                if len(selected_conditions) > 2:
+                    st.info("""
+                    📊 **Statistical Testing for Fatty Acid Comparisons:**
+                    - Multiple conditions detected: Using ANOVA + Tukey's test
+                    - Each fatty acid type (SFA, MUFA, PUFA) is tested separately
+                    - ANOVA determines if there are any differences between conditions
+                    - If ANOVA is significant (p < 0.05), Tukey's test shows which specific conditions differ
+                    - The analysis automatically adjusts significance thresholds to maintain a 5% false positive rate
+                    - Stars (★) indicate significance levels:
+                        * ★ p < 0.05
+                        * ★★ p < 0.01
+                        * ★★★ p < 0.001
+                    """)
+                elif len(selected_conditions) == 2:
+                    st.info("""
+                    📊 **Statistical Testing for Fatty Acid Comparisons:**
+                    - Two conditions detected: Using Welch's t-test
+                    - Each fatty acid type (SFA, MUFA, PUFA) is tested separately
+                    - The t-test determines if there are significant differences between conditions
+                    - Stars (★) indicate significance levels:
+                        * ★ p < 0.05
+                        * ★★ p < 0.01
+                        * ★★★ p < 0.001
+                    - Note: If you plan to compare multiple conditions, select all relevant conditions to use ANOVA
+                    """)
+
+                plots = lp.SaturationPlot.create_plots(filtered_df, experiment, selected_conditions)
                 
+                for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
+                    st.subheader(f"Saturation Plot for {lipid_class}")
+                    
+                    st.plotly_chart(main_plot)
+                    plotly_svg_download_button(main_plot, f"saturation_plot_main_{lipid_class}.svg")
+                    
+                    main_csv_download = convert_df(plot_data)
+                    st.download_button(
+                        label="Download CSV",
+                        data=main_csv_download,
+                        file_name=f'saturation_plot_main_data_{lipid_class}.csv',
+                        mime='text/csv'
+                    )
+                    
+                    st.plotly_chart(percentage_plot)
+                    plotly_svg_download_button(percentage_plot, f"saturation_plot_percentage_{lipid_class}.svg")
+                    
+                    percentage_data = lp.SaturationPlot._calculate_percentage_df(plot_data)
+                    percentage_csv_download = convert_df(percentage_data)
+                    st.download_button(
+                        label="Download CSV",
+                        data=percentage_csv_download,
+                        file_name=f'saturation_plot_percentage_data_{lipid_class}.csv',
+                        mime='text/csv'
+                    )
+                    
+                    saturation_plots[lipid_class] = {'main': main_plot, 'percentage': percentage_plot}
+                    
+                    st.markdown("---")
+    return saturation_plots
+
+def display_pathway_visualization(experiment, continuation_df):
+    """
+    Displays an interactive lipid pathway visualization within a Streamlit application, 
+    based on lipidomics data from a specified experiment. The function allows users 
+    to select control and experimental conditions from the experiment setup. It then 
+    calculates the saturation ratio and fold change for each lipid class and generates 
+    a comprehensive pathway visualization, highlighting the abundance and saturation 
+    levels of different lipid classes.
+
+    The visualization is displayed within an expandable section in the Streamlit interface. 
+    Users can also download the visualization as an SVG file for high-quality printing or 
+    further use, as well as the underlying data as a CSV file.
+
+    Args:
+        experiment: An object containing detailed information about the experimental setup, 
+                    including conditions and samples. This object is used to derive 
+                    control and experimental conditions for the analysis.
+        continuation_df (DataFrame): A DataFrame containing processed lipidomics data, 
+                                    which includes information necessary for generating 
+                                    the pathway visualization, such as lipid classes, 
+                                    molecular structures, and abundances.
+
+    Raises:
+        ValueError: If there are not at least two conditions with more than one replicate 
+                    in the experiment, which is a prerequisite for creating a meaningful 
+                    pathway visualization.
+    """
+
+    with st.expander("Lipid Pathway Visualization"):
+        # UI for selecting control and experimental conditions
+        if len([x for x in experiment.number_of_samples_list if x > 1]) > 1:
+            control_condition = st.selectbox('Select Control Condition',
+                                             [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1], 
+                                             index=0)
+            experimental_condition = st.selectbox('Select Experimental Condition',
+                                                  [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1 and cond != control_condition], 
+                                                  index=1)
+    
+            # Check if both conditions are selected
+            if control_condition and experimental_condition:
+                class_saturation_ratio_df = lp.PathwayViz.calculate_class_saturation_ratio(continuation_df)
+                class_fold_change_df = lp.PathwayViz.calculate_class_fold_change(continuation_df, experiment, control_condition, experimental_condition)
+                
+                fig, pathway_dict = lp.PathwayViz.create_pathway_viz(class_fold_change_df, class_saturation_ratio_df, control_condition, experimental_condition)
+                
+                if fig is not None and pathway_dict:
+                    st.pyplot(fig)
+                    
+                    # Add SVG download button for the pathway visualization
+                    matplotlib_svg_download_button(fig, f"pathway_visualization_{control_condition}_vs_{experimental_condition}.svg")
+                    
+                    pathway_df = pd.DataFrame.from_dict(pathway_dict)
+                    pathway_df.set_index('class', inplace=True)
+                    st.write(pathway_df)
+                    csv_download = convert_df(pathway_df)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_download,
+                        file_name='pathway_df.csv',
+                        mime='text/csv')
+                    
+                    return fig
+                    
+                else:
+                    st.warning("Unable to generate pathway visualization due to insufficient data.")
+        else:
+            st.warning("At least two conditions with more than one replicate are required for pathway visualization.")
+            
+        return None
+                
+def display_volcano_plot(experiment, continuation_df):
+    """
+    Display a user interface for creating and interacting with volcano plots in lipidomics data using Plotly.
+    Returns a dictionary containing the generated plots.
+    """
+    volcano_plots = {}
+    with st.expander("Volcano Plots - Test Hypothesis"):
+        conditions_with_replicates = [condition for index, condition in enumerate(experiment.conditions_list) if experiment.number_of_samples_list[index] > 1]
+        if len(conditions_with_replicates) <= 1:
+            st.error('You need at least two conditions with more than one replicate to create a volcano plot.')
+            return volcano_plots
+
+        p_value_threshold = st.number_input('Enter the significance level for Volcano Plot', min_value=0.001, max_value=0.1, value=0.05, step=0.001, key="volcano_plot_p_value_threshold")
+        q_value_threshold = -np.log10(p_value_threshold)
+        control_condition = st.selectbox('Pick the control condition', conditions_with_replicates)
+        default_experimental = conditions_with_replicates[1] if len(conditions_with_replicates) > 1 else conditions_with_replicates[0]
+        experimental_condition = st.selectbox('Pick the experimental condition', conditions_with_replicates, index=conditions_with_replicates.index(default_experimental))
+        selected_classes_list = st.multiselect('Add or remove classes:', list(continuation_df['ClassKey'].value_counts().index), list(continuation_df['ClassKey'].value_counts().index))
+        
+        hide_non_significant = st.checkbox('Hide non-significant data points', value=False)
+
+        plot, merged_df, removed_lipids_df = lp.VolcanoPlot.create_and_display_volcano_plot(experiment, continuation_df, control_condition, experimental_condition, selected_classes_list, q_value_threshold, hide_non_significant)
+        st.plotly_chart(plot, use_container_width=True)
+        volcano_plots['main'] = plot
+        
+        # Add SVG download button for the main volcano plot
+        plotly_svg_download_button(plot, "volcano_plot.svg")
+
+        # Download options
+        csv_data = convert_df(merged_df[['LipidMolec', 'FoldChange', '-log10(pValue)', 'ClassKey']])
+        st.download_button("Download CSV", csv_data, file_name="volcano_data.csv", mime="text/csv")
+        st.write('------------------------------------------------------------------------------------')
+        
+        # Generate and display the concentration vs. fold change plot
+        color_mapping = lp.VolcanoPlot._generate_color_mapping(merged_df)
+        concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant)
+        st.plotly_chart(concentration_vs_fold_change_plot, use_container_width=True)
+        volcano_plots['concentration_vs_fold_change'] = concentration_vs_fold_change_plot
+        
+        # Add SVG download button for the concentration vs fold change plot
+        plotly_svg_download_button(concentration_vs_fold_change_plot, "concentration_vs_fold_change_plot.svg")
+
+        # CSV download option for concentration vs. fold change plot
+        csv_data_for_concentration_plot = convert_df(download_df)
+        st.download_button("Download CSV", csv_data_for_concentration_plot, file_name="concentration_vs_fold_change_data.csv", mime="text/csv")
+        st.write('------------------------------------------------------------------------------------')
+        
+        # Additional functionality for lipid concentration distribution
+        all_classes = list(merged_df['ClassKey'].unique())
+        selected_class = st.selectbox('Select Lipid Class:', all_classes)
+        if selected_class:
+            class_lipids = merged_df[merged_df['ClassKey'] == selected_class]['LipidMolec'].unique().tolist()
+            selected_lipids = st.multiselect('Select Lipids:', class_lipids, default=class_lipids[:1])
+            if selected_lipids:
+                selected_conditions = [control_condition, experimental_condition]
+                plot_df = lp.VolcanoPlot.create_concentration_distribution_data(
+                    merged_df, selected_lipids, selected_conditions, experiment
+                )
+                fig = lp.VolcanoPlot.create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions)
+                st.pyplot(fig)
+                volcano_plots['concentration_distribution'] = fig
+                
+                # Add SVG download button for the concentration distribution plot (matplotlib)
+                matplotlib_svg_download_button(fig, "concentration_distribution_plot.svg")
+                
+                csv_data = convert_df(plot_df)
+                st.download_button("Download CSV", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
+        st.write('------------------------------------------------------------------------------------')
+
+        # Displaying the table of invalid lipids
+        if not removed_lipids_df.empty:
+            st.write("Lipids excluded from the plot (fold change zero or infinity):")
+            st.dataframe(removed_lipids_df)
+        else:
+            st.write("No invalid lipids found.")
+
+    return volcano_plots
+
+def display_lipidomic_heatmap(experiment, continuation_df):
+    """
+    Displays a lipidomic heatmap in the Streamlit app, offering an interactive interface for users to 
+    select specific conditions and lipid classes for visualization. This function facilitates the exploration 
+    of lipidomic data by generating both clustered and regular heatmaps based on user input.
+    Args:
+        experiment (Experiment): An object containing detailed information about the experiment setup.
+        continuation_df (pd.DataFrame): A DataFrame containing processed lipidomics data.
+    Returns:
+        tuple: A tuple containing the regular heatmap figure and the clustered heatmap figure (if generated).
+    """
+    regular_heatmap = None
+    clustered_heatmap = None
+    with st.expander("Lipidomic Heatmap"):
+        # UI for selecting conditions and classes
+        all_conditions = experiment.conditions_list
+        selected_conditions = st.multiselect("Select conditions:", all_conditions, default=all_conditions)
+        selected_conditions = [condition for condition in selected_conditions if len(experiment.individual_samples_list[experiment.conditions_list.index(condition)]) > 1]
+        all_classes = continuation_df['ClassKey'].unique()
+        selected_classes = st.multiselect("Select lipid classes:", all_classes, default=all_classes)
+        
+        # UI for selecting number of clusters
+        n_clusters = st.slider("Number of clusters:", min_value=2, max_value=10, value=5)
+        
+        if selected_conditions and selected_classes:
+            # Extract sample names based on selected conditions
+            selected_samples = [sample for condition in selected_conditions 
+                                for sample in experiment.individual_samples_list[experiment.conditions_list.index(condition)]]
+            # Process data for heatmap generation
+            filtered_df, _ = lp.LipidomicHeatmap.filter_data(continuation_df, selected_conditions, selected_classes, experiment.conditions_list, experiment.individual_samples_list)
+            z_scores_df = lp.LipidomicHeatmap.compute_z_scores(filtered_df)
+            
+            # Generate both regular and clustered heatmaps
+            regular_heatmap = lp.LipidomicHeatmap.generate_regular_heatmap(z_scores_df, selected_samples)
+            clustered_heatmap, class_percentages = lp.LipidomicHeatmap.generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters)
+            
+            # Apply layout updates to both heatmaps
+            for heatmap, heatmap_type in [(regular_heatmap, "Regular"), (clustered_heatmap, "Clustered")]:
+                heatmap.update_layout(
+                    width=900,
+                    height=600,
+                    margin=dict(l=150, r=50, t=50, b=100),
+                    xaxis_tickangle=-45,
+                    yaxis_title="Lipid Molecules",
+                    xaxis_title="Samples",
+                    title=f"Lipidomic Heatmap ({heatmap_type})",
+                    font=dict(size=10)
+                )
+                heatmap.update_traces(colorbar=dict(len=0.9, thickness=15))
+            
+            # Allow users to choose which heatmap to display
+            heatmap_type = st.radio("Select Heatmap Type", ["Clustered", "Regular"], index=0)
+            current_heatmap = clustered_heatmap if heatmap_type == "Clustered" else regular_heatmap
+            
+            # Display the selected heatmap
+            st.plotly_chart(current_heatmap, use_container_width=True)
+            
+            # Display cluster information
+            if heatmap_type == "Clustered":
+                st.subheader(f"Cluster Information (Number of clusters: {n_clusters})")
+                st.dataframe(class_percentages.round(2))
+                
+                # Create a downloadable CSV for cluster information
+                csv_cluster_info = convert_df(class_percentages.reset_index())
+                st.download_button("Download Cluster Information CSV", csv_cluster_info, 'cluster_information.csv', 'text/csv')
+            
+            # Download buttons
+            plotly_svg_download_button(current_heatmap, f"Lipidomic_{heatmap_type}_Heatmap.svg")
+            csv_download = convert_df(z_scores_df.reset_index())
+            st.download_button("Download CSV", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
+    return regular_heatmap, clustered_heatmap
+
 def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots, volcano_plots, pathway_visualization):
     pdf_buffer = io.BytesIO()
     
