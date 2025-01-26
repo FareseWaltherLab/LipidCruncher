@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
+from PIL import Image
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
@@ -67,8 +68,17 @@ def initialize_session_state():
 # Modify the main function to preserve state when switching modules
 def main():
     """Main function for the Lipidomics Analysis Module Streamlit application."""
-    st.header("Lipidomics Analysis Module")
-    st.markdown("Process and clean lipidomics data from multiple sources.")
+    # Load and display the logo
+    try:
+        logo = Image.open('./images/logo.tif')  # Replace with your logo path
+        # You can adjust the width to control the size of the logo
+        st.image(logo, width=720)  # Adjust width as needed
+    except Exception as e:
+        # Fallback to text header if image fails to load
+        st.error(f"Failed to load logo: {str(e)}")
+        st.header("LipidCruncher")
+    
+    st.markdown("Process, analyze and visualize lipidomics data from multiple sources.")
     
     # Initialize session state for cache clearing
     if 'clear_cache' not in st.session_state:
@@ -113,6 +123,7 @@ def main():
                     df_to_clean = updated_df if updated_df is not None else df
                     
                     if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
+                        st.subheader("Data Standardization, Filtering, and Normalization Module")
                         cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
                         
                         if cleaned_df is not None:
@@ -156,7 +167,7 @@ def main():
                             )
                         
                         # Add back button with state preservation
-                        if st.button("Back to Data Cleaning, Filtering, & Normalization", key="back_to_cleaning"):
+                        if st.button("Back to Data Standardization, Filtering, and Normalization", key="back_to_cleaning"):
                             st.session_state.module = "Data Cleaning, Filtering, & Normalization"
                             # Preserve the current state
                             st.session_state.preserved_data = {
@@ -696,7 +707,6 @@ def rename_intensity_to_concentration(df):
 
 def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     """Handle data normalization with consistent session state usage."""
-    st.subheader("Data Normalization")
     
     # Store essential columns before normalization only for LipidSearch 5.0
     stored_columns = {}
@@ -712,20 +722,22 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     # Get the full list of classes
     all_class_lst = list(cleaned_df['ClassKey'].unique())
     
-    # Initialize selected_classes with all classes only if it doesn't exist in session state
-    if 'selected_classes' not in st.session_state:
-        st.session_state.selected_classes = all_class_lst.copy()  # Initialize with all classes
+    # Initialize or retrieve selected classes from session state
+    # Only initialize with all classes if selected_classes is empty or doesn't exist
+    if 'selected_classes' not in st.session_state or not st.session_state.selected_classes:
+        st.session_state.selected_classes = all_class_lst.copy()
     
-    # Class selection with session state persistence - use saved selection as default
+    # Class selection with session state persistence
     selected_classes = st.multiselect(
         'Select lipid classes you would like to analyze:',
-        all_class_lst,
-        default=st.session_state.selected_classes,  # Use saved selection instead of all_class_lst
+        options=all_class_lst,  # Available options are all classes
+        default=st.session_state.selected_classes,  # Default to currently selected classes
         key='class_selection'
     )
     
     # Update session state with current selection
-    st.session_state.selected_classes = selected_classes
+    if selected_classes:  # Only update if some classes are selected
+        st.session_state.selected_classes = selected_classes
 
     if not selected_classes:
         st.warning("Please select at least one lipid class to proceed with normalization.")
