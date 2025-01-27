@@ -1,5 +1,4 @@
 FROM python:3.9-slim
-
 WORKDIR /app
 
 # Copy requirements first for better cache utilization
@@ -14,4 +13,4 @@ EXPOSE 8501
 
 # Set the same entrypoint and command as your current image
 ENTRYPOINT ["streamlit", "run"]
-CMD ["lipidsearch5.py"]
+CMD ["main_app.py"]
