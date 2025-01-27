@@ -80,10 +80,6 @@ def main():
     
     st.markdown("Process, analyze and visualize lipidomics data from multiple sources.")
     
-    # Initialize session state for cache clearing
-    if 'clear_cache' not in st.session_state:
-        st.session_state.clear_cache = False
-    
     initialize_session_state()
     
     # Always show format selection in sidebar
@@ -193,17 +189,6 @@ def main():
         for key, value in st.session_state.preserved_data.items():
             setattr(st.session_state, key, value)
         del st.session_state.preserved_data
-
-    # Place the cache clearing button in the sidebar
-    if st.sidebar.button("End Session and Clear Cache"):
-        st.session_state.clear_cache = True
-        st.experimental_rerun()
-
-    # Check if cache should be cleared
-    if st.session_state.clear_cache:
-        clear_streamlit_cache()
-        st.sidebar.success("Cache cleared successfully!")
-        st.session_state.clear_cache = False
         
 def clear_session_state():
     """Clear processed data from session state."""
@@ -1055,7 +1040,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         bqc_label (str): Label for batch quality control samples
         format_type (str): The format of the input data (e.g., 'LipidSearch 5.0')
     """
-    st.subheader("2) Quality Check & Anomaly Detection")
+    st.subheader("Quality Check and Anomaly Detection Module")
     
     # Initialize variables
     box_plot_fig1 = None
@@ -1098,7 +1083,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # PCA Analysis
     continuation_df, pca_plot = display_pca_analysis(continuation_df, experiment)
     
-    st.subheader("3) Data Visualization, Interpretation, and Analysis ")
+    st.subheader("Data Visualization, Interpretation, and Analysis Module")
     # Analysis
     analysis_option = st.radio(
         "Select an analysis feature:",
@@ -1152,50 +1137,38 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         "1. Generate the PDF only after completing all desired analyses.\n"
         "2. Ensure all analyses you want in the report have been viewed at least once.\n"
         "3. Use this feature instead of downloading plots individually - it's more efficient for multiple downloads.\n"
-        "4. Generate the PDF before clearing the cache.\n"
-        "5. Avoid interacting with the app during PDF generation.\n"
-        "6. Select 'No' if you're not ready to end your session."
+        "4. Avoid interacting with the app during PDF generation.\n"
     )
 
-    generate_pdf = st.radio("Are you ready to generate the PDF report?", ('No', 'Yes'), index=0)
+    generate_pdf = st.radio("Would you like to generate a PDF report?", ('No', 'Yes'), index=0)
 
     if generate_pdf == 'Yes':
-        st.info("Please confirm that you have completed all analyses and are ready to end your session.")
-        confirm_generate = st.checkbox("I confirm that I'm ready to generate the PDF and end my session.")
-        
-        if confirm_generate:
-            if box_plot_fig1 and box_plot_fig2:
-                with st.spinner('Generating PDF report... Please do not interact with the app.'):
-                    pdf_buffer = generate_pdf_report(
-                        box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
-                        st.session_state.heatmap_fig, st.session_state.correlation_plots, 
-                        st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts, 
-                        st.session_state.saturation_plots, st.session_state.volcano_plots,
-                        st.session_state.pathway_visualization
-                    )
-                if pdf_buffer:
-                    st.success("PDF report generated successfully!")
-                    st.download_button(
-                        label="Download Quality Check & Analysis Report (PDF)",
-                        data=pdf_buffer,
-                        file_name="quality_check_and_analysis_report.pdf",
-                        mime="application/pdf",
-                    )
-                    st.info(
-                        "You can now download your PDF report. After downloading, please use the "
-                        "'End Session and Clear Cache' button in the sidebar to conclude your session."
-                    )
-                    
-                    # Close the figures to free up memory after PDF generation
-                    plt.close(box_plot_fig1)
-                    plt.close(box_plot_fig2)
-                    plt.close('all')  # This closes all remaining matplotlib figures
-                else:
-                    st.error("Failed to generate PDF report. Please check the logs for details.")
+        if box_plot_fig1 and box_plot_fig2:
+            with st.spinner('Generating PDF report... Please do not interact with the app.'):
+                pdf_buffer = generate_pdf_report(
+                    box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
+                    st.session_state.heatmap_fig, st.session_state.correlation_plots, 
+                    st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts, 
+                    st.session_state.saturation_plots, st.session_state.volcano_plots,
+                    st.session_state.pathway_visualization
+                )
+            if pdf_buffer:
+                st.success("PDF report generated successfully!")
+                st.download_button(
+                    label="Download Quality Check & Analysis Report (PDF)",
+                    data=pdf_buffer,
+                    file_name="quality_check_and_analysis_report.pdf",
+                    mime="application/pdf",
+                )
+                
+                # Close the figures to free up memory after PDF generation
+                plt.close(box_plot_fig1)
+                plt.close(box_plot_fig2)
+                plt.close('all')  # This closes all remaining matplotlib figures
             else:
-                st.warning("Some plots are missing. Unable to generate PDF report.")
+                st.error("Failed to generate PDF report. Please check the logs for details.")
         else:
-            st.info("Please confirm when you're ready to generate the PDF report.")
+            st.warning("Some plots are missing. Unable to generate PDF report.")
             
 def display_box_plots(continuation_df, experiment):
     # Initialize a counter in session state if it doesn't exist
