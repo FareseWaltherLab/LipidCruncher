@@ -46,8 +46,8 @@ class VolcanoPlot:
         Returns:
             A tuple containing the processed DataFrame and lists of column names for control and experimental samples.
         """
-        control_cols = ['MeanArea[' + sample + ']' for sample in control_samples]
-        experimental_cols = ['MeanArea[' + sample + ']' for sample in experimental_samples]
+        control_cols = ['concentration[' + sample + ']' for sample in control_samples]
+        experimental_cols = ['concentration[' + sample + ']' for sample in experimental_samples]
         selected_cols = control_cols + experimental_cols + ['LipidMolec']
         return df[selected_cols], control_cols, experimental_cols
 
@@ -345,7 +345,7 @@ class VolcanoPlot:
             for condition in selected_conditions:
                 samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
                 for sample in samples:
-                    concentration = volcano_df.loc[volcano_df['LipidMolec'] == lipid, f'MeanArea[{sample}]'].values[0]
+                    concentration = volcano_df.loc[volcano_df['LipidMolec'] == lipid, f'concentration[{sample}]'].values[0]
                     plot_data.append({'Lipid': lipid, 'Condition': condition, 'Concentration': concentration})
     
         return pd.DataFrame(plot_data)

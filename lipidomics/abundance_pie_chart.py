@@ -19,12 +19,12 @@ class AbundancePieChart:
         Returns:
             pd.DataFrame: Aggregated DataFrame with total abundance per lipid class.
         """
-        available_samples = [sample for sample in full_samples_list if f"MeanArea[{sample}]" in df.columns]
+        available_samples = [sample for sample in full_samples_list if f"concentration[{sample}]" in df.columns]
         if not available_samples:
             st.warning("No sample columns found in the dataset.")
             return pd.DataFrame()
         
-        grouped_df = df.groupby('ClassKey')[[f"MeanArea[{sample}]" for sample in available_samples]].sum()
+        grouped_df = df.groupby('ClassKey')[[f"concentration[{sample}]" for sample in available_samples]].sum()
         return grouped_df
 
     @staticmethod
@@ -77,12 +77,12 @@ class AbundancePieChart:
         Returns:
             tuple: A tuple containing the Plotly figure object and the DataFrame used.
         """
-        available_samples = [sample for sample in samples if f"MeanArea[{sample}]" in df.columns]
+        available_samples = [sample for sample in samples if f"concentration[{sample}]" in df.columns]
         if not available_samples:
             st.warning(f"No sample columns found for condition: {condition}")
             return None, df
         
-        condition_abundance = df[[f"MeanArea[{sample}]" for sample in available_samples]].sum(axis=1)
+        condition_abundance = df[[f"concentration[{sample}]" for sample in available_samples]].sum(axis=1)
         sorted_sizes, sorted_labels = AbundancePieChart._sort_pie_chart_data(condition_abundance, df.index)
     
         custom_labels = [f'{label} - {pct:.1f}%' for label, pct in zip(sorted_labels, 100 * sorted_sizes / sorted_sizes.sum())]

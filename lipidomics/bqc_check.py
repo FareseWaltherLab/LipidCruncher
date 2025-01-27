@@ -168,7 +168,7 @@ class BQCQualityCheck:
             pd.DataFrame: The DataFrame prepared for plotting.
         """
         bqc_samples_list = individual_samples_list[bqc_sample_index]
-        auc = ['MeanArea[' + sample + ']' for sample in bqc_samples_list]
+        auc = ['concentration[' + sample + ']' for sample in bqc_samples_list]
         return BQCQualityCheck.prepare_dataframe_for_plot(dataframe.copy(), auc)
     
     @staticmethod

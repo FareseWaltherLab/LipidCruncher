@@ -30,7 +30,7 @@ class SaturationPlot:
         Calculates SFA, MUFA, and PUFA values for a specific lipid class under given conditions.
         """
         filtered_df = SaturationPlot._filter_df_for_lipid_class(df, lipid_class)
-        available_samples = [sample for sample in samples if f'MeanArea[{sample}]' in filtered_df.columns]
+        available_samples = [sample for sample in samples if f'concentration[{sample}]' in filtered_df.columns]
         
         if not available_samples:
             st.warning(f"No data available for {lipid_class} in condition {condition}")
@@ -39,12 +39,12 @@ class SaturationPlot:
         sfa_values, mufa_values, pufa_values = [], [], []
         
         for sample in available_samples:
-            sample_df = filtered_df[['LipidMolec', f'MeanArea[{sample}]']].copy()
+            sample_df = filtered_df[['LipidMolec', f'concentration[{sample}]']].copy()
             sample_df['fa_ratios'] = sample_df['LipidMolec'].apply(SaturationPlot._calculate_fa_ratios)
             
-            sfa_value = sample_df.apply(lambda x: x[f'MeanArea[{sample}]'] * x['fa_ratios'][0], axis=1).sum()
-            mufa_value = sample_df.apply(lambda x: x[f'MeanArea[{sample}]'] * x['fa_ratios'][1], axis=1).sum()
-            pufa_value = sample_df.apply(lambda x: x[f'MeanArea[{sample}]'] * x['fa_ratios'][2], axis=1).sum()
+            sfa_value = sample_df.apply(lambda x: x[f'concentration[{sample}]'] * x['fa_ratios'][0], axis=1).sum()
+            mufa_value = sample_df.apply(lambda x: x[f'concentration[{sample}]'] * x['fa_ratios'][1], axis=1).sum()
+            pufa_value = sample_df.apply(lambda x: x[f'concentration[{sample}]'] * x['fa_ratios'][2], axis=1).sum()
             
             sfa_values.append(sfa_value)
             mufa_values.append(mufa_value)
@@ -74,7 +74,7 @@ class SaturationPlot:
         """
         Computes the mean and variance of the area under the curve (AUC) for each lipid across given samples.
         """
-        mean_cols = [f'MeanArea[{sample}]' for sample in samples if f'MeanArea[{sample}]' in df.columns]
+        mean_cols = [f'concentration[{sample}]' for sample in samples if f'concentration[{sample}]' in df.columns]
         if mean_cols:
             df['mean_AUC'] = df[mean_cols].mean(axis=1)
             df['var_AUC'] = df[mean_cols].var(axis=1)

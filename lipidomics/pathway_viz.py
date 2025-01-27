@@ -95,11 +95,11 @@ class PathwayViz:
             DataFrame: DataFrame with total abundance per class.
         """
         # Filter for only available columns
-        available_samples = [sample for sample in full_samples_list if f"MeanArea[{sample}]" in df.columns]
-        mean_area_cols = [f"MeanArea[{sample}]" for sample in available_samples]
+        available_samples = [sample for sample in full_samples_list if f"concentration[{sample}]" in df.columns]
+        mean_area_cols = [f"concentration[{sample}]" for sample in available_samples]
         
         if not mean_area_cols:
-            st.warning("No valid MeanArea columns found in the dataset.")
+            st.warning("No valid concentration columns found in the dataset.")
             return pd.DataFrame()  # Return an empty DataFrame if no valid columns are found
         
         return df.groupby('ClassKey')[mean_area_cols].sum()
@@ -118,8 +118,8 @@ class PathwayViz:
        Returns:
            Series: Pandas Series with fold change values for each class.
        """
-        return (abundance_df[[f'MeanArea[{sample}]' for sample in experimental_samples]].mean(axis=1) /
-                abundance_df[[f'MeanArea[{sample}]' for sample in control_samples]].mean(axis=1))
+        return (abundance_df[[f'concentration[{sample}]' for sample in experimental_samples]].mean(axis=1) /
+                abundance_df[[f'concentration[{sample}]' for sample in control_samples]].mean(axis=1))
 
     @staticmethod
     @st.cache_data(ttl=3600)
@@ -157,8 +157,8 @@ class PathwayViz:
         """
         full_samples_list = experiment.full_samples_list
         control_idx, experimental_idx = map(experiment.conditions_list.index, [control, experimental])
-        control_samples = [sample for sample in experiment.individual_samples_list[control_idx] if f"MeanArea[{sample}]" in df.columns]
-        experimental_samples = [sample for sample in experiment.individual_samples_list[experimental_idx] if f"MeanArea[{sample}]" in df.columns]
+        control_samples = [sample for sample in experiment.individual_samples_list[control_idx] if f"concentration[{sample}]" in df.columns]
+        experimental_samples = [sample for sample in experiment.individual_samples_list[experimental_idx] if f"concentration[{sample}]" in df.columns]
     
         if not control_samples or not experimental_samples:
             st.warning("Not enough valid samples for fold change calculation.")

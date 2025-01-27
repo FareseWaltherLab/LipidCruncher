@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import logging
 import matplotlib.pyplot as plt
 import streamlit as st
 from scipy import stats
@@ -22,7 +23,7 @@ class AbundanceBarChart:
     @st.cache_data(ttl=3600)
     def create_mean_std_columns(df, full_samples_list, individual_samples_list, conditions_list, selected_conditions, selected_classes):
         try:
-            available_samples = [sample for sample in full_samples_list if f"MeanArea[{sample}]" in df.columns]
+            available_samples = [sample for sample in full_samples_list if f"concentration[{sample}]" in df.columns]
             grouped_df = pd.DataFrame()
             
             for condition in selected_conditions:
@@ -35,7 +36,7 @@ class AbundanceBarChart:
                 if not individual_samples:
                     continue
                 
-                mean_cols = [f"MeanArea[{sample}]" for sample in individual_samples]
+                mean_cols = [f"concentration[{sample}]" for sample in individual_samples]
                 n_samples = len(mean_cols)
                 
                 # Calculate statistics for each class
@@ -87,7 +88,7 @@ class AbundanceBarChart:
         Returns:
         pd.DataFrame: DataFrame grouped by 'ClassKey' with summed mean areas.
         """
-        return df.groupby('ClassKey')[[f"MeanArea[{sample}]" for sample in full_samples_list]].sum().reset_index()
+        return df.groupby('ClassKey')[[f"concentration[{sample}]" for sample in full_samples_list]].sum().reset_index()
 
     @staticmethod
     def calculate_mean_std_for_conditions(grouped_df, individual_samples_list, conditions_list, selected_conditions):
@@ -103,7 +104,7 @@ class AbundanceBarChart:
         for condition in selected_conditions:
             condition_index = conditions_list.index(condition)
             individual_samples = individual_samples_list[condition_index]
-            mean_cols = [f"MeanArea[{sample}]" for sample in individual_samples]
+            mean_cols = [f"concentration[{sample}]" for sample in individual_samples]
             grouped_df[f"mean_AUC_{condition}"] = grouped_df[mean_cols].mean(axis=1)
             grouped_df[f"std_AUC_{condition}"] = grouped_df[mean_cols].std(axis=1)
 
@@ -161,8 +162,8 @@ class AbundanceBarChart:
                     condition_samples = experiment.individual_samples_list[condition_idx]
                     
                     # Get data columns for this condition
-                    sample_columns = [f"MeanArea[{sample}]" for sample in condition_samples 
-                                      if f"MeanArea[{sample}]" in class_df.columns]
+                    sample_columns = [f"concentration[{sample}]" for sample in condition_samples 
+                                      if f"concentration[{sample}]" in class_df.columns]
                     
                     if sample_columns:
                         # Sum across all species for each sample
@@ -232,8 +233,8 @@ class AbundanceBarChart:
                     for condition in selected_conditions:
                         condition_idx = experiment.conditions_list.index(condition)
                         condition_samples = experiment.individual_samples_list[condition_idx]
-                        sample_columns = [f"MeanArea[{sample}]" for sample in condition_samples 
-                                          if f"MeanArea[{sample}]" in class_df.columns]
+                        sample_columns = [f"concentration[{sample}]" for sample in condition_samples 
+                                          if f"concentration[{sample}]" in class_df.columns]
     
                         if sample_columns:
                             sample_sums = class_df[sample_columns].sum()
@@ -270,7 +271,7 @@ class AbundanceBarChart:
     
         try:
             # Validate and prepare data
-            expected_columns = ['ClassKey'] + [f"MeanArea[{sample}]" for sample in full_samples_list]
+            expected_columns = ['ClassKey'] + [f"concentration[{sample}]" for sample in full_samples_list]
             valid_columns = ['ClassKey'] + [col for col in expected_columns if col in df.columns and col != 'ClassKey']
             df = df[valid_columns]
     

@@ -1,167 +1,165 @@
 import pandas as pd
-import streamlit as st
 import re
+import streamlit as st
 
 class GroupSamples:
-    """
-    Handles grouping of samples for lipidomics data analysis.
-
-    This class provides functionality to validate datasets, construct and manipulate dataframes for grouping samples 
-    based on experimental conditions.
-
-    Attributes:
-        experiment (Experiment): An object representing the experimental setup.
-        _mean_area_col_list_cache (list): Cache for storing the list of mean area columns.
-    """
-
-    def __init__(self, experiment):
+    """Handles grouping of samples for lipidomics data analysis."""
+    
+    def __init__(self, experiment, data_format=None):
         """
-        Initializes the GroupSamples class with the given experimental setup.
-
-        Args:
-            experiment (Experiment): The experimental setup to be used for sample grouping.
+        Initialize with experiment setup.
         """
         self.experiment = experiment
-        
+        self.data_format = data_format
+
     def check_dataset_validity(self, df):
-        """
-        Validates if the dataset contains the necessary columns required for LipidSearch analysis.
-
-        Args:
-            df (pd.DataFrame): The dataset to be validated.
-
-        Returns:
-            bool: True if the dataset contains the required columns, False otherwise.
-        """
-        required_static_columns = {'LipidMolec', 'ClassKey', 'BaseRt', 'FAKey'}
-        if not required_static_columns.issubset(df.columns):
+        """Validates dataset columns."""
+        try:
+            # Check for LipidMolec column (case-insensitive)
+            if 'LipidMolec' not in df.columns:
+                st.error("Missing LipidMolec column")
+                return False
+            
+            # Check for intensity columns in standardized format
+            value_columns = [col for col in df.columns if col.startswith('intensity[')]
+            if not value_columns:
+                st.error("No intensity columns found")
+                return False
+                
+            # Verify number of intensity columns matches experiment setup
+            expected_samples = len(self.experiment.full_samples_list)
+            actual_samples = len(value_columns)
+            
+            if expected_samples != actual_samples:
+                st.error(f"Number of samples in data ({actual_samples}) doesn't match experiment setup ({expected_samples})!")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            st.error(f"Error checking dataset validity: {str(e)}")
             return False
 
-        # Dynamically check for 'MeanArea' columns based on the sample names in the dataset
-        mean_area_columns_present = all(
-            any(col.startswith(f"MeanArea[{sample_name}]") for col in df.columns)
-            for sample_name in self._extract_sample_names(df)
-        )
-
-        return mean_area_columns_present
-
-    def _extract_sample_names(self, df):
-        """
-        Extracts sample names from the 'MeanArea' columns in the DataFrame.
-
-        Args:
-            df (pd.DataFrame): The dataset to extract sample names from.
-
-        Returns:
-            list: A list of extracted sample names.
-        """
-        sample_names = set()
-        for col in df.columns:
-            match = re.match(r"MeanArea\[(.+)\]$", col)
-            if match:
-                sample_names.add(match.group(1))
-
+    def extract_sample_names(self, df):
+        """Extracts sample names from the standardized intensity columns."""
+        sample_names = {
+            match.group(1) for col in df.columns
+            if (match := re.match(r"intensity\[(.+)\]$", col))
+        }
         return list(sample_names)
-            
+
     def check_input_validity(self, df):
-        """
-        Validates if the total number of samples in the dataset matches with the experimental setup.
+        """Validates if the total number of samples matches the experiment setup."""
+        n_samples = len(self.build_mean_area_col_list(df))
+        expected_samples = len(self.experiment.full_samples_list)
+        return n_samples == expected_samples
 
-        Args:
-            df (pd.DataFrame): The dataset to be validated.
+    def build_mean_area_col_list(self, df):
+        """Returns list of sample indices from standardized intensity columns."""
+        try:
+            value_cols = []
+            for col in df.columns:
+                if col.startswith('intensity['):
+                    # Extract the sample number from intensity[sN]
+                    match = re.match(r"intensity\[s(\d+)\]$", col)
+                    if match:
+                        value_cols.append(int(match.group(1)))
+            
+            if not value_cols:
+                raise ValueError("No intensity columns found")
+                
+            return sorted(value_cols)
+            
+        except Exception as e:
+            st.error(f"Error building column list: {str(e)}")
+            return []
 
-        Returns:
-            bool: True if the total number of samples matches, False otherwise.
-        """
-        return len(self.build_mean_area_col_list(df)) == len(self.experiment.full_samples_list)
-        
-    @st.cache_data(ttl=3600)
-    def build_mean_area_col_list(_self, df):
-        """
-        Extracts and caches the list of mean area columns from the dataset.
-    
-        Args:
-            df (pd.DataFrame): The dataset from which to extract the columns.
-    
-        Returns:
-            list: The list of mean area column indices.
-    
-        Raises:
-            ValueError: If mean area columns are not found or follow an unexpected format.
-        """
-    
-        mean_area_cols = []
-        for col in df.columns:
-            match = re.match(r"MeanArea\[s(\d+)\]$", col)
-            if match:
-                mean_area_cols.append(int(match.group(1)))
-    
-        if not mean_area_cols:
-            raise ValueError("Mean area columns not found or follow an unexpected format.")
-
-        return sorted(mean_area_cols)
-
-    
     def build_group_df(self, df):
-        """
-        Constructs a DataFrame that maps sample names to their conditions.
+        """Constructs sample-to-condition mapping DataFrame."""
+        try:
+            # Get ordered list of samples
+            sample_numbers = self.build_mean_area_col_list(df)
+            sample_names = ['s' + str(i) for i in sample_numbers]
+            
+            # If we have Metabolomics Workbench data with conditions, use them
+            if self.data_format == 'Metabolomics Workbench' and 'workbench_conditions' in st.session_state:
+                conditions = []
+                for sample in sample_names:
+                    condition = st.session_state.workbench_conditions.get(sample, '')
+                    conditions.append(condition)
+            else:
+                # Use conditions from experiment setup
+                conditions = self.experiment.extensive_conditions_list
+            
+            group_df = pd.DataFrame({
+                'sample name': sample_names,
+                'condition': conditions
+            })
+            
+            return group_df
+            
+        except Exception as e:
+            st.error(f"Error building group DataFrame: {str(e)}")
+            return pd.DataFrame()
 
-        Args:
-            df (pd.DataFrame): The dataset used to construct the group DataFrame.
-
-        Returns:
-            pd.DataFrame: A DataFrame with sample names and their corresponding conditions.
-        """
-        sample_names = ['s' + str(i) for i in self.build_mean_area_col_list(df)]
-        return pd.DataFrame({'sample name': sample_names, 'condition': self.experiment.extensive_conditions_list})
-    
     def group_samples(self, group_df, selections):
         """
-        Reorders samples in the group DataFrame based on user selections.
-    
-        Args:
-            group_df (pd.DataFrame): The initial group DataFrame.
-            selections (dict): A dictionary mapping conditions to selected sample names.
-    
-        Returns:
-            pd.DataFrame: The updated group DataFrame with reordered samples.
-    
-        Raises:
-            ValueError: If selections do not align with the experiment setup or if data integrity issues are detected.
+        Reorders samples based on user selections and returns updated group_df 
+        and column mapping.
         """
-        # Check that all conditions are represented in selections
         if set(selections.keys()) != set(self.experiment.conditions_list):
             raise ValueError("Selections do not cover all experiment conditions.")
-    
-        # Verify that the total number of selected samples matches the experiment setup
-        total_selected_samples = sum(len(samples) for samples in selections.values())
-        if total_selected_samples != sum(self.experiment.number_of_samples_list):
-            raise ValueError("The number of selected samples does not match the experiment setup.")
-    
-        # Ensure no duplication or omission of samples
-        all_selected_samples = set(sample for samples in selections.values() for sample in samples)
-        if len(all_selected_samples) != total_selected_samples:
-            raise ValueError("Duplication or omission detected in selected samples.")
-    
-        ordered_samples = []
-        for condition in self.experiment.conditions_list:
-            selected_samples = selections[condition]
-            ordered_samples.extend(selected_samples)
-    
+        
+        # Create the new ordered sample list
+        ordered_samples = [
+            sample for condition in self.experiment.conditions_list
+            for sample in selections[condition]
+        ]
+        
+        # Update group_df with new sample ordering
         group_df['sample name'] = ordered_samples
-        return group_df
+        
+        # Create mapping for column reordering
+        old_to_new = {
+            f'intensity[{sample}]': f'intensity[s{i + 1}]'
+            for i, sample in enumerate(ordered_samples)
+        }
+        return group_df, old_to_new
 
-    
+    def reorder_intensity_columns(self, df, old_to_new):
+        """
+        Reorders and renames intensity columns in the DataFrame based on the mapping.
+        """
+        df = df.copy()
+        
+        # Separate static and intensity columns
+        static_cols = [col for col in df.columns if not col.startswith('intensity[')]
+        intensity_cols = sorted([col for col in df.columns if col.startswith('intensity[')])
+        
+        # Create new DataFrame and copy static columns
+        result_df = pd.DataFrame(index=df.index)
+        for col in static_cols:
+            result_df[col] = df[col]
+        
+        # Create the new intensity columns list
+        new_intensity_cols = [
+            old_to_new.get(col, col) for col in intensity_cols
+        ]
+        
+        # Copy data column by column
+        for new_col, old_col in zip(new_intensity_cols, intensity_cols):
+            result_df[new_col] = df[old_col]
+        
+        return result_df
+
     def update_sample_names(self, group_df):
-        """
-        Updates the sample names in the group DataFrame to a standardized format.
-
-        Args:
-            group_df (pd.DataFrame): The DataFrame with original sample names.
-
-        Returns:
-            pd.DataFrame: A DataFrame with old and updated sample names and conditions.
-        """
+        """Updates sample names to a standardized format."""
         total_samples = sum(self.experiment.number_of_samples_list)
-        updated_names = ['s' + str(i+1) for i in range(total_samples)]
-        return pd.DataFrame({'old name': group_df['sample name'], 'updated name': updated_names, 'condition': group_df['condition']})
+        updated_names = ['s' + str(i + 1) for i in range(total_samples)]
+        
+        name_df = pd.DataFrame({
+            'old name': group_df['sample name'],
+            'updated name': updated_names,
+            'condition': group_df['condition']
+        })
+        return name_df

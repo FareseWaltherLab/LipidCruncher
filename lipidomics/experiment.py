@@ -103,7 +103,7 @@ class Experiment:
             pd.DataFrame: The updated DataFrame with bad sample columns removed.
         """
         for sample in bad_samples:
-            col_name = f'MeanArea[{sample}]'
+            col_name = f'concentration[{sample}]'
             if col_name in dataframe.columns:
                 dataframe.drop(columns=[col_name], inplace=True)
         return dataframe
@@ -179,7 +179,7 @@ class Experiment:
     
         # Remove bad samples from the DataFrame
         for sample in bad_samples:
-            mean_area_col = f'MeanArea[{sample}]'
+            mean_area_col = f'concentration[{sample}]'
             if mean_area_col in df.columns:
                 df = df.drop(columns=[mean_area_col])
     
