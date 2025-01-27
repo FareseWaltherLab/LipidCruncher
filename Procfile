@@ -1,1 +1,1 @@
-web: sh setup.sh && streamlit run lipidsearch5.py
+web: sh setup.sh && streamlit run main_app.py
