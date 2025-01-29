@@ -7,8 +7,9 @@ LipidCruncher is a comprehensive tool designed to streamline the analysis of mas
 ## Key Features
 * ✨ Data standardization and quality control
 * 📊 Interactive visualization tools
-** Volcano plots
-** Heatmaps
-** Pathway mapping
 * 📈 Advanced statistical analysis capabilities
 * 🔍 Automated normalization and anomaly detection
+
+## Status
+🚧 $Currently in Final Development Stage$ 🚧
+LipidCruncher is in its final stages of development. Full documentation, installation instructions, and detailed usage guides will be available soon. 
