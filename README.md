@@ -6,7 +6,7 @@ LipidCruncher is a comprehensive tool designed to streamline the analysis of mas
 
 ## Key Features
 Data standardization and quality control
-📊 Interactive visualization tools
+* Interactive visualization tools
 
 Volcano plots
 Heatmaps
