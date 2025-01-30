@@ -708,22 +708,22 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     all_class_lst = list(cleaned_df['ClassKey'].unique())
     
     # Initialize or retrieve selected classes from session state
-    # Only initialize with all classes if selected_classes is empty or doesn't exist
-    if 'selected_classes' not in st.session_state or not st.session_state.selected_classes:
+    if 'selected_classes' not in st.session_state:
         st.session_state.selected_classes = all_class_lst.copy()
     
-    # Class selection with session state persistence
+    # Callback function to update session state
+    def update_selected_classes():
+        st.session_state.selected_classes = st.session_state.temp_selected_classes
+    
     selected_classes = st.multiselect(
         'Select lipid classes you would like to analyze:',
-        options=all_class_lst,  # Available options are all classes
-        default=st.session_state.selected_classes,  # Default to currently selected classes
-        key='class_selection'
+        options=all_class_lst,
+        default=all_class_lst,  # Set default to include all classes
+        key='temp_selected_classes',
+        on_change=update_selected_classes
     )
     
-    # Update session state with current selection
-    if selected_classes:  # Only update if some classes are selected
-        st.session_state.selected_classes = selected_classes
-
+    # Use the direct selection result instead of session state
     if not selected_classes:
         st.warning("Please select at least one lipid class to proceed with normalization.")
         return None
