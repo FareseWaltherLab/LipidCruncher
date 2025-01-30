@@ -101,7 +101,7 @@ class LipidomicHeatmap:
 
         # Add cluster boundaries
         cluster_sizes = clustered_df['Cluster'].value_counts().sort_index()
-        cumulative_sizes = np.cumsum(cluster_sizes.values[:-1])  # We don't need a line after the last cluster
+        cumulative_sizes = np.cumsum(cluster_sizes.values[:-1])
         
         for size in cumulative_sizes:
             fig.add_shape(
@@ -117,17 +117,16 @@ class LipidomicHeatmap:
             title='Clustered Lipidomic Heatmap',
             xaxis_title="Samples",
             yaxis_title="Lipid Molecules",
-            margin=dict(l=100, r=100, t=50, b=50)
+            margin=dict(l=100, r=100, t=50, b=50),
+            # Restore original dimensions
+            width=900,
+            height=600
         )
 
         fig.update_xaxes(tickangle=45)
         fig.update_yaxes(tickmode='array', autorange="reversed")
 
-        class_percentages = clustered_df.groupby('Cluster').apply(
-            lambda x: x.index.get_level_values('ClassKey').value_counts(normalize=True)
-        ).unstack(fill_value=0) * 100
-
-        return fig, class_percentages
+        return fig
     
     @staticmethod
     def generate_regular_heatmap(z_scores_df, selected_samples):

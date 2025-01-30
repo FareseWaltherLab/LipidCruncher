@@ -1909,72 +1909,31 @@ def display_volcano_plot(experiment, continuation_df):
     return volcano_plots
 
 def display_lipidomic_heatmap(experiment, continuation_df):
-    """
-    Displays a lipidomic heatmap in the Streamlit app, offering an interactive interface for users to 
-    select specific conditions and lipid classes for visualization. This function facilitates the exploration 
-    of lipidomic data by generating both clustered and regular heatmaps based on user input.
-    Args:
-        experiment (Experiment): An object containing detailed information about the experiment setup.
-        continuation_df (pd.DataFrame): A DataFrame containing processed lipidomics data.
-    Returns:
-        tuple: A tuple containing the regular heatmap figure and the clustered heatmap figure (if generated).
-    """
     regular_heatmap = None
     clustered_heatmap = None
     with st.expander("Lipidomic Heatmap"):
-        # UI for selecting conditions and classes
         all_conditions = experiment.conditions_list
         selected_conditions = st.multiselect("Select conditions:", all_conditions, default=all_conditions)
         selected_conditions = [condition for condition in selected_conditions if len(experiment.individual_samples_list[experiment.conditions_list.index(condition)]) > 1]
         all_classes = continuation_df['ClassKey'].unique()
         selected_classes = st.multiselect("Select lipid classes:", all_classes, default=all_classes)
         
-        # UI for selecting number of clusters
         n_clusters = st.slider("Number of clusters:", min_value=2, max_value=10, value=5)
         
         if selected_conditions and selected_classes:
-            # Extract sample names based on selected conditions
             selected_samples = [sample for condition in selected_conditions 
                                 for sample in experiment.individual_samples_list[experiment.conditions_list.index(condition)]]
-            # Process data for heatmap generation
             filtered_df, _ = lp.LipidomicHeatmap.filter_data(continuation_df, selected_conditions, selected_classes, experiment.conditions_list, experiment.individual_samples_list)
             z_scores_df = lp.LipidomicHeatmap.compute_z_scores(filtered_df)
             
-            # Generate both regular and clustered heatmaps
             regular_heatmap = lp.LipidomicHeatmap.generate_regular_heatmap(z_scores_df, selected_samples)
-            clustered_heatmap, class_percentages = lp.LipidomicHeatmap.generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters)
+            clustered_heatmap = lp.LipidomicHeatmap.generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters)
             
-            # Apply layout updates to both heatmaps
-            for heatmap, heatmap_type in [(regular_heatmap, "Regular"), (clustered_heatmap, "Clustered")]:
-                heatmap.update_layout(
-                    width=900,
-                    height=600,
-                    margin=dict(l=150, r=50, t=50, b=100),
-                    xaxis_tickangle=-45,
-                    yaxis_title="Lipid Molecules",
-                    xaxis_title="Samples",
-                    title=f"Lipidomic Heatmap ({heatmap_type})",
-                    font=dict(size=10)
-                )
-                heatmap.update_traces(colorbar=dict(len=0.9, thickness=15))
-            
-            # Allow users to choose which heatmap to display
+            # Visualization code remains the same
             heatmap_type = st.radio("Select Heatmap Type", ["Clustered", "Regular"], index=0)
             current_heatmap = clustered_heatmap if heatmap_type == "Clustered" else regular_heatmap
-            
-            # Display the selected heatmap
             st.plotly_chart(current_heatmap, use_container_width=True)
             
-            # Display cluster information
-            if heatmap_type == "Clustered":
-                st.subheader(f"Cluster Information (Number of clusters: {n_clusters})")
-                st.dataframe(class_percentages.round(2))
-                
-                # Create a downloadable CSV for cluster information
-                csv_cluster_info = convert_df(class_percentages.reset_index())
-                st.download_button("Download Cluster Information CSV", csv_cluster_info, 'cluster_information.csv', 'text/csv')
-            
-            # Download buttons
             plotly_svg_download_button(current_heatmap, f"Lipidomic_{heatmap_type}_Heatmap.svg")
             csv_download = convert_df(z_scores_df.reset_index())
             st.download_button("Download CSV", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
