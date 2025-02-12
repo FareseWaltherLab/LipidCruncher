@@ -235,7 +235,7 @@ def update_session_state(name_df, experiment, bqc_label):
 def display_format_selection():
     return st.sidebar.selectbox(
         'Select Data Format',
-        ['LipidSearch 5.0', 'Generic Format', 'Metabolomics Workbench']
+        ['Generic Format', 'Metabolomics Workbench', 'LipidSearch 5.0']
     )
 
 def display_format_requirements(data_format):
@@ -290,6 +290,7 @@ def display_format_requirements(data_format):
     else:
         st.info("""
         **Dataset Requirements for Generic Format**
+        
         IMPORTANT: Your dataset must contain ONLY these columns in this order:
         
         1. **First Column - Lipid Names:**
