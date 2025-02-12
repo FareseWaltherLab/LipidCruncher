@@ -28,8 +28,8 @@ class DataFormatHandler:
             
             lipid_name = str(lipid_name).strip()
             
-            # Remove all ;0 suffixes
-            lipid_name = re.sub(r';0(?=[\s/_)]|$)', '', lipid_name)
+            # Remove all ;N suffixes
+            lipid_name = re.sub(r';[0-9]+(?=[\s/_)]|$)', '', lipid_name)
             
             # Extract deuteration or other modifications if present
             modification = ""
