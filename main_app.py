@@ -1162,16 +1162,25 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
                     mime="application/pdf",
                 )
                 
-                # Close the figures to free up memory after PDF generation
-                plt.close(box_plot_fig1)
-                plt.close(box_plot_fig2)
-                plt.close('all')  # This closes all remaining matplotlib figures
+                # Close only matplotlib figures, not Plotly figures
+                plt.close('all')  # This closes all matplotlib figures
+                
             else:
                 st.error("Failed to generate PDF report. Please check the logs for details.")
         else:
             st.warning("Some plots are missing. Unable to generate PDF report.")
             
 def display_box_plots(continuation_df, experiment):
+    """
+    Display box plots using Plotly for improved interactivity and readability.
+    
+    Args:
+        continuation_df (pd.DataFrame): The dataset to visualize
+        experiment (Experiment): Experiment object containing sample information
+        
+    Returns:
+        tuple: Two Plotly figure objects (missing values plot, box plot)
+    """
     # Initialize a counter in session state if it doesn't exist
     if 'box_plot_counter' not in st.session_state:
         st.session_state.box_plot_counter = 0
@@ -1180,51 +1189,71 @@ def display_box_plots(continuation_df, experiment):
     st.session_state.box_plot_counter += 1
     
     # Generate a unique identifier based on the current data and counter
-    unique_id = hashlib.md5(f"{str(continuation_df.index.tolist())}_{st.session_state.box_plot_counter}".encode()).hexdigest()
+    unique_id = hashlib.md5(
+        f"{str(continuation_df.index.tolist())}_{st.session_state.box_plot_counter}".encode()
+    ).hexdigest()
     
     expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
     with expand_box_plot:
-        # Creating a deep copy for visualization to keep the original continuation_df intact
+        # Creating a deep copy for visualization
         visualization_df = continuation_df.copy(deep=True)
         
         # Ensure the columns reflect the current state of the DataFrame
-        current_samples = [sample for sample in experiment.full_samples_list if f'concentration[{sample}]' in visualization_df.columns]
+        current_samples = [
+            sample for sample in experiment.full_samples_list 
+            if f'concentration[{sample}]' in visualization_df.columns
+        ]
         
         mean_area_df = lp.BoxPlot.create_mean_area_df(visualization_df, current_samples)
         zero_values_percent_list = lp.BoxPlot.calculate_missing_values_percentage(mean_area_df)
         
+        st.subheader("Missing Values Distribution")
+        
         # Generate and display the first plot (Missing Values Distribution)
         fig1 = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
-        st.pyplot(fig1)
-        matplotlib_svg_download_button(fig1, "missing_values_distribution.svg")
-
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        # Add SVG download button for the missing values plot
+        plotly_svg_download_button(fig1, "missing_values_distribution.svg")
+        
         # Data for download (Missing Values)
         missing_values_data = np.vstack((current_samples, zero_values_percent_list)).T
-        missing_values_csv = convert_df(pd.DataFrame(missing_values_data, columns=["Sample", "Percentage Missing"]))
-        st.download_button(
-            label="Download CSV",
-            data=missing_values_csv,
-            file_name="missing_values_data.csv",
-            mime='text/csv',
-            key=f"download_missing_values_data_{unique_id}"
-        )
+        missing_values_df = pd.DataFrame(missing_values_data, columns=["Sample", "Percentage Missing"])
+        missing_values_csv = convert_df(missing_values_df)
         
-        st.write('--------------------------------------------------------------------------------')
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="Download CSV",
+                data=missing_values_csv,
+                file_name="missing_values_data.csv",
+                mime='text/csv',
+                key=f"download_missing_values_data_{unique_id}"
+            )
+        
+        st.markdown("---")
+        
+        st.subheader("Box Plot of Non-Zero Concentrations")
         
         # Generate and display the second plot (Box Plot)
         fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
-        st.pyplot(fig2)
-        matplotlib_svg_download_button(fig2, "box_plot.svg")
+        st.plotly_chart(fig2, use_container_width=True)
+        
+        # Add SVG download button for the box plot
+        plotly_svg_download_button(fig2, "box_plot.svg")
         
         # Provide option to download the raw data for Box Plot
         csv_data = convert_df(mean_area_df)
-        st.download_button(
-            label="Download CSV",
-            data=csv_data,
-            file_name="box_plot_data.csv",
-            mime='text/csv',
-            key=f"download_box_plot_data_{unique_id}"
-        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="Download CSV",
+                data=csv_data,
+                file_name="box_plot_data.csv",
+                mime='text/csv',
+                key=f"download_box_plot_data_{unique_id}"
+            )
     
     # Return the figure objects for later use in PDF generation
     return fig1, fig2
@@ -1940,23 +1969,25 @@ def display_lipidomic_heatmap(experiment, continuation_df):
             st.download_button("Download CSV", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
     return regular_heatmap, clustered_heatmap
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts, saturation_plots, volcano_plots, pathway_visualization):
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
+                     heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts, 
+                     saturation_plots, volcano_plots, pathway_visualization):
     pdf_buffer = io.BytesIO()
     
     try:
         pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
         
         # Page 1: Box Plots
-        img_buffer1 = io.BytesIO()
-        box_plot_fig1.savefig(img_buffer1, format='png', dpi=300, bbox_inches='tight')
-        img_buffer1.seek(0)
-        img1 = ImageReader(img_buffer1)
+        # Convert Plotly figures to PNG for the box plots
+        box_plot1_bytes = pio.to_image(box_plot_fig1, format='png', width=800, height=600, scale=2)
+        box_plot2_bytes = pio.to_image(box_plot_fig2, format='png', width=800, height=600, scale=2)
+        
+        # Add first box plot
+        img1 = ImageReader(io.BytesIO(box_plot1_bytes))
         pdf.drawImage(img1, 50, 400, width=500, height=300, preserveAspectRatio=True)
         
-        img_buffer2 = io.BytesIO()
-        box_plot_fig2.savefig(img_buffer2, format='png', dpi=300, bbox_inches='tight')
-        img_buffer2.seek(0)
-        img2 = ImageReader(img_buffer2)
+        # Add second box plot
+        img2 = ImageReader(io.BytesIO(box_plot2_bytes))
         pdf.drawImage(img2, 50, 50, width=500, height=300, preserveAspectRatio=True)
         
         # Page 2: BQC Plot
@@ -1970,17 +2001,17 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
         pdf.showPage()
         pdf.setPageSize(landscape(letter))
         if retention_time_plot is not None:
-            svg_bytes = pio.to_image(retention_time_plot, format='svg')
-            drawing = svg2rlg(io.BytesIO(svg_bytes))
-            renderPDF.draw(drawing, pdf, 50, 50)
+            rt_bytes = pio.to_image(retention_time_plot, format='png', width=1000, height=700, scale=2)
+            rt_img = ImageReader(io.BytesIO(rt_bytes))
+            pdf.drawImage(rt_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
         
         # Page 4: PCA Plot
         pdf.showPage()
         pdf.setPageSize(landscape(letter))
         if pca_plot is not None:
-            svg_bytes = pio.to_image(pca_plot, format='svg')
-            drawing = svg2rlg(io.BytesIO(svg_bytes))
-            renderPDF.draw(drawing, pdf, 50, 50)
+            pca_bytes = pio.to_image(pca_plot, format='png', width=1000, height=700, scale=2)
+            pca_img = ImageReader(io.BytesIO(pca_bytes))
+            pdf.drawImage(pca_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
         
         # Pages for Correlation Plots
         for condition, corr_fig in correlation_plots.items():

@@ -1,25 +1,18 @@
 import streamlit as st
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import numpy as np
+from plotly.subplots import make_subplots
 
 class BoxPlot:
     """
-    Class for generating and displaying box plots for lipidomics data analysis.
+    Class for generating and displaying box plots for lipidomics data analysis using Plotly.
     """
     
-    def __init__(self):
-        pass
-
     @staticmethod
     @st.cache_data(ttl=3600)
     def create_mean_area_df(df, full_samples_list):
         """
         Creates a DataFrame containing only the 'concentration' columns from the provided DataFrame.
-        Args:
-            df (pd.DataFrame): The dataset to be processed.
-            full_samples_list (list[str]): List of sample names.
-        Returns:
-            pd.DataFrame: A DataFrame with the 'concentration' columns.
         """
         concentration_cols = [f'concentration[{sample}]' for sample in full_samples_list]
         return df[concentration_cols]
@@ -29,48 +22,118 @@ class BoxPlot:
     def calculate_missing_values_percentage(mean_area_df):
         """
         Calculates the percentage of missing values for each sample in the experiment.
-
-        Args:
-            mean_area_df (pd.DataFrame): DataFrame containing mean area data for the samples.
-
-        Returns:
-            list: A list containing the percentage of missing values for each sample.
         """
-        return [len(mean_area_df[mean_area_df[col] == 0]) / len(mean_area_df) * 100 for col in mean_area_df.columns]
-    
+        return [len(mean_area_df[mean_area_df[col] == 0]) / len(mean_area_df) * 100 
+                for col in mean_area_df.columns]
+
     @staticmethod
     def plot_missing_values(full_samples_list, zero_values_percent_list):
         """
-        Plots a bar chart of missing values percentage for each sample.
-
-        Args:
-            full_samples_list (list[str]): List of sample names.
-            zero_values_percent_list (list[float]): List of missing value percentages for each sample.
+        Creates an interactive horizontal bar chart of missing values percentage using Plotly.
         """
-        plt.rcdefaults()
-        fig, ax = plt.subplots()
-        ax.barh(full_samples_list, zero_values_percent_list)
-        ax.set_xlabel('Percentage of Missing Values')
-        ax.set_ylabel('Sample')
-        ax.set_title('Missing Values Distribution')
+        # Calculate dynamic height based on number of samples
+        dynamic_height = max(400, len(full_samples_list) * 25)
+        # Add extra padding for title
+        total_height = dynamic_height + 60  # Added 60px for title space
+        
+        fig = go.Figure()
+        
+        # Add horizontal bar chart
+        fig.add_trace(go.Bar(
+            y=full_samples_list,
+            x=zero_values_percent_list,
+            orientation='h',
+            text=[f'{val:.1f}%' for val in zero_values_percent_list],
+            textposition='outside',
+            textfont=dict(size=12, color='black'),  # Set text color to black
+            marker_color='lightblue',
+            name=''  # Empty name to avoid legend
+        ))
+        
+        # Update layout with improved spacing and black text
+        fig.update_layout(
+            title={
+                'text': 'Missing Values Distribution',
+                'font': {'size': 20, 'color': 'black'},  # Set title color to black
+                'y': 0.98,  # Moved title up
+                'x': 0.5,
+                'xanchor': 'center',
+                'yanchor': 'top'
+            },
+            xaxis_title={
+                'text': 'Percentage of Missing Values',
+                'font': {'size': 14, 'color': 'black'}  # Set axis title color to black
+            },
+            yaxis_title={
+                'text': 'Sample',
+                'font': {'size': 14, 'color': 'black'}  # Set axis title color to black
+            },
+            yaxis={'tickfont': {'size': 12, 'color': 'black'}},  # Set y-axis tick labels to black
+            xaxis={'tickfont': {'size': 12, 'color': 'black'}},  # Set x-axis tick labels to black
+            margin={'l': 20, 'r': 20, 't': 60, 'b': 20},  # Increased top margin for title
+            showlegend=False,
+            height=total_height,  # Use new total height
+            width=800,
+            plot_bgcolor='white'  # White background
+        )
+        
+        # Add gridlines
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        
         return fig
 
     @staticmethod
     def plot_box_plot(mean_area_df, full_samples_list):
         """
-        Plots a box plot for the non-zero values in the mean area DataFrame.
-
-        Args:
-            mean_area_df (pd.DataFrame): DataFrame containing mean area data for the samples.
-            full_samples_list (list[str]): List of sample names.
+        Creates an interactive box plot using Plotly.
         """
-        log_transformed_data = [list(np.log10(mean_area_df[col][mean_area_df[col] > 0])) for col in mean_area_df.columns]
+        # Prepare data
+        log_transformed_data = [list(np.log10(mean_area_df[col][mean_area_df[col] > 0])) 
+                              for col in mean_area_df.columns]
         
-        plt.rcdefaults()
-        fig, ax = plt.subplots()
-        plt.boxplot(log_transformed_data)
-        ax.set_xlabel('Sample')
-        ax.set_ylabel('log10(Concentration)')
-        ax.set_title('Box Plot of Non-Zero Concentrations')
-        ax.set_xticklabels(full_samples_list)
+        fig = go.Figure()
+        
+        # Add box plots
+        for i, data in enumerate(log_transformed_data):
+            fig.add_trace(go.Box(
+                y=data,
+                name=full_samples_list[i],
+                boxpoints='outliers',  # Show outliers
+                marker_color='lightblue',
+                line_color='darkblue',
+                showlegend=False
+            ))
+        
+        # Update layout with improved spacing and black text
+        fig.update_layout(
+            title={
+                'text': 'Box Plot of Non-Zero Concentrations',
+                'font': {'size': 20, 'color': 'black'},  # Set title color to black
+                'y': 0.98,  # Moved title up
+                'x': 0.5,
+                'xanchor': 'center',
+                'yanchor': 'top'
+            },
+            xaxis_title={
+                'text': 'Sample',
+                'font': {'size': 14, 'color': 'black'}  # Set axis title color to black
+            },
+            yaxis_title={
+                'text': 'log10(Concentration)',
+                'font': {'size': 14, 'color': 'black'}  # Set axis title color to black
+            },
+            xaxis={
+                'tickangle': 45,
+                'tickfont': {'size': 12, 'color': 'black'}  # Set x-axis tick labels to black
+            },
+            yaxis={'tickfont': {'size': 12, 'color': 'black'}},  # Set y-axis tick labels to black
+            margin={'l': 20, 'r': 20, 't': 60, 'b': 120},  # Increased top margin for title
+            height=600,
+            width=max(800, len(full_samples_list) * 50),  # Dynamic width based on number of samples
+            plot_bgcolor='white'  # White background
+        )
+        
+        # Add gridlines
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        
         return fig
