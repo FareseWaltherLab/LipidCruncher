@@ -75,7 +75,23 @@ class CleanGenericData:
             return pd.DataFrame()
 
     def data_cleaner(self, df, name_df, experiment):
-        """Main method to clean generic format data."""
+        """
+        Main method to clean generic format data.
+        
+        This method performs several cleaning operations:
+        1. Removes rows with invalid lipid names (empty, '#', special characters only)
+        2. Removes rows where all intensity values are zero or null
+        3. Converts missing values to zero
+        4. Removes duplicate entries based on LipidMolec
+        
+        Args:
+            df (pd.DataFrame): Input DataFrame to clean
+            name_df (pd.DataFrame): DataFrame containing name mappings
+            experiment (Experiment): Experiment object containing setup information
+            
+        Returns:
+            pd.DataFrame: Cleaned DataFrame or empty DataFrame if error occurs
+        """
         try:
             cleaned_df = df.copy()
             
@@ -84,14 +100,80 @@ class CleanGenericData:
             if cleaned_df.empty:
                 return cleaned_df
                 
+            # Remove rows with invalid lipid names
+            cleaned_df = self._remove_invalid_lipid_rows(cleaned_df)
+            if cleaned_df.empty:
+                st.error("No valid data remains after removing invalid lipid names")
+                return cleaned_df
+                
             cleaned_df = self._update_column_names(cleaned_df, name_df)
             cleaned_df = self._convert_columns_to_numeric(cleaned_df, experiment.full_samples_list)
+            
+            # Remove duplicates based on LipidMolec
+            cleaned_df = cleaned_df.drop_duplicates(subset=['LipidMolec'])
+            
+            # Get intensity columns
+            intensity_cols = [col for col in cleaned_df.columns if col.startswith('intensity[')]
+            
+            # Remove rows where all intensity values are zero or null
+            cleaned_df = cleaned_df[~(cleaned_df[intensity_cols] == 0).all(axis=1)]
+            cleaned_df = cleaned_df[~cleaned_df[intensity_cols].isnull().all(axis=1)]
+            
             cleaned_df = cleaned_df.reset_index(drop=True)
             
             return cleaned_df
             
         except Exception as e:
             st.error(f"Error in data cleaning: {str(e)}")
+            return pd.DataFrame()
+    
+    def _remove_invalid_lipid_rows(self, df):
+        """
+        Remove rows with invalid lipid names.
+        
+        Invalid lipid names include:
+        - Empty strings or pure whitespace
+        - Single special characters like '#'
+        - Strings containing only special characters
+        
+        Args:
+            df (pd.DataFrame): DataFrame to clean
+            
+        Returns:
+            pd.DataFrame: DataFrame with invalid lipid rows removed
+        """
+        try:
+            # Create a copy to avoid modifying the original
+            df_copy = df.copy()
+            
+            # Get the name of the lipid molecule column (case insensitive)
+            lipid_col = [col for col in df_copy.columns if col.lower() == 'lipidmolec'][0]
+            
+            # Define invalid patterns
+            invalid_patterns = [
+                r'^\s*$',           # Empty strings or pure whitespace
+                r'^[#@$%&*]+$',     # Strings of only special characters
+                r'^[0-9]+$',        # Strings of only numbers
+                r'^#\s*$',          # Just # with optional whitespace
+                r'^nan$',           # Literal 'nan'
+                r'^null$',          # Literal 'null'
+                r'^none$'           # Literal 'none'
+            ]
+            
+            # Combine patterns
+            combined_pattern = '|'.join(invalid_patterns)
+            
+            # Create mask for valid lipid names
+            valid_mask = ~df_copy[lipid_col].str.match(combined_pattern, case=False, na=True)
+            
+            # Also remove NaN values
+            valid_mask = valid_mask & ~df_copy[lipid_col].isna()
+            
+            # Apply the mask and return
+            return df_copy[valid_mask]
+            
+        except Exception as e:
+            st.error(f"Error removing invalid lipid rows: {str(e)}")
             return pd.DataFrame()
     
     def extract_internal_standards(self, df):
