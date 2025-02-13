@@ -62,18 +62,20 @@ class BoxPlot:
             },
             xaxis_title={
                 'text': 'Percentage of Missing Values',
-                'font': {'size': 14, 'color': 'black'}  # Set axis title color to black
+                'font': {'size': 14, 'color': 'black'},  # Set axis title color to black
+                'standoff': 15  # Add small space between axis title and tick labels
             },
             yaxis_title={
                 'text': 'Sample',
-                'font': {'size': 14, 'color': 'black'}  # Set axis title color to black
+                'font': {'size': 14, 'color': 'black'},  # Set axis title color to black
+                'standoff': 15  # Add small space between axis title and tick labels
             },
             yaxis={'tickfont': {'size': 12, 'color': 'black'}},  # Set y-axis tick labels to black
             xaxis={'tickfont': {'size': 12, 'color': 'black'}},  # Set x-axis tick labels to black
-            margin={'l': 20, 'r': 20, 't': 60, 'b': 20},  # Increased top margin for title
+            margin={'l': 100, 'r': 100, 't': 60, 'b': 60},  # Moderately increased margins
             showlegend=False,
             height=total_height,  # Use new total height
-            width=800,
+            width=900,  # Slightly increased width to prevent text cutoff
             plot_bgcolor='white'  # White background
         )
         
@@ -116,20 +118,23 @@ class BoxPlot:
             },
             xaxis_title={
                 'text': 'Sample',
-                'font': {'size': 14, 'color': 'black'}  # Set axis title color to black
+                'font': {'size': 14, 'color': 'black'},  # Set axis title color to black
+                'standoff': 15  # Add small space between axis title and tick labels
             },
             yaxis_title={
                 'text': 'log10(Concentration)',
-                'font': {'size': 14, 'color': 'black'}  # Set axis title color to black
+                'font': {'size': 14, 'color': 'black'},  # Set axis title color to black
+                'standoff': 15  # Add small space between axis title and tick labels
             },
             xaxis={
                 'tickangle': 45,
-                'tickfont': {'size': 12, 'color': 'black'}  # Set x-axis tick labels to black
+                'tickfont': {'size': 12, 'color': 'black'},  # Set x-axis tick labels to black
+                'title_standoff': 30  # Add moderate space for rotated labels
             },
             yaxis={'tickfont': {'size': 12, 'color': 'black'}},  # Set y-axis tick labels to black
-            margin={'l': 20, 'r': 20, 't': 60, 'b': 120},  # Increased top margin for title
+            margin={'l': 100, 'r': 100, 't': 60, 'b': 100},  # Moderately increased margins
             height=600,
-            width=max(800, len(full_samples_list) * 50),  # Dynamic width based on number of samples
+            width=900,  # Slightly increased width
             plot_bgcolor='white'  # White background
         )
         
