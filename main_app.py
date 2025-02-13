@@ -1508,12 +1508,24 @@ def display_pca_analysis(continuation_df, experiment):
     return continuation_df, pca_plot
 
 def display_abundance_bar_charts(experiment, continuation_df):
+    """
+    Display abundance bar charts with statistical analysis for selected conditions and lipid classes.
+    
+    Args:
+        experiment: Experiment object containing experimental setup information
+        continuation_df: DataFrame containing the lipidomics data
+        
+    Returns:
+        tuple: (linear_fig, log2_fig) containing the Plotly figures for both scales
+    """
     with st.expander("Class Concentration Bar Chart"):
-        experiment = st.session_state.experiment
+        # Get valid conditions (more than one sample)
+        valid_conditions = [
+            cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) 
+            if num_samples > 1
+        ]
         
-        # Filter out conditions with only one sample
-        valid_conditions = [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1]
-        
+        # Select conditions and classes
         selected_conditions_list = st.multiselect(
             'Add or remove conditions', 
             valid_conditions, 
@@ -1585,22 +1597,27 @@ def display_abundance_bar_charts(experiment, continuation_df):
 
             # Generate linear scale chart
             linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
-                continuation_df, 
-                experiment.full_samples_list, 
-                experiment.individual_samples_list, 
-                experiment.conditions_list, 
-                selected_conditions_list, 
-                selected_classes_list, 
-                'linear scale',
-                statistical_results
+                df=continuation_df,
+                full_samples_list=experiment.full_samples_list,
+                individual_samples_list=experiment.individual_samples_list,
+                conditions_list=experiment.conditions_list,
+                selected_conditions=selected_conditions_list,
+                selected_classes=selected_classes_list,
+                mode='linear scale',
+                anova_results=statistical_results
             )
+            
             if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
-                st.pyplot(linear_fig)
                 st.write("Linear Scale")
+                st.plotly_chart(linear_fig)
                 
-                matplotlib_svg_download_button(linear_fig, "abundance_bar_chart_linear.svg")
-                
-                try:
+                # Add download options
+                col1, col2 = st.columns(2)
+                with col1:
+                    # Add SVG download button for the linear scale plot
+                    plotly_svg_download_button(linear_fig, "abundance_bar_chart_linear.svg")
+                with col2:
+                    # Add CSV download for the data
                     csv_data = convert_df(abundance_df)
                     st.download_button(
                         label="Download CSV",
@@ -1609,27 +1626,30 @@ def display_abundance_bar_charts(experiment, continuation_df):
                         mime='text/csv',
                         key='abundance_chart_download_linear'
                     )
-                except Exception as e:
-                    st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
             
             # Generate log2 scale chart
             log2_fig, abundance_df_log2 = lp.AbundanceBarChart.create_abundance_bar_chart(
-                continuation_df, 
-                experiment.full_samples_list, 
-                experiment.individual_samples_list, 
-                experiment.conditions_list, 
-                selected_conditions_list, 
-                selected_classes_list, 
-                'log2 scale',
-                statistical_results
+                df=continuation_df,
+                full_samples_list=experiment.full_samples_list,
+                individual_samples_list=experiment.individual_samples_list,
+                conditions_list=experiment.conditions_list,
+                selected_conditions=selected_conditions_list,
+                selected_classes=selected_classes_list,
+                mode='log2 scale',
+                anova_results=statistical_results
             )
+            
             if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
-                st.pyplot(log2_fig)
                 st.write("Log2 Scale")
+                st.plotly_chart(log2_fig)
                 
-                matplotlib_svg_download_button(log2_fig, "abundance_bar_chart_log2.svg")
-                
-                try:
+                # Add download options
+                col1, col2 = st.columns(2)
+                with col1:
+                    # Add SVG download button for the log2 scale plot
+                    plotly_svg_download_button(log2_fig, "abundance_bar_chart_log2.svg")
+                with col2:
+                    # Add CSV download for the data
                     csv_data_log2 = convert_df(abundance_df_log2)
                     st.download_button(
                         label="Download CSV",
@@ -1638,8 +1658,6 @@ def display_abundance_bar_charts(experiment, continuation_df):
                         mime='text/csv',
                         key='abundance_chart_download_log2'
                     )
-                except Exception as e:
-                    st.error(f"Failed to convert DataFrame to CSV: {str(e)}")
             
             # Check if any conditions were removed due to having only one sample
             removed_conditions = set(experiment.conditions_list) - set(valid_conditions)
@@ -1652,7 +1670,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
         return linear_fig, log2_fig
 
 def display_statistical_details(statistical_results, selected_conditions):
-    """Display detailed statistical analysis"""
+    """Display detailed statistical analysis results."""
     st.write("### Detailed Statistical Analysis")
     
     if len(selected_conditions) == 2:
@@ -1669,9 +1687,13 @@ def display_statistical_details(statistical_results, selected_conditions):
         if results['test'] == 't-test':
             st.write(f"t-statistic: {results['statistic']:.3f}")
             st.write(f"p-value: {p_value:.3f}")
+            if 'adjusted p-value' in results:
+                st.write(f"Adjusted p-value: {results['adjusted p-value']:.3f}")
         else:  # ANOVA
             st.write(f"F-statistic: {results['statistic']:.3f}")
             st.write(f"p-value: {p_value:.3f}")
+            if 'adjusted p-value' in results:
+                st.write(f"Adjusted p-value: {results['adjusted p-value']:.3f}")
             
             if results.get('tukey_results'):
                 st.write("\nTukey's test pairwise comparisons:")
