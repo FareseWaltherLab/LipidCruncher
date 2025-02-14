@@ -1,7 +1,7 @@
 import numpy as np
-import pandas as pd
-import logging
+import pandas as pd 
 import plotly.graph_objects as go
+import plotly.express as px
 import streamlit as st
 from scipy import stats
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
@@ -238,6 +238,12 @@ class AbundanceBarChart:
                                  mode: str,
                                  anova_results: Optional[Dict] = None) -> Tuple[go.Figure, Optional[pd.DataFrame]]:
         """Create abundance bar chart using Plotly."""
+        # Add this at the start of the create_abundance_bar_chart method
+        colors = {
+            condition: px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+            for i, condition in enumerate(selected_conditions)
+        }
+        
         try:
             # Data validation and preparation
             expected_columns = ['ClassKey'] + [f"concentration[{sample}]" for sample in full_samples_list]
@@ -292,7 +298,8 @@ class AbundanceBarChart:
                     orientation='h',
                     error_x=error_x,
                     width=bar_width,
-                    showlegend=True
+                    showlegend=True,
+                    marker_color=colors[condition]
                 ))
             
             # Add significance markers if available

@@ -2051,11 +2051,10 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
             if chart is not None:
                 pdf.showPage()
                 pdf.setPageSize(landscape(letter))
-                img_buffer = io.BytesIO()
-                chart.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
-                img_buffer.seek(0)
-                img = ImageReader(img_buffer)
-                pdf.drawImage(img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+                # Convert Plotly figure to PNG bytes
+                chart_bytes = pio.to_image(chart, format='png', width=1000, height=700, scale=2)
+                chart_img = ImageReader(io.BytesIO(chart_bytes))
+                pdf.drawImage(chart_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
                 pdf.drawString(50, 30, f"Abundance Bar Chart ({scale} scale)")
         
         # Add Abundance Pie Charts
