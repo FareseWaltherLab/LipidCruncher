@@ -1738,11 +1738,19 @@ def display_abundance_pie_charts(experiment, continuation_df):
 def display_saturation_plots(experiment, continuation_df):
     saturation_plots = {}
     with st.expander("Saturation Plots"):
+        # Check if we have any detailed FA compositions
+        has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
+        
+        if not has_detailed_fa:
+            st.warning("""
+            ⚠️ Note: Saturation plots work best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            Your data appears to use total composition (e.g., PC(34:1)) which only shows total 
+            carbons and double bonds. This may affect the accuracy of the saturation analysis.
+            """)
+
         full_samples_list = experiment.full_samples_list
         
-        # Get all unique classes from the DataFrame
         all_classes = continuation_df['ClassKey'].unique().tolist()
-        
         selected_classes_list = st.multiselect('Select classes for the saturation plot:', all_classes, all_classes)
         
         if selected_classes_list:
