@@ -625,35 +625,19 @@ def handle_standards_upload(normalizer):
     - CSV file (.csv)
     - Must contain column: 'LipidMolec'
     - The standards must exist in your dataset
-    
     """)
     
     uploaded_file = st.file_uploader("Upload CSV file with standards", type=['csv'])
     if uploaded_file is not None:
         try:
-            # Read the CSV file
             standards_df = pd.read_csv(uploaded_file)
-            
-            # Validate the DataFrame has the required column
-            if 'LipidMolec' not in standards_df.columns:
-                st.error("The standards file must contain a 'LipidMolec' column")
-                st.write("Found columns:", list(standards_df.columns))
-                return None
-                
-            # Debug info - show the first few rows
-            st.write("Preview of uploaded standards data:")
-            st.write(standards_df.head())
-                
-            # Process the standards file
             return normalizer.process_standards_file(standards_df, st.session_state.cleaned_df)
-            
         except ValueError as ve:
             st.error(str(ve))
         except Exception as e:
             st.error(f"Error reading standards file: {str(e)}")
-            import traceback
-            st.error(traceback.format_exc())
     return None
+
 
 def manage_internal_standards(normalizer):
     """Handle internal standards management workflow."""
