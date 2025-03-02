@@ -87,12 +87,34 @@ class CleanLipidSearchData:
 
     @st.cache_data(ttl=3600)
     def extract_internal_standards(_self, df):
-        patterns = [
-            r'\+D\d+', r':\(s\)', r'\+\d*C\d*', r'\+\d*N\d*', r'SPLASH'
-        ]
-        combined_pattern = '|'.join(f'(?:{pattern})' for pattern in patterns)
-        internal_standards_df = df[df['LipidMolec'].str.contains(combined_pattern, regex=True, na=False)].reset_index(drop=True)
-        non_standards_df = df[~df['LipidMolec'].str.contains(combined_pattern, regex=True, na=False)].reset_index(drop=True)
+        """
+        Extracts internal standards from the dataframe with a robust approach.
+        
+        True internal standards are identified as:
+        1. Deuterium labeling patterns (e.g., +D7, -D7)
+        2. The :(s) notation, EXCEPT when combined with known chemical modifiers
+        """
+        # Create a copy of the dataframe
+        df = df.copy()
+        
+        # First identify true deuterium-labeled standards directly
+        deuterium_mask = df['LipidMolec'].str.contains(r'[+-]D\d+', regex=True, na=False)
+        
+        # Then handle the :(s) notation separately
+        standard_notation_mask = df['LipidMolec'].str.contains(r':\(s\)', regex=True, na=False)
+        
+        # Create a separate mask for chemical modifications (+XXXX)
+        chemical_mod_mask = df['LipidMolec'].str.contains(r'\+[A-Z]{2,}', regex=True, na=False)
+        
+        # A true standard should either:
+        # 1. Have deuterium labeling, OR
+        # 2. Have :(s) notation WITHOUT chemical modifications
+        standards_mask = deuterium_mask | (standard_notation_mask & ~chemical_mod_mask)
+        
+        # Extract standards and non-standards
+        internal_standards_df = df[standards_mask].reset_index(drop=True)
+        non_standards_df = df[~standards_mask].reset_index(drop=True)
+        
         return non_standards_df, internal_standards_df
 
     @st.cache_data(ttl=3600)
