@@ -30,11 +30,46 @@ class CleanLipidSearchData:
         return df
 
     def _standardize_lipid_name(self, class_key, fa_key):
+        """
+        Standardizes lipid names with special handling for Ch class molecules
+        and null/NaN FAKey values.
+        
+        Args:
+            class_key (str): The lipid class key (e.g., PC, PE, Ch)
+            fa_key (str, float, None): The fatty acid composition, may be NaN
+            
+        Returns:
+            str: Standardized lipid name
+        """
+        # Handle null/NaN FAKey
+        if pd.isna(fa_key):
+            fa_key = ""
+        else:
+            # Convert to string if it's not already
+            fa_key = str(fa_key)
+        
+        # Special handling for cholesterol class - they often have different formatting
+        if class_key == 'Ch':
+            # Check if fa_key is empty or just contains deuterium labeling
+            if not fa_key or fa_key.startswith('D'):
+                # Handle different formats of Ch
+                if fa_key.startswith('D'):
+                    return f"Ch-{fa_key}()"
+                else:
+                    return f"Ch()"
+        
+        # Standard processing for other lipid classes
         if '+D' in fa_key:
             fa_key, internal_standard = fa_key.split('+', 1)
             internal_standard = '+' + internal_standard
         else:
             internal_standard = ''
+            
+        # Handle empty fa_key
+        if not fa_key or fa_key == '()':
+            return f"{class_key}(){internal_standard}"
+            
+        # Sort fatty acids for consistent representation
         sorted_fatty_acids = '_'.join(sorted(fa_key.strip('()').split('_')))
         return f"{class_key}({sorted_fatty_acids}){internal_standard}"
 
@@ -72,7 +107,29 @@ class CleanLipidSearchData:
 
     @st.cache_data(ttl=3600)
     def _remove_missing_fa_keys(_self, df):
-        return df.dropna(subset=['FAKey'])
+        """
+        Removes rows with missing FA keys, with exceptions for:
+        1. Ch class molecules
+        2. Ch-D standard molecules (like Ch-D7)
+        
+        Args:
+            df (pd.DataFrame): Input dataframe
+            
+        Returns:
+            pd.DataFrame: Filtered dataframe
+        """
+        # Create a mask for rows to keep:
+        # Either they have a non-null FAKey, OR
+        # They belong to the Ch class, OR
+        # Their LipidMolec starts with "Ch-D"
+        keep_mask = (
+            df['FAKey'].notna() | 
+            (df['ClassKey'] == 'Ch') | 
+            df['LipidMolec'].str.contains(r'^Ch-D', regex=True, na=False)
+        )
+        
+        # Return the filtered dataframe
+        return df[keep_mask]
 
     def final_cleanup(self, df):
         return df.drop(columns=['TotalSmpIDRate(%)']).reset_index(drop=True)
@@ -88,28 +145,33 @@ class CleanLipidSearchData:
     @st.cache_data(ttl=3600)
     def extract_internal_standards(_self, df):
         """
-        Extracts internal standards from the dataframe with a robust approach.
+        Extracts internal standards from the dataframe with improved pattern matching.
         
         True internal standards are identified as:
         1. Deuterium labeling patterns (e.g., +D7, -D7)
-        2. The :(s) notation, EXCEPT when combined with known chemical modifiers
+        2. Ch-D7 pattern specifically
+        3. The :(s) notation, EXCEPT when combined with known chemical modifiers
         """
         # Create a copy of the dataframe
         df = df.copy()
         
-        # First identify true deuterium-labeled standards directly
+        # Create pattern for deuterium-labeled standards
         deuterium_mask = df['LipidMolec'].str.contains(r'[+-]D\d+', regex=True, na=False)
         
-        # Then handle the :(s) notation separately
+        # Specific pattern for Ch-D7 type molecules
+        ch_d_mask = df['LipidMolec'].str.contains(r'^Ch-D\d+', regex=True, na=False)
+        
+        # Handle the :(s) notation
         standard_notation_mask = df['LipidMolec'].str.contains(r':\(s\)', regex=True, na=False)
         
-        # Create a separate mask for chemical modifications (+XXXX)
+        # Create a mask for chemical modifications (+XXXX)
         chemical_mod_mask = df['LipidMolec'].str.contains(r'\+[A-Z]{2,}', regex=True, na=False)
         
-        # A true standard should either:
+        # A true standard should be one of:
         # 1. Have deuterium labeling, OR
-        # 2. Have :(s) notation WITHOUT chemical modifications
-        standards_mask = deuterium_mask | (standard_notation_mask & ~chemical_mod_mask)
+        # 2. Be a Ch-D7 type molecule, OR
+        # 3. Have :(s) notation WITHOUT chemical modifications
+        standards_mask = deuterium_mask | ch_d_mask | (standard_notation_mask & ~chemical_mod_mask)
         
         # Extract standards and non-standards
         internal_standards_df = df[standards_mask].reset_index(drop=True)
