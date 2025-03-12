@@ -15,6 +15,7 @@ import plotly.io as pio
 import streamlit as st
 
 from PIL import Image
+from pdf2image import convert_from_path
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
@@ -64,131 +65,211 @@ def initialize_session_state():
         st.session_state.selected_classes = []
     if 'create_norm_dataset' not in st.session_state:
         st.session_state.create_norm_dataset = False
+        
+    if 'page' not in st.session_state:
+        st.session_state.page = 'landing'
 
-# Modify the main function to preserve state when switching modules
-def main():
-    """Main function for the Lipidomics Analysis Module Streamlit application."""
+def display_landing_page():
+    """Display the LipidCruncher landing page with enhanced module explanations."""
     # Load and display the logo
     try:
-        logo = Image.open('./images/logo.tif')  # Replace with your logo path
-        # You can adjust the width to control the size of the logo
-        st.image(logo, width=720)  # Adjust width as needed
+        logo = Image.open('./images/logo.tif')
+        st.image(logo, width=720)
     except Exception as e:
-        # Fallback to text header if image fails to load
         st.error(f"Failed to load logo: {str(e)}")
         st.header("LipidCruncher")
-    
-    st.markdown("Process, analyze and visualize lipidomics data from multiple sources.")
-    
-    initialize_session_state()
-    
-    # Always show format selection in sidebar
-    data_format = display_format_selection()
-    display_format_requirements(data_format)
-    
-    # Store the format type in session state for later use
-    st.session_state.format_type = data_format
-    
-    # Update file type options based on format
-    file_types = ['csv'] if data_format == 'Metabolomics Workbench' else ['csv', 'txt']
-    
-    uploaded_file = st.sidebar.file_uploader(
-        f'Upload your {data_format} dataset', 
-        type=file_types
-    )
-    
-    if uploaded_file:
-        df = load_and_validate_data(uploaded_file, data_format)
-        if df is not None:
-            # Display column mapping for generic format
-            if data_format == 'Generic Format':
-                display_column_mapping()
-            
-            # Process experiment setup
-            confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, data_format)
-            
-            # Update confirmation state
-            st.session_state.confirmed = confirmed
-            
-            if valid_samples:
-                if confirmed:
-                    # Update session state with experiment information
-                    update_session_state(name_df, experiment, bqc_label)
-                    
-                    # Use updated_df if available, otherwise use original df
-                    df_to_clean = updated_df if updated_df is not None else df
-                    
-                    if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
-                        st.subheader("Data Standardization, Filtering, and Normalization Module")
-                        cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
-                        
-                        if cleaned_df is not None:
-                            # Store essential data in session state
-                            st.session_state.experiment = experiment
-                            st.session_state.format_type = data_format
-                            st.session_state.cleaned_df = cleaned_df
-                            st.session_state.intsta_df = intsta_df
-                            st.session_state.continuation_df = cleaned_df
-                            
-                            # Display cleaned data and manage standards
-                            display_cleaned_data(cleaned_df, intsta_df)
-                            
-                            # Handle normalization
-                            normalized_df = handle_data_normalization(
-                                cleaned_df, 
-                                st.session_state.intsta_df,
-                                experiment, 
-                                data_format
-                            )
-                            
-                            if normalized_df is not None:
-                                st.session_state.normalized_df = normalized_df
-                                st.session_state.continuation_df = normalized_df
-                                
-                                # Add navigation button to next page
-                                _, right_column = st.columns([3, 1])
-                                with right_column:
-                                    if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
-                                        st.session_state.module = "Quality Check & Analysis"
-                                        st.experimental_rerun()
-                                        
-                    elif st.session_state.module == "Quality Check & Analysis":
-                        if st.session_state.cleaned_df is not None:
-                            quality_check_and_analysis_module(
-                                st.session_state.continuation_df, 
-                                st.session_state.intsta_df, 
-                                st.session_state.experiment,
-                                st.session_state.bqc_label,
-                                st.session_state.format_type
-                            )
-                        
-                        # Add back button with state preservation
-                        if st.button("Back to Data Standardization, Filtering, and Normalization", key="back_to_cleaning"):
-                            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
-                            # Preserve the current state
-                            st.session_state.preserved_data = {
-                                'cleaned_df': st.session_state.cleaned_df,
-                                'intsta_df': st.session_state.intsta_df,
-                                'normalized_df': st.session_state.normalized_df,
-                                'continuation_df': st.session_state.continuation_df,
-                                'normalization_method': st.session_state.normalization_method,
-                                'selected_classes': st.session_state.selected_classes,
-                                'create_norm_dataset': st.session_state.create_norm_dataset
-                            }
-                            st.experimental_rerun()
-                
-                else:
-                    # Clear processed data when unconfirmed
-                    clear_session_state()
-                    st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
-            else:
-                st.error("Please ensure your samples are valid before proceeding.")
 
-    # Restore preserved state if returning from Quality Check & Analysis
-    if 'preserved_data' in st.session_state and st.session_state.module == "Data Cleaning, Filtering, & Normalization":
-        for key, value in st.session_state.preserved_data.items():
-            setattr(st.session_state, key, value)
-        del st.session_state.preserved_data
+    st.markdown("""
+    **LipidCruncher** is an innovative, open-source web platform developed by the **[Farese and Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther)** to transform lipidomic data analysis. 
+    Designed to overcome traditional challenges like manual spreadsheet handling and insufficient quality assessment, LipidCruncher offers a comprehensive 
+    solution that streamlines data standardization, normalization, and rigorous quality control while providing powerful visualization tools. 
+    The platform significantly accelerates the research iteration process, allowing scientists to quickly identify anomalies and patterns through advanced 
+    features including volcano plots, lipid saturation profiles, pathway mapping, and interactive heatmaps—all within an intuitive interface that requires 
+    no bioinformatics expertise. LipidCruncher empowers researchers to efficiently convert complex lipid datasets into scientific insights, regardless 
+    of their specific research focus.
+    """, unsafe_allow_html=True)
+
+    st.subheader("Key Features")
+    st.markdown("""
+    - **Versatile Data Input**: Import datasets from LipidSearch, Metabolomics Workbench, or generic CSV formats.
+    - **Robust Processing**: Standardize, filter, and normalize data with options tailored to your experiment.
+    - **Rigorous Quality Control**: Ensure data integrity with diagnostic tools like box plots, CoV analysis, and PCA.
+    - **Advanced Visualizations**: Gain insights through interactive volcano plots, heatmaps, and pathway maps.
+    - **Open Access**: Freely available online with source code on [GitHub](https://github.com/FareseWaltherLab/LipidCruncher).
+    """)
+
+    st.subheader("How It Works")
+    st.markdown("""
+    LipidCruncher organizes the lipidomics analysis pipeline into three integrated modules, each designed to simplify and standardize critical steps from raw data to scientific insight:
+    """)
+
+    st.markdown("**Module 1: Data Input, Standardization, Filtering, and Normalization**")
+    st.markdown("""
+    - **Data Input**: Import data in flexible formats, including generic CSV, LipidSearch, and Metabolomics Workbench.
+    - **Standardization**: Automatically align column naming for consistency across datasets.
+    - **Filtering**: Clean data by removing empty rows, duplicates, and replacing null values with zeros.
+    - **Normalization**: Choose from four options: no normalization, internal standard-based, protein-based, or combined internal standard and protein normalization.
+    """)
+
+    st.markdown("**Module 2: Quality Check and Anomaly Detection**")
+    st.markdown("""
+    - **Box Plots**: Visualize concentration distributions to confirm uniformity among replicates.
+    - **Zero-Value Analysis**: Identify samples with excessive missing data.
+    - **CoV Analysis**: Assess measurement precision using batch quality control (BQC) samples.
+    - **Correlation Analysis**: Identify outliers through pairwise correlations between replicates.
+    - **PCA**: Visualize sample clustering and flag potential outliers.
+    """)
+
+    st.markdown("**Module 3: Data Visualization, Interpretation, and Analysis**")
+    st.markdown("""
+    - **Bar and Pie Charts**: Display lipid class concentrations and proportional distributions.
+    - **Metabolic Network Visualization**: Map lipid class changes in a metabolic context.
+    - **Saturation Profiles**: Analyze fatty acid saturation levels (SFA, MUFA, PUFA).
+    - **Volcano Plots**: Highlight significant lipid changes with customizable thresholds.
+    - **Heatmaps**: Provide a high-resolution view of lipidomic alterations with interactive features.
+    """)
+
+    st.subheader("Pipeline Overview")
+    pdf_path = './images/figure1.pdf'  # Adjust path as needed
+    try:
+        images = convert_from_path(pdf_path, dpi=300)
+        if images:
+            fig1_image = images[0]
+            img_byte_arr = io.BytesIO()
+            fig1_image.save(img_byte_arr, format='PNG')
+            img_byte_arr = img_byte_arr.getvalue()
+            st.image(img_byte_arr, caption="Figure 1: Overview of the LipidCruncher Analysis Pipeline", use_column_width=True)
+            with open(pdf_path, "rb") as pdf_file:
+                pdf_bytes = pdf_file.read()
+        else:
+            st.warning("No pages found in Figure 1 PDF.")
+    except Exception as e:
+        st.warning(f"Could not load Figure 1 PDF: {str(e)}. Please ensure 'figure1.pdf' is in the './images/' directory and Poppler is installed.")
+
+    st.subheader("Get Started")
+    st.markdown("""
+    Upload your lipidomic dataset to begin analyzing it with LipidCruncher. For reporting bugs, feature requests, or any questions or comments, please email abdih@mskcc.org.
+    """)
+    # Center the "Start Crunching" button
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col2:
+        if st.button("Start Crunching"):
+            st.session_state.page = 'app'
+            st.experimental_rerun()
+
+def main():
+    """Main function for the Lipidomics Analysis Module Streamlit application."""
+    initialize_session_state()
+
+    if st.session_state.page == 'landing':
+        display_landing_page()
+    elif st.session_state.page == 'app':
+        try:
+            logo = Image.open('./images/logo.tif')
+            st.image(logo, width=720)
+        except Exception as e:
+            st.error(f"Failed to load logo: {str(e)}")
+            st.header("LipidCruncher")
+        
+        st.markdown("Process, analyze and visualize lipidomics data from multiple sources.")
+        
+        data_format = display_format_selection()
+        display_format_requirements(data_format)
+        
+        st.session_state.format_type = data_format
+        
+        file_types = ['csv'] if data_format == 'Metabolomics Workbench' else ['csv', 'txt']
+        
+        uploaded_file = st.sidebar.file_uploader(
+            f'Upload your {data_format} dataset', 
+            type=file_types
+        )
+        
+        if uploaded_file:
+            df = load_and_validate_data(uploaded_file, data_format)
+            if df is not None:
+                if data_format == 'Generic Format':
+                    display_column_mapping()
+                
+                confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, data_format)
+                
+                st.session_state.confirmed = confirmed
+                
+                if valid_samples:
+                    if confirmed:
+                        update_session_state(name_df, experiment, bqc_label)
+                        
+                        df_to_clean = updated_df if updated_df is not None else df
+                        
+                        if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
+                            st.subheader("Data Standardization, Filtering, and Normalization Module")
+                            cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
+                            
+                            if cleaned_df is not None:
+                                st.session_state.experiment = experiment
+                                st.session_state.format_type = data_format
+                                st.session_state.cleaned_df = cleaned_df
+                                st.session_state.intsta_df = intsta_df
+                                st.session_state.continuation_df = cleaned_df
+                                
+                                display_cleaned_data(cleaned_df, intsta_df)
+                                
+                                normalized_df = handle_data_normalization(
+                                    cleaned_df, 
+                                    st.session_state.intsta_df,
+                                    experiment, 
+                                    data_format
+                                )
+                                
+                                if normalized_df is not None:
+                                    st.session_state.normalized_df = normalized_df
+                                    st.session_state.continuation_df = normalized_df
+                                    
+                                    _, right_column = st.columns([3, 1])
+                                    with right_column:
+                                        if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
+                                            st.session_state.module = "Quality Check & Analysis"
+                                            st.experimental_rerun()
+                                            
+                        elif st.session_state.module == "Quality Check & Analysis":
+                            if st.session_state.cleaned_df is not None:
+                                quality_check_and_analysis_module(
+                                    st.session_state.continuation_df, 
+                                    st.session_state.intsta_df, 
+                                    st.session_state.experiment,
+                                    st.session_state.bqc_label,
+                                    st.session_state.format_type
+                                )
+                            
+                            if st.button("Back to Data Standardization, Filtering, and Normalization", key="back_to_cleaning"):
+                                st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+                                st.session_state.preserved_data = {
+                                    'cleaned_df': st.session_state.cleaned_df,
+                                    'intsta_df': st.session_state.intsta_df,
+                                    'normalized_df': st.session_state.normalized_df,
+                                    'continuation_df': st.session_state.continuation_df,
+                                    'normalization_method': st.session_state.normalization_method,
+                                    'selected_classes': st.session_state.selected_classes,
+                                    'create_norm_dataset': st.session_state.create_norm_dataset
+                                }
+                                st.experimental_rerun()
+                    
+                    else:
+                        clear_session_state()
+                        st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
+                else:
+                    st.error("Please ensure your samples are valid before proceeding.")
+
+        # Restore preserved state if returning from Quality Check & Analysis
+        if 'preserved_data' in st.session_state and st.session_state.module == "Data Cleaning, Filtering, & Normalization":
+            for key, value in st.session_state.preserved_data.items():
+                setattr(st.session_state, key, value)
+            del st.session_state.preserved_data
+        
+        # Add a button to return to the landing page
+        if st.button("Back to Home"):
+            st.session_state.page = 'landing'
+            st.experimental_rerun()
         
 def clear_session_state():
     """Clear processed data from session state."""

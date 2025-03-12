@@ -18,7 +18,7 @@ class StandardsManager:
            
        Returns:
            tuple: (cleaned_df, intsta_df) with updated data
-       """
+       """a
        try:
            # Create copies of the DataFrames to avoid modifying the original
            cleaned_df = cleaned_df.copy()
