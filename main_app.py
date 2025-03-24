@@ -80,7 +80,7 @@ def display_landing_page():
         st.header("LipidCruncher")
 
     st.markdown("""
-    **LipidCruncher** is an innovative, open-source web platform developed by the **[Farese and Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther)** to transform lipidomic data analysis. 
+    **LipidCruncher** is an innovative, open-source web platform developed by **[The Farese and Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther)** to transform lipidomic data analysis. 
     Designed to overcome traditional challenges like manual spreadsheet handling and insufficient quality assessment, LipidCruncher offers a comprehensive 
     solution that streamlines data standardization, normalization, and rigorous quality control while providing powerful visualization tools. 
     The platform significantly accelerates the research iteration process, allowing scientists to quickly identify anomalies and patterns through advanced 
@@ -95,7 +95,7 @@ def display_landing_page():
     - **Robust Processing**: Standardize, filter, and normalize data with options tailored to your experiment.
     - **Rigorous Quality Control**: Ensure data integrity with diagnostic tools like box plots, CoV analysis, and PCA.
     - **Advanced Visualizations**: Gain insights through interactive volcano plots, heatmaps, and pathway maps.
-    - **Open Access**: Freely available online with source code on [GitHub](https://github.com/FareseWaltherLab/LipidCruncher).
+    - **Open Access**: Freely available online with source code on The Farese and Walther Lab [GitHub](https://github.com/FareseWaltherLab/LipidCruncher).
     """)
 
     st.subheader("How It Works")
@@ -138,7 +138,7 @@ def display_landing_page():
             img_byte_arr = io.BytesIO()
             fig1_image.save(img_byte_arr, format='PNG')
             img_byte_arr = img_byte_arr.getvalue()
-            st.image(img_byte_arr, caption="Figure 1: Overview of the LipidCruncher Analysis Pipeline", use_column_width=True)
+            st.image(img_byte_arr, caption="Overview of the LipidCruncher Analysis Pipeline", use_column_width=True)
             with open(pdf_path, "rb") as pdf_file:
                 pdf_bytes = pdf_file.read()
         else:
@@ -148,14 +148,19 @@ def display_landing_page():
 
     st.subheader("Get Started")
     st.markdown("""
-    Upload your lipidomic dataset to begin analyzing it with LipidCruncher. For reporting bugs, feature requests, or any questions or comments, please email abdih@mskcc.org.
+    Upload your lipidomic dataset to begin analyzing it with LipidCruncher.
     """)
-    # Center the "Start Crunching" button
+        # Center the "Start Crunching" button
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
         if st.button("Start Crunching"):
             st.session_state.page = 'app'
             st.experimental_rerun()
+                
+    st.subheader("Support")
+    st.markdown("""
+    For reporting bugs, feature requests, or any questions or comments, please email abdih@mskcc.org.
+    """)
 
 def main():
     """Main function for the Lipidomics Analysis Module Streamlit application."""
@@ -757,10 +762,143 @@ def display_cleaned_data(cleaned_df, intsta_df):
 
     # Display cleaned data
     with st.expander("View Cleaned Data"):
+        # Add checkbox for showing detailed information
+        show_cleaning_info = st.checkbox("Show data cleaning process details", key="show_cleaning_info")
+        
+        if show_cleaning_info:
+            st.markdown("### Data Cleaning and Standardization Process")
+            st.markdown("""
+            LipidCruncher performs a systematic cleaning and standardization process on your uploaded data 
+            to ensure consistency, reliability, and compatibility with downstream analyses. The specific 
+            procedures applied depend on your data format.
+            """)
+            
+            # Tabs for different data formats
+            data_format_tab = st.radio(
+                "Select data format to view cleaning details:",
+                ["LipidSearch Format", "Generic Format", "Metabolomics Workbench"],
+                horizontal=True
+            )
+            
+            if data_format_tab == "LipidSearch Format":
+                st.markdown("#### Data Cleaning for LipidSearch Format")
+                st.markdown("""
+                For LipidSearch data, we perform the following standardization and cleaning steps:
+                
+                1. **Column Standardization**: We extract and standardize essential columns including LipidMolec, 
+                   ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, and all MeanArea 
+                   columns for each sample.
+                
+                2. **Data Type Conversion**: MeanArea columns are converted to numeric format, with any 
+                   non-numeric entries replaced by zeros to maintain data integrity.
+                
+                3. **Lipid Name Standardization**: Names of lipid molecules are standardized to ensure 
+                   uniform formatting across the dataset.
+                
+                4. **Quality Filtering**: Only entries with grades 'A', 'B', or 'C' are retained. 
+                   Grade 'C' is only accepted for specific lipid classes (LPC and SM).
+                
+                5. **Best Peak Selection**: For each unique lipid, the entry with the highest TotalSmpIDRate(%) 
+                   is selected, as this indicates the most reliable measurement across samples.
+                
+                6. **Missing FA Keys Handling**: Rows with missing FA keys are removed, with exceptions 
+                   for cholesterol (Ch) class molecules and deuterated standards.
+                
+                7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
+                
+                8. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
+                """)
+                
+                st.info("This process ensures that only high-quality, consistent data points are retained for analysis.")
+                
+            elif data_format_tab == "Generic Format":
+                st.markdown("#### Data Cleaning for Generic Format")
+                st.markdown("""
+                For Generic Format data, we perform the following standardization and cleaning steps:
+                
+                1. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining 
+                   columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
+                
+                2. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format: 
+                   Class(chain details). For example:
+                   - LPC O-17:4 → LPC(O-17:4)
+                   - Cer d18:0/C24:0 → Cer(d18:0_C24:0)
+                   - CE 14:0;0 → CE(14:0)
+                
+                3. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class 
+                   from the standardized lipid name (e.g., 'PC' from 'PC(16:0_18:1)').
+                
+                4. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
+                   non-numeric entries replaced by zeros.
+                
+                5. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special 
+                   characters, strings with only special characters) are removed.
+                
+                6. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
+                
+                7. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
+                """)
+                
+                st.info("This standardization process allows for consistent analysis regardless of the original format of your data.")
+                
+            else:  # Metabolomics Workbench
+                st.markdown("#### Data Cleaning for Metabolomics Workbench Format")
+                st.markdown("""
+                For Metabolomics Workbench data, we perform the following standardization and cleaning steps:
+                
+                1. **Section Extraction**: Data is extracted from between the 'MS_METABOLITE_DATA_START' and 
+                   'MS_METABOLITE_DATA_END' markers.
+                
+                2. **Header Processing**: The first row is processed as sample names, and the second row as 
+                   experimental conditions.
+                
+                3. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining 
+                   columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
+                
+                4. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format, 
+                   similar to the Generic Format process.
+                
+                5. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class 
+                   from the standardized lipid name.
+                
+                6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
+                   non-numeric entries replaced by zeros.
+                
+                7. **Experimental Conditions Storage**: The experimental conditions from the second row are 
+                   stored and used to suggest the experimental setup.
+                """)
+                
+                st.info("This process ensures that your Metabolomics Workbench data is properly formatted for analysis in LipidCruncher.")
+            
+            # Add a divider
+            st.markdown("---")
+        
+        # Display the cleaned data
+        st.subheader("Cleaned Data")
+        st.write("This table shows your data after cleaning and standardization:")
         display_data(st.session_state.cleaned_df, "Cleaned Data", "cleaned_data.csv")
 
     # Internal standards management
     with st.expander("Manage Internal Standards"):
+        # Add checkbox for showing internal standards information
+        show_standards_info = st.checkbox("Show internal standards detection details", key="show_standards_info")
+        
+        if show_standards_info:
+            st.markdown("### Internal Standards Detection")
+            st.markdown("""
+            LipidCruncher automatically identifies internal standards from the SPLASH LIPIDOMIX® Mass Spec Standard (Avanti Polar Lipids, Cat# 330707-1) 
+            by detecting patterns like "+D7" or ":(s)" notation in lipid names. If you use custom standards with different naming conventions, you can upload them using the 
+            option below.
+            """)
+            
+            if not st.session_state.intsta_df.empty:
+                st.success(f"✓ {len(st.session_state.intsta_df)} internal standards were automatically detected in your dataset.")
+            else:
+                st.warning("No internal standards were automatically detected in your dataset.")
+                
+            # Add a divider
+            st.markdown("---")
+        
         manage_internal_standards(normalizer)
             
 def rename_intensity_to_concentration(df):
@@ -817,9 +955,35 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     has_standards = not st.session_state.intsta_df.empty
 
     # Determine available normalization options
-    normalization_options = ['None', 'Internal Standards', 'BCA Assay', 'Both'] if has_standards else ['None', 'BCA Assay']
+    normalization_options = ['None', 'Internal Standards', 'Protein-based', 'Both'] if has_standards else ['None', 'Protein-based']
     if not has_standards:
-        st.warning("No internal standards available. Only BCA normalization is available.")
+        st.warning("No internal standards available. Only protein-based normalization is available.")
+
+    # Add normalization explanation 
+    with st.expander("About Normalization Methods"):
+        st.markdown("### Data Normalization Methods")
+        st.markdown("""
+        LipidCruncher offers four normalization methods to adjust your lipidomic data:
+        
+        **None**: Use raw intensity values without normalization. This is suitable if your data has already been normalized externally.
+        
+        **Internal Standards**: Normalize lipid measurements using spiked-in internal standards of known concentration. For each lipid class, you'll select an appropriate internal standard. The normalization formula is:
+        ```
+        Concentration = (Intensity_lipid / Intensity_standard) × Concentration_standard
+        ```
+        
+        **Protein-based**: Normalize lipid intensities against protein concentration (e.g., determined by a BCA assay). This adjusts for differences in starting material. The normalization formula is:
+        ```
+        Concentration = Intensity_lipid / Protein_concentration
+        ```
+        
+        **Both**: Apply both internal standards and protein normalization:
+        ```
+        Concentration = (Intensity_lipid / Intensity_standard) × (Concentration_standard / Protein_concentration)
+        ```
+        
+        After normalization, intensity columns are renamed to concentration columns to reflect that values now represent absolute or relative lipid concentrations rather than raw intensities.
+        """)
 
     # Initialize or retrieve normalization method from session state
     if 'normalization_method' not in st.session_state:
@@ -848,9 +1012,9 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
             # Track whether we need to do standards normalization
             do_standards = normalization_method in ['Internal Standards', 'Both'] and has_standards
             
-            # Handle BCA Assay normalization
-            if normalization_method in ['BCA Assay', 'Both']:
-                with st.expander("Enter BCA Assay Data"):
+            # Handle Protein-based normalization
+            if normalization_method in ['Protein-based', 'Both']:
+                with st.expander("Enter Protein Concentration Data"):
                     protein_df = collect_protein_concentrations(experiment)
                     if protein_df is not None:
                         try:
@@ -859,13 +1023,13 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
                                 protein_df, 
                                 preserve_prefix=True
                             )
-                            # Store BCA normalization settings
-                            st.session_state.normalization_settings['bca'] = {
+                            # Store protein-based normalization settings
+                            st.session_state.normalization_settings['protein'] = {
                                 'protein_df': protein_df
                             }
-                            st.success("BCA normalization applied successfully")
+                            st.success("Protein-based normalization applied successfully")
                         except Exception as e:
-                            st.error(f"Error during BCA normalization: {str(e)}")
+                            st.error(f"Error during protein-based normalization: {str(e)}")
                             return None
 
             # Handle internal standards normalization
@@ -1276,6 +1440,38 @@ def display_box_plots(continuation_df, experiment):
     
     expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
     with expand_box_plot:
+        # Add explanation about box plots
+        show_boxplot_info = st.checkbox("Show box plot analysis details", key="show_boxplot_info")
+        if show_boxplot_info:
+            st.markdown("### Box Plot Analysis")
+            st.markdown("""
+            Box plots are powerful diagnostic tools that help assess data quality and identify potential anomalies in your lipidomic dataset. LipidCruncher generates two complementary visualizations:
+            
+            **1. Missing Values Distribution:**
+            This plot shows the percentage of missing (zero) values for each sample in your dataset. A higher percentage may indicate:
+            - Lower sensitivity for that sample during analysis
+            - Technical issues during sample preparation or data acquisition
+            - Biological differences resulting in fewer detectable lipids
+            
+            Ideally, samples from the same experimental condition should show similar percentages. Substantial differences between replicates could signal potential quality issues.
+            
+            **2. Box Plot of Non-Zero Concentrations:**
+            This visualization displays the distribution of non-zero concentration values for each sample using standard box plot elements:
+            - The box shows the interquartile range (25th to 75th percentile)
+            - The horizontal line inside the box represents the median
+            - The whiskers extend to the most extreme data points within 1.5 times the interquartile range
+            - Individual points beyond the whiskers represent potential outliers
+            
+            What to look for:
+            - Similar median values and box sizes across replicates of the same condition indicate good reproducibility
+            - Unusual distributions (very high/low median, wide/narrow box) may suggest technical issues
+            - Consistent differences between experimental conditions may reflect genuine biological effects
+            
+            These visualizations help you make informed decisions about the quality and reliability of your lipidomic data before proceeding with further analysis.
+            """)
+            # Add a divider
+            st.markdown("---")
+        
         # Creating a deep copy for visualization
         visualization_df = continuation_df.copy(deep=True)
         
@@ -1411,6 +1607,43 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
     
     if bqc_label is not None:
         with st.expander("Quality Check Using BQC Samples"):
+            # Add explanation about BQC analysis
+            show_bqc_info = st.checkbox("Show BQC analysis details", key="show_bqc_info")
+            if show_bqc_info:
+                st.markdown("### Batch Quality Control (BQC) Analysis")
+                st.markdown("""
+                BQC analysis assesses the measurement reliability of your lipidomic dataset using Coefficient of Variation (CoV) calculations on BQC samples.
+                
+                **What is CoV?**  
+                The Coefficient of Variation measures the relative variability of data by calculating:
+                ```
+                CoV = (Standard Deviation / Mean) × 100%
+                ```
+                
+                It is calculated for each lipid species across all BQC samples (excluding zero values). Lower CoV values indicate higher measurement precision and reliability.
+                
+                **The CoV Scatter Plot:**
+                - X-axis: Log10 of the mean concentration for each lipid species in BQC samples
+                - Y-axis: CoV percentage for each lipid species
+                - Each point represents a single lipid species
+                - Hover over points to see the specific lipid, its mean concentration, and CoV value
+                
+                **Interpreting CoV Values:**
+                - CoV < 20%: Excellent measurement precision
+                - CoV < 30%: Good measurement precision
+                - CoV > 30%: Potential issues with measurement reliability
+                
+                **Filtering Option:**
+                LipidCruncher allows you to filter the dataset to remove lipid species with high CoV values. This helps ensure that only reliable measurements are used in downstream analyses.
+                
+                **Reliability Metric:**
+                The percentage of lipid species with CoV < 30% is calculated to provide an overall data quality indicator:
+                - ≥ 80%: Excellent data quality
+                - 50-79%: Good data quality, but caution advised
+                - < 50%: Potentially problematic dataset, careful interpretation required
+                """)
+                st.markdown("---")
+            
             bqc_sample_index = experiment.conditions_list.index(bqc_label)
             scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(data_df, experiment, bqc_sample_index)
             
@@ -1424,10 +1657,11 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                 mime='text/csv'
             )
             
+            # Display reliability assessment with appropriate color coding
             if reliable_data_percent >= 80:
-                st.info(f"{reliable_data_percent}% of the datapoints are confidently reliable (CoV < 30%).")
+                st.success(f"{reliable_data_percent}% of the datapoints are confidently reliable (CoV < 30%).")
             elif reliable_data_percent >= 50:
-                st.warning(f"{reliable_data_percent}% of the datapoints are confidently reliable.")
+                st.warning(f"{reliable_data_percent}% of the datapoints are confidently reliable (CoV < 30%).")
             else:
                 st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < 30%).")
             
@@ -1441,6 +1675,8 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                         st.error("The filtered dataset is empty. Please try a higher CoV threshold.")
                         st.warning("Returning the original dataset without filtering.")
                     else:
+                        percentage_kept = round((len(filtered_df) / len(prepared_df)) * 100, 1)
+                        st.info(f"Filtering removed {len(prepared_df) - len(filtered_df)} lipid species ({100 - percentage_kept}% of the dataset).")
                         st.write('Filtered dataset:')
                         st.write(filtered_df)
                         csv_download = convert_df(filtered_df)
@@ -1503,9 +1739,82 @@ def display_retention_time_plots(continuation_df, format_type):
         plotly.graph_objs._figure.Figure or None: The multi-class retention time comparison plot if generated, else None.
     """
     if format_type == 'LipidSearch 5.0':
-        expand_retention = st.expander('View Retention Time Plots: Check Sanity of Data')
-        with expand_retention:
-            return integrate_retention_time_plots(continuation_df)
+        with st.expander('View Retention Time Plots: Check Sanity of Data'):
+            # Add explanation about retention time analysis
+            show_rt_info = st.checkbox("Show retention time analysis details", key="show_rt_info")
+            if show_rt_info:
+                st.markdown("### Retention Time Analysis")
+                st.markdown("""
+                Retention time analysis is a crucial quality check for LipidSearch data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
+                
+                **What is Retention Time?**  
+                Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicity—more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
+                
+                **What to Look For:**
+                
+                1. **Class-specific Clustering**: Lipids from the same class should form distinct clusters in the plot. Each lipid class has characteristic hydrophobicity patterns, resulting in similar retention times for molecules within that class.
+                
+                2. **Mass-Retention Time Relationship**: Within a lipid class:
+                   - Longer fatty acid chains (higher mass) generally show longer retention times
+                   - More saturated lipids (fewer double bonds) typically elute later than their unsaturated counterparts
+                
+                3. **Outliers**: Points that deviate significantly from their class's typical pattern may indicate:
+                   - Incorrect lipid identification
+                   - Co-eluting compounds
+                   - Unusual structural features
+                
+                **Two Viewing Modes:**
+                
+                - **Individual Mode**: Displays separate plots for each lipid class, allowing detailed examination of class-specific patterns
+                - **Comparison Mode**: Shows multiple lipid classes in a single plot with color coding, enabling direct comparison between classes
+                
+                This analysis helps confirm the analytical integrity of your data and can reveal potential misidentifications or chromatographic issues.
+                """)
+                st.markdown("---")
+            
+            # Get the viewing mode selection
+            mode = st.radio('Select a viewing mode', ['Comparison Mode', 'Individual Mode'])
+            
+            if mode == 'Individual Mode':
+                # Handling individual retention time plots
+                plots = lp.RetentionTime.plot_single_retention(continuation_df)
+                for idx, (plot, retention_df) in enumerate(plots, 1):
+                    st.plotly_chart(plot, use_container_width=True)
+                    plotly_svg_download_button(plot, f"retention_time_plot_{idx}.svg")
+                    csv_download = convert_df(retention_df)
+                    st.download_button(
+                        label="Download CSV", 
+                        data=csv_download, 
+                        file_name=f'retention_plot_{idx}.csv', 
+                        mime='text/csv'
+                    )
+                return None
+            elif mode == 'Comparison Mode':
+                # Handling comparison mode for retention time plots
+                all_lipid_classes_lst = continuation_df['ClassKey'].value_counts().index.tolist()
+                # Use multiselect with instruction text
+                st.markdown("**Select lipid classes to compare:**")
+                selected_classes_list = st.multiselect(
+                    'Add/Remove classes for comparison:',
+                    all_lipid_classes_lst, 
+                    default=all_lipid_classes_lst[:min(5, len(all_lipid_classes_lst))]  # Default to first 5 classes or fewer
+                )
+                
+                if selected_classes_list:  # Ensuring that selected_classes_list is not empty
+                    plot, retention_df = lp.RetentionTime.plot_multi_retention(continuation_df, selected_classes_list)
+                    if plot:
+                        st.plotly_chart(plot, use_container_width=True)
+                        plotly_svg_download_button(plot, "retention_time_comparison.svg")
+                        csv_download = convert_df(retention_df)
+                        st.download_button(
+                            label="Download CSV", 
+                            data=csv_download, 
+                            file_name='Retention_Time_Comparison.csv', 
+                            mime='text/csv'
+                        )
+                        return plot
+                else:
+                    st.warning("Please select at least one lipid class to generate the comparison plot.")
     else:
         # For other formats, return None (retention time plots not applicable)
         return None
@@ -1526,17 +1835,67 @@ def analyze_pairwise_correlation(continuation_df, experiment):
     """
     expand_corr = st.expander('Pairwise Correlation Analysis')
     with expand_corr:
-        st.info("LipidCruncher removes the missing values before performing the correlation test.")
+        # Add explanation about correlation analysis
+        show_corr_info = st.checkbox("Show correlation analysis details", key="show_corr_info")
+        if show_corr_info:
+            st.markdown("### Pairwise Correlation Analysis")
+            st.markdown("""
+            Pairwise correlation analysis helps assess the reproducibility of your lipidomic measurements by calculating how closely related the measurements are between sample replicates.
+            
+            **What is Correlation Analysis?**  
+            Correlation analysis calculates the Pearson correlation coefficient between pairs of samples. This coefficient:
+            - Ranges from -1 to 1
+            - Values close to 1 indicate strong positive correlation (similar patterns)
+            - Values close to 0 indicate no correlation
+            - Values close to -1 indicate strong negative correlation (opposite patterns)
+            
+            **The Correlation Heatmap:**
+            - The heatmap displays correlation coefficients between all pairs of replicates
+            - Blue colors indicate higher correlation (more similar)
+            - Red colors indicate lower correlation (less similar)
+            - Only the lower triangle is shown to avoid redundancy
+            
+            **Interpreting Correlation Values:**
+            - For biological replicates:
+              - Correlation ≥ 0.7: Good reproducibility
+              - Correlation < 0.7: Potential issues with reproducibility
+            
+            - For technical replicates:
+              - Correlation ≥ 0.8: Good reproducibility
+              - Correlation < 0.8: Potential technical issues
+            
+            **Data Preprocessing:**
+            - Missing (zero) values are removed before calculating correlations
+            - This ensures that correlations are based only on lipids detected in both samples
+            
+            Low correlation between replicates may indicate:
+            1. Sample preparation inconsistencies
+            2. Instrument performance issues
+            3. True biological variation
+            4. Potential outlier samples
+            
+            This analysis helps identify samples that might need to be excluded or further investigated before proceeding with biological interpretation.
+            """)
+            st.markdown("---")
+        
         # Filter out conditions with only one replicate
         multi_replicate_conditions = [condition for condition, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1]
+        
         # Ensure there are multi-replicate conditions before proceeding
         if multi_replicate_conditions:
             selected_condition = st.selectbox('Select a condition', multi_replicate_conditions)
             condition_index = experiment.conditions_list.index(selected_condition)
-            sample_type = st.selectbox('Select the type of your samples', ['biological replicates', 'Technical replicates'])
+            
+            sample_type = st.selectbox(
+                'Select the type of your samples', 
+                ['biological replicates', 'technical replicates'],
+                help="Biological replicates: different samples from the same condition. Technical replicates: repeated measurements of the same sample."
+            )
+            
             mean_area_df = lp.Correlation.prepare_data_for_correlation(continuation_df, experiment.individual_samples_list, condition_index)
             correlation_df, v_min, thresh = lp.Correlation.compute_correlation(mean_area_df, sample_type)
             fig = lp.Correlation.render_correlation_plot(correlation_df, v_min, thresh, experiment.conditions_list[condition_index])
+            
             st.pyplot(fig)
             matplotlib_svg_download_button(fig, f"correlation_plot_{experiment.conditions_list[condition_index]}.svg")
             
@@ -1549,9 +1908,29 @@ def analyze_pairwise_correlation(continuation_df, experiment):
                 file_name='Correlation_Matrix_' + experiment.conditions_list[condition_index] + '.csv',
                 mime='text/csv'
             )
+            
+            # Highlight potentially problematic correlations
+            low_correlations = []
+            min_threshold = 0.7 if sample_type == 'biological replicates' else 0.8
+            
+            for i in range(len(correlation_df.columns)):
+                for j in range(i+1, len(correlation_df.columns)):
+                    if correlation_df.iloc[j, i] < min_threshold:
+                        low_correlations.append(
+                            f"{correlation_df.columns[i]} and {correlation_df.index[j]}: {correlation_df.iloc[j, i]:.3f}"
+                        )
+            
+            if low_correlations:
+                st.warning("**Potential correlation issues detected:**")
+                for corr in low_correlations:
+                    st.write(f"• {corr}")
+                st.write(f"Consider investigating these sample pairs as they show correlations below the recommended threshold ({min_threshold}) for {sample_type}.")
+            else:
+                st.success(f"All correlations are above the recommended threshold ({min_threshold}) for {sample_type}.")
+                
             return selected_condition, fig
         else:
-            st.error("No conditions with multiple replicates found.")
+            st.error("No conditions with multiple replicates found. Correlation analysis requires at least two replicates.")
             return None, None
         
 def display_pca_analysis(continuation_df, experiment):
@@ -1565,20 +1944,73 @@ def display_pca_analysis(continuation_df, experiment):
     Returns:
         tuple: A tuple containing the updated continuation_df and the PCA plot.
     """
+    from scipy.stats import chi2  # Add import here
+    
     pca_plot = None
     with st.expander("Principal Component Analysis (PCA)"):
-        samples_to_remove = st.multiselect('Select samples to remove from the analysis (optional):', experiment.full_samples_list)
+        # Add explanation about PCA analysis
+        show_pca_info = st.checkbox("Show PCA analysis details", key="show_pca_info")
+        if show_pca_info:
+            st.markdown("### Principal Component Analysis (PCA)")
+            st.markdown("""
+            PCA is a powerful dimensionality reduction technique that helps visualize complex lipidomic datasets by transforming high-dimensional data into a set of linearly uncorrelated variables called principal components.
+            
+            **What is PCA?**  
+            PCA identifies the directions (principal components) in which your data varies the most. These components are ordered by the amount of variance they explain:
+            - Principal Component 1 (PC1) explains the largest portion of variance
+            - Principal Component 2 (PC2) explains the second largest portion
+            
+            The percentage shown next to each PC indicates how much of the total variance that component explains.
+            
+            **The PCA Plot:**
+            - Each point represents one sample
+            - Points that cluster together have similar lipid profiles
+            - Greater distances between points indicate greater differences in lipid profiles
+            - Confidence ellipses (95% confidence) are drawn around each experimental condition
+            
+            **Interpreting the Plot:**
+            - **Well-separated clusters**: Different experimental conditions show distinct lipid profiles
+            - **Overlapping clusters**: Conditions have similar lipid profiles
+            - **Tight clusters**: Good reproducibility within conditions
+            - **Spread-out clusters**: Higher variability within conditions
+            - **Outliers**: Samples falling outside their group's confidence ellipse may indicate anomalies
+            
+            **Data Preprocessing:**
+            - Data is standardized (centered and scaled) before PCA
+            - This ensures that variables with larger values don't dominate the analysis
+            
+            **When to Remove Samples:**
+            Consider removing samples that:
+            1. Fall far outside their expected cluster
+            2. Don't group with their biological replicates
+            3. Show unusual patterns confirmed by other quality metrics
+            
+            **Note:** Sample removal should be done cautiously and documented. Biological outliers may represent real variation rather than technical issues.
+            """)
+            st.markdown("---")
         
+        # Sample removal interface
+        samples_to_remove = st.multiselect(
+            'Select samples to remove from the analysis (optional):',
+            experiment.full_samples_list,
+            help="Select any samples that you want to exclude from the PCA analysis. This is useful if you suspect certain samples are outliers."
+        )
+        
+        # Validate if we have enough samples after removal
         if samples_to_remove:
-            if (len(experiment.full_samples_list) - len(samples_to_remove)) >= 2:
-                continuation_df = experiment.remove_bad_samples(samples_to_remove, continuation_df)
+            remaining_count = len(experiment.full_samples_list) - len(samples_to_remove)
+            if remaining_count < 2:
+                st.error('At least two samples are required for a meaningful PCA analysis!')
             else:
-                st.error('At least two samples are required for a meaningful analysis!')
+                continuation_df = experiment.remove_bad_samples(samples_to_remove, continuation_df)
+                st.success(f"Analysis will proceed with {remaining_count} samples.")
         
+        # Generate and display PCA plot
         pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
         st.plotly_chart(pca_plot, use_container_width=True)
         plotly_svg_download_button(pca_plot, "pca_plot.svg")
         
+        # Show the PCA data table
         csv_data = convert_df(pca_df)
         st.download_button(
             label="Download CSV",
@@ -1586,6 +2018,35 @@ def display_pca_analysis(continuation_df, experiment):
             file_name="PCA_data.csv",
             mime="text/csv"
         )
+        
+        # Add interpretation suggestions based on the plot
+        for condition in pca_df['Condition'].unique():
+            condition_df = pca_df[pca_df['Condition'] == condition]
+            if len(condition_df) >= 3:  # Only check if we have at least 3 samples
+                # Calculate the Mahalanobis distance for each point
+                center = condition_df[['PC1', 'PC2']].mean().values
+                cov = np.cov(condition_df['PC1'], condition_df['PC2'])
+                
+                # If the covariance matrix is singular, we can't compute Mahalanobis distances
+                try:
+                    inv_cov = np.linalg.inv(cov)
+                    
+                    # Check for potential outliers
+                    potential_outliers = []
+                    for _, row in condition_df.iterrows():
+                        point = np.array([row['PC1'], row['PC2']])
+                        dist = np.sqrt(np.dot(np.dot((point - center), inv_cov), (point - center).T))
+                        # Using chi-square distribution with 2 degrees of freedom (for 2D) and p=0.05
+                        if dist > np.sqrt(chi2.ppf(0.95, 2)):
+                            potential_outliers.append(row['Sample'])
+                    
+                    if potential_outliers:
+                        st.warning(f"**Potential outliers detected in {condition}:** {', '.join(potential_outliers)}")
+                        st.write("These samples fall outside the 95% confidence ellipse. Consider examining them more closely.")
+                except np.linalg.LinAlgError:
+                    # Covariance matrix is singular
+                    pass
+        
     return continuation_df, pca_plot
 
 def display_abundance_bar_charts(experiment, continuation_df):
@@ -1620,73 +2081,95 @@ def display_abundance_bar_charts(experiment, continuation_df):
             key='classes_select'
         )
         
-        linear_fig, log2_fig = None, None
-        if selected_conditions_list and selected_classes_list:
-            # Statistical testing guidance
+        # Add explanation about bar chart analysis
+        show_barchart_info = st.checkbox("Show bar chart analysis details", key="show_barchart_info")
+        if show_barchart_info:
+            st.markdown("### Class Concentration Bar Chart Analysis")
+            st.markdown("""
+            Bar charts provide a quantitative comparison of lipid class concentrations across different experimental conditions.
+            
+            **What the Chart Shows:**
+            - Each bar represents the mean concentration of a specific lipid class in a condition
+            - Error bars represent the standard error of the mean (SEM = standard deviation/√n), indicating the precision of the measurement
+            - Statistical significance is indicated with asterisks (* p < 0.05, ** p < 0.01, *** p < 0.001)
+            
+            **Viewing Options:**
+            - **Linear Scale:** Shows absolute concentration values, useful for comparing abundant lipid classes
+            - **Log2 Scale:** Transforms data to a logarithmic scale, better for visualizing both low and high abundance lipids
+            
+            **Statistical Testing:**
+            """)
+            
+            # Integrate the statistical testing guidance based on the number of conditions
             if len(selected_conditions_list) > 2:
-                st.info("""
-                📊 **Statistical Testing Note:**
-                - Multiple conditions detected: Using ANOVA + Tukey's test
+                st.markdown("""
+                **For multiple conditions (current selection):**
+                - Multiple conditions are analyzed using ANOVA + Tukey's test
                 - This is the correct approach when interested in multiple comparisons
-                - Do NOT run separate t-tests by unselecting conditions - this would inflate the false positive rate
-                - The current analysis automatically adjusts significance thresholds to maintain a 5% false positive rate across all comparisons
+                - Do NOT run separate t-tests by unselecting conditions - this would inflate the false discovery rate
+                - One-way ANOVA determines if any group means differ significantly
+                - If ANOVA is significant, Tukey's HSD test identifies which specific pairs of conditions differ
+                - P-values are adjusted for multiple testing using the Benjamini-Hochberg method to control false discovery rate at 5%
+                - Error bars shown are standard error of the mean (SEM = standard deviation/√n)
                 """)
             elif len(selected_conditions_list) == 2:
-                st.info("""
-                📊 **Statistical Testing Note:**
-                - Two conditions detected: Using t-test
+                st.markdown("""
+                **For two conditions (current selection):**
+                - Two conditions are compared using Welch's t-test (does not assume equal variances)
                 - This is appropriate ONLY for a single pre-planned comparison
                 - If you plan to compare multiple conditions, please select all relevant conditions to use ANOVA + Tukey's test
+                - P-values are adjusted for multiple testing using the Benjamini-Hochberg method
+                - Error bars shown are standard error of the mean (SEM = standard deviation/√n)
+                - Significance levels:
+                  * p < 0.05, ** p < 0.01, *** p < 0.001
+                """)
+            else:
+                st.markdown("""
+                **Statistical testing requires selecting conditions:**
+                - For two conditions: Welch's t-test will be used
+                - For three or more conditions: ANOVA followed by Tukey's HSD test will be used
+                - Please select conditions above to enable statistical testing
                 """)
             
+            st.markdown("""
+            **Data Processing:**
+            - For each condition, the total concentration of each lipid class is calculated by summing all species within that class
+            - The mean and standard error are calculated across all replicates within each condition
+            - Statistical tests are performed to identify significant differences between conditions
+            """)
+            st.markdown("---")
+        
+        linear_fig, log2_fig = None, None
+        if selected_conditions_list and selected_classes_list:
             # Perform statistical tests
-            statistical_results = lp.AbundanceBarChart.perform_statistical_tests(
-                continuation_df, 
-                experiment, 
-                selected_conditions_list, 
-                selected_classes_list
-            )
-            
-            # Display statistical testing information
-            if statistical_results:
-                if len(selected_conditions_list) == 2:
-                    st.info("""
-                    📊 **Statistical Testing Information**
-                    - Method: Student t-test
-                    - Significance levels:
-                         * p < 0.05
-                        - ** p < 0.01
-                        - *** p < 0.001
-                    """)
-                else:
-                    st.info("""
-                    📊 **Statistical Testing Information**
-                    - Method: ANOVA + Tukey's test
-                    - Multiple comparison correction applied
-                    - Significance levels:
-                         * p < 0.05
-                        - ** p < 0.01
-                        - *** p < 0.001
-                    """)
+            with st.spinner("Performing statistical analysis..."):
+                statistical_results = lp.AbundanceBarChart.perform_statistical_tests(
+                    continuation_df, 
+                    experiment, 
+                    selected_conditions_list, 
+                    selected_classes_list
+                )
             
             # Optional detailed statistical results
-            if st.checkbox("Show detailed statistical analysis"):
+            show_detailed_stats = st.checkbox("Show detailed statistical analysis", key="show_detailed_stats")
+            if show_detailed_stats:
                 display_statistical_details(
                     statistical_results, 
                     selected_conditions_list
                 )
 
             # Generate linear scale chart
-            linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
-                df=continuation_df,
-                full_samples_list=experiment.full_samples_list,
-                individual_samples_list=experiment.individual_samples_list,
-                conditions_list=experiment.conditions_list,
-                selected_conditions=selected_conditions_list,
-                selected_classes=selected_classes_list,
-                mode='linear scale',
-                anova_results=statistical_results
-            )
+            with st.spinner("Generating linear scale chart..."):
+                linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
+                    df=continuation_df,
+                    full_samples_list=experiment.full_samples_list,
+                    individual_samples_list=experiment.individual_samples_list,
+                    conditions_list=experiment.conditions_list,
+                    selected_conditions=selected_conditions_list,
+                    selected_classes=selected_classes_list,
+                    mode='linear scale',
+                    anova_results=statistical_results
+                )
             
             if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
                 st.write("Linear Scale")
@@ -1709,16 +2192,17 @@ def display_abundance_bar_charts(experiment, continuation_df):
                     )
             
             # Generate log2 scale chart
-            log2_fig, abundance_df_log2 = lp.AbundanceBarChart.create_abundance_bar_chart(
-                df=continuation_df,
-                full_samples_list=experiment.full_samples_list,
-                individual_samples_list=experiment.individual_samples_list,
-                conditions_list=experiment.conditions_list,
-                selected_conditions=selected_conditions_list,
-                selected_classes=selected_classes_list,
-                mode='log2 scale',
-                anova_results=statistical_results
-            )
+            with st.spinner("Generating log2 scale chart..."):
+                log2_fig, abundance_df_log2 = lp.AbundanceBarChart.create_abundance_bar_chart(
+                    df=continuation_df,
+                    full_samples_list=experiment.full_samples_list,
+                    individual_samples_list=experiment.individual_samples_list,
+                    conditions_list=experiment.conditions_list,
+                    selected_conditions=selected_conditions_list,
+                    selected_classes=selected_classes_list,
+                    mode='log2 scale',
+                    anova_results=statistical_results
+                )
             
             if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
                 st.write("Log2 Scale")
@@ -1756,69 +2240,206 @@ def display_statistical_details(statistical_results, selected_conditions):
     
     if len(selected_conditions) == 2:
         st.write(f"Comparing conditions: {selected_conditions[0]} vs {selected_conditions[1]}")
-        st.write("Method: Independent t-test (Welch's t-test)")
+        st.write("**Method:** Welch's t-test (does not assume equal variances between groups)")
+        st.write("""
+        The t-test determines whether the means of two groups are statistically different from each other. 
+        Welch's t-test is used because it does not assume equal variances between the two groups, making it more robust.
+        """)
     else:
         st.write(f"Comparing {len(selected_conditions)} conditions using ANOVA + Tukey's test")
-        st.write("Note: P-values are adjusted for multiple comparisons")
+        st.write("""
+        **Method:** One-way Analysis of Variance (ANOVA) followed by Tukey's HSD (Honestly Significant Difference) test
+        
+        ANOVA tests whether any of the group means are statistically different from each other. It returns an F-statistic and p-value.
+        If ANOVA indicates significant differences (p < 0.05), Tukey's HSD test is performed to determine which specific groups differ.
+        """)
+        st.write("**Multiple comparisons correction:** Benjamini-Hochberg procedure to control false discovery rate at 5%")
     
+    # Create a table for statistical results
+    results_data = []
     for lipid_class, results in statistical_results.items():
-        st.write(f"\n#### {lipid_class}")
         p_value = results['p-value']
+        adj_p_value = results.get('adjusted p-value', p_value)
         
         if results['test'] == 't-test':
-            st.write(f"t-statistic: {results['statistic']:.3f}")
-            st.write(f"p-value: {p_value:.3f}")
-            if 'adjusted p-value' in results:
-                st.write(f"Adjusted p-value: {results['adjusted p-value']:.3f}")
+            result_row = {
+                'Lipid Class': lipid_class,
+                'Test': 't-test',
+                'Statistic': f"t = {results['statistic']:.3f}",
+                'p-value': f"{p_value:.3f}",
+                'Adjusted p-value': f"{adj_p_value:.3f}",
+                'Significant': '✓' if adj_p_value < 0.05 else '✗'
+            }
+            results_data.append(result_row)
         else:  # ANOVA
-            st.write(f"F-statistic: {results['statistic']:.3f}")
-            st.write(f"p-value: {p_value:.3f}")
-            if 'adjusted p-value' in results:
-                st.write(f"Adjusted p-value: {results['adjusted p-value']:.3f}")
-            
-            if results.get('tukey_results'):
-                st.write("\nTukey's test pairwise comparisons:")
-                tukey = results['tukey_results']
-                for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
-                    st.write(f"- {g1} vs {g2}: p = {p:.3f}")
-            else:
-                st.write("No pairwise comparisons available (ANOVA p-value > 0.05)")
+            result_row = {
+                'Lipid Class': lipid_class,
+                'Test': 'ANOVA',
+                'Statistic': f"F = {results['statistic']:.3f}",
+                'p-value': f"{p_value:.3f}",
+                'Adjusted p-value': f"{adj_p_value:.3f}",
+                'Significant': '✓' if adj_p_value < 0.05 else '✗'
+            }
+            results_data.append(result_row)
+    
+    if results_data:
+        results_df = pd.DataFrame(results_data)
+        st.write("#### Statistical Test Results Summary")
+        st.dataframe(results_df)
+    
+    # Show detailed post-hoc results for ANOVA
+    if len(selected_conditions) > 2:
+        st.write("#### Post-hoc Test Results (Tukey's HSD)")
+        st.write("The table below shows pairwise comparisons between conditions for each lipid class with significant ANOVA results.")
+        
+        has_posthoc_results = False
+        for lipid_class, results in statistical_results.items():
+            if results['test'] == 'ANOVA' and results.get('tukey_results'):
+                adj_p_value = results.get('adjusted p-value', results['p-value'])
+                if adj_p_value < 0.05:
+                    has_posthoc_results = True
+                    st.write(f"**{lipid_class}**")
+                    
+                    tukey = results['tukey_results']
+                    tukey_data = []
+                    for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
+                        significance = ''
+                        if p < 0.001:
+                            significance = '***'
+                        elif p < 0.01:
+                            significance = '**'
+                        elif p < 0.05:
+                            significance = '*'
+                            
+                        tukey_data.append({
+                            'Group 1': g1,
+                            'Group 2': g2,
+                            'p-value': f"{p:.3f}",
+                            'Significant': significance
+                        })
+                    
+                    tukey_df = pd.DataFrame(tukey_data)
+                    st.dataframe(tukey_df)
+        
+        if not has_posthoc_results:
+            st.write("No significant ANOVA results to display post-hoc tests for.")
                 
 def display_abundance_pie_charts(experiment, continuation_df):
+    """
+    Display pie charts showing the proportional distribution of lipid classes for each condition.
+    
+    Args:
+        experiment: Experiment object containing experimental setup information
+        continuation_df: DataFrame containing the lipidomics data
+        
+    Returns:
+        dict: Dictionary containing the generated pie chart figures by condition
+    """
     pie_charts = {}
     with st.expander("Class Concentration Pie Chart"):
+        # Get all lipid classes
         full_samples_list = experiment.full_samples_list
         all_classes = lp.AbundancePieChart.get_all_classes(continuation_df, full_samples_list)
-        selected_classes_list = st.multiselect('Select classes for the chart:', all_classes, all_classes)
+        
+        # Select lipid classes
+        selected_classes_list = st.multiselect(
+            'Select classes for the chart:', 
+            all_classes, 
+            all_classes,
+            key='pie_chart_classes'
+        )
+        
+        # Show explanation about pie chart analysis
+        show_piechart_info = st.checkbox("Show pie chart analysis details", key="show_piechart_info")
+        if show_piechart_info:
+            st.markdown("### Class Concentration Pie Chart Analysis")
+            st.markdown("""
+            Pie charts visualize the relative proportions of different lipid classes within each experimental condition, providing a quick overview of lipid composition.
+            
+            **What the Chart Shows:**
+            - Each segment represents a lipid class
+            - The size of each segment corresponds to the percentage of that class in the total lipid pool
+            - Hover over segments to see exact percentages
+            - Consistent colors are used for the same lipid class across different conditions
+            
+            **Data Processing:**
+            - For each condition, the total concentration of each lipid class is calculated by summing all species within that class
+            - The sum across all replicates is used to represent each condition
+            - Values are converted to percentages for the pie chart representation
+            """)
+            st.markdown("---")
+        
         if selected_classes_list:
+            # Filter dataframe for selected classes
             filtered_df = lp.AbundancePieChart.filter_df_for_selected_classes(continuation_df, full_samples_list, selected_classes_list)
+            
+            # Generate consistent colors for classes
             color_mapping = lp.AbundancePieChart._generate_color_mapping(selected_classes_list)
+            
+            # Create list of conditions with multiple samples
+            conditions_with_samples = []
             for condition, samples in zip(experiment.conditions_list, experiment.individual_samples_list):
                 if len(samples) > 1:  # Skip conditions with only one sample
-                    fig, df = lp.AbundancePieChart.create_pie_chart(filtered_df, full_samples_list, condition, samples, color_mapping)
-                    st.subheader(f"Abundance Pie Chart for {condition}")
-                    st.plotly_chart(fig)
-                    
-                    # Add SVG download button for the pie chart
-                    plotly_svg_download_button(fig, f"abundance_pie_chart_{condition}.svg")
-                    
-                    # Add CSV download button for the pie chart data
-                    csv_download = convert_df(df)
-                    st.download_button(
-                        label="Download CSV",
-                        data=csv_download,
-                        file_name=f'abundance_pie_chart_{condition}.csv',
-                        mime='text/csv'
-                    )
-                    
+                    conditions_with_samples.append((condition, samples))
+            
+            if not conditions_with_samples:
+                st.warning("No conditions with multiple samples found.")
+                return pie_charts
+            
+            # Create separate rows for each condition
+            for condition, samples in conditions_with_samples:
+                st.subheader(f"{condition}")
+                fig, df = lp.AbundancePieChart.create_pie_chart(
+                    filtered_df, full_samples_list, condition, samples, color_mapping
+                )
+                if fig is not None:
+                    st.plotly_chart(fig, use_container_width=True)
                     pie_charts[condition] = fig
                     
-                    st.markdown("---")  # Add a separator between charts
+                    # Download options
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        plotly_svg_download_button(
+                            fig, f"abundance_pie_chart_{condition}.svg"
+                        )
+                    with col2:
+                        # Create a data frame with percentages for download
+                        available_samples = [sample for sample in samples if f"concentration[{sample}]" in filtered_df.columns]
+                        if available_samples:
+                            total_values = filtered_df[[f"concentration[{sample}]" for sample in available_samples]].sum(axis=1)
+                            percent_values = (total_values / total_values.sum() * 100).round(2)
+                            download_df = pd.DataFrame({
+                                'Class': filtered_df.index,
+                                'Total Concentration': total_values.values,
+                                'Percentage (%)': percent_values.values
+                            })
+                            csv_download = convert_df(download_df)
+                            st.download_button(
+                                label="Download CSV",
+                                data=csv_download,
+                                file_name=f'abundance_pie_chart_{condition}.csv',
+                                mime='text/csv'
+                            )
+                # Add a divider between conditions
+                st.markdown("---")
+        else:
+            st.warning("Please select at least one lipid class to create the pie charts.")
+    
     return pie_charts
 
 def display_saturation_plots(experiment, continuation_df):
+    """
+    Display saturation plots with statistical analysis for selected conditions and lipid classes.
+    
+    Args:
+        experiment: Experiment object containing experimental setup information
+        continuation_df: DataFrame containing the lipidomics data
+        
+    Returns:
+        dict: Dictionary containing the generated plots by lipid class
+    """
     saturation_plots = {}
-    with st.expander("Saturation Plots"):
+    with st.expander("Class Level Breakdown - Saturation Plots"):
         # Check if we have any detailed FA compositions
         has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
         
@@ -1829,84 +2450,144 @@ def display_saturation_plots(experiment, continuation_df):
             carbons and double bonds. This may affect the accuracy of the saturation analysis.
             """)
 
+        # Show explanation about saturation plot analysis
+        show_saturation_info = st.checkbox("Show saturation plot analysis details", key="show_saturation_info")
+        if show_saturation_info:
+            st.markdown("### Saturation Plot Analysis")
+            st.markdown("""
+            Saturation plots analyze the fatty acid composition within lipid classes, distinguishing between saturated (SFA), mono-unsaturated (MUFA), and poly-unsaturated fatty acids (PUFA).
+            
+            **What the Plots Show:**
+            
+            1. **Concentration Profile Plot**:
+               - Groups of bars show SFA, MUFA, and PUFA concentrations for each condition
+               - Error bars represent standard error of the mean (SEM = standard deviation/√n)
+               - Stars (★) indicate statistical significance between conditions:
+                 * ★ p < 0.05
+                 * ★★ p < 0.01
+                 * ★★★ p < 0.001
+            
+            2. **Percentage Distribution Plot**:
+               - Stacked bars show the relative proportion of SFA, MUFA, and PUFA in each condition
+               - Total height always equals 100%
+               - Shows compositional shifts even when total lipid amounts differ
+            
+            **How SFA, MUFA, and PUFA Are Calculated:**
+            
+            1. For each lipid molecule (e.g., PC(16:0_18:1)), the number of double bonds in each fatty acid chain is determined:
+               - 16:0 has 0 double bonds → SFA (saturated)
+               - 18:1 has 1 double bond → MUFA (mono-unsaturated)
+               - Chains with 2+ double bonds → PUFA (poly-unsaturated)
+            
+            2. The proportion of each fatty acid type is calculated per molecule:
+               - For PC(16:0_18:1), which has 1 SFA and 1 MUFA chain, the proportions are:
+                 * SFA: 1/2 = 0.5 (50%)
+                 * MUFA: 1/2 = 0.5 (50%)
+                 * PUFA: 0/2 = 0 (0%)
+            
+            3. These proportions are multiplied by the molecule's concentration:
+               - If PC(16:0_18:1) has a concentration of 10 μM, then:
+                 * SFA contribution = 10 μM × 0.5 = 5 μM
+                 * MUFA contribution = 10 μM × 0.5 = 5 μM
+                 * PUFA contribution = 10 μM × 0 = 0 μM
+            
+            4. All contributions are summed across all lipid molecules in each class to get total SFA, MUFA, and PUFA concentrations
+            
+            **Statistical Analysis Details:**
+            
+            - **For two conditions**: Welch's t-test is used, which does not assume equal variances
+            
+            - **For multiple conditions**: One-way ANOVA followed by Tukey's HSD post-hoc test for pairwise comparisons
+            
+            - **Multiple Testing Correction**: 
+              * When testing multiple lipid classes, p-values are NOT automatically adjusted
+              * For ANOVA with post-hoc tests, Tukey's HSD inherently controls for multiple comparisons within each lipid class
+              * Users should interpret significance with caution when analyzing many lipid classes simultaneously
+            """)
+            st.markdown("---")
+
+        # Get all lipid classes
         full_samples_list = experiment.full_samples_list
-        
         all_classes = continuation_df['ClassKey'].unique().tolist()
-        selected_classes_list = st.multiselect('Select classes for the saturation plot:', all_classes, all_classes)
         
-        if selected_classes_list:
+        # Select classes and conditions
+        selected_classes_list = st.multiselect(
+            'Select classes for the saturation plot:', 
+            all_classes, 
+            all_classes
+        )
+        
+        selected_conditions = st.multiselect(
+            'Select conditions for the saturation plot:', 
+            experiment.conditions_list, 
+            experiment.conditions_list
+        )
+        
+        if selected_classes_list and selected_conditions:
             # Filter the DataFrame for selected classes
             filtered_df = continuation_df[continuation_df['ClassKey'].isin(selected_classes_list)]
             
-            selected_conditions = st.multiselect('Select conditions for the saturation plot:', experiment.conditions_list, experiment.conditions_list)
-            
-            if selected_conditions:
-                # Add statistical testing guidance based on number of conditions
-                if len(selected_conditions) > 2:
-                    st.info("""
-                    📊 **Statistical Testing for Fatty Acid Comparisons:**
-                    - Multiple conditions detected: Using ANOVA + Tukey's test
-                    - Each fatty acid type (SFA, MUFA, PUFA) is tested separately
-                    - ANOVA determines if there are any differences between conditions
-                    - If ANOVA is significant (p < 0.05), Tukey's test shows which specific conditions differ
-                    - The analysis automatically adjusts significance thresholds to maintain a 5% false positive rate
-                    - Stars (★) indicate significance levels:
-                        * ★ p < 0.05
-                        * ★★ p < 0.01
-                        * ★★★ p < 0.001
-                    """)
-                elif len(selected_conditions) == 2:
-                    st.info("""
-                    📊 **Statistical Testing for Fatty Acid Comparisons:**
-                    - Two conditions detected: Using Welch's t-test
-                    - Each fatty acid type (SFA, MUFA, PUFA) is tested separately
-                    - The t-test determines if there are significant differences between conditions
-                    - Stars (★) indicate significance levels:
-                        * ★ p < 0.05
-                        * ★★ p < 0.01
-                        * ★★★ p < 0.001
-                    - Note: If you plan to compare multiple conditions, select all relevant conditions to use ANOVA
-                    """)
-
+            # Generate the plots
+            with st.spinner("Generating saturation plots..."):
                 plots = lp.SaturationPlot.create_plots(filtered_df, experiment, selected_conditions)
                 
-                for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
-                    st.subheader(f"Saturation Plot for {lipid_class}")
-                    
-                    st.plotly_chart(main_plot)
-                    plotly_svg_download_button(main_plot, f"saturation_plot_main_{lipid_class}.svg")
-                    
-                    main_csv_download = convert_df(plot_data)
-                    st.download_button(
-                        label="Download CSV",
-                        data=main_csv_download,
-                        file_name=f'saturation_plot_main_data_{lipid_class}.csv',
-                        mime='text/csv'
-                    )
-                    
-                    st.plotly_chart(percentage_plot)
-                    plotly_svg_download_button(percentage_plot, f"saturation_plot_percentage_{lipid_class}.svg")
-                    
-                    percentage_data = lp.SaturationPlot._calculate_percentage_df(plot_data)
-                    percentage_csv_download = convert_df(percentage_data)
-                    st.download_button(
-                        label="Download CSV",
-                        data=percentage_csv_download,
-                        file_name=f'saturation_plot_percentage_data_{lipid_class}.csv',
-                        mime='text/csv'
-                    )
-                    
-                    saturation_plots[lipid_class] = {'main': main_plot, 'percentage': percentage_plot}
-                    
-                    st.markdown("---")
+                if plots:
+                    for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
+                        st.subheader(f"Saturation Profile for {lipid_class}")
+                        
+                        # Display the main plot
+                        st.markdown("#### Concentration Profile")
+                        st.plotly_chart(main_plot)
+                        plotly_svg_download_button(main_plot, f"saturation_plot_main_{lipid_class}.svg")
+                        
+                        # Provide download for the data
+                        main_csv_download = convert_df(plot_data)
+                        st.download_button(
+                            label="Download CSV",
+                            data=main_csv_download,
+                            file_name=f'saturation_plot_main_data_{lipid_class}.csv',
+                            mime='text/csv'
+                        )
+                        
+                        # Display the percentage plot
+                        st.markdown("#### Percentage Distribution")
+                        st.plotly_chart(percentage_plot)
+                        plotly_svg_download_button(percentage_plot, f"saturation_plot_percentage_{lipid_class}.svg")
+                        
+                        # Provide download for the percentage data
+                        percentage_data = lp.SaturationPlot._calculate_percentage_df(plot_data)
+                        percentage_csv_download = convert_df(percentage_data)
+                        st.download_button(
+                            label="Download CSV",
+                            data=percentage_csv_download,
+                            file_name=f'saturation_plot_percentage_data_{lipid_class}.csv',
+                            mime='text/csv'
+                        )
+                        
+                        # Add to the dictionary for return
+                        saturation_plots[lipid_class] = {'main': main_plot, 'percentage': percentage_plot}
+                        
+                        # Add a separator between plots
+                        st.markdown("---")
+                else:
+                    st.warning("No plots could be generated. This might be because there are insufficient samples or no data for the selected classes.")
+        else:
+            st.warning("Please select at least one class and one condition to generate saturation plots.")
+    
     return saturation_plots
 
 def display_pathway_visualization(experiment, continuation_df):
     """
     Displays an interactive lipid pathway visualization within a Streamlit application.
-    [rest of docstring remains the same]
+    
+    Args:
+        experiment: Experiment object containing sample information
+        continuation_df: DataFrame containing the lipidomic data
+        
+    Returns:
+        matplotlib.figure.Figure or None: The pathway visualization figure if generated, otherwise None
     """
-    with st.expander("Lipid Pathway Visualization"):
+    with st.expander("Class Level Breakdown - Pathway Visualization"):
         # Check if we have any detailed FA compositions
         has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
         
@@ -1918,42 +2599,115 @@ def display_pathway_visualization(experiment, continuation_df):
             remain accurate.
             """)
 
-        # Rest of the existing code
+        # Show explanation about the pathway visualization
+        show_pathway_info = st.checkbox("Show pathway visualization details", key="show_pathway_info")
+        if show_pathway_info:
+            st.markdown("### Lipid Pathway Visualization")
+            st.markdown("""
+            The lipid pathway visualization provides a comprehensive view of how different lipid classes relate to each other in metabolic pathways and how they are affected by experimental conditions.
+            
+            **What the Visualization Shows:**
+            
+            - **Circle Positions**: Each circle represents a different lipid class positioned according to metabolic relationships
+            - **Circle Size**: The size of each circle indicates the fold change in abundance between conditions 
+              - Larger circles = increased abundance in experimental condition
+              - Smaller circles = decreased abundance in experimental condition
+            - **Circle Color**: Color intensity represents the saturation ratio (proportion of saturated fatty acids)
+              - Warmer colors (red/yellow) = higher proportion of saturated fatty acids
+              - Cooler colors (blue/purple) = lower proportion of saturated fatty acids
+            
+            **How the Data is Calculated:**
+            
+            1. **Fold Change Calculation**:
+               - For each lipid class, the average concentration in the experimental condition is divided by the average concentration in the control condition
+               - This ratio determines the circle size (squared for visual emphasis)
+               - Values >1 indicate an increase in the experimental condition
+               - Values <1 indicate a decrease in the experimental condition
+            
+            2. **Saturation Ratio Calculation**:
+               - For each lipid molecule (e.g., PC(16:0_18:1)), the number of saturated and unsaturated fatty acid chains is counted:
+                 * Chains with 0 double bonds (e.g., 16:0) are counted as saturated
+                 * Chains with 1+ double bonds (e.g., 18:1) are counted as unsaturated
+               - The saturation ratio is calculated as: number of saturated chains ÷ total number of chains
+               - This ratio ranges from 0 (all unsaturated) to 1 (all saturated)
+            """)
+            st.markdown("---")
+
+        # Allow selection of control and experimental conditions
         if len([x for x in experiment.number_of_samples_list if x > 1]) > 1:
             control_condition = st.selectbox('Select Control Condition',
                                              [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1], 
                                              index=0)
             experimental_condition = st.selectbox('Select Experimental Condition',
                                                   [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1 and cond != control_condition], 
-                                                  index=1)
+                                                  index=0)
     
             # Check if both conditions are selected
             if control_condition and experimental_condition:
-                class_saturation_ratio_df = lp.PathwayViz.calculate_class_saturation_ratio(continuation_df)
-                class_fold_change_df = lp.PathwayViz.calculate_class_fold_change(continuation_df, experiment, control_condition, experimental_condition)
-                
-                fig, pathway_dict = lp.PathwayViz.create_pathway_viz(class_fold_change_df, class_saturation_ratio_df, control_condition, experimental_condition)
-                
-                if fig is not None and pathway_dict:
-                    st.pyplot(fig)
+                with st.spinner("Generating pathway visualization..."):
+                    # Calculate saturation ratios
+                    class_saturation_ratio_df = lp.PathwayViz.calculate_class_saturation_ratio(continuation_df)
                     
-                    # Add SVG download button for the pathway visualization
-                    matplotlib_svg_download_button(fig, f"pathway_visualization_{control_condition}_vs_{experimental_condition}.svg")
+                    # Calculate fold changes
+                    class_fold_change_df = lp.PathwayViz.calculate_class_fold_change(continuation_df, experiment, control_condition, experimental_condition)
                     
-                    pathway_df = pd.DataFrame.from_dict(pathway_dict)
-                    pathway_df.set_index('class', inplace=True)
-                    st.write(pathway_df)
-                    csv_download = convert_df(pathway_df)
-                    st.download_button(
-                        label="Download CSV",
-                        data=csv_download,
-                        file_name='pathway_df.csv',
-                        mime='text/csv')
+                    # Generate the visualization
+                    fig, pathway_dict = lp.PathwayViz.create_pathway_viz(class_fold_change_df, class_saturation_ratio_df, control_condition, experimental_condition)
                     
-                    return fig
-                    
-                else:
-                    st.warning("Unable to generate pathway visualization due to insufficient data.")
+                    if fig is not None and pathway_dict:
+                        st.pyplot(fig)
+                        
+                        # Add SVG download button for the pathway visualization
+                        matplotlib_svg_download_button(fig, f"pathway_visualization_{control_condition}_vs_{experimental_condition}.svg")
+                        
+                        # Create a summary table of the data
+                        st.subheader("Pathway Data Summary")
+                        st.markdown(f"**Comparing {experimental_condition} to {control_condition}**")
+                        
+                        # Create a more informative dataframe
+                        pathway_df = pd.DataFrame({
+                            'Lipid Class': pathway_dict['class'],
+                            'Fold Change': pathway_dict['abundance ratio'],
+                            'Saturation Ratio': pathway_dict['saturated fatty acids ratio']
+                        })
+                        
+                        # Add a direction column for clarity
+                        pathway_df['Change Direction'] = pathway_df['Fold Change'].apply(
+                            lambda x: "↑ Increased" if x > 1 else 
+                                     ("↓ Decreased" if x < 1 and x > 0 else "No Change")
+                        )
+                        
+                        # Sort by absolute change
+                        pathway_df['Absolute Change'] = abs(pathway_df['Fold Change'] - 1)
+                        pathway_df = pathway_df.sort_values('Absolute Change', ascending=False)
+                        
+                        # Remove helper column and format others
+                        pathway_df = pathway_df.drop('Absolute Change', axis=1)
+                        pathway_df['Fold Change'] = pathway_df['Fold Change'].apply(lambda x: f"{x:.2f}")
+                        pathway_df['Saturation Ratio'] = pathway_df['Saturation Ratio'].apply(lambda x: f"{x:.2f}")
+                        
+                        # Display the dataframe
+                        st.dataframe(pathway_df)
+                        
+                        # Provide download button
+                        csv_download = convert_df(pathway_df)
+                        st.download_button(
+                            label="Download CSV",
+                            data=csv_download,
+                            file_name='pathway_visualization_data.csv',
+                            mime='text/csv')
+                        
+                        return fig
+                    else:
+                        st.warning("Unable to generate pathway visualization due to insufficient data.")
+                        st.markdown("""
+                        This could be due to:
+                        1. Missing lipid classes needed for the visualization
+                        2. Issues with fatty acid composition data
+                        3. Insufficient data for calculating fold changes
+                        
+                        Try using a dataset with more comprehensive lipid coverage or check the format of your fatty acid data.
+                        """)
         else:
             st.warning("At least two conditions with more than one replicate are required for pathway visualization.")
             
@@ -1965,107 +2719,363 @@ def display_volcano_plot(experiment, continuation_df):
     Returns a dictionary containing the generated plots.
     """
     volcano_plots = {}
-    with st.expander("Volcano Plots - Test Hypothesis"):
+    with st.expander("Species Level Breakdown - Volcano Plot"):
+        # Check for conditions with multiple replicates
         conditions_with_replicates = [condition for index, condition in enumerate(experiment.conditions_list) if experiment.number_of_samples_list[index] > 1]
         if len(conditions_with_replicates) <= 1:
             st.error('You need at least two conditions with more than one replicate to create a volcano plot.')
             return volcano_plots
 
+        # Show explanation about volcano plot analysis
+        show_volcano_info = st.checkbox("Show volcano plot analysis details", key="show_volcano_info")
+        if show_volcano_info:
+            st.markdown("### Volcano Plot Analysis")
+            st.markdown("""
+            Volcano plots are powerful visualizations for identifying statistically significant changes in lipid species between two experimental conditions.
+            
+            **What the Plot Shows:**
+            
+            - **X-axis (Log2 Fold Change)**: Shows the magnitude and direction of change between conditions
+              - Positive values (right side): Increased in experimental condition
+              - Negative values (left side): Decreased in experimental condition
+              - Each unit represents a doubling (right) or halving (left) of concentration
+            
+            - **Y-axis (-log10 p-value)**: Shows the statistical significance of the change
+              - Higher values (top): More statistically significant
+              - Lower values (bottom): Less statistically significant
+            
+            - **Dashed Lines**: Reference thresholds for biological and statistical significance
+              - Horizontal line: Statistical significance threshold (p-value)
+              - Vertical lines: Biological significance thresholds (±2-fold change)
+            
+            - **Color Coding**: Points are colored by lipid class for easier pattern recognition
+            
+            **Data Processing:**
+            
+            - **Fold Change Calculation**: Log2(mean experimental / mean control)
+              - Lipids with zero concentration in either condition are excluded and listed separately
+            
+            - **Statistical Testing**: Welch's t-test comparing control and experimental replicates
+              - P-values are transformed to -log10 scale for visualization
+              - No adjustment for multiple testing is applied
+            
+            - **Filtering Options**:
+              - Set significance threshold (default p = 0.05)
+              - Hide non-significant points
+              - Select specific lipid classes
+            
+            **Companion Plots:**
+            
+            - **Concentration vs. Fold Change**: Shows relationship between abundance and magnitude of change
+              - Reveals whether high or low abundance lipids are more affected
+            
+            - **Concentration Distribution**: Box plots of selected lipids across conditions
+              - Provides detailed view of specific lipids of interest
+            """)
+            st.markdown("---")
+
+        # Significance level selection
         p_value_threshold = st.number_input('Enter the significance level for Volcano Plot', min_value=0.001, max_value=0.1, value=0.05, step=0.001, key="volcano_plot_p_value_threshold")
         q_value_threshold = -np.log10(p_value_threshold)
+        
+        # Condition selection
         control_condition = st.selectbox('Pick the control condition', conditions_with_replicates)
         default_experimental = conditions_with_replicates[1] if len(conditions_with_replicates) > 1 else conditions_with_replicates[0]
         experimental_condition = st.selectbox('Pick the experimental condition', conditions_with_replicates, index=conditions_with_replicates.index(default_experimental))
+        
+        # Class selection
         selected_classes_list = st.multiselect('Add or remove classes:', list(continuation_df['ClassKey'].value_counts().index), list(continuation_df['ClassKey'].value_counts().index))
         
+        # Display options
         hide_non_significant = st.checkbox('Hide non-significant data points', value=False)
 
-        plot, merged_df, removed_lipids_df = lp.VolcanoPlot.create_and_display_volcano_plot(experiment, continuation_df, control_condition, experimental_condition, selected_classes_list, q_value_threshold, hide_non_significant)
-        st.plotly_chart(plot, use_container_width=True)
-        volcano_plots['main'] = plot
-        
-        # Add SVG download button for the main volcano plot
-        plotly_svg_download_button(plot, "volcano_plot.svg")
-
-        # Download options
-        csv_data = convert_df(merged_df[['LipidMolec', 'FoldChange', '-log10(pValue)', 'ClassKey']])
-        st.download_button("Download CSV", csv_data, file_name="volcano_data.csv", mime="text/csv")
-        st.write('------------------------------------------------------------------------------------')
-        
-        # Generate and display the concentration vs. fold change plot
-        color_mapping = lp.VolcanoPlot._generate_color_mapping(merged_df)
-        concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant)
-        st.plotly_chart(concentration_vs_fold_change_plot, use_container_width=True)
-        volcano_plots['concentration_vs_fold_change'] = concentration_vs_fold_change_plot
-        
-        # Add SVG download button for the concentration vs fold change plot
-        plotly_svg_download_button(concentration_vs_fold_change_plot, "concentration_vs_fold_change_plot.svg")
-
-        # CSV download option for concentration vs. fold change plot
-        csv_data_for_concentration_plot = convert_df(download_df)
-        st.download_button("Download CSV", csv_data_for_concentration_plot, file_name="concentration_vs_fold_change_data.csv", mime="text/csv")
-        st.write('------------------------------------------------------------------------------------')
-        
-        # Additional functionality for lipid concentration distribution
-        all_classes = list(merged_df['ClassKey'].unique())
-        selected_class = st.selectbox('Select Lipid Class:', all_classes)
-        if selected_class:
-            class_lipids = merged_df[merged_df['ClassKey'] == selected_class]['LipidMolec'].unique().tolist()
-            selected_lipids = st.multiselect('Select Lipids:', class_lipids, default=class_lipids[:1])
-            if selected_lipids:
-                selected_conditions = [control_condition, experimental_condition]
-                plot_df = lp.VolcanoPlot.create_concentration_distribution_data(
-                    merged_df, selected_lipids, selected_conditions, experiment
+        # Generate plots
+        if selected_classes_list:
+            with st.spinner("Generating volcano plot..."):
+                plot, merged_df, removed_lipids_df = lp.VolcanoPlot.create_and_display_volcano_plot(
+                    experiment, 
+                    continuation_df, 
+                    control_condition, 
+                    experimental_condition, 
+                    selected_classes_list, 
+                    q_value_threshold, 
+                    hide_non_significant
                 )
-                fig = lp.VolcanoPlot.create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions)
-                st.pyplot(fig)
-                volcano_plots['concentration_distribution'] = fig
                 
-                # Add SVG download button for the concentration distribution plot (matplotlib)
-                matplotlib_svg_download_button(fig, "concentration_distribution_plot.svg")
+                # Display main volcano plot
+                st.plotly_chart(plot, use_container_width=True)
+                volcano_plots['main'] = plot
                 
-                csv_data = convert_df(plot_df)
-                st.download_button("Download CSV", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
-        st.write('------------------------------------------------------------------------------------')
+                # Add download options
+                plotly_svg_download_button(plot, "volcano_plot.svg")
+                csv_data = convert_df(merged_df[['LipidMolec', 'FoldChange', '-log10(pValue)', 'ClassKey']])
+                st.download_button("Download CSV", csv_data, file_name="volcano_data.csv", mime="text/csv")
+            
+            st.markdown("---")
+            
+            # Generate and display the concentration vs. fold change plot
+            with st.spinner("Generating concentration vs. fold change plot..."):
+                st.subheader("Concentration vs. Fold Change Plot")
+                st.markdown("""
+                This plot shows the relationship between a lipid's abundance (concentration) and its fold change. 
+                It can reveal whether changes occur primarily in high- or low-abundance lipid species.
+                """)
+                
+                color_mapping = lp.VolcanoPlot._generate_color_mapping(merged_df)
+                concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(
+                    merged_df, 
+                    color_mapping, 
+                    q_value_threshold, 
+                    hide_non_significant
+                )
+                
+                st.plotly_chart(concentration_vs_fold_change_plot, use_container_width=True)
+                volcano_plots['concentration_vs_fold_change'] = concentration_vs_fold_change_plot
+                
+                # Add download options
+                plotly_svg_download_button(concentration_vs_fold_change_plot, "concentration_vs_fold_change_plot.svg")
+                csv_data_for_concentration_plot = convert_df(download_df)
+                st.download_button("Download CSV", csv_data_for_concentration_plot, file_name="concentration_vs_fold_change_data.csv", mime="text/csv")
+            
+            st.markdown("---")
+            
+            # Additional functionality for lipid concentration distribution
+            st.subheader("Lipid Concentration Distribution")
+            st.markdown("""
+            Select a lipid class and specific lipids to view their concentration distribution across conditions. 
+            This provides a detailed look at individual lipid species that show interesting patterns in the volcano plot.
+            """)
+            
+            all_classes = list(merged_df['ClassKey'].unique())
+            selected_class = st.selectbox('Select Lipid Class:', all_classes)
+            
+            if selected_class:
+                class_lipids = merged_df[merged_df['ClassKey'] == selected_class]['LipidMolec'].unique().tolist()
+                selected_lipids = st.multiselect('Select Lipids:', class_lipids, default=class_lipids[:1])
+                
+                if selected_lipids:
+                    selected_conditions = [control_condition, experimental_condition]
+                    with st.spinner("Generating concentration distribution plot..."):
+                        plot_df = lp.VolcanoPlot.create_concentration_distribution_data(
+                            merged_df, 
+                            selected_lipids, 
+                            selected_conditions, 
+                            experiment
+                        )
+                        fig = lp.VolcanoPlot.create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions)
+                        st.pyplot(fig)
+                        volcano_plots['concentration_distribution'] = fig
+                        
+                        # Add download options
+                        matplotlib_svg_download_button(fig, "concentration_distribution_plot.svg")
+                        csv_data = convert_df(plot_df)
+                        st.download_button("Download CSV", csv_data, file_name=f"{'_'.join(selected_lipids)}_concentration.csv", mime="text/csv")
+            
+            st.markdown("---")
 
-        # Displaying the table of invalid lipids
-        if not removed_lipids_df.empty:
-            st.write("Lipids excluded from the plot (fold change zero or infinity):")
-            st.dataframe(removed_lipids_df)
+            # Displaying the table of invalid lipids
+            st.subheader("Excluded Lipids")
+            st.markdown("""
+            The following lipids were excluded from the volcano plot because they had zero concentration in either 
+            the control or experimental condition. This often occurs for lipids that are only present in one condition.
+            """)
+            
+            if not removed_lipids_df.empty:
+                st.dataframe(removed_lipids_df)
+                csv_excluded = convert_df(removed_lipids_df)
+                st.download_button("Download Excluded Lipids CSV", csv_excluded, file_name="excluded_lipids.csv", mime="text/csv")
+            else:
+                st.write("No lipids were excluded from the analysis.")
         else:
-            st.write("No invalid lipids found.")
+            st.warning("Please select at least one lipid class to generate the volcano plot.")
 
     return volcano_plots
 
 def display_lipidomic_heatmap(experiment, continuation_df):
+    """
+    Display a user interface for creating and interacting with lipidomic heatmaps.
+    
+    Args:
+        experiment: Experiment object containing experimental setup information
+        continuation_df: DataFrame containing the lipidomics data
+        
+    Returns:
+        tuple: A tuple containing the regular heatmap figure and clustered heatmap figure
+    """
     regular_heatmap = None
     clustered_heatmap = None
-    with st.expander("Lipidomic Heatmap"):
-        all_conditions = experiment.conditions_list
-        selected_conditions = st.multiselect("Select conditions:", all_conditions, default=all_conditions)
-        selected_conditions = [condition for condition in selected_conditions if len(experiment.individual_samples_list[experiment.conditions_list.index(condition)]) > 1]
-        all_classes = continuation_df['ClassKey'].unique()
-        selected_classes = st.multiselect("Select lipid classes:", all_classes, default=all_classes)
+    
+    with st.expander("Species Level Breakdown - Lipidomic Heatmap"):
+        # Show explanation about heatmap analysis
+        show_heatmap_info = st.checkbox("Show heatmap analysis details", key="show_heatmap_info")
+        if show_heatmap_info:
+            st.markdown("### Lipidomic Heatmap Analysis")
+            st.markdown("""
+            Heatmaps provide a comprehensive visualization of lipid abundance patterns across multiple samples and conditions.
+            
+            **What the Heatmap Shows:**
+            
+            - **Rows**: Individual lipid molecules (e.g., PC(16:0_18:1))
+            - **Columns**: Individual samples grouped by condition
+            - **Colors**: Represent standardized abundance values (Z-scores)
+              - Red: Higher than average abundance
+              - Blue: Lower than average abundance
+              - White: Close to average abundance
+            - **Z-scores**: Standardized values that show how many standard deviations a data point is from the mean
+              - Z-score = (Value - Mean) / Standard Deviation
+              - This normalization enables comparison across lipids with different absolute abundances
+            
+            **Heatmap Types:**
+            
+            1. **Regular Heatmap**: 
+               - Shows lipids in their original order
+               - Preserves the organization of your input data
+               - Useful when you have a specific ordering in mind (e.g., by lipid class)
+            
+            2. **Clustered Heatmap**:
+               - Groups similar lipids together based on their abundance patterns
+               - Uses hierarchical clustering with Ward's method
+               - Reveals co-regulated lipid groups that might have similar biological functions
+               - Dashed lines separate distinct clusters
+               - Number of clusters can be adjusted using the slider
+            """)
+            st.markdown("---")
         
-        n_clusters = st.slider("Number of clusters:", min_value=2, max_value=10, value=5)
+        # Let user select conditions and classes
+        all_conditions = experiment.conditions_list
+        selected_conditions = st.multiselect(
+            "Select conditions:", 
+            all_conditions, 
+            default=all_conditions
+        )
+        
+        # Filter for conditions with multiple samples
+        selected_conditions = [condition for condition in selected_conditions 
+                             if len(experiment.individual_samples_list[experiment.conditions_list.index(condition)]) > 0]
+        
+        all_classes = continuation_df['ClassKey'].unique()
+        selected_classes = st.multiselect(
+            "Select lipid classes:", 
+            all_classes, 
+            default=all_classes
+        )
+        
+        # Choose number of clusters for hierarchical clustering
+        n_clusters = st.slider(
+            "Number of clusters:", 
+            min_value=2, 
+            max_value=10, 
+            value=5,
+            help="Adjust the number of clusters in the hierarchical clustering. More clusters will create more detailed groupings."
+        )
         
         if selected_conditions and selected_classes:
-            selected_samples = [sample for condition in selected_conditions 
-                                for sample in experiment.individual_samples_list[experiment.conditions_list.index(condition)]]
-            filtered_df, _ = lp.LipidomicHeatmap.filter_data(continuation_df, selected_conditions, selected_classes, experiment.conditions_list, experiment.individual_samples_list)
-            z_scores_df = lp.LipidomicHeatmap.compute_z_scores(filtered_df)
+            # Filter data based on selections
+            filtered_df, selected_samples = lp.LipidomicHeatmap.filter_data(
+                continuation_df, 
+                selected_conditions, 
+                selected_classes, 
+                experiment.conditions_list, 
+                experiment.individual_samples_list
+            )
             
-            regular_heatmap = lp.LipidomicHeatmap.generate_regular_heatmap(z_scores_df, selected_samples)
-            clustered_heatmap = lp.LipidomicHeatmap.generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters)
+            if filtered_df.empty:
+                st.warning("No data available for the selected conditions and classes.")
+                return None
             
-            # Visualization code remains the same
-            heatmap_type = st.radio("Select Heatmap Type", ["Clustered", "Regular"], index=0)
-            current_heatmap = clustered_heatmap if heatmap_type == "Clustered" else regular_heatmap
-            st.plotly_chart(current_heatmap, use_container_width=True)
+            # Compute Z-scores
+            with st.spinner("Computing Z-scores..."):
+                z_scores_df = lp.LipidomicHeatmap.compute_z_scores(filtered_df)
             
-            plotly_svg_download_button(current_heatmap, f"Lipidomic_{heatmap_type}_Heatmap.svg")
-            csv_download = convert_df(z_scores_df.reset_index())
-            st.download_button("Download CSV", csv_download, f'z_scores_{heatmap_type}_heatmap.csv', 'text/csv')
+            # Heatmap type selection
+            heatmap_type = st.radio(
+                "Select Heatmap Type", 
+                ["Clustered", "Regular"], 
+                index=0,
+                help="Clustered heatmap groups similar lipids together. Regular heatmap preserves the original order."
+            )
+            
+            # Generate and display the appropriate heatmap
+            if heatmap_type == "Clustered":
+                with st.spinner("Generating clustered heatmap..."):
+                    clustered_heatmap = lp.LipidomicHeatmap.generate_clustered_heatmap(
+                        z_scores_df, 
+                        selected_samples, 
+                        n_clusters
+                    )
+                    
+                    # Display the clustered heatmap
+                    st.plotly_chart(clustered_heatmap, use_container_width=True)
+                    
+                    # Add download options
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        plotly_svg_download_button(clustered_heatmap, "Lipidomic_Clustered_Heatmap.svg")
+                    with col2:
+                        csv_download = convert_df(z_scores_df.reset_index())
+                        st.download_button(
+                            "Download CSV", 
+                            csv_download, 
+                            'clustered_heatmap_data.csv', 
+                            'text/csv'
+                        )
+                    
+                    # Display cluster information
+                    st.subheader("Cluster Composition")
+                    st.markdown("""
+                    The table below shows the percentage distribution of lipid classes within each cluster.
+                    This helps identify which lipid classes are enriched in specific clusters.
+                    """)
+                    
+                    # Get cluster percentages
+                    _, class_percentages = lp.LipidomicHeatmap.identify_clusters_and_percentages(
+                        z_scores_df, 
+                        n_clusters
+                    )
+                    
+                    # Display cluster percentages
+                    if not class_percentages.empty:
+                        # Format percentages to 1 decimal place
+                        formatted_percentages = class_percentages.round(1)
+                        st.dataframe(formatted_percentages)
+                        
+                        # Add download option for cluster composition
+                        csv_download = convert_df(formatted_percentages.reset_index())
+                        st.download_button(
+                            "Download Cluster Composition CSV", 
+                            csv_download, 
+                            'cluster_composition.csv', 
+                            'text/csv'
+                        )
+            else:
+                with st.spinner("Generating regular heatmap..."):
+                    regular_heatmap = lp.LipidomicHeatmap.generate_regular_heatmap(
+                        z_scores_df, 
+                        selected_samples
+                    )
+                    
+                    # Display the regular heatmap
+                    st.plotly_chart(regular_heatmap, use_container_width=True)
+                    
+                    # Add download options
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        plotly_svg_download_button(regular_heatmap, "Lipidomic_Regular_Heatmap.svg")
+                    with col2:
+                        csv_download = convert_df(z_scores_df.reset_index())
+                        st.download_button(
+                            "Download CSV", 
+                            csv_download, 
+                            'regular_heatmap_data.csv', 
+                            'text/csv'
+                        )
+            
+            # Remove the redundant separate download section
+            # since we've added download options right below each heatmap
+            
+        else:
+            st.warning("Please select at least one condition and one lipid class to generate the heatmap.")
+    
     return regular_heatmap, clustered_heatmap
 
 def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
