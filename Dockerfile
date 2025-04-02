@@ -13,4 +13,4 @@ EXPOSE 8501
 
 # Set the same entrypoint and command as your current image
 ENTRYPOINT ["streamlit", "run"]
-CMD ["main_app.py"]
+CMD ["src/main_app.py"]
