@@ -25,6 +25,9 @@ from reportlab.graphics import renderPDF
 # Local imports
 import lipidomics as lp
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))  # Gets the directory where main_app.py is
+IMAGES_DIR = os.path.join(SCRIPT_DIR, 'images')  # Path to the images directory
+
 # Modify the initialize_session_state function to include all necessary state variables
 def initialize_session_state():
     """Initialize the Streamlit session state with default values."""
@@ -73,8 +76,13 @@ def display_landing_page():
     """Display the LipidCruncher landing page with enhanced module explanations."""
     # Load and display the logo
     try:
-        logo = Image.open('./images/logo.tif')
-        st.image(logo, width=720)
+        logo_path = os.path.join(IMAGES_DIR, 'logo.tif')
+        if os.path.exists(logo_path):
+            logo = Image.open(logo_path)
+            st.image(logo, width=720)
+        else:
+            st.error(f"Logo file not found at {logo_path}")
+            st.header("LipidCruncher")
     except Exception as e:
         st.error(f"Failed to load logo: {str(e)}")
         st.header("LipidCruncher")
@@ -130,8 +138,8 @@ def display_landing_page():
     """)
 
     st.subheader("Pipeline Overview")
-    pdf_path = './images/figure1.pdf'  # Adjust path as needed
     try:
+        pdf_path = os.path.join(IMAGES_DIR, 'figure1.pdf')
         images = convert_from_path(pdf_path, dpi=300)
         if images:
             fig1_image = images[0]
@@ -170,8 +178,13 @@ def main():
         display_landing_page()
     elif st.session_state.page == 'app':
         try:
-            logo = Image.open('./images/logo.tif')
-            st.image(logo, width=720)
+            logo_path = os.path.join(IMAGES_DIR, 'logo.tif')
+            if os.path.exists(logo_path):
+                logo = Image.open(logo_path)
+                st.image(logo, width=720)
+            else:
+                st.error(f"Logo file not found at {logo_path}")
+                st.header("LipidCruncher")
         except Exception as e:
             st.error(f"Failed to load logo: {str(e)}")
             st.header("LipidCruncher")
