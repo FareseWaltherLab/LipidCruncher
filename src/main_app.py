@@ -88,7 +88,7 @@ def display_landing_page():
         st.header("LipidCruncher")
 
     st.markdown("""
-    **LipidCruncher** is an innovative, open-source web platform developed by **[The Farese and Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther)** to transform lipidomic data analysis. 
+    **LipidCruncher** is an open-source web platform developed by **[The Farese and Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther)** to transform lipidomic data analysis. 
     Designed to overcome traditional challenges like manual spreadsheet handling and insufficient quality assessment, LipidCruncher offers a comprehensive 
     solution that streamlines data standardization, normalization, and rigorous quality control while providing powerful visualization tools. 
     The platform significantly accelerates the research iteration process, allowing scientists to quickly identify anomalies and patterns through advanced 
@@ -153,6 +153,13 @@ def display_landing_page():
             st.warning("No pages found in Figure 1 PDF.")
     except Exception as e:
         st.warning(f"Could not load Figure 1 PDF: {str(e)}. Please ensure 'figure1.pdf' is in the './images/' directory and Poppler is installed.")
+
+    st.subheader("Learn More")
+    
+    st.markdown("""
+    To explore LipidCruncher and see how we utilized it in a case study, 
+    read our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) published on bioRxiv.
+    """, unsafe_allow_html=True)
 
     st.subheader("Get Started")
     st.markdown("""
@@ -395,11 +402,10 @@ def display_format_requirements(data_format):
         1. **First Column - Lipid Names:**
            * Can have any column name
            * Must contain lipid molecule identifiers
-           * Will be standardized to match these formats:
-             - LPC O-17:4         -> LPC(O-17:4)
+           * Will be standardized to match te standard format. For example:
+             - LPC O-18:1         -> LPC(O-18:1)
              - Cer d18:0/C24:0    -> Cer(d18:0_C24:0)
              - CE 14:0;0          -> CE(14:0)
-             - CerG1(d13:0_25:2)  -> CerG1(d13:0_25:2)
              - PA 16:0/18:1+O     -> PA(16:0_18:1+O)
              
         2. **Remaining Columns - Intensity Values Only:**

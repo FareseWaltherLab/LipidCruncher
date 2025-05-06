@@ -75,11 +75,16 @@ For bug reports, feature requests, or questions:
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+# Updates for GitHub README
+
+## Learn More
+To explore LipidCruncher's methodology, performance benchmarks, and see how it revealed novel insights in a phospholipid metabolism case study, read our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) published on bioRxiv.
+
 ## Citation
 If you use LipidCruncher in your research, please cite:
 ```
-[Citation information will be available upon publication]
+Hamza, A., et al. (2025). LipidCruncher: An open-source web platform for processing, visualizing, and analyzing lipidomic data. bioRxiv. https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1
 ```
 
 ## Status
-LipidCruncher is in its final stages of development. Full documentation in the form of an article will be available soon. The app interface will include detailed user guidelines to assist researchers in navigating and utilizing all features effectively.
+LipidCruncher is actively maintained and updated. The web application is fully functional and available at [https://lipidcruncher.org](https://lipidcruncher.org). For additional methodological details and example applications, please refer to our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1).
