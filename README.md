@@ -81,7 +81,7 @@ To explore LipidCruncher and see how we used it for a case study, read our [pape
 ## Citation
 If you use LipidCruncher in your research, please cite:
 ```
-Hamza, A., et al. (2025). LipidCruncher: An open-source web platform for processing, visualizing, and analyzing lipidomic data. bioRxiv. https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1
+Hamed, A., Ambaw, Y.A., Chitraju, C., Singh, S., Lai, Z.W., Farese, R.V. Jr., & Walther, T.C. (2025). LipidCruncher: An open-source web application for processing, visualizing, and analyzing lipidomic data. bioRxiv. https://doi.org/10.1101/2025.04.28.650893
 ```
 
 ## Status
