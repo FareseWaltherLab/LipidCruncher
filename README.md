@@ -76,7 +76,7 @@ For bug reports, feature requests, or questions:
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Learn More
-To explore LipidCruncher's methodology, performance benchmarks, and see how it revealed novel insights in a phospholipid metabolism case study, read our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) published on bioRxiv.
+To explore LipidCruncher and see how we used it for a case study, read our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) published on bioRxiv.
 
 ## Citation
 If you use LipidCruncher in your research, please cite:
