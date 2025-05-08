@@ -160,17 +160,31 @@ def display_landing_page():
     To explore LipidCruncher and see how we utilized it in a case study, 
     read our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) published on bioRxiv.
     """, unsafe_allow_html=True)
-
+    
     st.subheader("Get Started")
     st.markdown("""
     Upload your lipidomic dataset to begin analyzing it with LipidCruncher.
     """)
-        # Center the "Start Crunching" button
+    
+    # Center the "Start Crunching" button
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
         if st.button("Start Crunching"):
             st.session_state.page = 'app'
             st.experimental_rerun()
+    
+    st.subheader("Test Datasets")
+    st.markdown("""
+    Want to explore LipidCruncher but don't have your own dataset? 
+    Try our sample datasets available on our lab's [GitHub](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets). 
+    These datasets are from the case study analyzed in our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1.article-metrics) 
+    describing LipidCruncher's features.
+    
+    The case study experiment includes three conditions with four replicates each:
+    - **WT** (Wild Type): samples s1-s4
+    - **ADGAT-DKO** (Double Knockout): samples s5-s8
+    - **BQC** (Batch Quality Control): samples s9-s12
+    """)
                 
     st.subheader("Support")
     st.markdown("""
