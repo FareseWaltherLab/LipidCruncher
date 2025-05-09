@@ -1660,6 +1660,8 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                 - Y-axis: CoV percentage for each lipid species
                 - Each point represents a single lipid species
                 - Hover over points to see the specific lipid, its mean concentration, and CoV value
+                - Points above the threshold (red) indicate potentially less reliable measurements
+                - The horizontal black line shows the selected CoV threshold
                 
                 **Interpreting CoV Values:**
                 - CoV < 20%: Excellent measurement precision
@@ -1670,16 +1672,35 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                 LipidCruncher allows you to filter the dataset to remove lipid species with high CoV values. This helps ensure that only reliable measurements are used in downstream analyses.
                 
                 **Reliability Metric:**
-                The percentage of lipid species with CoV < 30% is calculated to provide an overall data quality indicator:
+                The percentage of lipid species with CoV below the threshold is calculated to provide an overall data quality indicator:
                 - ≥ 80%: Excellent data quality
                 - 50-79%: Good data quality, but caution advised
                 - < 50%: Potentially problematic dataset, careful interpretation required
                 """)
                 st.markdown("---")
             
-            bqc_sample_index = experiment.conditions_list.index(bqc_label)
-            scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(data_df, experiment, bqc_sample_index)
+            # Move threshold setting outside the filter option
+            st.subheader("CoV Threshold Setting")
+            cov_threshold = st.number_input(
+                'Set CoV threshold (%)', 
+                min_value=10, 
+                max_value=1000, 
+                value=30, 
+                step=1,
+                help="Data points above this threshold will be highlighted in red and can optionally be filtered out."
+            )
             
+            bqc_sample_index = experiment.conditions_list.index(bqc_label)
+            
+            # Generate and display the plot with the threshold
+            scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(
+                data_df, 
+                experiment, 
+                bqc_sample_index,
+                cov_threshold=cov_threshold
+            )
+            
+            # Display the plot
             st.plotly_chart(scatter_plot, use_container_width=True)
             plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg")
             csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
@@ -1692,34 +1713,70 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             
             # Display reliability assessment with appropriate color coding
             if reliable_data_percent >= 80:
-                st.success(f"{reliable_data_percent}% of the datapoints are confidently reliable (CoV < 30%).")
+                st.success(f"{reliable_data_percent:.1f}% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
             elif reliable_data_percent >= 50:
-                st.warning(f"{reliable_data_percent}% of the datapoints are confidently reliable (CoV < 30%).")
+                st.warning(f"{reliable_data_percent:.1f}% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
             else:
-                st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < 30%).")
+                st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
             
+            # Filtering section
             if prepared_df is not None and not prepared_df.empty:
+                st.subheader("Data Filtering Options")
                 filter_option = st.radio("Would you like to filter your data using BQC samples?", ("No", "Yes"), index=0)
                 if filter_option == "Yes":
-                    cov_threshold = st.number_input('Enter the maximum acceptable CoV in %', min_value=10, max_value=1000, value=30, step=1)
-                    filtered_df = lp.BQCQualityCheck.filter_dataframe_by_cov_threshold(cov_threshold, prepared_df)
+                    # Use the already selected threshold for filtering
+                    st.info(f"Data will be filtered using the threshold of {cov_threshold}% CoV selected above.")
                     
-                    if filtered_df.empty:
-                        st.error("The filtered dataset is empty. Please try a higher CoV threshold.")
-                        st.warning("Returning the original dataset without filtering.")
-                    else:
-                        percentage_kept = round((len(filtered_df) / len(prepared_df)) * 100, 1)
-                        st.info(f"Filtering removed {len(prepared_df) - len(filtered_df)} lipid species ({100 - percentage_kept}% of the dataset).")
-                        st.write('Filtered dataset:')
-                        st.write(filtered_df)
-                        csv_download = convert_df(filtered_df)
-                        st.download_button(
-                            label="Download Filtered Data",
-                            data=csv_download,
-                            file_name='Filtered_Data.csv',
-                            mime='text/csv'
-                        )
-                        data_df = filtered_df  # Update data_df with the filtered dataset
+                    if st.button("Apply Filter"):
+                        # Get lipids that meet the threshold criteria (those with CoV < threshold)
+                        reliable_lipids = prepared_df[prepared_df['cov'] < cov_threshold]['LipidMolec'].tolist()
+                        
+                        # Get all lipids that will be filtered out
+                        all_lipids_in_original = data_df['LipidMolec'].tolist()
+                        filtered_out_lipids = [lipid for lipid in all_lipids_in_original if lipid not in reliable_lipids]
+                        
+                        # Filter the original dataframe to keep only reliable lipids
+                        filtered_df = data_df[data_df['LipidMolec'].isin(reliable_lipids)].reset_index(drop=True)
+                        
+                        if filtered_df.empty:
+                            st.error("The filtered dataset is empty. Please try a higher CoV threshold.")
+                            st.warning("Returning the original dataset without filtering.")
+                        else:
+                            # Calculate statistics
+                            removed_count = len(filtered_out_lipids)
+                            percentage_kept = round((len(filtered_df) / len(data_df)) * 100, 1)
+                            
+                            st.info(f"Filtering removed {removed_count} lipid species ({100 - percentage_kept:.1f}% of the dataset).")
+                            
+                            # Show list of filtered lipids
+                            if filtered_out_lipids:
+                                show_filtered_list = st.checkbox("Show list of filtered lipids", key="show_filtered_list")
+                                
+                                if show_filtered_list:
+                                    # Create DataFrame of filtered lipids
+                                    filtered_out_df = pd.DataFrame({'LipidMolec': filtered_out_lipids})
+                                    st.write("**Lipids removed by filtering:**")
+                                    st.dataframe(filtered_out_df)
+                                    
+                                    # Add download button for filtered lipids
+                                    csv_filtered = convert_df(filtered_out_df)
+                                    st.download_button(
+                                        label="Download filtered lipids list",
+                                        data=csv_filtered,
+                                        file_name="filtered_out_lipids.csv",
+                                        mime="text/csv"
+                                    )
+                            
+                            st.write('Filtered dataset:')
+                            st.write(filtered_df)
+                            csv_download = convert_df(filtered_df)
+                            st.download_button(
+                                label="Download Filtered Data",
+                                data=csv_download,
+                                file_name='Filtered_Data.csv',
+                                mime='text/csv'
+                            )
+                            data_df = filtered_df  # Update data_df with the filtered dataset
 
     return data_df, scatter_plot  # Always return a tuple
 

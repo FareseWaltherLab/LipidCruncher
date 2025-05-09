@@ -154,6 +154,124 @@ class BQCQualityCheck:
         return fig, cov_df
 
     @staticmethod
+    def create_cov_scatter_plot_with_threshold(mean_concentrations, coefficients_of_variation, lipid_species, cov_threshold):
+        """
+        Create a scatter plot showing the coefficient of variation for lipid species using Plotly with threshold coloring.
+    
+        Args:
+            mean_concentrations (array): Array of mean concentrations.
+            coefficients_of_variation (array): Array of CoV values.
+            lipid_species (array): Array of lipid species names.
+            cov_threshold (float): The CoV threshold for coloring data points.
+    
+        Returns:
+            tuple: A Plotly Figure object and a DataFrame used for the plot.
+        """
+        # Convert to numpy arrays for easier handling
+        mean_concentrations = np.array(mean_concentrations)
+        coefficients_of_variation = np.array(coefficients_of_variation)
+        lipid_species = np.array(lipid_species)
+        
+        # Filter out NaN values
+        valid_indices = ~(np.isnan(mean_concentrations) | np.isnan(coefficients_of_variation))
+        mean_concentrations = mean_concentrations[valid_indices]
+        coefficients_of_variation = coefficients_of_variation[valid_indices]
+        lipid_species = lipid_species[valid_indices]
+        
+        cov_df = pd.DataFrame({
+            "Mean_concentration": mean_concentrations, 
+            "CoV": coefficients_of_variation, 
+            'Species': lipid_species
+        })
+    
+        fig = go.Figure()
+        
+        # Separate data by threshold
+        below_threshold = cov_df[cov_df['CoV'] <= cov_threshold]
+        above_threshold = cov_df[cov_df['CoV'] > cov_threshold]
+        
+        # Add points below threshold (blue)
+        if len(below_threshold) > 0:
+            fig.add_trace(go.Scatter(
+                x=below_threshold["Mean_concentration"],
+                y=below_threshold["CoV"],
+                mode='markers',
+                marker=dict(size=5, color='blue'),  # Reduced marker size
+                text=below_threshold['Species'],
+                hovertemplate=
+                '<b>Species:</b> %{text}<br>' +
+                '<b>Mean concentration:</b> %{x:.4f}<br>' +
+                '<b>CoV:</b> %{y:.2f}%<br>' +
+                '<extra></extra>'
+            ))
+        
+        # Add points above threshold (red)
+        if len(above_threshold) > 0:
+            fig.add_trace(go.Scatter(
+                x=above_threshold["Mean_concentration"],
+                y=above_threshold["CoV"],
+                mode='markers',
+                marker=dict(size=5, color='red'),  # Reduced marker size  
+                text=above_threshold['Species'],
+                hovertemplate=
+                '<b>Species:</b> %{text}<br>' +
+                '<b>Mean concentration:</b> %{x:.4f}<br>' +
+                '<b>CoV:</b> %{y:.2f}%<br>' +
+                '<extra></extra>'
+            ))
+        
+        # Add horizontal threshold line
+        fig.add_hline(
+            y=cov_threshold,
+            line_dash="solid",
+            line_color="black",
+            line_width=2,
+            annotation_text=f"Threshold: {cov_threshold}%",
+            annotation_position="top right",
+            annotation_font=dict(size=14, color="black")
+        )
+    
+        fig.update_layout(
+            title={
+                'text': 'CoV - All lipid Species',
+                'font': {'size': 24, 'color': 'black'}  # Larger, black title
+            },
+            xaxis_title='Log10 of Mean BQC Concentration',
+            yaxis_title='CoV(%)',
+            xaxis=dict(
+                title_font=dict(size=18, color='black'),  # Larger, black axis title
+                tickfont=dict(size=14, color='black'),  # Larger, black tick labels
+                tickcolor='black',  # Black tick marks
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                mirror=True,
+                ticks='outside'
+            ),
+            yaxis=dict(
+                title_font=dict(size=18, color='black'),  # Larger, black axis title
+                tickfont=dict(size=14, color='black'),  # Larger, black tick labels
+                tickcolor='black',  # Black tick marks  
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                mirror=True,
+                ticks='outside'
+            ),
+            plot_bgcolor='white',  # White background
+            paper_bgcolor='white',  # White surrounding area
+            showlegend=False,
+            margin=dict(t=50, r=50, b=50, l=50),  # Add some margin
+            font=dict(color='black')  # Set global font color to black
+        )
+    
+        # Add a frame around the plot
+        fig.update_xaxes(zeroline=False)
+        fig.update_yaxes(zeroline=False)
+    
+        return fig, cov_df
+
+    @staticmethod
     @st.cache_data(ttl=3600)
     def generate_cov_plot_data(dataframe, individual_samples_list, bqc_sample_index):
         """
@@ -172,7 +290,7 @@ class BQCQualityCheck:
         return BQCQualityCheck.prepare_dataframe_for_plot(dataframe.copy(), auc)
     
     @staticmethod
-    def generate_and_display_cov_plot(dataframe, experiment_details, bqc_sample_index):
+    def generate_and_display_cov_plot(dataframe, experiment_details, bqc_sample_index, cov_threshold=30):
         """
         Generate and display a CoV scatter plot based on BQC samples from a given DataFrame.
     
@@ -180,15 +298,16 @@ class BQCQualityCheck:
             dataframe (pd.DataFrame): The DataFrame containing lipidomics data.
             experiment_details (Experiment): An object containing details about the experiment setup.
             bqc_sample_index (int): The index of BQC samples in the experiment's sample list.
+            cov_threshold (float): The CoV threshold for coloring data points and calculating reliability.
     
         Returns:
             tuple: A Plotly Figure object for the scatter plot, the DataFrame used for plotting, and the reliable data percentage.
         """
         prepared_df = BQCQualityCheck.generate_cov_plot_data(dataframe, experiment_details.individual_samples_list, bqc_sample_index)
         mean_concentrations, coefficients_of_variation, lipid_species = BQCQualityCheck.prepare_plot_inputs(prepared_df)
-        scatter_plot, cov_df = BQCQualityCheck.create_cov_scatter_plot(mean_concentrations, coefficients_of_variation, lipid_species)
+        scatter_plot, cov_df = BQCQualityCheck.create_cov_scatter_plot_with_threshold(mean_concentrations, coefficients_of_variation, lipid_species, cov_threshold)
         
-        reliable_data_percent = round(len(prepared_df[prepared_df['cov'] < 30]) / len(prepared_df) * 100, 1)
+        reliable_data_percent = round(len(prepared_df[prepared_df['cov'] < cov_threshold]) / len(prepared_df) * 100, 1)
     
         return scatter_plot, prepared_df, reliable_data_percent
 
