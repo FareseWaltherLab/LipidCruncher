@@ -178,7 +178,10 @@ def display_landing_page():
     Want to explore LipidCruncher but don't have your own dataset? 
     Try our sample datasets available on our lab's [GitHub](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets). 
     These datasets are from the case study analyzed in our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1.article-metrics) 
-    describing LipidCruncher's features.
+    describing LipidCruncher's features. The LipidSearch dataset is the original dataset containing raw, unprocessed values.
+    Additionally, we provide the same data in Generic and Metabolomics Workbench formats, which include pre-normalized values for your convenience.
+
+   
     
     The case study experiment includes three conditions with four replicates each:
     - **WT** (Wild Type): samples s1-s4
@@ -838,6 +841,7 @@ def display_cleaned_data(cleaned_df, intsta_df):
                    for cholesterol (Ch) class molecules and deuterated standards.
                 
                 7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
+                In addition, all negative values are converted to zero. 
                 
                 8. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
                 """)
@@ -868,6 +872,7 @@ def display_cleaned_data(cleaned_df, intsta_df):
                    characters, strings with only special characters) are removed.
                 
                 6. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
+                In addition, all negative values are converted to zero.
                 
                 7. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
                 """)
@@ -1645,38 +1650,45 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             if show_bqc_info:
                 st.markdown("### Batch Quality Control (BQC) Analysis")
                 st.markdown("""
-                BQC analysis assesses the measurement reliability of your lipidomic dataset using Coefficient of Variation (CoV) calculations on BQC samples.
-                
+                Batch Quality Control (BQC) analysis evaluates the reliability of your lipidomics data by analyzing the variability of measurements in BQC samples, which are special quality control samples run alongside your experiment. This analysis uses the Coefficient of Variation (CoV) to measure how consistent the measurements are for each lipid across these samples.
+
                 **What is CoV?**  
-                The Coefficient of Variation measures the relative variability of data by calculating:
+                The Coefficient of Variation (CoV) is a measure of relative variability, calculated as:
                 ```
                 CoV = (Standard Deviation / Mean) × 100%
                 ```
-                
-                It is calculated for each lipid species across all BQC samples, including zero values. This provides a complete picture of measurement variability, as zeros may indicate detection issues or true absence of the lipid.
-                
-                **The CoV Scatter Plot:**
-                - X-axis: Log10 of the mean concentration for each lipid species in BQC samples
-                - Y-axis: CoV percentage for each lipid species
-                - Each point represents a single lipid species
-                - Hover over points to see the specific lipid, its mean concentration, and CoV value
-                - Points above the threshold (red) indicate potentially less reliable measurements
-                - The horizontal black line shows the selected CoV threshold
-                
-                **Interpreting CoV Values:**
-                - CoV < 20%: Excellent measurement precision
-                - CoV < 30%: Good measurement precision
-                - CoV > 30%: Potential issues with measurement reliability
-                - Very high CoV (>100%): Often indicates inconsistent detection or near-limit measurements
-                
-                **Filtering Option:**
-                LipidCruncher allows you to filter the dataset to remove lipid species with high CoV values. This helps ensure that only reliable measurements are used in downstream analyses.
-                
-                **Reliability Metric:**
-                The percentage of lipid species with CoV below the threshold is calculated to provide an overall data quality indicator:
-                - ≥ 80%: Excellent data quality
-                - 50-79%: Good data quality, but caution advised
-                - < 50%: Potentially problematic dataset, careful interpretation required
+                A lower CoV indicates more consistent measurements, suggesting higher reliability. CoV is computed for each lipid species across all BQC samples.
+
+                **Handling Zero Values:**  
+                Zero values in BQC samples can occur due to detection limits or true absence of a lipid. To ensure accurate analysis:
+                - If a lipid has **exactly one zero** in its BQC measurements, the zero is replaced with a small value: the smallest non-zero measurement for lipids in the same class (e.g., all PEs or PCs) divided by 10. This keeps the lipid in the analysis while minimizing impact on CoV*.
+                - If a lipid has **multiple zeros**, it is considered unreliable and excluded from the analysis. These lipids are listed in a filtered lipids table if you choose to filter the data, allowing you to review and optionally add them back.
+
+                **The CoV Scatter Plot:**  
+                The scatter plot visualizes the reliability of each lipid species:
+                - **X-axis**: Log10 of the average concentration of the lipid in BQC samples (after handling zeros).
+                - **Y-axis**: CoV percentage for the lipid.
+                - **Each point**: Represents one lipid species.
+                - **Hover information**: Shows the lipid name, mean concentration, and CoV value.
+                - **Color coding**: Blue points are below the CoV threshold (reliable), red points are above (less reliable).
+                - **Threshold line**: A horizontal black line shows your selected CoV threshold (e.g., 30%).
+
+                **Interpreting CoV Values:**  
+                - **CoV < 20%**: Excellent measurement consistency, highly reliable.
+                - **CoV < 30%**: Good consistency, suitable for most analyses.
+                - **CoV > 30%**: Potential reliability issues, may require caution.
+                - **CoV > 100%**: High variability, often due to inconsistent detection or low concentrations.
+
+                **Filtering Option:**  
+                You can filter out lipids with high CoV values (above your chosen threshold) or multiple zero values to focus on reliable data for downstream analyses. If you select "Yes" for filtering:
+                - Lipids with CoV above the threshold or multiple zeros are listed in a table.
+                - You can review these lipids and choose to add back any you want to keep (e.g., lipids critical to your study).
+
+                **Reliability Metric:**  
+                The percentage of lipids with CoV below your threshold indicates overall data quality:
+                - **≥ 80%**: Excellent data quality, most measurements are reliable.
+                - **50–79%**: Good data quality, but some caution is advised for lipids with higher CoV.
+                - **< 50%**: Potential issues with the dataset, interpret results carefully.
                 """)
                 st.markdown("---")
             
@@ -1694,7 +1706,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             bqc_sample_index = experiment.conditions_list.index(bqc_label)
             
             # Generate and display the plot with the threshold
-            scatter_plot, prepared_df, reliable_data_percent = lp.BQCQualityCheck.generate_and_display_cov_plot(
+            scatter_plot, prepared_df, reliable_data_percent, filtered_lipids = lp.BQCQualityCheck.generate_and_display_cov_plot(
                 data_df, 
                 experiment, 
                 bqc_sample_index,
@@ -1714,11 +1726,11 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             
             # Display reliability assessment with appropriate color coding
             if reliable_data_percent >= 80:
-                st.success(f"{reliable_data_percent:.1f}% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
+                st.success(f"{reliable_data_percent:.1f}% of the datapoints are confidently reliable (CoV < {cov_threshold}%), after excluding lipids with multiple zero values in BQC samples.")
             elif reliable_data_percent >= 50:
-                st.warning(f"{reliable_data_percent:.1f}% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
+                st.warning(f"{reliable_data_percent:.1f}% of the datapoints are confidently reliable (CoV < {cov_threshold}%), after excluding lipids with multiple zero values in BQC samples.")
             else:
-                st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
+                st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < {cov_threshold}%), after excluding lipids with multiple zero values in BQC samples.")
             
             # Filtering section
             if prepared_df is not None and not prepared_df.empty:
@@ -1727,18 +1739,27 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                 
                 if filter_option == "Yes":
                     # Use the already selected threshold for filtering
-                    st.info(f"Data will be filtered using the threshold of {cov_threshold}% CoV selected above.")
+                    st.info(f"Data will be filtered using the threshold of {cov_threshold}% CoV selected above. "
+                            f"Lipids with multiple zero values in BQC samples will also be filtered.")
                     
-                    # Apply filtering directly without button
-                    # Get lipids that meet the threshold criteria (those with CoV < threshold)
+                    # Apply CoV-based filtering
                     reliable_lipids = prepared_df[prepared_df['cov'] < cov_threshold]['LipidMolec'].tolist()
+                    
+                    # Get lipids filtered out by CoV threshold
+                    cov_filtered_df = prepared_df[prepared_df['cov'] >= cov_threshold][['LipidMolec', 'ClassKey', 'cov', 'mean']].copy()
+                    cov_filtered_df['Reason'] = f'CoV >= {cov_threshold}%'
+                    
+                    # Combine with lipids filtered due to multiple zeros
+                    combined_filtered_df = filtered_lipids.copy()
+                    if not cov_filtered_df.empty:
+                        combined_filtered_df = pd.concat([combined_filtered_df, cov_filtered_df], ignore_index=True)
                     
                     # Get all lipids that will be filtered out
                     all_lipids_in_original = data_df['LipidMolec'].tolist()
-                    filtered_out_lipids = [lipid for lipid in all_lipids_in_original if lipid not in reliable_lipids]
+                    filtered_out_lipids = [filtered_out_lipids for filtered_out_lipids in all_lipids_in_original if filtered_out_lipids not in reliable_lipids]
                     
                     if not filtered_out_lipids:
-                        st.info("No lipids were filtered out. All lipids meet the CoV threshold criteria.")
+                        st.info("No lipids were filtered out. All lipids meet the CoV threshold and have at most one zero value.")
                         filtered_df = data_df.copy()
                     else:
                         # Calculate statistics
@@ -1747,30 +1768,34 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                         
                         st.warning(f"Initial filtering removed {removed_count} lipid species ({percentage_removed:.1f}% of the dataset).")
                         
-                        # Show list of filtered lipids with option to add some back
+                        # Show filtered_out_lipids of filtered lipids with option to add some back
                         st.subheader("Review Filtered Lipids")
                         st.markdown("""
-                        The following lipids were automatically filtered out. You can review them and add back any that you 
-                        believe should be included in the analysis (e.g., lipids of special interest or known to be stable 
-                        despite high CoV).
+                        The following lipids were automatically filtered out due to high CoV values or multiple zero values in BQC samples. 
+                        You can review them and add back any that you believe should be included in the analysis 
+                        (e.g., lipids of special interest or known to be stable despite high CoV or multiple zeros).
                         """)
                         
-                        # Create a detailed dataframe with CoV information for filtered lipids
+                        # Create a detailed dataframe with CoV and reason information
                         filtered_info = []
                         for lipid in filtered_out_lipids:
-                            lipid_row = prepared_df[prepared_df['LipidMolec'] == lipid]
+                            lipid_row = combined_filtered_df[combined_filtered_df['LipidMolec'] == lipid]
                             if not lipid_row.empty:
-                                cov_value = lipid_row['cov'].iloc[0]
-                                if pd.isna(cov_value):
-                                    cov_display = "Insufficient data"
+                                reason = lipid_row['Reason'].iloc[0]
+                                if 'CoV' in reason:
+                                    cov_value = lipid_row['cov'].iloc[0]
+                                    cov_display = f"{cov_value:.1f}%" if pd.notna(cov_value) else "Insufficient data"
                                 else:
-                                    cov_display = f"{cov_value:.1f}%"
+                                    cov_display = "N/A"
                             else:
                                 cov_display = "Not in BQC analysis"
+                                reason = "Unknown"
                             
                             filtered_info.append({
                                 'LipidMolec': lipid,
-                                'CoV': cov_display
+                                'ClassKey': lipid_row['ClassKey'].iloc[0] if not lipid_row.empty else 'N/A',
+                                'CoV': cov_display,
+                                'Reason': reason
                             })
                         
                         filtered_info_df = pd.DataFrame(filtered_info)
@@ -1779,8 +1804,8 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                         lipids_to_add_back = st.multiselect(
                             "Select lipids to add back to the dataset:",
                             options=filtered_out_lipids,
-                            format_func=lambda x: f"{x} (CoV: {filtered_info_df[filtered_info_df['LipidMolec'] == x]['CoV'].iloc[0]})",
-                            help="Select any lipids you want to keep in the dataset despite not meeting the CoV threshold."
+                            format_func=lambda x: f"{x} (CoV: {filtered_info_df[filtered_info_df['LipidMolec'] == x]['CoV'].iloc[0]}, Reason: {filtered_info_df[filtered_info_df['LipidMolec'] == x]['Reason'].iloc[0]})",
+                            help="Select any lipids you want to keep in the dataset despite not meeting the CoV threshold or having multiple zeros."
                         )
                         
                         # Show filtered lipids table
@@ -1789,7 +1814,10 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                         
                         # Create final filtered dataset
                         final_reliable_lipids = reliable_lipids + lipids_to_add_back
-                        filtered_df = data_df[data_df['LipidMolec'].isin(final_reliable_lipids)].reset_index(drop=True)
+                        filtered_df = data_df[data_df['LipidMolec'].isin(final_reliable_lipids)]
+                        
+                        # Sort by ClassKey and reset index
+                        filtered_df = filtered_df.sort_values(by='ClassKey').reset_index(drop=True)
                         
                         # Final statistics
                         final_removed_count = len(data_df) - len(filtered_df)
@@ -1803,9 +1831,11 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                     if filtered_df.empty:
                         st.error("The filtered dataset is empty. Please adjust your selection or try a higher CoV threshold.")
                         st.warning("Returning the original dataset without filtering.")
+                        filtered_df = data_df.copy()
+                        filtered_df = filtered_df.sort_values(by='ClassKey').reset_index(drop=True)  # Sort even if unfiltered
                     else:
                         st.write('Final filtered dataset:')
-                        st.write(filtered_df)
+                        st.dataframe(filtered_df)
                         csv_download = convert_df(filtered_df)
                         st.download_button(
                             label="Download Filtered Data",

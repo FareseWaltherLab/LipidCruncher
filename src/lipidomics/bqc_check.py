@@ -11,38 +11,66 @@ class BQCQualityCheck:
     """
     
     @staticmethod
-    def impute_zeros_by_class(dataframe, value_columns, class_column='LipidClass'):
+    def impute_zeros_by_class(dataframe, value_columns, class_column='ClassKey'):
         """
-        Impute zero values in specified columns with the smallest non-zero value in the same class divided by 10.
+        Impute zeros or filter rows based on the number of zeros in specified columns.
+        - If exactly one zero, impute with the smallest non-zero value in the same class divided by 10.
+        - If more than one zero, exclude the row and include it in filtered lipids.
         
         Args:
             dataframe (pd.DataFrame): The DataFrame containing the data.
-            value_columns (list): List of columns where zeros should be imputed.
-            class_column (str): The column name containing class labels (default: 'LipidClass').
+            value_columns (list): List of columns where zeros are checked/imputed.
+            class_column (str): The column name containing class labels (default: 'ClassKey').
         
         Returns:
-            pd.DataFrame: The DataFrame with zeros imputed.
+            tuple: (processed DataFrame with imputed zeros and filtered rows removed,
+                    DataFrame of filtered lipids with multiple zeros)
         """
         df = dataframe.copy()
         
         if class_column not in df.columns:
-            raise ValueError(f"Class column '{class_column}' not found in DataFrame.")
+            raise ValueError(f"Class column '{class_column}' not found in DataFrame. Available columns: {list(df.columns)}")
         
-        for class_label in df[class_column].unique():
-            class_mask = df[class_column] == class_label
-            class_data = df.loc[class_mask, value_columns]
-            
-            all_values = class_data.values.flatten()
-            non_zero_values = all_values[all_values > 0]
-            if len(non_zero_values) == 0:
-                min_value = 1e-10  # Fallback value
-            else:
-                min_value = non_zero_values.min() / 10.0
-            
-            for col in value_columns:
-                df.loc[class_mask & (df[col] == 0), col] = min_value
+        # Count zeros per row in value_columns
+        zero_counts = (df[value_columns] == 0).sum(axis=1)
         
-        return df
+        # Initialize filtered lipids DataFrame
+        filtered_lipids = pd.DataFrame()
+        
+        # Process rows with exactly one zero
+        one_zero_mask = zero_counts == 1
+        if one_zero_mask.any():
+            one_zero_df = df[one_zero_mask].copy()
+            for class_label in one_zero_df[class_column].unique():
+                class_mask = one_zero_df[class_column] == class_label
+                class_data = one_zero_df.loc[class_mask, value_columns]
+                
+                # Find smallest non-zero value in class
+                all_values = class_data.values.flatten()
+                non_zero_values = all_values[all_values > 0]
+                if len(non_zero_values) == 0:
+                    min_value = 1e-10  # Fallback
+                else:
+                    min_value = non_zero_values.min() / 10.0
+                
+                # Impute zeros
+                for col in value_columns:
+                    one_zero_df.loc[class_mask & (one_zero_df[col] == 0), col] = min_value
+            
+            df.loc[one_zero_mask] = one_zero_df
+        
+        # Collect rows with more than one zero
+        multi_zero_mask = zero_counts > 1
+        if multi_zero_mask.any():
+            filtered_lipids = df[multi_zero_mask].copy()
+            filtered_lipids['Reason'] = 'Multiple zeros in BQC concentration columns'
+            # Keep only relevant columns (adjust as needed)
+            filtered_lipids = filtered_lipids[['LipidMolec', class_column, *value_columns, 'Reason']]
+        
+        # Exclude rows with multiple zeros from main DataFrame
+        df = df[~multi_zero_mask].reset_index(drop=True)
+        
+        return df, filtered_lipids
     
     @staticmethod
     def calculate_coefficient_of_variation(numbers):
@@ -103,24 +131,27 @@ class BQCQualityCheck:
             area_under_curve_columns (list): A list of columns representing areas under the curve.
         
         Returns:
-            pd.DataFrame: The processed DataFrame with additional 'cov' and 'mean' columns.
+            tuple: (processed DataFrame with additional 'cov' and 'mean' columns,
+                    DataFrame of filtered lipids with multiple zeros)
         """
-        # Impute zeros with smallest non-zero value in the same class divided by 10
-        dataframe = BQCQualityCheck.impute_zeros_by_class(
+        # Impute zeros and get filtered lipids
+        dataframe, filtered_lipids = BQCQualityCheck.impute_zeros_by_class(
             dataframe, 
             value_columns=area_under_curve_columns, 
             class_column='ClassKey'
         )
         
+        # Calculate CoV and mean
         dataframe['cov'] = dataframe[area_under_curve_columns].apply(
             BQCQualityCheck.calculate_coefficient_of_variation, axis=1)
         dataframe['mean'] = dataframe[area_under_curve_columns].apply(
             BQCQualityCheck.calculate_mean_including_zeros, axis=1)
         
+        # Apply log transformation where mean > 0
         valid_mean_mask = (dataframe['mean'].notnull()) & (dataframe['mean'] > 0)
         dataframe.loc[valid_mean_mask, 'mean'] = np.log10(dataframe.loc[valid_mean_mask, 'mean'])
         
-        return dataframe
+        return dataframe, filtered_lipids
 
     @staticmethod
     def prepare_plot_inputs(dataframe):
@@ -332,7 +363,7 @@ class BQCQualityCheck:
             bqc_sample_index (int): The index of BQC samples in the experiment's sample list.
         
         Returns:
-            pd.DataFrame: The DataFrame prepared for plotting.
+            tuple: (DataFrame prepared for plotting, DataFrame of filtered lipids)
         """
         bqc_samples_list = individual_samples_list[bqc_sample_index]
         auc = ['concentration[' + sample + ']' for sample in bqc_samples_list]
@@ -342,36 +373,73 @@ class BQCQualityCheck:
     def generate_and_display_cov_plot(dataframe, experiment_details, bqc_sample_index, cov_threshold=30):
         """
         Generate and display a CoV scatter plot based on BQC samples from a given DataFrame.
-    
+        
         Args:
             dataframe (pd.DataFrame): The DataFrame containing lipidomics data.
             experiment_details (Experiment): An object containing details about the experiment setup.
             bqc_sample_index (int): The index of BQC samples in the experiment's sample list.
             cov_threshold (float): The CoV threshold for coloring data points and calculating reliability.
-    
+        
         Returns:
-            tuple: A Plotly Figure object for the scatter plot, the DataFrame used for plotting, and the reliable data percentage.
+            tuple: (Plotly Figure object, prepared DataFrame, reliable data percentage, filtered lipids DataFrame)
         """
-        prepared_df = BQCQualityCheck.generate_cov_plot_data(dataframe, experiment_details.individual_samples_list, bqc_sample_index)
+        prepared_df, filtered_lipids = BQCQualityCheck.generate_cov_plot_data(
+            dataframe, experiment_details.individual_samples_list, bqc_sample_index
+        )
         mean_concentrations, coefficients_of_variation, lipid_species = BQCQualityCheck.prepare_plot_inputs(prepared_df)
-        scatter_plot, cov_df = BQCQualityCheck.create_cov_scatter_plot_with_threshold(mean_concentrations, coefficients_of_variation, lipid_species, cov_threshold)
+        scatter_plot, cov_df = BQCQualityCheck.create_cov_scatter_plot_with_threshold(
+            mean_concentrations, coefficients_of_variation, lipid_species, cov_threshold
+        )
         
         reliable_data_percent = round(len(prepared_df[prepared_df['cov'] < cov_threshold]) / len(prepared_df) * 100, 1)
-    
-        return scatter_plot, prepared_df, reliable_data_percent
+        
+        return scatter_plot, prepared_df, reliable_data_percent, filtered_lipids
+
+    @staticmethod
+    def display_filtered_lipids(filtered_lipids, filter_choice, cov_filtered_df=None):
+        """
+        Display a table of filtered lipids if the user selects 'yes' for filtering.
+        
+        Args:
+            filtered_lipids (pd.DataFrame): DataFrame of lipids filtered due to multiple zeros.
+            filter_choice (str): User's filtering choice ('yes' or 'no').
+            cov_filtered_df (pd.DataFrame, optional): DataFrame of lipids filtered by CoV threshold.
+        
+        Returns:
+            pd.DataFrame: Combined DataFrame of filtered lipids (if any).
+        """
+        if filter_choice.lower() != 'yes':
+            return pd.DataFrame()  # Return empty DataFrame if no filtering
+        
+        # Combine filtered lipids (multiple zeros) and CoV-filtered lipids (if provided)
+        combined_filtered = filtered_lipids.copy()
+        if cov_filtered_df is not None and not cov_filtered_df.empty:
+            cov_filtered_df['Reason'] = f'CoV above threshold ({cov_threshold}%)'
+            combined_filtered = pd.concat([combined_filtered, cov_filtered_df], ignore_index=True)
+        
+        if not combined_filtered.empty:
+            st.subheader("Filtered Lipids")
+            st.dataframe(combined_filtered)
+        
+        return combined_filtered
 
     @staticmethod
     @st.cache_data(ttl=3600)
     def filter_dataframe_by_cov_threshold(threshold, prepared_df):
         """
         Filter a DataFrame based on a specified CoV threshold.
-
+        
         Args:
             threshold (float): The CoV threshold for filtering.
             prepared_df (pd.DataFrame): The DataFrame to be filtered.
-
+        
         Returns:
-            pd.DataFrame: The filtered DataFrame with irrelevant columns removed and index reset.
+            tuple: (filtered DataFrame with irrelevant columns removed and index reset,
+                    DataFrame of lipids filtered by CoV)
         """
         filtered_df = prepared_df[prepared_df['cov'] <= threshold]
-        return filtered_df.drop(['mean', 'cov'], axis=1).reset_index(drop=True)
+        cov_filtered_df = prepared_df[prepared_df['cov'] > threshold].copy()
+        cov_filtered_df['Reason'] = f'CoV above {threshold}%'
+        cov_filtered_df = cov_filtered_df[['LipidMolec', 'ClassKey', 'cov', 'mean', 'Reason']]  # Adjust columns as needed
+        
+        return filtered_df.drop(['mean', 'cov'], axis=1).reset_index(drop=True), cov_filtered_df
