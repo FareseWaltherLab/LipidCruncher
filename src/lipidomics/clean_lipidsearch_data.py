@@ -13,7 +13,7 @@ class CleanLipidSearchData:
     @st.cache_data(ttl=3600)
     def _convert_columns_to_numeric(_self, df, full_samples_list):
         value_cols = [f'intensity[{sample}]' for sample in full_samples_list]
-        df[value_cols] = df[value_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+        df[value_cols] = df[value_cols].apply(pd.to_numeric, errors='coerce').fillna(0).clip(lower=0)
         return df
 
     @st.cache_data(ttl=3600)

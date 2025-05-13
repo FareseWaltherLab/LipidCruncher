@@ -11,66 +11,115 @@ class BQCQualityCheck:
     """
     
     @staticmethod
+    def impute_zeros_by_class(dataframe, value_columns, class_column='LipidClass'):
+        """
+        Impute zero values in specified columns with the smallest non-zero value in the same class divided by 10.
+        
+        Args:
+            dataframe (pd.DataFrame): The DataFrame containing the data.
+            value_columns (list): List of columns where zeros should be imputed.
+            class_column (str): The column name containing class labels (default: 'LipidClass').
+        
+        Returns:
+            pd.DataFrame: The DataFrame with zeros imputed.
+        """
+        df = dataframe.copy()
+        
+        if class_column not in df.columns:
+            raise ValueError(f"Class column '{class_column}' not found in DataFrame.")
+        
+        for class_label in df[class_column].unique():
+            class_mask = df[class_column] == class_label
+            class_data = df.loc[class_mask, value_columns]
+            
+            all_values = class_data.values.flatten()
+            non_zero_values = all_values[all_values > 0]
+            if len(non_zero_values) == 0:
+                min_value = 1e-10  # Fallback value
+            else:
+                min_value = non_zero_values.min() / 10.0
+            
+            for col in value_columns:
+                df.loc[class_mask & (df[col] == 0), col] = min_value
+        
+        return df
+    
+    @staticmethod
     def calculate_coefficient_of_variation(numbers):
         """
         Calculate the coefficient of variation (CoV) for a given array of numbers.
-
+        Now includes zero values in the calculation.
+    
         Args:
             numbers (list): A list or array of numerical values.
-
+    
         Returns:
             float or None: The coefficient of variation as a percentage, or None if calculation is not applicable.
         """
-        non_zero_numbers = np.array(numbers)[np.array(numbers) > 0]
-        if non_zero_numbers.size > 1:
-            return np.std(non_zero_numbers, ddof=1) / np.mean(non_zero_numbers) * 100
+        # Convert to numpy array for easier handling
+        numbers = np.array(numbers)
+        
+        # We now include zeros in the calculation
+        # Only requirement is having at least 2 values to calculate std
+        if len(numbers) >= 2:
+            mean_val = np.mean(numbers)
+            if mean_val == 0:
+                # If mean is zero, CoV is undefined (division by zero)
+                return None
+            return np.std(numbers, ddof=1) / mean_val * 100
         return None
     
     @staticmethod
-    def calculate_mean_excluding_zeros(numbers):
+    def calculate_mean_including_zeros(numbers):
         """
-        Calculate the mean of a list of numbers, excluding zeros.
-
+        Calculate the mean of a list of numbers, including zeros.
+        
         Args:
             numbers (list): A list or array of numerical values.
-
+    
         Returns:
-            float or None: The mean of the non-zero numbers, or None if no non-zero numbers are present.
+            float or None: The mean of the numbers, or None if fewer than 2 values are present.
         """
-        non_zero_numbers = np.array(numbers)[np.array(numbers) > 0]
-        return np.mean(non_zero_numbers) if non_zero_numbers.size > 1 else None
+        numbers = np.array(numbers)
+        if len(numbers) >= 2:
+            return np.mean(numbers)
+        return None
 
     @staticmethod
     def apply_log_transformation(series):
         """
-        Apply log10 transformation to a Pandas series, excluding zero values.
-
-        Args:
-            series (pd.Series): A Pandas series with numerical values.
-
-        Returns:
-            pd.Series: A series with the log10 transformation applied to non-zero values.
+        Apply log10 transformation to a Pandas series.
         """
-        return np.log10(series[series > 0])
+        return np.log10(series)
 
     @staticmethod
     @st.cache_data(ttl=3600)
     def prepare_dataframe_for_plot(dataframe, area_under_curve_columns):
         """
-        Prepare a DataFrame for plotting by calculating CoV and mean values for specified columns.
-
+        Prepare a DataFrame for plotting by imputing zeros, calculating CoV, and mean values for specified columns.
+        
         Args:
             dataframe (pd.DataFrame): The DataFrame to process.
             area_under_curve_columns (list): A list of columns representing areas under the curve.
-
+        
         Returns:
             pd.DataFrame: The processed DataFrame with additional 'cov' and 'mean' columns.
         """
+        # Impute zeros with smallest non-zero value in the same class divided by 10
+        dataframe = BQCQualityCheck.impute_zeros_by_class(
+            dataframe, 
+            value_columns=area_under_curve_columns, 
+            class_column='ClassKey'
+        )
+        
         dataframe['cov'] = dataframe[area_under_curve_columns].apply(
             BQCQualityCheck.calculate_coefficient_of_variation, axis=1)
         dataframe['mean'] = dataframe[area_under_curve_columns].apply(
-            BQCQualityCheck.calculate_mean_excluding_zeros, axis=1)
-        dataframe.loc[dataframe['mean'].notnull(), 'mean'] = BQCQualityCheck.apply_log_transformation(dataframe['mean'])
+            BQCQualityCheck.calculate_mean_including_zeros, axis=1)
+        
+        valid_mean_mask = (dataframe['mean'].notnull()) & (dataframe['mean'] > 0)
+        dataframe.loc[valid_mean_mask, 'mean'] = np.log10(dataframe.loc[valid_mean_mask, 'mean'])
+        
         return dataframe
 
     @staticmethod

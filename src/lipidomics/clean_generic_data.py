@@ -64,11 +64,11 @@ class CleanGenericData:
             return pd.DataFrame()
 
     def _convert_columns_to_numeric(self, df, full_samples_list):
-        """Converts intensity data columns to numeric type."""
+        """Converts intensity data columns to numeric type and handles null/negative values."""
         try:
             intensity_cols = [f'intensity[{sample}]' for sample in full_samples_list]
             df_copy = df.copy()
-            df_copy[intensity_cols] = df_copy[intensity_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+            df_copy[intensity_cols] = df_copy[intensity_cols].apply(pd.to_numeric, errors='coerce').fillna(0).clip(lower=0)
             return df_copy
         except KeyError as e:
             st.error(f"Error converting columns to numeric: {str(e)}")
