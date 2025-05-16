@@ -419,7 +419,7 @@ def display_format_requirements(data_format):
         1. **First Column - Lipid Names:**
            * Can have any column name
            * Must contain lipid molecule identifiers
-           * Will be standardized to match te standard format. For example:
+           * Will be standardized to match the standard format. For example:
              - LPC O-18:1         -> LPC(O-18:1)
              - Cer d18:0/C24:0    -> Cer(d18:0_C24:0)
              - CE 14:0;0          -> CE(14:0)
@@ -565,7 +565,7 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
                          for condition in experiment.conditions_list)
         
         if all_correct:
-            try:
+            try: 
                 # Update the group_df and get column mapping
                 group_df, old_to_new = grouped_samples.group_samples(group_df, selections)
                 
