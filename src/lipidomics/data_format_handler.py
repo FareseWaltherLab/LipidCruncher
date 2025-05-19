@@ -233,67 +233,32 @@ class DataFormatHandler:
         return df
     
     @staticmethod
-    def _standardize_metabolomics_workbench(text_data):
+    def _validate_metabolomics_workbench(text_data):
         """
-        Standardizes Metabolomics Workbench format data.
+        Validates Metabolomics Workbench format text data.
         """
         try:
-            # Find the data section
+            # Check for required section markers
+            if 'MS_METABOLITE_DATA_START' not in text_data or 'MS_METABOLITE_DATA_END' not in text_data:
+                return False, "Missing required data section markers"
+                
+            # Extract data section
             start_idx = text_data.find('MS_METABOLITE_DATA_START')
             end_idx = text_data.find('MS_METABOLITE_DATA_END')
+            if start_idx == -1 or end_idx == -1 or start_idx >= end_idx:
+                return False, "Invalid data section markers"
             
-            # Extract and split the data section into lines
-            data_section = text_data[start_idx:end_idx].strip().split('\n')
-            data_section = [line.strip() for line in data_section if line.strip()]
+            # Get the data section
+            data_lines = text_data[start_idx:end_idx].strip().split('\n')
+            data_lines = [line.strip() for line in data_lines if line.strip()]
             
-            # Remove the MS_METABOLITE_DATA_START line
-            data_section = [line for line in data_section if 'MS_METABOLITE_DATA_START' not in line]
-            
-            # Parse header rows and split by comma since file is CSV
-            samples_line = data_section[0].split(',')
-            factors_line = data_section[1].split(',')
-            
-            # Extract sample names and conditions, skipping the first column header
-            sample_names = samples_line[1:]  # Skip 'Samples' column
-            conditions = factors_line[1:]    # Skip 'Factors' column
-            
-            # Create list of data rows
-            data_rows = []
-            for line in data_section[2:]:  # Skip header rows
-                if line.strip():  # Ignore empty lines
-                    values = line.split(',')  # Split by comma
-                    if len(values) == len(sample_names) + 1:  # +1 for lipid name column
-                        data_rows.append(values)
-            
-            # Create DataFrame
-            columns = ['LipidMolec'] + [f'intensity[s{i+1}]' for i in range(len(sample_names))]
-            df = pd.DataFrame(data_rows, columns=columns)
-            
-            # Store experimental conditions and sample names in session state
-            st.session_state.workbench_conditions = {
-                f's{i+1}': condition.strip() 
-                for i, condition in enumerate(conditions)
-            }
-            st.session_state.workbench_samples = {
-                f's{i+1}': name.strip() 
-                for i, name in enumerate(sample_names)
-            }
-            
-            # Clean and standardize lipid names
-            df['LipidMolec'] = df['LipidMolec'].apply(DataFormatHandler._standardize_lipid_name)
-            
-            # Infer ClassKey from standardized LipidMolec
-            df['ClassKey'] = df['LipidMolec'].apply(DataFormatHandler._infer_class_key)
-            
-            # Convert intensity columns to numeric, replacing any non-numeric values with NaN
-            intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
-            df[intensity_cols] = df[intensity_cols].apply(pd.to_numeric, errors='coerce').fillna(0).clip(lower=0)
-            
-            return df
-            
+            # Need at least marker + samples + factors + one data row
+            if len(data_lines) < 4:
+                return False, "Insufficient data rows"
+                
+            return True, "Valid Metabolomics Workbench format"
         except Exception as e:
-            st.error(f"Error in standardize_metabolomics_workbench: {str(e)}")
-            return pd.DataFrame()
+            return False, f"Validation error: {str(e)}"
 
     @staticmethod
     def _standardize_metabolomics_workbench(text_data):
