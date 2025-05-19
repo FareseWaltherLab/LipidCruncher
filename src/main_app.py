@@ -741,7 +741,6 @@ def clean_data(df, name_df, experiment, data_format):
 
 
 def handle_standards_upload(normalizer):
-    """Handle the upload and processing of custom standards file."""
     st.info("""
     You can upload your own standards file. Requirements:
     - CSV file (.csv)
@@ -753,7 +752,12 @@ def handle_standards_upload(normalizer):
     if uploaded_file is not None:
         try:
             standards_df = pd.read_csv(uploaded_file)
-            return normalizer.process_standards_file(standards_df, st.session_state.cleaned_df)
+            # Pass both cleaned_df and intsta_df from session state
+            return normalizer.process_standards_file(
+                standards_df,
+                st.session_state.cleaned_df,
+                st.session_state.intsta_df
+            )
         except ValueError as ve:
             st.error(str(ve))
         except Exception as e:
@@ -1041,134 +1045,153 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     normalized_df = filtered_df.copy()
     normalized_data_object = lp.NormalizeData()
 
-    try:
-        if normalization_method != 'None':
-            # Store normalization settings in session state
-            if 'normalization_settings' not in st.session_state:
-                st.session_state.normalization_settings = {}
-            
-            # Track whether we need to do standards normalization
-            do_standards = normalization_method in ['Internal Standards', 'Both'] and has_standards
-            
-            # Handle Protein-based normalization
-            if normalization_method in ['Protein-based', 'Both']:
-                with st.expander("Enter Protein Concentration Data"):
-                    protein_df = collect_protein_concentrations(experiment)
-                    if protein_df is not None:
-                        try:
-                            normalized_df = normalized_data_object.normalize_using_bca(
-                                normalized_df, 
-                                protein_df, 
-                                preserve_prefix=True
-                            )
-                            # Store protein-based normalization settings
-                            st.session_state.normalization_settings['protein'] = {
-                                'protein_df': protein_df
-                            }
-                            st.success("Protein-based normalization applied successfully")
-                        except Exception as e:
-                            st.error(f"Error during protein-based normalization: {str(e)}")
-                            return None
-
-            # Handle internal standards normalization
-            if do_standards:
-                with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
-                    intensity_cols = [col for col in intsta_df.columns if col.startswith('intensity[')]
-                    if not intensity_cols:
-                        st.error("Internal standards data does not contain properly formatted intensity columns")
-                        return None
-
-                    # Group standards by their ClassKey
-                    standards_by_class = {}
-                    if 'ClassKey' in st.session_state.intsta_df.columns:
-                        standards_by_class = st.session_state.intsta_df.groupby('ClassKey')['LipidMolec'].apply(list).to_dict()
-            
-                    # Process standards with session state preservation
-                    class_to_standard_map = process_class_standards(
-                        selected_classes, 
-                        standards_by_class, 
-                        st.session_state.intsta_df,
-                        st.session_state.get('class_standard_map', {})
-                    )
-                    
-                    if not class_to_standard_map:
-                        return None
-
-                    # Store the standards mapping
-                    st.session_state.class_standard_map = class_to_standard_map
-
-                    # Apply normalization
-                    normalized_df = apply_standards_normalization(
-                        normalized_df, 
-                        class_to_standard_map, 
-                        selected_classes, 
-                        st.session_state.intsta_df, 
-                        normalized_data_object,
-                        experiment
-                    )
-                    if normalized_df is None:
-                        return None
-
-        # Rename intensity columns to concentration
-        normalized_df = rename_intensity_to_concentration(normalized_df)
+    #try:
+    if normalization_method != 'None':
+        # Store normalization settings in session state
+        if 'normalization_settings' not in st.session_state:
+            st.session_state.normalization_settings = {}
         
-        # Add back LipidSearch essential columns if needed
-        if normalized_df is not None and format_type == 'LipidSearch 5.0':
-            for col, values in stored_columns.items():
-                normalized_df[col] = values
+        # Track whether we need to do standards normalization
+        do_standards = normalization_method in ['Internal Standards', 'Both'] and has_standards
+        
+        # Handle Protein-based normalization
+        if normalization_method in ['Protein-based', 'Both']:
+            with st.expander("Enter Protein Concentration Data"):
+                protein_df = collect_protein_concentrations(experiment)
+                if protein_df is not None:
+                    try:
+                        normalized_df = normalized_data_object.normalize_using_bca(
+                            normalized_df, 
+                            protein_df, 
+                            preserve_prefix=True
+                        )
+                        # Store protein-based normalization settings
+                        st.session_state.normalization_settings['protein'] = {
+                            'protein_df': protein_df
+                        }
+                        st.success("Protein-based normalization applied successfully")
+                    except Exception as e:
+                        st.error(f"Error during protein-based normalization: {str(e)}")
+                        return None
 
-        # Display normalized data (always show it)
-        if normalized_df is not None:
-            st.subheader("View Normalized Dataset")
-            st.write(normalized_df)
-            csv = normalized_df.to_csv(index=False)
-            st.download_button(
-                label="Download Normalized Data",
-                data=csv,
-                file_name="normalized_data.csv",
-                mime="text/csv"
-            )
+        # Handle internal standards normalization
+        if do_standards:
+            with st.expander("Enter Inputs For Data Normalization Using Internal Standards"):
+                intensity_cols = [col for col in intsta_df.columns if col.startswith('intensity[')]
+                if not intensity_cols:
+                    st.error("Internal standards data does not contain properly formatted intensity columns")
+                    return None
 
-        return normalized_df
+                # Group standards by their ClassKey
+                standards_by_class = {}
+                if 'ClassKey' in st.session_state.intsta_df.columns:
+                    standards_by_class = st.session_state.intsta_df.groupby('ClassKey')['LipidMolec'].apply(list).to_dict()
+        
+                # Process standards with session state preservation
+                class_to_standard_map = process_class_standards(
+                    selected_classes, 
+                    standards_by_class, 
+                    st.session_state.intsta_df,
+                    st.session_state.get('class_standard_map', {})
+                )
+                
+                if not class_to_standard_map:
+                    return None
 
-    except Exception as e:
-        st.error(f"An unexpected error occurred during normalization: {str(e)}")
-        return None
+                # Store the standards mapping
+                st.session_state.class_standard_map = class_to_standard_map
+
+                # Apply normalization
+                normalized_df = apply_standards_normalization(
+                    normalized_df, 
+                    class_to_standard_map, 
+                    selected_classes, 
+                    st.session_state.intsta_df, 
+                    normalized_data_object,
+                    experiment
+                )
+                if normalized_df is None:
+                    return None
+
+    # Rename intensity columns to concentration
+    normalized_df = rename_intensity_to_concentration(normalized_df)
+    
+    # Add back LipidSearch essential columns if needed
+    if normalized_df is not None and format_type == 'LipidSearch 5.0':
+        for col, values in stored_columns.items():
+            normalized_df[col] = values
+
+    # Display normalized data (always show it)
+    if normalized_df is not None:
+        st.subheader("View Normalized Dataset")
+        st.write(normalized_df)
+        csv = normalized_df.to_csv(index=False)
+        st.download_button(
+            label="Download Normalized Data",
+            data=csv,
+            file_name="normalized_data.csv",
+            mime="text/csv"
+        )
+
+    return normalized_df    
+            
+
+    #except Exception as e:
+        #st.error(f"An unexpected error occurred during normalization: {str(e)}")
+        #return None
 
 def process_class_standards(selected_classes, standards_by_class, intsta_df, saved_mappings=None):
     """
-    Process class-standard mapping with session state preservation.
+    Process class-standard mapping with session state preservation, ensuring class-specific defaults.
+
+    Args:
+        selected_classes (list): List of lipid classes to normalize.
+        standards_by_class (dict): Dictionary mapping ClassKey to list of LipidMolec standards.
+        intsta_df (pd.DataFrame): DataFrame containing internal standards.
+        saved_mappings (dict, optional): Previously saved class-to-standard mappings.
+
+    Returns:
+        dict or None: Mapping of lipid classes to selected standards, or None if invalid.
     """
+    
     class_to_standard_map = {}
     all_available_standards = list(intsta_df['LipidMolec'].unique())
     
+    # Handle case where no standards are available
+    if not all_available_standards:
+        st.error("No internal standards available for normalization.")
+        return None
+    
     for lipid_class in selected_classes:
-        # Get previously selected standard if available
         default_standard = None
         if saved_mappings and lipid_class in saved_mappings:
             default_standard = saved_mappings[lipid_class]
-            try:
-                default_idx = all_available_standards.index(default_standard)
-            except ValueError:
-                default_idx = 0
-        else:
-            # Try to use class-specific standard
+            if default_standard not in all_available_standards:
+                default_standard = None
+
+        if not default_standard:
             class_specific_standards = standards_by_class.get(lipid_class, [])
-            default_idx = all_available_standards.index(class_specific_standards[0]) if class_specific_standards else 0
-        
+            if class_specific_standards:
+                default_standard = class_specific_standards[0]
+            else:
+                default_standard = all_available_standards[0]
+                st.warning(f"No specific standards available for {lipid_class}. Defaulting to {default_standard}.")
+
+        default_idx = all_available_standards.index(default_standard) if default_standard in all_available_standards else 0
+
         selected_standard = st.selectbox(
             f'Select internal standard for {lipid_class}',
             all_available_standards,
             index=default_idx,
             key=f'standard_selection_{lipid_class}'
         )
-        
+
         class_to_standard_map[lipid_class] = selected_standard
 
     if len(class_to_standard_map) != len(selected_classes):
         st.error("Please select standards for all lipid classes")
         return None
-        
+
     return class_to_standard_map
 
 def apply_standards_normalization(df, class_to_standard_map, selected_classes, intsta_df, normalizer, experiment):
