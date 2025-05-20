@@ -189,6 +189,13 @@ def display_landing_page():
     - **BQC** (Batch Quality Control): samples s9-s12
     """)
                 
+    st.subheader("Tip")
+    st.markdown("""
+    💡 **Important**: When you need to switch to a different analysis with a different dataset, 
+    first refresh the page and start from the homepage. This ensures a clean session and prevents 
+    any conflicts with previously loaded data.
+    """)
+    
     st.subheader("Support")
     st.markdown("""
     For reporting bugs, feature requests, or any questions or comments, please email abdih@mskcc.org.
@@ -905,8 +912,11 @@ def display_cleaned_data(cleaned_df, intsta_df):
                 
                 6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
                    non-numeric entries replaced by zeros.
+                   
+                7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed. 
+                In addition, all negative values are converted to zero.
                 
-                7. **Experimental Conditions Storage**: The experimental conditions from the second row are 
+                8. **Experimental Conditions Storage**: The experimental conditions from the second row are 
                    stored and used to suggest the experimental setup.
                 """)
                 

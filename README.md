@@ -90,11 +90,11 @@ pip install -r requirements.txt
 streamlit run main_app.py
 ```
 
-## Learn More
-To explore LipidCruncher and see how we used it for a case study, read our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) published on bioRxiv.
+## Status
+LipidCruncher is actively maintained and updated. The web application is fully functional and available at [https://lipidcruncher.org](https://lipidcruncher.org). For additional methodological details and example applications, please refer to our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1).
 
 ## Test Dataset
-Want to explore LipidCruncher but don't have your own dataset? Try our sample datasets available on the lab's [GitHub](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets). These datasets are from the case study analyzed in our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) describing LipidCruncher's features.
+Want to explore LipidCruncher but don't have your own dataset? Try our sample datasets available on the lab's [GitHub](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets). These datasets are from the case study analyzed in our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) describing LipidCruncher's features. The LipidSearch dataset is the original dataset containing raw, unprocessed values. Additionally, we provide the same data in Generic and Metabolomics Workbench formats, which include pre-normalized values for your convenience.
 
 The case study experiment includes three conditions with four replicates each:
 * **WT** (Wild Type): samples s1-s4
@@ -107,6 +107,3 @@ For bug reports, feature requests, or questions:
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Status
-LipidCruncher is actively maintained and updated. The web application is fully functional and available at [https://lipidcruncher.org](https://lipidcruncher.org). For additional methodological details and example applications, please refer to our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1).
