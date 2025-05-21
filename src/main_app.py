@@ -278,6 +278,22 @@ def main():
                                     with right_column:
                                         if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
                                             st.session_state.module = "Quality Check & Analysis"
+                                            # IMPORTANT FIX: Save all important normalization state before navigating
+                                            st.session_state.preserved_data = {
+                                                'cleaned_df': st.session_state.cleaned_df,
+                                                'intsta_df': st.session_state.intsta_df,
+                                                'normalized_df': st.session_state.normalized_df,
+                                                'continuation_df': st.session_state.continuation_df,
+                                                'normalization_method': st.session_state.normalization_method,
+                                                'selected_classes': st.session_state.selected_classes,
+                                                'create_norm_dataset': st.session_state.create_norm_dataset,
+                                                # IMPORTANT FIX: Add these additional fields
+                                                'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
+                                                'protein_df': st.session_state.get('protein_df'),
+                                                'standard_source_preference': st.session_state.get('standard_source_preference'),
+                                                'class_standard_map': st.session_state.get('class_standard_map'),
+                                                'standard_concentrations': st.session_state.get('standard_concentrations')
+                                            }
                                             st.experimental_rerun()
                                             
                         elif st.session_state.module == "Quality Check & Analysis":
@@ -292,6 +308,7 @@ def main():
                             
                             if st.button("Back to Data Standardization, Filtering, and Normalization", key="back_to_cleaning"):
                                 st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+                                # IMPORTANT FIX: Also include the new fields when going back
                                 st.session_state.preserved_data = {
                                     'cleaned_df': st.session_state.cleaned_df,
                                     'intsta_df': st.session_state.intsta_df,
@@ -299,7 +316,13 @@ def main():
                                     'continuation_df': st.session_state.continuation_df,
                                     'normalization_method': st.session_state.normalization_method,
                                     'selected_classes': st.session_state.selected_classes,
-                                    'create_norm_dataset': st.session_state.create_norm_dataset
+                                    'create_norm_dataset': st.session_state.create_norm_dataset,
+                                    # IMPORTANT FIX: Add these additional fields
+                                    'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
+                                    'protein_df': st.session_state.get('protein_df'),
+                                    'standard_source_preference': st.session_state.get('standard_source_preference'),
+                                    'class_standard_map': st.session_state.get('class_standard_map'),
+                                    'standard_concentrations': st.session_state.get('standard_concentrations')
                                 }
                                 st.experimental_rerun()
                     
@@ -312,7 +335,8 @@ def main():
         # Restore preserved state if returning from Quality Check & Analysis
         if 'preserved_data' in st.session_state and st.session_state.module == "Data Cleaning, Filtering, & Normalization":
             for key, value in st.session_state.preserved_data.items():
-                setattr(st.session_state, key, value)
+                if value is not None:  # Only set non-None values
+                    setattr(st.session_state, key, value)
             del st.session_state.preserved_data
         
         # Add a button to return to the landing page
@@ -361,6 +385,20 @@ def update_session_state(name_df, experiment, bqc_label):
     st.session_state.extensive_conditions_list = experiment.extensive_conditions_list
     st.session_state.number_of_samples_list = experiment.number_of_samples_list
     st.session_state.aggregate_number_of_samples_list = experiment.aggregate_number_of_samples_list
+    
+    # IMPORTANT FIX: Make sure to preserve normalization settings through navigation
+    if 'preserved_data' in st.session_state:
+        # Restore preserved normalization settings when returning from other modules
+        if 'preserved_intsta_df' in st.session_state.preserved_data:
+            st.session_state.preserved_intsta_df = st.session_state.preserved_data['preserved_intsta_df']
+        if 'protein_df' in st.session_state.preserved_data:
+            st.session_state.protein_df = st.session_state.preserved_data['protein_df']
+        if 'standard_source_preference' in st.session_state.preserved_data:
+            st.session_state.standard_source_preference = st.session_state.preserved_data['standard_source_preference']
+        if 'class_standard_map' in st.session_state.preserved_data:
+            st.session_state.class_standard_map = st.session_state.preserved_data['class_standard_map']
+        if 'standard_concentrations' in st.session_state.preserved_data:
+            st.session_state.standard_concentrations = st.session_state.preserved_data['standard_concentrations']
 
 def display_format_selection():
     return st.sidebar.selectbox(
@@ -773,27 +811,88 @@ def handle_standards_upload(normalizer):
 
 
 def manage_internal_standards(normalizer):
-    """Handle internal standards management workflow."""
+    """Handle internal standards management workflow with simplified approach."""
+    
+    # Initialize with automatic detection as default
+    if 'standard_source_preference' not in st.session_state:
+        st.session_state.standard_source_preference = "Automatic Detection"
+    
+    # Radio button for standards source
     standards_source = st.radio(
         "Select standards source:",
         ["Automatic Detection", "Upload Custom Standards"],
-        index=0
+        index=0 if st.session_state.standard_source_preference == "Automatic Detection" else 1,
+        key="standards_source_radio"
     )
     
+    # Save the preference
+    st.session_state.standard_source_preference = standards_source
+    
+    # Handle automatic detection
     if standards_source == "Automatic Detection":
+        # Clear any custom standards when switching to automatic detection
+        if 'preserved_intsta_df' in st.session_state:
+            st.session_state.preserved_intsta_df = None
+        
+        # Show automatically detected standards if available
         if not st.session_state.intsta_df.empty:
             st.success(f"✓ Found {len(st.session_state.intsta_df)} standards")
             st.write("Current standards:")
-            display_data(st.session_state.intsta_df, "Current Standards", "current_standards.csv")
+            display_data(st.session_state.intsta_df, "Current Standards", "current_standards.csv", "auto")
         else:
             st.info("No internal standards were automatically detected in the dataset")
+    
+    # Handle custom upload
     else:
-        new_standards_df = handle_standards_upload(normalizer)
-        if new_standards_df is not None:
-            st.session_state.intsta_df = new_standards_df
-            st.success(f"✓ Successfully loaded {len(new_standards_df)} custom standards")
-            st.write("Loaded custom standards:")
-            display_data(new_standards_df, "Current Standards", "current_standards.csv")
+        # Reset display area for custom standards
+        upload_container = st.container()
+        
+        with upload_container:
+            st.info("""
+            You can upload your own standards file. Requirements:
+            - CSV file (.csv)
+            - Must contain column: 'LipidMolec'
+            - The standards must exist in your dataset
+            """)
+            
+            uploaded_file = st.file_uploader(
+                "Upload CSV file with standards", 
+                type=['csv'],
+                key="standards_file_uploader"
+            )
+            
+            if uploaded_file is not None:
+                try:
+                    standards_df = pd.read_csv(uploaded_file)
+                    # Process the uploaded standards
+                    new_standards_df = normalizer.process_standards_file(
+                        standards_df,
+                        st.session_state.cleaned_df,
+                        st.session_state.intsta_df
+                    )
+                    
+                    if new_standards_df is not None:
+                        # Update both current and preserved standards
+                        st.session_state.intsta_df = new_standards_df
+                        st.session_state.preserved_intsta_df = new_standards_df.copy()
+                        
+                        st.success(f"✓ Successfully loaded {len(new_standards_df)} custom standards")
+                        st.write("Loaded custom standards:")
+                        display_data(new_standards_df, "Custom Standards", "custom_standards.csv", "uploaded")
+                    
+                except ValueError as ve:
+                    st.error(str(ve))
+                except Exception as e:
+                    st.error(f"Error reading standards file: {str(e)}")
+            
+            elif 'preserved_intsta_df' in st.session_state and st.session_state.preserved_intsta_df is not None:
+                # Show previously uploaded standards
+                st.success(f"✓ Using previously uploaded standards ({len(st.session_state.preserved_intsta_df)} standards)")
+                st.write("Current uploaded standards:")
+                display_data(st.session_state.preserved_intsta_df, "Custom Standards", "custom_standards.csv", "preserved")
+                
+                # Use previously uploaded standards
+                st.session_state.intsta_df = st.session_state.preserved_intsta_df.copy()
 
 def display_cleaned_data(cleaned_df, intsta_df):
     """
@@ -963,7 +1062,7 @@ def rename_intensity_to_concentration(df):
     return df.rename(columns=rename_dict)
 
 def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
-    """Handle data normalization with consistent session state usage."""
+    """Handle data normalization with improved session state persistence."""
     
     # Store essential columns before normalization only for LipidSearch 5.0
     stored_columns = {}
@@ -987,15 +1086,16 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     def update_selected_classes():
         st.session_state.selected_classes = st.session_state.temp_selected_classes
     
+    # FIXED: Always default to all classes if nothing is selected
     selected_classes = st.multiselect(
         'Select lipid classes you would like to analyze:',
         options=all_class_lst,
-        default=all_class_lst,  # Set default to include all classes
+        default=all_class_lst if not st.session_state.selected_classes else st.session_state.selected_classes,
         key='temp_selected_classes',
         on_change=update_selected_classes
     )
     
-    # Use the direct selection result instead of session state
+    # Use the direct selection result
     if not selected_classes:
         st.warning("Please select at least one lipid class to proceed with normalization.")
         return None
@@ -1003,13 +1103,31 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     # Filter DataFrame based on selected classes
     filtered_df = cleaned_df[cleaned_df['ClassKey'].isin(selected_classes)].copy()
 
-    # Check if we have standards from earlier selection
-    has_standards = not st.session_state.intsta_df.empty
+    # Check if we have standards from intsta_df
+    has_standards = not intsta_df.empty
 
-    # Determine available normalization options
-    normalization_options = ['None', 'Internal Standards', 'Protein-based', 'Both'] if has_standards else ['None', 'Protein-based']
-    if not has_standards:
-        st.warning("No internal standards available. Only protein-based normalization is available.")
+    # Store standard source and intsta_df persistently in session state if not already present
+    if 'standard_source' not in st.session_state:
+        st.session_state.standard_source = "Automatic Detection" if has_standards else None
+    
+    # IMPORTANT FIX: Always keep the intsta_df in session state to preserve uploaded standards
+    if 'preserved_intsta_df' not in st.session_state:
+        st.session_state.preserved_intsta_df = intsta_df.copy() if not intsta_df.empty else None
+    elif intsta_df is not None and not intsta_df.empty:
+        # Update the preserved standards if new ones are provided
+        st.session_state.preserved_intsta_df = intsta_df.copy()
+    elif st.session_state.preserved_intsta_df is not None:
+        # Use the preserved standards if the current ones are empty
+        st.session_state.intsta_df = st.session_state.preserved_intsta_df.copy()
+        intsta_df = st.session_state.preserved_intsta_df.copy()
+        has_standards = True
+    
+    normalized_data_object = lp.NormalizeData()
+
+    # IMPORTANT FIX: Use the standards from session state if available
+    if st.session_state.preserved_intsta_df is not None and intsta_df.empty:
+        intsta_df = st.session_state.preserved_intsta_df.copy()
+        has_standards = True
 
     # Add normalization explanation 
     with st.expander("About Normalization Methods"):
@@ -1037,25 +1155,43 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
         After normalization, intensity columns are renamed to concentration columns to reflect that values now represent absolute or relative lipid concentrations rather than raw intensities.
         """)
 
+    # Determine available normalization options based on current standards availability
+    normalization_options = ['None', 'Internal Standards', 'Protein-based', 'Both'] if has_standards else ['None', 'Protein-based']
+    
+    # IMPORTANT FIX: If user had previously chosen standards-based method but standards are now missing, add a notice
+    if 'normalization_method' in st.session_state and st.session_state.normalization_method in ['Internal Standards', 'Both'] and not has_standards:
+        st.warning("Your previous normalization method required internal standards, but none are currently available. Please upload standards or select a different method.")
+    
     # Initialize or retrieve normalization method from session state
     if 'normalization_method' not in st.session_state:
         st.session_state.normalization_method = 'None'
     
+    # Validate saved normalization method against current options
+    if st.session_state.normalization_method not in normalization_options:
+        # IMPORTANT FIX: Don't automatically reset to 'None' if standards might be uploaded
+        if not ('normalization_method' in st.session_state and 
+                st.session_state.normalization_method in ['Internal Standards', 'Both']):
+            st.session_state.normalization_method = 'None'
+            
+    # Find the correct index to pre-select, handling the case where the method isn't available
+    if st.session_state.normalization_method in normalization_options:
+        default_index = normalization_options.index(st.session_state.normalization_method)
+    else:
+        default_index = 0
+        
     # Select normalization method with session state persistence
     normalization_method = st.radio(
         "Select normalization method:",
         options=normalization_options,
         key='norm_method_selection',
-        index=normalization_options.index(st.session_state.normalization_method)
+        index=default_index
     )
     
     # Update session state
     st.session_state.normalization_method = normalization_method
 
     normalized_df = filtered_df.copy()
-    normalized_data_object = lp.NormalizeData()
 
-    #try:
     if normalization_method != 'None':
         # Store normalization settings in session state
         if 'normalization_settings' not in st.session_state:
@@ -1067,7 +1203,18 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
         # Handle Protein-based normalization
         if normalization_method in ['Protein-based', 'Both']:
             with st.expander("Enter Protein Concentration Data"):
-                protein_df = collect_protein_concentrations(experiment)
+                # IMPORTANT FIX: Preserve protein concentration inputs
+                protein_df = None
+                if 'protein_df' in st.session_state:
+                    protein_df = st.session_state.protein_df
+                
+                new_protein_df = collect_protein_concentrations(experiment)
+                
+                if new_protein_df is not None:
+                    # Update the stored protein_df in session state
+                    st.session_state.protein_df = new_protein_df
+                    protein_df = new_protein_df
+                
                 if protein_df is not None:
                     try:
                         normalized_df = normalized_data_object.normalize_using_bca(
@@ -1094,14 +1241,14 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
 
                 # Group standards by their ClassKey
                 standards_by_class = {}
-                if 'ClassKey' in st.session_state.intsta_df.columns:
-                    standards_by_class = st.session_state.intsta_df.groupby('ClassKey')['LipidMolec'].apply(list).to_dict()
+                if 'ClassKey' in intsta_df.columns:
+                    standards_by_class = intsta_df.groupby('ClassKey')['LipidMolec'].apply(list).to_dict()
         
                 # Process standards with session state preservation
                 class_to_standard_map = process_class_standards(
                     selected_classes, 
                     standards_by_class, 
-                    st.session_state.intsta_df,
+                    intsta_df,
                     st.session_state.get('class_standard_map', {})
                 )
                 
@@ -1116,7 +1263,7 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
                     normalized_df, 
                     class_to_standard_map, 
                     selected_classes, 
-                    st.session_state.intsta_df, 
+                    intsta_df, 
                     normalized_data_object,
                     experiment
                 )
@@ -1143,12 +1290,7 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
             mime="text/csv"
         )
 
-    return normalized_df    
-            
-
-    #except Exception as e:
-        #st.error(f"An unexpected error occurred during normalization: {str(e)}")
-        #return None
+    return normalized_df
 
 def process_class_standards(selected_classes, standards_by_class, intsta_df, saved_mappings=None):
     """
@@ -1328,7 +1470,7 @@ def collect_protein_concentrations(experiment):
             st.warning("Please upload an Excel file to proceed.")
             return None
         
-def display_data(df, title, filename):
+def display_data(df, title, filename, key_suffix=''):
     """
     Display a DataFrame in an expander with download option.
     
@@ -1336,6 +1478,7 @@ def display_data(df, title, filename):
         df (pd.DataFrame): DataFrame to display
         title (str): Title for the data section
         filename (str): Name of file for download
+        key_suffix (str): Optional suffix to make widget keys unique
     """
     st.write(df)
     csv = df.to_csv(index=False)
@@ -1343,7 +1486,8 @@ def display_data(df, title, filename):
         label=f"Download {title}",
         data=csv,
         file_name=filename,
-        mime="text/csv"
+        mime="text/csv",
+        key=f"download_{filename}_{key_suffix}"  # Add unique key
     )
     
 def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bqc_label, format_type):
