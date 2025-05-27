@@ -641,24 +641,27 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
     return group_df, df
 
 def process_experiment(df, data_format='lipidsearch'):
-    """
-    Process the experiment setup and sample grouping based on user input.
-    """
     st.sidebar.subheader("Define Experiment")
     
     if data_format == 'Metabolomics Workbench' and 'workbench_conditions' in st.session_state:
-        # Parse conditions from the data (but don't display the parsed values)
-        parsed_conditions = lp.DataFormatHandler._parse_workbench_conditions(
-            set(st.session_state.workbench_conditions.values())
-        )
+        # Get conditions in the order they appear in the data
+        conditions_in_order = [st.session_state.workbench_conditions[f's{i+1}'] 
+                              for i in range(len(st.session_state.workbench_samples))]
+        
+        # Get unique conditions in order of first appearance
+        unique_conditions = []
+        seen = set()
+        for condition in conditions_in_order:
+            if condition not in seen:
+                seen.add(condition)
+                unique_conditions.append(condition)
         
         use_detected = st.sidebar.checkbox("Use detected experimental setup", value=True)
         
         if use_detected:
-            # Use the detected conditions
-            unique_conditions = set(st.session_state.workbench_conditions.values())
+            # Use the detected conditions in original order
             n_conditions = len(unique_conditions)
-            conditions_list = list(unique_conditions)
+            conditions_list = unique_conditions
             
             # Count samples per condition
             sample_counts = {}
@@ -672,26 +675,22 @@ def process_experiment(df, data_format='lipidsearch'):
             st.sidebar.write("Using detected setup:")
             for cond, count in zip(conditions_list, number_of_samples_list):
                 st.sidebar.write(f"* {cond}: {count} samples")
-            
+        
         else:
-            # Allow manual setup
+            # Manual setup remains unchanged
             n_conditions = st.sidebar.number_input('Enter the number of conditions', 
                                                  min_value=1, max_value=20, value=1, step=1)
-            
             conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1}') 
                              for i in range(n_conditions)]
-            
             number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', 
                                                             min_value=1, max_value=1000, value=1, step=1) 
                                     for i in range(n_conditions)]
     else:
-        # Standard manual setup for other formats
+        # Non-Metabolomics Workbench setup remains unchanged
         n_conditions = st.sidebar.number_input('Enter the number of conditions', 
                                              min_value=1, max_value=20, value=1, step=1)
-        
         conditions_list = [st.sidebar.text_input(f'Create a label for condition #{i + 1}') 
                          for i in range(n_conditions)]
-        
         number_of_samples_list = [st.sidebar.number_input(f'Number of samples for condition #{i + 1}', 
                                                          min_value=1, max_value=1000, value=1, step=1) 
                                  for i in range(n_conditions)]
@@ -701,11 +700,11 @@ def process_experiment(df, data_format='lipidsearch'):
         st.sidebar.error("All condition labels must be non-empty.")
         return False, None, None, None, False, None
 
+    # Rest of the function remains unchanged
     name_df, group_df, updated_df, valid_samples = process_group_samples(df, experiment, data_format)
     if not valid_samples:
         return False, None, None, None, False, None
 
-    # Only show BQC selection and confirmation if grouping is complete
     if st.session_state.grouping_complete:
         bqc_label = specify_bqc_samples(experiment)
         confirmed = confirm_user_inputs(group_df, experiment)
@@ -749,26 +748,42 @@ def confirm_user_inputs(group_df, experiment):
         st.sidebar.subheader("Confirm Inputs")
 
         # Display total number of samples
-        st.sidebar.write("There are a total of " + str(sum(experiment.number_of_samples_list)) + " samples.")
+        total_samples = sum(experiment.number_of_samples_list)
+        st.sidebar.write(f"There are a total of {total_samples} samples.")
 
         # Display information about sample and condition pairings
-        for condition in experiment.conditions_list:
-            build_replicate_condition_pair(condition, experiment)
+        for i, condition in enumerate(experiment.conditions_list):
+            if condition and condition.strip():  # Make sure condition is not empty
+                build_replicate_condition_pair(condition, experiment)
+            else:
+                st.sidebar.error(f"Empty condition found at index {i}")
 
         # Display a checkbox for the user to confirm the inputs
         return st.sidebar.checkbox("Confirm the inputs by checking this box")
+        
     except Exception as e:
-        raise Exception(f"Error in confirming user inputs: {e}")
+        st.sidebar.error(f"Error in confirming user inputs: {e}")
+        st.write(f"Error in confirm_user_inputs: {e}")
+        return False
 
 def build_replicate_condition_pair(condition, experiment):
     """
     Display information about sample and condition pairings in the Streamlit sidebar.
     """
-    index = experiment.conditions_list.index(condition)
-    samples = experiment.individual_samples_list[index]
+    try:
+        index = experiment.conditions_list.index(condition)
+        samples = experiment.individual_samples_list[index]
 
-    display_text = f"- {' to '.join([samples[0], samples[-1]])} (total {len(samples)}) correspond to {condition}" if len(samples) > 5 else f"- {'-'.join(samples)} correspond to {condition}"
-    st.sidebar.write(display_text)
+        if len(samples) > 5:
+            display_text = f"- {samples[0]} to {samples[-1]} (total {len(samples)}) correspond to {condition}"
+        else:
+            display_text = f"- {'-'.join(samples)} correspond to {condition}"
+        
+        st.sidebar.write(display_text)
+        
+    except Exception as e:
+        st.sidebar.error(f"Error displaying condition {condition}: {str(e)}")
+        st.write(f"Error in build_replicate_condition_pair: {e}")
 
 def clean_data(df, name_df, experiment, data_format):
     """
@@ -1041,11 +1056,6 @@ def display_cleaned_data(cleaned_df, intsta_df):
             by detecting patterns like "+D7" or ":(s)" notation in lipid names. If you use custom standards with different naming conventions, you can upload them using the 
             option below.
             """)
-            
-            if not st.session_state.intsta_df.empty:
-                st.success(f"✓ {len(st.session_state.intsta_df)} internal standards were automatically detected in your dataset.")
-            else:
-                st.warning("No internal standards were automatically detected in your dataset.")
                 
             # Add a divider
             st.markdown("---")
@@ -2253,14 +2263,6 @@ def analyze_pairwise_correlation(continuation_df, experiment):
                         low_correlations.append(
                             f"{correlation_df.columns[i]} and {correlation_df.index[j]}: {correlation_df.iloc[j, i]:.3f}"
                         )
-            
-            if low_correlations:
-                st.warning("**Potential correlation issues detected:**")
-                for corr in low_correlations:
-                    st.write(f"• {corr}")
-                st.write(f"Consider investigating these sample pairs as they show correlations below the recommended threshold ({min_threshold}) for {sample_type}.")
-            else:
-                st.success(f"All correlations are above the recommended threshold ({min_threshold}) for {sample_type}.")
                 
             return selected_condition, fig
         else:

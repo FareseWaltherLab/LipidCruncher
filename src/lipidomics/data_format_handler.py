@@ -285,6 +285,14 @@ class DataFormatHandler:
             sample_names = samples_line[1:]  # Skip 'Samples' column
             conditions = factors_line[1:]    # Skip 'Factors' column
             
+            # Clean up condition names - remove "Condition:" prefix if present
+            cleaned_conditions = []
+            for condition in conditions:
+                condition = condition.strip()
+                if condition.startswith('Condition:'):
+                    condition = condition.replace('Condition:', '').strip()
+                cleaned_conditions.append(condition)
+            
             # Create list of data rows
             data_rows = []
             for line in data_section[2:]:  # Skip header rows
@@ -298,9 +306,10 @@ class DataFormatHandler:
             df = pd.DataFrame(data_rows, columns=columns)
             
             # Store experimental conditions and sample names in session state
+            # Use cleaned conditions without the "Condition:" prefix
             st.session_state.workbench_conditions = {
-                f's{i+1}': condition.strip() 
-                for i, condition in enumerate(conditions)
+                f's{i+1}': condition 
+                for i, condition in enumerate(cleaned_conditions)
             }
             st.session_state.workbench_samples = {
                 f's{i+1}': name.strip() 
