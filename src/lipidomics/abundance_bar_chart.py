@@ -15,8 +15,7 @@ class AbundanceBarChart:
     abundance of lipid classes under selected experimental conditions. It supports 
     different modes of data representation (linear or logarithmic scale) and provides 
     functionalities for grouping data, calculating mean and standard deviation, 
-    handling log transformations, and filtering based on selected classes. The class 
-    also includes methods for customizing and rendering the final plot.
+    handling log transformations, and filtering based on selected classes.
     """
 
     @staticmethod
@@ -27,7 +26,7 @@ class AbundanceBarChart:
                               conditions_list: List[str], 
                               selected_conditions: List[str], 
                               selected_classes: List[str]) -> pd.DataFrame:
-        """Create mean and standard error columns for each condition."""
+        """Create mean and standard deviation columns for each condition with mathematically rigorous approach."""
         try:
             available_samples = [sample for sample in full_samples_list 
                                if f"concentration[{sample}]" in df.columns]
@@ -52,15 +51,38 @@ class AbundanceBarChart:
                     class_df = df[df['ClassKey'] == class_name]
                     
                     if not class_df.empty:
+                        # Get total abundance per sample (sum across all species in the class)
                         total_abundance_per_sample = class_df[mean_cols].sum(axis=0)
                         
-                        class_mean = total_abundance_per_sample.mean()
-                        class_sem = total_abundance_per_sample.sem()
+                        # LINEAR SCALE STATISTICS
+                        linear_mean = total_abundance_per_sample.mean()
+                        linear_std = total_abundance_per_sample.std(ddof=1)  # Use sample std (N-1)
+                        
+                        # LOG2 SCALE STATISTICS - Transform individual values first
+                        # Use consistent approach: replace zeros with small value to maintain sample size
+                        # This ensures log scale statistics are based on same samples as linear scale
+                        
+                        # Replace zeros with a small value (e.g., minimum positive value / 10)
+                        min_positive = total_abundance_per_sample[total_abundance_per_sample > 0].min()
+                        if pd.isna(min_positive):
+                            # All values are zero - handle this case
+                            log2_mean = np.nan
+                            log2_std = np.nan
+                        else:
+                            # Replace zeros with small value to maintain sample consistency
+                            small_value = min_positive / 10
+                            adjusted_values = total_abundance_per_sample.replace(0, small_value)
+                            
+                            log2_values = np.log2(adjusted_values)
+                            log2_mean = log2_values.mean()
+                            log2_std = log2_values.std(ddof=1) if len(log2_values) > 1 else 0.0
                         
                         class_stats.append({
                             'ClassKey': class_name,
-                            f'mean_AUC_{condition}': class_mean,
-                            f'sem_AUC_{condition}': class_sem
+                            f'mean_AUC_{condition}': linear_mean,
+                            f'std_AUC_{condition}': linear_std,
+                            f'log2_mean_AUC_{condition}': log2_mean,
+                            f'log2_std_AUC_{condition}': log2_std
                         })
                 
                 if not grouped_df.empty:
@@ -70,7 +92,6 @@ class AbundanceBarChart:
                     grouped_df = pd.DataFrame(class_stats)
             
             grouped_df = AbundanceBarChart.filter_by_selected_classes(grouped_df, selected_classes)
-            grouped_df = AbundanceBarChart.calculate_log2_values(grouped_df, selected_conditions)
             
             return grouped_df
             
@@ -93,30 +114,25 @@ class AbundanceBarChart:
                                         selected_conditions: List[str]):
         """
         Calculates mean and standard deviation for specific conditions.
+        DEPRECATED: Use create_mean_std_columns instead for mathematically rigorous approach.
         """
         for condition in selected_conditions:
             condition_index = conditions_list.index(condition)
             individual_samples = individual_samples_list[condition_index]
             mean_cols = [f"concentration[{sample}]" for sample in individual_samples]
             grouped_df[f"mean_AUC_{condition}"] = grouped_df[mean_cols].mean(axis=1)
-            grouped_df[f"sem_AUC_{condition}"] = grouped_df[mean_cols].sem(axis=1)
+            grouped_df[f"std_AUC_{condition}"] = grouped_df[mean_cols].std(axis=1, ddof=1)
 
     @staticmethod
     @st.cache_data(ttl=3600)
     def calculate_log2_values(grouped_df: pd.DataFrame, 
                             selected_conditions: List[str]) -> pd.DataFrame:
-        """Calculate log2 values for mean and SEM."""
-        for condition in selected_conditions:
-            mean_col = f"mean_AUC_{condition}"
-            sem_col = f"sem_AUC_{condition}"
-            
-            if mean_col in grouped_df.columns and sem_col in grouped_df.columns:
-                log2_mean_col = f"log2_mean_AUC_{condition}"
-                log2_sem_col = f"log2_sem_AUC_{condition}"
-                
-                grouped_df[log2_mean_col] = np.log2(grouped_df[mean_col].replace(0, np.nan))
-                grouped_df[log2_sem_col] = grouped_df[sem_col] / (grouped_df[mean_col] * np.log(2))
-        
+        """
+        DEPRECATED: Log2 values are now calculated directly in create_mean_std_columns 
+        using the mathematically rigorous approach.
+        """
+        # This method is kept for backward compatibility but should not be used
+        # The new approach calculates log2 statistics directly from transformed individual values
         return grouped_df
 
     @staticmethod
@@ -237,8 +253,8 @@ class AbundanceBarChart:
                                  selected_classes: List[str],
                                  mode: str,
                                  anova_results: Optional[Dict] = None) -> Tuple[go.Figure, Optional[pd.DataFrame]]:
-        """Create abundance bar chart using Plotly."""
-        # Add this at the start of the create_abundance_bar_chart method
+        """Create abundance bar chart using Plotly with corrected error bar calculations."""
+        # Color scheme for conditions
         colors = {
             condition: px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
             for i, condition in enumerate(selected_conditions)
@@ -258,7 +274,7 @@ class AbundanceBarChart:
             
             selected_conditions = [cond for cond in selected_conditions if cond in conditions_list]
     
-            # Create mean and std columns
+            # Create mean and std columns using the corrected method
             abundance_df = AbundanceBarChart.create_mean_std_columns(
                 df, full_samples_list, individual_samples_list, 
                 conditions_list, selected_conditions, selected_classes
@@ -273,17 +289,17 @@ class AbundanceBarChart:
             # Add bars for each condition
             bar_width = 0.8 / len(selected_conditions)
             for i, condition in enumerate(selected_conditions):
-                mean, sem = AbundanceBarChart.get_mode_specific_values(abundance_df, condition, mode)
-                if mean.isnull().all() or sem.isnull().all() or mean.empty or sem.empty:
+                mean, std = AbundanceBarChart.get_mode_specific_values(abundance_df, condition, mode)
+                if mean.isnull().all() or std.isnull().all() or mean.empty or std.empty:
                     continue
                 
                 # Calculate y-positions for bars
                 y_positions = np.arange(len(abundance_df)) + (i - len(selected_conditions)/2 + 0.5) * bar_width
                 
-                # Add error bars
+                # Add error bars (now using standard deviation)
                 error_x = dict(
                     type='data',
-                    array=sem,
+                    array=std,
                     visible=True,
                     color='black',
                     thickness=1,
@@ -375,23 +391,23 @@ class AbundanceBarChart:
             return fig, abundance_df
     
         except Exception as e:
-            logging.error(f"Error in create_abundance_bar_chart: {str(e)}")
+            st.error(f"Error in create_abundance_bar_chart: {str(e)}")
             return None, None
 
     @staticmethod
     def get_mode_specific_values(abundance_df: pd.DataFrame, 
                                condition: str, 
                                mode: str) -> Tuple[pd.Series, pd.Series]:
-        """Get mode-specific values (linear or log2 scale)."""
+        """Get mode-specific values (linear or log2 scale) - now returns standard deviation instead of SEM."""
         if mode == 'linear scale':
             mean = abundance_df.get(f"mean_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
-            sem = abundance_df.get(f"sem_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
+            std = abundance_df.get(f"std_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
         elif mode == 'log2 scale':
             mean = abundance_df.get(f"log2_mean_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
-            sem = abundance_df.get(f"log2_sem_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
+            std = abundance_df.get(f"log2_std_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
         else:
             raise ValueError(f"Invalid mode: {mode}. Must be 'linear scale' or 'log2 scale'")
-        return mean, sem
+        return mean, std
 
     @staticmethod
     def _generate_plot_title(mode: str, selected_conditions: List[str]) -> str:
