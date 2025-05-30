@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
+from typing import Tuple, Optional
 
 from PIL import Image
 from pdf2image import convert_from_path
@@ -2385,6 +2386,263 @@ def display_pca_analysis(continuation_df, experiment):
         
     return continuation_df, pca_plot
 
+def display_statistical_options():
+    """
+    Display UI components for statistical testing options.
+    Returns the selected options as a dictionary.
+    """
+    st.subheader("Statistical Testing Options")
+    
+    # Create two columns for options
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Test type selection
+        test_type = st.selectbox(
+            "Statistical Test Type",
+            options=["parametric", "auto", "non_parametric"],
+            index=0,  # Default to parametric
+            help="""
+            • Parametric: t-test/ANOVA (assumes normal distribution) - DEFAULT
+            • Auto: Automatically choose based on normality tests and sample size
+            • Non-parametric: Mann-Whitney U/Kruskal-Wallis (no distribution assumptions)
+            """
+        )
+        
+        # Multiple testing correction
+        correction_method = st.selectbox(
+            "Multiple Testing Correction",
+            options=["none", "fdr_bh", "bonferroni"],
+            index=0,  # Default to none
+            help="""
+            • None: No correction - DEFAULT (for single or few specific hypotheses)
+            • FDR (Benjamini-Hochberg): Controls false discovery rate (for exploratory analysis)
+            • Bonferroni: Conservative, controls family-wise error rate (very strict)
+            """
+        )
+    
+    with col2:
+        # Significance threshold
+        alpha = st.slider(
+            "Significance Threshold (α)",
+            min_value=0.01,
+            max_value=0.10,
+            value=0.05,
+            step=0.01,  # Changed to 0.01 increments
+            help="P-value threshold for statistical significance"
+        )
+        
+        # Auto-transformation option
+        auto_transform = st.checkbox(
+            "Auto-transform data if not normal (log10)",
+            value=True,  # Default to True
+            help="""
+            If enabled, will automatically apply log10 transformation to data 
+            that fails normality tests. Log10 often provides better normalization 
+            and is more interpretable for biological data.
+            """
+        )
+    
+    # Advanced options toggle instead of expander
+    show_advanced = st.checkbox("Show advanced options & guidance", key="show_advanced_stats")
+    
+    if show_advanced:
+        st.markdown("""
+        ### 📚 Quick Guide & Recommendations
+        
+        **Default Settings:** Good starting point for exploration. For rigorous hypothesis testing, customize based on your study design.
+        
+        **Key Principle:** Each lipid class = one hypothesis. If testing multiple classes, consider correction. **Important:** Only select the lipid classes you actually want to test - including irrelevant classes inflates your multiple testing burden.
+        
+        **Significance Stars:** * p<0.05, ** p<0.01, *** p<0.001
+        
+        **Statistical Methods & Assumptions:**
+        - **Parametric (t-test/ANOVA):** Assumes normal distribution and equal variances, more powerful when assumptions met
+        - **Non-parametric (Mann-Whitney/Kruskal-Wallis):** No distribution assumptions, less powerful but robust
+        - **Log10 transformation:** Often normalizes biological data that's right-skewed
+        
+        **For Serious Hypothesis Testing:** Select "Auto" mode - it intelligently chooses the most appropriate test based on your data characteristics.
+        
+        **Auto Mode Logic & Technical Details:**
+        - **Tests normality** (Shapiro-Wilk test) on your actual data
+        - **Tries log10 transformation** if data isn't normal
+        - **Sample size rules**: ≥30 samples → parametric reliable, 15-29 → parametric if normal, <15 → non-parametric safer
+        - **Tests variance equality** (Levene's test) and uses Welch's corrections when needed
+        - **Test selection**: Welch's t-test vs Mann-Whitney U (2 groups), ANOVA/Welch's ANOVA vs Kruskal-Wallis (multiple groups)
+        - **Data processing**: Zeros replaced with min_positive/10, Welch's tests for unequal variances
+        - **Adapts to your data** rather than making assumptions
+        - **Note:** Auto mode still respects your multiple testing correction choice - it only selects the statistical test type, not the correction method
+        """)
+        
+        # Show current selections summary
+        st.markdown("### 📋 Current Settings:")
+        st.write(f"- **Test Type**: {test_type.title()}")
+        st.write(f"- **Correction**: {correction_method.upper().replace('_', ' ')}")
+        st.write(f"- **Significance**: {alpha}")
+        st.write(f"- **Auto-transform**: {'Yes (log10)' if auto_transform else 'No'}")
+    
+    return {
+        'test_type': test_type,
+        'correction_method': correction_method,
+        'alpha': alpha,
+        'auto_transform': auto_transform
+    }
+
+def display_statistical_results_summary(statistical_results):
+    """
+    Display a summary of statistical test results with diagnostic information.
+    """
+    if '_test_info' not in statistical_results:
+        return
+        
+    test_info = statistical_results['_test_info']
+    parameters = statistical_results['_parameters']
+    
+    st.subheader("Statistical Analysis Summary")
+    
+    # Parameters used
+    st.markdown("### Analysis Parameters:")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**Test Type**: {parameters['test_type'].title()}")
+        st.write(f"**Correction Method**: {parameters['correction_method'].upper().replace('_', ' ')}")
+    with col2:
+        st.write(f"**Significance Level**: {parameters['alpha']}")
+        st.write(f"**Auto-transform**: {'Yes' if parameters['auto_transform'] else 'No'}")
+    
+    # Transformation summary
+    if test_info['transformation_applied']:
+        st.markdown("### Data Transformations Applied:")
+        transform_summary = {}
+        for lipid_class, transform in test_info['transformation_applied'].items():
+            if transform not in transform_summary:
+                transform_summary[transform] = []
+            transform_summary[transform].append(lipid_class)
+        
+        for transform, classes in transform_summary.items():
+            if transform != "none":
+                st.write(f"**{transform.title()} transformation**: {', '.join(classes)}")
+    
+    # Test selection summary
+    if test_info['test_chosen']:
+        st.markdown("### Tests Performed:")
+        test_summary = {}
+        for lipid_class, test in test_info['test_chosen'].items():
+            if test not in test_summary:
+                test_summary[test] = []
+            test_summary[test].append(lipid_class)
+        
+        for test, classes in test_summary.items():
+            st.write(f"**{test}**: {len(classes)} lipid classes")
+    
+    # Normality test results (if available)
+    if test_info['normality_tests'] and parameters['test_type'] in ['auto', 'parametric']:
+        st.markdown("### Normality Assessment:")
+        normal_classes = []
+        improved_classes = []
+        remaining_classes = []
+        
+        for lipid_class, norm_result in test_info['normality_tests'].items():
+            if 'is_normal' in norm_result:
+                if norm_result['is_normal']:
+                    normal_classes.append(lipid_class)
+                elif ('log_is_normal' in norm_result and norm_result['log_is_normal']):
+                    improved_classes.append(lipid_class)
+                else:
+                    remaining_classes.append(lipid_class)
+        
+        total_count = len(normal_classes) + len(improved_classes) + len(remaining_classes)
+        
+        if total_count > 0:
+            st.write(f"**Classes with normal distribution**: {len(normal_classes)}/{total_count} ({100*len(normal_classes)/total_count:.1f}%)")
+            if normal_classes:
+                st.write(f"*{', '.join(normal_classes)}*")
+            st.write("*Normal = Shapiro-Wilk test p > 0.05, indicating data follows normal distribution*")
+            
+            if parameters['auto_transform'] and improved_classes:
+                st.write(f"**Classes normalized by log10 transformation**: {len(improved_classes)}")
+                st.write(f"*{', '.join(improved_classes)}*")
+                st.write("*These classes were non-normal originally but became normal after log10 transformation*")
+                
+            if remaining_classes:
+                st.write(f"**Classes remaining non-normal**: {len(remaining_classes)}")
+                st.write(f"*{', '.join(remaining_classes)}*")
+                st.write("*These classes stayed non-normal even after log10 transformation → used non-parametric tests*")
+
+def display_detailed_statistical_results(statistical_results, selected_conditions):
+    """
+    Display detailed statistical test results in an expandable section.
+    """
+    show_detailed_stats = st.checkbox("Show detailed statistical analysis", key="show_detailed_stats")
+    if show_detailed_stats:
+        st.write("### Detailed Statistical Test Results")
+        
+        # Create a table for statistical results
+        results_data = []
+        for lipid_class, results in statistical_results.items():
+            if lipid_class.startswith('_'):  # Skip metadata
+                continue
+                
+            p_value = results['p-value']
+            adj_p_value = results.get('adjusted p-value', p_value)
+            transformation = results.get('transformation', 'none')
+            
+            result_row = {
+                'Lipid Class': lipid_class,
+                'Test': results['test'],
+                'Statistic': f"{results['statistic']:.3f}",
+                'p-value': f"{p_value:.3f}",
+                'Adjusted p-value': f"{adj_p_value:.3f}",
+                'Transformation': transformation.title(),
+                'Significant': '✓' if adj_p_value < 0.05 else '✗'
+            }
+            results_data.append(result_row)
+        
+        if results_data:
+            results_df = pd.DataFrame(results_data)
+            st.dataframe(results_df, use_container_width=True)
+        
+        # Show detailed post-hoc results for multi-group comparisons
+        if len(selected_conditions) > 2:
+            st.write("### Post-hoc Test Results")
+            st.write("Pairwise comparisons for lipid classes with significant omnibus tests:")
+            
+            has_posthoc_results = False
+            for lipid_class, results in statistical_results.items():
+                if lipid_class.startswith('_'):  # Skip metadata
+                    continue
+                    
+                if results.get('tukey_results'):
+                    has_posthoc_results = True
+                    st.write(f"**{lipid_class}** ({results['test']})")
+                    
+                    tukey = results['tukey_results']
+                    tukey_data = []
+                    for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
+                        significance = ''
+                        if p < 0.001:
+                            significance = '***'
+                        elif p < 0.01:
+                            significance = '**'
+                        elif p < 0.05:
+                            significance = '*'
+                            
+                        tukey_data.append({
+                            'Group 1': g1,
+                            'Group 2': g2,
+                            'p-value': f"{p:.3f}",
+                            'Significant': significance,
+                            'Method': tukey['method']
+                        })
+                    
+                    if tukey_data:
+                        tukey_df = pd.DataFrame(tukey_data)
+                        st.dataframe(tukey_df, use_container_width=True)
+                        st.markdown("---")
+            
+            if not has_posthoc_results:
+                st.write("No significant omnibus tests found for post-hoc analysis.")
+
 def display_abundance_bar_charts(experiment, continuation_df):
     """
     Display abundance bar charts with statistical analysis for selected conditions and lipid classes.
@@ -2403,6 +2661,15 @@ def display_abundance_bar_charts(experiment, continuation_df):
             if num_samples > 1
         ]
         
+        if not valid_conditions:
+            st.warning("No conditions with multiple samples found. Bar chart analysis requires at least two replicates per condition.")
+            return None, None
+        
+        # Display statistical options
+        stat_options = display_statistical_options()
+        
+        st.markdown("---")  # Separator
+        
         # Select conditions and classes
         selected_conditions_list = st.multiselect(
             'Add or remove conditions', 
@@ -2410,6 +2677,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
             valid_conditions,
             key='conditions_select'
         )
+        
         selected_classes_list = st.multiselect(
             'Add or remove classes:',
             list(continuation_df['ClassKey'].value_counts().index), 
@@ -2426,7 +2694,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
             
             **What the Chart Shows:**
             - Each bar represents the mean concentration of a specific lipid class in a condition
-            - Error bars represent the standard error of the mean (SEM = standard deviation/√n), indicating the precision of the measurement
+            - Error bars represent the **standard deviation** (not standard error), showing the variability within each condition
             - Statistical significance is indicated with asterisks (* p < 0.05, ** p < 0.01, *** p < 0.001)
             
             **Viewing Options:**
@@ -2434,65 +2702,33 @@ def display_abundance_bar_charts(experiment, continuation_df):
             - **Log2 Scale:** Transforms data to a logarithmic scale, better for visualizing both low and high abundance lipids
             
             **Statistical Testing:**
-            """)
-            
-            # Integrate the statistical testing guidance based on the number of conditions
-            if len(selected_conditions_list) > 2:
-                st.markdown("""
-                **For multiple conditions (current selection):**
-                - Multiple conditions are analyzed using ANOVA + Tukey's test
-                - This is the correct approach when interested in multiple comparisons
-                - Do NOT run separate t-tests by unselecting conditions - this would inflate the false discovery rate
-                - One-way ANOVA determines if any group means differ significantly
-                - If ANOVA is significant, Tukey's HSD test identifies which specific pairs of conditions differ
-                - P-values are adjusted for multiple testing using the Benjamini-Hochberg method to control false discovery rate at 5%
-                - Error bars shown are standard error of the mean (SEM = standard deviation/√n)
-                """)
-            elif len(selected_conditions_list) == 2:
-                st.markdown("""
-                **For two conditions (current selection):**
-                - Two conditions are compared using Welch's t-test (does not assume equal variances)
-                - This is appropriate ONLY for a single pre-planned comparison
-                - If you plan to compare multiple conditions, please select all relevant conditions to use ANOVA + Tukey's test
-                - P-values are adjusted for multiple testing using the Benjamini-Hochberg method
-                - Error bars shown are standard error of the mean (SEM = standard deviation/√n)
-                - Significance levels:
-                  * p < 0.05, ** p < 0.01, *** p < 0.001
-                """)
-            else:
-                st.markdown("""
-                **Statistical testing requires selecting conditions:**
-                - For two conditions: Welch's t-test will be used
-                - For three or more conditions: ANOVA followed by Tukey's HSD test will be used
-                - Please select conditions above to enable statistical testing
-                """)
-            
-            st.markdown("""
-            **Data Processing:**
-            - For each condition, the total concentration of each lipid class is calculated by summing all species within that class
-            - The mean and standard error are calculated across all replicates within each condition
-            - Statistical tests are performed to identify significant differences between conditions
+            The analysis uses the statistical options you selected above. Results are based on the total concentration of each lipid class (sum of all species within that class) for each sample replicate.
             """)
             st.markdown("---")
         
         linear_fig, log2_fig = None, None
+        
         if selected_conditions_list and selected_classes_list:
-            # Perform statistical tests
+            # Perform statistical tests with user-selected options
             with st.spinner("Performing statistical analysis..."):
                 statistical_results = lp.AbundanceBarChart.perform_statistical_tests(
                     continuation_df, 
                     experiment, 
                     selected_conditions_list, 
-                    selected_classes_list
+                    selected_classes_list,
+                    test_type=stat_options['test_type'],
+                    correction_method=stat_options['correction_method'],
+                    alpha=stat_options['alpha'],
+                    auto_transform=stat_options['auto_transform']
                 )
             
-            # Optional detailed statistical results
-            show_detailed_stats = st.checkbox("Show detailed statistical analysis", key="show_detailed_stats")
-            if show_detailed_stats:
-                display_statistical_details(
-                    statistical_results, 
-                    selected_conditions_list
-                )
+            # Display statistical results summary
+            display_statistical_results_summary(statistical_results)
+            
+            # Display detailed statistical results
+            display_detailed_statistical_results(statistical_results, selected_conditions_list)
+            
+            st.markdown("---")  # Separator before plots
 
             # Generate linear scale chart
             with st.spinner("Generating linear scale chart..."):
@@ -2508,16 +2744,23 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 )
             
             if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
-                st.write("Linear Scale")
-                st.plotly_chart(linear_fig)
+                st.subheader("Linear Scale")
+                st.plotly_chart(linear_fig, use_container_width=True)
                 
                 # Add download options
                 col1, col2 = st.columns(2)
                 with col1:
-                    # Add SVG download button for the linear scale plot
-                    plotly_svg_download_button(linear_fig, "abundance_bar_chart_linear.svg")
+                    # SVG download for the linear scale plot
+                    svg_bytes = linear_fig.to_image(format="svg")
+                    svg_string = svg_bytes.decode('utf-8')
+                    st.download_button(
+                        label="Download SVG",
+                        data=svg_string,
+                        file_name="abundance_bar_chart_linear.svg",
+                        mime="image/svg+xml"
+                    )
                 with col2:
-                    # Add CSV download for the data
+                    # CSV download for the data
                     csv_data = convert_df(abundance_df)
                     st.download_button(
                         label="Download CSV",
@@ -2541,16 +2784,23 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 )
             
             if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
-                st.write("Log2 Scale")
-                st.plotly_chart(log2_fig)
+                st.subheader("Log2 Scale")
+                st.plotly_chart(log2_fig, use_container_width=True)
                 
                 # Add download options
                 col1, col2 = st.columns(2)
                 with col1:
-                    # Add SVG download button for the log2 scale plot
-                    plotly_svg_download_button(log2_fig, "abundance_bar_chart_log2.svg")
+                    # SVG download for the log2 scale plot
+                    svg_bytes = log2_fig.to_image(format="svg")
+                    svg_string = svg_bytes.decode('utf-8')
+                    st.download_button(
+                        label="Download SVG",
+                        data=svg_string,
+                        file_name="abundance_bar_chart_log2.svg",
+                        mime="image/svg+xml"
+                    )
                 with col2:
-                    # Add CSV download for the data
+                    # CSV download for the data
                     csv_data_log2 = convert_df(abundance_df_log2)
                     st.download_button(
                         label="Download CSV",
@@ -2563,103 +2813,13 @@ def display_abundance_bar_charts(experiment, continuation_df):
             # Check if any conditions were removed due to having only one sample
             removed_conditions = set(experiment.conditions_list) - set(valid_conditions)
             if removed_conditions:
-                st.warning(f"The following conditions were excluded due to having only one sample: {', '.join(removed_conditions)}")
+                st.info(f"Note: The following conditions were excluded due to having only one sample: {', '.join(removed_conditions)}")
                 
         else:
             st.warning("Please select at least one condition and one class to create the charts.")
         
         return linear_fig, log2_fig
 
-def display_statistical_details(statistical_results, selected_conditions):
-    """Display detailed statistical analysis results."""
-    st.write("### Detailed Statistical Analysis")
-    
-    if len(selected_conditions) == 2:
-        st.write(f"Comparing conditions: {selected_conditions[0]} vs {selected_conditions[1]}")
-        st.write("**Method:** Welch's t-test (does not assume equal variances between groups)")
-        st.write("""
-        The t-test determines whether the means of two groups are statistically different from each other. 
-        Welch's t-test is used because it does not assume equal variances between the two groups, making it more robust.
-        """)
-    else:
-        st.write(f"Comparing {len(selected_conditions)} conditions using ANOVA + Tukey's test")
-        st.write("""
-        **Method:** One-way Analysis of Variance (ANOVA) followed by Tukey's HSD (Honestly Significant Difference) test
-        
-        ANOVA tests whether any of the group means are statistically different from each other. It returns an F-statistic and p-value.
-        If ANOVA indicates significant differences (p < 0.05), Tukey's HSD test is performed to determine which specific groups differ.
-        """)
-        st.write("**Multiple comparisons correction:** Benjamini-Hochberg procedure to control false discovery rate at 5%")
-    
-    # Create a table for statistical results
-    results_data = []
-    for lipid_class, results in statistical_results.items():
-        p_value = results['p-value']
-        adj_p_value = results.get('adjusted p-value', p_value)
-        
-        if results['test'] == 't-test':
-            result_row = {
-                'Lipid Class': lipid_class,
-                'Test': 't-test',
-                'Statistic': f"t = {results['statistic']:.3f}",
-                'p-value': f"{p_value:.3f}",
-                'Adjusted p-value': f"{adj_p_value:.3f}",
-                'Significant': '✓' if adj_p_value < 0.05 else '✗'
-            }
-            results_data.append(result_row)
-        else:  # ANOVA
-            result_row = {
-                'Lipid Class': lipid_class,
-                'Test': 'ANOVA',
-                'Statistic': f"F = {results['statistic']:.3f}",
-                'p-value': f"{p_value:.3f}",
-                'Adjusted p-value': f"{adj_p_value:.3f}",
-                'Significant': '✓' if adj_p_value < 0.05 else '✗'
-            }
-            results_data.append(result_row)
-    
-    if results_data:
-        results_df = pd.DataFrame(results_data)
-        st.write("#### Statistical Test Results Summary")
-        st.dataframe(results_df)
-    
-    # Show detailed post-hoc results for ANOVA
-    if len(selected_conditions) > 2:
-        st.write("#### Post-hoc Test Results (Tukey's HSD)")
-        st.write("The table below shows pairwise comparisons between conditions for each lipid class with significant ANOVA results.")
-        
-        has_posthoc_results = False
-        for lipid_class, results in statistical_results.items():
-            if results['test'] == 'ANOVA' and results.get('tukey_results'):
-                adj_p_value = results.get('adjusted p-value', results['p-value'])
-                if adj_p_value < 0.05:
-                    has_posthoc_results = True
-                    st.write(f"**{lipid_class}**")
-                    
-                    tukey = results['tukey_results']
-                    tukey_data = []
-                    for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
-                        significance = ''
-                        if p < 0.001:
-                            significance = '***'
-                        elif p < 0.01:
-                            significance = '**'
-                        elif p < 0.05:
-                            significance = '*'
-                            
-                        tukey_data.append({
-                            'Group 1': g1,
-                            'Group 2': g2,
-                            'p-value': f"{p:.3f}",
-                            'Significant': significance
-                        })
-                    
-                    tukey_df = pd.DataFrame(tukey_data)
-                    st.dataframe(tukey_df)
-        
-        if not has_posthoc_results:
-            st.write("No significant ANOVA results to display post-hoc tests for.")
-                
 def display_abundance_pie_charts(experiment, continuation_df):
     """
     Display pie charts showing the proportional distribution of lipid classes for each condition.
