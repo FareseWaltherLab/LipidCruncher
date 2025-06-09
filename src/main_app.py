@@ -331,7 +331,7 @@ def main():
                         clear_session_state()
                         st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
                 else:
-                    st.error("Please ensure your samples are valid before proceeding.")
+                    st.error("Please ensure your experiment description is valid before proceeding.")
 
         # Restore preserved state if returning from Quality Check & Analysis
         if 'preserved_data' in st.session_state and st.session_state.module == "Data Cleaning, Filtering, & Normalization":
@@ -2388,186 +2388,221 @@ def display_pca_analysis(continuation_df, experiment):
 
 def display_statistical_options():
     """
-    Display UI components for statistical testing options.
+    Display UI components for statistical testing options with auto/manual mode selection.
     Returns the selected options as a dictionary.
     """
     st.subheader("Statistical Testing Options")
     
-    # Create two columns for options
-    col1, col2 = st.columns(2)
+    # First choice: Auto vs Manual mode
+    mode_choice = st.radio(
+        "Select Analysis Mode:",
+        options=["Manual", "Auto"],
+        index=0,  # Default to Manual
+        help="""
+        • Manual: You control all statistical choices
+        • Auto: Uses parametric tests with intelligent corrections based on your data
+        """,
+        horizontal=True
+    )
     
-    with col1:
-        # Test type selection
-        test_type = st.selectbox(
-            "Statistical Test Type",
-            options=["parametric", "auto", "non_parametric"],
-            index=0,  # Default to parametric
-            help="""
-            • Parametric: t-test/ANOVA (assumes normal distribution) - DEFAULT
-            • Auto: Automatically choose based on normality tests and sample size
-            • Non-parametric: Mann-Whitney U/Kruskal-Wallis (no distribution assumptions)
-            """
-        )
-        
-        # Multiple testing correction
-        correction_method = st.selectbox(
-            "Multiple Testing Correction",
-            options=["none", "fdr_bh", "bonferroni"],
-            index=0,  # Default to none
-            help="""
-            • None: No correction - DEFAULT (for single or few specific hypotheses)
-            • FDR (Benjamini-Hochberg): Controls false discovery rate (for exploratory analysis)
-            • Bonferroni: Conservative, controls family-wise error rate (very strict)
-            """
-        )
+    # Fixed significance threshold
+    alpha = 0.05
     
-    with col2:
-        # Significance threshold
-        alpha = st.slider(
-            "Significance Threshold (α)",
-            min_value=0.01,
-            max_value=0.10,
-            value=0.05,
-            step=0.01,  # Changed to 0.01 increments
-            help="P-value threshold for statistical significance"
-        )
-        
-        # Auto-transformation option
-        auto_transform = st.checkbox(
-            "Auto-transform data if not normal (log10)",
-            value=True,  # Default to True
-            help="""
-            If enabled, will automatically apply log10 transformation to data 
-            that fails normality tests. Log10 often provides better normalization 
-            and is more interpretable for biological data.
-            """
-        )
-    
-    # Advanced options toggle instead of expander
-    show_advanced = st.checkbox("Show advanced options & guidance", key="show_advanced_stats")
-    
-    if show_advanced:
-        st.markdown("""
-        ### 📚 Quick Guide & Recommendations
-        
-        **Default Settings:** Good starting point for exploration. For rigorous hypothesis testing, customize based on your study design.
-        
-        **Key Principle:** Each lipid class = one hypothesis. If testing multiple classes, consider correction. **Important:** Only select the lipid classes you actually want to test - including irrelevant classes inflates your multiple testing burden.
-        
-        **Significance Stars:** * p<0.05, ** p<0.01, *** p<0.001
-        
-        **Statistical Methods & Assumptions:**
-        - **Parametric (t-test/ANOVA):** Assumes normal distribution and equal variances, more powerful when assumptions met
-        - **Non-parametric (Mann-Whitney/Kruskal-Wallis):** No distribution assumptions, less powerful but robust
-        - **Log10 transformation:** Often normalizes biological data that's right-skewed
-        
-        **For Serious Hypothesis Testing:** Select "Auto" mode - it intelligently chooses the most appropriate test based on your data characteristics.
-        
-        **Auto Mode Logic & Technical Details:**
-        - **Tests normality** (Shapiro-Wilk test) on your actual data
-        - **Tries log10 transformation** if data isn't normal
-        - **Sample size rules**: ≥30 samples → parametric reliable, 15-29 → parametric if normal, <15 → non-parametric safer
-        - **Tests variance equality** (Levene's test) and uses Welch's corrections when needed
-        - **Test selection**: Welch's t-test vs Mann-Whitney U (2 groups), ANOVA/Welch's ANOVA vs Kruskal-Wallis (multiple groups)
-        - **Data processing**: Zeros replaced with min_positive/10, Welch's tests for unequal variances
-        - **Adapts to your data** rather than making assumptions
-        - **Note:** Auto mode still respects your multiple testing correction choice - it only selects the statistical test type, not the correction method
+    if mode_choice == "Auto":
+        # Auto mode - show what will be decided
+        st.info("""
+        🤖 **Auto Mode**: Uses parametric statistical tests with intelligent corrections:
+        - **Test Type**: Parametric (Welch's t-test/ANOVA) with automatic log10 transformation
+        - **Level 1 Correction**: Based on number of lipid classes selected
+        - **Level 2 Correction**: Based on number of conditions selected
         """)
         
-        # Show current selections summary
-        st.markdown("### 📋 Current Settings:")
-        st.write(f"- **Test Type**: {test_type.title()}")
-        st.write(f"- **Correction**: {correction_method.upper().replace('_', ' ')}")
-        st.write(f"- **Significance**: {alpha}")
-        st.write(f"- **Auto-transform**: {'Yes (log10)' if auto_transform else 'No'}")
+        # Set placeholders for auto mode
+        test_type = "auto"
+        correction_method = "auto"
+        posthoc_correction = "auto"
+        
+    else:
+        # Manual mode - show full controls
+        # Create two columns for options
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Test type selection
+            test_type = st.selectbox(
+                "Statistical Test Type",
+                options=["parametric", "non_parametric"],
+                index=0,  # Default to parametric
+                help="""
+                • Parametric: Welch's t-test/ANOVA (assumes log-normal distribution after transformation)
+                • Non-parametric: Mann-Whitney U/Kruskal-Wallis (more conservative, no distribution assumptions)
+                """
+            )
+            
+            correction_method = st.selectbox(
+                "Between-Class Correction (Level 1)",
+                options=["uncorrected", "fdr_bh", "bonferroni"],
+                index=0,  # Default to uncorrected
+                help="""
+                • Uncorrected: No correction (good for single hypothesis)
+                • FDR (Benjamini-Hochberg): Controls false discovery rate (for multiple classes)
+                • Bonferroni: Conservative, controls family-wise error rate (very strict)
+                """
+            )
+        
+        with col2:
+            posthoc_correction = st.selectbox(
+                "Within-Class Correction (Level 2)",
+                options=["uncorrected", "standard", "bonferroni_all"],
+                index=0,  # Default to uncorrected
+                help="""
+                For 3+ conditions only:
+                • Uncorrected: No pairwise correction
+                • Standard: Tukey's HSD (parametric) or Bonferroni (non-parametric) 
+                • Bonferroni All: Bonferroni correction for all pairwise tests
+                """
+            )
+    
+    # Auto-transformation option (always available)
+    auto_transform = st.checkbox(
+        "Auto-transform data (log10)",
+        value=True,  # Default to True
+        help="""
+        Automatically applies log10 transformation to all data. 
+        Log10 transformation is standard practice in lipidomics as it often 
+        normalizes skewed concentration data and is biologically interpretable.
+        """
+    )
+    
+    # Show current settings
+    st.markdown("---")
+    st.markdown("### 📋 Current Settings Summary")
+    
+    if mode_choice == "Auto":
+        st.info("🤖 **Auto Mode**: Parametric tests with intelligent corrections will be applied")
+    else:
+        # Show current selections in a clean format
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"- **Mode**: Manual")
+            st.write(f"- **Test Type**: {test_type.title()}")
+            st.write(f"- **Level 1 Correction**: {correction_method.upper().replace('_', '-')}")
+        with col2:
+            st.write(f"- **Level 2 Correction**: {posthoc_correction.replace('_', ' ').title()}")
+            st.write(f"- **Significance**: α = {alpha}")
+            st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
+    
+    # Important warning about hypothesis testing
+    st.markdown("---")
+    st.warning("""
+    ⚠️ **Critical for Hypothesis Testing**: If you are conducting formal hypothesis testing (especially with multiple testing corrections), 
+    only select lipid classes that are part of your specific research hypothesis. Including additional "exploratory" classes 
+    will inflate your p-values and reduce statistical power to detect true effects in your classes of interest.
+    
+    **Best Practice**: Pre-specify your lipid classes of interest based on biological rationale before looking at the data.
+    """)
+    
+    # Complete guidance section - common information first, then mode-specific
+    st.markdown("---")
+    st.markdown("### 📚 Class Concentration Bar Chart Analysis Guide")
+    
+    # Common information regardless of mode
+    st.markdown("""
+        **📊 What the Chart Shows:**
+        - **Each bar**: Mean concentration of a lipid class in a condition (sum of all individual lipid species within that class)
+        - **Error bars**: Standard deviation showing the variability within each condition
+        - **Stars**: Statistical significance: * p<0.05, ** p<0.01, *** p<0.001
+        - **Sample size (n)**: Number of biological replicates per condition (typically 3-6 in lipidomics), NOT the number of lipid species
+        """)
+    
+    if mode_choice == "Auto":
+        st.markdown("### 🤖 Auto Mode Guide")
+        st.markdown("""
+            **How Auto Mode Works:**
+            - **Test Selection**: Always uses parametric tests (Welch's t-test/ANOVA) which are appropriate for typical lipidomics sample sizes (n=3-6)
+            - **Automatic Log Transformation**: Applies log10 transformation which is standard practice in lipidomics
+            - **Smart Corrections**: Applies appropriate multiple testing corrections based on your experimental design
+            - **Robust Approach**: Welch's tests don't assume equal variances, making them robust for biological data
+            
+            **Auto Mode Logic:**
+            - **Level 1 (Between-Class)**: 1 class → Uncorrected | Multiple classes → FDR correction
+            - **Level 2 (Within-Class)**: ≤2 conditions → No post-hoc | 3-4 conditions → Standard approach | 5+ conditions → Conservative Bonferroni
+            
+            **Statistical Process:**
+            - **2 Conditions**: Welch's t-test + Level 1 correction (if multiple classes)
+            - **3+ Conditions**: Welch's ANOVA + Level 1 correction + Level 2 post-hoc (if omnibus significant)
+            
+            **When to Use Auto Mode:**
+            - Standard lipidomics analysis with typical sample sizes (n=3-6)
+            - When you want established best practices applied automatically
+            - For exploratory analysis where you want optimal statistical choices
+            """)
+    else:
+        # Show full guide for manual mode
+        st.markdown("### 🔧 Manual Mode Guide")
+        
+        st.markdown("""
+            **🔬 Statistical Test Types:**
+            
+            **Parametric Tests (Welch's t-test/ANOVA):**
+            - **When to use**: Standard choice for lipidomics data with log transformation
+            - **Advantages**: More statistical power, widely accepted in the field
+            - **Assumptions**: Assumes log-normal distribution (typically met after log10 transformation)
+            - **Variance assumption**: Uses Welch's correction - does NOT assume equal variances
+            - **Sample size**: Appropriate for typical lipidomics studies (n=3-6 per group)
+            
+            **Non-parametric Tests (Mann-Whitney U/Kruskal-Wallis):**
+            - **When to use**: More conservative approach, no distribution assumptions
+            - **Advantages**: Robust to any data distribution, no transformation needed
+            - **Disadvantages**: Less statistical power than parametric tests
+            - **Best for**: When you prefer maximum conservatism or have highly skewed data even after transformation
+            
+            💡 **Key Point**: Non-parametric tests are more conservative (harder to detect significant differences) but make no assumptions about data distribution.
+            """)
+
+        st.markdown("""
+            **🔬 Statistical Testing Process:**
+            
+            **📊 The Process:**
+            - **2 Conditions**: Test + Level 1 correction (if testing multiple classes)
+            - **3+ Conditions**: Three-step process to control false discoveries:
+              1. **Omnibus Test**: "Are there ANY differences among groups?"
+              2. **Level 1 Correction**: Control false discoveries across lipid classes
+              3. **Level 2 Post-hoc**: "Which specific pairs differ?"
+            """)
+
+        st.markdown("""
+            **🎯 Two-Level Statistical Control:**
+            
+            **🏷️ Level 1 - Between-Class Correction** (Applied to all analyses)
+            
+            | Choice | When to Use |
+            |--------|-------------|
+            | **Uncorrected** | Testing a single pre-specified lipid class with clear hypothesis |
+            | **FDR** | Exploring multiple classes (balances discovery with false positive control) |
+            | **Bonferroni** | Confirmatory studies where false positives are very costly |
+            
+            **🔍 Level 2 - Within-Class Correction** (For 3+ conditions only)
+            
+            | Choice | When to Use |
+            |--------|-------------|
+            | **Uncorrected** | Accept higher false positive risk for more discoveries |
+            | **Standard** | Balanced approach: Tukey's HSD (parametric) or Bonferroni (non-parametric) |
+            | **Bonferroni All** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
+            
+            💡 **Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
+            """)
+
+        st.markdown("**Rule of thumb:** 1 class → Uncorrected Level 1 | Multiple classes → FDR Level 1 | High-stakes confirmatory → Bonferroni both levels")
     
     return {
         'test_type': test_type,
         'correction_method': correction_method,
+        'posthoc_correction': posthoc_correction,
         'alpha': alpha,
-        'auto_transform': auto_transform
+        'auto_transform': auto_transform,
+        'mode_choice': mode_choice
     }
-
-def display_statistical_results_summary(statistical_results):
-    """
-    Display a summary of statistical test results with diagnostic information.
-    """
-    if '_test_info' not in statistical_results:
-        return
-        
-    test_info = statistical_results['_test_info']
-    parameters = statistical_results['_parameters']
-    
-    st.subheader("Statistical Analysis Summary")
-    
-    # Parameters used
-    st.markdown("### Analysis Parameters:")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write(f"**Test Type**: {parameters['test_type'].title()}")
-        st.write(f"**Correction Method**: {parameters['correction_method'].upper().replace('_', ' ')}")
-    with col2:
-        st.write(f"**Significance Level**: {parameters['alpha']}")
-        st.write(f"**Auto-transform**: {'Yes' if parameters['auto_transform'] else 'No'}")
-    
-    # Transformation summary
-    if test_info['transformation_applied']:
-        st.markdown("### Data Transformations Applied:")
-        transform_summary = {}
-        for lipid_class, transform in test_info['transformation_applied'].items():
-            if transform not in transform_summary:
-                transform_summary[transform] = []
-            transform_summary[transform].append(lipid_class)
-        
-        for transform, classes in transform_summary.items():
-            if transform != "none":
-                st.write(f"**{transform.title()} transformation**: {', '.join(classes)}")
-    
-    # Test selection summary
-    if test_info['test_chosen']:
-        st.markdown("### Tests Performed:")
-        test_summary = {}
-        for lipid_class, test in test_info['test_chosen'].items():
-            if test not in test_summary:
-                test_summary[test] = []
-            test_summary[test].append(lipid_class)
-        
-        for test, classes in test_summary.items():
-            st.write(f"**{test}**: {len(classes)} lipid classes")
-    
-    # Normality test results (if available)
-    if test_info['normality_tests'] and parameters['test_type'] in ['auto', 'parametric']:
-        st.markdown("### Normality Assessment:")
-        normal_classes = []
-        improved_classes = []
-        remaining_classes = []
-        
-        for lipid_class, norm_result in test_info['normality_tests'].items():
-            if 'is_normal' in norm_result:
-                if norm_result['is_normal']:
-                    normal_classes.append(lipid_class)
-                elif ('log_is_normal' in norm_result and norm_result['log_is_normal']):
-                    improved_classes.append(lipid_class)
-                else:
-                    remaining_classes.append(lipid_class)
-        
-        total_count = len(normal_classes) + len(improved_classes) + len(remaining_classes)
-        
-        if total_count > 0:
-            st.write(f"**Classes with normal distribution**: {len(normal_classes)}/{total_count} ({100*len(normal_classes)/total_count:.1f}%)")
-            if normal_classes:
-                st.write(f"*{', '.join(normal_classes)}*")
-            st.write("*Normal = Shapiro-Wilk test p > 0.05, indicating data follows normal distribution*")
-            
-            if parameters['auto_transform'] and improved_classes:
-                st.write(f"**Classes normalized by log10 transformation**: {len(improved_classes)}")
-                st.write(f"*{', '.join(improved_classes)}*")
-                st.write("*These classes were non-normal originally but became normal after log10 transformation*")
-                
-            if remaining_classes:
-                st.write(f"**Classes remaining non-normal**: {len(remaining_classes)}")
-                st.write(f"*{', '.join(remaining_classes)}*")
-                st.write("*These classes stayed non-normal even after log10 transformation → used non-parametric tests*")
 
 def display_detailed_statistical_results(statistical_results, selected_conditions):
     """
@@ -2605,57 +2640,106 @@ def display_detailed_statistical_results(statistical_results, selected_condition
         # Show detailed post-hoc results for multi-group comparisons
         if len(selected_conditions) > 2:
             st.write("### Post-hoc Test Results")
-            st.write("Pairwise comparisons for lipid classes with significant omnibus tests:")
             
-            has_posthoc_results = False
-            for lipid_class, results in statistical_results.items():
-                if lipid_class.startswith('_'):  # Skip metadata
-                    continue
-                    
-                if results.get('tukey_results'):
-                    has_posthoc_results = True
-                    st.write(f"**{lipid_class}** ({results['test']})")
-                    
-                    tukey = results['tukey_results']
-                    tukey_data = []
-                    for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
-                        significance = ''
-                        if p < 0.001:
-                            significance = '***'
-                        elif p < 0.01:
-                            significance = '**'
-                        elif p < 0.05:
-                            significance = '*'
+            # Check if post-hoc correction was requested
+            posthoc_correction = statistical_results.get('_parameters', {}).get('posthoc_correction', 'uncorrected')
+            
+            if posthoc_correction == "uncorrected":
+                st.write("Post-hoc analysis was not performed (correction method: uncorrected).")
+            else:
+                # Count significant omnibus tests
+                significant_omnibus_count = 0
+                has_posthoc_results = False
+                
+                for lipid_class, results in statistical_results.items():
+                    if lipid_class.startswith('_'):  # Skip metadata
+                        continue
+                        
+                    # Check if this was a significant omnibus test
+                    if (results.get('test', '') in ["One-way ANOVA", "Welch's ANOVA", "One-way ANOVA (fallback)", 
+                                                   "One-way ANOVA (Welch's unavailable)", "Kruskal-Wallis"] and
+                        results.get('p-value', 1) <= 0.05):
+                        significant_omnibus_count += 1
+                        
+                        # Check if post-hoc results exist
+                        if results.get('tukey_results'):
+                            has_posthoc_results = True
+                            st.write(f"**{lipid_class}** ({results['test']})")
                             
-                        tukey_data.append({
-                            'Group 1': g1,
-                            'Group 2': g2,
-                            'p-value': f"{p:.3f}",
-                            'Significant': significance,
-                            'Method': tukey['method']
-                        })
-                    
-                    if tukey_data:
-                        tukey_df = pd.DataFrame(tukey_data)
-                        st.dataframe(tukey_df, use_container_width=True)
-                        st.markdown("---")
-            
-            if not has_posthoc_results:
-                st.write("No significant omnibus tests found for post-hoc analysis.")
+                            tukey = results['tukey_results']
+                            tukey_data = []
+                            for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
+                                significance = ''
+                                if p < 0.001:
+                                    significance = '***'
+                                elif p < 0.01:
+                                    significance = '**'
+                                elif p < 0.05:
+                                    significance = '*'
+                                    
+                                tukey_data.append({
+                                    'Group 1': g1,
+                                    'Group 2': g2,
+                                    'p-value': f"{p:.3f}",
+                                    'Significant': significance,
+                                    'Method': tukey['method']
+                                })
+                            
+                            if tukey_data:
+                                tukey_df = pd.DataFrame(tukey_data)
+                                st.dataframe(tukey_df, use_container_width=True)
+                                st.markdown("---")
+                
+                # Display appropriate message based on results
+                if significant_omnibus_count == 0:
+                    st.write("No significant omnibus tests found for post-hoc analysis.")
+                elif not has_posthoc_results:
+                    st.write(f"Found {significant_omnibus_count} significant omnibus test(s), but post-hoc analysis failed to complete.")
 
-def display_abundance_bar_charts(experiment, continuation_df):
+def apply_auto_mode_logic(selected_classes, selected_conditions):
     """
-    Display abundance bar charts with statistical analysis for selected conditions and lipid classes.
+    Auto mode logic for intelligent defaults.
     
     Args:
-        experiment: Experiment object containing experimental setup information
-        continuation_df: DataFrame containing the lipidomics data
+        selected_classes (list): List of selected lipid classes
+        selected_conditions (list): List of selected conditions
         
     Returns:
-        tuple: (linear_fig, log2_fig) containing the Plotly figures for both scales
+        dict: Dictionary containing auto recommendations and rationales
     """
+    # Auto Level 1 (Between-Class) Correction
+    if len(selected_classes) == 1:
+        auto_correction_method = "uncorrected"
+        auto_rationale = "Single class → no between-class correction needed"
+    elif len(selected_classes) <= 5:
+        auto_correction_method = "fdr_bh"
+        auto_rationale = "Few classes (≤5) → FDR balances discovery and control"
+    else:
+        auto_correction_method = "fdr_bh"
+        auto_rationale = "Multiple classes → FDR recommended for exploration"
+    
+    # Auto Level 2 (Within-Class) Correction
+    if len(selected_conditions) <= 2:
+        auto_posthoc_correction = "uncorrected"
+        auto_posthoc_rationale = "≤2 conditions → no post-hoc needed"
+    elif len(selected_conditions) <= 4:
+        auto_posthoc_correction = "standard"  # Updated to use new naming
+        auto_posthoc_rationale = "Few conditions → standard post-hoc approach"
+    else:
+        auto_posthoc_correction = "bonferroni_all"  # Updated to use new naming
+        auto_posthoc_rationale = "Many conditions → conservative Bonferroni"
+    
+    return {
+        'correction_method': auto_correction_method,
+        'correction_rationale': auto_rationale,
+        'posthoc_correction': auto_posthoc_correction,
+        'posthoc_rationale': auto_posthoc_rationale
+    }
+
+def display_abundance_bar_charts(experiment, continuation_df):
+    """Display abundance bar charts with auto mode integration."""
     with st.expander("Class Concentration Bar Chart"):
-        # Get valid conditions (more than one sample)
+        # Get valid conditions (more than one sample) - FIX: Define this first
         valid_conditions = [
             cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) 
             if num_samples > 1
@@ -2665,12 +2749,12 @@ def display_abundance_bar_charts(experiment, continuation_df):
             st.warning("No conditions with multiple samples found. Bar chart analysis requires at least two replicates per condition.")
             return None, None
         
-        # Display statistical options
+        # Get statistical options first (without auto logic)
         stat_options = display_statistical_options()
         
-        st.markdown("---")  # Separator
+        st.markdown("---")
         
-        # Select conditions and classes
+        # Get user selections
         selected_conditions_list = st.multiselect(
             'Add or remove conditions', 
             valid_conditions, 
@@ -2685,29 +2769,18 @@ def display_abundance_bar_charts(experiment, continuation_df):
             key='classes_select'
         )
         
-        # Add explanation about bar chart analysis
-        show_barchart_info = st.checkbox("Show bar chart analysis details", key="show_barchart_info")
-        if show_barchart_info:
-            st.markdown("### Class Concentration Bar Chart Analysis")
-            st.markdown("""
-            Bar charts provide a quantitative comparison of lipid class concentrations across different experimental conditions.
+        # Apply auto mode logic if selected (for any auto settings)
+        if stat_options['mode_choice'] == "Auto":
+            auto_settings = apply_auto_mode_logic(selected_classes_list, selected_conditions_list)
             
-            **What the Chart Shows:**
-            - Each bar represents the mean concentration of a specific lipid class in a condition
-            - Error bars represent the **standard deviation** (not standard error), showing the variability within each condition
-            - Statistical significance is indicated with asterisks (* p < 0.05, ** p < 0.01, *** p < 0.001)
-            
-            **Viewing Options:**
-            - **Linear Scale:** Shows absolute concentration values, useful for comparing abundant lipid classes
-            - **Log2 Scale:** Transforms data to a logarithmic scale, better for visualizing both low and high abundance lipids
-            
-            **Statistical Testing:**
-            The analysis uses the statistical options you selected above. Results are based on the total concentration of each lipid class (sum of all species within that class) for each sample replicate.
-            """)
-            st.markdown("---")
+            # Override auto selections with intelligent recommendations
+            stat_options['test_type'] = "auto"  # Will be handled in the statistical function
+            stat_options['correction_method'] = auto_settings['correction_method']
+            stat_options['posthoc_correction'] = auto_settings['posthoc_correction']
         
-        linear_fig, log2_fig = None, None
+        linear_fig, log10_fig = None, None
         
+        # Continue with statistical analysis using (possibly auto-modified) stat_options
         if selected_conditions_list and selected_classes_list:
             # Perform statistical tests with user-selected options
             with st.spinner("Performing statistical analysis..."):
@@ -2718,12 +2791,46 @@ def display_abundance_bar_charts(experiment, continuation_df):
                     selected_classes_list,
                     test_type=stat_options['test_type'],
                     correction_method=stat_options['correction_method'],
+                    posthoc_correction=stat_options['posthoc_correction'],
                     alpha=stat_options['alpha'],
                     auto_transform=stat_options['auto_transform']
                 )
             
-            # Display statistical results summary
-            display_statistical_results_summary(statistical_results)
+            # Display auto mode results after analysis
+            if stat_options['mode_choice'] == "Auto":
+                auto_settings = apply_auto_mode_logic(selected_classes_list, selected_conditions_list)
+                
+                # Get the actual tests chosen from results
+                tests_chosen = set()
+                posthoc_methods = set()
+                
+                for lipid_class, result in statistical_results.items():
+                    if not lipid_class.startswith('_'):
+                        tests_chosen.add(result['test'])
+                        if result.get('tukey_results'):
+                            posthoc_methods.add(result['tukey_results']['method'])
+                
+                # Format test types display
+                if tests_chosen:
+                    test_display = ", ".join(sorted(tests_chosen))
+                else:
+                    test_display = "None (no valid data)"
+                
+                # Format posthoc display
+                if posthoc_methods:
+                    posthoc_display = ", ".join(sorted(posthoc_methods))
+                elif len(selected_conditions_list) <= 2:
+                    posthoc_display = "Not applicable (≤2 conditions)"
+                else:
+                    posthoc_display = "None (no significant omnibus tests)"
+                
+                st.info(f"""
+                🤖 **Auto Mode Results Applied:**
+                - **Tests Chosen**: {test_display}
+                - **Level 1 Correction**: {auto_settings['correction_method'].upper().replace('_', '-')} 
+                  ({auto_settings['correction_rationale']})
+                - **Level 2 Post-hoc**: {posthoc_display}
+                """)
             
             # Display detailed statistical results
             display_detailed_statistical_results(statistical_results, selected_conditions_list)
@@ -2770,44 +2877,44 @@ def display_abundance_bar_charts(experiment, continuation_df):
                         key='abundance_chart_download_linear'
                     )
             
-            # Generate log2 scale chart
-            with st.spinner("Generating log2 scale chart..."):
-                log2_fig, abundance_df_log2 = lp.AbundanceBarChart.create_abundance_bar_chart(
+            # Generate log10 scale chart
+            with st.spinner("Generating log10 scale chart..."):
+                log10_fig, abundance_df_log10 = lp.AbundanceBarChart.create_abundance_bar_chart(
                     df=continuation_df,
                     full_samples_list=experiment.full_samples_list,
                     individual_samples_list=experiment.individual_samples_list,
                     conditions_list=experiment.conditions_list,
                     selected_conditions=selected_conditions_list,
                     selected_classes=selected_classes_list,
-                    mode='log2 scale',
+                    mode='log10 scale',
                     anova_results=statistical_results
                 )
             
-            if log2_fig is not None and abundance_df_log2 is not None and not abundance_df_log2.empty:
-                st.subheader("Log2 Scale")
-                st.plotly_chart(log2_fig, use_container_width=True)
+            if log10_fig is not None and abundance_df_log10 is not None and not abundance_df_log10.empty:
+                st.subheader("Log10 Scale")
+                st.plotly_chart(log10_fig, use_container_width=True)
                 
                 # Add download options
                 col1, col2 = st.columns(2)
                 with col1:
-                    # SVG download for the log2 scale plot
-                    svg_bytes = log2_fig.to_image(format="svg")
+                    # SVG download for the log10 scale plot
+                    svg_bytes = log10_fig.to_image(format="svg")
                     svg_string = svg_bytes.decode('utf-8')
                     st.download_button(
                         label="Download SVG",
                         data=svg_string,
-                        file_name="abundance_bar_chart_log2.svg",
+                        file_name="abundance_bar_chart_log10.svg",
                         mime="image/svg+xml"
                     )
                 with col2:
                     # CSV download for the data
-                    csv_data_log2 = convert_df(abundance_df_log2)
+                    csv_data_log10 = convert_df(abundance_df_log10)
                     st.download_button(
                         label="Download CSV",
-                        data=csv_data_log2,
-                        file_name='abundance_bar_chart_log2.csv',
+                        data=csv_data_log10,
+                        file_name='abundance_bar_chart_log10.csv',
                         mime='text/csv',
-                        key='abundance_chart_download_log2'
+                        key='abundance_chart_download_log10'
                     )
             
             # Check if any conditions were removed due to having only one sample
@@ -2818,7 +2925,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
         else:
             st.warning("Please select at least one condition and one class to create the charts.")
         
-        return linear_fig, log2_fig
+        return linear_fig, log10_fig
 
 def display_abundance_pie_charts(experiment, continuation_df):
     """

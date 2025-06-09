@@ -105,29 +105,91 @@ class AbundanceBarChart:
                                 selected_conditions: List[str], 
                                 selected_classes: List[str],
                                 test_type: str = "parametric",
-                                correction_method: str = "none",
+                                correction_method: str = "uncorrected",
+                                posthoc_correction: str = "uncorrected",
                                 alpha: float = 0.05,
                                 auto_transform: bool = True) -> Dict:
         """
-        Perform statistical tests (t-test or ANOVA) on the data with enhanced options.
+        Perform statistical tests (t-test or ANOVA) on the data with user-controlled post-hoc correction.
+        
+        Args:
+            continuation_df: DataFrame containing the lipidomics data
+            experiment: Experiment object containing experimental setup information
+            selected_conditions: List of conditions to compare
+            selected_classes: List of lipid classes to test
+            test_type: "parametric", "non_parametric", or "auto"
+            correction_method: "uncorrected", "fdr_bh", or "bonferroni" (Level 1 correction)
+            posthoc_correction: "uncorrected", "standard", or "bonferroni_all" (Level 2 correction)
+            alpha: Significance threshold
+            auto_transform: Whether to apply log10 transformation automatically
+            
+        Returns:
+            Dictionary containing statistical test results
         """
-        from scipy.stats import shapiro, levene, mannwhitneyu, kruskal
+        from scipy.stats import mannwhitneyu, kruskal
         from statsmodels.stats.multitest import multipletests
+        from itertools import combinations
+        
+        def perform_bonferroni_posthoc_internal(continuation_df: pd.DataFrame, 
+                                              lipid_class: str, 
+                                              selected_conditions: List[str], 
+                                              experiment: Any, 
+                                              transformation_applied: str) -> Dict:
+            """
+            Helper function to perform Bonferroni-corrected pairwise comparisons.
+            """
+            pairs = list(combinations(selected_conditions, 2))
+            pairwise_p_values = []
+            
+            class_df = continuation_df[continuation_df['ClassKey'] == lipid_class].copy()
+            condition_data = {}
+            
+            # Collect data for each condition
+            for condition in selected_conditions:
+                condition_idx = experiment.conditions_list.index(condition)
+                condition_samples = experiment.individual_samples_list[condition_idx]
+                sample_columns = [f"concentration[{sample}]" for sample in condition_samples 
+                                if f"concentration[{sample}]" in class_df.columns]
+                if sample_columns:
+                    sample_sums = class_df[sample_columns].sum()
+                    
+                    # Apply transformation if needed
+                    if transformation_applied == "log10":
+                        min_positive = min([x for x in sample_sums if x > 0]) if any(x > 0 for x in sample_sums) else 1
+                        small_value = min_positive / 10
+                        sample_sums = np.log10(np.maximum(sample_sums, small_value))
+                    
+                    condition_data[condition] = sample_sums.values
+            
+            # Perform pairwise tests
+            for cond1, cond2 in pairs:
+                if cond1 in condition_data and cond2 in condition_data:
+                    _, p_val = mannwhitneyu(condition_data[cond1], condition_data[cond2], 
+                                          alternative='two-sided')
+                    pairwise_p_values.append(p_val)
+            
+            # Apply Bonferroni correction to pairwise comparisons
+            bonf_corrected = multipletests(pairwise_p_values, method='bonferroni')[1]
+            
+            tukey_results = {
+                'group1': [pair[0] for pair in pairs],
+                'group2': [pair[1] for pair in pairs],
+                'p_values': bonf_corrected,
+                'method': "Mann-Whitney U + Bonferroni"
+            }
+            
+            return tukey_results
         
         statistical_results = {}
         all_p_values = []
         test_info = {
             'transformation_applied': {},
-            'normality_tests': {},
-            'variance_tests': {},
             'test_chosen': {}
         }
     
         for lipid_class in selected_classes:
             try:
                 class_df = continuation_df[continuation_df['ClassKey'] == lipid_class].copy()
-                data_for_stats = []
-                conditions_for_stats = []
                 
                 # Collect data for each condition
                 condition_groups = {}
@@ -140,94 +202,44 @@ class AbundanceBarChart:
                     if sample_columns:
                         sample_sums = class_df[sample_columns].sum()
                         condition_groups[condition] = sample_sums.values
-                        data_for_stats.extend(sample_sums.values)
-                        conditions_for_stats.extend([condition] * len(sample_sums))
-                
+    
                 if len(condition_groups) < 2:
                     continue
                     
                 # Check for zeros and apply small value replacement if needed
-                min_positive = min([x for x in data_for_stats if x > 0]) if any(x > 0 for x in data_for_stats) else 1
-                small_value = min_positive / 10  # Changed from 1000 to 10
+                all_values = np.concatenate(list(condition_groups.values()))
+                min_positive = min([x for x in all_values if x > 0]) if any(x > 0 for x in all_values) else 1
+                small_value = min_positive / 10
                 
                 # Replace zeros in condition groups
                 for condition in condition_groups:
                     condition_groups[condition] = np.array([max(x, small_value) for x in condition_groups[condition]])
-                
-                # Determine if transformation is needed
+    
+                # Apply transformation if auto_transform is enabled
                 original_data = list(condition_groups.values())
                 transformed_data = original_data.copy()
                 transformation_applied = "none"
                 
-                if auto_transform and test_type in ["auto", "parametric"]:
-                    # Test normality on original data
-                    combined_data = np.concatenate(original_data)
-                    if len(combined_data) >= 3:  # Need at least 3 samples for Shapiro-Wilk
-                        try:
-                            _, normality_p = shapiro(combined_data)
-                            test_info['normality_tests'][lipid_class] = {
-                                'original_p_value': normality_p,
-                                'is_normal': normality_p > 0.05
-                            }
-                            
-                            # If not normal, try log10 transformation
-                            if normality_p <= 0.05:
-                                log_data = [np.log10(group) for group in condition_groups.values()]
-                                combined_log = np.concatenate(log_data)
-                                _, log_normality_p = shapiro(combined_log)
-                                
-                                test_info['normality_tests'][lipid_class]['log_p_value'] = log_normality_p
-                                test_info['normality_tests'][lipid_class]['log_is_normal'] = log_normality_p > 0.05
-                                
-                                # Use log-transformed data if it's more normal
-                                if log_normality_p > normality_p:
-                                    transformed_data = log_data
-                                    transformation_applied = "log10"
-                        except:
-                            # If normality test fails, assume non-normal
-                            test_info['normality_tests'][lipid_class] = {'test_failed': True}
+                if auto_transform:
+                    # Apply log10 transformation automatically (no normality testing)
+                    log_data = [np.log10(group) for group in condition_groups.values()]
+                    transformed_data = log_data
+                    transformation_applied = "log10"
                 
                 test_info['transformation_applied'][lipid_class] = transformation_applied
-                
-                # Test homogeneity of variance only for multi-group comparisons
-                equal_variances = True
-                if test_type in ["auto", "parametric"] and len(transformed_data) > 2:
-                    try:
-                        _, variance_p = levene(*transformed_data)
-                        equal_variances = variance_p > 0.05
-                        test_info['variance_tests'][lipid_class] = {
-                            'p_value': variance_p,
-                            'equal_variances': equal_variances
-                        }
-                    except:
-                        test_info['variance_tests'][lipid_class] = {'test_failed': True}
-                
+    
                 # Choose and perform statistical test
                 if len(selected_conditions) == 2:
                     # Two-group comparison
                     group1, group2 = transformed_data[0], transformed_data[1]
                     
                     if test_type == "non_parametric":
-                        # Mann-Whitney U test
                         statistic, p_value = mannwhitneyu(group1, group2, alternative='two-sided')
                         test_chosen = "Mann-Whitney U"
-                    elif test_type == "parametric":
-                        # Welch's t-test (more robust)
+                    elif test_type in ["parametric", "auto"]:
+                        # For both parametric and auto mode, use parametric tests
                         statistic, p_value = stats.ttest_ind(group1, group2, equal_var=False)
                         test_chosen = "Welch's t-test"
-                    else:  # auto
-                        # Choose based on normality and sample size with more nuanced rules
-                        is_normal = test_info['normality_tests'].get(lipid_class, {}).get('is_normal', False)
-                        # More nuanced sample size rule: ≥20 reliable, 10-19 if normal, <10 non-parametric
-                        min_size = min(len(group1), len(group2))
-                        sample_size_ok = min_size >= 20 or (min_size >= 10 and is_normal)
-                        
-                        if is_normal or sample_size_ok:
-                            statistic, p_value = stats.ttest_ind(group1, group2, equal_var=False)
-                            test_chosen = "Welch's t-test"
-                        else:
-                            statistic, p_value = mannwhitneyu(group1, group2, alternative='two-sided')
-                            test_chosen = "Mann-Whitney U"
                     
                     statistical_results[lipid_class] = {
                         'test': test_chosen,
@@ -240,46 +252,24 @@ class AbundanceBarChart:
                 else:
                     # Multiple group comparison
                     if test_type == "non_parametric":
-                        # Kruskal-Wallis test
                         statistic, p_value = kruskal(*transformed_data)
                         test_chosen = "Kruskal-Wallis"
-                    elif test_type == "parametric":
-                        # Choose between regular ANOVA and Welch's ANOVA based on variance test
-                        if equal_variances:
-                            statistic, p_value = stats.f_oneway(*transformed_data)
-                            test_chosen = "One-way ANOVA"
-                        else:
-                            # Use Welch's ANOVA for unequal variances
+                    elif test_type in ["parametric", "auto"]:
+                        # For both parametric and auto mode, use parametric tests
+                        try:
                             from scipy.stats import alexandergovern
-                            try:
-                                statistic, p_value = alexandergovern(*transformed_data)
-                                test_chosen = "Welch's ANOVA"
-                            except:
-                                # Fallback to regular ANOVA if Welch's fails
-                                statistic, p_value = stats.f_oneway(*transformed_data)
-                                test_chosen = "One-way ANOVA (fallback)"
-                    else:  # auto
-                        # Choose based on normality and sample sizes with CLT rules
-                        is_normal = test_info['normality_tests'].get(lipid_class, {}).get('is_normal', False)
-                        min_sample_size = min(len(group) for group in transformed_data)
-                        # CLT rule: ≥30 reliable, 15-29 if normal, <15 non-parametric
-                        sample_size_ok = min_sample_size >= 30 or (min_sample_size >= 15 and is_normal)
-                        
-                        if is_normal or sample_size_ok:
-                            if equal_variances:
-                                statistic, p_value = stats.f_oneway(*transformed_data)
-                                test_chosen = "One-way ANOVA"
-                            else:
-                                from scipy.stats import alexandergovern
-                                try:
-                                    statistic, p_value = alexandergovern(*transformed_data)
-                                    test_chosen = "Welch's ANOVA"
-                                except:
-                                    statistic, p_value = stats.f_oneway(*transformed_data)
-                                    test_chosen = "One-way ANOVA (fallback)"
-                        else:
-                            statistic, p_value = kruskal(*transformed_data)
-                            test_chosen = "Kruskal-Wallis"
+                            result = alexandergovern(*transformed_data)
+                            statistic = result.statistic
+                            p_value = result.pvalue
+                            test_chosen = "Welch's ANOVA"
+                        except (ImportError, AttributeError):
+                            # SciPy version doesn't have alexandergovern
+                            statistic, p_value = stats.f_oneway(*transformed_data)
+                            test_chosen = "One-way ANOVA (Welch's unavailable)"
+                        except Exception as e:
+                            # Other unexpected errors
+                            statistic, p_value = stats.f_oneway(*transformed_data)
+                            test_chosen = "One-way ANOVA (fallback)"
                     
                     statistical_results[lipid_class] = {
                         'test': test_chosen,
@@ -293,11 +283,10 @@ class AbundanceBarChart:
                 test_info['test_chosen'][lipid_class] = test_chosen
                         
             except Exception as e:
-                st.warning(f"Could not perform statistical test for {lipid_class}: {str(e)}")
                 continue
     
-        # Multiple testing correction
-        if all_p_values and correction_method != "none":
+        # Multiple testing correction (Level 1 - Between-Class)
+        if all_p_values and correction_method != "uncorrected":
             if correction_method == "fdr_bh":
                 adjusted = multipletests(all_p_values, alpha=alpha, method='fdr_bh')
                 method_name = "Benjamini-Hochberg FDR"
@@ -305,98 +294,98 @@ class AbundanceBarChart:
                 adjusted = multipletests(all_p_values, alpha=alpha, method='bonferroni')
                 method_name = "Bonferroni"
             else:
-                # No correction
                 adjusted = (np.array(all_p_values) <= alpha, all_p_values)
-                method_name = "None"
+                method_name = "Uncorrected"
             
-            adjusted_p_values = adjusted[1] if correction_method != "none" else all_p_values
+            adjusted_p_values = adjusted[1] if correction_method != "uncorrected" else all_p_values
             significance_flags = adjusted[0]
     
             # Update results with adjusted p-values
             for i, lipid_class in enumerate(statistical_results):
-                if correction_method != "none":
-                    statistical_results[lipid_class]['adjusted p-value'] = adjusted_p_values[i]
-                    statistical_results[lipid_class]['significant'] = significance_flags[i]
-                    statistical_results[lipid_class]['correction_method'] = method_name
-                else:
-                    statistical_results[lipid_class]['significant'] = all_p_values[i] <= alpha
-                    statistical_results[lipid_class]['correction_method'] = "None"
+                if not lipid_class.startswith('_'):  # Skip metadata
+                    if correction_method != "uncorrected":
+                        statistical_results[lipid_class]['adjusted p-value'] = adjusted_p_values[i]
+                        statistical_results[lipid_class]['significant'] = significance_flags[i]
+                        statistical_results[lipid_class]['correction_method'] = method_name
+                    else:
+                        statistical_results[lipid_class]['significant'] = all_p_values[i] <= alpha
+                        statistical_results[lipid_class]['correction_method'] = "Uncorrected"
     
-                # Perform post-hoc tests for significant multi-group results
+        # Identify significant omnibus tests for post-hoc analysis
+        significant_omnibus_tests = []
+        for lipid_class, result in statistical_results.items():
+            if not lipid_class.startswith('_'):
+                # Track significant omnibus tests for post-hoc analysis
                 if (len(selected_conditions) > 2 and 
-                    statistical_results[lipid_class]['test'] in ["One-way ANOVA", "Welch's ANOVA", "Kruskal-Wallis"] and
-                    statistical_results[lipid_class]['p-value'] <= alpha):  # Use uncorrected p-value for post-hoc decision
-                    
+                    result['test'] in ["One-way ANOVA", "Welch's ANOVA", "One-way ANOVA (fallback)", 
+                                     "One-way ANOVA (Welch's unavailable)", "Kruskal-Wallis"] and
+                    result['p-value'] <= alpha):  # Use uncorrected p-value for omnibus qualification
+                    significant_omnibus_tests.append(lipid_class)
+    
+        # Perform post-hoc tests (Level 2 - Within-Class)
+        if len(selected_conditions) > 2 and posthoc_correction != "uncorrected" and significant_omnibus_tests:
+            for lipid_class in significant_omnibus_tests:
+                if lipid_class in statistical_results:
                     try:
-                        if "ANOVA" in statistical_results[lipid_class]['test']:
-                            # Parametric post-hoc: Tukey's HSD
-                            class_df = continuation_df[continuation_df['ClassKey'] == lipid_class].copy()
-                            data_for_posthoc = []
-                            conditions_for_posthoc = []
-                            
-                            for condition in selected_conditions:
-                                condition_idx = experiment.conditions_list.index(condition)
-                                condition_samples = experiment.individual_samples_list[condition_idx]
-                                sample_columns = [f"concentration[{sample}]" for sample in condition_samples 
-                                                if f"concentration[{sample}]" in class_df.columns]
-        
-                                if sample_columns:
-                                    sample_sums = class_df[sample_columns].sum()
-                                    # Apply same transformation as main test
-                                    if transformation_applied == "log10":
-                                        sample_sums = np.log10(np.maximum(sample_sums, small_value))
-                                    data_for_posthoc.extend(sample_sums.values)
-                                    conditions_for_posthoc.extend([condition] * len(sample_sums))
-        
-                            tukey = pairwise_tukeyhsd(data_for_posthoc, conditions_for_posthoc)
-                            tukey_results = {
-                                'group1': [str(res[0]) for res in tukey._results_table[1:]],
-                                'group2': [str(res[1]) for res in tukey._results_table[1:]],
-                                'p_values': tukey.pvalues,
-                                'method': "Tukey's HSD"
-                            }
+                        # Choose post-hoc method based on user selection and original test type
+                        if posthoc_correction == "standard":
+                            # Use standard approach: Tukey for parametric, Bonferroni for non-parametric
+                            if ("ANOVA" in statistical_results[lipid_class]['test']):
+                                # Parametric post-hoc: Tukey's HSD
+                                class_df = continuation_df[continuation_df['ClassKey'] == lipid_class].copy()
+                                data_for_posthoc = []
+                                conditions_for_posthoc = []
+                                
+                                for condition in selected_conditions:
+                                    condition_idx = experiment.conditions_list.index(condition)
+                                    condition_samples = experiment.individual_samples_list[condition_idx]
+                                    sample_columns = [f"concentration[{sample}]" for sample in condition_samples 
+                                                    if f"concentration[{sample}]" in class_df.columns]
+    
+                                    if sample_columns:
+                                        sample_sums = class_df[sample_columns].sum()
+                                        # Apply same transformation as main test
+                                        transformation_applied = statistical_results[lipid_class]['transformation']
+                                        if transformation_applied == "log10":
+                                            min_positive = min([x for x in sample_sums if x > 0]) if any(x > 0 for x in sample_sums) else 1
+                                            small_value = min_positive / 10
+                                            sample_sums = np.log10(np.maximum(sample_sums, small_value))
+                                        data_for_posthoc.extend(sample_sums.values)
+                                        conditions_for_posthoc.extend([condition] * len(sample_sums))
+    
+                                tukey = pairwise_tukeyhsd(data_for_posthoc, conditions_for_posthoc)
+                                tukey_results = {
+                                    'group1': [str(res[0]) for res in tukey._results_table[1:]],
+                                    'group2': [str(res[1]) for res in tukey._results_table[1:]],
+                                    'p_values': tukey.pvalues,
+                                    'method': "Tukey's HSD"
+                                }
+                                statistical_results[lipid_class]['tukey_results'] = tukey_results
+                            else:
+                                # Non-parametric: use Bonferroni approach
+                                tukey_results = perform_bonferroni_posthoc_internal(
+                                    continuation_df, lipid_class, selected_conditions, experiment, 
+                                    statistical_results[lipid_class]['transformation']
+                                )
+                                statistical_results[lipid_class]['tukey_results'] = tukey_results
+                                
+                        elif posthoc_correction == "bonferroni_all":
+                            # Always use Bonferroni regardless of test type
+                            tukey_results = perform_bonferroni_posthoc_internal(
+                                continuation_df, lipid_class, selected_conditions, experiment, 
+                                statistical_results[lipid_class]['transformation']
+                            )
                             statistical_results[lipid_class]['tukey_results'] = tukey_results
-                        else:
-                            # Non-parametric post-hoc: Pairwise Mann-Whitney with Bonferroni correction
-                            from itertools import combinations
-                            pairs = list(combinations(selected_conditions, 2))
-                            pairwise_p_values = []
                             
-                            class_df = continuation_df[continuation_df['ClassKey'] == lipid_class].copy()
-                            condition_data = {}
-                            for condition in selected_conditions:
-                                condition_idx = experiment.conditions_list.index(condition)
-                                condition_samples = experiment.individual_samples_list[condition_idx]
-                                sample_columns = [f"concentration[{sample}]" for sample in condition_samples 
-                                                if f"concentration[{sample}]" in class_df.columns]
-                                if sample_columns:
-                                    sample_sums = class_df[sample_columns].sum()
-                                    condition_data[condition] = sample_sums.values
-                            
-                            for cond1, cond2 in pairs:
-                                if cond1 in condition_data and cond2 in condition_data:
-                                    _, p_val = mannwhitneyu(condition_data[cond1], condition_data[cond2], 
-                                                          alternative='two-sided')
-                                    pairwise_p_values.append(p_val)
-                            
-                            # Apply Bonferroni correction to pairwise comparisons
-                            bonf_corrected = multipletests(pairwise_p_values, method='bonferroni')[1]
-                            
-                            tukey_results = {
-                                'group1': [pair[0] for pair in pairs],
-                                'group2': [pair[1] for pair in pairs],
-                                'p_values': bonf_corrected,
-                                'method': "Mann-Whitney U + Bonferroni"
-                            }
-                            statistical_results[lipid_class]['tukey_results'] = tukey_results
                     except Exception as e:
-                        st.warning(f"Post-hoc test failed for {lipid_class}: {str(e)}")
-        
+                        continue
+    
         # Add test information to results
         statistical_results['_test_info'] = test_info
         statistical_results['_parameters'] = {
             'test_type': test_type,
             'correction_method': correction_method,
+            'posthoc_correction': posthoc_correction,
             'alpha': alpha,
             'auto_transform': auto_transform
         }
@@ -561,11 +550,11 @@ class AbundanceBarChart:
         if mode == 'linear scale':
             mean = abundance_df.get(f"mean_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
             std = abundance_df.get(f"std_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
-        elif mode == 'log2 scale':  # Keep backward compatibility 
+        elif mode in ['log2 scale', 'log10 scale']:  # Accept both for backward compatibility
             mean = abundance_df.get(f"log10_mean_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
             std = abundance_df.get(f"log10_std_AUC_{condition}", pd.Series(dtype=float)).fillna(0)
         else:
-            raise ValueError(f"Invalid mode: {mode}. Must be 'linear scale' or 'log2 scale'")
+            raise ValueError(f"Invalid mode: {mode}. Must be 'linear scale', 'log2 scale', or 'log10 scale'")
         return mean, std
 
     @staticmethod
@@ -577,6 +566,12 @@ class AbundanceBarChart:
     @staticmethod
     def _generate_plot_title(mode: str, selected_conditions: List[str]) -> str:
         """Generate an appropriate title for the plot."""
-        scale_type = "Linear" if mode == 'linear scale' else "Log10"
+        if mode == 'linear scale':
+            scale_type = "Linear"
+        elif mode in ['log2 scale', 'log10 scale']:
+            scale_type = "Log10"
+        else:
+            scale_type = "Unknown"
+        
         conditions_str = " vs ".join(selected_conditions)
         return f"Class Concentration Bar Chart ({scale_type} Scale)<br>{conditions_str}"
