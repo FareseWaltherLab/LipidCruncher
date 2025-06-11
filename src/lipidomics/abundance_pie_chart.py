@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import itertools
+import plotly.colors as pc
 
 class AbundancePieChart:
     
@@ -85,10 +85,47 @@ class AbundancePieChart:
         condition_abundance = df[[f"concentration[{sample}]" for sample in available_samples]].sum(axis=1)
         sorted_sizes, sorted_labels = AbundancePieChart._sort_pie_chart_data(condition_abundance, df.index)
     
-        custom_labels = [f'{label} - {pct:.1f}%' for label, pct in zip(sorted_labels, 100 * sorted_sizes / sorted_sizes.sum())]
+        # Calculate percentages with meaningful decimal precision
+        percentages = 100 * sorted_sizes / sorted_sizes.sum()
+        custom_labels = [f'{label} - {AbundancePieChart._format_percentage(pct)}%' 
+                        for label, pct in zip(sorted_labels, percentages)]
+        
         fig = AbundancePieChart._configure_pie_chart(sorted_sizes, custom_labels, condition, sorted_labels, color_mapping)
     
         return fig, df
+
+    @staticmethod
+    def _format_percentage(percentage):
+        """
+        Format percentage to show the first meaningful decimal digit.
+        
+        Args:
+            percentage (float): The percentage value to format.
+            
+        Returns:
+            str: Formatted percentage string.
+        """
+        if percentage == 0:
+            return "0.0"
+        
+        if percentage >= 10:
+            # For percentages >= 10%, show 1 decimal place
+            return f"{percentage:.1f}"
+        elif percentage >= 1:
+            # For percentages >= 1%, show 1 decimal place
+            return f"{percentage:.1f}"
+        elif percentage >= 0.1:
+            # For percentages >= 0.1%, show 2 decimal places
+            return f"{percentage:.2f}"
+        elif percentage >= 0.01:
+            # For percentages >= 0.01%, show 3 decimal places
+            return f"{percentage:.3f}"
+        elif percentage >= 0.001:
+            # For percentages >= 0.001%, show 4 decimal places
+            return f"{percentage:.4f}"
+        else:
+            # For very small percentages, use scientific notation
+            return f"{percentage:.2e}"
 
     @staticmethod
     def _sort_pie_chart_data(sizes, labels):
@@ -124,22 +161,70 @@ class AbundancePieChart:
     
         fig = px.pie(values=sizes, names=labels, title=f'Total Abundance Pie Chart - {condition}',
                      color_discrete_sequence=colors)
-        hovertemplate = '%{label}<extra>%{percent:.1%}</extra>'
-        fig.update_traces(hovertemplate=hovertemplate, textinfo='none')
+        
+        # Update hover template to use meaningful decimal precision
+        percentages = 100 * sizes / sizes.sum()
+        hover_labels = [f'{label}<br>{AbundancePieChart._format_percentage(pct)}%' 
+                       for label, pct in zip(sorted_labels, percentages)]
+        
+        fig.update_traces(
+            hovertemplate='%{label}<extra></extra>',
+            textinfo='none'
+        )
         fig.update_layout(legend_title="Lipid Classes", margin=dict(l=10, r=100, t=40, b=10), width=450, height=300)
         return fig
     
     @staticmethod
     def _generate_color_mapping(labels):
         """
-        Generate a color mapping for different lipid classes to ensure consistent colors across conditions.
+        Generate a unique color mapping for different lipid classes to ensure each class gets a distinct color.
         
         Args:
             labels (list): List of lipid class labels.
         
         Returns:
-            dict: Dictionary mapping lipid class labels to colors.
+            dict: Dictionary mapping lipid class labels to unique colors.
         """
-        color_palette = px.colors.qualitative.Plotly
-        color_cycle = itertools.cycle(color_palette)
-        return {label: next(color_cycle) for label in labels}
+        # Combine multiple color palettes to ensure we have enough unique colors
+        all_colors = (
+            pc.qualitative.Plotly +
+            pc.qualitative.Set1 + 
+            pc.qualitative.Set2 + 
+            pc.qualitative.Set3 +
+            pc.qualitative.Pastel1 +
+            pc.qualitative.Pastel2 +
+            pc.qualitative.Dark2 +
+            pc.qualitative.Alphabet
+        )
+        
+        # Remove duplicates while preserving order
+        unique_colors = []
+        seen = set()
+        for color in all_colors:
+            if color not in seen:
+                unique_colors.append(color)
+                seen.add(color)
+        
+        # If we still don't have enough colors, generate additional ones
+        num_labels = len(labels)
+        if num_labels > len(unique_colors):
+            # Generate additional colors using HSV color space
+            import colorsys
+            additional_colors = []
+            for i in range(num_labels - len(unique_colors)):
+                hue = (i * 0.618033988749895) % 1  # Golden ratio for better distribution
+                saturation = 0.7 + (i % 3) * 0.1  # Vary saturation
+                value = 0.8 + (i % 2) * 0.1  # Vary brightness
+                rgb = colorsys.hsv_to_rgb(hue, saturation, value)
+                hex_color = '#{:02x}{:02x}{:02x}'.format(
+                    int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255)
+                )
+                additional_colors.append(hex_color)
+            unique_colors.extend(additional_colors)
+        
+        # Create the mapping, ensuring each label gets a unique color
+        color_mapping = {}
+        for i, label in enumerate(labels):
+            color_mapping[label] = unique_colors[i % len(unique_colors)]
+        
+        return color_mapping
