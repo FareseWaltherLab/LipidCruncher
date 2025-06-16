@@ -1503,14 +1503,7 @@ def display_data(df, title, filename, key_suffix=''):
     
 def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bqc_label, format_type):
     """
-    Performs quality check and analysis on the data.
-    
-    Args:
-        continuation_df (pd.DataFrame): The data to analyze
-        intsta_df (pd.DataFrame): Internal standards data
-        experiment (Experiment): Experiment setup information
-        bqc_label (str): Label for batch quality control samples
-        format_type (str): The format of the input data (e.g., 'LipidSearch 5.0')
+    Updated quality check and analysis module with enhanced saturation plots.
     """
     st.subheader("Quality Check and Anomaly Detection Module")
     
@@ -1562,7 +1555,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         (
             "Class Level Breakdown - Bar Chart", 
             "Class Level Breakdown - Pie Charts", 
-            "Class Level Breakdown - Saturation Plots", 
+            "Class Level Breakdown - Saturation Plots",  # Updated with enhanced version
             "Class Level Breakdown - Pathway Visualization",
             "Species Level Breakdown - Volcano Plot",
             "Species Level Breakdown - Lipidomic Heatmap"
@@ -1579,6 +1572,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         pie_charts = display_abundance_pie_charts(experiment, continuation_df)
         st.session_state.abundance_pie_charts.update(pie_charts)
     elif analysis_option == "Class Level Breakdown - Saturation Plots":
+        # USE THE NEW ENHANCED SATURATION PLOTS FUNCTION
         saturation_plots = display_saturation_plots(experiment, continuation_df)
         st.session_state.saturation_plots.update(saturation_plots)
     elif analysis_option == "Class Level Breakdown - Pathway Visualization":
@@ -1602,7 +1596,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         if clustered_heatmap:
             st.session_state.heatmap_fig['Clustered Heatmap'] = clustered_heatmap
 
-    # PDF Generation Section
+    # PDF Generation Section (unchanged)
     st.subheader("Generate PDF Report")
     st.warning(
         "⚠️ Important: PDF Report Generation Guidelines\n\n"
@@ -2434,7 +2428,7 @@ def display_statistical_options():
                 options=["parametric", "non_parametric"],
                 index=0,  # Default to parametric
                 help="""
-                • Parametric: Welch's t-test/ANOVA (assumes log-normal distribution after transformation)
+                • Parametric: Welch's t-test/ANOVA (assumes normal distribution after transformation)
                 • Non-parametric: Mann-Whitney U/Kruskal-Wallis (more conservative, no distribution assumptions)
                 """
             )
@@ -2547,7 +2541,7 @@ def display_statistical_options():
             **Parametric Tests (Welch's t-test/ANOVA):**
             - **When to use**: Standard choice for lipidomics data with log transformation
             - **Advantages**: More statistical power, widely accepted in the field
-            - **Assumptions**: Assumes log-normal distribution (typically met after log10 transformation)
+            - **Assumptions**: Assumes normal distribution (typically met after log10 transformation)
             - **Variance assumption**: Uses Welch's correction - does NOT assume equal variances
             - **Sample size**: Appropriate for typical lipidomics studies (n=3-6 per group)
             
@@ -3030,109 +3024,486 @@ def display_abundance_pie_charts(experiment, continuation_df):
     
     return pie_charts
 
+# Add these UI functions to your main_app.py file
+
+def display_saturation_statistical_options():
+    """
+    Display UI components for statistical testing options with auto/manual mode selection.
+    Specialized for saturation plot analysis.
+    """
+    st.subheader("Statistical Testing Options")
+    
+    # First choice: Auto vs Manual mode
+    mode_choice = st.radio(
+        "Select Analysis Mode:",
+        options=["Manual", "Auto"],
+        index=0,  # Default to Manual
+        help="""
+        • Manual: You control all statistical choices
+        • Auto: Uses parametric tests with intelligent corrections based on your data
+        """,
+        horizontal=True
+    )
+    
+    # Fixed significance threshold
+    alpha = 0.05
+    
+    if mode_choice == "Auto":
+        # Auto mode - show what will be decided
+        st.info("""
+        🤖 **Auto Mode**: Uses parametric statistical tests with intelligent corrections:
+        - **Test Type**: Parametric (Welch's t-test/ANOVA) with automatic log10 transformation
+        - **Level 1 Correction**: Based on number of lipid classes × 3 fatty acid types
+        - **Level 2 Correction**: Based on number of conditions selected
+        """)
+        
+        # Set placeholders for auto mode
+        test_type = "auto"
+        correction_method = "auto"
+        posthoc_correction = "auto"
+        
+    else:
+        # Manual mode - show full controls
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            test_type = st.selectbox(
+                "Statistical Test Type",
+                options=["parametric", "non_parametric"],
+                index=0,
+                help="""
+                • Parametric: Welch's t-test/ANOVA (assumes log-normal distribution after transformation)
+                • Non-parametric: Mann-Whitney U/Kruskal-Wallis (more conservative, no distribution assumptions)
+                """
+            )
+            
+            correction_method = st.selectbox(
+                "Between Class/FA Type Correction (Level 1)",
+                options=["uncorrected", "fdr_bh", "bonferroni"],
+                index=0,
+                help="""
+                Note: Tests 3 fatty acid types (SFA, MUFA, PUFA) per lipid class
+                • Uncorrected: No correction (good for single class analysis)
+                • FDR (Benjamini-Hochberg): Controls false discovery rate (for multiple classes)
+                • Bonferroni: Conservative, controls family-wise error rate (very strict)
+                """
+            )
+        
+        with col2:
+            posthoc_correction = st.selectbox(
+                "Within Class/FA Type Correction (Level 2)",
+                options=["uncorrected", "standard", "bonferroni_all"],
+                index=0,
+                help="""
+                For 3+ conditions only:
+                • Uncorrected: No pairwise correction
+                • Standard: Tukey's HSD (parametric) or Bonferroni (non-parametric) 
+                • Bonferroni All: Bonferroni correction for all pairwise tests
+                """
+            )
+    
+    # Auto-transformation option (always available)
+    auto_transform = st.checkbox(
+        "Auto-transform data (log10)",
+        value=True,
+        help="""
+        Automatically applies log10 transformation to all data. 
+        Log10 transformation is standard practice in lipidomics as it often 
+        normalizes skewed concentration data and is biologically interpretable.
+        """
+    )
+    
+    # Show current settings for manual mode only
+    if mode_choice == "Manual":
+        st.markdown("---")
+        st.markdown("### 📋 Current Settings Summary")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"- **Mode**: Manual")
+            st.write(f"- **Test Type**: {test_type.title()}")
+            st.write(f"- **Level 1 Correction**: {correction_method.upper().replace('_', '-')}")
+        with col2:
+            st.write(f"- **Level 2 Correction**: {posthoc_correction.replace('_', ' ').title()}")
+            st.write(f"- **Significance**: α = {alpha}")
+            st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
+    
+    # Important warning about hypothesis testing
+    st.markdown("---")
+    st.warning("""
+    ⚠️ **Critical for Hypothesis Testing**: Saturation plots test 3 fatty acid types (SFA, MUFA, PUFA) 
+    per lipid class, creating a higher multiple testing burden than other analyses. Consider this when 
+    selecting correction methods, especially when testing many lipid classes simultaneously.
+    
+    **Best Practice**: Pre-specify your lipid classes of interest based on biological rationale.
+    """)
+    
+    return {
+        'test_type': test_type,
+        'correction_method': correction_method,
+        'posthoc_correction': posthoc_correction,
+        'alpha': alpha,
+        'auto_transform': auto_transform,
+        'mode_choice': mode_choice
+    }
+
+def display_saturation_detailed_statistical_results(statistical_results, selected_conditions):
+    """Display detailed statistical test results in an expandable section."""
+    show_detailed_stats = st.checkbox("Show detailed statistical analysis", key="show_detailed_saturation_stats")
+    if show_detailed_stats:
+        st.write("### Detailed Statistical Test Results")
+        
+        # Create a table for statistical results
+        results_data = []
+        for lipid_class, class_results in statistical_results.items():
+            if lipid_class.startswith('_'):  # Skip metadata
+                continue
+                
+            for fa_type, results in class_results.items():
+                p_value = results['p-value']
+                adj_p_value = results.get('adjusted p-value', p_value)
+                transformation = results.get('transformation', 'none')
+                
+                result_row = {
+                    'Lipid Class': lipid_class,
+                    'Fatty Acid Type': fa_type,
+                    'Test': results['test'],
+                    'Statistic': f"{results['statistic']:.3f}",
+                    'p-value': f"{p_value:.3f}",
+                    'Adjusted p-value': f"{adj_p_value:.3f}" if not np.isnan(adj_p_value) else "NaN",
+                    'Transformation': transformation.title(),
+                    'Significant': '✓' if adj_p_value < 0.05 else '✗'
+                }
+                results_data.append(result_row)
+        
+        if results_data:
+            results_df = pd.DataFrame(results_data)
+            st.dataframe(results_df, use_container_width=True)
+        
+        # Show detailed post-hoc results for multi-group comparisons
+        if len(selected_conditions) > 2:
+            st.write("### Post-hoc Test Results")
+            
+            posthoc_correction = statistical_results.get('_parameters', {}).get('posthoc_correction', 'uncorrected')
+            
+            if posthoc_correction == "uncorrected":
+                st.write("Post-hoc analysis was not performed (correction method: uncorrected).")
+            else:
+                # Count significant omnibus tests
+                significant_omnibus_count = 0
+                has_posthoc_results = False
+                
+                for lipid_class, class_results in statistical_results.items():
+                    if lipid_class.startswith('_'):  # Skip metadata
+                        continue
+                        
+                    for fa_type, results in class_results.items():
+                        # Check if this was a significant omnibus test using adjusted p-value
+                        adj_p_value = results.get('adjusted p-value', results.get('p-value', 1))
+                        if (results.get('test', '') in ["One-way ANOVA", "Welch's ANOVA", "One-way ANOVA (fallback)", 
+                                                       "One-way ANOVA (Welch's unavailable)", "Kruskal-Wallis"] and
+                            adj_p_value <= 0.05):
+                            significant_omnibus_count += 1
+                            
+                            # Check if post-hoc results exist
+                            if results.get('tukey_results'):
+                                has_posthoc_results = True
+                                st.write(f"**{lipid_class} - {fa_type}** ({results['test']})")
+                                
+                                tukey = results['tukey_results']
+                                tukey_data = []
+                                for g1, g2, p in zip(tukey['group1'], tukey['group2'], tukey['p_values']):
+                                    significance = ''
+                                    if p < 0.001:
+                                        significance = '***'
+                                    elif p < 0.01:
+                                        significance = '**'
+                                    elif p < 0.05:
+                                        significance = '*'
+                                        
+                                    tukey_data.append({
+                                        'Group 1': g1,
+                                        'Group 2': g2,
+                                        'p-value': f"{p:.3f}",
+                                        'Significant': significance,
+                                        'Method': tukey['method']
+                                    })
+                                
+                                if tukey_data:
+                                    tukey_df = pd.DataFrame(tukey_data)
+                                    st.dataframe(tukey_df, use_container_width=True)
+                                    st.markdown("---")
+                
+                # Display appropriate message based on results
+                if significant_omnibus_count == 0:
+                    st.write("No significant omnibus tests found for post-hoc analysis.")
+                elif not has_posthoc_results:
+                    st.write(f"Found {significant_omnibus_count} significant omnibus test(s), but post-hoc analysis failed to complete.")
+
+def display_saturation_compatibility_warning(continuation_df):
+    """Display compatibility warning for datasets without detailed fatty acid composition."""
+    # Check if we have any detailed FA compositions
+    has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
+    
+    if not has_detailed_fa:
+        st.warning("""
+        ⚠️ Note: Saturation plots work best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+        Your data appears to use total composition (e.g., PC(34:1)) which only shows total 
+        carbons and double bonds. This may affect the accuracy of the saturation analysis.
+        """)
+
+def display_auto_mode_results(stat_options, selected_classes, selected_conditions, statistical_results):
+    """Display the results of auto mode logic after statistical analysis is complete."""
+    if stat_options['mode_choice'] == "Auto":
+        auto_settings = lp.SaturationPlot.apply_auto_mode_logic(selected_classes, selected_conditions)
+        
+        # Count actual tests performed
+        total_tests_performed = 0
+        tests_chosen = set()
+        posthoc_methods = set()
+        
+        for lipid_class, class_results in statistical_results.items():
+            if not lipid_class.startswith('_'):
+                for fa_type, result in class_results.items():
+                    total_tests_performed += 1
+                    tests_chosen.add(result['test'])
+                    if result.get('tukey_results'):
+                        posthoc_methods.add(result['tukey_results']['method'])
+        
+        # Format test types display
+        if tests_chosen:
+            test_display = ", ".join(sorted(tests_chosen))
+        else:
+            test_display = "None (no valid data)"
+        
+        # Format posthoc display
+        if posthoc_methods:
+            posthoc_display = ", ".join(sorted(posthoc_methods))
+        elif len(selected_conditions) <= 2:
+            posthoc_display = "Not applicable (≤2 conditions)"
+        else:
+            posthoc_display = "None (no significant omnibus tests)"
+        
+        st.info(f"""
+        🤖 **Auto Mode Results Applied:**
+        - **Tests Performed**: {total_tests_performed} total
+        - **Tests Chosen**: {test_display}
+        - **Level 1 Correction**: {auto_settings['correction_method'].upper().replace('_', '-')} 
+          ({auto_settings['correction_rationale']})
+        - **Level 2 Post-hoc**: {posthoc_display}
+        """)
+
+def display_excluded_conditions_warning(experiment, selected_conditions):
+    """Display warning about conditions excluded due to insufficient samples."""
+    # Get valid conditions (more than one sample)
+    valid_conditions = [
+        cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) 
+        if num_samples > 1
+    ]
+    
+    # Check if any conditions were removed due to having only one sample
+    removed_conditions = set(selected_conditions) - set(valid_conditions)
+    if removed_conditions:
+        st.info(f"Note: The following conditions were excluded due to having only one sample: {', '.join(removed_conditions)}")
+
 def display_saturation_plots(experiment, continuation_df):
     """
-    Display saturation plots with statistical analysis for selected conditions and lipid classes.
-    
-    Args:
-        experiment: Experiment object containing experimental setup information
-        continuation_df: DataFrame containing the lipidomics data
-        
-    Returns:
-        dict: Dictionary containing the generated plots by lipid class
+    Enhanced saturation plot display function with rigorous statistical methodology.
+    Now uses separated core logic with UI components in main app.
     """
     saturation_plots = {}
     with st.expander("Class Level Breakdown - Saturation Plots"):
-        # Check if we have any detailed FA compositions
-        has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
-        
-        if not has_detailed_fa:
-            st.warning("""
-            ⚠️ Note: Saturation plots work best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
-            Your data appears to use total composition (e.g., PC(34:1)) which only shows total 
-            carbons and double bonds. This may affect the accuracy of the saturation analysis.
-            """)
+        # Display compatibility warning
+        display_saturation_compatibility_warning(continuation_df)
 
-        # Show explanation about saturation plot analysis
-        show_saturation_info = st.checkbox("Show saturation plot analysis details", key="show_saturation_info")
-        if show_saturation_info:
-            st.markdown("### Saturation Plot Analysis")
-            st.markdown("""
-            Saturation plots analyze the fatty acid composition within lipid classes, distinguishing between saturated (SFA), mono-unsaturated (MUFA), and poly-unsaturated fatty acids (PUFA).
-            
-            **What the Plots Show:**
-            
-            1. **Concentration Profile Plot**:
-               - Groups of bars show SFA, MUFA, and PUFA concentrations for each condition
-               - Error bars represent standard error of the mean (SEM = standard deviation/√n)
-               - Stars (★) indicate statistical significance between conditions:
-                 * ★ p < 0.05
-                 * ★★ p < 0.01
-                 * ★★★ p < 0.001
-            
-            2. **Percentage Distribution Plot**:
-               - Stacked bars show the relative proportion of SFA, MUFA, and PUFA in each condition
-               - Total height always equals 100%
-               - Shows compositional shifts even when total lipid amounts differ
-            
-            **How SFA, MUFA, and PUFA Are Calculated:**
-            
-            1. For each lipid molecule (e.g., PC(16:0_18:1)), the number of double bonds in each fatty acid chain is determined:
-               - 16:0 has 0 double bonds → SFA (saturated)
-               - 18:1 has 1 double bond → MUFA (mono-unsaturated)
-               - Chains with 2+ double bonds → PUFA (poly-unsaturated)
-            
-            2. The proportion of each fatty acid type is calculated per molecule:
-               - For PC(16:0_18:1), which has 1 SFA and 1 MUFA chain, the proportions are:
-                 * SFA: 1/2 = 0.5 (50%)
-                 * MUFA: 1/2 = 0.5 (50%)
-                 * PUFA: 0/2 = 0 (0%)
-            
-            3. These proportions are multiplied by the molecule's concentration:
-               - If PC(16:0_18:1) has a concentration of 10 μM, then:
-                 * SFA contribution = 10 μM × 0.5 = 5 μM
-                 * MUFA contribution = 10 μM × 0.5 = 5 μM
-                 * PUFA contribution = 10 μM × 0 = 0 μM
-            
-            4. All contributions are summed across all lipid molecules in each class to get total SFA, MUFA, and PUFA concentrations
-            
-            **Statistical Analysis Details:**
-            
-            - **For two conditions**: Welch's t-test is used, which does not assume equal variances
-            
-            - **For multiple conditions**: One-way ANOVA followed by Tukey's HSD post-hoc test for pairwise comparisons
-            
-            - **Multiple Testing Correction**: 
-              * When testing multiple lipid classes, p-values are NOT automatically adjusted
-              * For ANOVA with post-hoc tests, Tukey's HSD inherently controls for multiple comparisons within each lipid class
-              * Users should interpret significance with caution when analyzing many lipid classes simultaneously
-            """)
-            st.markdown("---")
-
-        # Get all lipid classes
-        full_samples_list = experiment.full_samples_list
-        all_classes = continuation_df['ClassKey'].unique().tolist()
+        # Show comprehensive analysis guide (moved outside checkbox)
+        st.markdown("### 📚 Saturation Plot Analysis Guide")
         
-        # Select classes and conditions
+        st.markdown("""
+        **📊 What the Analysis Shows:**
+        
+        Saturation plots analyze the fatty acid composition within lipid classes, distinguishing between:
+        - **SFA (Saturated Fatty Acids)**: Fatty acids with no double bonds
+        - **MUFA (Monounsaturated Fatty Acids)**: Fatty acids with one double bond
+        - **PUFA (Polyunsaturated Fatty Acids)**: Fatty acids with two or more double bonds
+        
+        **📈 Two Complementary Visualizations:**
+        
+        1. **Concentration Profile Plot**:
+           - Groups of bars show absolute SFA, MUFA, and PUFA concentrations for each condition
+           - Error bars represent standard deviation calculated from biological replicates
+           - Stars indicate statistical significance between conditions:  * p<0.05, ** p<0.01, *** p<0.001
+        
+        2. **Percentage Distribution Plot**:
+           - Stacked bars show the relative proportion of SFA, MUFA, and PUFA in each condition
+           - Total height always equals 100%
+           - Shows compositional shifts even when total lipid amounts differ
+        
+        **🧮 How SFA, MUFA, and PUFA Values Are Computed:**
+        
+        For each lipid molecule in your dataset (e.g., PC(16:0_18:1)):
+        
+        1. **Fatty Acid Chain Analysis**: The algorithm parses the lipid name to identify individual fatty acid chains
+           - Example: PC(16:0_18:1) contains chains 16:0 and 18:1
+           - The number after the colon indicates double bonds: 16:0 (0 bonds = saturated), 18:1 (1 bond = monounsaturated)
+        
+        2. **Classification by Saturation**:
+           - **SFA**: Chains with 0 double bonds (e.g., 16:0, 18:0)
+           - **MUFA**: Chains with 1 double bond (e.g., 16:1, 18:1)  
+           - **PUFA**: Chains with 2+ double bonds (e.g., 18:2, 20:4, 22:6)
+        
+        3. **Weighted Contribution Calculation**:
+           - For each sample, the algorithm calculates: lipid concentration × fatty acid ratio
+           - Example: PC(16:0_18:1) at 100 µM contributes:
+             * SFA: 100 × 0.5 = 50 µM (one of two chains is saturated)
+             * MUFA: 100 × 0.5 = 50 µM (one of two chains is monounsaturated)
+             * PUFA: 100 × 0 = 0 µM (no polyunsaturated chains)
+        
+        4. **Class-Level Summation**: All contributions within a lipid class are summed
+           - Total SFA = sum of all SFA contributions from all PC species
+           - Total MUFA = sum of all MUFA contributions from all PC species
+           - Total PUFA = sum of all PUFA contributions from all PC species
+        
+        **📊 Statistical Analysis Features:**
+        
+        - **Two-Level Correction System**: Controls false discoveries across lipid classes × fatty acid types, and pairwise comparisons within each fatty acid type
+        - **Auto Mode**: Intelligently selects corrections based on number of tests and conditions
+        - **Rigorous Testing**: Uses Welch's t-test/ANOVA with log10 transformation as standard practice
+        - **Error Bars**: Show standard deviation for proper biological interpretation
+        - **Post-hoc Analysis**: Tukey's HSD for parametric or Bonferroni correction for non-parametric tests
+        
+        **⚠️ Important Notes:**
+        
+        - **Sample Size**: Analysis requires ≥2 biological replicates per condition
+        - **Multiple Testing**: Saturation analysis tests 3 fatty acid types per lipid class, creating higher statistical burden
+        """)
+        
+        # Big note about data format requirements
+        st.warning("""
+        ⚠️ **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
+        (e.g., PC(16:0_18:1)) vs. total composition (e.g., PC(34:1)). If your dataset uses total composition format, 
+        the saturation analysis may be less accurate as it cannot precisely identify individual fatty acid chains.
+        """)
+        
+        # Statistical methodology sections (moved out of checkbox)
+        st.markdown("### 🔬 Statistical Testing Process")
+        st.markdown("""
+        **📊 The Process:**
+        - **2 Conditions**: Test + Level 1 correction (if testing multiple classes)
+        - **3+ Conditions**: Three-step process to control false discoveries:
+          1. **Omnibus Test**: "Are there ANY differences among groups?"
+          2. **Level 1 Correction**: Control false discoveries across lipid classes × fatty acid types
+          3. **Level 2 Post-hoc**: "Which specific pairs differ?"
+        """)
+        
+        st.markdown("### 🎯 Two-Level Statistical Control")
+        st.markdown("""
+        **🏷️ Level 1 - Between Class/FA Type Correction** (Applied to all analyses)
+        
+        | Choice | When to Use |
+        |--------|-------------|
+        | **Uncorrected** | Testing a single pre-specified lipid class with clear hypothesis |
+        | **FDR** | Exploring multiple classes (balances discovery with false positive control) |
+        | **Bonferroni** | Confirmatory studies where false positives are very costly |
+        
+        **🔍 Level 2 - Within Class/FA Type Correction** (For 3+ conditions only)
+        
+        | Choice | When to Use |
+        |--------|-------------|
+        | **Uncorrected** | Accept higher false positive risk for more discoveries |
+        | **Standard** | Balanced approach: Tukey's HSD (parametric) or Bonferroni (non-parametric) |
+        | **Bonferroni All** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
+        
+        **💡 Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
+        """)
+        
+        st.markdown("### 🤖 Auto Mode Logic")
+        st.markdown("""
+        - **Test Selection**: Always uses parametric tests (Welch's t-test/ANOVA) appropriate for typical lipidomics sample sizes
+        - **Automatic Log Transformation**: Standard practice in lipidomics
+        - **Smart Corrections**: 
+          * Level 1: Single class → Uncorrected | Multiple classes → FDR 
+          * Level 2: ≤2 conditions → No post-hoc | 3-4 conditions → Standard | 5+ conditions → Conservative Bonferroni
+        """)
+        
+        st.markdown("---")
+
+        # Get statistical options using the UI function
+        stat_options = display_saturation_statistical_options()
+        
+        st.markdown("---")
+        
+        # Get valid conditions (more than one sample)
+        valid_conditions = [
+            cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) 
+            if num_samples > 1
+        ]
+        
+        if not valid_conditions:
+            st.warning("No conditions with multiple samples found. Saturation analysis requires at least two replicates per condition.")
+            return saturation_plots
+        
+        # Get user selections
+        selected_conditions_list = st.multiselect(
+            'Select conditions for the saturation plot:', 
+            valid_conditions, 
+            valid_conditions
+        )
+        
         selected_classes_list = st.multiselect(
             'Select classes for the saturation plot:', 
-            all_classes, 
-            all_classes
+            list(continuation_df['ClassKey'].value_counts().index), 
+            list(continuation_df['ClassKey'].value_counts().index)
         )
         
-        selected_conditions = st.multiselect(
-            'Select conditions for the saturation plot:', 
-            experiment.conditions_list, 
-            experiment.conditions_list
-        )
-        
-        if selected_classes_list and selected_conditions:
-            # Filter the DataFrame for selected classes
-            filtered_df = continuation_df[continuation_df['ClassKey'].isin(selected_classes_list)]
+        # Apply auto mode logic if selected
+        if stat_options['mode_choice'] == "Auto":
+            auto_settings = lp.SaturationPlot.apply_auto_mode_logic(selected_classes_list, selected_conditions_list)
             
-            # Generate the plots
+            # Override auto selections with intelligent recommendations
+            stat_options['test_type'] = "auto"
+            stat_options['correction_method'] = auto_settings['correction_method']
+            stat_options['posthoc_correction'] = auto_settings['posthoc_correction']
+        
+        if selected_conditions_list and selected_classes_list:
+            # Perform statistical tests with user-selected options
+            with st.spinner("Performing statistical analysis..."):
+                statistical_results = lp.SaturationPlot.perform_statistical_tests(
+                    continuation_df, 
+                    experiment, 
+                    selected_conditions_list, 
+                    selected_classes_list,
+                    test_type=stat_options['test_type'],
+                    correction_method=stat_options['correction_method'],
+                    posthoc_correction=stat_options['posthoc_correction'],
+                    alpha=stat_options['alpha'],
+                    auto_transform=stat_options['auto_transform']
+                )
+            
+            # Display auto mode results after analysis
+            display_auto_mode_results(stat_options, selected_classes_list, selected_conditions_list, statistical_results)
+            
+            # Display detailed statistical results
+            display_saturation_detailed_statistical_results(statistical_results, selected_conditions_list)
+            
+            st.markdown("---")  # Separator before plots
+            
+            # NEW: Add checkbox for showing significance asterisks
+            show_significance = st.checkbox(
+                "Show statistical significance asterisks on plots",
+                value=False,  # Default unchecked
+                help="Display *, **, *** symbols on plots to indicate statistical significance levels"
+            )
+
+            # Generate enhanced plots with statistical annotations
             with st.spinner("Generating saturation plots..."):
-                plots = lp.SaturationPlot.create_plots(filtered_df, experiment, selected_conditions)
+                plots = lp.SaturationPlot.create_plots(
+                    continuation_df, 
+                    experiment, 
+                    selected_conditions_list, 
+                    statistical_results,
+                    show_significance=show_significance  # Pass the checkbox value
+                )
                 
                 if plots:
                     for lipid_class, (main_plot, percentage_plot, plot_data) in plots.items():
@@ -3140,42 +3511,66 @@ def display_saturation_plots(experiment, continuation_df):
                         
                         # Display the main plot
                         st.markdown("#### Concentration Profile")
-                        st.plotly_chart(main_plot)
-                        plotly_svg_download_button(main_plot, f"saturation_plot_main_{lipid_class}.svg")
+                        st.plotly_chart(main_plot, use_container_width=True)
                         
-                        # Provide download for the data
-                        main_csv_download = convert_df(plot_data)
-                        st.download_button(
-                            label="Download CSV",
-                            data=main_csv_download,
-                            file_name=f'saturation_plot_main_data_{lipid_class}.csv',
-                            mime='text/csv'
-                        )
+                        # Add download options for main plot
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            svg_bytes = main_plot.to_image(format="svg")
+                            svg_string = svg_bytes.decode('utf-8')
+                            st.download_button(
+                                label="Download SVG",
+                                data=svg_string,
+                                file_name=f"saturation_plot_main_{lipid_class}.svg",
+                                mime="image/svg+xml"
+                            )
+                        with col2:
+                            main_csv_download = plot_data.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="Download CSV",
+                                data=main_csv_download,
+                                file_name=f'saturation_plot_main_data_{lipid_class}.csv',
+                                mime='text/csv'
+                            )
                         
                         # Display the percentage plot
                         st.markdown("#### Percentage Distribution")
-                        st.plotly_chart(percentage_plot)
-                        plotly_svg_download_button(percentage_plot, f"saturation_plot_percentage_{lipid_class}.svg")
+                        st.plotly_chart(percentage_plot, use_container_width=True)
                         
-                        # Provide download for the percentage data
-                        percentage_data = lp.SaturationPlot._calculate_percentage_df(plot_data)
-                        percentage_csv_download = convert_df(percentage_data)
-                        st.download_button(
-                            label="Download CSV",
-                            data=percentage_csv_download,
-                            file_name=f'saturation_plot_percentage_data_{lipid_class}.csv',
-                            mime='text/csv'
-                        )
+                        # Add download options for percentage plot
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            svg_bytes = percentage_plot.to_image(format="svg")
+                            svg_string = svg_bytes.decode('utf-8')
+                            st.download_button(
+                                label="Download SVG",
+                                data=svg_string,
+                                file_name=f"saturation_plot_percentage_{lipid_class}.svg",
+                                mime="image/svg+xml"
+                            )
+                        with col2:
+                            percentage_data = lp.SaturationPlot._calculate_percentage_df(plot_data)
+                            percentage_csv_download = percentage_data.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="Download CSV",
+                                data=percentage_csv_download,
+                                file_name=f'saturation_plot_percentage_data_{lipid_class}.csv',
+                                mime='text/csv'
+                            )
                         
-                        # Add to the dictionary for return
+                        # Add to the return dictionary for PDF generation
                         saturation_plots[lipid_class] = {'main': main_plot, 'percentage': percentage_plot}
                         
                         # Add a separator between plots
                         st.markdown("---")
                 else:
                     st.warning("No plots could be generated. This might be because there are insufficient samples or no data for the selected classes.")
+            
+            # Display excluded conditions warning
+            display_excluded_conditions_warning(experiment, selected_conditions_list)
+                
         else:
-            st.warning("Please select at least one class and one condition to generate saturation plots.")
+            st.warning("Please select at least one condition and one class to generate saturation plots.")
     
     return saturation_plots
 
