@@ -379,7 +379,8 @@ class PathwayViz:
             tuple: Color and size data for the plot.
         """
         color_contour = pathway_dict['saturated fatty acids ratio']
-        size = [50 * ele**2 for ele in pathway_dict['abundance ratio']]
+        # Changed from fold_change^2 to linear fold_change
+        size = [50 * ele for ele in pathway_dict['abundance ratio']]
         return color_contour, size
 
     @staticmethod

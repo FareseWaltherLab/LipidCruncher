@@ -1555,8 +1555,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         (
             "Class Level Breakdown - Bar Chart", 
             "Class Level Breakdown - Pie Charts", 
-            "Class Level Breakdown - Saturation Plots",  # Updated with enhanced version
-            "Class Level Breakdown - Pathway Visualization",
+            "Class Level Breakdown - Saturation Plots (requires detailed fatty acid composition)",
+            "Class Level Breakdown - Pathway Visualization (requires detailed fatty acid composition)",
             "Species Level Breakdown - Volcano Plot",
             "Species Level Breakdown - Lipidomic Heatmap"
         )
@@ -1571,11 +1571,11 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     elif analysis_option == "Class Level Breakdown - Pie Charts":
         pie_charts = display_abundance_pie_charts(experiment, continuation_df)
         st.session_state.abundance_pie_charts.update(pie_charts)
-    elif analysis_option == "Class Level Breakdown - Saturation Plots":
+    elif analysis_option == "Class Level Breakdown - Saturation Plots (requires detailed fatty acid composition)":
         # USE THE NEW ENHANCED SATURATION PLOTS FUNCTION
         saturation_plots = display_saturation_plots(experiment, continuation_df)
         st.session_state.saturation_plots.update(saturation_plots)
-    elif analysis_option == "Class Level Breakdown - Pathway Visualization":
+    elif analysis_option == "Class Level Breakdown - Pathway Visualization (requires detailed fatty acid composition)":
         pathway_fig = display_pathway_visualization(experiment, continuation_df)
         if pathway_fig:
             st.session_state.pathway_visualization = pathway_fig
@@ -3586,6 +3586,13 @@ def display_pathway_visualization(experiment, continuation_df):
         matplotlib.figure.Figure or None: The pathway visualization figure if generated, otherwise None
     """
     with st.expander("Class Level Breakdown - Pathway Visualization"):
+        # Add the critical data format requirement warning
+        st.warning("""
+        ⚠️ **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
+        (e.g., PC(16:0_18:1)) vs. total composition (e.g., PC(34:1)). If your dataset uses total composition format, 
+        the saturation analysis may be less accurate as it cannot precisely identify individual fatty acid chains.
+        """)
+        
         # Check if we have any detailed FA compositions
         has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
         
@@ -3597,39 +3604,39 @@ def display_pathway_visualization(experiment, continuation_df):
             remain accurate.
             """)
 
-        # Show explanation about the pathway visualization
-        show_pathway_info = st.checkbox("Show pathway visualization details", key="show_pathway_info")
-        if show_pathway_info:
-            st.markdown("### Lipid Pathway Visualization")
-            st.markdown("""
-            The lipid pathway visualization provides a comprehensive view of how different lipid classes relate to each other in metabolic pathways and how they are affected by experimental conditions.
-            
-            **What the Visualization Shows:**
-            
-            - **Circle Positions**: Each circle represents a different lipid class positioned according to metabolic relationships
-            - **Circle Size**: The size of each circle indicates the fold change in abundance between conditions 
-              - Larger circles = increased abundance in experimental condition
-              - Smaller circles = decreased abundance in experimental condition
-            - **Circle Color**: Color intensity represents the saturation ratio (proportion of saturated fatty acids)
-              - Warmer colors (red/yellow) = higher proportion of saturated fatty acids
-              - Cooler colors (blue/purple) = lower proportion of saturated fatty acids
-            
-            **How the Data is Calculated:**
-            
-            1. **Fold Change Calculation**:
-               - For each lipid class, the average concentration in the experimental condition is divided by the average concentration in the control condition
-               - This ratio determines the circle size (squared for visual emphasis)
-               - Values >1 indicate an increase in the experimental condition
-               - Values <1 indicate a decrease in the experimental condition
-            
-            2. **Saturation Ratio Calculation**:
-               - For each lipid molecule (e.g., PC(16:0_18:1)), the number of saturated and unsaturated fatty acid chains is counted:
-                 * Chains with 0 double bonds (e.g., 16:0) are counted as saturated
-                 * Chains with 1+ double bonds (e.g., 18:1) are counted as unsaturated
-               - The saturation ratio is calculated as: number of saturated chains ÷ total number of chains
-               - This ratio ranges from 0 (all unsaturated) to 1 (all saturated)
-            """)
-            st.markdown("---")
+        # Show explanation about the pathway visualization (always visible)
+        st.markdown("### Lipid Pathway Visualization")
+        st.markdown("""
+        The lipid pathway visualization provides a comprehensive view of how different lipid classes relate to each other in metabolic pathways and how they are affected by experimental conditions.
+        
+        **What the Visualization Shows:**
+        
+        - **Circle Positions**: Each circle represents a different lipid class positioned according to metabolic relationships
+        - **Circle Size**: The size of each circle indicates the fold change in abundance between conditions 
+          - Larger circles = increased abundance in experimental condition
+          - Smaller circles = decreased abundance in experimental condition
+          - **Unit circle (fold change = 1)**: A circle with black perimeter and no fill color serves as the reference point, representing no change between conditions
+          - **Empty circles**: Lipid classes not detected in your dataset appear as empty positions (no visible circle)
+        - **Circle Color**: Color intensity represents the saturation ratio (proportion of saturated fatty acids)
+          - Warmer colors (red/yellow) = higher proportion of saturated fatty acids
+          - Cooler colors (blue/purple) = lower proportion of saturated fatty acids
+        
+        **How the Data is Calculated:**
+        
+        1. **Fold Change Calculation**:
+           - For each lipid class, the average concentration in the experimental condition is divided by the average concentration in the control condition
+           - This ratio determines the circle size
+           - Values >1 indicate an increase in the experimental condition
+           - Values <1 indicate a decrease in the experimental condition
+        
+        2. **Saturation Ratio Calculation**:
+           - For each lipid molecule (e.g., PC(16:0_18:1)), the number of saturated and unsaturated fatty acid chains is counted:
+             * Chains with 0 double bonds (e.g., 16:0) are counted as saturated
+             * Chains with 1+ double bonds (e.g., 18:1) are counted as unsaturated
+           - The saturation ratio is calculated as: number of saturated chains ÷ total number of chains
+           - This ratio ranges from 0 (all unsaturated) to 1 (all saturated)
+        """)
+        st.markdown("---")
 
         # Allow selection of control and experimental conditions
         if len([x for x in experiment.number_of_samples_list if x > 1]) > 1:
@@ -3668,12 +3675,6 @@ def display_pathway_visualization(experiment, continuation_df):
                             'Fold Change': pathway_dict['abundance ratio'],
                             'Saturation Ratio': pathway_dict['saturated fatty acids ratio']
                         })
-                        
-                        # Add a direction column for clarity
-                        pathway_df['Change Direction'] = pathway_df['Fold Change'].apply(
-                            lambda x: "↑ Increased" if x > 1 else 
-                                     ("↓ Decreased" if x < 1 and x > 0 else "No Change")
-                        )
                         
                         # Sort by absolute change
                         pathway_df['Absolute Change'] = abs(pathway_df['Fold Change'] - 1)
