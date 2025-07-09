@@ -5,14 +5,16 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 from scipy import stats
+from scipy.stats import mannwhitneyu
+from statsmodels.stats.multitest import multipletests
 import streamlit as st
 import itertools
+from typing import Dict, List, Tuple, Optional, Any
 
 class VolcanoPlot:
     """
-    A class dedicated to creating volcano plots for lipidomics data analysis.
-    This class handles data processing and plot generation for comparing two conditions
-    to identify significantly altered lipids.
+    Volcano plot class with rigorous statistical testing methodology
+    following the same framework as the bar chart analysis.
     """
 
     @staticmethod
@@ -48,109 +50,252 @@ class VolcanoPlot:
         """
         control_cols = ['concentration[' + sample + ']' for sample in control_samples]
         experimental_cols = ['concentration[' + sample + ']' for sample in experimental_samples]
-        selected_cols = control_cols + experimental_cols + ['LipidMolec']
+        selected_cols = control_cols + experimental_cols + ['LipidMolec', 'ClassKey']
         return df[selected_cols], control_cols, experimental_cols
 
     @staticmethod
-    @st.cache_data(ttl=3600)
-    def _calculate_stats(df, control_cols, experimental_cols):
+    def perform_statistical_tests(df: pd.DataFrame,
+                                control_cols: List[str],
+                                experimental_cols: List[str],
+                                test_type: str = "parametric",
+                                correction_method: str = "uncorrected",
+                                alpha: float = 0.05,
+                                auto_transform: bool = True) -> Dict:
         """
-        Calculate mean values and identify valid rows where neither mean control nor mean experimental values are zero.
+        Perform rigorous statistical testing for volcano plot data following the bar chart methodology.
+        
+        Args:
+            df: DataFrame containing the lipidomics data
+            control_cols: List of control sample column names
+            experimental_cols: List of experimental sample column names
+            test_type: "parametric", "non_parametric", or "auto"
+            correction_method: "uncorrected", "fdr_bh", or "bonferroni"
+            alpha: Significance threshold
+            auto_transform: Whether to apply log10 transformation automatically
+            
+        Returns:
+            Dictionary containing statistical test results for each lipid
+        """
+        statistical_results = {}
+        all_p_values = []
+        all_lipids = []
+        
+        for idx, row in df.iterrows():
+            lipid_name = row['LipidMolec']
+            
+            try:
+                # Extract concentration values for control and experimental groups
+                control_values = row[control_cols].values
+                experimental_values = row[experimental_cols].values
+                
+                # Filter out any NaN values
+                control_values = control_values[~pd.isna(control_values)]
+                experimental_values = experimental_values[~pd.isna(experimental_values)]
+                
+                # Skip if either group has no valid values or if either group has all zeros
+                if (len(control_values) == 0 or len(experimental_values) == 0 or
+                    np.all(control_values == 0) or np.all(experimental_values == 0)):
+                    continue
+                
+                # Handle zeros and apply small value replacement for transformation
+                all_values = np.concatenate([control_values, experimental_values])
+                min_positive = min([x for x in all_values if x > 0]) if any(x > 0 for x in all_values) else 1
+                small_value = min_positive / 10
+                
+                # Replace zeros with small values to enable log transformation
+                control_values_adj = np.array([max(x, small_value) for x in control_values])
+                experimental_values_adj = np.array([max(x, small_value) for x in experimental_values])
+                
+                # Store original data for fold change calculation
+                original_control = control_values_adj.copy()
+                original_experimental = experimental_values_adj.copy()
+                
+                # Apply transformation if auto_transform is enabled
+                transformed_control = original_control.copy()
+                transformed_experimental = original_experimental.copy()
+                transformation_applied = "none"
+                
+                if auto_transform:
+                    # Apply log10 transformation automatically (standard practice)
+                    transformed_control = np.log10(control_values_adj)
+                    transformed_experimental = np.log10(experimental_values_adj)
+                    transformation_applied = "log10"
+                
+                # Choose and perform statistical test
+                if test_type == "non_parametric":
+                    statistic, p_value = mannwhitneyu(transformed_control, transformed_experimental, 
+                                                    alternative='two-sided')
+                    test_chosen = "Mann-Whitney U"
+                elif test_type in ["parametric", "auto"]:
+                    # Use Welch's t-test (doesn't assume equal variances)
+                    statistic, p_value = stats.ttest_ind(transformed_control, transformed_experimental, 
+                                                       equal_var=False)
+                    test_chosen = "Welch's t-test"
+                
+                # Calculate fold change using original (adjusted) values for biological interpretation
+                mean_control = np.mean(original_control)
+                mean_experimental = np.mean(original_experimental)
+                fold_change = mean_experimental / mean_control
+                log2_fold_change = np.log2(fold_change)
+                
+                # Store results
+                statistical_results[lipid_name] = {
+                    'test': test_chosen,
+                    'statistic': statistic,
+                    'p-value': p_value,
+                    'transformation': transformation_applied,
+                    'mean_control': mean_control,
+                    'mean_experimental': mean_experimental,
+                    'fold_change': fold_change,
+                    'log2_fold_change': log2_fold_change,
+                    'class_key': row['ClassKey']
+                }
+                
+                all_p_values.append(p_value)
+                all_lipids.append(lipid_name)
+                
+            except Exception as e:
+                # Skip problematic lipids
+                continue
+        
+        # Apply multiple testing correction if requested
+        if all_p_values and correction_method != "uncorrected":
+            if correction_method == "fdr_bh":
+                adjusted = multipletests(all_p_values, alpha=alpha, method='fdr_bh')
+                method_name = "Benjamini-Hochberg FDR"
+            elif correction_method == "bonferroni":
+                adjusted = multipletests(all_p_values, alpha=alpha, method='bonferroni')
+                method_name = "Bonferroni"
+            
+            adjusted_p_values = adjusted[1]
+            significance_flags = adjusted[0]
+            
+            # Update results with adjusted p-values
+            for i, lipid_name in enumerate(all_lipids):
+                if lipid_name in statistical_results:
+                    statistical_results[lipid_name]['adjusted_p_value'] = adjusted_p_values[i]
+                    statistical_results[lipid_name]['significant'] = significance_flags[i]
+                    statistical_results[lipid_name]['correction_method'] = method_name
+        else:
+            # No correction applied
+            for lipid_name in all_lipids:
+                if lipid_name in statistical_results:
+                    statistical_results[lipid_name]['adjusted_p_value'] = statistical_results[lipid_name]['p-value']
+                    statistical_results[lipid_name]['significant'] = statistical_results[lipid_name]['p-value'] <= alpha
+                    statistical_results[lipid_name]['correction_method'] = "Uncorrected"
+        
+        # Add metadata
+        statistical_results['_parameters'] = {
+            'test_type': test_type,
+            'correction_method': correction_method,
+            'alpha': alpha,
+            'auto_transform': auto_transform,
+            'n_tests_performed': len(all_p_values)
+        }
+        
+        return statistical_results
+
+    @staticmethod
+    @st.cache_data(ttl=3600)
+    def _calculate_stats_enhanced(df, control_cols, experimental_cols, 
+                                test_type="parametric", correction_method="uncorrected", 
+                                alpha=0.05, auto_transform=True):
+        """
+        Enhanced statistics calculation with rigorous statistical testing.
         
         Args:
             df: DataFrame containing relevant data for control and experimental conditions.
             control_cols: List of column names for control samples.
             experimental_cols: List of column names for experimental samples.
+            test_type: Type of statistical test to perform
+            correction_method: Multiple testing correction method
+            alpha: Significance threshold
+            auto_transform: Whether to apply automatic log transformation
         
         Returns:
-            A tuple containing the DataFrame, mean control values, mean experimental values, and a mask of valid rows.
+            A tuple containing the DataFrame and statistical results dictionary.
         """
-        mean_control = df[control_cols].mean(axis=1)
-        mean_experimental = df[experimental_cols].mean(axis=1)
-        valid_rows = (mean_control != 0) & (mean_experimental != 0)
-        return df, mean_control, mean_experimental, valid_rows
+        # Perform enhanced statistical testing
+        statistical_results = VolcanoPlot.perform_statistical_tests(
+            df, control_cols, experimental_cols, 
+            test_type, correction_method, alpha, auto_transform
+        )
+        
+        return df, statistical_results
     
     @staticmethod
     @st.cache_data(ttl=3600)
-    def _format_results(df, mean_control, mean_experimental, valid_rows, control_cols, experimental_cols):
+    def _format_results_enhanced(df, statistical_results, control_cols, experimental_cols):
         """
-        Format the results of volcano plot data preparation by calculating fold changes, p-values, and logging mean control concentrations.
-    
-        This method processes the provided DataFrame to compute statistical metrics used for volcano plot generation. 
-        It calculates the log2 fold change between experimental and control conditions, performs a t-test to 
-        determine p-values, and logs the mean concentration of control samples. Rows where the mean concentration
-        in control or experimental conditions is zero are deemed invalid and excluded from these calculations.
-    
+        Format the results using the enhanced statistical testing framework.
+        
         Args:
-            df (pd.DataFrame): The DataFrame containing lipidomics data filtered to include relevant columns only.
-            mean_control (pd.Series): A Series containing mean values of control samples across lipids.
-            mean_experimental (pd.Series): A Series containing mean values of experimental samples across lipids.
-            valid_rows (pd.Series): A boolean Series indicating rows where neither mean control nor mean experimental values are zero.
-            control_cols (list): A list of column names corresponding to control samples.
-            experimental_cols (list): A list of column names corresponding to experimental samples.
-    
+            df: The DataFrame containing lipidomics data
+            statistical_results: Dictionary containing statistical test results
+            control_cols: List of control sample column names
+            experimental_cols: List of experimental sample column names
+        
         Returns:
             tuple: 
-                - A DataFrame (volcano_df) containing the calculated fold change, p-values, log10 of mean control concentration,
-                  and lipid identifiers. Additionally includes -log10 transformed p-values for easier visualization.
-                - A DataFrame (removed_lipids_df) listing lipids excluded from the analysis due to having zero concentration in
-                  either control or experimental groups, useful for troubleshooting and quality control.
-    
-        Raises:
-            ValueError: If `valid_rows` contains no true values, indicating no valid data points to process.
+                - A DataFrame (volcano_df) containing the calculated metrics
+                - A DataFrame (removed_lipids_df) listing excluded lipids
         """
-        # Identify valid rows where neither control nor experimental mean values are zero
-        valid_rows = (mean_control != 0) & (mean_experimental != 0)
-
-        # Calculate fold changes and p-values for valid rows
-        if valid_rows.any():
-            fold_change = np.log2(mean_experimental[valid_rows] / mean_control[valid_rows])
-            p_values = stats.ttest_ind(df.loc[valid_rows, experimental_cols], df.loc[valid_rows, control_cols], axis=1).pvalue
-            log10_mean_control = np.log10(mean_control[valid_rows] + 1)  # Adding 1 to avoid log10(0)
-        else:
-            fold_change, p_values, log10_mean_control = pd.Series([]), pd.Series([]), pd.Series([])
-
-        volcano_df = pd.DataFrame({
-            'FoldChange': fold_change,
-            'pValue': p_values,
-            'Log10MeanControl': log10_mean_control,
-            'Lipid': df.loc[valid_rows, 'LipidMolec']
-        })
-        volcano_df['-log10(pValue)'] = -np.log10(volcano_df['pValue'])
-
-        # Determine the reason for exclusion: whether due to zeros in control or experimental
-        zero_control = mean_control == 0
-        zero_experimental = mean_experimental == 0
-
-        conditions_with_zeros = zero_control & zero_experimental
-        condition_labels = np.where(zero_control & ~zero_experimental, 'Control', 
-                                    np.where(zero_experimental & ~zero_control, 'Experimental', 'Both'))
-
-        # Create DataFrame for excluded entries, retaining the original index
-        removed_lipids_df = df[~valid_rows][['LipidMolec']].reset_index()
-        removed_lipids_df['ConditionWithZero'] = condition_labels[~valid_rows]
-        removed_lipids_df.columns = ['Lipid Index', 'LipidMolec', 'ConditionWithZero']
-
+        volcano_data = []
+        removed_lipids = []
+        
+        for idx, row in df.iterrows():
+            lipid_name = row['LipidMolec']
+            
+            if lipid_name in statistical_results:
+                # Lipid was successfully processed
+                result = statistical_results[lipid_name]
+                
+                volcano_data.append({
+                    'LipidMolec': lipid_name,
+                    'ClassKey': result['class_key'],
+                    'FoldChange': result['log2_fold_change'],
+                    'pValue': result['p-value'],
+                    'adjusted_pValue': result['adjusted_p_value'],
+                    '-log10(pValue)': -np.log10(result['p-value']),
+                    '-log10(adjusted_pValue)': -np.log10(result['adjusted_p_value']),
+                    'Log10MeanControl': np.log10(result['mean_control']),
+                    'mean_control': result['mean_control'],
+                    'mean_experimental': result['mean_experimental'],
+                    'test_method': result['test'],
+                    'transformation': result['transformation'],
+                    'significant': result['significant'],
+                    'correction_method': result['correction_method']
+                })
+            else:
+                # Lipid was excluded - determine why
+                control_values = row[control_cols].values
+                experimental_values = row[experimental_cols].values
+                
+                # Filter out NaN values
+                control_values = control_values[~pd.isna(control_values)]
+                experimental_values = experimental_values[~pd.isna(experimental_values)]
+                
+                if len(control_values) == 0:
+                    reason = "No valid control values"
+                elif len(experimental_values) == 0:
+                    reason = "No valid experimental values"
+                elif np.all(control_values == 0):
+                    reason = "All control values are zero"
+                elif np.all(experimental_values == 0):
+                    reason = "All experimental values are zero"
+                else:
+                    reason = "Statistical test failed"
+                
+                removed_lipids.append({
+                    'LipidMolec': lipid_name,
+                    'ClassKey': row['ClassKey'],
+                    'Reason': reason
+                })
+        
+        volcano_df = pd.DataFrame(volcano_data)
+        removed_lipids_df = pd.DataFrame(removed_lipids)
+        
         return volcano_df, removed_lipids_df
-
-    @staticmethod
-    @st.cache_data(ttl=3600)
-    def _merge_and_filter_df(df, volcano_df, selected_classes):
-        """
-        Merge the original DataFrame with volcano plot data and filter based on selected classes.
-        
-        Args:
-            df: Original DataFrame with lipidomics data.
-            volcano_df: DataFrame containing volcano plot data such as fold change and p-values.
-            selected_classes: List of lipid classes to be included in the plot.
-        
-        Returns:
-            A merged and filtered DataFrame based on selected lipid classes.
-        """
-        volcano_df['Lipid'] = volcano_df.index
-        filtered_df = df[df['ClassKey'].isin(selected_classes)]
-        filtered_df['Lipid'] = filtered_df.index
-        return filtered_df.merge(volcano_df, on='Lipid')
 
     @staticmethod
     def _generate_color_mapping(merged_df):
@@ -168,56 +313,110 @@ class VolcanoPlot:
         return {class_name: next(colors) for class_name in unique_classes}
 
     @staticmethod
-    def _create_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant):
+    def _create_plot_enhanced(volcano_df, color_mapping, q_value_threshold, 
+                            hide_non_significant, use_adjusted_p=True, 
+                            fold_change_threshold=1.0):
         """
-        Create a Plotly figure for the volcano plot visualization.
+        Create a Plotly figure for the volcano plot visualization with improved statistical framework.
         
         Args:
-            merged_df: DataFrame containing data to be plotted.
-            color_mapping: Dictionary mapping lipid classes to colors.
-            q_value_threshold: The threshold for significance in the plot (-log10 of p-value).
-            hide_non_significant: Boolean indicating whether to hide non-significant data points.
+            volcano_df: DataFrame containing volcano plot data
+            color_mapping: Dictionary mapping lipid classes to colors
+            q_value_threshold: The threshold for significance (-log10 of p-value)
+            hide_non_significant: Boolean indicating whether to hide non-significant data points
+            use_adjusted_p: Whether to use adjusted p-values for significance determination
+            fold_change_threshold: Fold change threshold for biological significance
         
         Returns:
             A Plotly figure object representing the volcano plot.
         """
+        # Choose which p-value column to use
+        p_col = '-log10(adjusted_pValue)' if use_adjusted_p else '-log10(pValue)'
+        p_raw_col = 'adjusted_pValue' if use_adjusted_p else 'pValue'
+        
         if hide_non_significant:
-            significant_df = merged_df[((merged_df['FoldChange'] < -1) | (merged_df['FoldChange'] > 1)) & (merged_df['-log10(pValue)'] >= q_value_threshold)]
+            significant_df = volcano_df[
+                ((volcano_df['FoldChange'] < -fold_change_threshold) | 
+                 (volcano_df['FoldChange'] > fold_change_threshold)) & 
+                (volcano_df[p_col] >= q_value_threshold)
+            ]
         else:
-            significant_df = merged_df
+            significant_df = volcano_df
         
         fig = go.Figure()
 
+        # Add traces for each lipid class
         for class_name, color in color_mapping.items():
             class_df = significant_df[significant_df['ClassKey'] == class_name]
-            fig.add_trace(go.Scatter(
-                x=class_df['FoldChange'],
-                y=class_df['-log10(pValue)'],
-                mode='markers',
-                name=class_name,
-                marker=dict(color=color, size=5),
-                text=class_df['LipidMolec'],
-                hovertemplate='<b>Lipid:</b> %{text}<br>' +
-                              '<b>Fold Change:</b> %{x:.2f}<br>' +
-                              '<b>-log10(p-value):</b> %{y:.2f}<extra></extra>'
-            ))
+            if not class_df.empty:
+                fig.add_trace(go.Scatter(
+                    x=class_df['FoldChange'],
+                    y=class_df[p_col],
+                    mode='markers',
+                    name=class_name,
+                    marker=dict(color=color, size=5),
+                    text=class_df['LipidMolec'],
+                    customdata=np.column_stack((
+                        class_df[p_raw_col], 
+                        class_df['test_method'],
+                        class_df['transformation'],
+                        class_df['correction_method']
+                    )),
+                    hovertemplate='<b>Lipid:</b> %{text}<br>' +
+                                  '<b>Log2 Fold Change:</b> %{x:.3f}<br>' +
+                                  f'<b>{"-log10(adj. p-value)" if use_adjusted_p else "-log10(p-value)"}:</b> %{{y:.3f}}<br>' +
+                                  f'<b>{"Adj. p-value" if use_adjusted_p else "p-value"}:</b> %{{customdata[0]:.2e}}<br>' +
+                                  '<b>Test:</b> %{customdata[1]}<br>' +
+                                  '<b>Transform:</b> %{customdata[2]}<br>' +
+                                  '<b>Correction:</b> %{customdata[3]}<extra></extra>'
+                ))
 
-        fig.add_shape(type="line", x0=merged_df['FoldChange'].min(), x1=merged_df['FoldChange'].max(),
-                      y0=q_value_threshold, y1=q_value_threshold, line=dict(dash="dash", color="black"))
-        fig.add_shape(type="line", x0=-1, x1=-1, y0=0, y1=merged_df['-log10(pValue)'].max(), line=dict(dash="dash", color="black"))
-        fig.add_shape(type="line", x0=1, x1=1, y0=0, y1=merged_df['-log10(pValue)'].max(), line=dict(dash="dash", color="black"))
+        # Add significance threshold lines
+        if not significant_df.empty:
+            # Horizontal line for p-value threshold
+            fig.add_shape(
+                type="line", 
+                x0=significant_df['FoldChange'].min(), 
+                x1=significant_df['FoldChange'].max(),
+                y0=q_value_threshold, 
+                y1=q_value_threshold, 
+                line=dict(dash="dash", color="red", width=2)
+            )
+            
+            # Vertical lines for fold change thresholds
+            fig.add_shape(
+                type="line", 
+                x0=-fold_change_threshold, 
+                x1=-fold_change_threshold, 
+                y0=0, 
+                y1=significant_df[p_col].max(), 
+                line=dict(dash="dash", color="red", width=2)
+            )
+            fig.add_shape(
+                type="line", 
+                x0=fold_change_threshold, 
+                x1=fold_change_threshold, 
+                y0=0, 
+                y1=significant_df[p_col].max(), 
+                line=dict(dash="dash", color="red", width=2)
+            )
 
+        # Update layout
+        p_label = "Adjusted p-value" if use_adjusted_p else "p-value"
         fig.update_layout(
-            title=dict(text="Volcano Plot", font=dict(size=24, color='black')),
-            xaxis_title=dict(text="Log2(Fold Change)", font=dict(size=18, color='black')),
-            yaxis_title=dict(text="-log10(p-value)", font=dict(size=18, color='black')),
-            xaxis=dict(tickfont=dict(size=14, color='black')),
-            yaxis=dict(tickfont=dict(size=14, color='black')),
+            title=dict(
+                text="Volcano Plot", 
+                font=dict(size=20, color='black')
+            ),
+            xaxis_title=dict(text="Log2(Fold Change)", font=dict(size=16, color='black')),
+            yaxis_title=dict(text=f"-log10({p_label})", font=dict(size=16, color='black')),
+            xaxis=dict(tickfont=dict(size=12, color='black'), showgrid=True, gridcolor='lightgray'),
+            yaxis=dict(tickfont=dict(size=12, color='black'), showgrid=True, gridcolor='lightgray'),
             plot_bgcolor='white',
             paper_bgcolor='white',
-            legend=dict(font=dict(size=12, color='black')),
+            legend=dict(font=dict(size=10, color='black')),
             height=600,
-            margin=dict(t=50, r=50, b=50, l=50)
+            margin=dict(t=80, r=50, b=50, l=50)
         )
 
         fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
@@ -226,146 +425,83 @@ class VolcanoPlot:
         return fig
 
     @staticmethod
-    def _add_scatter_plots(plot, merged_df, color_mapping):
+    def create_and_display_volcano_plot_enhanced(experiment, df, control_condition, experimental_condition, 
+                                               selected_classes, q_value_threshold, hide_non_significant,
+                                               test_type="parametric", correction_method="uncorrected", 
+                                               alpha=0.05, auto_transform=True, 
+                                               use_adjusted_p=True, fold_change_threshold=1.0):
         """
-        Add scatter plots to the Bokeh plot for each lipid class.
+        Volcano plot generation with rigorous statistical testing framework.
         
         Args:
-            plot: Bokeh plot figure to which scatter plots will be added.
-            merged_df: DataFrame containing data to be plotted.
-            color_mapping: Dictionary mapping lipid classes to colors.
-        """
-        for class_name, color in color_mapping.items():
-            class_df = merged_df[merged_df['ClassKey'] == class_name]
-            class_source = ColumnDataSource(class_df)
-            plot.scatter(x='FoldChange', y='-log10(pValue)', color=color, legend_label=class_name, source=class_source)
-
-    @staticmethod
-    def _configure_hover_tool(plot, plot_type="volcano"):
-        """
-        Configure and add a hover tool to the Bokeh plot.
-        
-        Args:
-            plot: Bokeh plot figure to which the hover tool will be added.
-            plot_type: Type of plot ("volcano" or "fold_change_vs_control") to customize hover tools accordingly.
+            experiment: Experiment object containing experimental setup information
+            df: DataFrame containing lipidomics data
+            control_condition: Name of the control condition
+            experimental_condition: Name of the experimental condition
+            selected_classes: List of lipid classes to include
+            q_value_threshold: Threshold for statistical significance (-log10 scale)
+            hide_non_significant: Whether to hide non-significant points
+            test_type: "parametric", "non_parametric", or "auto"
+            correction_method: "uncorrected", "fdr_bh", or "bonferroni"
+            alpha: Significance threshold
+            auto_transform: Whether to apply log10 transformation
+            use_adjusted_p: Whether to use adjusted p-values for plotting
+            fold_change_threshold: Biological significance threshold for fold change
         
         Returns:
-            The Bokeh plot with the hover tool configured.
+            tuple: (plot figure, volcano_df, removed_lipids_df, statistical_summary)
         """
-        if plot_type == "volcano":
-            hover = HoverTool(tooltips=[
-                ("Lipid", "@LipidMolec"),
-                ("Fold Change", "@FoldChange"),
-                ("p-value", "@pValue")
-            ])
-        elif plot_type == "fold_change_vs_control":
-            hover = HoverTool(tooltips=[
-                ("Lipid", "@LipidMolec"),
-                ("Fold Change", "@FoldChange"),
-                ("Mean Control Concentration", "@Log10MeanControl")
-            ])
+        # Get samples for conditions
+        control_samples, experimental_samples = VolcanoPlot._get_samples_for_conditions(
+            experiment, control_condition, experimental_condition
+        )
         
-        plot.add_tools(hover)
-        plot.title.text_font_size = "15pt"
-        plot.xaxis.axis_label_text_font_size = "15pt"
-        plot.yaxis.axis_label_text_font_size = "15pt"
-        plot.xaxis.major_label_text_font_size = "15pt"
-        plot.yaxis.major_label_text_font_size = "15pt"
-
-
-    @staticmethod
-    def create_and_display_volcano_plot(experiment, df, control_condition, experimental_condition, selected_classes, q_value_threshold, hide_non_significant):
-        """
-        Generates a volcano plot for comparing two conditions in lipidomics data to identify significantly altered lipids.
+        # Prepare data
+        df_processed, control_cols, experimental_cols = VolcanoPlot._prepare_data(
+            df, control_samples, experimental_samples
+        )
         
-        This method orchestrates the creation of a volcano plot by preparing the data, calculating necessary statistics,
-        merging and filtering based on selected lipid classes, and then generating a color-coded plot to visually represent
-        the data. It is intended to provide insights into which lipids are significantly altered between two experimental
-        conditions based on log2 fold changes and statistical significance (p-values).
-    
-        Args:
-            experiment (Experiment): An object containing detailed information about the experiment setup, including conditions and samples.
-            df (pd.DataFrame): The DataFrame containing lipidomics data.
-            control_condition (str): The name of the control condition.
-            experimental_condition (str): The name of the experimental condition to be compared against the control.
-            selected_classes (list): A list of lipid classes to include in the plot. Only lipids from these classes will be displayed.
-            q_value_threshold (float): The threshold for statistical significance, represented as -log10(p-value), used to draw a threshold line on the plot.
-            hide_non_significant (bool): Whether to hide non-significant data points in the plot.
-    
-        Returns:
-            plot (figure): A Bokeh figure object representing the volcano plot.
-            merged_df (pd.DataFrame): A DataFrame containing the data used in the plot, including identifiers and computed metrics such as fold changes and p-values.
-            removed_lipids_df (pd.DataFrame): A DataFrame listing lipids excluded from the analysis due to zero concentration in either control or experimental groups.
-        """
-        control_samples, experimental_samples = VolcanoPlot._get_samples_for_conditions(experiment, control_condition, experimental_condition)
-        df_processed, control_cols, experimental_cols = VolcanoPlot._prepare_data(df, control_samples, experimental_samples)
-        df_processed, mean_control, mean_experimental, valid_rows = VolcanoPlot._calculate_stats(df_processed, control_cols, experimental_cols)
-        volcano_df, removed_lipids_df = VolcanoPlot._format_results(df_processed, mean_control, mean_experimental, valid_rows, control_cols, experimental_cols)
-        merged_df = VolcanoPlot._merge_and_filter_df(df, volcano_df, selected_classes)
-        color_mapping = VolcanoPlot._generate_color_mapping(merged_df)
-        plot = VolcanoPlot._create_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant)
+        # Filter by selected classes early
+        df_processed = df_processed[df_processed['ClassKey'].isin(selected_classes)]
         
-        return plot, merged_df, removed_lipids_df
-
-    
-    @staticmethod
-    @st.cache_data(ttl=3600)
-    def get_most_abundant_lipid(df, selected_class):
-        """
-        Get the most abundant lipid in the selected class.
+        # Enhanced statistical analysis
+        df_processed, statistical_results = VolcanoPlot._calculate_stats_enhanced(
+            df_processed, control_cols, experimental_cols, 
+            test_type, correction_method, alpha, auto_transform
+        )
         
-        Args:
-            df (pd.DataFrame): DataFrame containing lipidomics data.
-            selected_class (str): The selected lipid class.
+        # Format results with enhanced framework
+        volcano_df, removed_lipids_df = VolcanoPlot._format_results_enhanced(
+            df_processed, statistical_results, control_cols, experimental_cols
+        )
         
-        Returns:
-            str: The most abundant lipid in the selected class.
-        """
-        class_df = df[df['ClassKey'] == selected_class]
-        most_abundant_lipid = class_df.set_index('LipidMolec').sum(axis=1).idxmax()
-        return most_abundant_lipid
-
-    
-    @staticmethod
-    def create_concentration_distribution_data(volcano_df, selected_lipids, selected_conditions, experiment):
-        """
-        Prepares data for concentration distribution plot of selected lipids across conditions.
-    
-        Args:
-            volcano_df (pd.DataFrame): DataFrame containing volcano plot data.
-            selected_lipids (list): List of selected lipid molecules for the plot.
-            selected_conditions (list): Conditions selected for the plot.
-            experiment (Experiment): Object containing experiment setup details.
-    
-        Returns:
-            pd.DataFrame: DataFrame containing concentration data for the selected lipids.
-        """
-        plot_data = []
-        for lipid in selected_lipids:
-            for condition in selected_conditions:
-                samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
-                for sample in samples:
-                    concentration = volcano_df.loc[volcano_df['LipidMolec'] == lipid, f'concentration[{sample}]'].values[0]
-                    plot_data.append({'Lipid': lipid, 'Condition': condition, 'Concentration': concentration})
-    
-        return pd.DataFrame(plot_data)
+        if volcano_df.empty:
+            return None, volcano_df, removed_lipids_df, statistical_results
+        
+        # Generate color mapping
+        color_mapping = VolcanoPlot._generate_color_mapping(volcano_df)
+        
+        # Create enhanced plot
+        plot = VolcanoPlot._create_plot_enhanced(
+            volcano_df, color_mapping, q_value_threshold, hide_non_significant,
+            use_adjusted_p, fold_change_threshold
+        )
+        
+        return plot, volcano_df, removed_lipids_df, statistical_results
 
     @staticmethod
-    def _create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, hide_non_significant):
+    def _create_concentration_vs_fold_change_plot(merged_df, color_mapping, q_value_threshold, 
+                                                hide_non_significant, use_adjusted_p=True):
         """
-        Create a Plotly figure for Log10(Mean Control Concentration) vs. Log2(Fold Change).
-    
-        Args:
-            merged_df: DataFrame containing merged data for plotting, including calculated metrics.
-            color_mapping: Dictionary mapping lipid classes to colors.
-            q_value_threshold: The threshold for significance in the plot (-log10 of p-value).
-            hide_non_significant: Boolean indicating whether to hide non-significant data points.
-    
-        Returns:
-            Plotly figure object representing the new plot.
+        Create a Plotly figure for Log10(Mean Control Concentration) vs. Log2(Fold Change) with enhanced features.
         """
+        p_col = '-log10(adjusted_pValue)' if use_adjusted_p else '-log10(pValue)'
+        
         if hide_non_significant:
-            significant_df = merged_df[((merged_df['FoldChange'] < -1) | (merged_df['FoldChange'] > 1)) & (merged_df['-log10(pValue)'] >= q_value_threshold)]
+            significant_df = merged_df[
+                ((merged_df['FoldChange'] < -1) | (merged_df['FoldChange'] > 1)) & 
+                (merged_df[p_col] >= q_value_threshold)
+            ]
         else:
             significant_df = merged_df
         
@@ -373,27 +509,28 @@ class VolcanoPlot:
 
         for class_name, color in color_mapping.items():
             class_df = significant_df[significant_df['ClassKey'] == class_name]
-            fig.add_trace(go.Scatter(
-                x=class_df['FoldChange'],
-                y=class_df['Log10MeanControl'],
-                mode='markers',
-                name=class_name,
-                marker=dict(color=color, size=5),
-                text=class_df['LipidMolec'],
-                hovertemplate='<b>Lipid:</b> %{text}<br>' +
-                              '<b>Fold Change:</b> %{x:.2f}<br>' +
-                              '<b>Log10(Mean Control):</b> %{y:.2f}<extra></extra>'
-            ))
+            if not class_df.empty:
+                fig.add_trace(go.Scatter(
+                    x=class_df['FoldChange'],
+                    y=class_df['Log10MeanControl'],
+                    mode='markers',
+                    name=class_name,
+                    marker=dict(color=color, size=5),
+                    text=class_df['LipidMolec'],
+                    hovertemplate='<b>Lipid:</b> %{text}<br>' +
+                                  '<b>Log2 Fold Change:</b> %{x:.3f}<br>' +
+                                  '<b>Log10(Mean Control):</b> %{y:.3f}<extra></extra>'
+                ))
 
         fig.update_layout(
-            title=dict(text="Fold Change vs. Mean Control Concentration", font=dict(size=24, color='black')),
-            xaxis_title=dict(text="Log2(Fold Change)", font=dict(size=18, color='black')),
-            yaxis_title=dict(text="Log10(Mean Control Concentration)", font=dict(size=18, color='black')),
-            xaxis=dict(tickfont=dict(size=14, color='black')),
-            yaxis=dict(tickfont=dict(size=14, color='black')),
+            title=dict(text="Fold Change vs. Mean Control Concentration", font=dict(size=20, color='black')),
+            xaxis_title=dict(text="Log2(Fold Change)", font=dict(size=16, color='black')),
+            yaxis_title=dict(text="Log10(Mean Control Concentration)", font=dict(size=16, color='black')),
+            xaxis=dict(tickfont=dict(size=12, color='black'), showgrid=True, gridcolor='lightgray'),
+            yaxis=dict(tickfont=dict(size=12, color='black'), showgrid=True, gridcolor='lightgray'),
             plot_bgcolor='white',
             paper_bgcolor='white',
-            legend=dict(font=dict(size=12, color='black')),
+            legend=dict(font=dict(size=10, color='black')),
             height=600,
             margin=dict(t=50, r=50, b=50, l=50)
         )
@@ -403,19 +540,30 @@ class VolcanoPlot:
 
         return fig, significant_df[['LipidMolec', 'Log10MeanControl', 'FoldChange', 'ClassKey']]
 
+    # Keep the existing helper methods for backward compatibility
+    @staticmethod
+    def get_most_abundant_lipid(df, selected_class):
+        """Get the most abundant lipid in the selected class."""
+        class_df = df[df['ClassKey'] == selected_class]
+        most_abundant_lipid = class_df.set_index('LipidMolec').sum(axis=1).idxmax()
+        return most_abundant_lipid
+    
+    @staticmethod
+    def create_concentration_distribution_data(volcano_df, selected_lipids, selected_conditions, experiment):
+        """Prepares data for concentration distribution plot of selected lipids across conditions."""
+        plot_data = []
+        for lipid in selected_lipids:
+            for condition in selected_conditions:
+                samples = experiment.individual_samples_list[experiment.conditions_list.index(condition)]
+                for sample in samples:
+                    concentration = volcano_df.loc[volcano_df['LipidMolec'] == lipid, f'concentration[{sample}]'].values[0]
+                    plot_data.append({'Lipid': lipid, 'Condition': condition, 'Concentration': concentration})
+        
+        return pd.DataFrame(plot_data)
+
     @staticmethod
     def create_concentration_distribution_plot(plot_df, selected_lipids, selected_conditions):
-        """
-        Creates a seaborn box plot for the concentration distribution of selected lipids.
-    
-        Args:
-            plot_df (pd.DataFrame): DataFrame containing concentration data for the selected lipids.
-            selected_lipids (list): List of selected lipid molecules.
-            selected_conditions (list): List of selected conditions.
-    
-        Returns:
-            plt.Figure: Matplotlib figure object with the box plot.
-        """
+        """Creates a seaborn box plot for the concentration distribution of selected lipids."""
         plt.figure(figsize=(10, 6))
         sns.set(style="whitegrid")
         ax = sns.boxplot(x="Lipid", y="Concentration", hue="Condition", data=plot_df, palette="Set2")
@@ -429,3 +577,16 @@ class VolcanoPlot:
         plt.tight_layout()
         return plt.gcf()
 
+    # Backward compatibility wrapper
+    @staticmethod
+    def create_and_display_volcano_plot(experiment, df, control_condition, experimental_condition, 
+                                      selected_classes, q_value_threshold, hide_non_significant):
+        """
+        Backward compatibility wrapper that calls the enhanced version with default parameters.
+        """
+        return VolcanoPlot.create_and_display_volcano_plot_enhanced(
+            experiment, df, control_condition, experimental_condition, 
+            selected_classes, q_value_threshold, hide_non_significant,
+            test_type="parametric", correction_method="uncorrected", 
+            alpha=0.05, auto_transform=True, use_adjusted_p=False, fold_change_threshold=1.0
+        )
