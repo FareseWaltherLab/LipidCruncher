@@ -924,121 +924,118 @@ def display_cleaned_data(cleaned_df, intsta_df):
 
     # Display cleaned data
     with st.expander("View Cleaned Data"):
-        # Add checkbox for showing detailed information
-        show_cleaning_info = st.checkbox("Show data cleaning process details", key="show_cleaning_info")
+        # Data cleaning process details - ALWAYS VISIBLE
+        st.markdown("### Data Cleaning and Standardization Process")
+        st.markdown("""
+        LipidCruncher performs a systematic cleaning and standardization process on your uploaded data 
+        to ensure consistency, reliability, and compatibility with downstream analyses. The specific 
+        procedures applied depend on your data format.
+        """)
         
-        if show_cleaning_info:
-            st.markdown("### Data Cleaning and Standardization Process")
+        # Tabs for different data formats
+        data_format_tab = st.radio(
+            "Select data format to view cleaning details:",
+            ["LipidSearch Format", "Generic Format", "Metabolomics Workbench"],
+            horizontal=True
+        )
+        
+        if data_format_tab == "LipidSearch Format":
+            st.markdown("#### Data Cleaning for LipidSearch Format")
             st.markdown("""
-            LipidCruncher performs a systematic cleaning and standardization process on your uploaded data 
-            to ensure consistency, reliability, and compatibility with downstream analyses. The specific 
-            procedures applied depend on your data format.
+            For LipidSearch data, we perform the following standardization and cleaning steps:
+            
+            1. **Column Standardization**: We extract and standardize essential columns including LipidMolec, 
+               ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, and all MeanArea 
+               columns for each sample.
+            
+            2. **Data Type Conversion**: MeanArea columns are converted to numeric format, with any 
+               non-numeric entries replaced by zeros to maintain data integrity.
+            
+            3. **Lipid Name Standardization**: Names of lipid molecules are standardized to ensure 
+               uniform formatting across the dataset.
+            
+            4. **Quality Filtering**: Only entries with grades 'A', 'B', or 'C' are retained. 
+               Grade 'C' is only accepted for specific lipid classes (LPC and SM).
+            
+            5. **Best Peak Selection**: For each unique lipid, the entry with the highest TotalSmpIDRate(%) 
+               is selected, as this indicates the most reliable measurement across samples.
+            
+            6. **Missing FA Keys Handling**: Rows with missing FA keys are removed, with exceptions 
+               for cholesterol (Ch) class molecules and deuterated standards.
+            
+            7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
+            In addition, all negative values are converted to zero. 
+            
+            8. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
             """)
             
-            # Tabs for different data formats
-            data_format_tab = st.radio(
-                "Select data format to view cleaning details:",
-                ["LipidSearch Format", "Generic Format", "Metabolomics Workbench"],
-                horizontal=True
-            )
+            st.info("This process ensures that only high-quality, consistent data points are retained for analysis.")
             
-            if data_format_tab == "LipidSearch Format":
-                st.markdown("#### Data Cleaning for LipidSearch Format")
-                st.markdown("""
-                For LipidSearch data, we perform the following standardization and cleaning steps:
-                
-                1. **Column Standardization**: We extract and standardize essential columns including LipidMolec, 
-                   ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, and all MeanArea 
-                   columns for each sample.
-                
-                2. **Data Type Conversion**: MeanArea columns are converted to numeric format, with any 
-                   non-numeric entries replaced by zeros to maintain data integrity.
-                
-                3. **Lipid Name Standardization**: Names of lipid molecules are standardized to ensure 
-                   uniform formatting across the dataset.
-                
-                4. **Quality Filtering**: Only entries with grades 'A', 'B', or 'C' are retained. 
-                   Grade 'C' is only accepted for specific lipid classes (LPC and SM).
-                
-                5. **Best Peak Selection**: For each unique lipid, the entry with the highest TotalSmpIDRate(%) 
-                   is selected, as this indicates the most reliable measurement across samples.
-                
-                6. **Missing FA Keys Handling**: Rows with missing FA keys are removed, with exceptions 
-                   for cholesterol (Ch) class molecules and deuterated standards.
-                
-                7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
-                In addition, all negative values are converted to zero. 
-                
-                8. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
-                """)
-                
-                st.info("This process ensures that only high-quality, consistent data points are retained for analysis.")
-                
-            elif data_format_tab == "Generic Format":
-                st.markdown("#### Data Cleaning for Generic Format")
-                st.markdown("""
-                For Generic Format data, we perform the following standardization and cleaning steps:
-                
-                1. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining 
-                   columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
-                
-                2. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format: 
-                   Class(chain details). For example:
-                   - LPC O-17:4 → LPC(O-17:4)
-                   - Cer d18:0/C24:0 → Cer(d18:0_C24:0)
-                   - CE 14:0;0 → CE(14:0)
-                
-                3. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class 
-                   from the standardized lipid name (e.g., 'PC' from 'PC(16:0_18:1)').
-                
-                4. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
-                   non-numeric entries replaced by zeros.
-                
-                5. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special 
-                   characters, strings with only special characters) are removed.
-                
-                6. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
-                In addition, all negative values are converted to zero.
-                
-                7. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
-                """)
-                
-                st.info("This standardization process allows for consistent analysis regardless of the original format of your data.")
-                
-            else:  # Metabolomics Workbench
-                st.markdown("#### Data Cleaning for Metabolomics Workbench Format")
-                st.markdown("""
-                For Metabolomics Workbench data, we perform the following standardization and cleaning steps:
-                
-                1. **Section Extraction**: Data is extracted from between the 'MS_METABOLITE_DATA_START' and 
-                   'MS_METABOLITE_DATA_END' markers.
-                
-                2. **Header Processing**: The first row is processed as sample names, and the second row as 
-                   experimental conditions.
-                
-                3. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining 
-                   columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
-                
-                4. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format, 
-                   similar to the Generic Format process.
-                
-                5. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class 
-                   from the standardized lipid name.
-                
-                6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
-                   non-numeric entries replaced by zeros.
-                   
-                7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed. 
-                In addition, all negative values are converted to zero.
-                
-                8. **Experimental Conditions Storage**: The experimental conditions from the second row are 
-                   stored and used to suggest the experimental setup.
-                """)
-                
-                st.info("This process ensures that your Metabolomics Workbench data is properly formatted for analysis in LipidCruncher.")
+        elif data_format_tab == "Generic Format":
+            st.markdown("#### Data Cleaning for Generic Format")
+            st.markdown("""
+            For Generic Format data, we perform the following standardization and cleaning steps:
             
-            # Add a divider
-            st.markdown("---")
+            1. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining 
+               columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
+            
+            2. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format: 
+               Class(chain details). For example:
+               - LPC O-17:4 → LPC(O-17:4)
+               - Cer d18:0/C24:0 → Cer(d18:0_C24:0)
+               - CE 14:0;0 → CE(14:0)
+            
+            3. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class 
+               from the standardized lipid name (e.g., 'PC' from 'PC(16:0_18:1)').
+            
+            4. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
+               non-numeric entries replaced by zeros.
+            
+            5. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special 
+               characters, strings with only special characters) are removed.
+            
+            6. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
+            In addition, all negative values are converted to zero.
+            
+            7. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
+            """)
+            
+            st.info("This standardization process allows for consistent analysis regardless of the original format of your data.")
+            
+        else:  # Metabolomics Workbench
+            st.markdown("#### Data Cleaning for Metabolomics Workbench Format")
+            st.markdown("""
+            For Metabolomics Workbench data, we perform the following standardization and cleaning steps:
+            
+            1. **Section Extraction**: Data is extracted from between the 'MS_METABOLITE_DATA_START' and 
+               'MS_METABOLITE_DATA_END' markers.
+            
+            2. **Header Processing**: The first row is processed as sample names, and the second row as 
+               experimental conditions.
+            
+            3. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining 
+               columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
+            
+            4. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format, 
+               similar to the Generic Format process.
+            
+            5. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class 
+               from the standardized lipid name.
+            
+            6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
+               non-numeric entries replaced by zeros.
+               
+            7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed. 
+            In addition, all negative values are converted to zero.
+            
+            8. **Experimental Conditions Storage**: The experimental conditions from the second row are 
+               stored and used to suggest the experimental setup.
+            """)
+            
+            st.info("This process ensures that your Metabolomics Workbench data is properly formatted for analysis in LipidCruncher.")
+        
+        # Add a divider
+        st.markdown("---")
         
         # Display the cleaned data
         st.subheader("Cleaned Data")
@@ -1047,19 +1044,16 @@ def display_cleaned_data(cleaned_df, intsta_df):
 
     # Internal standards management
     with st.expander("Manage Internal Standards"):
-        # Add checkbox for showing internal standards information
-        show_standards_info = st.checkbox("Show internal standards detection details", key="show_standards_info")
-        
-        if show_standards_info:
-            st.markdown("### Internal Standards Detection")
-            st.markdown("""
-            LipidCruncher automatically identifies internal standards from the SPLASH LIPIDOMIX® Mass Spec Standard (Avanti Polar Lipids, Cat# 330707-1) 
-            by detecting patterns like "+D7" or ":(s)" notation in lipid names. If you use custom standards with different naming conventions, you can upload them using the 
-            option below.
-            """)
-                
-            # Add a divider
-            st.markdown("---")
+        # Internal standards detection details - ALWAYS VISIBLE
+        st.markdown("### Internal Standards Detection")
+        st.markdown("""
+        LipidCruncher automatically identifies internal standards from the SPLASH LIPIDOMIX® Mass Spec Standard (Avanti Polar Lipids, Cat# 330707-1) 
+        by detecting patterns like "+D7" or ":(s)" notation in lipid names. If you use custom standards with different naming conventions, you can upload them using the 
+        option below.
+        """)
+            
+        # Add a divider
+        st.markdown("---")
         
         manage_internal_standards(normalizer)
             
@@ -1660,37 +1654,35 @@ def display_box_plots(continuation_df, experiment):
     
     expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
     with expand_box_plot:
-        # Add explanation about box plots
-        show_boxplot_info = st.checkbox("Show box plot analysis details", key="show_boxplot_info")
-        if show_boxplot_info:
-            st.markdown("### Box Plot Analysis")
-            st.markdown("""
-            Box plots are powerful diagnostic tools that help assess data quality and identify potential anomalies in your lipidomic dataset. LipidCruncher generates two complementary visualizations:
-            
-            **1. Missing Values Distribution:**
-            This plot shows the percentage of missing (zero) values for each sample in your dataset. A higher percentage may indicate:
-            - Lower sensitivity for that sample during analysis
-            - Technical issues during sample preparation or data acquisition
-            - Biological differences resulting in fewer detectable lipids
-            
-            Ideally, samples from the same experimental condition should show similar percentages. Substantial differences between replicates could signal potential quality issues.
-            
-            **2. Box Plot of Non-Zero Concentrations:**
-            This visualization displays the distribution of non-zero concentration values for each sample using standard box plot elements:
-            - The box shows the interquartile range (25th to 75th percentile)
-            - The horizontal line inside the box represents the median
-            - The whiskers extend to the most extreme data points within 1.5 times the interquartile range
-            - Individual points beyond the whiskers represent potential outliers
-            
-            What to look for:
-            - Similar median values and box sizes across replicates of the same condition indicate good reproducibility
-            - Unusual distributions (very high/low median, wide/narrow box) may suggest technical issues
-            - Consistent differences between experimental conditions may reflect genuine biological effects
-            
-            These visualizations help you make informed decisions about the quality and reliability of your lipidomic data before proceeding with further analysis.
-            """)
-            # Add a divider
-            st.markdown("---")
+        # Box plot analysis details - ALWAYS VISIBLE
+        st.markdown("### Box Plot Analysis")
+        st.markdown("""
+        Box plots are powerful diagnostic tools that help assess data quality and identify potential anomalies in your lipidomic dataset. LipidCruncher generates two complementary visualizations:
+        
+        **1. Missing Values Distribution:**
+        This plot shows the percentage of missing (zero) values for each sample in your dataset. A higher percentage may indicate:
+        - Lower sensitivity for that sample during analysis
+        - Technical issues during sample preparation or data acquisition
+        - Biological differences resulting in fewer detectable lipids
+        
+        Ideally, samples from the same experimental condition should show similar percentages. Substantial differences between replicates could signal potential quality issues.
+        
+        **2. Box Plot of Non-Zero Concentrations:**
+        This visualization displays the distribution of non-zero concentration values for each sample using standard box plot elements:
+        - The box shows the interquartile range (25th to 75th percentile)
+        - The horizontal line inside the box represents the median
+        - The whiskers extend to the most extreme data points within 1.5 times the interquartile range
+        - Individual points beyond the whiskers represent potential outliers
+        
+        What to look for:
+        - Similar median values and box sizes across replicates of the same condition indicate good reproducibility
+        - Unusual distributions (very high/low median, wide/narrow box) may suggest technical issues
+        - Consistent differences between experimental conditions may reflect genuine biological effects
+        
+        These visualizations help you make informed decisions about the quality and reliability of your lipidomic data before proceeding with further analysis.
+        """)
+        # Add a divider
+        st.markdown("---")
         
         # Creating a deep copy for visualization
         visualization_df = continuation_df.copy(deep=True)
@@ -1827,52 +1819,38 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
     
     if bqc_label is not None:
         with st.expander("Quality Check Using BQC Samples"):
-            # Add explanation about BQC analysis
-            show_bqc_info = st.checkbox("Show BQC analysis details", key="show_bqc_info")
-            if show_bqc_info:
-                st.markdown("### Batch Quality Control (BQC) Analysis")
-                st.markdown("""
-                Batch Quality Control (BQC) analysis evaluates the reliability of your lipidomics data by analyzing the variability of measurements in BQC samples, which are special quality control samples run alongside your experiment. This analysis uses the Coefficient of Variation (CoV) to measure how consistent the measurements are for each lipid across these samples.
+            # BQC analysis details - ALWAYS VISIBLE
+            st.markdown("### Batch Quality Control (BQC) Analysis")
+            st.markdown("""
+            Batch Quality Control (BQC) analysis evaluates the reliability of your lipidomics data by analyzing the variability of measurements in BQC samples, which are special quality control samples run alongside your experiment. This analysis uses the Coefficient of Variation (CoV) to measure how consistent the measurements are for each lipid across these samples.
 
-                **What is CoV?**  
-                The Coefficient of Variation (CoV) is a measure of relative variability, calculated as:
-                ```
-                CoV = (Standard Deviation / Mean) × 100%
-                ```
-                A lower CoV indicates more consistent measurements, suggesting higher reliability. CoV is computed for each lipid species across all BQC samples.
+            **What is CoV?**  
+            The Coefficient of Variation (CoV) is a measure of relative variability, calculated as:
+            ```
+            CoV = (Standard Deviation / Mean) × 100%
+            ```
+            A lower CoV indicates more consistent measurements, suggesting higher reliability. CoV is computed for each lipid species across all BQC samples.
 
-                **Handling Zero Values:**  
-                Zero values in BQC samples can occur due to detection limits or true absence of a lipid. To ensure accurate analysis:
-                - If a lipid has **exactly one zero** in its BQC measurements, the zero is replaced with a small value: the smallest non-zero measurement for lipids in the same class (e.g., all PEs or PCs) divided by 10. This keeps the lipid in the analysis while minimizing impact on CoV*.
-                - If a lipid has **multiple zeros**, it is considered unreliable and excluded from the analysis. These lipids are listed in a filtered lipids table if you choose to filter the data, allowing you to review and optionally add them back.
+            **Handling Zero Values:**  
+            Zero values in BQC samples can occur due to detection limits or true absence of a lipid. To ensure accurate analysis:
+            - If a lipid has **exactly one zero** in its BQC measurements, the zero is replaced with a small value: the smallest non-zero measurement for lipids in the same class (e.g., all PEs or PCs) divided by 10. This keeps the lipid in the analysis while minimizing impact on CoV*.
+            - If a lipid has **multiple zeros**, it is considered unreliable and excluded from the analysis. These lipids are listed in a filtered lipids table if you choose to filter the data, allowing you to review and optionally add them back.
 
-                **The CoV Scatter Plot:**  
-                The scatter plot visualizes the reliability of each lipid species:
-                - **X-axis**: Log10 of the average concentration of the lipid in BQC samples (after handling zeros).
-                - **Y-axis**: CoV percentage for the lipid.
-                - **Each point**: Represents one lipid species.
-                - **Hover information**: Shows the lipid name, mean concentration, and CoV value.
-                - **Color coding**: Blue points are below the CoV threshold (reliable), red points are above (less reliable).
-                - **Threshold line**: A horizontal black line shows your selected CoV threshold (e.g., 30%).
+            **The CoV Scatter Plot:**  
+            The scatter plot visualizes the reliability of each lipid species:
+            - **X-axis**: Log10 of the average concentration of the lipid in BQC samples (after handling zeros).
+            - **Y-axis**: CoV percentage for the lipid.
+            - **Each point**: Represents one lipid species.
+            - **Hover information**: Shows the lipid name, mean concentration, and CoV value.
+            - **Color coding**: Blue points are below the CoV threshold (reliable), red points are above (less reliable).
+            - **Threshold line**: A horizontal black line shows your selected CoV threshold (e.g., 30%).
 
-                **Interpreting CoV Values:**  
-                - **CoV < 20%**: Excellent measurement consistency, highly reliable.
-                - **CoV < 30%**: Good consistency, suitable for most analyses.
-                - **CoV > 30%**: Potential reliability issues, may require caution.
-                - **CoV > 100%**: High variability, often due to inconsistent detection or low concentrations.
-
-                **Filtering Option:**  
-                You can filter out lipids with high CoV values (above your chosen threshold) or multiple zero values to focus on reliable data for downstream analyses. If you select "Yes" for filtering:
-                - Lipids with CoV above the threshold or multiple zeros are listed in a table.
-                - You can review these lipids and choose to add back any you want to keep (e.g., lipids critical to your study).
-
-                **Reliability Metric:**  
-                The percentage of lipids with CoV below your threshold indicates overall data quality:
-                - **≥ 80%**: Excellent data quality, most measurements are reliable.
-                - **50–79%**: Good data quality, but some caution is advised for lipids with higher CoV.
-                - **< 50%**: Potential issues with the dataset, interpret results carefully.
-                """)
-                st.markdown("---")
+            **Filtering Option:**  
+            You can filter out lipids with high CoV values (above your chosen threshold) or multiple zero values to focus on reliable data for downstream analyses. If you select "Yes" for filtering:
+            - Lipids with CoV above the threshold or multiple zeros are listed in a table.
+            - You can review these lipids and choose to add back any you want to keep (e.g., lipids critical to your study).
+            """)
+            st.markdown("---")
             
             # Move threshold setting outside the filter option
             st.subheader("CoV Threshold Setting")
@@ -2010,11 +1988,12 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                         if lipids_to_add_back:
                             st.info(f"Added back {len(lipids_to_add_back)} lipids based on your selection.")
                     
+                    # Complete the filtering logic - this was missing in your code
                     if filtered_df.empty:
                         st.error("The filtered dataset is empty. Please adjust your selection or try a higher CoV threshold.")
                         st.warning("Returning the original dataset without filtering.")
                         filtered_df = data_df.copy()
-                        filtered_df = filtered_df.sort_values(by='ClassKey').reset_index(drop=True)  # Sort even if unfiltered
+                        filtered_df = filtered_df.sort_values(by='ClassKey').reset_index(drop=True)
                     else:
                         st.write('Final filtered dataset:')
                         st.dataframe(filtered_df)
@@ -2174,48 +2153,39 @@ def analyze_pairwise_correlation(continuation_df, experiment):
     """
     expand_corr = st.expander('Pairwise Correlation Analysis')
     with expand_corr:
-        # Add explanation about correlation analysis
-        show_corr_info = st.checkbox("Show correlation analysis details", key="show_corr_info")
-        if show_corr_info:
-            st.markdown("### Pairwise Correlation Analysis")
-            st.markdown("""
-            Pairwise correlation analysis helps assess the reproducibility of your lipidomic measurements by calculating how closely related the measurements are between sample replicates.
-            
-            **What is Correlation Analysis?**  
-            Correlation analysis calculates the Pearson correlation coefficient between pairs of samples. This coefficient:
-            - Ranges from -1 to 1
-            - Values close to 1 indicate strong positive correlation (similar patterns)
-            - Values close to 0 indicate no correlation
-            - Values close to -1 indicate strong negative correlation (opposite patterns)
-            
-            **The Correlation Heatmap:**
-            - The heatmap displays correlation coefficients between all pairs of replicates
-            - Blue colors indicate higher correlation (more similar)
-            - Red colors indicate lower correlation (less similar)
-            - Only the lower triangle is shown to avoid redundancy
-            
-            **Interpreting Correlation Values:**
-            - For biological replicates:
-              - Correlation ≥ 0.7: Good reproducibility
-              - Correlation < 0.7: Potential issues with reproducibility
-            
-            - For technical replicates:
-              - Correlation ≥ 0.8: Good reproducibility
-              - Correlation < 0.8: Potential technical issues
-            
-            **Data Preprocessing:**
-            - Missing (zero) values are removed before calculating correlations
-            - This ensures that correlations are based only on lipids detected in both samples
-            
-            Low correlation between replicates may indicate:
-            1. Sample preparation inconsistencies
-            2. Instrument performance issues
-            3. True biological variation
-            4. Potential outlier samples
-            
-            This analysis helps identify samples that might need to be excluded or further investigated before proceeding with biological interpretation.
-            """)
-            st.markdown("---")
+        # Correlation analysis details - ALWAYS VISIBLE
+        st.markdown("### Pairwise Correlation Analysis")
+        st.markdown("""
+        Pairwise correlation analysis helps assess the reproducibility of your lipidomic measurements by calculating how closely related the measurements are between sample replicates.    **What is Correlation Analysis?**  
+        Correlation analysis calculates the Pearson correlation coefficient between pairs of samples. This coefficient:
+        - Ranges from -1 to 1
+        - Values close to 1 indicate strong positive correlation (similar patterns)
+        - Values close to 0 indicate no correlation
+        - Values close to -1 indicate strong negative correlation (opposite patterns)
+        
+        **The Correlation Heatmap:**
+        - The heatmap displays correlation coefficients between all pairs of replicates
+        - Blue colors indicate higher correlation (more similar)
+        - Red colors indicate lower correlation (less similar)
+        - Only the lower triangle is shown to avoid redundancy
+        
+        **Interpreting Correlation Values:**
+        - For biological replicates: Higher correlations suggest good reproducibility, while lower correlations may indicate potential issues or greater biological variation.
+        - For technical replicates: Even higher correlations are typically expected, as they represent repeated measurements of the same sample, with lower values potentially signaling technical issues.
+        
+        **Data Preprocessing:**
+        - Missing (zero) values are removed before calculating correlations
+        - This ensures that correlations are based only on lipids detected in both samples
+        
+        Low correlation between replicates may indicate:
+        1. Sample preparation inconsistencies
+        2. Instrument performance issues
+        3. True biological variation
+        4. Potential outlier samples
+        
+        This analysis helps identify samples that might need to be excluded or further investigated before proceeding with biological interpretation.
+        """)
+        st.markdown("---")
         
         # Filter out conditions with only one replicate
         multi_replicate_conditions = [condition for condition, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1]
@@ -2279,46 +2249,44 @@ def display_pca_analysis(continuation_df, experiment):
     
     pca_plot = None
     with st.expander("Principal Component Analysis (PCA)"):
-        # Add explanation about PCA analysis
-        show_pca_info = st.checkbox("Show PCA analysis details", key="show_pca_info")
-        if show_pca_info:
-            st.markdown("### Principal Component Analysis (PCA)")
-            st.markdown("""
-            PCA is a powerful dimensionality reduction technique that helps visualize complex lipidomic datasets by transforming high-dimensional data into a set of linearly uncorrelated variables called principal components.
-            
-            **What is PCA?**  
-            PCA identifies the directions (principal components) in which your data varies the most. These components are ordered by the amount of variance they explain:
-            - Principal Component 1 (PC1) explains the largest portion of variance
-            - Principal Component 2 (PC2) explains the second largest portion
-            
-            The percentage shown next to each PC indicates how much of the total variance that component explains.
-            
-            **The PCA Plot:**
-            - Each point represents one sample
-            - Points that cluster together have similar lipid profiles
-            - Greater distances between points indicate greater differences in lipid profiles
-            - Confidence ellipses (95% confidence) are drawn around each experimental condition
-            
-            **Interpreting the Plot:**
-            - **Well-separated clusters**: Different experimental conditions show distinct lipid profiles
-            - **Overlapping clusters**: Conditions have similar lipid profiles
-            - **Tight clusters**: Good reproducibility within conditions
-            - **Spread-out clusters**: Higher variability within conditions
-            - **Outliers**: Samples falling outside their group's confidence ellipse may indicate anomalies
-            
-            **Data Preprocessing:**
-            - Data is standardized (centered and scaled) before PCA
-            - This ensures that variables with larger values don't dominate the analysis
-            
-            **When to Remove Samples:**
-            Consider removing samples that:
-            1. Fall far outside their expected cluster
-            2. Don't group with their biological replicates
-            3. Show unusual patterns confirmed by other quality metrics
-            
-            **Note:** Sample removal should be done cautiously and documented. Biological outliers may represent real variation rather than technical issues.
-            """)
-            st.markdown("---")
+        # PCA analysis details - ALWAYS VISIBLE
+        st.markdown("### Principal Component Analysis (PCA)")
+        st.markdown("""
+        PCA is a powerful dimensionality reduction technique that helps visualize complex lipidomic datasets by transforming high-dimensional data into a set of linearly uncorrelated variables called principal components.
+        
+        **What is PCA?**  
+        PCA identifies the directions (principal components) in which your data varies the most. These components are ordered by the amount of variance they explain:
+        - Principal Component 1 (PC1) explains the largest portion of variance
+        - Principal Component 2 (PC2) explains the second largest portion
+        
+        The percentage shown next to each PC indicates how much of the total variance that component explains.
+        
+        **The PCA Plot:**
+        - Each point represents one sample
+        - Points that cluster together have similar lipid profiles
+        - Greater distances between points indicate greater differences in lipid profiles
+        - Confidence ellipses (95% confidence) are drawn around each experimental condition
+        
+        **Interpreting the Plot:**
+        - **Well-separated clusters**: Different experimental conditions show distinct lipid profiles
+        - **Overlapping clusters**: Conditions have similar lipid profiles
+        - **Tight clusters**: Good reproducibility within conditions
+        - **Spread-out clusters**: Higher variability within conditions
+        - **Outliers**: Samples falling outside their group's confidence ellipse may indicate anomalies
+        
+        **Data Preprocessing:**
+        - Data is standardized (centered and scaled) before PCA
+        - This ensures that variables with larger values don't dominate the analysis
+        
+        **When to Remove Samples:**
+        Consider removing samples that:
+        1. Fall far outside their expected cluster
+        2. Don't group with their biological replicates
+        3. Show unusual patterns confirmed by other quality metrics
+        
+        **Note:** Sample removal should be done cautiously and documented. Biological outliers may represent real variation rather than technical issues.
+        """)
+        st.markdown("---")
         
         # Sample removal interface
         samples_to_remove = st.multiselect(
@@ -2946,25 +2914,23 @@ def display_abundance_pie_charts(experiment, continuation_df):
             key='pie_chart_classes'
         )
         
-        # Show explanation about pie chart analysis
-        show_piechart_info = st.checkbox("Show pie chart analysis details", key="show_piechart_info")
-        if show_piechart_info:
-            st.markdown("### Class Concentration Pie Chart Analysis")
-            st.markdown("""
-            Pie charts visualize the relative proportions of different lipid classes within each experimental condition, providing a quick overview of lipid composition.
-            
-            **What the Chart Shows:**
-            - Each segment represents a lipid class
-            - The size of each segment corresponds to the percentage of that class in the total lipid pool
-            - Hover over segments to see exact percentages
-            - Consistent colors are used for the same lipid class across different conditions
-            
-            **Data Processing:**
-            - For each condition, the total concentration of each lipid class is calculated by summing all species within that class
-            - The sum across all replicates is used to represent each condition
-            - Values are converted to percentages for the pie chart representation
-            """)
-            st.markdown("---")
+        # Pie chart analysis details - ALWAYS VISIBLE
+        st.markdown("### Class Concentration Pie Chart Analysis")
+        st.markdown("""
+        Pie charts visualize the relative proportions of different lipid classes within each experimental condition, providing a quick overview of lipid composition.
+        
+        **What the Chart Shows:**
+        - Each segment represents a lipid class
+        - The size of each segment corresponds to the percentage of that class in the total lipid pool
+        - Hover over segments to see exact percentages
+        - Consistent colors are used for the same lipid class across different conditions
+        
+        **Data Processing:**
+        - For each condition, the total concentration of each lipid class is calculated by summing all species within that class
+        - The sum across all replicates is used to represent each condition
+        - Values are converted to percentages for the pie chart representation
+        """)
+        st.markdown("---")
         
         if selected_classes_list:
             # Filter dataframe for selected classes
@@ -4245,40 +4211,38 @@ def display_lipidomic_heatmap(experiment, continuation_df):
     clustered_heatmap = None
     
     with st.expander("Species Level Breakdown - Lipidomic Heatmap"):
-        # Show explanation about heatmap analysis
-        show_heatmap_info = st.checkbox("Show heatmap analysis details", key="show_heatmap_info")
-        if show_heatmap_info:
-            st.markdown("### Lipidomic Heatmap Analysis")
-            st.markdown("""
-            Heatmaps provide a comprehensive visualization of lipid abundance patterns across multiple samples and conditions.
-            
-            **What the Heatmap Shows:**
-            
-            - **Rows**: Individual lipid molecules (e.g., PC(16:0_18:1))
-            - **Columns**: Individual samples grouped by condition
-            - **Colors**: Represent standardized abundance values (Z-scores)
-              - Red: Higher than average abundance
-              - Blue: Lower than average abundance
-              - White: Close to average abundance
-            - **Z-scores**: Standardized values that show how many standard deviations a data point is from the mean
-              - Z-score = (Value - Mean) / Standard Deviation
-              - This normalization enables comparison across lipids with different absolute abundances
-            
-            **Heatmap Types:**
-            
-            1. **Regular Heatmap**: 
-               - Shows lipids in their original order
-               - Preserves the organization of your input data
-               - Useful when you have a specific ordering in mind (e.g., by lipid class)
-            
-            2. **Clustered Heatmap**:
-               - Groups similar lipids together based on their abundance patterns
-               - Uses hierarchical clustering with Ward's method
-               - Reveals co-regulated lipid groups that might have similar biological functions
-               - Dashed lines separate distinct clusters
-               - Number of clusters can be adjusted using the slider
-            """)
-            st.markdown("---")
+        # Heatmap analysis details - ALWAYS VISIBLE
+        st.markdown("### Lipidomic Heatmap Analysis")
+        st.markdown("""
+        Heatmaps provide a comprehensive visualization of lipid abundance patterns across multiple samples and conditions.
+        
+        **What the Heatmap Shows:**
+        
+        - **Rows**: Individual lipid molecules (e.g., PC(16:0_18:1))
+        - **Columns**: Individual samples grouped by condition
+        - **Colors**: Represent standardized abundance values (Z-scores)
+          - Red: Higher than average abundance
+          - Blue: Lower than average abundance
+          - White: Close to average abundance
+        - **Z-scores**: Standardized values that show how many standard deviations a data point is from the mean
+          - Z-score = (Value - Mean) / Standard Deviation
+          - This normalization enables comparison across lipids with different absolute abundances
+        
+        **Heatmap Types:**
+        
+        1. **Regular Heatmap**: 
+           - Shows lipids in their original order
+           - Preserves the organization of your input data
+           - Useful when you have a specific ordering in mind (e.g., by lipid class)
+        
+        2. **Clustered Heatmap**:
+           - Groups similar lipids together based on their abundance patterns
+           - Uses hierarchical clustering with Ward's method
+           - Reveals co-regulated lipid groups that might have similar biological functions
+           - Dashed lines separate distinct clusters
+           - Number of clusters can be adjusted using the slider
+        """)
+        st.markdown("---")
         
         # Let user select conditions and classes
         all_conditions = experiment.conditions_list
@@ -4408,9 +4372,6 @@ def display_lipidomic_heatmap(experiment, continuation_df):
                             'regular_heatmap_data.csv', 
                             'text/csv'
                         )
-            
-            # Remove the redundant separate download section
-            # since we've added download options right below each heatmap
             
         else:
             st.warning("Please select at least one condition and one lipid class to generate the heatmap.")
