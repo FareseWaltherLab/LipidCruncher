@@ -443,3 +443,5 @@ class BQCQualityCheck:
         cov_filtered_df = cov_filtered_df[['LipidMolec', 'ClassKey', 'cov', 'mean', 'Reason']]  # Adjust columns as needed
         
         return filtered_df.drop(['mean', 'cov'], axis=1).reset_index(drop=True), cov_filtered_df
+    
+    
