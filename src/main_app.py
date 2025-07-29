@@ -199,7 +199,7 @@ def display_landing_page():
     
     st.subheader("Support")
     st.markdown("""
-    For reporting bugs, feature requests, or any questions or comments, please email abdih@mskcc.org.
+    For reporting bugs, feature requests, or any questions or comments, please email lipidcruncher@gmail.com.
     """)
 
 def main():
