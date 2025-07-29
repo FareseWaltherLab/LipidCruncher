@@ -103,7 +103,7 @@ The case study experiment includes three conditions with four replicates each:
 
 ## Support
 For bug reports, feature requests, or questions:
-- Email: abdih@mskcc.org
+- Email: lipidcruncher@gmail.com
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
