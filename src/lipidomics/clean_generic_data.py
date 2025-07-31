@@ -213,4 +213,3 @@ class CleanGenericData:
         except Exception as e:
             st.error(f"Error extracting internal standards: {str(e)}")
             return df, pd.DataFrame(columns=df.columns)
-    

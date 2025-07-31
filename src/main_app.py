@@ -262,7 +262,11 @@ def main():
                                 st.session_state.intsta_df = intsta_df
                                 st.session_state.continuation_df = cleaned_df
                                 
-                                display_cleaned_data(cleaned_df, intsta_df)
+                                cleaned_df = display_cleaned_data(cleaned_df, intsta_df)
+                                
+                                if cleaned_df is not None:
+                                    st.session_state.cleaned_df = cleaned_df
+                                    st.session_state.continuation_df = cleaned_df
                                 
                                 normalized_df = handle_data_normalization(
                                     cleaned_df, 
@@ -910,13 +914,97 @@ def manage_internal_standards(normalizer):
                 # Use previously uploaded standards
                 st.session_state.intsta_df = st.session_state.preserved_intsta_df.copy()
 
-def display_cleaned_data(cleaned_df, intsta_df):
+def apply_zero_filter(cleaned_df, experiment, data_format):
+    """
+    Applies the zero-value filter to the cleaned dataframe.
+    
+    For each lipid species, checks if in EVERY condition, >=75% of replicates 
+    have value <= threshold. If yes, removes that species from the dataset.
+    
+    Args:
+        cleaned_df (pd.DataFrame): Cleaned dataframe
+        experiment (Experiment): Experiment object
+        data_format (str): Data format
+        
+    Returns:
+        pd.DataFrame: Filtered dataframe
+    """
+    default_threshold = 30000.0 if data_format == 'LipidSearch 5.0' else 0.0
+    threshold = st.number_input(
+        'Enter detection threshold (values <= this are considered zero for filtering)',
+        min_value=0.0,
+        value=default_threshold,
+        step=1.0,
+        help="For non-LipidSearch formats, 0 means only exact zeros are considered. Enter a value >0 if needed.",
+        key="zero_filter_threshold"
+    )
+    
+    # Get all lipid species before filtering
+    all_species = cleaned_df['LipidMolec'].tolist()
+    
+    # List to keep track of rows to keep
+    to_keep = []
+    
+    for idx, row in cleaned_df.iterrows():
+        # Assume remove unless we find a condition with <75% zeros
+        remove = True
+        
+        for cond_idx, cond_samples in enumerate(experiment.individual_samples_list):
+            if not cond_samples:  # Skip empty conditions
+                continue
+            
+            zero_count = 0
+            n_samples = len(cond_samples)
+            
+            for sample in cond_samples:
+                col = f'intensity[{sample}]'
+                if col in cleaned_df.columns:
+                    value = row[col]
+                    if value <= threshold:
+                        zero_count += 1
+            
+            # If this condition has <75% zeros, keep the row
+            if (zero_count / n_samples) < 0.75:
+                remove = False
+                break
+        
+        if not remove:
+            to_keep.append(idx)
+    
+    filtered_df = cleaned_df.loc[to_keep].reset_index(drop=True)
+    
+    # Compute removed species
+    removed_species = [species for species in all_species if species not in filtered_df['LipidMolec'].tolist()]
+    
+    # Show removal info
+    removed = len(removed_species)
+    if removed > 0:
+        st.info(f"Removed {removed} species based on zero filter ({removed / len(all_species) * 100:.1f}%)")
+        
+        # Display removed species
+        with st.expander("View Removed Species"):
+            removed_df = pd.DataFrame({'Removed LipidMolec': removed_species})
+            st.dataframe(removed_df)
+            csv = removed_df.to_csv(index=False)
+            st.download_button(
+                label="Download Removed Species",
+                data=csv,
+                file_name="removed_species.csv",
+                mime="text/csv"
+            )
+    else:
+        st.info("No species removed by zero filter")
+    
+    return filtered_df
+
+def display_cleaned_data(unfiltered_df, intsta_df):
     """
     Display cleaned data and manage internal standards with simplified workflow.
+    Now includes the zero filter application and display of removed species.
     """
     # Update session state with new data if provided
-    if cleaned_df is not None:
-        st.session_state.cleaned_df = cleaned_df.copy()
+    if unfiltered_df is not None:
+        st.session_state.cleaned_df = unfiltered_df.copy()
         st.session_state.intsta_df = intsta_df.copy() if intsta_df is not None else pd.DataFrame()
 
     # Create normalizer instance
@@ -963,10 +1051,9 @@ def display_cleaned_data(cleaned_df, intsta_df):
             6. **Missing FA Keys Handling**: Rows with missing FA keys are removed, with exceptions 
                for cholesterol (Ch) class molecules and deuterated standards.
             
-            7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
-            In addition, all negative values are converted to zero. 
+            7. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
             
-            8. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
+            8. **Zero Filtering**: Removes lipid species where, in every condition, 75% or more of the replicates have intensity values <= user-specified detection threshold (considered zero or below detection).
             """)
             
             st.info("This process ensures that only high-quality, consistent data points are retained for analysis.")
@@ -994,10 +1081,9 @@ def display_cleaned_data(cleaned_df, intsta_df):
             5. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special 
                characters, strings with only special characters) are removed.
             
-            6. **Zero Value Handling**: Rows where all intensity values are zero or null are removed.
-            In addition, all negative values are converted to zero.
+            6. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
             
-            7. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
+            7. **Zero Filtering**: Removes lipid species where, in every condition, 75% or more of the replicates have intensity values <= user-specified detection threshold (considered zero or below detection).
             """)
             
             st.info("This standardization process allows for consistent analysis regardless of the original format of your data.")
@@ -1024,12 +1110,11 @@ def display_cleaned_data(cleaned_df, intsta_df):
             
             6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
                non-numeric entries replaced by zeros.
-               
-            7. **Zero Value Handling**: Rows where all intensity values are zero or null are removed. 
-            In addition, all negative values are converted to zero.
             
-            8. **Experimental Conditions Storage**: The experimental conditions from the second row are 
+            7. **Experimental Conditions Storage**: The experimental conditions from the second row are 
                stored and used to suggest the experimental setup.
+            
+            8. **Zero Filtering**: Removes lipid species where, in every condition, 75% or more of the replicates have intensity values <= user-specified detection threshold (considered zero or below detection).
             """)
             
             st.info("This process ensures that your Metabolomics Workbench data is properly formatted for analysis in LipidCruncher.")
@@ -1037,10 +1122,79 @@ def display_cleaned_data(cleaned_df, intsta_df):
         # Add a divider
         st.markdown("---")
         
-        # Display the cleaned data
-        st.subheader("Cleaned Data")
-        st.write("This table shows your data after cleaning and standardization:")
-        display_data(st.session_state.cleaned_df, "Cleaned Data", "cleaned_data.csv")
+        # Additional zero filtering section
+        st.subheader("Zero Filtering")
+        st.markdown("""
+        This filter removes lipid species where, in every condition, 75% or more of the replicates have intensity values 
+        less than or equal to the specified detection threshold (considered as zero or below detection).
+        """)
+        
+        default_threshold = 30000.0 if st.session_state.format_type == 'LipidSearch 5.0' else 0.0
+        threshold = st.number_input(
+            'Enter detection threshold (values <= this are considered zero for filtering)',
+            min_value=0.0,
+            value=default_threshold,
+            step=1.0,
+            help="For non-LipidSearch formats, 0 means only exact zeros are considered. Enter a value >0 if needed.",
+            key="zero_filter_threshold"
+        )
+        
+        # Apply filter
+        filtered_df = st.session_state.cleaned_df.copy()
+        
+        # Get all lipid species before filtering
+        all_species = filtered_df['LipidMolec'].tolist()
+        
+        # List to keep track of rows to keep
+        to_keep = []
+        
+        for idx, row in filtered_df.iterrows():
+            # Assume remove unless we find a condition with <75% zeros
+            remove = True
+            
+            for cond_idx, cond_samples in enumerate(st.session_state.experiment.individual_samples_list):
+                if not cond_samples:  # Skip empty conditions
+                    continue
+                    
+                zero_count = 0
+                n_samples = len(cond_samples)
+                
+                for sample in cond_samples:
+                    col = f'intensity[{sample}]'
+                    if col in filtered_df.columns:
+                        value = row[col]
+                        if value <= threshold:
+                            zero_count += 1
+                
+                # If this condition has <75% zeros, keep the row
+                if (zero_count / n_samples) < 0.75:
+                    remove = False
+                    break
+            
+            if not remove:
+                to_keep.append(idx)
+        
+        filtered_df = filtered_df.loc[to_keep].reset_index(drop=True)
+        
+        # Compute removed species
+        removed_species = [species for species in all_species if species not in filtered_df['LipidMolec'].tolist()]
+        
+        # Show removal info
+        removed = len(removed_species)
+        if removed > 0:
+            st.info(f"Removed {removed} species based on zero filter ({removed / len(all_species) * 100:.1f}%)")
+            
+            # Display removed species
+            removed_df = pd.DataFrame({'Removed LipidMolec': removed_species})
+            st.dataframe(removed_df)
+        else:
+            st.info("No species removed by zero filter")
+        
+        # Display the filtered data
+        st.markdown("---")
+        st.subheader("Final Cleaned Data")
+        st.write("This table shows your data after all cleaning steps, including zero filtering:")
+        display_data(filtered_df, "Data", "final_cleaned_data.csv")
 
     # Internal standards management
     with st.expander("Manage Internal Standards"):
@@ -1056,6 +1210,9 @@ def display_cleaned_data(cleaned_df, intsta_df):
         st.markdown("---")
         
         manage_internal_standards(normalizer)
+    
+    # Return the filtered dataframe for further processing
+    return filtered_df
             
 def rename_intensity_to_concentration(df):
     """Renames intensity columns to concentration columns at the end of normalization"""
@@ -2060,37 +2217,35 @@ def display_retention_time_plots(continuation_df, format_type):
     """
     if format_type == 'LipidSearch 5.0':
         with st.expander('View Retention Time Plots: Check Sanity of Data'):
-            # Add explanation about retention time analysis
-            show_rt_info = st.checkbox("Show retention time analysis details", key="show_rt_info")
-            if show_rt_info:
-                st.markdown("### Retention Time Analysis")
-                st.markdown("""
-                Retention time analysis is a crucial quality check for LipidSearch data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
-                
-                **What is Retention Time?**  
-                Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicity—more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
-                
-                **What to Look For:**
-                
-                1. **Class-specific Clustering**: Lipids from the same class should form distinct clusters in the plot. Each lipid class has characteristic hydrophobicity patterns, resulting in similar retention times for molecules within that class.
-                
-                2. **Mass-Retention Time Relationship**: Within a lipid class:
-                   - Longer fatty acid chains (higher mass) generally show longer retention times
-                   - More saturated lipids (fewer double bonds) typically elute later than their unsaturated counterparts
-                
-                3. **Outliers**: Points that deviate significantly from their class's typical pattern may indicate:
-                   - Incorrect lipid identification
-                   - Co-eluting compounds
-                   - Unusual structural features
-                
-                **Two Viewing Modes:**
-                
-                - **Individual Mode**: Displays separate plots for each lipid class, allowing detailed examination of class-specific patterns
-                - **Comparison Mode**: Shows multiple lipid classes in a single plot with color coding, enabling direct comparison between classes
-                
-                This analysis helps confirm the analytical integrity of your data and can reveal potential misidentifications or chromatographic issues.
-                """)
-                st.markdown("---")
+            # Add explanation about retention time analysis - ALWAYS VISIBLE
+            st.markdown("### Retention Time Analysis")
+            st.markdown("""
+            Retention time analysis is a crucial quality check for LipidSearch data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
+            
+            **What is Retention Time?**  
+            Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicity—more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
+            
+            **What to Look For:**
+            
+            1. **Class-specific Clustering**: Lipids from the same class should form distinct clusters in the plot. Each lipid class has characteristic hydrophobicity patterns, resulting in similar retention times for molecules within that class.
+            
+            2. **Mass-Retention Time Relationship**: Within a lipid class:
+               - Longer fatty acid chains (higher mass) generally show longer retention times
+               - More saturated lipids (fewer double bonds) typically elute later than their unsaturated counterparts
+            
+            3. **Outliers**: Points that deviate significantly from their class's typical pattern may indicate:
+               - Incorrect lipid identification
+               - Co-eluting compounds
+               - Unusual structural features
+            
+            **Two Viewing Modes:**
+            
+            - **Individual Mode**: Displays separate plots for each lipid class, allowing detailed examination of class-specific patterns
+            - **Comparison Mode**: Shows multiple lipid classes in a single plot with color coding, enabling direct comparison between classes
+            
+            This analysis helps confirm the analytical integrity of your data and can reveal potential misidentifications or chromatographic issues.
+            """)
+            st.markdown("---")
             
             # Get the viewing mode selection
             mode = st.radio('Select a viewing mode', ['Comparison Mode', 'Individual Mode'])
