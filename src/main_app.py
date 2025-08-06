@@ -1011,9 +1011,9 @@ def display_cleaned_data(unfiltered_df, intsta_df):
     normalizer = lp.NormalizeData()
 
     # Display cleaned data
-    with st.expander("View Cleaned Data"):
+    with st.expander("Clean and Filter Data"):
         # Data cleaning process details - ALWAYS VISIBLE
-        st.markdown("### Data Cleaning and Standardization Process")
+        st.markdown("### Data Cleaning, Standardization and Filtering Process")
         st.markdown("""
         LipidCruncher performs a systematic cleaning and standardization process on your uploaded data 
         to ensure consistency, reliability, and compatibility with downstream analyses. The specific 
@@ -1192,7 +1192,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         
         # Display the filtered data
         st.markdown("---")
-        st.subheader("Final Cleaned Data")
+        st.subheader("Final Cleaned and Filtered Data")
         st.write("This table shows your data after all cleaning steps, including zero filtering:")
         display_data(filtered_df, "Data", "final_cleaned_data.csv")
 
@@ -1210,6 +1210,56 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         st.markdown("---")
         
         manage_internal_standards(normalizer)
+
+        # Internal standards consistency plot
+        if not st.session_state.intsta_df.empty:
+            st.markdown("### Internal Standards Consistency Plot")
+            st.markdown("""
+            This stacked bar plot shows the raw intensity values of internal standards across all samples. 
+            Each bar represents a sample, stacked by internal standard classes. Consistent bar heights and 
+            compositions across samples indicate good sample preparation and instrument performance.
+            """)
+            
+            # Generate the plot using the separated logic
+            fig = lp.InternalStandardsPlotter.create_consistency_plot(
+                st.session_state.intsta_df,
+                st.session_state.experiment.full_samples_list
+            )
+            
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Add download options
+                col1, col2 = st.columns(2)
+                with col1:
+                    plotly_svg_download_button(fig, "internal_standards_consistency.svg")
+                with col2:
+                    # Recompute grouped_df for download
+                    intsta_df = st.session_state.intsta_df
+                    samples = st.session_state.experiment.full_samples_list
+                    intensity_cols = [col for col in intsta_df.columns if col.startswith('intensity[')]
+                    col_to_sample = {f'intensity[{sample}]': sample for sample in samples}
+                    valid_intensity_cols = [col for col in intensity_cols if col in col_to_sample]
+                    melted_df = pd.melt(
+                        intsta_df, 
+                        id_vars=['ClassKey', 'LipidMolec'], 
+                        value_vars=valid_intensity_cols,
+                        var_name='Sample_Column', 
+                        value_name='Intensity'
+                    )
+                    melted_df['Sample'] = melted_df['Sample_Column'].map(col_to_sample)
+                    grouped_df = melted_df.groupby(['Sample', 'ClassKey'])['Intensity'].sum().reset_index()
+                    csv_download = convert_df(grouped_df)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_download,
+                        file_name='internal_standards_consistency_data.csv',
+                        mime='text/csv'
+                    )
+            else:
+                st.info("No intensity data available for plotting.")
+        else:
+            st.info("No internal standards available for consistency plot.")
     
     # Return the filtered dataframe for further processing
     return filtered_df
