@@ -1211,55 +1211,70 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         
         manage_internal_standards(normalizer)
 
-        # Internal standards consistency plot
         if not st.session_state.intsta_df.empty:
-            st.markdown("### Internal Standards Consistency Plot")
+            st.markdown("### Internal Standards Consistency Plots")
             st.markdown("""
-            This stacked bar plot shows the raw intensity values of internal standards across all samples. 
-            Each bar represents a sample, stacked by internal standard classes. Consistent bar heights and 
-            compositions across samples indicate good sample preparation and instrument performance.
+            These stacked bar plots show the raw intensity values of internal standards across all samples, separated by class. 
+            For classes with multiple standards, bars are stacked by individual standard. 
+            Consistent bar heights across samples indicate good sample preparation and instrument performance.
             """)
             
-            # Generate the plot using the separated logic
-            fig = lp.InternalStandardsPlotter.create_consistency_plot(
-                st.session_state.intsta_df,
-                st.session_state.experiment.full_samples_list
+            # Add multiselect for conditions
+            conditions = st.session_state.experiment.conditions_list
+            selected_conditions = st.multiselect(
+                'Select conditions to display:', 
+                conditions, 
+                default=conditions
             )
             
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Add download options
-                col1, col2 = st.columns(2)
-                with col1:
-                    plotly_svg_download_button(fig, "internal_standards_consistency.svg")
-                with col2:
-                    # Recompute grouped_df for download
-                    intsta_df = st.session_state.intsta_df
-                    samples = st.session_state.experiment.full_samples_list
-                    intensity_cols = [col for col in intsta_df.columns if col.startswith('intensity[')]
-                    col_to_sample = {f'intensity[{sample}]': sample for sample in samples}
-                    valid_intensity_cols = [col for col in intensity_cols if col in col_to_sample]
-                    melted_df = pd.melt(
-                        intsta_df, 
-                        id_vars=['ClassKey', 'LipidMolec'], 
-                        value_vars=valid_intensity_cols,
-                        var_name='Sample_Column', 
-                        value_name='Intensity'
-                    )
-                    melted_df['Sample'] = melted_df['Sample_Column'].map(col_to_sample)
-                    grouped_df = melted_df.groupby(['Sample', 'ClassKey'])['Intensity'].sum().reset_index()
-                    csv_download = convert_df(grouped_df)
-                    st.download_button(
-                        label="Download CSV",
-                        data=csv_download,
-                        file_name='internal_standards_consistency_data.csv',
-                        mime='text/csv'
-                    )
+            # Get selected samples in original order
+            selected_samples = []
+            for cond in selected_conditions:
+                idx = conditions.index(cond)
+                selected_samples.extend(st.session_state.experiment.individual_samples_list[idx])
+            
+            # Preserve original full order but filter to selected
+            full_samples = st.session_state.experiment.full_samples_list
+            selected_samples_ordered = [s for s in full_samples if s in selected_samples]
+            
+            # Generate plots with selected samples
+            figs = lp.InternalStandardsPlotter.create_consistency_plots(
+                st.session_state.intsta_df,
+                selected_samples_ordered
+            )
+            
+            if figs:
+                for fig in figs:
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Add download options
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        plotly_svg_download_button(fig, f"internal_standards_consistency_{fig.layout.title.text.replace(' ', '_')}.svg")
+                    with col2:
+                        # Compute data for this fig
+                        class_key = fig.layout.title.text.split(' for ')[-1]
+                        class_df = st.session_state.intsta_df[st.session_state.intsta_df['ClassKey'] == class_key]
+                        intensity_cols = [f'intensity[{s}]' for s in selected_samples_ordered if f'intensity[{s}]' in class_df.columns]
+                        melted_df = pd.melt(
+                            class_df, 
+                            id_vars=['LipidMolec'], 
+                            value_vars=intensity_cols,
+                            var_name='Sample_Column', 
+                            value_name='Intensity'
+                        )
+                        melted_df['Sample'] = melted_df['Sample_Column'].str.replace('intensity[', '', regex=False).str.replace(']', '', regex=False)
+                        csv = melted_df.to_csv(index=False)
+                        st.download_button(
+                            label="Download CSV",
+                            data=csv,
+                            file_name=f'internal_standards_consistency_{class_key}.csv',
+                            mime='text/csv'
+                        )
             else:
-                st.info("No intensity data available for plotting.")
+                st.info("No internal standards available for consistency plots.")
         else:
-            st.info("No internal standards available for consistency plot.")
+            st.info("No internal standards available for consistency plots.")
     
     # Return the filtered dataframe for further processing
     return filtered_df
