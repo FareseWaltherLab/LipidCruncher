@@ -315,7 +315,7 @@ class VolcanoPlot:
     @staticmethod
     def _create_plot_enhanced(volcano_df, color_mapping, q_value_threshold, 
                             hide_non_significant, use_adjusted_p=True, 
-                            fold_change_threshold=1.0):
+                            fold_change_threshold=1.0, top_n_labels=0):
         """
         Create a Plotly figure for the volcano plot visualization with improved statistical framework.
         
@@ -326,6 +326,7 @@ class VolcanoPlot:
             hide_non_significant: Boolean indicating whether to hide non-significant data points
             use_adjusted_p: Whether to use adjusted p-values for significance determination
             fold_change_threshold: Fold change threshold for biological significance
+            top_n_labels: Number of top lipids to label (ranked by p-value)
         
         Returns:
             A Plotly figure object representing the volcano plot.
@@ -400,6 +401,135 @@ class VolcanoPlot:
                 y1=significant_df[p_col].max(), 
                 line=dict(dash="dash", color="red", width=2)
             )
+        
+        # Add labels for top N most significant points using annotations with arrows
+        if top_n_labels > 0:
+            # Sort by significance (descending -log10(p))
+            sorted_df = volcano_df.sort_values(p_col, ascending=False).head(top_n_labels)
+            
+            # Parameters for bounding box estimation
+            char_width = 0.05  # approximate width per character in plot units
+            label_height = 0.3  # approximate height of label
+            buffer = 0.2  # buffer for arrows
+            
+            placed_boxes = []  # list of {'left':, 'right':, 'bottom':, 'top':}
+            
+            # Define candidate positions relative to point: (dx, dy, align)
+            candidates = [
+                (0.1, 0.3, 'left'),   # above right
+                (-0.1, 0.3, 'right'), # above left
+                (0.1, -0.3, 'left'),  # below right
+                (-0.1, -0.3, 'right'),# below left
+                (0.3, 0.1, 'left'),   # right upper
+                (0.3, -0.1, 'left'),  # right lower
+                (-0.3, 0.1, 'right'), # left upper
+                (-0.3, -0.1, 'right') # left lower
+            ]
+            
+            for i, row in sorted_df.iterrows():
+                color = color_mapping[row['ClassKey']]
+                text = row['LipidMolec']
+                point_x = row['FoldChange']
+                point_y = row[p_col]
+                
+                # Estimate width
+                w = len(text) * char_width
+                
+                placed = False
+                for cand_i, (dx, dy, align) in enumerate(candidates):
+                    # Scale offsets with try number for more spread
+                    scale = 1 + (cand_i // len(candidates)) * 0.5
+                    label_x = point_x + dx * scale
+                    label_y = point_y + dy * scale
+                    
+                    # Calculate box edges based on align
+                    if align == 'left':
+                        left = label_x
+                        right = label_x + w
+                    else:
+                        left = label_x - w
+                        right = label_x
+                    
+                    bottom = label_y - label_height / 2
+                    top = label_y + label_height / 2
+                    
+                    # Check for overlap with placed boxes (including buffer for arrows)
+                    overlap = False
+                    for box in placed_boxes:
+                        if not (right < box['left'] - buffer or left > box['right'] + buffer or 
+                                top < box['bottom'] - buffer or bottom > box['top'] + buffer):
+                            overlap = True
+                            break
+                    
+                    if not overlap:
+                        # Place the text annotation
+                        fig.add_annotation(
+                            x=label_x,
+                            y=label_y,
+                            text=text,
+                            showarrow=False,
+                            font=dict(color=color, size=12),
+                            align=align
+                        )
+                        
+                        # Add the arrow annotation (tail at label, head at point)
+                        fig.add_annotation(
+                            x=point_x,
+                            y=point_y,
+                            ax=label_x,
+                            ay=label_y,
+                            axref='x',
+                            ayref='y',
+                            text='',
+                            showarrow=True,
+                            arrowhead=1,
+                            arrowsize=1,
+                            arrowwidth=1,
+                            arrowcolor='black'
+                        )
+                        
+                        # Add to placed boxes with buffer
+                        placed_boxes.append({
+                            'left': left - buffer,
+                            'right': right + buffer,
+                            'bottom': bottom - buffer,
+                            'top': top + buffer
+                        })
+                        placed = True
+                        # print(f"Placed {text} at ({label_x:.2f}, {label_y:.2f}) with align {align}")  # Debug
+                        break
+                
+                if not placed:
+                    # Fallback: place above with left/right align
+                    align_fallback = 'left' if point_x > 0 else 'right'
+                    label_x_fallback = point_x + (0.1 if align_fallback == 'left' else -0.1)
+                    label_y_fallback = point_y + 0.2
+                    
+                    fig.add_annotation(
+                        x=label_x_fallback,
+                        y=label_y_fallback,
+                        text=text,
+                        showarrow=False,
+                        font=dict(color=color, size=12),
+                        align=align_fallback
+                    )
+                    
+                    # Fallback arrow
+                    fig.add_annotation(
+                        x=point_x,
+                        y=point_y,
+                        ax=label_x_fallback,
+                        ay=label_y_fallback,
+                        axref='x',
+                        ayref='y',
+                        text='',
+                        showarrow=True,
+                        arrowhead=1,
+                        arrowsize=1,
+                        arrowwidth=1,
+                        arrowcolor='black'
+                    )
+                    # print(f"Fallback placed {text} at ({label_x_fallback:.2f}, {label_y_fallback:.2f})")  # Debug
 
         # Update layout
         p_label = "Adjusted p-value" if use_adjusted_p else "p-value"
@@ -429,7 +559,8 @@ class VolcanoPlot:
                                                selected_classes, q_value_threshold, hide_non_significant,
                                                test_type="parametric", correction_method="uncorrected", 
                                                alpha=0.05, auto_transform=True, 
-                                               use_adjusted_p=True, fold_change_threshold=1.0):
+                                               use_adjusted_p=True, fold_change_threshold=1.0,
+                                               top_n_labels=0):
         """
         Volcano plot generation with rigorous statistical testing framework.
         
@@ -447,6 +578,7 @@ class VolcanoPlot:
             auto_transform: Whether to apply log10 transformation
             use_adjusted_p: Whether to use adjusted p-values for plotting
             fold_change_threshold: Biological significance threshold for fold change
+            top_n_labels: Number of top significant lipids to label on the plot
         
         Returns:
             tuple: (plot figure, volcano_df, removed_lipids_df, statistical_summary)
@@ -484,7 +616,7 @@ class VolcanoPlot:
         # Create enhanced plot
         plot = VolcanoPlot._create_plot_enhanced(
             volcano_df, color_mapping, q_value_threshold, hide_non_significant,
-            use_adjusted_p, fold_change_threshold
+            use_adjusted_p, fold_change_threshold, top_n_labels=top_n_labels
         )
         
         return plot, volcano_df, removed_lipids_df, statistical_results

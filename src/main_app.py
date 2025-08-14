@@ -4182,6 +4182,12 @@ def display_volcano_plot(experiment, continuation_df):
             value=False,
             help="Hide points that don't meet both statistical and biological significance thresholds"
         )
+        
+        top_n_labels = st.number_input(
+            'Number of top lipids to label (ranked by p-value):', 
+            min_value=0, max_value=50, value=0, step=1,
+            help="Enter the number of most significant lipids to label on the plot. Labels will match the point colors."
+        )
 
         # Apply auto mode logic if selected
         if stat_options.get('mode_choice') == "Auto":
@@ -4212,7 +4218,8 @@ def display_volcano_plot(experiment, continuation_df):
                         alpha=stat_options['alpha'],
                         auto_transform=stat_options['auto_transform'],
                         use_adjusted_p=True,  # ALWAYS use adjusted p-values
-                        fold_change_threshold=log2_fc_threshold
+                        fold_change_threshold=log2_fc_threshold,
+                        top_n_labels=top_n_labels
                     )
                     
                     if plot is None:
