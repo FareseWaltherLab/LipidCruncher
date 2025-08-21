@@ -432,6 +432,10 @@ class VolcanoPlot:
                 point_x = row['FoldChange']
                 point_y = row[p_col]
                 
+                # Get custom offsets if any
+                key = f"pos_{text}"
+                custom_x, custom_y = st.session_state.custom_label_positions.get(key, (0.0, 0.0))
+                
                 # Estimate width
                 w = len(text) * char_width
                 
@@ -439,8 +443,8 @@ class VolcanoPlot:
                 for cand_i, (dx, dy, align) in enumerate(candidates):
                     # Scale offsets with try number for more spread
                     scale = 1 + (cand_i // len(candidates)) * 0.5
-                    label_x = point_x + dx * scale
-                    label_y = point_y + dy * scale
+                    label_x = point_x + dx * scale + custom_x
+                    label_y = point_y + dy * scale + custom_y
                     
                     # Calculate box edges based on align
                     if align == 'left':
@@ -502,8 +506,8 @@ class VolcanoPlot:
                 if not placed:
                     # Fallback: place above with left/right align
                     align_fallback = 'left' if point_x > 0 else 'right'
-                    label_x_fallback = point_x + (0.1 if align_fallback == 'left' else -0.1)
-                    label_y_fallback = point_y + 0.2
+                    label_x_fallback = point_x + (0.1 if align_fallback == 'left' else -0.1) + custom_x
+                    label_y_fallback = point_y + 0.2 + custom_y
                     
                     fig.add_annotation(
                         x=label_x_fallback,
@@ -514,7 +518,7 @@ class VolcanoPlot:
                         align=align_fallback
                     )
                     
-                    # Fallback arrow
+                    # Fallback arrow (tail at label, head at point)
                     fig.add_annotation(
                         x=point_x,
                         y=point_y,
