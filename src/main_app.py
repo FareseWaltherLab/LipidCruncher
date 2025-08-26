@@ -4233,7 +4233,7 @@ def display_volcano_plot(experiment, continuation_df):
                     # Add multiselect for user to choose additional lipids to label
                     available_lipids = volcano_df['LipidMolec'].tolist()
                     st.session_state.custom_labeled_lipids = st.multiselect(
-                        'Select lipids to permanently label on the plot (in addition to top N):',
+                        'Select additional lipids to label on the plot (in addition to top N):',
                         available_lipids,
                         default=st.session_state.custom_labeled_lipids,
                         key='custom_lipid_labels'
