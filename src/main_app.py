@@ -1719,17 +1719,16 @@ def display_data(df, title, filename, key_suffix=''):
     
 def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bqc_label, format_type):
     """
-    Updated quality check and analysis module with enhanced saturation plots.
+    Updated quality check and analysis module with enhanced saturation plots and FACH.
     """
     st.subheader("Quality Check and Anomaly Detection Module")
-    
+   
     # Initialize variables
     box_plot_fig1 = None
     box_plot_fig2 = None
     bqc_plot = None
     retention_time_plot = None
     pca_plot = None
-
     # Initialize session state for plots if not already done
     if 'heatmap_generated' not in st.session_state:
         st.session_state.heatmap_generated = False
@@ -1747,37 +1746,39 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         st.session_state.volcano_plots = {}
     if 'pathway_visualization' not in st.session_state:
         st.session_state.pathway_visualization = None
+    if 'fach_plots' not in st.session_state:
+        st.session_state.fach_plots = {}  # Ensure this is initialized
 
     # Quality Check
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
     continuation_df, bqc_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
-    
+   
     # Only show retention time plots for LipidSearch 5.0
     if format_type == 'LipidSearch 5.0':
         retention_time_plot = display_retention_time_plots(continuation_df, format_type)
-    
+   
     # Pairwise Correlation Analysis
     selected_condition, corr_fig = analyze_pairwise_correlation(continuation_df, experiment)
     if selected_condition and corr_fig:
         st.session_state.correlation_plots[selected_condition] = corr_fig
-    
+   
     # PCA Analysis
     continuation_df, pca_plot = display_pca_analysis(continuation_df, experiment)
-    
+   
     st.subheader("Data Visualization, Interpretation, and Analysis Module")
     # Analysis
     analysis_option = st.radio(
         "Select an analysis feature:",
         (
-            "Class Level Breakdown - Bar Chart", 
-            "Class Level Breakdown - Pie Charts", 
+            "Class Level Breakdown - Bar Chart",
+            "Class Level Breakdown - Pie Charts",
             "Class Level Breakdown - Saturation Plots (requires detailed fatty acid composition)",
+            "Class Level Breakdown - Fatty Acid Composition Heatmaps",  # Added FACH option
             "Class Level Breakdown - Pathway Visualization (requires detailed fatty acid composition)",
             "Species Level Breakdown - Volcano Plot",
             "Species Level Breakdown - Lipidomic Heatmap"
         )
     )
-
     if analysis_option == "Class Level Breakdown - Bar Chart":
         linear_chart, log2_chart = display_abundance_bar_charts(experiment, continuation_df)
         if linear_chart:
@@ -1788,9 +1789,11 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         pie_charts = display_abundance_pie_charts(experiment, continuation_df)
         st.session_state.abundance_pie_charts.update(pie_charts)
     elif analysis_option == "Class Level Breakdown - Saturation Plots (requires detailed fatty acid composition)":
-        # USE THE NEW ENHANCED SATURATION PLOTS FUNCTION
         saturation_plots = display_saturation_plots(experiment, continuation_df)
         st.session_state.saturation_plots.update(saturation_plots)
+    elif analysis_option == "Class Level Breakdown - Fatty Acid Composition Heatmaps":
+        fach_plots = display_fach_heatmaps(experiment, continuation_df)
+        st.session_state.fach_plots.update(fach_plots)  # Store FACH plots
     elif analysis_option == "Class Level Breakdown - Pathway Visualization (requires detailed fatty acid composition)":
         pathway_fig = display_pathway_visualization(experiment, continuation_df)
         if pathway_fig:
@@ -1805,14 +1808,13 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         else:
             regular_heatmap = heatmap_result
             clustered_heatmap = None
-        
+       
         if regular_heatmap:
             st.session_state.heatmap_generated = True
             st.session_state.heatmap_fig['Regular Heatmap'] = regular_heatmap
         if clustered_heatmap:
             st.session_state.heatmap_fig['Clustered Heatmap'] = clustered_heatmap
-
-    # PDF Generation Section (unchanged)
+    # PDF Generation Section
     st.subheader("Generate PDF Report")
     st.warning(
         "⚠️ Important: PDF Report Generation Guidelines\n\n"
@@ -1821,16 +1823,14 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         "3. Use this feature instead of downloading plots individually - it's more efficient for multiple downloads.\n"
         "4. Avoid interacting with the app during PDF generation.\n"
     )
-
     generate_pdf = st.radio("Would you like to generate a PDF report?", ('No', 'Yes'), index=0)
-
     if generate_pdf == 'Yes':
         if box_plot_fig1 and box_plot_fig2:
             with st.spinner('Generating PDF report... Please do not interact with the app.'):
                 pdf_buffer = generate_pdf_report(
-                    box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
-                    st.session_state.heatmap_fig, st.session_state.correlation_plots, 
-                    st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts, 
+                    box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot,
+                    st.session_state.heatmap_fig, st.session_state.correlation_plots,
+                    st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts,
                     st.session_state.saturation_plots, st.session_state.volcano_plots,
                     st.session_state.pathway_visualization
                 )
@@ -1842,10 +1842,10 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
                     file_name="quality_check_and_analysis_report.pdf",
                     mime="application/pdf",
                 )
-                
+               
                 # Close only matplotlib figures, not Plotly figures
                 plt.close('all')  # This closes all matplotlib figures
-                
+               
             else:
                 st.error("Failed to generate PDF report. Please check the logs for details.")
         else:
@@ -4723,9 +4723,103 @@ def display_lipidomic_heatmap(experiment, continuation_df):
     
     return regular_heatmap, clustered_heatmap
 
-def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot, 
-                     heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts, 
-                     saturation_plots, volcano_plots, pathway_visualization):
+def display_fach_heatmaps(experiment, continuation_df):
+    """
+    Display Fatty Acid Composition Heatmaps (FACH) for a selected lipid class and conditions.
+    Returns a dictionary of generated plots for PDF inclusion.
+    
+    Args:
+        experiment: Experiment object containing experimental setup information
+        continuation_df: DataFrame containing the lipidomics data
+    
+    Returns:
+        dict: Dictionary with lipid class as key and Plotly figure as value
+    """
+    fach_plots = {}
+    with st.expander("Class Level Breakdown - Fatty Acid Composition Heatmaps"):
+        # Display compatibility warning
+        has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
+        if not has_detailed_fa:
+            st.warning("""
+            ⚠️ Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            Your data appears to use total composition (e.g., PC(34:1)), which may affect accuracy.
+            """)
+        
+        st.markdown("### Fatty Acid Composition Heatmap Analysis")
+        st.markdown("""
+        Fatty Acid Composition Heatmaps (FACH) visualize the relative abundance of lipids within a selected class,
+        grouped by total carbon chain length (y-axis) and number of double bonds (x-axis).
+        
+        - **Color intensity**: Represents the proportion of total class abundance (sum of mean concentrations).
+        - **Darker colors**: Indicate higher proportional abundance.
+        - **Data processing**: Mean concentrations are calculated per condition, then converted to percentages.
+        - **Use case**: Compare fatty acid composition across conditions to identify specific changes in carbon chain length or unsaturation.
+        """)
+        st.markdown("---")
+        
+        # Select class (single)
+        all_classes = sorted(continuation_df['ClassKey'].unique())
+        selected_class = st.selectbox('Select lipid class:', all_classes, key='fach_class_select')
+        
+        # Select conditions
+        valid_conditions = [c for i, c in enumerate(experiment.conditions_list) if experiment.number_of_samples_list[i] > 0]
+        selected_conditions = st.multiselect('Select conditions:', valid_conditions, default=valid_conditions[:2], key='fach_conditions_select')
+        
+        if selected_class and selected_conditions:
+            with st.spinner("Generating Fatty Acid Composition Heatmap..."):
+                data_dict = lp.FACH.prepare_fach_data(continuation_df, experiment, selected_class, selected_conditions)
+                if data_dict:
+                    fig = lp.FACH.create_fach_heatmap(data_dict)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                        fach_plots[selected_class] = fig
+                        
+                        # Download options
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            plotly_svg_download_button(fig, f"fach_{selected_class}.svg")
+                        with col2:
+                            # Combined CSV download
+                            combined_df = pd.concat([df.assign(Condition=cond) for cond, df in data_dict.items()])
+                            csv = combined_df.to_csv(index=False)
+                            st.download_button(
+                                label="Download CSV",
+                                data=csv,
+                                file_name=f"fach_data_{selected_class}.csv",
+                                mime="text/csv",
+                                key=f"fach_download_{selected_class}"
+                            )
+                else:
+                    st.warning("No data available for the selected class and conditions. Ensure the lipid class contains parseable lipid names (e.g., PC(34:1) or PC(16:0_18:1)).")
+        else:
+            st.info("Select a lipid class and at least one condition to generate the heatmap.")
+    
+    return fach_plots
+
+def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot,
+                       heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts,
+                       saturation_plots, volcano_plots, pathway_visualization, fach_plots=None):
+    """
+    Generate a PDF report containing all generated plots.
+    
+    Args:
+        box_plot_fig1: Plotly figure for missing values distribution
+        box_plot_fig2: Plotly figure for box plot of non-zero concentrations
+        bqc_plot: Plotly figure for BQC quality check
+        retention_time_plot: Plotly figure for retention time plot
+        pca_plot: Plotly figure for PCA analysis
+        heatmap_figs: Dictionary of heatmap figures (regular and clustered)
+        correlation_plots: Dictionary of correlation plot figures
+        abundance_bar_charts: Dictionary of abundance bar chart figures
+        abundance_pie_charts: Dictionary of abundance pie chart figures
+        saturation_plots: Dictionary of saturation plot figures
+        volcano_plots: Dictionary of volcano plot figures
+        pathway_visualization: Matplotlib figure for pathway visualization
+        fach_plots: Dictionary of FACH figures (default None)
+    
+    Returns:
+        BytesIO: Buffer containing the generated PDF
+    """
     pdf_buffer = io.BytesIO()
     
     try:
@@ -4827,7 +4921,6 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
                 main_img = ImageReader(io.BytesIO(main_bytes))
                 pdf.drawImage(main_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
                 pdf.drawString(50, 80, "Volcano Plot")
-
             # Concentration vs Fold Change Plot
             if 'concentration_vs_fold_change' in volcano_plots:
                 pdf.showPage()
@@ -4836,7 +4929,6 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
                 conc_img = ImageReader(io.BytesIO(conc_bytes))
                 pdf.drawImage(conc_img, 50, 100, width=700, height=500, preserveAspectRatio=True)
                 pdf.drawString(50, 80, "Concentration vs Fold Change Plot")
-
             # Concentration Distribution Plot
             if 'concentration_distribution' in volcano_plots:
                 pdf.showPage()
@@ -4859,6 +4951,17 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
             pdf.drawImage(img, 50, 50, width=700, height=500, preserveAspectRatio=True)
             pdf.drawString(50, 30, "Lipid Pathway Visualization")
         
+        # Add FACH Plots
+        if fach_plots:
+            for lipid_class, fach_plot in fach_plots.items():
+                if fach_plot is not None:
+                    pdf.showPage()
+                    pdf.setPageSize(landscape(letter))
+                    fach_bytes = pio.to_image(fach_plot, format='png', width=1000, height=600, scale=2)
+                    fach_img = ImageReader(io.BytesIO(fach_bytes))
+                    pdf.drawImage(fach_img, 50, 100, width=700, height=400, preserveAspectRatio=True)
+                    pdf.drawString(50, 80, f"Fatty Acid Composition Heatmap for {lipid_class}")
+        
         # Add Lipidomic Heatmaps
         if 'Regular Heatmap' in heatmap_figs:
             add_heatmap_to_pdf(pdf, heatmap_figs['Regular Heatmap'], "Regular Lipidomic Heatmap")
@@ -4868,7 +4971,7 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
         
         pdf.save()
         pdf_buffer.seek(0)
-        
+    
     except Exception as e:
         print(f"Error generating PDF: {str(e)}")
         import traceback
