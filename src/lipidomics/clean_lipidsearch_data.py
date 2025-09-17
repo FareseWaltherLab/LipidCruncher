@@ -33,11 +33,11 @@ class CleanLipidSearchData:
         """
         Standardizes lipid names with special handling for Ch class molecules
         and null/NaN FAKey values.
-        
+       
         Args:
             class_key (str): The lipid class key (e.g., PC, PE, Ch)
             fa_key (str, float, None): The fatty acid composition, may be NaN
-            
+           
         Returns:
             str: Standardized lipid name
         """
@@ -47,7 +47,7 @@ class CleanLipidSearchData:
         else:
             # Convert to string if it's not already
             fa_key = str(fa_key)
-        
+       
         # Special handling for cholesterol class - they often have different formatting
         if class_key == 'Ch':
             # Check if fa_key is empty or just contains deuterium labeling
@@ -57,18 +57,18 @@ class CleanLipidSearchData:
                     return f"Ch-{fa_key}()"
                 else:
                     return f"Ch()"
-        
+       
         # Standard processing for other lipid classes
         if '+D' in fa_key:
             fa_key, internal_standard = fa_key.split('+', 1)
             internal_standard = '+' + internal_standard
         else:
             internal_standard = ''
-            
+           
         # Handle empty fa_key
         if not fa_key or fa_key == '()':
             return f"{class_key}(){internal_standard}"
-            
+           
         # Sort fatty acids for consistent representation
         sorted_fatty_acids = '_'.join(sorted(fa_key.strip('()').split('_')))
         return f"{class_key}({sorted_fatty_acids}){internal_standard}"
@@ -100,7 +100,15 @@ class CleanLipidSearchData:
     def _add_lipid_to_clean_df(self, temp_df, clean_df, lipid, sample_names):
         isolated_df = temp_df[temp_df['LipidMolec'] == lipid]
         max_peak_quality = max(isolated_df['TotalSmpIDRate(%)'])
-        isolated_row = isolated_df[isolated_df['TotalSmpIDRate(%)'] == max_peak_quality].iloc[0]
+        # Filter rows with maximum TotalSmpIDRate(%)
+        max_quality_df = isolated_df[isolated_df['TotalSmpIDRate(%)'] == max_peak_quality]
+        # Define grade priority (A > B > C)
+        grade_priority = {'A': 1, 'B': 2, 'C': 3}
+        # Select row with highest grade (lowest priority value)
+        max_quality_df['grade_priority'] = max_quality_df['TotalGrade'].map(grade_priority)
+        isolated_row = max_quality_df.sort_values('grade_priority').iloc[0]
+        # Drop temporary column
+        max_quality_df = max_quality_df.drop(columns=['grade_priority'])
         new_row = {col: isolated_row[col] for col in clean_df.columns}
         clean_df = pd.concat([clean_df, pd.DataFrame([new_row])], ignore_index=True)
         return clean_df
@@ -111,10 +119,10 @@ class CleanLipidSearchData:
         Removes rows with missing FA keys, with exceptions for:
         1. Ch class molecules
         2. Ch-D standard molecules (like Ch-D7)
-        
+       
         Args:
             df (pd.DataFrame): Input dataframe
-            
+           
         Returns:
             pd.DataFrame: Filtered dataframe
         """
@@ -123,11 +131,11 @@ class CleanLipidSearchData:
         # They belong to the Ch class, OR
         # Their LipidMolec starts with "Ch-D"
         keep_mask = (
-            df['FAKey'].notna() | 
-            (df['ClassKey'] == 'Ch') | 
+            df['FAKey'].notna() |
+            (df['ClassKey'] == 'Ch') |
             df['LipidMolec'].str.contains(r'^Ch-D', regex=True, na=False)
         )
-        
+       
         # Return the filtered dataframe
         return df[keep_mask]
 
@@ -146,7 +154,7 @@ class CleanLipidSearchData:
     def extract_internal_standards(_self, df):
         """
         Extracts internal standards from the dataframe with improved pattern matching.
-        
+       
         True internal standards are identified as:
         1. Deuterium labeling patterns (e.g., +D7, -D7)
         2. Ch-D7 pattern specifically
@@ -154,29 +162,29 @@ class CleanLipidSearchData:
         """
         # Create a copy of the dataframe
         df = df.copy()
-        
+       
         # Create pattern for deuterium-labeled standards
         deuterium_mask = df['LipidMolec'].str.contains(r'[+-]D\d+', regex=True, na=False)
-        
+       
         # Specific pattern for Ch-D7 type molecules
         ch_d_mask = df['LipidMolec'].str.contains(r'^Ch-D\d+', regex=True, na=False)
-        
+       
         # Handle the :(s) notation
         standard_notation_mask = df['LipidMolec'].str.contains(r':\(s\)', regex=True, na=False)
-        
+       
         # Create a mask for chemical modifications (+XXXX)
         chemical_mod_mask = df['LipidMolec'].str.contains(r'\+[A-Z]{2,}', regex=True, na=False)
-        
+       
         # A true standard should be one of:
         # 1. Have deuterium labeling, OR
         # 2. Be a Ch-D7 type molecule, OR
         # 3. Have :(s) notation WITHOUT chemical modifications
         standards_mask = deuterium_mask | ch_d_mask | (standard_notation_mask & ~chemical_mod_mask)
-        
+       
         # Extract standards and non-standards
         internal_standards_df = df[standards_mask].reset_index(drop=True)
         non_standards_df = df[~standards_mask].reset_index(drop=True)
-        
+       
         return non_standards_df, internal_standards_df
 
     @st.cache_data(ttl=3600)
