@@ -914,20 +914,22 @@ def manage_internal_standards(normalizer):
                 # Use previously uploaded standards
                 st.session_state.intsta_df = st.session_state.preserved_intsta_df.copy()
 
-def apply_zero_filter(cleaned_df, experiment, data_format):
+def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None):
     """
     Applies the zero-value filter to the cleaned dataframe.
-    
-    For each lipid species, checks if in EVERY condition, >=75% of replicates 
-    have value <= threshold. If yes, removes that species from the dataset.
-    
+   
+    For each lipid species, removes the species if the BQC condition (if present) has 50% or more
+    replicates with values <= threshold OR every non-BQC condition has 75% or more replicates
+    with values <= threshold. If no BQC condition exists, only the non-BQC condition applies.
+   
     Args:
         cleaned_df (pd.DataFrame): Cleaned dataframe
         experiment (Experiment): Experiment object
         data_format (str): Data format
-        
+        bqc_label (str, optional): Label for Batch Quality Control samples
+       
     Returns:
-        pd.DataFrame: Filtered dataframe
+        tuple: (filtered DataFrame, list of removed species)
     """
     default_threshold = 30000.0 if data_format == 'LipidSearch 5.0' else 0.0
     threshold = st.number_input(
@@ -938,85 +940,75 @@ def apply_zero_filter(cleaned_df, experiment, data_format):
         help="For non-LipidSearch formats, 0 means only exact zeros are considered. Enter a value >0 if needed.",
         key="zero_filter_threshold"
     )
-    
+   
     # Get all lipid species before filtering
     all_species = cleaned_df['LipidMolec'].tolist()
-    
+   
     # List to keep track of rows to keep
     to_keep = []
-    
+   
     for idx, row in cleaned_df.iterrows():
-        # Assume remove unless we find a condition with <75% zeros
-        remove = True
-        
+        non_bqc_all_fail = True
+        bqc_fail = False if bqc_label is None or bqc_label not in experiment.conditions_list else True  # Default to False if no valid BQC condition
+       
         for cond_idx, cond_samples in enumerate(experiment.individual_samples_list):
             if not cond_samples:  # Skip empty conditions
                 continue
-            
+           
             zero_count = 0
             n_samples = len(cond_samples)
-            
+           
             for sample in cond_samples:
                 col = f'intensity[{sample}]'
                 if col in cleaned_df.columns:
                     value = row[col]
                     if value <= threshold:
                         zero_count += 1
-            
-            # If this condition has <75% zeros, keep the row
-            if (zero_count / n_samples) < 0.75:
-                remove = False
-                break
-        
-        if not remove:
+           
+            # Set threshold based on whether the condition is BQC
+            zero_threshold = 0.5 if experiment.conditions_list[cond_idx] == bqc_label else 0.75
+           
+            # Calculate zero proportion
+            zero_proportion = zero_count / n_samples if n_samples > 0 else 1.0
+           
+            # Check if condition passes its threshold
+            if zero_proportion < zero_threshold:
+                if experiment.conditions_list[cond_idx] == bqc_label:
+                    bqc_fail = False
+                else:
+                    non_bqc_all_fail = False
+       
+        # Retain lipid if BQC does not fail AND not all non-BQC conditions fail
+        if not bqc_fail and not non_bqc_all_fail:
             to_keep.append(idx)
-    
+   
     filtered_df = cleaned_df.loc[to_keep].reset_index(drop=True)
-    
+   
     # Compute removed species
     removed_species = [species for species in all_species if species not in filtered_df['LipidMolec'].tolist()]
-    
-    # Show removal info
-    removed = len(removed_species)
-    if removed > 0:
-        st.info(f"Removed {removed} species based on zero filter ({removed / len(all_species) * 100:.1f}%)")
-        
-        # Display removed species
-        with st.expander("View Removed Species"):
-            removed_df = pd.DataFrame({'Removed LipidMolec': removed_species})
-            st.dataframe(removed_df)
-            csv = removed_df.to_csv(index=False)
-            st.download_button(
-                label="Download Removed Species",
-                data=csv,
-                file_name="removed_species.csv",
-                mime="text/csv"
-            )
-    else:
-        st.info("No species removed by zero filter")
-    
-    return filtered_df
+   
+    return filtered_df, removed_species
 
 def display_cleaned_data(unfiltered_df, intsta_df):
     """
     Display cleaned data and manage internal standards with simplified workflow.
-    Now includes the zero filter application and display of removed species.
+    Includes zero filter application and display of removed species and final filtered data within the main expander.
     """
     # Update session state with new data if provided
     if unfiltered_df is not None:
         st.session_state.cleaned_df = unfiltered_df.copy()
         st.session_state.intsta_df = intsta_df.copy() if intsta_df is not None else pd.DataFrame()
-
+    
     # Create normalizer instance
     normalizer = lp.NormalizeData()
-
+    
     # Display cleaned data
     with st.expander("Clean and Filter Data"):
         # Data cleaning process details - ALWAYS VISIBLE
         st.markdown("### Data Cleaning, Standardization and Filtering Process")
         st.markdown("""
-        LipidCruncher performs a systematic cleaning and standardization process on your uploaded data 
-        to ensure consistency, reliability, and compatibility with downstream analyses. The specific 
+        LipidCruncher performs a systematic cleaning and standardization process on your uploaded data
+        to ensure consistency, reliability, and compatibility with downstream analyses. The specific
         procedures applied depend on your data format.
         """)
         
@@ -1026,227 +1018,200 @@ def display_cleaned_data(unfiltered_df, intsta_df):
             ["LipidSearch Format", "Generic Format", "Metabolomics Workbench"],
             horizontal=True
         )
-        
+       
         if data_format_tab == "LipidSearch Format":
             st.markdown("#### Data Cleaning for LipidSearch Format")
             st.markdown("""
             For LipidSearch data, we perform the following standardization and cleaning steps:
-            
-            1. **Column Standardization**: We extract and standardize essential columns including LipidMolec, 
-               ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, and all MeanArea 
+           
+            1. **Column Standardization**: We extract and standardize essential columns including LipidMolec,
+               ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, and all MeanArea
                columns for each sample.
-            
-            2. **Data Type Conversion**: MeanArea columns are converted to numeric format, with any 
+           
+            2. **Data Type Conversion**: MeanArea columns are converted to numeric format, with any
                non-numeric entries replaced by zeros to maintain data integrity.
-            
-            3. **Lipid Name Standardization**: Names of lipid molecules are standardized to ensure 
+           
+            3. **Lipid Name Standardization**: Names of lipid molecules are standardized to ensure
                uniform formatting across the dataset.
-            
-            4. **Quality Filtering**: Only entries with grades 'A', 'B', or 'C' are retained. 
+           
+            4. **Quality Filtering**: Only entries with grades 'A', 'B', or 'C' are retained.
                Grade 'C' is only accepted for specific lipid classes (LPC and SM).
-            
-            5. **Best Peak Selection**: For each unique lipid, the entry with the highest TotalSmpIDRate(%) 
+           
+            5. **Best Peak Selection**: For each unique lipid, the entry with the highest TotalSmpIDRate(%)
                is selected, as this indicates the most reliable measurement across samples.
-            
-            6. **Missing FA Keys Handling**: Rows with missing FA keys are removed, with exceptions 
+           
+            6. **Missing FA Keys Handling**: Rows with missing FA keys are removed, with exceptions
                for cholesterol (Ch) class molecules and deuterated standards.
-            
+           
             7. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
-            
-            8. **Zero Filtering**: Removes lipid species where, in every condition, 75% or more of the replicates have intensity values <= user-specified detection threshold (considered zero or below detection).
+           
+            8. **Zero Filtering**: Removes lipid species where the BQC condition (if present) has 50% or more replicates with intensity values <= user-specified detection threshold OR every non-BQC condition has 75% or more replicates with such values.
             """)
-            
+           
             st.info("This process ensures that only high-quality, consistent data points are retained for analysis.")
-            
+           
         elif data_format_tab == "Generic Format":
             st.markdown("#### Data Cleaning for Generic Format")
             st.markdown("""
             For Generic Format data, we perform the following standardization and cleaning steps:
-            
-            1. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining 
+           
+            1. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining
                columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
-            
-            2. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format: 
+           
+            2. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format:
                Class(chain details). For example:
                - LPC O-17:4 → LPC(O-17:4)
                - Cer d18:0/C24:0 → Cer(d18:0_C24:0)
                - CE 14:0;0 → CE(14:0)
-            
-            3. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class 
+           
+            3. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class
                from the standardized lipid name (e.g., 'PC' from 'PC(16:0_18:1)').
-            
-            4. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
+           
+            4. **Data Type Conversion**: Intensity columns are converted to numeric format, with any
                non-numeric entries replaced by zeros.
-            
-            5. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special 
+           
+            5. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special
                characters, strings with only special characters) are removed.
-            
+           
             6. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
-            
-            7. **Zero Filtering**: Removes lipid species where, in every condition, 75% or more of the replicates have intensity values <= user-specified detection threshold (considered zero or below detection).
+           
+            7. **Zero Filtering**: Removes lipid species where the BQC condition (if present) has 50% or more replicates with intensity values <= user-specified detection threshold OR every non-BQC condition has 75% or more replicates with such values.
             """)
-            
+           
             st.info("This standardization process allows for consistent analysis regardless of the original format of your data.")
-            
+           
         else:  # Metabolomics Workbench
             st.markdown("#### Data Cleaning for Metabolomics Workbench Format")
             st.markdown("""
             For Metabolomics Workbench data, we perform the following standardization and cleaning steps:
-            
-            1. **Section Extraction**: Data is extracted from between the 'MS_METABOLITE_DATA_START' and 
+           
+            1. **Section Extraction**: Data is extracted from between the 'MS_METABOLITE_DATA_START' and
                'MS_METABOLITE_DATA_END' markers.
-            
-            2. **Header Processing**: The first row is processed as sample names, and the second row as 
+           
+            2. **Header Processing**: The first row is processed as sample names, and the second row as
                experimental conditions.
-            
-            3. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining 
+           
+            3. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining
                columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
-            
-            4. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format, 
+           
+            4. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format,
                similar to the Generic Format process.
-            
-            5. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class 
+           
+            5. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class
                from the standardized lipid name.
-            
-            6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
+           
+            6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any
                non-numeric entries replaced by zeros.
-            
-            7. **Experimental Conditions Storage**: The experimental conditions from the second row are 
+           
+            7. **Experimental Conditions Storage**: The experimental conditions from the second row are
                stored and used to suggest the experimental setup.
-            
-            8. **Zero Filtering**: Removes lipid species where, in every condition, 75% or more of the replicates have intensity values <= user-specified detection threshold (considered zero or below detection).
+           
+            8. **Zero Filtering**: Removes lipid species where the BQC condition (if present) has 50% or more replicates with intensity values <= user-specified detection threshold OR every non-BQC condition has 75% or more replicates with such values.
             """)
-            
+           
             st.info("This process ensures that your Metabolomics Workbench data is properly formatted for analysis in LipidCruncher.")
-        
+       
         # Add a divider
         st.markdown("---")
-        
-        # Additional zero filtering section
+       
+        # Zero filtering section
         st.subheader("Zero Filtering")
         st.markdown("""
-        This filter removes lipid species where, in every condition, 75% or more of the replicates have intensity values 
-        less than or equal to the specified detection threshold (considered as zero or below detection).
+        This filter removes lipid species if the BQC condition (if present) has 50% or more replicates with intensity values
+        less than or equal to the specified detection threshold (considered as zero or below detection) OR if every non-BQC
+        condition has 75% or more such replicates. If no BQC condition exists, only the non-BQC condition applies.
         """)
         
-        default_threshold = 30000.0 if st.session_state.format_type == 'LipidSearch 5.0' else 0.0
-        threshold = st.number_input(
-            'Enter detection threshold (values <= this are considered zero for filtering)',
-            min_value=0.0,
-            value=default_threshold,
-            step=1.0,
-            help="For non-LipidSearch formats, 0 means only exact zeros are considered. Enter a value >0 if needed.",
-            key="zero_filter_threshold"
-        )
+        # Check if cleaned_df is valid
+        if st.session_state.cleaned_df is None or st.session_state.cleaned_df.empty:
+            st.error("No valid cleaned data available for zero filtering.")
+            return None
         
         # Apply filter
-        filtered_df = st.session_state.cleaned_df.copy()
+        filtered_df, removed_species = apply_zero_filter(
+            st.session_state.cleaned_df,
+            st.session_state.experiment,
+            st.session_state.format_type,
+            bqc_label=st.session_state.bqc_label
+        )
         
-        # Get all lipid species before filtering
-        all_species = filtered_df['LipidMolec'].tolist()
-        
-        # List to keep track of rows to keep
-        to_keep = []
-        
-        for idx, row in filtered_df.iterrows():
-            # Assume remove unless we find a condition with <75% zeros
-            remove = True
-            
-            for cond_idx, cond_samples in enumerate(st.session_state.experiment.individual_samples_list):
-                if not cond_samples:  # Skip empty conditions
-                    continue
-                    
-                zero_count = 0
-                n_samples = len(cond_samples)
-                
-                for sample in cond_samples:
-                    col = f'intensity[{sample}]'
-                    if col in filtered_df.columns:
-                        value = row[col]
-                        if value <= threshold:
-                            zero_count += 1
-                
-                # If this condition has <75% zeros, keep the row
-                if (zero_count / n_samples) < 0.75:
-                    remove = False
-                    break
-            
-            if not remove:
-                to_keep.append(idx)
-        
-        filtered_df = filtered_df.loc[to_keep].reset_index(drop=True)
-        
-        # Compute removed species
-        removed_species = [species for species in all_species if species not in filtered_df['LipidMolec'].tolist()]
-        
-        # Show removal info
+        # Display removed species immediately after the threshold input
         removed = len(removed_species)
         if removed > 0:
-            st.info(f"Removed {removed} species based on zero filter ({removed / len(all_species) * 100:.1f}%)")
-            
-            # Display removed species
+            st.info(f"Removed {removed} species based on zero filter ({removed / len(st.session_state.cleaned_df) * 100:.1f}%)")
+            st.markdown("**Removed Species:**")
             removed_df = pd.DataFrame({'Removed LipidMolec': removed_species})
             st.dataframe(removed_df)
+            csv = removed_df.to_csv(index=False)
+            st.download_button(
+                label="Download Removed Species",
+                data=csv,
+                file_name="removed_species.csv",
+                mime="text/csv"
+            )
         else:
             st.info("No species removed by zero filter")
         
-        # Display the filtered data
+        # Update session state with filtered data
+        st.session_state.cleaned_df = filtered_df
+        st.session_state.continuation_df = filtered_df
+        
+        # Display the filtered data within the main expander
         st.markdown("---")
         st.subheader("Final Cleaned and Filtered Data")
         st.write("This table shows your data after all cleaning steps, including zero filtering:")
         display_data(filtered_df, "Data", "final_cleaned_data.csv")
-
+    
     # Internal standards management
     with st.expander("Manage Internal Standards"):
         # Internal standards detection details - ALWAYS VISIBLE
         st.markdown("### Internal Standards Detection")
         st.markdown("""
-        LipidCruncher automatically identifies internal standards from the SPLASH LIPIDOMIX® Mass Spec Standard (Avanti Polar Lipids, Cat# 330707-1) 
-        by detecting patterns like "+D7" or ":(s)" notation in lipid names. If you use custom standards with different naming conventions, you can upload them using the 
+        LipidCruncher automatically identifies internal standards from the SPLASH LIPIDOMIX® Mass Spec Standard (Avanti Polar Lipids, Cat# 330707-1)
+        by detecting patterns like "+D7" or ":(s)" notation in lipid names. If you use custom standards with different naming conventions, you can upload them using the
         option below.
         """)
-            
+           
         # Add a divider
         st.markdown("---")
-        
+       
         manage_internal_standards(normalizer)
-
         if not st.session_state.intsta_df.empty:
             st.markdown("### Internal Standards Consistency Plots")
             st.markdown("""
-            These stacked bar plots show the raw intensity values of internal standards across all samples, separated by class. 
-            For classes with multiple standards, bars are stacked by individual standard. 
+            These stacked bar plots show the raw intensity values of internal standards across all samples, separated by class.
+            For classes with multiple standards, bars are stacked by individual standard.
             Consistent bar heights across samples indicate good sample preparation and instrument performance.
             """)
-            
+           
             # Add multiselect for conditions
             conditions = st.session_state.experiment.conditions_list
             selected_conditions = st.multiselect(
-                'Select conditions to display:', 
-                conditions, 
+                'Select conditions to display:',
+                conditions,
                 default=conditions
             )
-            
+           
             # Get selected samples in original order
             selected_samples = []
             for cond in selected_conditions:
                 idx = conditions.index(cond)
                 selected_samples.extend(st.session_state.experiment.individual_samples_list[idx])
-            
+           
             # Preserve original full order but filter to selected
             full_samples = st.session_state.experiment.full_samples_list
             selected_samples_ordered = [s for s in full_samples if s in selected_samples]
-            
+           
             # Generate plots with selected samples
             figs = lp.InternalStandardsPlotter.create_consistency_plots(
                 st.session_state.intsta_df,
                 selected_samples_ordered
             )
-            
+           
             if figs:
                 for fig in figs:
                     st.plotly_chart(fig, use_container_width=True)
-                    
+                   
                     # Add download options
                     col1, col2 = st.columns(2)
                     with col1:
@@ -1257,10 +1222,10 @@ def display_cleaned_data(unfiltered_df, intsta_df):
                         class_df = st.session_state.intsta_df[st.session_state.intsta_df['ClassKey'] == class_key]
                         intensity_cols = [f'intensity[{s}]' for s in selected_samples_ordered if f'intensity[{s}]' in class_df.columns]
                         melted_df = pd.melt(
-                            class_df, 
-                            id_vars=['LipidMolec'], 
+                            class_df,
+                            id_vars=['LipidMolec'],
                             value_vars=intensity_cols,
-                            var_name='Sample_Column', 
+                            var_name='Sample_Column',
                             value_name='Intensity'
                         )
                         melted_df['Sample'] = melted_df['Sample_Column'].str.replace('intensity[', '', regex=False).str.replace(']', '', regex=False)
@@ -1275,7 +1240,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
                 st.info("No internal standards available for consistency plots.")
         else:
             st.info("No internal standards available for consistency plots.")
-    
+   
     # Return the filtered dataframe for further processing
     return filtered_df
             
