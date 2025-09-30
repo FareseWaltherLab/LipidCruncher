@@ -55,7 +55,7 @@ class FACH:
         
         # Parse C and DB for each lipid
         class_df['Carbon'], class_df['DB'] = zip(*class_df['LipidMolec'].apply(FACH.parse_carbon_db))
-        class_df = class_df.dropna(subset=['Carbon', 'DB'])  # Drop unparsable
+        class_df = class_df.dropna(subset=['Carbon', 'DB']) # Drop unparsable
         
         for condition in selected_conditions:
             cond_idx = experiment.conditions_list.index(condition)
@@ -74,7 +74,7 @@ class FACH:
             # Compute proportions
             total_conc = agg_df['Mean_Conc'].sum()
             if total_conc > 0:
-                agg_df['Proportion'] = (agg_df['Mean_Conc'] / total_conc) * 100  # As percentage
+                agg_df['Proportion'] = (agg_df['Mean_Conc'] / total_conc) * 100 # As percentage
             else:
                 agg_df['Proportion'] = 0
             
@@ -88,22 +88,23 @@ class FACH:
         Create side-by-side heatmaps for each condition with average DB and carbon chain length lines.
         Includes annotations for both lines positioned outside the heatmap grid to avoid overlap,
         with a semi-transparent background for clarity, and uses black text for all plot elements,
-        including subplot titles.
+        including subplot titles. Ensures x-axis numbers are not rotated (tickangle=0).
+        Uses a custom YlOrRd colorscale starting with yellowish at 0.
         Returns Plotly figure.
         """
         if not data_dict:
             return None
-        
+    
         # Find global min/max for consistent color scale
         all_proportions = pd.concat([df['Proportion'] for df in data_dict.values()])
         vmin, vmax = all_proportions.min(), all_proportions.max()
-        
+    
         # Find global max for DB and Carbon to set consistent axes
         all_db = pd.concat([df['DB'] for df in data_dict.values()])
         all_carbon = pd.concat([df['Carbon'] for df in data_dict.values()])
         max_db = int(all_db.max()) if not all_db.empty else 9
         max_carbon = int(all_carbon.max()) if not all_carbon.empty else 50
-        
+    
         # Create subplots: one per condition
         n_conditions = len(data_dict)
         fig = make_subplots(
@@ -112,7 +113,17 @@ class FACH:
             subplot_titles=list(data_dict.keys()),
             shared_yaxes=True
         )
-        
+    
+        # Define custom YlOrRd colorscale (yellow at 0, progressing to red)
+        custom_colorscale = [
+            [0.0, 'rgb(255, 255, 204)'],  # Light yellow for 0%
+            [0.2, 'rgb(255, 204, 153)'],  # Light orange
+            [0.4, 'rgb(255, 153, 102)'],  # Orange
+            [0.6, 'rgb(255, 102, 51)'],   # Darker orange
+            [0.8, 'rgb(204, 51, 0)'],     # Red-orange
+            [1.0, 'rgb(153, 0, 0)']       # Dark red for max
+        ]
+    
         col_idx = 1
         for condition, df in data_dict.items():
             # Calculate average DB and Carbon, weighted by Proportion
@@ -122,18 +133,18 @@ class FACH:
             else:
                 avg_db = 0
                 avg_carbon = 0
-            
+    
             heatmap = go.Heatmap(
                 x=df['DB'],
                 y=df['Carbon'],
                 z=df['Proportion'],
-                colorscale='Plasma',
+                colorscale=custom_colorscale,  # Updated to custom YlOrRd
                 zmin=vmin,
                 zmax=vmax,
                 colorbar=dict(title='Proportion (%)', titlefont=dict(color='black'), tickfont=dict(color='black'))
             )
             fig.add_trace(heatmap, row=1, col=col_idx)
-            
+    
             # Add vertical dashed line for average DB
             fig.add_vline(
                 x=avg_db,
@@ -154,7 +165,7 @@ class FACH:
                 row=1,
                 col=col_idx
             )
-            
+    
             # Add horizontal dashed line for average Carbon
             fig.add_hline(
                 y=avg_carbon,
@@ -175,12 +186,13 @@ class FACH:
                 row=1,
                 col=col_idx
             )
-            
-            # Update x-axis to show all integers from 0 to max_db
+    
+            # Update x-axis to show all integers from 0 to max_db with no rotation
             fig.update_xaxes(
                 tickmode='array',
                 tickvals=list(range(max_db + 1)),
                 ticktext=list(range(max_db + 1)),
+                tickangle=0,
                 title_text='Double Bonds',
                 titlefont=dict(color='black'),
                 tickfont=dict(color='black'),
@@ -188,7 +200,7 @@ class FACH:
                 row=1,
                 col=col_idx
             )
-            
+    
             # Update y-axis for the first subplot only to avoid redundancy
             if col_idx == 1:
                 fig.update_yaxes(
@@ -206,14 +218,14 @@ class FACH:
                     row=1,
                     col=col_idx
                 )
-            
+    
             col_idx += 1
-        
+    
         # Update subplot titles to black
         for annotation in fig.layout.annotations:
-            if annotation.text in data_dict.keys():  # Check if annotation is a subplot title
+            if annotation.text in data_dict.keys():
                 annotation.font = dict(color='black', size=12)
-        
+    
         fig.update_layout(
             title=f'Fatty Acid Composition Heatmaps',
             titlefont=dict(color='black'),
@@ -222,5 +234,5 @@ class FACH:
             plot_bgcolor='white',
             paper_bgcolor='white'
         )
-        
+    
         return fig
