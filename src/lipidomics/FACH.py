@@ -12,15 +12,25 @@ class FACH:
     of lipids within a selected class, grouped by total carbon chain length and number of
     double bonds.
     """
+    
     @staticmethod
     def parse_carbon_db(lipid_name):
         """
         Parse total carbon atoms and double bonds from lipid name.
-        Handles formats like 'PC(34:1)' or 'PC(16:0_18:1)'.
+        Assumes lipid names have been standardized to Class(chain_details) format
+        where chain_details uses '_' as separator.
+        
+        Handles various formats:
+        - Standard: 'PC(34:1)' or 'PC(16:0_18:1)'
+        - Ether lipids: 'PC(O-38:4)', 'PE(P-36:2)'
+        - Sphingoid bases: 'Cer(d18:1_24:0)', 'SM(d18:1_16:0)'
+        - Oxidized: 'PC(16:0_18:1+O)', 'PE(18:0_20:4+2O)'
+        - With modifications: 'LPC(18:1)(d7)'
+        
         Returns (total_carbons, total_db) or (None, None) if unparsable.
         """
-        # Extract the part inside parentheses
-        match = re.search(r'\((.*?)\)', lipid_name)
+        # Extract the part inside the first set of parentheses (ignoring modifications in second parentheses)
+        match = re.search(r'\(([^)]+)\)', lipid_name)
         if not match:
             return None, None
         composition = match.group(1)
@@ -28,16 +38,30 @@ class FACH:
         total_c = 0
         total_db = 0
         
-        # Split by '_' for detailed or use single for total
-        chains = composition.split('_') if '_' in composition else [composition]
+        # Split by underscore (standardized separator)
+        chains = composition.split('_')
         
         for chain in chains:
-            chain_match = re.match(r'(\d+):(\d+)', chain)
+            # Remove common prefixes that don't contribute to carbon count:
+            # - Ether lipids: O-, P-
+            # - Sphingoid bases: d, t, m (e.g., d18:1, t18:0, m18:1)
+            # Note: Keep the numbers after these prefixes
+            chain_cleaned = re.sub(r'^[OPdtm]-?', '', chain)
+            
+            # Remove oxidation and hydroxyl suffixes that don't affect carbon:db count
+            # Examples: +O, +2O, +3O
+            chain_cleaned = re.sub(r'\+\d*O', '', chain_cleaned)
+            
+            # Remove chain identifiers like C in C24:0
+            chain_cleaned = re.sub(r'^C', '', chain_cleaned)
+            
+            # Now extract carbon:db pattern
+            chain_match = re.match(r'(\d+):(\d+)', chain_cleaned)
             if chain_match:
                 total_c += int(chain_match.group(1))
                 total_db += int(chain_match.group(2))
         
-        return total_c, total_db if total_c > 0 else (None, None)
+        return (total_c, total_db) if total_c > 0 else (None, None)
 
     @staticmethod
     def prepare_fach_data(df, experiment, selected_class, selected_conditions):
@@ -45,6 +69,8 @@ class FACH:
         Prepare data for FACH: aggregate proportions per (C, DB) for each condition.
         Returns dict of {condition: pd.DataFrame with 'Carbon', 'DB', 'Proportion'}
         """
+        import streamlit as st
+        
         fach_data = {}
         
         # Filter to selected class
@@ -54,8 +80,36 @@ class FACH:
             return fach_data
         
         # Parse C and DB for each lipid
-        class_df['Carbon'], class_df['DB'] = zip(*class_df['LipidMolec'].apply(FACH.parse_carbon_db))
-        class_df = class_df.dropna(subset=['Carbon', 'DB']) # Drop unparsable
+        parsed_results = []
+        unparsable_lipids = []
+        
+        for lipid_name in class_df['LipidMolec']:
+            result = FACH.parse_carbon_db(lipid_name)
+            parsed_results.append(result)
+            if result == (None, None):
+                unparsable_lipids.append(lipid_name)
+        
+        # Report unparsable lipids if any
+        if unparsable_lipids:
+            st.warning(f"Could not parse {len(unparsable_lipids)} lipids in class '{selected_class}':")
+            for lipid in unparsable_lipids[:10]:
+                st.write(f"  - {lipid}")
+            if len(unparsable_lipids) > 10:
+                st.write(f"  ... and {len(unparsable_lipids) - 10} more")
+        
+        # Unpack results
+        class_df['Carbon'], class_df['DB'] = zip(*parsed_results)
+        
+        # Convert None values and any remaining tuples to np.nan
+        class_df['Carbon'] = class_df['Carbon'].apply(lambda x: np.nan if x is None else x)
+        class_df['DB'] = class_df['DB'].apply(lambda x: np.nan if isinstance(x, tuple) or x is None else x)
+        
+        # Drop unparsable rows
+        class_df = class_df.dropna(subset=['Carbon', 'DB'])
+        
+        if class_df.empty:
+            st.error(f"No parsable lipids remaining for class '{selected_class}'")
+            return fach_data
         
         for condition in selected_conditions:
             cond_idx = experiment.conditions_list.index(condition)
@@ -74,7 +128,7 @@ class FACH:
             # Compute proportions
             total_conc = agg_df['Mean_Conc'].sum()
             if total_conc > 0:
-                agg_df['Proportion'] = (agg_df['Mean_Conc'] / total_conc) * 100 # As percentage
+                agg_df['Proportion'] = (agg_df['Mean_Conc'] / total_conc) * 100
             else:
                 agg_df['Proportion'] = 0
             
@@ -90,6 +144,7 @@ class FACH:
         with a semi-transparent background for clarity, and uses black text for all plot elements,
         including subplot titles. Ensures x-axis numbers are not rotated (tickangle=0).
         Uses a custom YlOrRd colorscale starting with yellowish at 0.
+        Y-axis starts slightly below the minimum carbon chain length.
         Returns Plotly figure.
         """
         if not data_dict:
@@ -99,10 +154,11 @@ class FACH:
         all_proportions = pd.concat([df['Proportion'] for df in data_dict.values()])
         vmin, vmax = all_proportions.min(), all_proportions.max()
     
-        # Find global max for DB and Carbon to set consistent axes
+        # Find global max for DB and min/max for Carbon to set consistent axes
         all_db = pd.concat([df['DB'] for df in data_dict.values()])
         all_carbon = pd.concat([df['Carbon'] for df in data_dict.values()])
         max_db = int(all_db.max()) if not all_db.empty else 9
+        min_carbon = int(all_carbon.min()) if not all_carbon.empty else 0
         max_carbon = int(all_carbon.max()) if not all_carbon.empty else 50
     
         # Create subplots: one per condition
@@ -138,7 +194,7 @@ class FACH:
                 x=df['DB'],
                 y=df['Carbon'],
                 z=df['Proportion'],
-                colorscale=custom_colorscale,  # Updated to custom YlOrRd
+                colorscale=custom_colorscale,
                 zmin=vmin,
                 zmax=vmax,
                 colorbar=dict(title='Proportion (%)', titlefont=dict(color='black'), tickfont=dict(color='black'))
@@ -201,20 +257,21 @@ class FACH:
                 col=col_idx
             )
     
-            # Update y-axis for the first subplot only to avoid redundancy
+            # Update y-axis - start slightly below minimum carbon chain length
+            y_range_min = min_carbon - 1 if min_carbon > 0 else 0
             if col_idx == 1:
                 fig.update_yaxes(
                     title_text='Carbon Chain Length',
                     titlefont=dict(color='black'),
                     tickfont=dict(color='black'),
-                    range=[min(df['Carbon'].min() - 0.5, 0) if not df.empty else 0, max_carbon + 2.5],
+                    range=[y_range_min, max_carbon + 2.5],
                     row=1,
                     col=col_idx
                 )
             else:
                 fig.update_yaxes(
                     tickfont=dict(color='black'),
-                    range=[min(df['Carbon'].min() - 0.5, 0) if not df.empty else 0, max_carbon + 2.5],
+                    range=[y_range_min, max_carbon + 2.5],
                     row=1,
                     col=col_idx
                 )
