@@ -3333,10 +3333,20 @@ def display_saturation_compatibility_warning(continuation_df):
     
     if not has_detailed_fa:
         st.warning("""
-        ⚠️ Note: Saturation plots work best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
-        Your data appears to use total composition (e.g., PC(34:1)) which only shows total 
-        carbons and double bonds. This may affect the accuracy of the saturation analysis.
+        ⚠️ **Data Format Issue**: Saturation plots require detailed fatty acid composition 
+        (e.g., PC(16:0_18:1)) to accurately classify chains as saturated, monounsaturated, 
+        or polyunsaturated. Your data appears to use consolidated total composition 
+        (e.g., PC(34:1)) which only shows total carbons and double bonds across all chains. 
+        This prevents accurate saturation analysis.
+        
+        **What this means:**
+        - `PC(16:0_18:1)` ✓ Shows individual chains: 16:0 (saturated) and 18:1 (monounsaturated)
+        - `PC(34:1)` ✗ Only shows totals: 34 carbons, 1 double bond (could be distributed many ways)
+        
+        The analysis may produce inaccurate results because the algorithm cannot determine 
+        which chains are saturated vs. unsaturated.
         """)
+
 
 def display_auto_mode_results(stat_options, selected_classes, selected_conditions, statistical_results):
     """Display the results of auto mode logic after statistical analysis is complete."""
@@ -3395,7 +3405,7 @@ def display_excluded_conditions_warning(experiment, selected_conditions):
 def display_saturation_plots(experiment, continuation_df):
     """
     Enhanced saturation plot display function with rigorous statistical methodology.
-    Now uses separated core logic with UI components in main app.
+    Now includes filtering for consolidated format lipids.
     """
     saturation_plots = {}
     with st.expander("Class Level Breakdown - Saturation Plots"):
@@ -3427,23 +3437,29 @@ def display_saturation_plots(experiment, continuation_df):
         
         **🧮 How SFA, MUFA, and PUFA Values Are Computed:**
         
-        For each lipid molecule in your dataset (e.g., PC(16:0_18:1)):
+        For each lipid molecule in your dataset, the algorithm:
         
-        1. **Fatty Acid Chain Analysis**: The algorithm parses the lipid name to identify individual fatty acid chains
-           - Example: PC(16:0_18:1) contains chains 16:0 and 18:1
-           - The number after the colon indicates double bonds: 16:0 (0 bonds = saturated), 18:1 (1 bond = monounsaturated)
+        1. **Fatty Acid Chain Parsing**: Identifies individual fatty acid chains from the lipid name
+           - ✓ `PC(16:0_18:1)` → Successfully parses to chains: [16:0, 18:1]
+           - ✓ `PE(18:0_20:4)` → Successfully parses to chains: [18:0, 20:4]
+           - ✗ `PC(34:1)` → Cannot parse individual chains (consolidated format)
+           
+        2. **Classification by Saturation**: Counts double bonds in each chain
+           - **SFA** (0 double bonds): 16:0, 18:0, 24:0
+           - **MUFA** (1 double bond): 16:1, 18:1, 24:1
+           - **PUFA** (2+ double bonds): 18:2, 20:4, 22:6
         
-        2. **Classification by Saturation**:
-           - **SFA**: Chains with 0 double bonds (e.g., 16:0, 18:0)
-           - **MUFA**: Chains with 1 double bond (e.g., 16:1, 18:1)  
-           - **PUFA**: Chains with 2+ double bonds (e.g., 18:2, 20:4, 22:6)
-        
-        3. **Weighted Contribution Calculation**:
-           - For each sample, the algorithm calculates: lipid concentration × fatty acid ratio
-           - Example: PC(16:0_18:1) at 100 µM contributes:
-             * SFA: 100 × 0.5 = 50 µM (one of two chains is saturated)
-             * MUFA: 100 × 0.5 = 50 µM (one of two chains is monounsaturated)
+        3. **Weighted Contribution Calculation**: Multiplies lipid concentration by fatty acid ratio
+           - Example: `PC(16:0_18:1)` at 100 µM contributes:
+             * SFA: 100 × 0.5 = 50 µM (1 of 2 chains is saturated)
+             * MUFA: 100 × 0.5 = 50 µM (1 of 2 chains is monounsaturated)
              * PUFA: 100 × 0 = 0 µM (no polyunsaturated chains)
+           
+           - Why consolidated format fails: `PC(34:1)` at 100 µM
+             * Could be `PC(16:0_18:1)`: 50 µM SFA + 50 µM MUFA
+             * Could be `PC(17:0_17:1)`: 50 µM SFA + 50 µM MUFA
+             * Could be `PC(18:0_16:1)`: 50 µM SFA + 50 µM MUFA
+             * Many other possibilities - **algorithm cannot determine correct distribution**
         
         4. **Class-Level Summation**: All contributions within a lipid class are summed
            - Total SFA = sum of all SFA contributions from all PC species
@@ -3462,13 +3478,29 @@ def display_saturation_plots(experiment, continuation_df):
         
         - **Sample Size**: Analysis requires ≥2 biological replicates per condition
         - **Multiple Testing**: Saturation analysis tests 3 fatty acid types per lipid class, creating higher statistical burden
+        - **Data Format Requirements**: This analysis **requires** detailed fatty acid composition for accuracy
         """)
         
-        # Big note about data format requirements
+        # Big note about data format requirements with examples
         st.warning("""
-        ⚠️ **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
-        (e.g., PC(16:0_18:1)) vs. total composition (e.g., PC(34:1)). If your dataset uses total composition format, 
-        the saturation analysis may be less accurate as it cannot precisely identify individual fatty acid chains.
+        ⚠️ **Critical Data Format Requirement**
+        
+        Saturation analysis requires detailed fatty acid composition to accurately classify chains. The analysis 
+        works differently depending on your data format:
+        
+        **✓ Detailed Format (Accurate Analysis Possible):**
+        - `PC(16:0_18:1)` → Individual chains visible: 16:0 (SFA) + 18:1 (MUFA)
+        - `PE(18:0_20:4)` → Individual chains visible: 18:0 (SFA) + 20:4 (PUFA)
+        - `Cer(d18:1/24:0)` → Individual chains visible: d18:1 (MUFA) + 24:0 (SFA)
+        
+        **✗ Consolidated Format (Inaccurate Analysis):**
+        - `PC(34:1)` → Total only: 34 carbons, 1 double bond (distribution unknown)
+        - `PE(38:4)` → Total only: 38 carbons, 4 double bonds (distribution unknown)
+        - Could represent many different combinations of SFA/MUFA/PUFA
+        
+        **Mixed Datasets:**
+        If your dataset contains both formats, you'll be prompted to exclude consolidated format lipids 
+        from the saturation analysis. This ensures only lipids with accurate fatty acid information are analyzed.
         """)
         
         # Statistical methodology sections (moved out of checkbox)
@@ -3542,6 +3574,74 @@ def display_saturation_plots(experiment, continuation_df):
             list(continuation_df['ClassKey'].value_counts().index)
         )
         
+        # NEW FEATURE: Identify and filter consolidated lipids
+        filtered_continuation_df = continuation_df.copy()
+        excluded_lipids_info = {}
+        
+        if selected_classes_list:
+            consolidated_lipids_dict = lp.SaturationPlot.identify_consolidated_lipids(continuation_df, selected_classes_list)
+            
+            if consolidated_lipids_dict:
+                st.markdown("---")
+                st.subheader("⚠️ Consolidated Format Lipids Detected")
+                st.markdown("""
+                **Important:** Your dataset contains lipids in consolidated format (e.g., `PC(34:1)`) 
+                mixed with detailed format (e.g., `PC(16:0_18:1)`). Consolidated format lipids cannot 
+                be accurately analyzed for saturation because individual fatty acid chains are not specified.
+                
+                **How to decide what to exclude:**
+                - **Multi-chain lipids in consolidated format** (e.g., `PC(34:1)`, `PE(36:2)`): Should be excluded
+                  - These have multiple FA chains but are reported as totals
+                  - Cannot determine which chains are SFA/MUFA/PUFA
+                  - Example: `PC(34:1)` could be `PC(16:0_18:1)` or `PC(17:0_17:1)` or many other combinations
+                
+                - **True single-chain lipids** (e.g., `LPC(18:1)`, `Cer(d18:1/24:0)`): Can be kept
+                  - These lipid classes naturally have one FA chain
+                  - The format accurately represents their structure
+                  - Will be analyzed correctly
+                
+                **Recommendation:** Select the lipids below that you want to **exclude** from the saturation analysis. 
+                When in doubt, exclude consolidated format lipids from multi-chain classes (PC, PE, PS, PI, PG, PA, TAG, DAG).
+                """)
+                
+                # Flatten all consolidated lipids for multiselect
+                all_consolidated = []
+                for lipid_class, lipids in consolidated_lipids_dict.items():
+                    all_consolidated.extend([(lipid, lipid_class) for lipid in lipids])
+                
+                # Create display format showing class
+                display_options = [f"{lipid} ({lipid_class})" for lipid, lipid_class in all_consolidated]
+                lipid_to_display = {f"{lipid} ({lipid_class})": lipid for lipid, lipid_class in all_consolidated}
+                
+                # Multiselect for exclusion
+                lipids_to_exclude_display = st.multiselect(
+                    f'Select lipids to **exclude** from saturation analysis ({len(all_consolidated)} consolidated format lipids detected):',
+                    display_options,
+                    default=[],  # Nothing excluded by default - user must choose
+                    help="Select lipids that are in consolidated format and have multiple fatty acid chains. These will be excluded only from saturation plot analysis."
+                )
+                
+                # Convert back to actual lipid names
+                lipids_to_exclude = [lipid_to_display[display] for display in lipids_to_exclude_display]
+                
+                if lipids_to_exclude:
+                    # Filter the dataframe
+                    filtered_continuation_df = continuation_df[~continuation_df['LipidMolec'].isin(lipids_to_exclude)].copy()
+                    
+                    # Store exclusion info for display
+                    for lipid in lipids_to_exclude:
+                        lipid_class = continuation_df[continuation_df['LipidMolec'] == lipid]['ClassKey'].iloc[0]
+                        if lipid_class not in excluded_lipids_info:
+                            excluded_lipids_info[lipid_class] = []
+                        excluded_lipids_info[lipid_class].append(lipid)
+                    
+                    st.success(f"✓ Excluded {len(lipids_to_exclude)} consolidated format lipids from saturation analysis")
+                    
+                else:
+                    st.info("No lipids excluded. All detected consolidated format lipids will be included in the analysis.")
+        
+        st.markdown("---")
+        
         # Apply auto mode logic if selected
         if stat_options['mode_choice'] == "Auto":
             auto_settings = lp.SaturationPlot.apply_auto_mode_logic(selected_classes_list, selected_conditions_list)
@@ -3552,10 +3652,10 @@ def display_saturation_plots(experiment, continuation_df):
             stat_options['posthoc_correction'] = auto_settings['posthoc_correction']
         
         if selected_conditions_list and selected_classes_list:
-            # Perform statistical tests with user-selected options
+            # Perform statistical tests with user-selected options on FILTERED data
             with st.spinner("Performing statistical analysis..."):
                 statistical_results = lp.SaturationPlot.perform_statistical_tests(
-                    continuation_df, 
+                    filtered_continuation_df,  # Use filtered dataframe
                     experiment, 
                     selected_conditions_list, 
                     selected_classes_list,
@@ -3573,7 +3673,7 @@ def display_saturation_plots(experiment, continuation_df):
             display_saturation_detailed_statistical_results(statistical_results, selected_conditions_list)
             
             st.markdown("---")  # Separator before plots
-            
+
             # NEW: Add checkbox for showing significance asterisks
             show_significance = st.checkbox(
                 "Show statistical significance asterisks on plots",
@@ -3581,10 +3681,10 @@ def display_saturation_plots(experiment, continuation_df):
                 help="Display *, **, *** symbols on plots to indicate statistical significance levels"
             )
 
-            # Generate enhanced plots with statistical annotations
+            # Generate enhanced plots with statistical annotations on FILTERED data
             with st.spinner("Generating saturation plots..."):
                 plots = lp.SaturationPlot.create_plots(
-                    continuation_df, 
+                    filtered_continuation_df,  # Use filtered dataframe
                     experiment, 
                     selected_conditions_list, 
                     statistical_results,

@@ -713,3 +713,47 @@ class SaturationPlot:
             'posthoc_rationale': auto_posthoc_rationale,
             'total_tests': total_tests
         }
+    
+    @staticmethod
+    def identify_consolidated_lipids(continuation_df, selected_classes):
+        """
+        Identify lipids that may be in consolidated format (e.g., PC(34:1) instead of PC(16:0_18:1)).
+        Excludes lipid classes that are always single-chain.
+        
+        Args:
+            continuation_df: DataFrame containing lipid data
+            selected_classes: List of selected lipid classes to analyze
+            
+        Returns:
+            dict: Dictionary mapping lipid class to list of potentially consolidated lipids
+        """
+        # Lipid classes that typically have only one fatty acid chain
+        SINGLE_CHAIN_CLASSES = {
+            'CE', 'Cer', 'CerG1', 'CerG2', 'CerG3', 'SM', 'LPC', 'LPE', 'LPG', 
+            'LPI', 'LPS', 'LPA', 'MAG', 'ChE', 'FFA'
+        }
+        
+        consolidated_lipids = {}
+        
+        for lipid_class in selected_classes:
+            # Skip classes that are always single-chain
+            if lipid_class in SINGLE_CHAIN_CLASSES:
+                continue
+                
+            # Get lipids for this class
+            class_df = continuation_df[continuation_df['ClassKey'] == lipid_class]
+            
+            # Find lipids without underscore (consolidated format)
+            consolidated = []
+            for lipid in class_df['LipidMolec']:
+                lipid_str = str(lipid)
+                # Check if lipid has parentheses and no underscore
+                if '(' in lipid_str and ')' in lipid_str:
+                    content = lipid_str.split('(')[1].split(')')[0]
+                    if '_' not in content and ':' in content:
+                        consolidated.append(lipid)
+            
+            if consolidated:
+                consolidated_lipids[lipid_class] = consolidated
+        
+        return consolidated_lipids
