@@ -72,6 +72,10 @@ def initialize_session_state():
         
     if 'page' not in st.session_state:
         st.session_state.page = 'landing'
+    
+    # NEW: Grade configuration state
+    if 'grade_config' not in st.session_state:
+        st.session_state.grade_config = None
 
 def display_landing_page():
     """Display the LipidCruncher landing page with enhanced module explanations."""
@@ -253,7 +257,19 @@ def main():
                         
                         if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
                             st.subheader("Data Standardization, Filtering, and Normalization Module")
-                            cleaned_df, intsta_df = clean_data(df_to_clean, name_df, experiment, data_format)
+                            
+                            # NEW: Grade filtering UI embedded in the cleaning section for LipidSearch
+                            grade_config = None
+                            if data_format == 'LipidSearch 5.0':
+                                # Show grade filtering UI in its own section before cleaning
+                                with st.expander("Configure Grade Filtering (LipidSearch Only)", expanded=False):
+                                    grade_config = get_grade_filtering_config(df_to_clean, data_format)
+                                    st.session_state.grade_config = grade_config
+                            
+                            # Pass grade_config to clean_data
+                            cleaned_df, intsta_df = clean_data(
+                                df_to_clean, name_df, experiment, data_format, grade_config
+                            )
                             
                             if cleaned_df is not None:
                                 st.session_state.experiment = experiment
@@ -283,7 +299,6 @@ def main():
                                     with right_column:
                                         if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
                                             st.session_state.module = "Quality Check & Analysis"
-                                            # IMPORTANT FIX: Save all important normalization state before navigating
                                             st.session_state.preserved_data = {
                                                 'cleaned_df': st.session_state.cleaned_df,
                                                 'intsta_df': st.session_state.intsta_df,
@@ -292,12 +307,12 @@ def main():
                                                 'normalization_method': st.session_state.normalization_method,
                                                 'selected_classes': st.session_state.selected_classes,
                                                 'create_norm_dataset': st.session_state.create_norm_dataset,
-                                                # IMPORTANT FIX: Add these additional fields
                                                 'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
                                                 'protein_df': st.session_state.get('protein_df'),
                                                 'standard_source_preference': st.session_state.get('standard_source_preference'),
                                                 'class_standard_map': st.session_state.get('class_standard_map'),
-                                                'standard_concentrations': st.session_state.get('standard_concentrations')
+                                                'standard_concentrations': st.session_state.get('standard_concentrations'),
+                                                'grade_config': st.session_state.get('grade_config')
                                             }
                                             st.experimental_rerun()
                                             
@@ -313,7 +328,6 @@ def main():
                             
                             if st.button("Back to Data Standardization, Filtering, and Normalization", key="back_to_cleaning"):
                                 st.session_state.module = "Data Cleaning, Filtering, & Normalization"
-                                # IMPORTANT FIX: Also include the new fields when going back
                                 st.session_state.preserved_data = {
                                     'cleaned_df': st.session_state.cleaned_df,
                                     'intsta_df': st.session_state.intsta_df,
@@ -322,12 +336,12 @@ def main():
                                     'normalization_method': st.session_state.normalization_method,
                                     'selected_classes': st.session_state.selected_classes,
                                     'create_norm_dataset': st.session_state.create_norm_dataset,
-                                    # IMPORTANT FIX: Add these additional fields
                                     'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
                                     'protein_df': st.session_state.get('protein_df'),
                                     'standard_source_preference': st.session_state.get('standard_source_preference'),
                                     'class_standard_map': st.session_state.get('class_standard_map'),
-                                    'standard_concentrations': st.session_state.get('standard_concentrations')
+                                    'standard_concentrations': st.session_state.get('standard_concentrations'),
+                                    'grade_config': st.session_state.get('grade_config')
                                 }
                                 st.experimental_rerun()
                     
@@ -340,7 +354,7 @@ def main():
         # Restore preserved state if returning from Quality Check & Analysis
         if 'preserved_data' in st.session_state and st.session_state.module == "Data Cleaning, Filtering, & Normalization":
             for key, value in st.session_state.preserved_data.items():
-                if value is not None:  # Only set non-None values
+                if value is not None:
                     setattr(st.session_state, key, value)
             del st.session_state.preserved_data
         
@@ -357,6 +371,7 @@ def clear_session_state():
     st.session_state.continuation_df = None
     st.session_state.experiment = None
     st.session_state.format_type = None
+    st.session_state.grade_config = None  # NEW: Clear grade config
     
 def update_session_state(name_df, experiment, bqc_label):
     """
@@ -790,20 +805,165 @@ def build_replicate_condition_pair(condition, experiment):
         st.sidebar.error(f"Error displaying condition {condition}: {str(e)}")
         st.write(f"Error in build_replicate_condition_pair: {e}")
 
-def clean_data(df, name_df, experiment, data_format):
+def clean_data(df, name_df, experiment, data_format, grade_config=None):
     """
     Clean data using appropriate cleaner based on the format.
+    
+    Args:
+        df: Input dataframe
+        name_df: Name mapping dataframe
+        experiment: Experiment object
+        data_format: Format type string
+        grade_config (dict, optional): Custom grade configuration for LipidSearch data
+    
+    Returns:
+        Tuple of (cleaned_df, intsta_df)
     """
     if data_format == 'LipidSearch 5.0':
         cleaner = lp.CleanLipidSearchData()
+        cleaned_df = cleaner.data_cleaner(df, name_df, experiment, grade_config)
     else:
         cleaner = lp.CleanGenericData()
-        
-    cleaned_df = cleaner.data_cleaner(df, name_df, experiment)
+        cleaned_df = cleaner.data_cleaner(df, name_df, experiment)
+    
     cleaned_df, intsta_df = cleaner.extract_internal_standards(cleaned_df)
     
     return cleaned_df, intsta_df
 
+def get_grade_filtering_config(df, format_type):
+    """
+    Display grade filtering UI within the data cleaning section.
+    Only shown for LipidSearch format.
+    
+    Args:
+        df (pd.DataFrame): The uploaded dataframe
+        format_type (str): The data format type
+        
+    Returns:
+        dict: Dictionary mapping lipid class to list of acceptable grades
+              Returns None if not LipidSearch format or if using defaults
+    """
+    if format_type != 'LipidSearch 5.0':
+        return None
+    
+    # Check if the required columns exist
+    if 'ClassKey' not in df.columns or 'TotalGrade' not in df.columns:
+        return None
+    
+    st.markdown("---")
+    st.markdown("### 🎯 Grade Filtering Configuration")
+    
+    st.markdown("""
+    LipidSearch assigns quality grades (A, B, C, D) to each lipid identification:
+    - **Grade A**: Highest confidence identifications
+    - **Grade B**: Good quality identifications
+    - **Grade C**: Lower confidence identifications
+    - **Grade D**: Lowest confidence identifications
+    
+    **Default Behavior:**
+    - Most lipid classes: Accept grades A and B only
+    - LPC and SM classes: Accept grades A, B, and C
+    """)
+    
+    # Get unique classes from the data
+    all_classes = sorted(df['ClassKey'].unique())
+    
+    # Option to use default or custom settings
+    use_custom = st.radio(
+        "Grade filtering mode:",
+        ["Use Default Settings", "Customize by Class"],
+        index=0,
+        help="Default settings follow LipidSearch best practices. Customize if you have specific requirements.",
+        key="grade_filter_mode"
+    )
+    
+    if use_custom == "Use Default Settings":
+        st.success("✓ Using default grade filtering: A/B for all classes, plus C for LPC and SM.")
+        return None
+    
+    # Custom settings
+    st.markdown("---")
+    st.markdown("#### 📋 Select Acceptable Grades by Lipid Class")
+    st.info("💡 **Tip:** Select the grades you want to accept for each lipid class. Clear selections will exclude that class entirely.")
+    
+    grade_config = {}
+    
+    # Process each lipid class with better spacing and clarity
+    for idx, lipid_class in enumerate(all_classes):
+        # Add spacing between classes
+        if idx > 0:
+            st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Create a container for each class with visual separation
+        with st.container():
+            # Class header with colored background
+            st.markdown(f"""
+            <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                <h4 style="margin: 0; color: #1f77b4;">📊 {lipid_class}</h4>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Default grades based on class
+            if lipid_class in ['LPC', 'SM']:
+                default_grades = ['A', 'B', 'C']
+            else:
+                default_grades = ['A', 'B']
+            
+            # Multiselect with clear labeling
+            selected_grades = st.multiselect(
+                f"Select acceptable grades for **{lipid_class}** class:",
+                options=['A', 'B', 'C', 'D'],
+                default=default_grades,
+                key=f"grade_select_{lipid_class}",
+                help=f"Choose which quality grades to accept for {lipid_class} lipids"
+            )
+            
+            # Visual feedback
+            if not selected_grades:
+                st.error(f"⚠️ **Warning:** No grades selected for {lipid_class}. This class will be completely excluded from analysis!")
+            elif 'D' in selected_grades:
+                st.warning(f"⚠️ **Caution:** Grade D included for {lipid_class}. This may include low-confidence identifications.")
+            else:
+                st.success(f"✓ {lipid_class}: {', '.join(selected_grades)} accepted")
+            
+            grade_config[lipid_class] = selected_grades
+    
+    st.markdown("---")
+    
+    # Summary of selections
+    st.markdown("### 📊 Configuration Summary")
+    
+    # Count classes by grade selection
+    abc_classes = [cls for cls, grades in grade_config.items() if set(grades) == {'A', 'B', 'C'}]
+    ab_classes = [cls for cls, grades in grade_config.items() if set(grades) == {'A', 'B'}]
+    abcd_classes = [cls for cls, grades in grade_config.items() if 'D' in grades]
+    custom_classes = [cls for cls, grades in grade_config.items() 
+                     if set(grades) not in [{'A', 'B', 'C'}, {'A', 'B'}] and 'D' not in grades]
+    excluded_classes = [cls for cls, grades in grade_config.items() if not grades]
+    
+    summary_col1, summary_col2 = st.columns(2)
+    
+    with summary_col1:
+        if ab_classes:
+            st.markdown(f"**✅ A, B only** ({len(ab_classes)} classes)")
+            st.caption(', '.join(ab_classes))
+        if abc_classes:
+            st.markdown(f"**✅ A, B, C** ({len(abc_classes)} classes)")
+            st.caption(', '.join(abc_classes))
+    
+    with summary_col2:
+        if abcd_classes:
+            st.markdown(f"**⚠️ Includes D** ({len(abcd_classes)} classes)")
+            st.caption(', '.join(abcd_classes))
+        if custom_classes:
+            st.markdown(f"**⚙️ Custom** ({len(custom_classes)} classes)")
+            for cls in custom_classes:
+                st.caption(f"• {cls}: {', '.join(grade_config[cls])}")
+    
+    if excluded_classes:
+        st.error(f"**🚫 Excluded** ({len(excluded_classes)} classes): {', '.join(excluded_classes)}")
+    
+    return grade_config
 
 def handle_standards_upload(normalizer):
     st.info("""
@@ -992,7 +1152,7 @@ def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None):
 def display_cleaned_data(unfiltered_df, intsta_df):
     """
     Display cleaned data and manage internal standards with simplified workflow.
-    Includes zero filter application and display of removed species and final filtered data within the main expander.
+    Includes grade filtering, zero filter application, and display of removed species.
     """
     # Update session state with new data if provided
     if unfiltered_df is not None:
@@ -1034,8 +1194,8 @@ def display_cleaned_data(unfiltered_df, intsta_df):
             3. **Lipid Name Standardization**: Names of lipid molecules are standardized to ensure
                uniform formatting across the dataset.
            
-            4. **Quality Filtering**: Only entries with grades 'A', 'B', or 'C' are retained.
-               Grade 'C' is only accepted for specific lipid classes (LPC and SM).
+            4. **Quality Filtering**: By default, entries with grades 'A' and 'B' are retained for most classes,
+               with grades 'A', 'B', and 'C' accepted for LPC and SM classes. You can customize this below.
            
             5. **Best Peak Selection**: For each unique lipid, the entry with the highest TotalSmpIDRate(%)
                is selected, as this indicates the most reliable measurement across samples.
