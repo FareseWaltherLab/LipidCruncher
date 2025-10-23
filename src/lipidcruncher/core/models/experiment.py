@@ -1,71 +1,85 @@
 """
-Experiment configuration model with validation.
+Data models for experiment configuration.
 """
 from typing import List
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator, computed_field
 
 
 class ExperimentConfig(BaseModel):
     """
     Configuration for a lipidomics experiment.
-    
-    Attributes:
-        n_conditions: Number of experimental conditions
-        conditions_list: Names of each condition (e.g., ['Control', 'Treatment'])
-        number_of_samples_list: Number of samples per condition
-        samples_list: Generated list of sample IDs (e.g., ['s1', 's2', ...])
+    Defines the experimental conditions and sample organization.
     """
-    n_conditions: int = Field(gt=0, description="Number of conditions (must be positive)")
-    conditions_list: List[str] = Field(min_length=1, description="List of condition names")
-    number_of_samples_list: List[int] = Field(min_length=1, description="Number of samples per condition")
-    samples_list: List[str] = Field(default_factory=list, description="Generated sample IDs")
+    n_conditions: int
+    conditions_list: List[str]
+    number_of_samples_list: List[int]
+    
+    @field_validator('n_conditions')
+    @classmethod
+    def validate_n_conditions(cls, v):
+        if v < 1:
+            raise ValueError("Number of conditions must be at least 1")
+        return v
+    
+    @field_validator('conditions_list')
+    @classmethod
+    def validate_conditions_list(cls, v, info):
+        n_conditions = info.data.get('n_conditions')
+        if n_conditions and len(v) != n_conditions:
+            raise ValueError(f"conditions_list length ({len(v)}) must match n_conditions ({n_conditions})")
+        if len(v) != len(set(v)):
+            raise ValueError("Condition names must be unique")
+        return v
     
     @field_validator('number_of_samples_list')
     @classmethod
-    def validate_sample_counts(cls, v):
-        """Ensure all sample counts are positive."""
-        if any(count <= 0 for count in v):
-            raise ValueError("All sample counts must be positive integers")
+    def validate_number_of_samples_list(cls, v, info):
+        n_conditions = info.data.get('n_conditions')
+        if n_conditions and len(v) != n_conditions:
+            raise ValueError(f"number_of_samples_list length ({len(v)}) must match n_conditions ({n_conditions})")
+        if any(n < 1 for n in v):
+            raise ValueError("Each condition must have at least 1 sample")
         return v
     
-    @field_validator('conditions_list', 'number_of_samples_list')
-    @classmethod
-    def validate_lists_match_n_conditions(cls, v, info):
-        """Ensure list lengths match n_conditions."""
-        if 'n_conditions' in info.data:
-            n_conditions = info.data['n_conditions']
-            if len(v) != n_conditions:
-                raise ValueError(f"List length ({len(v)}) must match n_conditions ({n_conditions})")
-        return v
-    
-    def model_post_init(self, __context):
-        """Generate samples_list after validation if not provided."""
-        if not self.samples_list:
-            self.samples_list = self._generate_samples()
-    
-    def _generate_samples(self) -> List[str]:
-        """Generate sample IDs like ['s1', 's2', 's3', ...]"""
+    @computed_field
+    @property
+    def samples_list(self) -> List[str]:
+        """Generate list of all sample names (s1, s2, s3, ...)."""
         total_samples = sum(self.number_of_samples_list)
         return [f's{i+1}' for i in range(total_samples)]
     
-    def get_samples_for_condition(self, condition: str) -> List[str]:
+    @computed_field
+    @property
+    def individual_samples_list(self) -> List[List[str]]:
         """
-        Get the sample IDs for a specific condition.
+        Generate list of sample lists for each condition.
+        Example: [['s1', 's2'], ['s3', 's4', 's5']]
+        """
+        result = []
+        sample_idx = 0
+        for n_samples in self.number_of_samples_list:
+            condition_samples = [f's{sample_idx + i + 1}' for i in range(n_samples)]
+            result.append(condition_samples)
+            sample_idx += n_samples
+        return result
+    
+    @computed_field
+    @property
+    def total_samples(self) -> int:
+        """Total number of samples across all conditions."""
+        return sum(self.number_of_samples_list)
+    
+    def get_condition_for_sample(self, sample: str) -> str:
+        """
+        Get the condition name for a given sample.
         
         Args:
-            condition: Name of the condition
-            
+            sample: Sample name (e.g., 's1', 's2')
+        
         Returns:
-            List of sample IDs for that condition
-            
-        Raises:
-            ValueError: If condition not found
+            Condition name
         """
-        if condition not in self.conditions_list:
-            raise ValueError(f"Condition '{condition}' not found in {self.conditions_list}")
-        
-        condition_idx = self.conditions_list.index(condition)
-        start_idx = sum(self.number_of_samples_list[:condition_idx])
-        end_idx = start_idx + self.number_of_samples_list[condition_idx]
-        
-        return self.samples_list[start_idx:end_idx]
+        for condition, samples in zip(self.conditions_list, self.individual_samples_list):
+            if sample in samples:
+                return condition
+        raise ValueError(f"Sample {sample} not found in experiment")

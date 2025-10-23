@@ -28,6 +28,7 @@ import lipidomics as lp
 from lipidcruncher.adapters.streamlit_adapter import StreamlitDataAdapter
 from lipidcruncher.core.models.experiment import ExperimentConfig
 from lipidcruncher.core.models.normalization import NormalizationConfig
+from lipidcruncher.core.services.zero_filtering_service import ZeroFilteringService
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))  # Gets the directory where main_app.py is
 IMAGES_DIR = os.path.join(SCRIPT_DIR, 'images')  # Path to the images directory
@@ -1094,21 +1095,19 @@ def manage_internal_standards(normalizer):
 
 def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None):
     """
-    Applies the zero-value filter to the cleaned dataframe.
-   
-    For each lipid species, removes the species if the BQC condition (if present) has 50% or more
-    replicates with values <= threshold OR every non-BQC condition has 75% or more replicates
-    with values <= threshold. If no BQC condition exists, only the non-BQC condition applies.
-   
+    Applies zero-value filter using ZeroFilteringService.
+    Displays threshold input UI and returns filtered data.
+    
     Args:
-        cleaned_df (pd.DataFrame): Cleaned dataframe
-        experiment (Experiment): Experiment object
-        data_format (str): Data format
-        bqc_label (str, optional): Label for Batch Quality Control samples
-       
+        cleaned_df: Cleaned dataframe
+        experiment: Experiment object
+        data_format: Data format
+        bqc_label: Label for BQC samples
+    
     Returns:
-        tuple: (filtered DataFrame, list of removed species)
+        tuple: (filtered_df, removed_species)
     """
+    # Display threshold input
     default_threshold = 30000.0 if data_format == 'LipidSearch 5.0' else 0.0
     threshold = st.number_input(
         'Enter detection threshold (values <= this are considered zero for filtering)',
@@ -1118,53 +1117,23 @@ def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None):
         help="For non-LipidSearch formats, 0 means only exact zeros are considered. Enter a value >0 if needed.",
         key="zero_filter_threshold"
     )
-   
-    # Get all lipid species before filtering
-    all_species = cleaned_df['LipidMolec'].tolist()
-   
-    # List to keep track of rows to keep
-    to_keep = []
-   
-    for idx, row in cleaned_df.iterrows():
-        non_bqc_all_fail = True
-        bqc_fail = False if bqc_label is None or bqc_label not in experiment.conditions_list else True  # Default to False if no valid BQC condition
-       
-        for cond_idx, cond_samples in enumerate(experiment.individual_samples_list):
-            if not cond_samples:  # Skip empty conditions
-                continue
-           
-            zero_count = 0
-            n_samples = len(cond_samples)
-           
-            for sample in cond_samples:
-                col = f'intensity[{sample}]'
-                if col in cleaned_df.columns:
-                    value = row[col]
-                    if value <= threshold:
-                        zero_count += 1
-           
-            # Set threshold based on whether the condition is BQC
-            zero_threshold = 0.5 if experiment.conditions_list[cond_idx] == bqc_label else 0.75
-           
-            # Calculate zero proportion
-            zero_proportion = zero_count / n_samples if n_samples > 0 else 1.0
-           
-            # Check if condition passes its threshold
-            if zero_proportion < zero_threshold:
-                if experiment.conditions_list[cond_idx] == bqc_label:
-                    bqc_fail = False
-                else:
-                    non_bqc_all_fail = False
-       
-        # Retain lipid if BQC does not fail AND not all non-BQC conditions fail
-        if not bqc_fail and not non_bqc_all_fail:
-            to_keep.append(idx)
-   
-    filtered_df = cleaned_df.loc[to_keep].reset_index(drop=True)
-   
-    # Compute removed species
-    removed_species = [species for species in all_species if species not in filtered_df['LipidMolec'].tolist()]
-   
+    
+    # Convert to ExperimentConfig
+    experiment_config = ExperimentConfig(
+        n_conditions=experiment.n_conditions,
+        conditions_list=experiment.conditions_list,
+        number_of_samples_list=experiment.number_of_samples_list
+    )
+    
+    # Use ZeroFilteringService
+    service = ZeroFilteringService()
+    filtered_df, removed_species = service.filter_by_zeros(
+        cleaned_df,
+        experiment_config,
+        threshold=threshold,
+        bqc_label=bqc_label
+    )
+    
     return filtered_df, removed_species
 
 def display_cleaned_data(unfiltered_df, intsta_df):

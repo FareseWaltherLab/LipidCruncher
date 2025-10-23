@@ -83,30 +83,61 @@ if uploaded_file:
         if 'experiment_config' in st.session_state:
             st.header("3️⃣ Data Cleaning")
             
+            # Zero filtering options
+            apply_zero_filter = st.checkbox("Apply zero filtering", value=False)
+            
+            zero_threshold = 0.0
+            bqc_label = None
+            
+            if apply_zero_filter:
+                col1, col2 = st.columns(2)
+                with col1:
+                    default_threshold = 30000.0 if data_format == 'LipidSearch 5.0' else 0.0
+                    zero_threshold = st.number_input(
+                        "Zero filter threshold:",
+                        min_value=0.0,
+                        value=default_threshold,
+                        help="Values <= this are considered zeros"
+                    )
+                with col2:
+                    bqc_label = st.selectbox(
+                        "BQC condition (optional):",
+                        [None] + conditions,
+                        help="Batch Quality Control condition"
+                    )
+            
             grade_config = None
             if data_format == 'LipidSearch 5.0':
                 with st.expander("Grade Filtering (Optional)"):
-                    st.info("Leave empty to use defaults (A/B/C for all)")
-                    # Simplified - you can expand this later
+                    st.info("Leave empty to use defaults (A/B for most, A/B/C for LPC/SM)")
             
             if st.button("Clean Data"):
                 with st.spinner("Cleaning data..."):
                     try:
-                        cleaned_df, standards_df = adapter.clean_data(
+                        # Updated to handle 3 return values
+                        cleaned_df, standards_df, removed_species = adapter.clean_data(
                             df,
                             st.session_state.experiment_config,
                             data_format,
-                            grade_config
+                            grade_config,
+                            apply_zero_filter=apply_zero_filter,
+                            zero_filter_threshold=zero_threshold,
+                            bqc_label=bqc_label
                         )
                         
                         st.session_state.cleaned_df = cleaned_df
                         st.session_state.standards_df = standards_df
+                        st.session_state.removed_species = removed_species
                         
                         st.write("### Cleaned Data")
                         st.dataframe(cleaned_df)
                         
                         st.write("### Internal Standards")
                         st.dataframe(standards_df)
+                        
+                        if removed_species:
+                            st.write(f"### Removed Species ({len(removed_species)})")
+                            st.dataframe(pd.DataFrame({'LipidMolec': removed_species}))
                         
                     except Exception as e:
                         st.error(f"Error during cleaning: {str(e)}")
