@@ -25,6 +25,9 @@ from reportlab.graphics import renderPDF
 
 # Local imports
 import lipidomics as lp
+from lipidcruncher.adapters.streamlit_adapter import StreamlitDataAdapter
+from lipidcruncher.core.models.experiment import ExperimentConfig
+from lipidcruncher.core.models.normalization import NormalizationConfig
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))  # Gets the directory where main_app.py is
 IMAGES_DIR = os.path.join(SCRIPT_DIR, 'images')  # Path to the images directory
@@ -807,26 +810,41 @@ def build_replicate_condition_pair(condition, experiment):
 
 def clean_data(df, name_df, experiment, data_format, grade_config=None):
     """
-    Clean data using appropriate cleaner based on the format.
+    Clean data using refactored services.
     
     Args:
-        df: Input dataframe
-        name_df: Name mapping dataframe
-        experiment: Experiment object
+        df: Input dataframe (already preprocessed with DataFormatHandler)
+        name_df: Name mapping dataframe (not used in new architecture)
+        experiment: Experiment object (old style)
         data_format: Format type string
         grade_config (dict, optional): Custom grade configuration for LipidSearch data
     
     Returns:
         Tuple of (cleaned_df, intsta_df)
     """
-    if data_format == 'LipidSearch 5.0':
-        cleaner = lp.CleanLipidSearchData()
-        cleaned_df = cleaner.data_cleaner(df, name_df, experiment, grade_config)
-    else:
-        cleaner = lp.CleanGenericData()
-        cleaned_df = cleaner.data_cleaner(df, name_df, experiment)
+    # Convert old Experiment object to new ExperimentConfig
+    experiment_config = ExperimentConfig(
+        n_conditions=experiment.n_conditions,
+        conditions_list=experiment.conditions_list,
+        number_of_samples_list=experiment.number_of_samples_list
+    )
     
-    cleaned_df, intsta_df = cleaner.extract_internal_standards(cleaned_df)
+    # Use the refactored cleaning service
+    adapter = StreamlitDataAdapter()
+    
+    # Note: df should already be preprocessed by DataFormatHandler before calling this
+    # We'll use the cleaning service directly (preprocessing already done elsewhere)
+    if data_format == 'LipidSearch 5.0':
+        cleaned_df = adapter.cleaning_service.clean_lipidsearch_data(
+            df, experiment_config, grade_config
+        )
+    else:
+        cleaned_df = adapter.cleaning_service.clean_generic_data(
+            df, experiment_config
+        )
+    
+    # Extract internal standards
+    cleaned_df, intsta_df = adapter.cleaning_service.extract_internal_standards(cleaned_df)
     
     return cleaned_df, intsta_df
 
