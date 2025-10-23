@@ -7,6 +7,7 @@ import pandas as pd
 from typing import Optional, Tuple, Dict, List
 from ..core.services.data_cleaning_service import DataCleaningService
 from ..core.services.normalization_service import NormalizationService
+from ..core.services.zero_filtering_service import ZeroFilteringService
 from ..core.models.experiment import ExperimentConfig
 from ..core.models.normalization import NormalizationConfig
 import sys
@@ -23,6 +24,7 @@ class StreamlitDataAdapter:
     def __init__(self):
         self.cleaning_service = DataCleaningService()
         self.normalization_service = NormalizationService()
+        self.zero_filter_service = ZeroFilteringService()
         self.format_handler = lp.DataFormatHandler()
     
     def clean_data(
@@ -30,19 +32,25 @@ class StreamlitDataAdapter:
         df: pd.DataFrame,
         experiment_config: ExperimentConfig,
         data_format: str,
-        grade_config: Optional[Dict[str, List[str]]] = None
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        grade_config: Optional[Dict[str, List[str]]] = None,
+        apply_zero_filter: bool = False,
+        zero_filter_threshold: float = 0.0,
+        bqc_label: Optional[str] = None
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
         """
-        Clean uploaded data based on format.
+        Clean uploaded data based on format, with optional zero filtering.
         
         Args:
             df: Raw uploaded DataFrame
             experiment_config: Experiment configuration
             data_format: Format type ('LipidSearch 5.0' or 'Generic Format')
             grade_config: Optional grade filtering config for LipidSearch
+            apply_zero_filter: Whether to apply zero filtering
+            zero_filter_threshold: Threshold for zero filtering
+            bqc_label: Label for BQC condition (if present)
         
         Returns:
-            Tuple of (cleaned_df, internal_standards_df)
+            Tuple of (cleaned_df, internal_standards_df, removed_species)
         """
         try:
             # Step 1: Preprocess/standardize the data format
@@ -74,12 +82,26 @@ class StreamlitDataAdapter:
                     experiment_config
                 )
             
-            # Step 3: Extract internal standards
+            # Step 3: Apply zero filtering (if requested)
+            removed_species = []
+            if apply_zero_filter:
+                cleaned_df, removed_species = self.zero_filter_service.filter_by_zeros(
+                    cleaned_df,
+                    experiment_config,
+                    threshold=zero_filter_threshold,
+                    bqc_label=bqc_label
+                )
+                
+                if removed_species:
+                    n_removed = len(removed_species)
+                    st.warning(f"🔍 Removed {n_removed} species based on zero filter")
+            
+            # Step 4: Extract internal standards
             cleaned_df, standards_df = self.cleaning_service.extract_internal_standards(cleaned_df)
             
             st.success(f"✅ Data cleaned successfully: {len(cleaned_df)} lipids, {len(standards_df)} standards")
             
-            return cleaned_df, standards_df
+            return cleaned_df, standards_df, removed_species
             
         except Exception as e:
             st.error(f"Error during data cleaning: {str(e)}")
