@@ -23,9 +23,9 @@ def select_lipid_classes_ui(cleaned_df: pd.DataFrame) -> Optional[List[str]]:
     
     all_classes = sorted(cleaned_df['ClassKey'].unique())
     
-    # Initialize session state for persistence
-    if 'selected_classes' not in st.session_state:
-        st.session_state.selected_classes = all_classes
+    # Initialize session state with ALL classes selected by default
+    if 'selected_classes' not in st.session_state or st.session_state.selected_classes is None:
+        st.session_state.selected_classes = all_classes  # Start with all selected
     
     def update_selected_classes():
         st.session_state.selected_classes = st.session_state.temp_selected_classes
@@ -33,7 +33,7 @@ def select_lipid_classes_ui(cleaned_df: pd.DataFrame) -> Optional[List[str]]:
     selected_classes = st.multiselect(
         'Select lipid classes you would like to analyze:',
         options=all_classes,
-        default=st.session_state.selected_classes,
+        default=st.session_state.selected_classes,  # Use persisted selection
         key='temp_selected_classes',
         on_change=update_selected_classes
     )
@@ -232,25 +232,17 @@ def collect_internal_standards_ui(
 
 
 def display_normalization_info():
-    """Display information about normalization methods."""
+    """Display information about normalization methods in readable format."""
     with st.expander("ℹ️ About Normalization Methods"):
-        st.markdown("""
-        ### Data Normalization Methods
+        st.markdown("### Data Normalization Methods")
         
-        **None**: Use raw intensity values without normalization.
+        st.markdown("**None**: Use raw intensity values without normalization. This is suitable if your data has already been normalized externally.")
         
-        **Internal Standards**: Normalize using spiked-in standards of known concentration.
-```
-        Concentration = (Intensity_lipid / Intensity_standard) × Concentration_standard
-```
+        st.markdown("**Internal Standards**: Normalize lipid measurements using spiked-in internal standards of known concentration. For each lipid class, you'll select an appropriate internal standard. The normalization formula is:")
+        st.code("Concentration = (Intensity_lipid / Intensity_standard) × Concentration_standard")
         
-        **Protein-based**: Normalize against protein concentration (e.g., BCA assay).
-```
-        Concentration = Intensity_lipid / Protein_concentration
-```
+        st.markdown("**Protein-based**: Normalize lipid intensities against protein concentration (e.g., determined by a BCA assay). This adjusts for differences in starting material. The normalization formula is:")
+        st.code("Concentration = Intensity_lipid / Protein_concentration")
         
-        **Both**: Apply both normalizations sequentially:
-```
-        Concentration = (Intensity_lipid / Intensity_standard) × Concentration_standard / Protein_concentration
-```
-        """)
+        st.markdown("**Both**: Apply both internal standards and protein normalization sequentially:")
+        st.code("Concentration = (Intensity_lipid / Intensity_standard) × Concentration_standard / Protein_concentration")

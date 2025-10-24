@@ -70,7 +70,7 @@ def initialize_session_state():
     if 'normalization_method' not in st.session_state:
         st.session_state.normalization_method = 'None'
     if 'selected_classes' not in st.session_state:
-        st.session_state.selected_classes = []
+        st.session_state.selected_classes = None  # Changed from [] to None
     if 'create_norm_dataset' not in st.session_state:
         st.session_state.create_norm_dataset = False
         
