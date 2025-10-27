@@ -89,7 +89,7 @@ def collect_protein_concentrations_ui(experiment_config) -> Optional[pd.DataFram
         protein_concentrations = {}
         
         st.write("Enter protein concentration (mg/mL) for each sample:")
-        for sample in experiment_config.samples_list:
+        for sample in experiment_config.full_samples_list:
             conc = st.number_input(
                 f"Concentration for {sample}:",
                 min_value=0.0,
@@ -122,7 +122,7 @@ def collect_protein_concentrations_ui(experiment_config) -> Optional[pd.DataFram
                 
                 # Validate samples match
                 file_samples = set(protein_df['Sample'])
-                expected_samples = set(experiment_config.samples_list)
+                expected_samples = set(experiment_config.full_samples_list)
                 
                 if file_samples != expected_samples:
                     st.error(f"Sample mismatch. Expected: {expected_samples}, Got: {file_samples}")

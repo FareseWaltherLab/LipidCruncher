@@ -106,13 +106,13 @@ class NormalizationService:
             intsta_auc = self._compute_intsta_auc(
                 intsta_df, 
                 standard_name, 
-                experiment.samples_list  # FIXED: Changed from full_samples_list
+                experiment.full_samples_list 
             )
             
             # Normalize this class
             class_df = self._compute_normalized_auc(
                 selected_df,
-                experiment.samples_list,  # FIXED: Changed from full_samples_list
+                experiment.full_samples_list, 
                 lipid_class,
                 intsta_auc,
                 concentration

@@ -29,7 +29,6 @@ from lipidcruncher.adapters.streamlit_adapter import StreamlitDataAdapter
 from lipidcruncher.core.models.experiment import ExperimentConfig
 from lipidcruncher.core.models.normalization import NormalizationConfig
 from lipidcruncher.core.services.zero_filtering_service import ZeroFilteringService
-from lipidcruncher.core.services.standards_service import StandardsService
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))  # Gets the directory where main_app.py is
 IMAGES_DIR = os.path.join(SCRIPT_DIR, 'images')  # Path to the images directory
@@ -71,7 +70,7 @@ def initialize_session_state():
     if 'normalization_method' not in st.session_state:
         st.session_state.normalization_method = 'None'
     if 'selected_classes' not in st.session_state:
-        st.session_state.selected_classes = None  # Changed from [] to None
+        st.session_state.selected_classes = []
     if 'create_norm_dataset' not in st.session_state:
         st.session_state.create_norm_dataset = False
         
@@ -720,33 +719,16 @@ def process_experiment(df, data_format='lipidsearch'):
                                                          min_value=1, max_value=1000, value=1, step=1) 
                                  for i in range(n_conditions)]
 
-    # Validate inputs before creating ExperimentConfig
-    if not all(label.strip() for label in conditions_list):
+    experiment = lp.Experiment()
+    if not experiment.setup_experiment(n_conditions, conditions_list, number_of_samples_list):
         st.sidebar.error("All condition labels must be non-empty.")
         return False, None, None, None, False, None
 
-    if not all(count > 0 for count in number_of_samples_list):
-        st.sidebar.error("All sample counts must be greater than 0.")
-        return False, None, None, None, False, None
-
-    # Create experiment configuration
-    try:
-        experiment = ExperimentConfig.from_user_input(
-            n_conditions=n_conditions,
-            conditions_list=conditions_list,
-            number_of_samples_list=number_of_samples_list
-        )
-    except ValueError as e:
-        # This should rarely happen now since we pre-validate
-        st.sidebar.error(f"Invalid experiment setup: {str(e)}")
-        return False, None, None, None, False, None
-
-    # NOW process group samples (this creates group_df)
+    # Rest of the function remains unchanged
     name_df, group_df, updated_df, valid_samples = process_group_samples(df, experiment, data_format)
     if not valid_samples:
         return False, None, None, None, False, None
 
-    # Then use group_df
     if st.session_state.grouping_complete:
         bqc_label = specify_bqc_samples(experiment)
         confirmed = confirm_user_inputs(group_df, experiment)
@@ -1002,8 +984,32 @@ def get_grade_filtering_config(df, format_type):
     
     return grade_config
 
+def handle_standards_upload(normalizer):
+    st.info("""
+    You can upload your own standards file. Requirements:
+    - CSV file (.csv)
+    - Must contain column: 'LipidMolec'
+    - The standards must exist in your dataset
+    """)
+    
+    uploaded_file = st.file_uploader("Upload CSV file with standards", type=['csv'])
+    if uploaded_file is not None:
+        try:
+            standards_df = pd.read_csv(uploaded_file)
+            # Pass both cleaned_df and intsta_df from session state
+            return normalizer.process_standards_file(
+                standards_df,
+                st.session_state.cleaned_df,
+                st.session_state.intsta_df
+            )
+        except ValueError as ve:
+            st.error(str(ve))
+        except Exception as e:
+            st.error(f"Error reading standards file: {str(e)}")
+    return None
 
-def manage_internal_standards():
+
+def manage_internal_standards(normalizer):
     """Handle internal standards management workflow with simplified approach."""
     
     # Initialize with automatic detection as default
@@ -1058,7 +1064,7 @@ def manage_internal_standards():
                 try:
                     standards_df = pd.read_csv(uploaded_file)
                     # Process the uploaded standards
-                    new_standards_df = StandardsService.process_standards_file(
+                    new_standards_df = normalizer.process_standards_file(
                         standards_df,
                         st.session_state.cleaned_df,
                         st.session_state.intsta_df
@@ -1139,6 +1145,9 @@ def display_cleaned_data(unfiltered_df, intsta_df):
     if unfiltered_df is not None:
         st.session_state.cleaned_df = unfiltered_df.copy()
         st.session_state.intsta_df = intsta_df.copy() if intsta_df is not None else pd.DataFrame()
+    
+    # Create normalizer instance
+    normalizer = lp.NormalizeData()
     
     # Display cleaned data
     with st.expander("Clean and Filter Data"):
@@ -1313,7 +1322,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         # Add a divider
         st.markdown("---")
        
-        manage_internal_standards()
+        manage_internal_standards(normalizer)
         if not st.session_state.intsta_df.empty:
             st.markdown("### Internal Standards Consistency Plots")
             st.markdown("""
@@ -1408,6 +1417,184 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     
     workflow = NormalizationWorkflow()
     return workflow.run(cleaned_df, intsta_df, experiment, format_type)
+
+def process_class_standards(selected_classes, standards_by_class, intsta_df, saved_mappings=None):
+    """
+    Process class-standard mapping with session state preservation, ensuring class-specific defaults.
+
+    Args:
+        selected_classes (list): List of lipid classes to normalize.
+        standards_by_class (dict): Dictionary mapping ClassKey to list of LipidMolec standards.
+        intsta_df (pd.DataFrame): DataFrame containing internal standards.
+        saved_mappings (dict, optional): Previously saved class-to-standard mappings.
+
+    Returns:
+        dict or None: Mapping of lipid classes to selected standards, or None if invalid.
+    """
+    
+    class_to_standard_map = {}
+    all_available_standards = list(intsta_df['LipidMolec'].unique())
+    
+    # Handle case where no standards are available
+    if not all_available_standards:
+        st.error("No internal standards available for normalization.")
+        return None
+    
+    for lipid_class in selected_classes:
+        default_standard = None
+        if saved_mappings and lipid_class in saved_mappings:
+            default_standard = saved_mappings[lipid_class]
+            if default_standard not in all_available_standards:
+                default_standard = None
+
+        if not default_standard:
+            class_specific_standards = standards_by_class.get(lipid_class, [])
+            if class_specific_standards:
+                default_standard = class_specific_standards[0]
+            else:
+                default_standard = all_available_standards[0]
+                st.warning(f"No specific standards available for {lipid_class}. Defaulting to {default_standard}.")
+
+        default_idx = all_available_standards.index(default_standard) if default_standard in all_available_standards else 0
+
+        selected_standard = st.selectbox(
+            f'Select internal standard for {lipid_class}',
+            all_available_standards,
+            index=default_idx,
+            key=f'standard_selection_{lipid_class}'
+        )
+
+        class_to_standard_map[lipid_class] = selected_standard
+
+    if len(class_to_standard_map) != len(selected_classes):
+        st.error("Please select standards for all lipid classes")
+        return None
+
+    return class_to_standard_map
+
+def apply_standards_normalization(df, class_to_standard_map, selected_classes, intsta_df, normalizer, experiment):
+    """Apply standards normalization with session state preservation."""
+    # Create ordered list of standards
+    added_intsta_species_lst = [class_to_standard_map[cls] for cls in selected_classes]
+    
+    # Get unique standards
+    selected_standards = set(added_intsta_species_lst)
+    
+    # Initialize or retrieve concentration values from session state
+    if 'standard_concentrations' not in st.session_state:
+        st.session_state.standard_concentrations = {}
+    
+    intsta_concentration_dict = {}
+    all_concentrations_entered = True
+    
+    st.write("Enter the concentration of each selected internal standard (µM):")
+    for standard in selected_standards:
+        # Use previously entered value as default if available
+        default_value = st.session_state.standard_concentrations.get(standard, 1.0)
+        
+        concentration = st.number_input(
+            f"Concentration (µM) for {standard}",
+            min_value=0.0,
+            value=default_value,
+            step=0.1,
+            key=f"conc_{standard}"
+        )
+        
+        # Store current value in session state
+        st.session_state.standard_concentrations[standard] = concentration
+        
+        if concentration <= 0:
+            st.error(f"Please enter a valid concentration for {standard}")
+            all_concentrations_entered = False
+        intsta_concentration_dict[standard] = concentration
+
+    if not all_concentrations_entered:
+        st.error("Please enter valid concentrations for all standards")
+        return None
+
+    try:
+        normalized_df = normalizer.normalize_data(
+            selected_classes,
+            added_intsta_species_lst,
+            intsta_concentration_dict,
+            df,
+            intsta_df,
+            experiment
+        )
+        st.success("Internal standards normalization applied successfully")
+        return normalized_df
+    except Exception as e:
+        st.error(f"Error during internal standards normalization: {str(e)}")
+        return None
+
+def collect_protein_concentrations(experiment):
+    """
+    Collects protein concentrations for each sample using Streamlit's UI.
+    Args:
+        experiment (Experiment): The experiment object containing the list of sample names.
+    Returns:
+        pd.DataFrame: A DataFrame with 'Sample' and 'Concentration' columns
+    """
+    method = st.radio(
+        "Select the method for providing protein concentrations:",
+        ["Manual Input", "Upload Excel File"],
+        index=1
+    )
+    
+    if method == "Manual Input":
+        protein_concentrations = {}
+        for sample in experiment.full_samples_list:
+            concentration = st.number_input(
+                f'Enter protein concentration for {sample} (mg/mL):',
+                min_value=0.0, max_value=100000.0, 
+                value=1.0, 
+                step=0.1,
+                key=sample
+            )
+            protein_concentrations[sample] = concentration
+
+        protein_df = pd.DataFrame(list(protein_concentrations.items()), 
+                                columns=['Sample', 'Concentration'])
+        return protein_df
+    
+    elif method == "Upload Excel File":
+        st.info("Upload an Excel file with a single column named 'Concentration'. Each row should correspond to the protein concentration for each sample in the experiment, in order.")
+        
+        uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
+        
+        if uploaded_file is not None:
+            try:
+                # Read the Excel file
+                protein_df = pd.read_excel(uploaded_file, engine='openpyxl')
+                
+                # Basic validations
+                if 'Concentration' not in protein_df.columns:
+                    st.error("Excel file must contain a single column named 'Concentration'")
+                    st.write("Found columns:", list(protein_df.columns))
+                    return None
+                    
+                if len(protein_df) != len(experiment.full_samples_list):
+                    st.error(f"Number of concentrations ({len(protein_df)}) does not match "
+                            f"number of samples ({len(experiment.full_samples_list)})")
+                    return None
+                
+                # Convert concentration values to numeric
+                protein_df['Concentration'] = pd.to_numeric(protein_df['Concentration'], errors='coerce')
+                if protein_df['Concentration'].isna().any():
+                    st.error("Some concentration values could not be converted to numbers")
+                    return None
+                
+                # Add sample names in the correct order
+                protein_df['Sample'] = experiment.full_samples_list
+                
+                return protein_df
+                
+            except Exception as e:
+                st.error(f"Error reading Excel file: {str(e)}")
+                return None
+        else:
+            st.warning("Please upload an Excel file to proceed.")
+            return None
         
 def display_data(df, title, filename, key_suffix=''):
     """

@@ -38,7 +38,7 @@ class DataCleaningService:
         df = self._remove_missing_fa_keys(df)
         
         # Convert columns to numeric
-        df = self._convert_columns_to_numeric(df, experiment.samples_list)
+        df = self._convert_columns_to_numeric(df, experiment.full_samples_list)
         
         # Apply grade filtering
         df = self._apply_grade_filter(df, grade_config)
@@ -76,7 +76,7 @@ class DataCleaningService:
             raise ValueError("No valid data remains after removing invalid lipid names")
         
         # Convert columns to numeric
-        df = self._convert_columns_to_numeric(df, experiment.samples_list)
+        df = self._convert_columns_to_numeric(df, experiment.full_samples_list)
         
         # Remove duplicates based on LipidMolec
         df = df.drop_duplicates(subset=['LipidMolec'])
@@ -208,8 +208,8 @@ class DataCleaningService:
         """
         Select best AUC for each lipid based on grade priority.
         """
-        clean_df = self._initialize_clean_df(experiment.samples_list)
-        sample_names = experiment.samples_list
+        clean_df = self._initialize_clean_df(experiment.full_samples_list)
+        sample_names = experiment.full_samples_list
         
         if grade_config is None:
             # Default behavior

@@ -77,7 +77,7 @@ if uploaded_file:
                 number_of_samples_list=samples_per_condition
             )
             st.session_state.experiment_config = experiment_config
-            st.success(f"✅ Experiment configured: {experiment_config.samples_list}")
+            st.success(f"✅ Experiment configured: {experiment_config.full_samples_list}")
         
         # Step 3: Data Cleaning
         if 'experiment_config' in st.session_state:
@@ -198,7 +198,7 @@ if uploaded_file:
                     st.subheader("Protein Concentrations")
                     
                     protein_concentrations = {}
-                    for sample in st.session_state.experiment_config.samples_list:
+                    for sample in st.session_state.experiment_config.full_samples_list:
                         protein_concentrations[sample] = st.number_input(
                             f"Protein concentration for {sample}:",
                             value=2.0,
