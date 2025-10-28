@@ -564,7 +564,7 @@ def process_group_samples(df, experiment, data_format):
     grouped_samples = lp.GroupSamples(experiment, data_format)
     
     if not grouped_samples.check_dataset_validity(df):
-        st.sidebar.error("Invalid dataset format!")
+        st.sidebar.warning("⚠️ Please check the error message on the main page and verify your experiment setup")
         return None, None, None, False
 
     value_cols = grouped_samples.build_mean_area_col_list(df)
