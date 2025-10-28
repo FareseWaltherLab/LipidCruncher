@@ -26,14 +26,22 @@ def select_lipid_classes_ui(cleaned_df: pd.DataFrame) -> Optional[List[str]]:
     # Initialize session state with ALL classes selected by default
     if 'selected_classes' not in st.session_state or st.session_state.selected_classes is None:
         st.session_state.selected_classes = all_classes  # Start with all selected
-    
+
+    # Filter session state to only include classes that exist in current data
+    # This handles cases where grade filtering or other settings remove classes
+    valid_defaults = [cls for cls in st.session_state.selected_classes if cls in all_classes]
+
+    # If no valid classes remain, default to all current classes
+    if not valid_defaults:
+        valid_defaults = all_classes
+
     def update_selected_classes():
         st.session_state.selected_classes = st.session_state.temp_selected_classes
-    
+
     selected_classes = st.multiselect(
         'Select lipid classes you would like to analyze:',
         options=all_classes,
-        default=st.session_state.selected_classes,  # Use persisted selection
+        default=valid_defaults,  # Safe: only classes that exist in options
         key='temp_selected_classes',
         on_change=update_selected_classes
     )
