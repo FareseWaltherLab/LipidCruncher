@@ -33,9 +33,26 @@ class DataCleaningService:
         
         Returns:
             Cleaned DataFrame
+            
+        Raises:
+            ValueError: If dataset is empty or becomes empty after cleaning steps
         """
+        # Early validation: check if DataFrame is empty
+        if df.empty:
+            raise ValueError(
+                "Dataset is empty. Please upload a valid LipidSearch data file with lipid species."
+            )
+        
         # Remove rows with missing FA keys (except Ch class)
         df = self._remove_missing_fa_keys(df)
+        
+        # Check if DataFrame is empty after removing missing FA keys
+        if df.empty:
+            raise ValueError(
+                "No valid lipid species found after filtering. "
+                "The dataset contains no rows with valid fatty acid (FA) keys. "
+                "Please check your data file."
+            )
         
         # Convert columns to numeric
         df = self._convert_columns_to_numeric(df, experiment.full_samples_list)
@@ -43,11 +60,25 @@ class DataCleaningService:
         # Apply grade filtering
         df = self._apply_grade_filter(df, grade_config)
         
+        # Check if DataFrame is empty after grade filtering
+        if df.empty:
+            raise ValueError(
+                "No lipid species remain after applying grade filters. "
+                "Please adjust your grade filter settings to include more data."
+            )
+        
         # Standardize lipid names
         df = self._correct_lipid_molec_column(df)
         
         # Select best AUC for each lipid
         df = self._select_best_auc(df, experiment, grade_config)
+        
+        # Check if DataFrame is empty after AUC selection
+        if df.empty:
+            raise ValueError(
+                "No lipid species remain after quality filtering. "
+                "This may indicate an issue with the data quality or filtering settings."
+            )
         
         # Final cleanup
         df = self._final_cleanup_lipidsearch(df)
@@ -68,12 +99,24 @@ class DataCleaningService:
         
         Returns:
             Cleaned DataFrame
+            
+        Raises:
+            ValueError: If dataset is empty or becomes empty after cleaning
         """
+        # Early validation: check if DataFrame is empty
+        if df.empty:
+            raise ValueError(
+                "Dataset is empty. Please upload a valid data file with lipid species."
+            )
+        
         # Remove rows with invalid lipid names
         df = self._remove_invalid_lipid_rows(df)
         
         if df.empty:
-            raise ValueError("No valid data remains after removing invalid lipid names")
+            raise ValueError(
+                "No valid lipid species found. All rows had invalid or missing lipid names. "
+                "Please check your data file and ensure the 'LipidMolec' column contains valid lipid identifiers."
+            )
         
         # Convert columns to numeric
         df = self._convert_columns_to_numeric(df, experiment.full_samples_list)
@@ -87,6 +130,13 @@ class DataCleaningService:
         # Remove rows where all intensity values are zero or null
         df = df[~(df[intensity_cols] == 0).all(axis=1)]
         df = df[~df[intensity_cols].isnull().all(axis=1)]
+        
+        if df.empty:
+            raise ValueError(
+                "No lipid species with non-zero intensity values found. "
+                "All rows contained only zeros or null values. "
+                "Please check your data file."
+            )
         
         df = df.reset_index(drop=True)
         
@@ -122,10 +172,21 @@ class DataCleaningService:
     def _remove_missing_fa_keys(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Remove rows with missing FA keys, with exceptions for Ch class molecules.
+        
+        Args:
+            df: DataFrame with FAKey, ClassKey, and LipidMolec columns
+            
+        Returns:
+            Filtered DataFrame
         """
         # Handle empty DataFrame to prevent .str accessor errors
         if df.empty:
             return df
+        
+        # Ensure LipidMolec column contains string values for .str accessor
+        # Convert to string and handle NaN values
+        df = df.copy()
+        df['LipidMolec'] = df['LipidMolec'].fillna('').astype(str)
         
         keep_mask = (
             df['FAKey'].notna() |
@@ -141,6 +202,13 @@ class DataCleaningService:
     ) -> pd.DataFrame:
         """
         Apply grade filtering to the dataframe.
+        
+        Args:
+            df: DataFrame with ClassKey and TotalGrade columns
+            grade_config: Optional dict mapping ClassKey to list of acceptable grades
+            
+        Returns:
+            Filtered DataFrame
         """
         if grade_config is None:
             # Default behavior: A, B, C for all
