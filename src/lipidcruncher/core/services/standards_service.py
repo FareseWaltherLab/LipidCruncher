@@ -33,6 +33,16 @@ class StandardsService:
         if 'LipidMolec' not in standards_df.columns:
             raise ValueError("Standards file must contain 'LipidMolec' column")
         
+        # FIX: Remove duplicates from uploaded standards file
+        original_count = len(standards_df)
+        standards_df = standards_df.drop_duplicates(subset=['LipidMolec'], keep='first')
+        duplicates_removed = original_count - len(standards_df)
+        
+        if duplicates_removed > 0:
+            import streamlit as st
+            st.warning(f"⚠️ Removed {duplicates_removed} duplicate standard(s) from uploaded file. "
+                      f"Only the first occurrence of each standard was kept.")
+        
         # Get list of lipids in cleaned data
         if cleaned_df is None or 'LipidMolec' not in cleaned_df.columns:
             raise ValueError("Cleaned data must contain 'LipidMolec' column")
