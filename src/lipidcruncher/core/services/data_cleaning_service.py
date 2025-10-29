@@ -37,8 +37,8 @@ class DataCleaningService:
         Raises:
             ValueError: If dataset is empty or becomes empty after cleaning steps
         """
-        # Early validation: check if DataFrame is empty
-        if df.empty:
+        # Early validation: check if DataFrame is effectively empty
+        if self._is_effectively_empty(df):
             raise ValueError(
                 "Dataset is empty. Please upload a valid LipidSearch data file with lipid species."
             )
@@ -103,8 +103,8 @@ class DataCleaningService:
         Raises:
             ValueError: If dataset is empty or becomes empty after cleaning
         """
-        # Early validation: check if DataFrame is empty
-        if df.empty:
+        # Early validation: check if DataFrame is effectively empty
+        if self._is_effectively_empty(df):
             raise ValueError(
                 "Dataset is empty. Please upload a valid data file with lipid species."
             )
@@ -168,6 +168,35 @@ class DataCleaningService:
         return cleaned_df, standards_df
     
     # ==================== LipidSearch-specific methods ====================
+    
+    def _is_effectively_empty(self, df: pd.DataFrame) -> bool:
+        """
+        Check if DataFrame is effectively empty.
+        
+        A DataFrame is considered effectively empty if:
+        1. It has no rows (df.empty == True), OR
+        2. It has rows but the LipidMolec column contains only NaN/empty values
+        
+        Args:
+            df: DataFrame to check
+            
+        Returns:
+            True if DataFrame is effectively empty, False otherwise
+        """
+        if df.empty:
+            return True
+        
+        # Check if LipidMolec column exists and has any valid values
+        if 'LipidMolec' in df.columns:
+            # Drop NaN values
+            lipid_values = df['LipidMolec'].dropna()
+            if len(lipid_values) == 0:
+                return True
+            # Also check if all are empty strings after stripping whitespace
+            if (lipid_values.astype(str).str.strip() == '').all():
+                return True
+        
+        return False
     
     def _remove_missing_fa_keys(self, df: pd.DataFrame) -> pd.DataFrame:
         """
