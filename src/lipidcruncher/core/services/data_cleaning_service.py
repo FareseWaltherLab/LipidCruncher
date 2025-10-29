@@ -123,6 +123,10 @@ class DataCleaningService:
         """
         Remove rows with missing FA keys, with exceptions for Ch class molecules.
         """
+        # Handle empty DataFrame to prevent .str accessor errors
+        if df.empty:
+            return df
+        
         keep_mask = (
             df['FAKey'].notna() |
             (df['ClassKey'] == 'Ch') |

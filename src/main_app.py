@@ -841,6 +841,24 @@ def clean_data(df, name_df, experiment, data_format, grade_config=None):
     Returns:
         Tuple of (cleaned_df, intsta_df)
     """
+    # ===================================================
+    # Validate we have data to clean
+    if df.empty:
+        st.error("❌ **No data to process**")
+        st.warning("""
+        The dataset is empty. This could happen because:
+        - All species were manually removed
+        - Grade filtering removed all data
+        - The uploaded file contains no valid data
+        
+        **What to do:**
+        1. Check your uploaded file
+        2. Adjust grade filtering settings (if applicable)
+        3. Re-upload your data
+        """)
+        st.stop()
+    # ===================================================
+    
     # Convert old Experiment object to new ExperimentConfig
     experiment_config = ExperimentConfig(
         n_conditions=experiment.n_conditions,
@@ -886,6 +904,11 @@ def get_grade_filtering_config(df, format_type):
     # Check if the required columns exist
     if 'ClassKey' not in df.columns or 'TotalGrade' not in df.columns:
         return None
+
+    # Check if DataFrame is empty
+    if df.empty:
+        st.warning("⚠️ No data available for grade filtering configuration.")
+        return None
     
     st.markdown("---")
     st.markdown("### 🎯 Grade Filtering Configuration")
@@ -903,7 +926,12 @@ def get_grade_filtering_config(df, format_type):
     """)
     
     # Get unique classes from the data
-    all_classes = sorted(df['ClassKey'].unique())
+    all_classes = sorted([str(c) for c in df['ClassKey'].unique() if pd.notna(c)])
+
+    # Check if we have any valid classes
+    if not all_classes:
+        st.error("⚠️ No valid lipid classes found in the dataset. Please check your data or adjust your filters.")
+        return None
     
     # Option to use default or custom settings
     use_custom = st.radio(
