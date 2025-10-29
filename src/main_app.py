@@ -841,49 +841,58 @@ def clean_data(df, name_df, experiment, data_format, grade_config=None):
     Returns:
         Tuple of (cleaned_df, intsta_df)
     """
-    # ===================================================
-    # Validate we have data to clean
-    if df.empty:
-        st.error("❌ **No data to process**")
-        st.warning("""
-        The dataset is empty. This could happen because:
-        - All species were manually removed
-        - Grade filtering removed all data
-        - The uploaded file contains no valid data
+    try:
+        # ===================================================
+        # Validate we have data to clean
+        if df.empty:
+            st.error("❌ **No data to process**")
+            st.warning("""
+            The dataset is empty. This could happen because:
+            - All species were manually removed
+            - Grade filtering removed all data
+            - The uploaded file contains no valid data
+            
+            **What to do:**
+            1. Check your uploaded file
+            2. Adjust grade filtering settings (if applicable)
+            3. Re-upload your data
+            """)
+            st.stop()
+        # ===================================================
         
-        **What to do:**
-        1. Check your uploaded file
-        2. Adjust grade filtering settings (if applicable)
-        3. Re-upload your data
-        """)
+        # Convert old Experiment object to new ExperimentConfig
+        experiment_config = ExperimentConfig(
+            n_conditions=experiment.n_conditions,
+            conditions_list=experiment.conditions_list,
+            number_of_samples_list=experiment.number_of_samples_list
+        )
+        
+        # Use the refactored cleaning service
+        adapter = StreamlitDataAdapter()
+        
+        # Note: df should already be preprocessed by DataFormatHandler before calling this
+        # We'll use the cleaning service directly (preprocessing already done elsewhere)
+        if data_format == 'LipidSearch 5.0':
+            cleaned_df = adapter.cleaning_service.clean_lipidsearch_data(
+                df, experiment_config, grade_config
+            )
+        else:
+            cleaned_df = adapter.cleaning_service.clean_generic_data(
+                df, experiment_config
+            )
+        
+        # Extract internal standards
+        cleaned_df, intsta_df = adapter.cleaning_service.extract_internal_standards(cleaned_df)
+        
+        return cleaned_df, intsta_df
+    
+    except ValueError as e:
+        st.error(f"❌ {str(e)}")
         st.stop()
-    # ===================================================
     
-    # Convert old Experiment object to new ExperimentConfig
-    experiment_config = ExperimentConfig(
-        n_conditions=experiment.n_conditions,
-        conditions_list=experiment.conditions_list,
-        number_of_samples_list=experiment.number_of_samples_list
-    )
-    
-    # Use the refactored cleaning service
-    adapter = StreamlitDataAdapter()
-    
-    # Note: df should already be preprocessed by DataFormatHandler before calling this
-    # We'll use the cleaning service directly (preprocessing already done elsewhere)
-    if data_format == 'LipidSearch 5.0':
-        cleaned_df = adapter.cleaning_service.clean_lipidsearch_data(
-            df, experiment_config, grade_config
-        )
-    else:
-        cleaned_df = adapter.cleaning_service.clean_generic_data(
-            df, experiment_config
-        )
-    
-    # Extract internal standards
-    cleaned_df, intsta_df = adapter.cleaning_service.extract_internal_standards(cleaned_df)
-    
-    return cleaned_df, intsta_df
+    except Exception as e:
+        st.error(f"❌ An unexpected error occurred: {str(e)}")
+        st.stop()
 
 def get_grade_filtering_config(df, format_type):
     """
