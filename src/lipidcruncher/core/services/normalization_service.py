@@ -147,7 +147,7 @@ class NormalizationService:
             df: DataFrame with lipid data
             config: Normalization configuration
             protein_df: DataFrame with protein concentrations
-            preserve_prefix: If True, keep 'intensity[' prefix
+            preserve_prefix: If True, keep current column prefix (intensity or concentration)
             
         Returns:
             Normalized DataFrame
@@ -158,10 +158,15 @@ class NormalizationService:
         if 'Sample' in protein_df.columns:
             protein_df = protein_df.set_index('Sample')
         
-        # Find and normalize intensity columns
+        # Find columns to normalize - can be either intensity[] or concentration[]
+        # (concentration[] appears when chaining with internal standards normalization)
         intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
+        concentration_cols = [col for col in df.columns if col.startswith('concentration[')]
         
-        for col in intensity_cols:
+        # Use whichever column type is present
+        cols_to_normalize = intensity_cols if intensity_cols else concentration_cols
+        
+        for col in cols_to_normalize:
             sample_name = col[col.find('[')+1:col.find(']')]
             
             if sample_name in protein_df.index:
@@ -174,8 +179,9 @@ class NormalizationService:
                 normalized_df[col] = df[col] / protein_conc
         
         # Rename columns unless preserving prefix or explicitly configured
+        # Only rename intensity[] to concentration[], not concentration[] to concentration[]
         use_preserve = preserve_prefix or config.preserve_column_prefix
-        if not use_preserve:
+        if not use_preserve and intensity_cols:
             normalized_df = self._rename_intensity_to_concentration(normalized_df)
         
         return normalized_df
