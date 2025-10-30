@@ -78,38 +78,71 @@ class NormalizationWorkflow:
         
         if not do_protein and not do_standards:
             st.info("No normalization selected. Using raw intensity values.")
-            return self._finalize_dataframe(filtered_df, stored_columns, format_type)
+            final_df = self._finalize_dataframe(filtered_df, stored_columns, format_type)
+            
+            # Display the data
+            st.subheader("View Dataset (No Normalization Applied)")
+            st.write(final_df)
+            
+            # Download button
+            csv = final_df.to_csv(index=False)
+            st.download_button(
+                label="Download Data",
+                data=csv,
+                file_name="filtered_data.csv",
+                mime="text/csv",
+                key="download_filtered_data"
+            )
+            
+            return final_df
         
         # Initialize normalized_df
         normalized_df = filtered_df.copy()
         
         # Step 3: Collect inputs and normalize
         try:
-            # Handle protein normalization
-            protein_df = None
-            protein_concentrations = None
-            
-            if do_protein:
-                with st.expander("�� Protein-based Normalization"):
-                    protein_df = collect_protein_concentrations_ui(experiment_config)
-                    if protein_df is None:
-                        st.warning("Protein concentrations required. Please provide values.")
-                        return None
-                    
-                    # Convert to dict
-                    protein_concentrations = dict(zip(protein_df['Sample'], protein_df['Concentration']))
-            
-            # Handle internal standards normalization
+            # Validate that internal standards are available when needed
+            if do_standards and (intsta_df is None or intsta_df.empty):
+                st.error("Internal standards normalization requires internal standards data. "
+                        "Please ensure your dataset contains internal standards or select a different normalization method.")
+                return None
+
+            # Handle internal standards normalization FIRST (matches processing order in NormalizationService)
             internal_standards = None
             intsta_concentrations = None
             
             if do_standards:
-                with st.expander("📊 Internal Standards Normalization"):
+                with st.expander("📊 Internal Standards Normalization", expanded=True):
                     result = collect_internal_standards_ui(selected_classes, intsta_df)
-                    if result is None:
-                        return None
-                    
-                    internal_standards, intsta_concentrations = result
+                    if result is not None:
+                        internal_standards, intsta_concentrations = result
+            
+            # Handle protein normalization SECOND (matches processing order in NormalizationService)
+            protein_df = None
+            protein_concentrations = None
+            
+            if do_protein:
+                with st.expander("🧪 Protein-based Normalization", expanded=True):
+                    protein_df = collect_protein_concentrations_ui(experiment_config)
+                    if protein_df is not None:
+                        # Convert to dict
+                        protein_concentrations = dict(zip(protein_df['Sample'], protein_df['Concentration']))
+            
+            # Check if all required inputs are collected before proceeding
+            ready_to_normalize = True
+            missing_inputs = []
+            
+            if do_standards and (internal_standards is None or intsta_concentrations is None):
+                ready_to_normalize = False
+                missing_inputs.append("internal standards configuration")
+            
+            if do_protein and protein_concentrations is None:
+                ready_to_normalize = False
+                missing_inputs.append("protein concentrations")
+            
+            if not ready_to_normalize:
+                st.info(f"⏳ Please complete: {', '.join(missing_inputs)}")
+                return None
             
             # Determine normalization method
             if do_protein and do_standards:
@@ -146,7 +179,25 @@ class NormalizationWorkflow:
                 )
             
             # Finalize
-            return self._finalize_dataframe(normalized_df, stored_columns, format_type)
+            final_df = self._finalize_dataframe(normalized_df, stored_columns, format_type)
+            
+            # Display normalized data
+            st.success("✅ Normalization completed successfully!")
+            
+            st.subheader("View Normalized Dataset")
+            st.write(final_df)
+            
+            # Download button
+            csv = final_df.to_csv(index=False)
+            st.download_button(
+                label="Download Normalized Data",
+                data=csv,
+                file_name="normalized_data.csv",
+                mime="text/csv",
+                key="download_normalized_data"
+            )
+            
+            return final_df
         
         except Exception as e:
             st.error(f"Error during normalization: {str(e)}")
