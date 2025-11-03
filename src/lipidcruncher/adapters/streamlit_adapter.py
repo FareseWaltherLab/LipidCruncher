@@ -8,11 +8,9 @@ from typing import Optional, Tuple, Dict, List
 from ..core.services.data_cleaning_service import DataCleaningService
 from ..core.services.normalization_service import NormalizationService
 from ..core.services.zero_filtering_service import ZeroFilteringService
+from ..core.services.format_preprocessing_service import FormatPreprocessingService
 from ..core.models.experiment import ExperimentConfig
 from ..core.models.normalization import NormalizationConfig
-import sys
-sys.path.insert(0, '.')
-import lipidomics as lp
 
 
 class StreamlitDataAdapter:
@@ -25,7 +23,7 @@ class StreamlitDataAdapter:
         self.cleaning_service = DataCleaningService()
         self.normalization_service = NormalizationService()
         self.zero_filter_service = ZeroFilteringService()
-        self.format_handler = lp.DataFormatHandler()
+        self.format_preprocessing_service = FormatPreprocessingService()
     
     def clean_data(
         self,
@@ -43,7 +41,7 @@ class StreamlitDataAdapter:
         Args:
             df: Raw uploaded DataFrame
             experiment_config: Experiment configuration
-            data_format: Format type ('LipidSearch 5.0' or 'Generic Format')
+            data_format: Format type ('LipidSearch 5.0', 'Generic Format', 'Metabolomics Workbench')
             grade_config: Optional grade filtering config for LipidSearch
             apply_zero_filter: Whether to apply zero filtering
             zero_filter_threshold: Threshold for zero filtering
@@ -53,23 +51,31 @@ class StreamlitDataAdapter:
             Tuple of (cleaned_df, internal_standards_df, removed_species)
         """
         try:
-            # Step 1: Preprocess/standardize the data format
-            if data_format == 'LipidSearch 5.0':
-                preprocessed_df, success, message = self.format_handler.validate_and_preprocess(
-                    df, 'lipidsearch'
-                )
-            else:
-                preprocessed_df, success, message = self.format_handler.validate_and_preprocess(
-                    df, 'generic'
-                )
+            # Step 1: Map UI format names to service format types
+            format_type_map = {
+                'LipidSearch 5.0': 'lipidsearch',
+                'Generic Format': 'generic',
+                'Metabolomics Workbench': 'metabolomics_workbench'
+            }
+            
+            format_type = format_type_map.get(data_format, 'generic')
+            
+            # Step 2: Preprocess/standardize the data format
+            preprocessed_df, success, message = self.format_preprocessing_service.validate_and_preprocess(
+                df, format_type
+            )
             
             if not success:
-                st.error(f"Preprocessing failed: {message}")
-                raise ValueError(message)
+                st.error(f"❌ Preprocessing failed: {message}")
+                raise ValueError(f"Preprocessing failed: {message}")
+            
+            if preprocessed_df is None:
+                st.error("❌ Preprocessing returned no data")
+                raise ValueError("Preprocessing returned no data")
             
             st.info(f"✅ Data preprocessed: {message}")
             
-            # Step 2: Clean the preprocessed data
+            # Step 3: Clean the preprocessed data
             if data_format == 'LipidSearch 5.0':
                 cleaned_df = self.cleaning_service.clean_lipidsearch_data(
                     preprocessed_df,
@@ -77,12 +83,13 @@ class StreamlitDataAdapter:
                     grade_config
                 )
             else:
+                # Generic and Metabolomics Workbench both use generic cleaning
                 cleaned_df = self.cleaning_service.clean_generic_data(
                     preprocessed_df,
                     experiment_config
                 )
             
-            # Step 3: Apply zero filtering (if requested)
+            # Step 4: Apply zero filtering (if requested)
             removed_species = []
             if apply_zero_filter:
                 cleaned_df, removed_species = self.zero_filter_service.filter_by_zeros(
@@ -96,7 +103,7 @@ class StreamlitDataAdapter:
                     n_removed = len(removed_species)
                     st.warning(f"🔍 Removed {n_removed} species based on zero filter")
             
-            # Step 4: Extract internal standards
+            # Step 5: Extract internal standards
             cleaned_df, standards_df = self.cleaning_service.extract_internal_standards(cleaned_df)
             
             st.success(f"✅ Data cleaned successfully: {len(cleaned_df)} lipids, {len(standards_df)} standards")
@@ -104,7 +111,7 @@ class StreamlitDataAdapter:
             return cleaned_df, standards_df, removed_species
             
         except Exception as e:
-            st.error(f"Error during data cleaning: {str(e)}")
+            st.error(f"❌ Error during data cleaning: {str(e)}")
             raise
     
     def normalize_data(
@@ -142,7 +149,7 @@ class StreamlitDataAdapter:
             return normalized_df
             
         except Exception as e:
-            st.error(f"Error during normalization: {str(e)}")
+            st.error(f"❌ Error during normalization: {str(e)}")
             raise
     
     @staticmethod
