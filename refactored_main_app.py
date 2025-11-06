@@ -6,6 +6,9 @@ Matches old main_app.py UI exactly.
 
 This application combines upload, configuration, data cleaning,
 zero filtering, and normalization into a single unified workflow.
+
+Author: Hamed Abdi / Claude
+Date: November 2025
 """
 
 import sys
@@ -193,6 +196,14 @@ def display_main_app():
     if st.session_state.confirmed:
         render_data_pipeline()
     else:
+        # Landing page with format requirements
+        st.markdown("## 📋 Data Format Requirements")
+        st.markdown("Please review the requirements for your data format before uploading.")
+        
+        # Show format requirements based on selected format
+        if st.session_state.format_type:
+            display_format_requirements_main(st.session_state.format_type)
+        
         st.info("👈 Please configure your experiment in the sidebar and confirm your inputs to proceed.")
     
     # Back to home button
@@ -255,7 +266,7 @@ def render_sidebar():
             st.sidebar.error(f"❌ Error reading file: {str(e)}")
 
 def display_format_requirements(data_format: str):
-    """Display format requirements in an expander."""
+    """Display format requirements in an expander in sidebar."""
     with st.sidebar.expander("📋 Format Requirements", expanded=False):
         if data_format == 'Metabolomics Workbench':
             st.info("""
@@ -302,6 +313,76 @@ def display_format_requirements(data_format: str):
             
             ⚠️ Remove any additional columns before uploading.
             """)
+
+def display_format_requirements_main(data_format: str):
+    """Display format requirements on main page (not in expander)."""
+    if data_format == 'Metabolomics Workbench':
+        st.markdown("### Metabolomics Workbench Format")
+        st.info("""
+        **Dataset Requirements:**
+        
+        The file must be a CSV containing:
+        1. **Required section markers:**
+           * `MS_METABOLITE_DATA_START`
+           * `MS_METABOLITE_DATA_END`
+           
+        2. **Three essential rows in the data section:**
+           * Row 1: Sample names
+           * Row 2: Experimental conditions (one per sample)
+           * Row 3+: Lipid measurements with lipid names in first column
+           
+        **Example:**
+        ```
+        MS_METABOLITE_DATA_START
+        Samples,Sample1,Sample2,Sample3,Sample4
+        Factors,WT,WT,KO,KO
+        LPC(16:0),234.5,256.7,189.3,201.4
+        PE(18:0_20:4),456.7,478.2,390.1,405.6
+        MS_METABOLITE_DATA_END
+        ```
+        """)
+    elif data_format == 'LipidSearch 5.0':
+        st.markdown("### LipidSearch 5.0 Format")
+        st.info("""
+        **Required Columns:**
+        * `LipidMolec`: Lipid molecule identifier
+        * `ClassKey`: Lipid class classification
+        * `CalcMass`: Calculated mass
+        * `BaseRt`: Base retention time
+        * `TotalGrade`: Quality grade (A, B, C, D)
+        * `TotalSmpIDRate(%)`: Sample identification rate
+        * `FAKey`: Fatty acid key
+        * `MeanArea[s1]`, `MeanArea[s2]`, etc.: Sample intensities
+        
+        **Note:** Each sample must have a corresponding MeanArea column.
+        For 10 samples, you need: MeanArea[s1], MeanArea[s2], ..., MeanArea[s10]
+        """)
+    else:  # Generic Format
+        st.markdown("### Generic Format")
+        st.info("""
+        **Dataset Requirements:**
+        
+        Your dataset must contain ONLY these columns in this order:
+        
+        1. **First Column - Lipid Names:**
+           * Can have any column name
+           * Must contain lipid molecule identifiers
+           * Will be standardized. Examples:
+             - `LPC O-18:1` → `LPC(O-18:1)`
+             - `Cer d18:0/C24:0` → `Cer(d18:0_C24:0)`
+             - `CE 14:0;0` → `CE(14:0)`
+             
+        2. **Remaining Columns - Intensity Values Only:**
+           * Each column = one sample
+           * Can have any column names
+           * Number of columns must match total number of samples
+           * Will be standardized to: `intensity[s1]`, `intensity[s2]`, ...
+        
+        ⚠️ **Important:** Remove any additional columns before uploading.
+        Only lipid names column + intensity columns should be present.
+        
+        **Note:** Lipid class (e.g., LPC, Cer, CE) will be automatically extracted from lipid names.
+        """)
 
 def render_experiment_config(df, data_format: str):
     """Render experiment configuration section in sidebar."""
@@ -700,8 +781,6 @@ def render_data_cleaning():
         
         # Display cleaned data
         if st.session_state.cleaned_df is not None:
-            st.success(f"✅ Data cleaned: {st.session_state.cleaned_df.shape[0]} lipids")
-            
             # Zero filtering UI (always show)
             st.markdown("### 🔍 Zero Filtering")
             st.markdown("""
@@ -710,17 +789,26 @@ def render_data_cleaning():
             - **Non-BQC conditions:** Remove if ≥75% of replicates in ALL conditions are below threshold
             """)
             
+            # Set default threshold based on format
+            default_threshold = 30000.0 if st.session_state.format_type == 'LipidSearch 5.0' else 0.0
+            step_size = 1000.0 if st.session_state.format_type == 'LipidSearch 5.0' else 0.1
+            
             threshold = st.number_input(
                 "Zero filter threshold:",
                 min_value=0.0,
-                value=0.0,
-                step=0.1,
+                value=default_threshold,
+                step=step_size,
                 help="Values ≤ this are considered zero",
                 key="zero_filter_threshold"
             )
             
             # Apply zero filtering whenever threshold changes
             apply_zero_filtering_simple(st.session_state.cleaned_df, threshold)
+            
+            # Display cleaning summary messages (after zero filtering, before data)
+            if st.session_state.intsta_df is not None and not st.session_state.intsta_df.empty:
+                st.success(f"✅ Extracted {len(st.session_state.intsta_df)} internal standards")
+            st.success(f"✅ Data cleaned: {st.session_state.cleaned_df.shape[0]} lipids")
             
             # Display results
             if st.session_state.filtered_df is not None:
@@ -747,11 +835,10 @@ def clean_data_only():
             # Extract internal standards
             cleaned_df, intsta_df = cleaning_service.extract_internal_standards(cleaned_df)
             
-            if not intsta_df.empty:
-                st.success(f"✅ Extracted {len(intsta_df)} internal standards")
-            
             st.session_state.cleaned_df = cleaned_df
             st.session_state.intsta_df = intsta_df
+            # Save original auto-detected standards for later restoration
+            st.session_state.original_intsta_df = intsta_df.copy()
             
         except Exception as e:
             st.error(f"❌ Error during cleaning: {str(e)}")
@@ -804,18 +891,121 @@ def display_cleaning_results():
 def render_standards_management():
     """Render internal standards management section."""
     with st.expander("🔬 Manage Internal Standards", expanded=False):
-        st.markdown("### Internal Standards Detected")
-        st.dataframe(st.session_state.intsta_df)
+        # Initialize preference if not exists
+        if 'standard_source_preference' not in st.session_state:
+            st.session_state.standard_source_preference = "Automatic Detection"
         
-        # Download button
-        csv = st.session_state.intsta_df.to_csv(index=False)
-        st.download_button(
-            label="💾 Download Internal Standards",
-            data=csv,
-            file_name="internal_standards.csv",
-            mime="text/csv",
-            key="download_standards"
+        # Radio button for standards source
+        standards_source = st.radio(
+            "Select standards source:",
+            ["Automatic Detection", "Upload Custom Standards"],
+            key="standards_source_radio"
         )
+        
+        # Save the preference
+        st.session_state.standard_source_preference = standards_source
+        
+        # Handle automatic detection
+        if standards_source == "Automatic Detection":
+            # Clear any custom standards when switching to automatic detection
+            if 'custom_intsta_df' in st.session_state:
+                st.session_state.custom_intsta_df = None
+            
+            # Restore original auto-detected standards
+            if 'original_intsta_df' in st.session_state:
+                st.session_state.intsta_df = st.session_state.original_intsta_df.copy()
+            
+            # Show automatically detected standards
+            st.markdown("### 📊 Automatically Detected Standards")
+            if not st.session_state.intsta_df.empty:
+                st.success(f"✅ Found {len(st.session_state.intsta_df)} standards")
+                st.dataframe(st.session_state.intsta_df)
+                
+                # Download button
+                csv = st.session_state.intsta_df.to_csv(index=False)
+                st.download_button(
+                    label="💾 Download Internal Standards",
+                    data=csv,
+                    file_name="internal_standards.csv",
+                    mime="text/csv",
+                    key="download_standards_auto"
+                )
+            else:
+                st.info("No internal standards were automatically detected in the dataset")
+        
+        # Handle custom upload
+        else:
+            st.markdown("### 📤 Upload Custom Standards")
+            st.info("""
+            You can upload your own standards file. Requirements:
+            - CSV file (.csv)
+            - Must contain column: 'LipidMolec'
+            - The standards must exist in your dataset
+            """)
+            
+            uploaded_file = st.file_uploader(
+                "Upload CSV file with standards", 
+                type=['csv'],
+                key="standards_file_uploader"
+            )
+            
+            if uploaded_file is not None:
+                from lipidcruncher.core.services.standards_service import StandardsService
+                
+                try:
+                    standards_df = pd.read_csv(uploaded_file)
+                    
+                    # Process the uploaded standards
+                    service = StandardsService()
+                    new_standards_df = service.process_standards_file(
+                        standards_df,
+                        st.session_state.cleaned_df,
+                        st.session_state.intsta_df
+                    )
+                    
+                    if new_standards_df is not None:
+                        # Store custom standards separately
+                        st.session_state.custom_intsta_df = new_standards_df.copy()
+                        # Update current standards
+                        st.session_state.intsta_df = new_standards_df
+                        
+                        st.success(f"✅ Successfully loaded {len(new_standards_df)} custom standards")
+                        st.markdown("### 📊 Loaded Custom Standards")
+                        st.dataframe(new_standards_df)
+                        
+                        # Download button
+                        csv = new_standards_df.to_csv(index=False)
+                        st.download_button(
+                            label="💾 Download Custom Standards",
+                            data=csv,
+                            file_name="custom_standards.csv",
+                            mime="text/csv",
+                            key="download_standards_custom"
+                        )
+                    
+                except ValueError as ve:
+                    st.error(str(ve))
+                except Exception as e:
+                    st.error(f"Error reading standards file: {str(e)}")
+            
+            elif 'custom_intsta_df' in st.session_state and st.session_state.custom_intsta_df is not None:
+                # Show previously uploaded standards
+                st.success(f"✅ Using previously uploaded standards ({len(st.session_state.custom_intsta_df)} standards)")
+                st.markdown("### 📊 Current Custom Standards")
+                st.dataframe(st.session_state.custom_intsta_df)
+                
+                # Use previously uploaded standards
+                st.session_state.intsta_df = st.session_state.custom_intsta_df.copy()
+                
+                # Download button
+                csv = st.session_state.custom_intsta_df.to_csv(index=False)
+                st.download_button(
+                    label="💾 Download Custom Standards",
+                    data=csv,
+                    file_name="custom_standards.csv",
+                    mime="text/csv",
+                    key="download_standards_custom_prev"
+                )
 
 def render_normalization():
     """Render normalization section (always visible, no expander)."""
@@ -856,19 +1046,18 @@ def render_normalization():
     
     all_classes = sorted(st.session_state.filtered_df['ClassKey'].unique())
     
-    # Initialize selected classes if not set
-    if not st.session_state.selected_classes:
-        st.session_state.selected_classes = all_classes.copy()
+    # Initialize or reinitialize if empty
+    if 'class_selector' not in st.session_state or not st.session_state.class_selector:
+        st.session_state.class_selector = all_classes.copy()
     
     # Filter to only classes present in current data
-    valid_classes = [c for c in st.session_state.selected_classes if c in all_classes]
-    if len(valid_classes) != len(st.session_state.selected_classes):
-        st.session_state.selected_classes = valid_classes
+    valid_classes = [c for c in st.session_state.class_selector if c in all_classes]
+    if len(valid_classes) != len(st.session_state.class_selector):
+        st.session_state.class_selector = valid_classes if valid_classes else all_classes.copy()
     
     selected_classes = st.multiselect(
         'Select lipid classes to analyze:',
         options=all_classes,
-        default=st.session_state.selected_classes,
         key='class_selector'
     )
     
@@ -950,43 +1139,44 @@ def collect_and_apply_standards(df: pd.DataFrame, intsta_df: pd.DataFrame) -> Op
     from lipidcruncher.core.services.normalization_service import NormalizationService
     from lipidcruncher.core.models.normalization import NormalizationConfig
     
-    st.markdown("#### 📋 Map Internal Standards to Lipid Classes")
-    
-    # Get unique classes in data and standards
-    lipid_classes = sorted(df['ClassKey'].unique())
-    available_standards = intsta_df['LipidMolec'].tolist()
-    
-    # Collect mapping
-    standards_mapping = {}
-    concentrations = {}
-    
-    for lipid_class in lipid_classes:
-        col1, col2 = st.columns(2)
+    with st.expander("📋 Configure Internal Standards Normalization", expanded=True):
+        st.markdown("Map each lipid class to its internal standard:")
         
-        with col1:
-            standard = st.selectbox(
-                f"Standard for **{lipid_class}**:",
-                options=['None'] + available_standards,
-                key=f'standard_{lipid_class}'
-            )
-            standards_mapping[lipid_class] = standard if standard != 'None' else None
+        # Get unique classes in data and standards
+        lipid_classes = sorted(df['ClassKey'].unique())
+        available_standards = intsta_df['LipidMolec'].tolist()
         
-        with col2:
-            if standard != 'None':
-                conc = st.number_input(
-                    f"Concentration (pmol):",
-                    min_value=0.0,
-                    value=100.0,
-                    step=10.0,
-                    key=f'conc_{lipid_class}'
+        # Collect mapping
+        standards_mapping = {}
+        concentrations = {}
+        
+        for lipid_class in lipid_classes:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                standard = st.selectbox(
+                    f"Standard for **{lipid_class}**:",
+                    options=['None'] + available_standards,
+                    key=f'standard_{lipid_class}'
                 )
-                concentrations[standard] = conc
-    
-    # Check if all classes have standards
-    missing = [c for c in lipid_classes if not standards_mapping.get(c)]
-    if missing:
-        st.warning(f"⚠️ No standards selected for: {', '.join(missing)}")
-        return None
+                standards_mapping[lipid_class] = standard if standard != 'None' else None
+            
+            with col2:
+                if standard != 'None':
+                    conc = st.number_input(
+                        f"Concentration (pmol):",
+                        min_value=0.0,
+                        value=100.0,
+                        step=10.0,
+                        key=f'conc_{lipid_class}'
+                    )
+                    concentrations[standard] = conc
+        
+        # Check if all classes have standards
+        missing = [c for c in lipid_classes if not standards_mapping.get(c)]
+        if missing:
+            st.warning(f"⚠️ No standards selected for: {', '.join(missing)}")
+            return None
     
     # Create NormalizationConfig
     try:
@@ -1017,24 +1207,23 @@ def collect_and_apply_protein(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     from lipidcruncher.core.services.normalization_service import NormalizationService
     from lipidcruncher.core.models.normalization import NormalizationConfig
     
-    st.markdown("#### 📋 Enter Protein Concentrations")
-    
-    # Collect protein concentrations
-    protein_data = []
-    
-    st.write("Enter protein concentration for each sample (e.g., mg/mL):")
-    
-    for sample in st.session_state.experiment_config.full_samples_list:
-        conc = st.number_input(
-            f"Protein concentration for **{sample}**:",
-            min_value=0.0,
-            value=1.0,
-            step=0.1,
-            key=f'protein_{sample}'
-        )
-        protein_data.append({'Sample': sample, 'Concentration': conc})
-    
-    protein_df = pd.DataFrame(protein_data)
+    with st.expander("📋 Configure Protein Normalization", expanded=True):
+        st.markdown("Enter protein concentration for each sample (e.g., mg/mL):")
+        
+        # Collect protein concentrations
+        protein_data = []
+        
+        for sample in st.session_state.experiment_config.full_samples_list:
+            conc = st.number_input(
+                f"Protein concentration for **{sample}**:",
+                min_value=0.0,
+                value=1.0,
+                step=0.1,
+                key=f'protein_{sample}'
+            )
+            protein_data.append({'Sample': sample, 'Concentration': conc})
+        
+        protein_df = pd.DataFrame(protein_data)
     
     # Get lipid classes
     lipid_classes = sorted(df['ClassKey'].unique())
@@ -1065,58 +1254,56 @@ def collect_and_apply_both(df: pd.DataFrame, intsta_df: pd.DataFrame) -> Optiona
     from lipidcruncher.core.services.normalization_service import NormalizationService
     from lipidcruncher.core.models.normalization import NormalizationConfig
     
-    # First, internal standards
-    st.markdown("#### 📋 Step 1: Map Internal Standards")
-    
     lipid_classes = sorted(df['ClassKey'].unique())
     available_standards = intsta_df['LipidMolec'].tolist()
     
-    standards_mapping = {}
-    concentrations = {}
-    
-    for lipid_class in lipid_classes:
-        col1, col2 = st.columns(2)
+    # First, internal standards
+    with st.expander("📋 Step 1: Map Internal Standards", expanded=True):
+        standards_mapping = {}
+        concentrations = {}
         
-        with col1:
-            standard = st.selectbox(
-                f"Standard for **{lipid_class}**:",
-                options=['None'] + available_standards,
-                key=f'both_standard_{lipid_class}'
-            )
-            standards_mapping[lipid_class] = standard if standard != 'None' else None
-        
-        with col2:
-            if standard != 'None':
-                conc = st.number_input(
-                    f"Concentration (pmol):",
-                    min_value=0.0,
-                    value=100.0,
-                    step=10.0,
-                    key=f'both_conc_{lipid_class}'
+        for lipid_class in lipid_classes:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                standard = st.selectbox(
+                    f"Standard for **{lipid_class}**:",
+                    options=['None'] + available_standards,
+                    key=f'both_standard_{lipid_class}'
                 )
-                concentrations[standard] = conc
-    
-    missing = [c for c in lipid_classes if not standards_mapping.get(c)]
-    if missing:
-        st.warning(f"⚠️ No standards selected for: {', '.join(missing)}")
-        return None
+                standards_mapping[lipid_class] = standard if standard != 'None' else None
+            
+            with col2:
+                if standard != 'None':
+                    conc = st.number_input(
+                        f"Concentration (pmol):",
+                        min_value=0.0,
+                        value=100.0,
+                        step=10.0,
+                        key=f'both_conc_{lipid_class}'
+                    )
+                    concentrations[standard] = conc
+        
+        missing = [c for c in lipid_classes if not standards_mapping.get(c)]
+        if missing:
+            st.warning(f"⚠️ No standards selected for: {', '.join(missing)}")
+            return None
     
     # Then, protein concentrations
-    st.markdown("#### 📋 Step 2: Enter Protein Concentrations")
-    
-    protein_data = []
-    
-    for sample in st.session_state.experiment_config.full_samples_list:
-        conc = st.number_input(
-            f"Protein concentration for **{sample}**:",
-            min_value=0.0,
-            value=1.0,
-            step=0.1,
-            key=f'both_protein_{sample}'
-        )
-        protein_data.append({'Sample': sample, 'Concentration': conc})
-    
-    protein_df = pd.DataFrame(protein_data)
+    with st.expander("📋 Step 2: Enter Protein Concentrations", expanded=True):
+        protein_data = []
+        
+        for sample in st.session_state.experiment_config.full_samples_list:
+            conc = st.number_input(
+                f"Protein concentration for **{sample}**:",
+                min_value=0.0,
+                value=1.0,
+                step=0.1,
+                key=f'both_protein_{sample}'
+            )
+            protein_data.append({'Sample': sample, 'Concentration': conc})
+        
+        protein_df = pd.DataFrame(protein_data)
     
     # Apply both normalizations
     try:
