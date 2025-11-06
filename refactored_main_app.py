@@ -6,9 +6,6 @@ Matches old main_app.py UI exactly.
 
 This application combines upload, configuration, data cleaning,
 zero filtering, and normalization into a single unified workflow.
-
-Author: Hamed Abdi / Claude
-Date: November 2025
 """
 
 import sys
@@ -558,18 +555,14 @@ def render_data_pipeline():
     # Show configuration summary
     display_configuration_summary()
     
-    # Section 1: Grade Filtering (LipidSearch only)
-    if st.session_state.format_type == 'LipidSearch 5.0':
-        render_grade_filtering()
-    
-    # Section 2: Data Cleaning and Zero Filtering
+    # Section 1: Data Cleaning and Zero Filtering (includes grade filtering for LipidSearch)
     render_data_cleaning()
     
-    # Section 3: Internal Standards Management
+    # Section 2: Internal Standards Management
     if st.session_state.intsta_df is not None and not st.session_state.intsta_df.empty:
         render_standards_management()
     
-    # Section 4: Normalization (always visible, no expander)
+    # Section 3: Normalization (always visible, no expander)
     render_normalization()
 
 def preprocess_data():
@@ -636,70 +629,71 @@ def display_configuration_summary():
         if st.session_state.bqc_label:
             st.write(f"**BQC Condition:** {st.session_state.bqc_label}")
 
-def render_grade_filtering():
-    """Render grade filtering section for LipidSearch format."""
-    with st.expander("🎯 Configure Grade Filtering (LipidSearch Only)", expanded=False):
-        st.markdown("""
-        LipidSearch assigns quality grades (A, B, C, D) to each lipid identification:
-        - **Grade A**: Highest confidence
-        - **Grade B**: Good quality
-        - **Grade C**: Lower confidence
-        - **Grade D**: Lowest confidence
-        
-        **Default:** Accept A/B for all classes, plus C for LPC and SM.
-        """)
-        
-        if 'ClassKey' not in st.session_state.preprocessed_df.columns:
-            st.warning("⚠️ ClassKey column missing - skipping grade filtering")
-            return
-        
-        # Get unique classes
-        all_classes = sorted(st.session_state.preprocessed_df['ClassKey'].unique())
-        st.write(f"**Lipid classes found:** {len(all_classes)}")
-        
-        # Option to use default or custom
-        use_custom = st.radio(
-            "Grade filtering mode:",
-            ["Use Default Settings", "Customize by Class"],
-            index=0,
-            key="grade_filter_mode"
-        )
-        
-        if use_custom == "Use Default Settings":
-            st.success("✅ Using default grade filtering.")
-            st.session_state.grade_config = None
-        else:
-            # Custom settings
-            st.markdown("#### 📋 Select Acceptable Grades by Lipid Class")
-            grade_config = {}
-            
-            for lipid_class in all_classes:
-                # Default grades
-                if lipid_class in ['LPC', 'SM']:
-                    default_grades = ['A', 'B', 'C']
-                else:
-                    default_grades = ['A', 'B']
-                
-                selected_grades = st.multiselect(
-                    f"Acceptable grades for **{lipid_class}**:",
-                    options=['A', 'B', 'C', 'D'],
-                    default=default_grades,
-                    key=f"grade_select_{lipid_class}"
-                )
-                
-                if not selected_grades:
-                    st.warning(f"⚠️ No grades selected for {lipid_class} - will be excluded!")
-                
-                grade_config[lipid_class] = selected_grades
-            
-            st.session_state.grade_config = grade_config
-
 def render_data_cleaning():
     """Render data cleaning and zero filtering section."""
     st.markdown("---")
     st.subheader("🧹 Data Cleaning and Filtering")
     
     with st.expander("Clean and Filter Data", expanded=True):
+        # Grade filtering UI (LipidSearch only) - MUST be configured before cleaning
+        if st.session_state.format_type == 'LipidSearch 5.0':
+            st.markdown("### 🎯 Grade Filtering (LipidSearch Only)")
+            st.markdown("""
+            LipidSearch assigns quality grades (A, B, C, D) to each lipid identification:
+            - **Grade A**: Highest confidence
+            - **Grade B**: Good quality
+            - **Grade C**: Lower confidence
+            - **Grade D**: Lowest confidence
+            
+            **Default:** Accept A/B for all classes, plus C for LPC and SM.
+            """)
+            
+            if 'ClassKey' in st.session_state.preprocessed_df.columns:
+                # Get unique classes
+                all_classes = sorted(st.session_state.preprocessed_df['ClassKey'].unique())
+                st.write(f"**Lipid classes found:** {len(all_classes)}")
+                
+                # Option to use default or custom
+                use_custom = st.radio(
+                    "Grade filtering mode:",
+                    ["Use Default Settings", "Customize by Class"],
+                    index=0,
+                    key="grade_filter_mode"
+                )
+                
+                if use_custom == "Use Default Settings":
+                    st.success("✅ Using default grade filtering.")
+                    st.session_state.grade_config = None
+                else:
+                    # Custom settings
+                    st.markdown("#### 📋 Select Acceptable Grades by Lipid Class")
+                    grade_config = {}
+                    
+                    for lipid_class in all_classes:
+                        # Default grades
+                        if lipid_class in ['LPC', 'SM']:
+                            default_grades = ['A', 'B', 'C']
+                        else:
+                            default_grades = ['A', 'B']
+                        
+                        selected_grades = st.multiselect(
+                            f"Acceptable grades for **{lipid_class}**:",
+                            options=['A', 'B', 'C', 'D'],
+                            default=default_grades,
+                            key=f"grade_select_{lipid_class}"
+                        )
+                        
+                        if not selected_grades:
+                            st.warning(f"⚠️ No grades selected for {lipid_class} - will be excluded!")
+                        
+                        grade_config[lipid_class] = selected_grades
+                    
+                    st.session_state.grade_config = grade_config
+            else:
+                st.warning("⚠️ ClassKey column missing - skipping grade filtering")
+            
+            st.markdown("---")  # Separator between grade filtering and data cleaning
+        
         # Auto-clean if not already done
         if st.session_state.cleaned_df is None:
             clean_data_only()
@@ -950,63 +944,6 @@ def render_normalization():
         if normalized_df is not None:
             st.session_state.normalized_df = normalized_df
             display_normalization_results()
-
-def collect_and_apply_standards(df: pd.DataFrame, intsta_df: pd.DataFrame) -> Optional[pd.DataFrame]:
-    """Collect internal standards mapping and apply normalization."""
-    from lipidcruncher.core.services.normalization_service import NormalizationService
-    
-    st.markdown("#### 📋 Map Internal Standards to Lipid Classes")
-    
-    # Get unique classes in data and standards
-    lipid_classes = sorted(df['ClassKey'].unique())
-    available_standards = intsta_df['LipidMolec'].tolist()
-    
-    # Collect mapping
-    standards_mapping = {}
-    concentrations = {}
-    
-    for lipid_class in lipid_classes:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            standard = st.selectbox(
-                f"Standard for **{lipid_class}**:",
-                options=['None'] + available_standards,
-                key=f'standard_{lipid_class}'
-            )
-            standards_mapping[lipid_class] = standard if standard != 'None' else None
-        
-        with col2:
-            if standard != 'None':
-                conc = st.number_input(
-                    f"Concentration (pmol):",
-                    min_value=0.0,
-                    value=100.0,
-                    step=10.0,
-                    key=f'conc_{lipid_class}'
-                )
-                concentrations[lipid_class] = conc
-    
-    # Check if all classes have standards
-    missing = [c for c in lipid_classes if not standards_mapping.get(c)]
-    if missing:
-        st.warning(f"⚠️ No standards selected for: {', '.join(missing)}")
-        return None
-    
-    # Apply normalization (remove experiment_config parameter)
-    try:
-        service = NormalizationService()
-        normalized_df = service.normalize_by_internal_standards(
-            df=df,
-            intsta_df=intsta_df,
-            standards_mapping=standards_mapping,
-            standard_concentrations=concentrations
-        )
-        st.success("✅ Normalization by internal standards complete!")
-        return normalized_df
-    except Exception as e:
-        st.error(f"❌ Normalization failed: {str(e)}")
-        return None
 
 def collect_and_apply_standards(df: pd.DataFrame, intsta_df: pd.DataFrame) -> Optional[pd.DataFrame]:
     """Collect internal standards mapping and apply normalization."""
