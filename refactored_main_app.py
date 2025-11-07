@@ -1382,31 +1382,119 @@ def collect_and_apply_protein(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     from lipidcruncher.core.models.normalization import NormalizationConfig
     
     with st.expander("📋 Configure Protein Normalization", expanded=True):
-        st.markdown("Enter protein concentration for each sample (e.g., mg/mL):")
+        # Radio button to choose input method
+        method = st.radio(
+            "Select the method for providing protein concentrations:",
+            ["Manual Input", "Upload Excel File"],
+            index=0,  # Default to manual
+            key="protein_input_method"
+        )
         
-        # Collect protein concentrations
-        protein_data = []
+        protein_df = None
         
-        for sample in st.session_state.experiment_config.full_samples_list:
-            conc = st.number_input(
-                f"Protein concentration for **{sample}**:",
-                min_value=0.0,
-                value=1.0,
-                step=0.1,
-                key=f'protein_{sample}'
+        if method == "Manual Input":
+            st.markdown("Enter protein concentration for each sample (e.g., mg/mL):")
+            
+            # Collect protein concentrations manually
+            protein_data = []
+            
+            for sample in st.session_state.experiment_config.full_samples_list:
+                conc = st.number_input(
+                    f"Protein concentration for **{sample}**:",
+                    min_value=0.0,
+                    value=1.0,
+                    step=0.1,
+                    key=f'protein_{sample}'
+                )
+                protein_data.append({'Sample': sample, 'Concentration': conc})
+            
+            protein_df = pd.DataFrame(protein_data)
+        
+        else:  # Upload Excel File
+            st.info("""
+            Upload an Excel file with protein concentrations.
+            
+            **Required columns:**
+            - `Sample`: Sample name (must match your sample names)
+            - `Concentration`: Protein concentration value (mg/mL)
+            
+            The file should contain one row per sample.
+            """)
+            
+            uploaded_file = st.file_uploader(
+                "Upload Excel file with protein concentrations",
+                type=['xlsx', 'xls'],
+                key="protein_file_upload"
             )
-            protein_data.append({'Sample': sample, 'Concentration': conc})
-        
-        protein_df = pd.DataFrame(protein_data)
+            
+            if uploaded_file is not None:
+                try:
+                    protein_df = pd.read_excel(uploaded_file)
+                    
+                    # Validate columns
+                    if 'Sample' not in protein_df.columns:
+                        st.error("❌ Excel file must have a 'Sample' column")
+                        return None
+                    
+                    if 'Concentration' not in protein_df.columns:
+                        st.error("❌ Excel file must have a 'Concentration' column")
+                        return None
+                    
+                    # Validate samples match
+                    file_samples = set(protein_df['Sample'])
+                    expected_samples = set(st.session_state.experiment_config.full_samples_list)
+                    
+                    if file_samples != expected_samples:
+                        missing = expected_samples - file_samples
+                        extra = file_samples - expected_samples
+                        
+                        error_msg = "❌ Sample mismatch!\n"
+                        if missing:
+                            error_msg += f"\n**Missing samples:** {', '.join(sorted(missing))}"
+                        if extra:
+                            error_msg += f"\n**Extra samples:** {', '.join(sorted(extra))}"
+                        
+                        st.error(error_msg)
+                        st.info(f"**Expected samples:** {', '.join(sorted(expected_samples))}")
+                        return None
+                    
+                    # Validate concentrations are numeric and positive
+                    protein_df['Concentration'] = pd.to_numeric(protein_df['Concentration'], errors='coerce')
+                    
+                    if protein_df['Concentration'].isna().any():
+                        st.error("❌ Some concentration values could not be converted to numbers")
+                        return None
+                    
+                    if (protein_df['Concentration'] <= 0).any():
+                        st.error("❌ All concentration values must be positive")
+                        return None
+                    
+                    st.success(f"✅ Loaded protein concentrations for {len(protein_df)} samples")
+                    st.dataframe(protein_df)
+                    
+                except Exception as e:
+                    st.error(f"❌ Error reading Excel file: {str(e)}")
+                    return None
+            else:
+                st.warning("⚠️ Please upload an Excel file to proceed")
+                return None
+    
+    # Only proceed if we have protein data
+    if protein_df is None:
+        return None
     
     # Get lipid classes
     lipid_classes = sorted(df['ClassKey'].unique())
     
-    # Create NormalizationConfig
+    # Create NormalizationConfig with protein_concentrations
     try:
+        # Convert protein_df to dict for config
+        protein_concentrations = dict(zip(protein_df['Sample'], protein_df['Concentration']))
+        
         config = NormalizationConfig(
             method='protein',
-            selected_classes=lipid_classes
+            selected_classes=lipid_classes,
+            protein_concentrations=protein_concentrations
         )
         
         service = NormalizationService()
@@ -1465,19 +1553,98 @@ def collect_and_apply_both(df: pd.DataFrame, intsta_df: pd.DataFrame) -> Optiona
     
     # Then, protein concentrations
     with st.expander("📋 Step 2: Enter Protein Concentrations", expanded=True):
-        protein_data = []
+        # Radio button to choose input method
+        method = st.radio(
+            "Select the method for providing protein concentrations:",
+            ["Manual Input", "Upload Excel File"],
+            index=0,  # Default to manual
+            key="both_protein_input_method"
+        )
         
-        for sample in st.session_state.experiment_config.full_samples_list:
-            conc = st.number_input(
-                f"Protein concentration for **{sample}**:",
-                min_value=0.0,
-                value=1.0,
-                step=0.1,
-                key=f'both_protein_{sample}'
+        protein_df = None
+        
+        if method == "Manual Input":
+            st.markdown("Enter protein concentration for each sample (e.g., mg/mL):")
+            
+            protein_data = []
+            
+            for sample in st.session_state.experiment_config.full_samples_list:
+                conc = st.number_input(
+                    f"Protein concentration for **{sample}**:",
+                    min_value=0.0,
+                    value=1.0,
+                    step=0.1,
+                    key=f'both_protein_{sample}'
+                )
+                protein_data.append({'Sample': sample, 'Concentration': conc})
+            
+            protein_df = pd.DataFrame(protein_data)
+        
+        else:  # Upload Excel File
+            st.info("""
+            Upload an Excel file with protein concentrations.
+            
+            **Required columns:**
+            - `Sample`: Sample name (must match your sample names)
+            - `Concentration`: Protein concentration value (mg/mL)
+            """)
+            
+            uploaded_file = st.file_uploader(
+                "Upload Excel file with protein concentrations",
+                type=['xlsx', 'xls'],
+                key="both_protein_file_upload"
             )
-            protein_data.append({'Sample': sample, 'Concentration': conc})
-        
-        protein_df = pd.DataFrame(protein_data)
+            
+            if uploaded_file is not None:
+                try:
+                    protein_df = pd.read_excel(uploaded_file)
+                    
+                    # Validate columns
+                    if 'Sample' not in protein_df.columns or 'Concentration' not in protein_df.columns:
+                        st.error("❌ Excel file must have 'Sample' and 'Concentration' columns")
+                        return None
+                    
+                    # Validate samples match
+                    file_samples = set(protein_df['Sample'])
+                    expected_samples = set(st.session_state.experiment_config.full_samples_list)
+                    
+                    if file_samples != expected_samples:
+                        missing = expected_samples - file_samples
+                        extra = file_samples - expected_samples
+                        
+                        error_msg = "❌ Sample mismatch!\n"
+                        if missing:
+                            error_msg += f"\n**Missing samples:** {', '.join(sorted(missing))}"
+                        if extra:
+                            error_msg += f"\n**Extra samples:** {', '.join(sorted(extra))}"
+                        
+                        st.error(error_msg)
+                        return None
+                    
+                    # Validate concentrations
+                    protein_df['Concentration'] = pd.to_numeric(protein_df['Concentration'], errors='coerce')
+                    
+                    if protein_df['Concentration'].isna().any():
+                        st.error("❌ Some concentration values could not be converted to numbers")
+                        return None
+                    
+                    if (protein_df['Concentration'] <= 0).any():
+                        st.error("❌ All concentration values must be positive")
+                        return None
+                    
+                    st.success(f"✅ Loaded protein concentrations for {len(protein_df)} samples")
+                    st.dataframe(protein_df)
+                    
+                except Exception as e:
+                    st.error(f"❌ Error reading Excel file: {str(e)}")
+                    return None
+            else:
+                st.warning("⚠️ Please upload an Excel file to proceed")
+                return None
+    
+    # Check if we have protein data before proceeding
+    if protein_df is None:
+        return None
     
     # Apply both normalizations
     try:
