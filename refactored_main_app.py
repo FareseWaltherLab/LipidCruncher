@@ -958,6 +958,101 @@ def display_cleaning_results():
         removed_df = pd.DataFrame({'Removed LipidMolec': st.session_state.removed_species})
         st.dataframe(removed_df)
 
+def _render_consistency_plots():
+    """Helper function to render consistency plots section."""
+    # Only show plots if we have standards and experiment config
+    if (st.session_state.intsta_df is None or 
+        st.session_state.intsta_df.empty or
+        st.session_state.experiment_config is None):
+        return
+    
+    st.markdown("---")
+    st.markdown("### 📊 Internal Standards Consistency Plots")
+    st.markdown("""
+    These stacked bar plots show the raw intensity values of internal standards across all samples, separated by class.
+    For classes with multiple standards, bars are stacked by individual standard.
+    Consistent bar heights across samples indicate good sample preparation and instrument performance.
+    """)
+    
+    # Condition filter multiselect
+    conditions = st.session_state.experiment_config.conditions_list
+    selected_conditions = st.multiselect(
+        'Select conditions to display:',
+        conditions,
+        default=conditions,
+        key='intsta_plot_conditions'
+    )
+    
+    if selected_conditions:
+        # Get samples for selected conditions
+        selected_samples = []
+        for cond in selected_conditions:
+            idx = conditions.index(cond)
+            selected_samples.extend(
+                st.session_state.experiment_config.individual_samples_list[idx]
+            )
+        
+        # Preserve original order but filter to selected
+        full_samples = st.session_state.experiment_config.full_samples_list
+        selected_samples_ordered = [s for s in full_samples if s in selected_samples]
+        
+        if selected_samples_ordered:
+            # Import the visualization service
+            from lipidcruncher.core.services.internal_standards_visualization_service import (
+                InternalStandardsVisualizationService
+            )
+            
+            # Generate plots
+            figs = InternalStandardsVisualizationService.create_consistency_plots(
+                st.session_state.intsta_df,
+                selected_samples_ordered
+            )
+            
+            if figs:
+                # Display each plot with download buttons
+                for fig in figs:
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Extract class name from title
+                    class_name = fig.layout.title.text.split(' for ')[-1]
+                    
+                    # Download buttons
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # SVG download
+                        svg_bytes = fig.to_image(format="svg")
+                        st.download_button(
+                            label="📥 Download SVG",
+                            data=svg_bytes,
+                            file_name=f"internal_standards_{class_name}.svg",
+                            mime="image/svg+xml",
+                            key=f"svg_{class_name}"
+                        )
+                    
+                    with col2:
+                        # CSV download
+                        csv_df = InternalStandardsVisualizationService.prepare_csv_data(
+                            st.session_state.intsta_df,
+                            class_name,
+                            selected_samples_ordered
+                        )
+                        csv = csv_df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download CSV",
+                            data=csv,
+                            file_name=f'internal_standards_{class_name}.csv',
+                            mime='text/csv',
+                            key=f"csv_{class_name}"
+                        )
+            else:
+                st.info("ℹ️ No plots could be generated. This may happen if the selected samples don't have intensity data.")
+        else:
+            st.warning("⚠️ No samples available for selected conditions.")
+    else:
+        st.warning("⚠️ Please select at least one condition to display plots.")
+
+
 def render_standards_management():
     """Render internal standards management section."""
     with st.expander("🔬 Manage Internal Standards", expanded=False):
@@ -1000,6 +1095,9 @@ def render_standards_management():
                     mime="text/csv",
                     key="download_standards_auto"
                 )
+                
+                # Show consistency plots for auto-detected standards
+                _render_consistency_plots()
             else:
                 st.info("No internal standards were automatically detected in the dataset")
         
@@ -1052,6 +1150,9 @@ def render_standards_management():
                             mime="text/csv",
                             key="download_standards_custom"
                         )
+                        
+                        # Show consistency plots for custom standards
+                        _render_consistency_plots()
                     
                 except ValueError as ve:
                     st.error(str(ve))
@@ -1076,6 +1177,9 @@ def render_standards_management():
                     mime="text/csv",
                     key="download_standards_custom_prev"
                 )
+                
+                # Show consistency plots for previously uploaded custom standards
+                _render_consistency_plots()
 
 def render_normalization():
     """Render normalization section (always visible, no expander)."""
