@@ -252,12 +252,16 @@ def render_sidebar():
                 st.session_state.raw_df = raw_text
                 df = raw_text
                 st.sidebar.success(f"✅ File uploaded: {uploaded_file.name}")
+                
+                # Extract conditions immediately for auto-config
+                st.session_state.metabolomics_conditions = extract_metabolomics_conditions(raw_text)
             else:
                 # Read as DataFrame
                 df = pd.read_csv(uploaded_file, sep=',' if uploaded_file.name.endswith('.csv') else '\t')
                 st.session_state.raw_df = df.copy()
                 st.sidebar.success(f"✅ File uploaded: {uploaded_file.name}")
                 st.sidebar.write(f"**Shape:** {df.shape[0]} rows × {df.shape[1]} columns")
+                st.session_state.metabolomics_conditions = None
             
             # Experiment configuration
             render_experiment_config(df, data_format)
@@ -389,6 +393,73 @@ def render_experiment_config(df, data_format: str):
     st.sidebar.markdown("---")
     st.sidebar.subheader("⚙️ Experiment Setup")
     
+    # Check for Metabolomics Workbench auto-detected conditions
+    if data_format == 'Metabolomics Workbench' and 'metabolomics_conditions' in st.session_state and st.session_state.metabolomics_conditions:
+        conditions_map = st.session_state.metabolomics_conditions
+        
+        # Get unique conditions in order of appearance
+        conditions_in_order = [conditions_map[f's{i+1}'] for i in range(len(conditions_map))]
+        unique_conditions = []
+        seen = set()
+        for condition in conditions_in_order:
+            if condition not in seen:
+                seen.add(condition)
+                unique_conditions.append(condition)
+        
+        use_detected = st.sidebar.checkbox("Use detected experimental setup", value=True, key="use_detected_metabolomics")
+        
+        if use_detected:
+            # Auto-populate from detected conditions
+            n_conditions = len(unique_conditions)
+            conditions_list = unique_conditions
+            
+            # Count samples per condition
+            sample_counts = {}
+            for condition in conditions_list:
+                count = sum(1 for x in conditions_map.values() if x == condition)
+                sample_counts[condition] = count
+            
+            number_of_samples_list = [sample_counts[condition] for condition in conditions_list]
+            
+            # Display the detected setup
+            st.sidebar.success("✅ Using detected setup:")
+            for cond, count in zip(conditions_list, number_of_samples_list):
+                st.sidebar.write(f"• {cond}: {count} samples")
+        else:
+            # Manual configuration
+            n_conditions, conditions_list, number_of_samples_list = manual_experiment_config()
+    else:
+        # Manual configuration for other formats
+        n_conditions, conditions_list, number_of_samples_list = manual_experiment_config()
+    
+    # Validate inputs
+    if not all(conditions_list):
+        st.sidebar.error("⚠️ All condition labels must be non-empty.")
+        return
+    
+    # Create ExperimentConfig
+    try:
+        experiment_config = ExperimentConfig(
+            n_conditions=n_conditions,
+            conditions_list=conditions_list,
+            number_of_samples_list=number_of_samples_list
+        )
+        st.session_state.experiment_config = experiment_config
+        
+        # Group samples section
+        render_group_samples(df, experiment_config, data_format)
+        
+        # BQC specification
+        render_bqc_specification(experiment_config)
+        
+        # Confirmation
+        render_confirmation(experiment_config)
+        
+    except Exception as e:
+        st.sidebar.error(f"❌ Error creating experiment configuration: {str(e)}")
+
+def manual_experiment_config():
+    """Manual experiment configuration UI."""
     n_conditions = st.sidebar.number_input(
         'Enter the number of conditions',
         min_value=1,
@@ -419,31 +490,7 @@ def render_experiment_config(df, data_format: str):
             )
         )
     
-    # Validate inputs
-    if not all(conditions_list):
-        st.sidebar.error("⚠️ All condition labels must be non-empty.")
-        return
-    
-    # Create ExperimentConfig
-    try:
-        experiment_config = ExperimentConfig(
-            n_conditions=n_conditions,
-            conditions_list=conditions_list,
-            number_of_samples_list=number_of_samples_list
-        )
-        st.session_state.experiment_config = experiment_config
-        
-        # Group samples section
-        render_group_samples(df, experiment_config, data_format)
-        
-        # BQC specification
-        render_bqc_specification(experiment_config)
-        
-        # Confirmation
-        render_confirmation(experiment_config)
-        
-    except Exception as e:
-        st.sidebar.error(f"❌ Error creating experiment configuration: {str(e)}")
+    return n_conditions, conditions_list, number_of_samples_list
 
 def render_group_samples(df, experiment_config: ExperimentConfig, data_format: str):
     """Render group samples section."""
@@ -645,6 +692,29 @@ def render_data_pipeline():
     
     # Section 3: Normalization (always visible, no expander)
     render_normalization()
+
+def extract_metabolomics_conditions(text_data: str) -> dict:
+    """Extract conditions mapping from Metabolomics Workbench format."""
+    try:
+        # Extract data section
+        start_idx = text_data.find('MS_METABOLITE_DATA_START')
+        end_idx = text_data.find('MS_METABOLITE_DATA_END')
+        data_section = text_data[start_idx:end_idx].strip()
+        data_lines = [line.strip() for line in data_section.split('\n') if line.strip()]
+        
+        # Get samples (row 2) and factors (row 3)
+        samples_line = data_lines[1]
+        factors_line = data_lines[2]
+        
+        sample_names = [s.strip() for s in samples_line.split(',')[1:]]  # Skip "Samples" header
+        conditions = [c.strip() for c in factors_line.split(',')[1:]]  # Skip "Factors" header
+        
+        # Create mapping {s1: condition, s2: condition, ...}
+        conditions_map = {f's{i+1}': conditions[i] for i in range(len(sample_names))}
+        
+        return conditions_map
+    except Exception as e:
+        return {}
 
 def preprocess_data():
     """Preprocess uploaded data."""
@@ -1307,11 +1377,15 @@ def collect_and_apply_both(df: pd.DataFrame, intsta_df: pd.DataFrame) -> Optiona
     
     # Apply both normalizations
     try:
+        # Convert protein_df to dict for config
+        protein_concentrations = dict(zip(protein_df['Sample'], protein_df['Concentration']))
+        
         config = NormalizationConfig(
             method='both',
             selected_classes=lipid_classes,
             internal_standards=standards_mapping,
-            intsta_concentrations=concentrations
+            intsta_concentrations=concentrations,
+            protein_concentrations=protein_concentrations
         )
         
         service = NormalizationService()
