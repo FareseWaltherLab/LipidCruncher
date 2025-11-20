@@ -126,56 +126,157 @@ class NormalizeData:
             st.error(f"Error in BCA normalization: {str(e)}")
             return df
         
-    def process_standards_file(self, standards_df, cleaned_df, intsta_df):
+    def process_standards_file(self, standards_df, cleaned_df, intsta_df, standards_in_dataset):
         """
-        Process and validate uploaded standards file.
-    
+        Process and validate uploaded standards file based on user selection.
+        
         Args:
             standards_df (pd.DataFrame): DataFrame containing standards data from the uploaded file
             cleaned_df (pd.DataFrame): DataFrame containing the cleaned dataset (non-standards)
             intsta_df (pd.DataFrame): DataFrame containing the internal standards dataset
-    
+            standards_in_dataset (bool): True if standards exist in dataset (legacy mode), 
+                                        False if standards are external (new mode)
+
         Returns:
             pd.DataFrame: Processed standards DataFrame with intensity values
-    
+
         Raises:
-            ValueError: If the standards file is invalid or standards are not found
+            ValueError: If the standards file is invalid or has format issues
+        """
+        # Get expected intensity columns from the main dataset
+        full_df = pd.concat([cleaned_df, intsta_df], ignore_index=True)
+        expected_intensity_cols = [col for col in full_df.columns if col.startswith('intensity[')]
+        
+        if not expected_intensity_cols:
+            raise ValueError("No intensity columns found in the main dataset")
+        
+        # Standardize column names: 1st col = LipidMolec, 2nd col = ClassKey, rest = intensity columns
+        standards_df = self._standardize_standards_columns(standards_df, expected_intensity_cols)
+        
+        if standards_in_dataset:
+            # LEGACY MODE: Extract standards from main dataset
+            return self._extract_standards_from_dataset(standards_df, full_df, expected_intensity_cols)
+        else:
+            # NEW MODE: Use complete standards dataset with intensity values
+            return self._validate_complete_standards(standards_df, expected_intensity_cols)
+
+    def _standardize_standards_columns(self, df, expected_intensity_cols):
+        """
+        Standardize column names: 
+        - 1st column → LipidMolec
+        - 2nd column → ClassKey (if exists and not numeric)
+        - Remaining columns → intensity[s1], intensity[s2], etc.
+        """
+        df = df.copy()
+        cols = df.columns.tolist()
+        
+        # First column is always LipidMolec
+        new_col_names = {cols[0]: 'LipidMolec'}
+        
+        # Check if we have more than 1 column
+        if len(cols) > 1:
+            # If second column looks like intensity data (numeric), then no ClassKey provided
+            # Otherwise, second column is ClassKey
+            if df[cols[1]].dtype in ['int64', 'float64'] or pd.to_numeric(df[cols[1]], errors='coerce').notna().all():
+                # No ClassKey, all remaining columns are intensities
+                has_classkey = False
+                intensity_start_idx = 1
+            else:
+                # Second column is ClassKey
+                new_col_names[cols[1]] = 'ClassKey'
+                has_classkey = True
+                intensity_start_idx = 2
+            
+            # Rename remaining columns as intensity columns
+            num_intensity_cols = len(cols) - intensity_start_idx
+            if num_intensity_cols > 0:
+                for i, col_idx in enumerate(range(intensity_start_idx, len(cols))):
+                    if i < len(expected_intensity_cols):
+                        new_col_names[cols[col_idx]] = expected_intensity_cols[i]
+        
+        # Rename columns
+        df = df.rename(columns=new_col_names)
+        
+        # If ClassKey not present, infer from LipidMolec
+        if 'ClassKey' not in df.columns:
+            df['ClassKey'] = df['LipidMolec'].apply(
+                lambda x: x.split('(')[0] if '(' in x else x
+            )
+        
+        return df
+
+    def _validate_complete_standards(self, standards_df, expected_intensity_cols):
+        """
+        Validate and process complete standards dataset (new mode).
+        """
+        # Check for required columns
+        if 'LipidMolec' not in standards_df.columns:
+            raise ValueError("Standards file must have LipidMolec as the first column")
+        
+        if 'ClassKey' not in standards_df.columns:
+            raise ValueError("Standards file must have ClassKey as the second column or it will be inferred from LipidMolec")
+        
+        # Check for intensity columns
+        uploaded_intensity_cols = [col for col in standards_df.columns if col.startswith('intensity[')]
+        
+        if not uploaded_intensity_cols:
+            raise ValueError(
+                f"Standards file must contain intensity columns. "
+                f"Expected columns after LipidMolec and ClassKey: {', '.join(expected_intensity_cols)}. "
+                f"The columns after LipidMolec and ClassKey should contain intensity values for each sample."
+            )
+        
+        # Validate that all required intensity columns are present
+        missing_cols = set(expected_intensity_cols) - set(uploaded_intensity_cols)
+        if missing_cols:
+            raise ValueError(
+                f"Standards file is missing the following intensity columns: {', '.join(sorted(missing_cols))}. "
+                f"Your main dataset has {len(expected_intensity_cols)} samples, so your standards file must have "
+                f"the same number of intensity columns (columns 3 onwards in your CSV)."
+            )
+        
+        # Select only the necessary columns
+        result_df = standards_df[['LipidMolec', 'ClassKey'] + expected_intensity_cols].copy()
+        
+        # Convert intensity columns to numeric
+        for col in expected_intensity_cols:
+            result_df[col] = pd.to_numeric(result_df[col], errors='coerce').fillna(0)
+        
+        st.success(f"✓ Loaded {len(result_df)} standards with complete intensity data")
+        return result_df
+
+    def _extract_standards_from_dataset(self, standards_df, full_df, expected_intensity_cols):
+        """
+        Extract standards from the main dataset (legacy mode).
         """
         if 'LipidMolec' not in standards_df.columns:
-            raise ValueError("Standards file must contain 'LipidMolec' column")
-    
-        # Extract ClassKey from LipidMolec if not provided
-        standards_df['ClassKey'] = standards_df['LipidMolec'].apply(
-            lambda x: x.split('(')[0] if '(' in x else x
-        )
-    
-        # Combine cleaned_df and intsta_df for validation and extraction
-        full_df = pd.concat([cleaned_df, intsta_df], ignore_index=True)
-    
+            raise ValueError("Standards file must have LipidMolec as the first column")
+        
         # Validate that all standards exist in the combined dataset
         valid_standards = standards_df['LipidMolec'].isin(full_df['LipidMolec'])
         if not valid_standards.all():
             invalid_standards = standards_df[~valid_standards]['LipidMolec'].tolist()
-            raise ValueError(f"The following standards were not found in the dataset: {', '.join(invalid_standards)}")
-    
-        # Get intensity columns from the combined dataset
-        intensity_cols = [col for col in full_df.columns if col.startswith('intensity[')]
-        if not intensity_cols:
-            raise ValueError("No intensity columns found in the dataset")
-    
-        # Create result DataFrame with standards and their intensity values
+            raise ValueError(
+                f"The following standards were not found in the dataset: {', '.join(invalid_standards)}. "
+                f"If these are external standards, please select 'No' for the mode question and provide intensity values."
+            )
+        
+        # Extract standards from the main dataset
         result_df = pd.DataFrame()
         for standard in standards_df['LipidMolec']:
-            # Get the row from full_df for this standard
             standard_data = full_df[full_df['LipidMolec'] == standard].copy()
             if not standard_data.empty:
-                # Add ClassKey if not present in the data
                 if 'ClassKey' not in standard_data.columns:
-                    standard_data['ClassKey'] = standards_df[standards_df['LipidMolec'] == standard]['ClassKey'].values[0]
-                # Select only necessary columns
-                standard_data = standard_data[['LipidMolec', 'ClassKey'] + intensity_cols]
+                    # Try to get ClassKey from uploaded file
+                    if 'ClassKey' in standards_df.columns:
+                        standard_data['ClassKey'] = standards_df[standards_df['LipidMolec'] == standard]['ClassKey'].values[0]
+                    else:
+                        # Infer from LipidMolec
+                        standard_data['ClassKey'] = standard.split('(')[0] if '(' in standard else standard
+                standard_data = standard_data[['LipidMolec', 'ClassKey'] + expected_intensity_cols]
                 result_df = pd.concat([result_df, standard_data], ignore_index=True)
-    
+        
+        st.success(f"✓ Extracted {len(result_df)} standards from the main dataset")
         return result_df
 
     def validate_standards(self, standards_df):

@@ -496,7 +496,7 @@ def display_format_requirements(data_format):
            * The number of intensity columns must match the total number of samples in your experiment
            * These columns will be automatically standardized to: intensity[s1], intensity[s2], ..., intensity[sN]
         
-        ⚠️ If your dataset contains any additional columns, please remove them before uploading.
+        ⚠️ If your dataset contains any additional columns, please remove them before uploading.
         Only the lipid names column followed by intensity columns should be present.
         
         Note: The lipid class (e.g., LPC, Cer, CE) will be automatically extracted from the lipid names to create the ClassKey.
@@ -920,9 +920,9 @@ def get_grade_filtering_config(df, format_type):
             
             # Visual feedback
             if not selected_grades:
-                st.error(f"⚠️ **Warning:** No grades selected for {lipid_class}. This class will be completely excluded from analysis!")
+                st.error(f"⚠️ **Warning:** No grades selected for {lipid_class}. This class will be completely excluded from analysis!")
             elif 'D' in selected_grades:
-                st.warning(f"⚠️ **Caution:** Grade D included for {lipid_class}. This may include low-confidence identifications.")
+                st.warning(f"⚠️ **Caution:** Grade D included for {lipid_class}. This may include low-confidence identifications.")
             else:
                 st.success(f"✓ {lipid_class}: {', '.join(selected_grades)} accepted")
             
@@ -944,19 +944,19 @@ def get_grade_filtering_config(df, format_type):
     summary_col1, summary_col2 = st.columns(2)
     
     with summary_col1:
-        if ab_classes:
+            st.markdown(f"**✅ A, B only** ({len(ab_classes)} classes)")
             st.markdown(f"**✅ A, B only** ({len(ab_classes)} classes)")
             st.caption(', '.join(ab_classes))
-        if abc_classes:
+            st.markdown(f"**✅ A, B, C** ({len(abc_classes)} classes)")
             st.markdown(f"**✅ A, B, C** ({len(abc_classes)} classes)")
             st.caption(', '.join(abc_classes))
     
     with summary_col2:
         if abcd_classes:
-            st.markdown(f"**⚠️ Includes D** ({len(abcd_classes)} classes)")
+            st.markdown(f"**⚠️ Includes D** ({len(abcd_classes)} classes)")
             st.caption(', '.join(abcd_classes))
         if custom_classes:
-            st.markdown(f"**⚙️ Custom** ({len(custom_classes)} classes)")
+            st.markdown(f"**⚙️ Custom** ({len(custom_classes)} classes)")
             for cls in custom_classes:
                 st.caption(f"• {cls}: {', '.join(grade_config[cls])}")
     
@@ -1024,16 +1024,48 @@ def manage_internal_standards(normalizer):
     
     # Handle custom upload
     else:
+        # CRITICAL FIX: Clear intsta_df immediately if no custom standards uploaded yet
+        if 'preserved_intsta_df' not in st.session_state or st.session_state.preserved_intsta_df is None:
+            st.session_state.intsta_df = pd.DataFrame()
+        
         # Reset display area for custom standards
         upload_container = st.container()
         
         with upload_container:
-            st.info("""
-            You can upload your own standards file. Requirements:
-            - CSV file (.csv)
-            - Must contain column: 'LipidMolec'
-            - The standards must exist in your dataset
-            """)
+            # Ask user about mode
+            st.markdown("### Are all the standards present in your main dataset?")
+            standards_in_dataset = st.radio(
+                "Select one:",
+                options=[
+                    "Yes - Extract standards from my dataset",
+                    "No - I'm uploading complete standards data"
+                ],
+                key="standards_mode_selection",
+                help="Choose 'Yes' if the standards you want to use already exist in your uploaded dataset. Choose 'No' if you're uploading external standards with their intensity values."
+            )
+            
+            # Convert to boolean
+            use_legacy_mode = standards_in_dataset.startswith("Yes")
+            
+            # Show mode-specific instructions
+            if use_legacy_mode:
+                st.info("""
+                **Instructions:**
+                - Upload a CSV with just one column: lipid molecule names
+                - These standards must exist in your main dataset
+                - Intensity values will be extracted from your dataset
+                - Column names will be automatically standardized
+                """)
+            else:
+                st.info("""
+                **Instructions:**
+                - Upload a CSV with:
+                  - 1st column: Lipid molecule names
+                  - 2nd column: Lipid class names
+                  - Remaining columns: Intensity values (one column per sample)
+                - The number of intensity columns must match your main dataset sample count
+                - Column names will be automatically standardized
+                """)
             
             uploaded_file = st.file_uploader(
                 "Upload CSV file with standards", 
@@ -1044,11 +1076,12 @@ def manage_internal_standards(normalizer):
             if uploaded_file is not None:
                 try:
                     standards_df = pd.read_csv(uploaded_file)
-                    # Process the uploaded standards
+                    # Process the uploaded standards with mode selection
                     new_standards_df = normalizer.process_standards_file(
                         standards_df,
                         st.session_state.cleaned_df,
-                        st.session_state.intsta_df
+                        st.session_state.intsta_df,
+                        standards_in_dataset=use_legacy_mode
                     )
                     
                     if new_standards_df is not None:
@@ -1066,13 +1099,13 @@ def manage_internal_standards(normalizer):
                     st.error(f"Error reading standards file: {str(e)}")
             
             elif 'preserved_intsta_df' in st.session_state and st.session_state.preserved_intsta_df is not None:
-                # Show previously uploaded standards
                 st.success(f"✓ Using previously uploaded standards ({len(st.session_state.preserved_intsta_df)} standards)")
                 st.write("Current uploaded standards:")
                 display_data(st.session_state.preserved_intsta_df, "Custom Standards", "custom_standards.csv", "preserved")
                 
                 # Use previously uploaded standards
                 st.session_state.intsta_df = st.session_state.preserved_intsta_df.copy()
+
 
 def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None):
     """
@@ -1327,7 +1360,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         # Internal standards detection details - ALWAYS VISIBLE
         st.markdown("### Internal Standards Detection")
         st.markdown("""
-        LipidCruncher automatically identifies internal standards from the SPLASH LIPIDOMIX® Mass Spec Standard (Avanti Polar Lipids, Cat# 330707-1)
+        LipidCruncher automatically identifies internal standards from the SPLASH LIPIDOMIXÂ® Mass Spec Standard (Avanti Polar Lipids, Cat# 330707-1)
         by detecting patterns like "+D7" or ":(s)" notation in lipid names. If you use custom standards with different naming conventions, you can upload them using the
         option below.
         """)
@@ -1336,7 +1369,17 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         st.markdown("---")
        
         manage_internal_standards(normalizer)
-        if not st.session_state.intsta_df.empty:
+        
+        # CRITICAL FIX: Only show plots based on mode and data availability
+        show_plots = False
+        if st.session_state.standard_source_preference == "Automatic Detection":
+            show_plots = not st.session_state.intsta_df.empty
+        else:  # Upload Custom Standards
+            show_plots = ('preserved_intsta_df' in st.session_state and 
+                         st.session_state.preserved_intsta_df is not None and 
+                         not st.session_state.preserved_intsta_df.empty)
+        
+        if show_plots:
             st.markdown("### Internal Standards Consistency Plots")
             st.markdown("""
             These stacked bar plots show the raw intensity values of internal standards across all samples, separated by class.
@@ -1462,17 +1505,11 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
     if 'standard_source' not in st.session_state:
         st.session_state.standard_source = "Automatic Detection" if has_standards else None
     
-    # IMPORTANT FIX: Always keep the intsta_df in session state to preserve uploaded standards
+    # CRITICAL FIX: Only preserve CUSTOM uploaded standards, not auto-detected ones
+    # preserved_intsta_df should ONLY be set when user uploads a custom file
+    # Don't initialize it with auto-detected standards
     if 'preserved_intsta_df' not in st.session_state:
-        st.session_state.preserved_intsta_df = intsta_df.copy() if not intsta_df.empty else None
-    elif intsta_df is not None and not intsta_df.empty:
-        # Update the preserved standards if new ones are provided
-        st.session_state.preserved_intsta_df = intsta_df.copy()
-    elif st.session_state.preserved_intsta_df is not None:
-        # Use the preserved standards if the current ones are empty
-        st.session_state.intsta_df = st.session_state.preserved_intsta_df.copy()
-        intsta_df = st.session_state.preserved_intsta_df.copy()
-        has_standards = True
+        st.session_state.preserved_intsta_df = None  # Start as None, only set by custom upload
     
     normalized_data_object = lp.NormalizeData()
 
@@ -1942,7 +1979,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # PDF Generation Section
     st.subheader("Generate PDF Report")
     st.warning(
-        "⚠️ Important: PDF Report Generation Guidelines\n\n"
+        "⚠️ Important: PDF Report Generation Guidelines\n\n"
         "1. Generate the PDF only after completing all desired analyses.\n"
         "2. Ensure all analyses you want in the report have been viewed at least once.\n"
         "3. Use this feature instead of downloading plots individually - it's more efficient for multiple downloads.\n"
@@ -2737,7 +2774,7 @@ def display_statistical_options():
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️ **Critical for Hypothesis Testing**: If you are conducting formal hypothesis testing (especially with multiple testing corrections), 
+    ⚠️ **Critical for Hypothesis Testing**: If you are conducting formal hypothesis testing (especially with multiple testing corrections), 
     only select lipid classes that are part of your specific research hypothesis. Including additional "exploratory" classes 
     will inflate your p-values and reduce statistical power to detect true effects in your classes of interest.
     
@@ -2816,7 +2853,7 @@ def display_statistical_options():
         st.markdown("""
             **🎯 Two-Level Statistical Control:**
             
-            **🏷️ Level 1 - Between-Class Correction** (Applied to all analyses)
+            **🏷️ Level 1 - Between-Class Correction** (Applied to all analyses)
             
             | Choice | When to Use |
             |--------|-------------|
@@ -3377,7 +3414,7 @@ def display_saturation_statistical_options():
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️ **Critical for Hypothesis Testing**: Saturation plots test 3 fatty acid types (SFA, MUFA, PUFA) 
+    ⚠️ **Critical for Hypothesis Testing**: Saturation plots test 3 fatty acid types (SFA, MUFA, PUFA) 
     per lipid class, creating a higher multiple testing burden than other analyses. Consider this when 
     selecting correction methods, especially when testing many lipid classes simultaneously.
     
@@ -3493,7 +3530,7 @@ def display_saturation_compatibility_warning(continuation_df):
     
     if not has_detailed_fa:
         st.warning("""
-        ⚠️ **Data Format Issue**: Saturation plots require detailed fatty acid composition 
+        ⚠️ **Data Format Issue**: Saturation plots require detailed fatty acid composition 
         (e.g., PC(16:0_18:1)) to accurately classify chains as saturated, monounsaturated, 
         or polyunsaturated. Your data appears to use consolidated total composition 
         (e.g., PC(34:1)) which only shows total carbons and double bonds across all chains. 
@@ -3634,7 +3671,7 @@ def display_saturation_plots(experiment, continuation_df):
         - **Error Bars**: Show standard deviation for proper biological interpretation
         - **Post-hoc Analysis**: Tukey's HSD for parametric or Bonferroni correction for non-parametric tests
         
-        **⚠️ Important Notes:**
+        **⚠️ Important Notes:**
         
         - **Sample Size**: Analysis requires ≥2 biological replicates per condition
         - **Multiple Testing**: Saturation analysis tests 3 fatty acid types per lipid class, creating higher statistical burden
@@ -3643,7 +3680,7 @@ def display_saturation_plots(experiment, continuation_df):
         
         # Big note about data format requirements with examples
         st.warning("""
-        ⚠️ **Critical Data Format Requirement**
+        ⚠️ **Critical Data Format Requirement**
         
         Saturation analysis requires detailed fatty acid composition to accurately classify chains. The analysis 
         works differently depending on your data format:
@@ -3676,7 +3713,7 @@ def display_saturation_plots(experiment, continuation_df):
         
         st.markdown("### 🎯 Two-Level Statistical Control")
         st.markdown("""
-        **🏷️ Level 1 - Between Class/FA Type Correction** (Applied to all analyses)
+        **🏷️ Level 1 - Between Class/FA Type Correction** (Applied to all analyses)
         
         | Choice | When to Use |
         |--------|-------------|
@@ -3743,7 +3780,7 @@ def display_saturation_plots(experiment, continuation_df):
             
             if consolidated_lipids_dict:
                 st.markdown("---")
-                st.subheader("⚠️ Consolidated Format Lipids Detected")
+                st.subheader("⚠️ Consolidated Format Lipids Detected")
                 st.markdown("""
                 **Important:** Your dataset contains lipids in consolidated format (e.g., `PC(34:1)`) 
                 mixed with detailed format (e.g., `PC(16:0_18:1)`). Consolidated format lipids cannot 
@@ -3934,7 +3971,7 @@ def display_pathway_visualization(experiment, continuation_df):
     with st.expander("Class Level Breakdown - Pathway Visualization"):
         # Add the critical data format requirement warning
         st.warning("""
-        ⚠️ **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
+        ⚠️ **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
         (e.g., PC(16:0_18:1)) vs. total composition (e.g., PC(34:1)). If your dataset uses total composition format, 
         the saturation analysis may be less accurate as it cannot precisely identify individual fatty acid chains.
         """)
@@ -3944,7 +3981,7 @@ def display_pathway_visualization(experiment, continuation_df):
         
         if not has_detailed_fa:
             st.warning("""
-            ⚠️ Note: The pathway visualization works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            ⚠️ Note: The pathway visualization works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
             Your data appears to use total composition (e.g., PC(34:1)), which may affect the accuracy of the 
             saturation ratio calculations (shown by the color scale). The circle sizes (showing abundance) 
             remain accurate.
@@ -4120,7 +4157,7 @@ def display_volcano_statistical_options():
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️ **Critical for Hypothesis Testing**: The volcano plot tests each individual lipid species for 
+    ⚠️ **Critical for Hypothesis Testing**: The volcano plot tests each individual lipid species for 
     significant changes between conditions. When testing many lipids simultaneously, multiple testing 
     corrections become crucial to control false discoveries.
     
@@ -4274,7 +4311,7 @@ def display_volcano_plot(experiment, continuation_df):
         - **Y-axis**: -log10(adjusted p-value) when correction is applied, -log10(p-value) when uncorrected
         - **Red Dashed Lines**: Configurable significance (horizontal) and biological significance (vertical) thresholds
 
-        **⚠️ Non-Parametric Test Note:**
+        **⚠️ Non-Parametric Test Note:**
 
         Mann-Whitney U tests with small sample sizes (n=3-6 per group) often produce identical p-values for many lipids,
         creating horizontal lines in the volcano plot. This is expected behavior due to the discrete nature of rank-based
@@ -4684,7 +4721,7 @@ def display_volcano_plot(experiment, continuation_df):
                         st.write("**Exclusion Reasons Summary:**")
                         for reason, count in exclusion_summary.items():
                             st.write(f"- {reason}: {count} lipids")
-                    else:
+                        st.success("✅ No lipids were excluded from the analysis!")
                         st.success("✅ No lipids were excluded from the analysis!")
 
                 except Exception as e:
@@ -4900,7 +4937,7 @@ def display_fach_heatmaps(experiment, continuation_df):
         has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
         if not has_detailed_fa:
             st.warning("""
-            ⚠️ Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            ⚠️ Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
             Your data appears to use total composition (e.g., PC(34:1)), which may affect accuracy.
             """)
         
