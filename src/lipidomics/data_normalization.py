@@ -163,9 +163,9 @@ class NormalizeData:
     def _standardize_standards_columns(self, df, expected_intensity_cols):
         """
         Standardize column names: 
-        - 1st column → LipidMolec
-        - 2nd column → ClassKey (if exists and not numeric)
-        - Remaining columns → intensity[s1], intensity[s2], etc.
+        - 1st column â†’ LipidMolec
+        - 2nd column â†’ ClassKey (if exists and not numeric)
+        - Remaining columns â†’ intensity[s1], intensity[s2], etc.
         """
         df = df.copy()
         cols = df.columns.tolist()
@@ -252,10 +252,13 @@ class NormalizeData:
         if 'LipidMolec' not in standards_df.columns:
             raise ValueError("Standards file must have LipidMolec as the first column")
         
+        # Deduplicate standards - important to avoid extracting the same standard multiple times
+        unique_standards = standards_df['LipidMolec'].drop_duplicates()
+        
         # Validate that all standards exist in the combined dataset
-        valid_standards = standards_df['LipidMolec'].isin(full_df['LipidMolec'])
+        valid_standards = unique_standards.isin(full_df['LipidMolec'])
         if not valid_standards.all():
-            invalid_standards = standards_df[~valid_standards]['LipidMolec'].tolist()
+            invalid_standards = unique_standards[~valid_standards].tolist()
             raise ValueError(
                 f"The following standards were not found in the dataset: {', '.join(invalid_standards)}. "
                 f"If these are external standards, please select 'No' for the mode question and provide intensity values."
@@ -263,7 +266,7 @@ class NormalizeData:
         
         # Extract standards from the main dataset
         result_df = pd.DataFrame()
-        for standard in standards_df['LipidMolec']:
+        for standard in unique_standards:
             standard_data = full_df[full_df['LipidMolec'] == standard].copy()
             if not standard_data.empty:
                 if 'ClassKey' not in standard_data.columns:
