@@ -4740,7 +4740,7 @@ def display_volcano_plot(experiment, continuation_df):
                         st.write("**Exclusion Reasons Summary:**")
                         for reason, count in exclusion_summary.items():
                             st.write(f"- {reason}: {count} lipids")
-                        st.success("→ No lipids were excluded from the analysis!")
+                    else:
                         st.success("→ No lipids were excluded from the analysis!")
 
                 except Exception as e:
