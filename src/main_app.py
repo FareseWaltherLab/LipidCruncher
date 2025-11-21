@@ -97,7 +97,7 @@ def display_landing_page():
     Designed to overcome traditional challenges like manual spreadsheet handling and insufficient quality assessment, LipidCruncher offers a comprehensive 
     solution that streamlines data standardization, normalization, and rigorous quality control while providing powerful visualization tools. 
     The platform significantly accelerates the research iteration process, allowing scientists to quickly identify anomalies and patterns through advanced 
-    features including volcano plots, lipid saturation profiles, pathway mapping, and interactive heatmapsâ€”all within an intuitive interface that requires 
+    features including volcano plots, lipid saturation profiles, pathway mapping, and interactive heatmaps—all within an intuitive interface that requires 
     no bioinformatics expertise. LipidCruncher empowers researchers to efficiently convert complex lipid datasets into scientific insights, regardless 
     of their specific research focus.
     """, unsafe_allow_html=True)
@@ -196,7 +196,7 @@ def display_landing_page():
                 
     st.subheader("Tip")
     st.markdown("""
-    ðŸ’¡ **Important**: When you need to switch to a different analysis with a different dataset, 
+    💡 **Important**: When you need to switch to a different analysis with a different dataset, 
     first refresh the page and start from the homepage. This ensures a clean session and prevents 
     any conflicts with previously loaded data.
     """)
@@ -276,6 +276,8 @@ def main():
                                 st.session_state.format_type = data_format
                                 st.session_state.cleaned_df = cleaned_df
                                 st.session_state.intsta_df = intsta_df
+                                # Save original auto-detected standards for restoration when switching modes
+                                st.session_state.original_auto_intsta_df = intsta_df.copy() if intsta_df is not None else pd.DataFrame()
                                 st.session_state.continuation_df = cleaned_df
                                 
                                 cleaned_df = display_cleaned_data(cleaned_df, intsta_df)
@@ -355,7 +357,18 @@ def main():
         if 'preserved_data' in st.session_state and st.session_state.module == "Data Cleaning, Filtering, & Normalization":
             for key, value in st.session_state.preserved_data.items():
                 if value is not None:
-                    setattr(st.session_state, key, value)
+                    # CRITICAL FIX: Don't restore intsta_df if user is in "Upload Custom Standards" mode
+                    # This prevents auto-detected standards from reappearing when switching modes
+                    if key == 'intsta_df':
+                        # Only restore intsta_df if we're in Automatic Detection mode OR if no mode is set yet
+                        restored_preference = st.session_state.preserved_data.get('standard_source_preference', 'Automatic Detection')
+                        if restored_preference == "Automatic Detection":
+                            setattr(st.session_state, key, value)
+                        # If in Upload Custom Standards mode, keep intsta_df empty unless custom file was uploaded
+                        elif 'preserved_intsta_df' not in st.session_state.preserved_data or st.session_state.preserved_data['preserved_intsta_df'] is None:
+                            st.session_state.intsta_df = pd.DataFrame()
+                    else:
+                        setattr(st.session_state, key, value)
             del st.session_state.preserved_data
         
         # Add a button to return to the landing page
@@ -454,7 +467,7 @@ def display_format_requirements(data_format):
         
         The data will be automatically processed to:
         * Extract the tabular data section
-        * Standardize lipid names (e.g., "LPC 16:0" â†’ "LPC(16:0)")
+        * Standardize lipid names (e.g., "LPC 16:0"  →  "LPC(16:0)")
         * Create intensity columns (named as intensity[s1], intensity[s2], etc.)
         * Use the condition strings to suggest experimental setup
         """)
@@ -496,7 +509,7 @@ def display_format_requirements(data_format):
            * The number of intensity columns must match the total number of samples in your experiment
            * These columns will be automatically standardized to: intensity[s1], intensity[s2], ..., intensity[sN]
         
-        ⚠️Â If your dataset contains any additional columns, please remove them before uploading.
+        ⚠️  If your dataset contains any additional columns, please remove them before uploading.
         Only the lipid names column followed by intensity columns should be present.
         
         Note: The lipid class (e.g., LPC, Cer, CE) will be automatically extracted from the lipid names to create the ClassKey.
@@ -851,7 +864,7 @@ def get_grade_filtering_config(df, format_type):
         return None
     
     st.markdown("---")
-    st.markdown("### ðŸŽ¯ Grade Filtering Configuration")
+    st.markdown("### 🎯 Grade Filtering Configuration")
     
     st.markdown("""
     LipidSearch assigns quality grades (A, B, C, D) to each lipid identification:
@@ -883,8 +896,8 @@ def get_grade_filtering_config(df, format_type):
     
     # Custom settings
     st.markdown("---")
-    st.markdown("#### ðŸ“‹ Select Acceptable Grades by Lipid Class")
-    st.info("ðŸ’¡ **Tip:** Select the grades you want to accept for each lipid class. Clear selections will exclude that class entirely.")
+    st.markdown("#### 🔬 Select Acceptable Grades by Lipid Class")
+    st.info("💡 **Tip:** Select the grades you want to accept for each lipid class. Clear selections will exclude that class entirely.")
     
     grade_config = {}
     
@@ -899,7 +912,7 @@ def get_grade_filtering_config(df, format_type):
             # Class header with colored background
             st.markdown(f"""
             <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
-                <h4 style="margin: 0; color: #1f77b4;">ðŸ“Š {lipid_class}</h4>
+                <h4 style="margin: 0; color: #1f77b4;">📊 {lipid_class}</h4>
             </div>
             """, unsafe_allow_html=True)
             
@@ -920,9 +933,9 @@ def get_grade_filtering_config(df, format_type):
             
             # Visual feedback
             if not selected_grades:
-                st.error(f"⚠️Â **Warning:** No grades selected for {lipid_class}. This class will be completely excluded from analysis!")
+                st.error(f"⚠️  **Warning:** No grades selected for {lipid_class}. This class will be completely excluded from analysis!")
             elif 'D' in selected_grades:
-                st.warning(f"⚠️Â **Caution:** Grade D included for {lipid_class}. This may include low-confidence identifications.")
+                st.warning(f"⚠️  **Caution:** Grade D included for {lipid_class}. This may include low-confidence identifications.")
             else:
                 st.success(f"✓ {lipid_class}: {', '.join(selected_grades)} accepted")
             
@@ -931,7 +944,7 @@ def get_grade_filtering_config(df, format_type):
     st.markdown("---")
     
     # Summary of selections
-    st.markdown("### ðŸ“Š Configuration Summary")
+    st.markdown("### 📊 Configuration Summary")
     
     # Count classes by grade selection
     abc_classes = [cls for cls, grades in grade_config.items() if set(grades) == {'A', 'B', 'C'}]
@@ -944,24 +957,24 @@ def get_grade_filtering_config(df, format_type):
     summary_col1, summary_col2 = st.columns(2)
     
     with summary_col1:
-            st.markdown(f"**→… A, B only** ({len(ab_classes)} classes)")
-            st.markdown(f"**→… A, B only** ({len(ab_classes)} classes)")
+            st.markdown(f"**→ A, B only** ({len(ab_classes)} classes)")
+            st.markdown(f"**→ A, B only** ({len(ab_classes)} classes)")
             st.caption(', '.join(ab_classes))
-            st.markdown(f"**→… A, B, C** ({len(abc_classes)} classes)")
-            st.markdown(f"**→… A, B, C** ({len(abc_classes)} classes)")
+            st.markdown(f"**→ A, B, C** ({len(abc_classes)} classes)")
+            st.markdown(f"**→ A, B, C** ({len(abc_classes)} classes)")
             st.caption(', '.join(abc_classes))
     
     with summary_col2:
         if abcd_classes:
-            st.markdown(f"**⚠️Â Includes D** ({len(abcd_classes)} classes)")
+            st.markdown(f"**⚠️  Includes D** ({len(abcd_classes)} classes)")
             st.caption(', '.join(abcd_classes))
         if custom_classes:
-            st.markdown(f"**âš™ï¸Â Custom** ({len(custom_classes)} classes)")
+            st.markdown(f"**⚙️  Custom** ({len(custom_classes)} classes)")
             for cls in custom_classes:
-                st.caption(f"â€¢ {cls}: {', '.join(grade_config[cls])}")
+                st.caption(f"• {cls}: {', '.join(grade_config[cls])}")
     
     if excluded_classes:
-        st.error(f"**ðŸš« Excluded** ({len(excluded_classes)} classes): {', '.join(excluded_classes)}")
+        st.error(f"**🚫 Excluded** ({len(excluded_classes)} classes): {', '.join(excluded_classes)}")
     
     return grade_config
 
@@ -1013,6 +1026,10 @@ def manage_internal_standards(normalizer):
         # Clear any custom standards when switching to automatic detection
         if 'preserved_intsta_df' in st.session_state:
             st.session_state.preserved_intsta_df = None
+        
+        # Restore original auto-detected standards if they exist
+        if 'original_auto_intsta_df' in st.session_state:
+            st.session_state.intsta_df = st.session_state.original_auto_intsta_df.copy()
         
         # Show automatically detected standards if available
         if not st.session_state.intsta_df.empty:
@@ -1072,6 +1089,13 @@ def manage_internal_standards(normalizer):
                 type=['csv'],
                 key="standards_file_uploader"
             )
+            
+            # CRITICAL FIX: If file uploader was cleared, reset both intsta_df and preserved_intsta_df
+            if uploaded_file is None and 'preserved_intsta_df' in st.session_state and st.session_state.preserved_intsta_df is not None:
+                st.session_state.intsta_df = pd.DataFrame()
+                st.session_state.preserved_intsta_df = None
+                # Show info message that standards were cleared
+                st.info("No internal standards available for consistency plots.")
             
             if uploaded_file is not None:
                 try:
@@ -1250,9 +1274,9 @@ def display_cleaned_data(unfiltered_df, intsta_df):
            
             2. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format:
                Class(chain details). For example:
-               - LPC O-17:4 â†’ LPC(O-17:4)
-               - Cer d18:0/C24:0 â†’ Cer(d18:0_C24:0)
-               - CE 14:0;0 â†’ CE(14:0)
+               - LPC O-17:4  →  LPC(O-17:4)
+               - Cer d18:0/C24:0  →  Cer(d18:0_C24:0)
+               - CE 14:0;0  →  CE(14:0)
            
             3. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class
                from the standardized lipid name (e.g., 'PC' from 'PC(16:0_18:1)').
@@ -1523,7 +1547,7 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
         
         **Internal Standards**: Normalize lipid measurements using spiked-in internal standards of known concentration. For each lipid class, you'll select an appropriate internal standard. The normalization formula is:
         ```
-        Concentration = (Intensity_lipid / Intensity_standard) Ã— Concentration_standard
+        Concentration = (Intensity_lipid / Intensity_standard) × Concentration_standard
         ```
         
         **Protein-based**: Normalize lipid intensities against protein concentration (e.g., determined by a BCA assay). This adjusts for differences in starting material. The normalization formula is:
@@ -1533,7 +1557,7 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
         
         **Both**: Apply both internal standards and protein normalization:
         ```
-        Concentration = (Intensity_lipid / Intensity_standard) Ã— (Concentration_standard / Protein_concentration)
+        Concentration = (Intensity_lipid / Intensity_standard) × (Concentration_standard / Protein_concentration)
         ```
         
         After normalization, intensity columns are renamed to concentration columns to reflect that values now represent absolute or relative lipid concentrations rather than raw intensities.
@@ -1745,13 +1769,13 @@ def apply_standards_normalization(df, class_to_standard_map, selected_classes, i
     intsta_concentration_dict = {}
     all_concentrations_entered = True
     
-    st.write("Enter the concentration of each selected internal standard (ÂµM):")
+    st.write("Enter the concentration of each selected internal standard (µM):")
     for standard in selected_standards:
         # Use previously entered value as default if available
         default_value = st.session_state.standard_concentrations.get(standard, 1.0)
         
         concentration = st.number_input(
-            f"Concentration (ÂµM) for {standard}",
+            f"Concentration (µM) for {standard}",
             min_value=0.0,
             value=default_value,
             step=0.1,
@@ -1974,7 +1998,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # PDF Generation Section
     st.subheader("Generate PDF Report")
     st.warning(
-        "⚠️Â Important: PDF Report Generation Guidelines\n\n"
+        "⚠️  Important: PDF Report Generation Guidelines\n\n"
         "1. Generate the PDF only after completing all desired analyses.\n"
         "2. Ensure all analyses you want in the report have been viewed at least once.\n"
         "3. Use this feature instead of downloading plots individually - it's more efficient for multiple downloads.\n"
@@ -2209,7 +2233,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             The Coefficient of Variation (CoV) is a measure of relative variability, calculated as:
 
             ```
-            CoV = (Standard Deviation / Mean) Ã— 100%
+            CoV = (Standard Deviation / Mean) × 100%
             ```
 
             A lower CoV indicates more consistent measurements, suggesting higher reliability. CoV is computed for each lipid species across all BQC samples.
@@ -2378,7 +2402,7 @@ def display_retention_time_plots(continuation_df, format_type):
             Retention time analysis is a crucial quality check for LipidSearch data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
             
             **What is Retention Time?**  
-            Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicityâ€”more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
+            Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicity—more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
             
             **What to Look For:**
             
@@ -2673,8 +2697,8 @@ def display_statistical_options():
         options=["Manual", "Auto"],
         index=0,  # Default to Manual
         help="""
-        â€¢ Manual: You control all statistical choices
-        â€¢ Auto: Uses parametric tests with intelligent corrections based on your data
+        • Manual: You control all statistical choices
+        • Auto: Uses parametric tests with intelligent corrections based on your data
         """,
         horizontal=True
     )
@@ -2685,7 +2709,7 @@ def display_statistical_options():
     if mode_choice == "Auto":
         # Auto mode - show what will be decided
         st.info("""
-        ðŸ¤– **Auto Mode**: Uses parametric statistical tests with intelligent corrections:
+        🤖 **Auto Mode**: Uses parametric statistical tests with intelligent corrections:
         - **Test Type**: Parametric (Welch's t-test/ANOVA) with automatic log10 transformation
         - **Level 1 Correction**: Based on number of lipid classes selected
         - **Level 2 Correction**: Based on number of conditions selected
@@ -2708,8 +2732,8 @@ def display_statistical_options():
                 options=["parametric", "non_parametric"],
                 index=0,  # Default to parametric
                 help="""
-                â€¢ Parametric: Welch's t-test/ANOVA (assumes normal distribution after transformation)
-                â€¢ Non-parametric: Mann-Whitney U/Kruskal-Wallis (more conservative, no distribution assumptions)
+                • Parametric: Welch's t-test/ANOVA (assumes normal distribution after transformation)
+                • Non-parametric: Mann-Whitney U/Kruskal-Wallis (more conservative, no distribution assumptions)
                 """
             )
             
@@ -2718,9 +2742,9 @@ def display_statistical_options():
                 options=["uncorrected", "fdr_bh", "bonferroni"],
                 index=0,  # Default to uncorrected
                 help="""
-                â€¢ Uncorrected: No correction (good for single hypothesis)
-                â€¢ FDR (Benjamini-Hochberg): Controls false discovery rate (for multiple classes)
-                â€¢ Bonferroni: Conservative, controls family-wise error rate (very strict)
+                • Uncorrected: No correction (good for single hypothesis)
+                • FDR (Benjamini-Hochberg): Controls false discovery rate (for multiple classes)
+                • Bonferroni: Conservative, controls family-wise error rate (very strict)
                 """
             )
         
@@ -2731,9 +2755,9 @@ def display_statistical_options():
                 index=0,  # Default to uncorrected
                 help="""
                 For 3+ conditions only:
-                â€¢ Uncorrected: No pairwise correction
-                â€¢ Standard: Tukey's HSD (parametric) or Bonferroni (non-parametric) 
-                â€¢ Bonferroni All: Bonferroni correction for all pairwise tests
+                • Uncorrected: No pairwise correction
+                • Standard: Tukey's HSD (parametric) or Bonferroni (non-parametric) 
+                • Bonferroni All: Bonferroni correction for all pairwise tests
                 """
             )
     
@@ -2750,10 +2774,10 @@ def display_statistical_options():
     
     # Show current settings
     st.markdown("---")
-    st.markdown("### ðŸ“‹ Current Settings Summary")
+    st.markdown("### 🔬 Current Settings Summary")
     
     if mode_choice == "Auto":
-        st.info("ðŸ¤– **Auto Mode**: Parametric tests with intelligent corrections will be applied")
+        st.info("🤖 **Auto Mode**: Parametric tests with intelligent corrections will be applied")
     else:
         # Show current selections in a clean format
         col1, col2 = st.columns(2)
@@ -2763,13 +2787,13 @@ def display_statistical_options():
             st.write(f"- **Level 1 Correction**: {correction_method.upper().replace('_', '-')}")
         with col2:
             st.write(f"- **Level 2 Correction**: {posthoc_correction.replace('_', ' ').title()}")
-            st.write(f"- **Significance**: Î± = {alpha}")
+            st.write(f"- **Significance**: α = {alpha}")
             st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
     
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️Â **Critical for Hypothesis Testing**: If you are conducting formal hypothesis testing (especially with multiple testing corrections), 
+    ⚠️  **Critical for Hypothesis Testing**: If you are conducting formal hypothesis testing (especially with multiple testing corrections), 
     only select lipid classes that are part of your specific research hypothesis. Including additional "exploratory" classes 
     will inflate your p-values and reduce statistical power to detect true effects in your classes of interest.
     
@@ -2778,11 +2802,11 @@ def display_statistical_options():
     
     # Complete guidance section - common information first, then mode-specific
     st.markdown("---")
-    st.markdown("### ðŸ“š Class Concentration Bar Chart Analysis Guide")
+    st.markdown("### 🏷️ Class Concentration Bar Chart Analysis Guide")
     
     # Common information regardless of mode
     st.markdown("""
-        **ðŸ“Š What the Chart Shows:**
+        **📊 What the Chart Shows:**
         - **Each bar**: Mean concentration of a lipid class in a condition (sum of all individual lipid species within that class)
         - **Error bars**: Standard deviation showing the variability within each condition
         - **Stars**: Statistical significance: * p<0.05, ** p<0.01, *** p<0.001
@@ -2790,7 +2814,7 @@ def display_statistical_options():
         """)
     
     if mode_choice == "Auto":
-        st.markdown("### ðŸ¤– Auto Mode Guide")
+        st.markdown("### 🤖 Auto Mode Guide")
         st.markdown("""
             **How Auto Mode Works:**
             - **Test Selection**: Always uses parametric tests (Welch's t-test/ANOVA) which are appropriate for typical lipidomics sample sizes (n=3-6)
@@ -2799,8 +2823,8 @@ def display_statistical_options():
             - **Robust Approach**: Welch's tests don't assume equal variances, making them robust for biological data
             
             **Auto Mode Logic:**
-            - **Level 1 (Between-Class)**: 1 class â†’ Uncorrected | Multiple classes â†’ FDR correction
-            - **Level 2 (Within-Class)**: â‰¤2 conditions â†’ No post-hoc | 3-4 conditions â†’ Standard approach | 5+ conditions â†’ Conservative Bonferroni
+            - **Level 1 (Between-Class)**: 1 class  →  Uncorrected | Multiple classes  →  FDR correction
+            - **Level 2 (Within-Class)**: ≤2 conditions  →  No post-hoc | 3-4 conditions  →  Standard approach | 5+ conditions  →  Conservative Bonferroni
             
             **Statistical Process:**
             - **2 Conditions**: Welch's t-test + Level 1 correction (if multiple classes)
@@ -2813,10 +2837,10 @@ def display_statistical_options():
             """)
     else:
         # Show full guide for manual mode
-        st.markdown("### ðŸ”§ Manual Mode Guide")
+        st.markdown("### 🔧 Manual Mode Guide")
         
         st.markdown("""
-            **ðŸ”¬ Statistical Test Types:**
+            **💡 Statistical Test Types:**
             
             **Parametric Tests (Welch's t-test/ANOVA):**
             - **When to use**: Standard choice for lipidomics data with log transformation
@@ -2831,13 +2855,13 @@ def display_statistical_options():
             - **Disadvantages**: Less statistical power than parametric tests
             - **Best for**: When you prefer maximum conservatism or have highly skewed data even after transformation
             
-            ðŸ’¡ **Key Point**: Non-parametric tests are more conservative (harder to detect significant differences) but make no assumptions about data distribution.
+            💡 **Key Point**: Non-parametric tests are more conservative (harder to detect significant differences) but make no assumptions about data distribution.
             """)
 
         st.markdown("""
-            **ðŸ”¬ Statistical Testing Process:**
+            **💡 Statistical Testing Process:**
             
-            **ðŸ“Š The Process:**
+            **📊 The Process:**
             - **2 Conditions**: Test + Level 1 correction (if testing multiple classes)
             - **3+ Conditions**: Three-step process to control false discoveries:
               1. **Omnibus Test**: "Are there ANY differences among groups?"
@@ -2846,9 +2870,9 @@ def display_statistical_options():
             """)
 
         st.markdown("""
-            **ðŸŽ¯ Two-Level Statistical Control:**
+            **🎯 Two-Level Statistical Control:**
             
-            **ðŸ·ï¸Â Level 1 - Between-Class Correction** (Applied to all analyses)
+            **🏷️  Level 1 - Between-Class Correction** (Applied to all analyses)
             
             | Choice | When to Use |
             |--------|-------------|
@@ -2856,7 +2880,7 @@ def display_statistical_options():
             | **FDR** | Exploring multiple classes (balances discovery with false positive control) |
             | **Bonferroni** | Confirmatory studies where false positives are very costly |
             
-            **ðŸ” Level 2 - Within-Class Correction** (For 3+ conditions only)
+            **📍 Level 2 - Within-Class Correction** (For 3+ conditions only)
             
             | Choice | When to Use |
             |--------|-------------|
@@ -2864,10 +2888,10 @@ def display_statistical_options():
             | **Standard** | Balanced approach: Tukey's HSD (parametric) or Bonferroni (non-parametric) |
             | **Bonferroni All** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
             
-            ðŸ’¡ **Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
+            💡 **Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
             """)
 
-        st.markdown("**Rule of thumb:** 1 class â†’ Uncorrected Level 1 | Multiple classes â†’ FDR Level 1 | High-stakes confirmatory â†’ Bonferroni both levels")
+        st.markdown("**Rule of thumb:** 1 class  →  Uncorrected Level 1 | Multiple classes  →  FDR Level 1 | High-stakes confirmatory  →  Bonferroni both levels")
     
     return {
         'test_type': test_type,
@@ -2903,7 +2927,7 @@ def display_detailed_statistical_results(statistical_results, selected_condition
                 'p-value': f"{p_value:.3f}",
                 'Adjusted p-value': f"{adj_p_value:.3f}",
                 'Transformation': transformation.title(),
-                'Significant': '✓' if adj_p_value < 0.05 else '→—'
+                'Significant': '✓' if adj_p_value < 0.05 else '—'
             }
             results_data.append(result_row)
         
@@ -2984,24 +3008,24 @@ def apply_auto_mode_logic(selected_classes, selected_conditions):
     # Auto Level 1 (Between-Class) Correction
     if len(selected_classes) == 1:
         auto_correction_method = "uncorrected"
-        auto_rationale = "Single class â†’ no between-class correction needed"
+        auto_rationale = "Single class  →  no between-class correction needed"
     elif len(selected_classes) <= 5:
         auto_correction_method = "fdr_bh"
-        auto_rationale = "Few classes (â‰¤5) â†’ FDR balances discovery and control"
+        auto_rationale = "Few classes (≤5)  →  FDR balances discovery and control"
     else:
         auto_correction_method = "fdr_bh"
-        auto_rationale = "Multiple classes â†’ FDR recommended for exploration"
+        auto_rationale = "Multiple classes  →  FDR recommended for exploration"
     
     # Auto Level 2 (Within-Class) Correction
     if len(selected_conditions) <= 2:
         auto_posthoc_correction = "uncorrected"
-        auto_posthoc_rationale = "â‰¤2 conditions â†’ no post-hoc needed"
+        auto_posthoc_rationale = "≤2 conditions  →  no post-hoc needed"
     elif len(selected_conditions) <= 4:
         auto_posthoc_correction = "standard"  # Updated to use new naming
-        auto_posthoc_rationale = "Few conditions â†’ standard post-hoc approach"
+        auto_posthoc_rationale = "Few conditions  →  standard post-hoc approach"
     else:
         auto_posthoc_correction = "bonferroni_all"  # Updated to use new naming
-        auto_posthoc_rationale = "Many conditions â†’ conservative Bonferroni"
+        auto_posthoc_rationale = "Many conditions  →  conservative Bonferroni"
     
     return {
         'correction_method': auto_correction_method,
@@ -3094,12 +3118,12 @@ def display_abundance_bar_charts(experiment, continuation_df):
                 if posthoc_methods:
                     posthoc_display = ", ".join(sorted(posthoc_methods))
                 elif len(selected_conditions_list) <= 2:
-                    posthoc_display = "Not applicable (â‰¤2 conditions)"
+                    posthoc_display = "Not applicable (≤2 conditions)"
                 else:
                     posthoc_display = "None (no significant omnibus tests)"
                 
                 st.info(f"""
-                ðŸ¤– **Auto Mode Results Applied:**
+                🤖 **Auto Mode Results Applied:**
                 - **Tests Chosen**: {test_display}
                 - **Level 1 Correction**: {auto_settings['correction_method'].upper().replace('_', '-')} 
                   ({auto_settings['correction_rationale']})
@@ -3317,8 +3341,8 @@ def display_saturation_statistical_options():
         options=["Manual", "Auto"],
         index=0,  # Default to Manual
         help="""
-        â€¢ Manual: You control all statistical choices
-        â€¢ Auto: Uses parametric tests with intelligent corrections based on your data
+        • Manual: You control all statistical choices
+        • Auto: Uses parametric tests with intelligent corrections based on your data
         """,
         horizontal=True
     )
@@ -3329,9 +3353,9 @@ def display_saturation_statistical_options():
     if mode_choice == "Auto":
         # Auto mode - show what will be decided
         st.info("""
-        ðŸ¤– **Auto Mode**: Uses parametric statistical tests with intelligent corrections:
+        🤖 **Auto Mode**: Uses parametric statistical tests with intelligent corrections:
         - **Test Type**: Parametric (Welch's t-test/ANOVA) with automatic log10 transformation
-        - **Level 1 Correction**: Based on number of lipid classes Ã— 3 fatty acid types
+        - **Level 1 Correction**: Based on number of lipid classes × 3 fatty acid types
         - **Level 2 Correction**: Based on number of conditions selected
         """)
         
@@ -3350,8 +3374,8 @@ def display_saturation_statistical_options():
                 options=["parametric", "non_parametric"],
                 index=0,
                 help="""
-                â€¢ Parametric: Welch's t-test/ANOVA (assumes log-normal distribution after transformation)
-                â€¢ Non-parametric: Mann-Whitney U/Kruskal-Wallis (more conservative, no distribution assumptions)
+                • Parametric: Welch's t-test/ANOVA (assumes log-normal distribution after transformation)
+                • Non-parametric: Mann-Whitney U/Kruskal-Wallis (more conservative, no distribution assumptions)
                 """
             )
             
@@ -3361,9 +3385,9 @@ def display_saturation_statistical_options():
                 index=0,
                 help="""
                 Note: Tests 3 fatty acid types (SFA, MUFA, PUFA) per lipid class
-                â€¢ Uncorrected: No correction (good for single class analysis)
-                â€¢ FDR (Benjamini-Hochberg): Controls false discovery rate (for multiple classes)
-                â€¢ Bonferroni: Conservative, controls family-wise error rate (very strict)
+                • Uncorrected: No correction (good for single class analysis)
+                • FDR (Benjamini-Hochberg): Controls false discovery rate (for multiple classes)
+                • Bonferroni: Conservative, controls family-wise error rate (very strict)
                 """
             )
         
@@ -3374,9 +3398,9 @@ def display_saturation_statistical_options():
                 index=0,
                 help="""
                 For 3+ conditions only:
-                â€¢ Uncorrected: No pairwise correction
-                â€¢ Standard: Tukey's HSD (parametric) or Bonferroni (non-parametric) 
-                â€¢ Bonferroni All: Bonferroni correction for all pairwise tests
+                • Uncorrected: No pairwise correction
+                • Standard: Tukey's HSD (parametric) or Bonferroni (non-parametric) 
+                • Bonferroni All: Bonferroni correction for all pairwise tests
                 """
             )
     
@@ -3394,7 +3418,7 @@ def display_saturation_statistical_options():
     # Show current settings for manual mode only
     if mode_choice == "Manual":
         st.markdown("---")
-        st.markdown("### ðŸ“‹ Current Settings Summary")
+        st.markdown("### 🔬 Current Settings Summary")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -3403,13 +3427,13 @@ def display_saturation_statistical_options():
             st.write(f"- **Level 1 Correction**: {correction_method.upper().replace('_', '-')}")
         with col2:
             st.write(f"- **Level 2 Correction**: {posthoc_correction.replace('_', ' ').title()}")
-            st.write(f"- **Significance**: Î± = {alpha}")
+            st.write(f"- **Significance**: α = {alpha}")
             st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
     
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️Â **Critical for Hypothesis Testing**: Saturation plots test 3 fatty acid types (SFA, MUFA, PUFA) 
+    ⚠️  **Critical for Hypothesis Testing**: Saturation plots test 3 fatty acid types (SFA, MUFA, PUFA) 
     per lipid class, creating a higher multiple testing burden than other analyses. Consider this when 
     selecting correction methods, especially when testing many lipid classes simultaneously.
     
@@ -3450,7 +3474,7 @@ def display_saturation_detailed_statistical_results(statistical_results, selecte
                     'p-value': f"{p_value:.3f}",
                     'Adjusted p-value': f"{adj_p_value:.3f}" if not np.isnan(adj_p_value) else "NaN",
                     'Transformation': transformation.title(),
-                    'Significant': '✓' if adj_p_value < 0.05 else '→—'
+                    'Significant': '✓' if adj_p_value < 0.05 else '—'
                 }
                 results_data.append(result_row)
         
@@ -3525,7 +3549,7 @@ def display_saturation_compatibility_warning(continuation_df):
     
     if not has_detailed_fa:
         st.warning("""
-        ⚠️Â **Data Format Issue**: Saturation plots require detailed fatty acid composition 
+        ⚠️  **Data Format Issue**: Saturation plots require detailed fatty acid composition 
         (e.g., PC(16:0_18:1)) to accurately classify chains as saturated, monounsaturated, 
         or polyunsaturated. Your data appears to use consolidated total composition 
         (e.g., PC(34:1)) which only shows total carbons and double bonds across all chains. 
@@ -3533,7 +3557,7 @@ def display_saturation_compatibility_warning(continuation_df):
         
         **What this means:**
         - `PC(16:0_18:1)` ✓ Shows individual chains: 16:0 (saturated) and 18:1 (monounsaturated)
-        - `PC(34:1)` →— Only shows totals: 34 carbons, 1 double bond (could be distributed many ways)
+        - `PC(34:1)` — Only shows totals: 34 carbons, 1 double bond (could be distributed many ways)
         
         The analysis may produce inaccurate results because the algorithm cannot determine 
         which chains are saturated vs. unsaturated.
@@ -3568,12 +3592,12 @@ def display_auto_mode_results(stat_options, selected_classes, selected_condition
         if posthoc_methods:
             posthoc_display = ", ".join(sorted(posthoc_methods))
         elif len(selected_conditions) <= 2:
-            posthoc_display = "Not applicable (â‰¤2 conditions)"
+            posthoc_display = "Not applicable (≤2 conditions)"
         else:
             posthoc_display = "None (no significant omnibus tests)"
         
         st.info(f"""
-        ðŸ¤– **Auto Mode Results Applied:**
+        🤖 **Auto Mode Results Applied:**
         - **Tests Performed**: {total_tests_performed} total
         - **Tests Chosen**: {test_display}
         - **Level 1 Correction**: {auto_settings['correction_method'].upper().replace('_', '-')} 
@@ -3605,17 +3629,17 @@ def display_saturation_plots(experiment, continuation_df):
         display_saturation_compatibility_warning(continuation_df)
 
         # Show comprehensive analysis guide (moved outside checkbox)
-        st.markdown("### ðŸ“š Saturation Plot Analysis Guide")
+        st.markdown("### 🏷️ Saturation Plot Analysis Guide")
         
         st.markdown("""
-        **ðŸ“Š What the Analysis Shows:**
+        **📊 What the Analysis Shows:**
         
         Saturation plots analyze the fatty acid composition within lipid classes, distinguishing between:
         - **SFA (Saturated Fatty Acids)**: Fatty acids with no double bonds
         - **MUFA (Monounsaturated Fatty Acids)**: Fatty acids with one double bond
         - **PUFA (Polyunsaturated Fatty Acids)**: Fatty acids with two or more double bonds
         
-        **ðŸ“ˆ Two Complementary Visualizations:**
+        **📈 Two Complementary Visualizations:**
         
         1. **Concentration Profile Plot**:
            - Groups of bars show absolute SFA, MUFA, and PUFA concentrations for each condition
@@ -3627,14 +3651,14 @@ def display_saturation_plots(experiment, continuation_df):
            - Total height always equals 100%
            - Shows compositional shifts even when total lipid amounts differ
         
-        **ðŸ§® How SFA, MUFA, and PUFA Values Are Computed:**
+        **🧮 How SFA, MUFA, and PUFA Values Are Computed:**
         
         For each lipid molecule in your dataset, the algorithm:
         
         1. **Fatty Acid Chain Parsing**: Identifies individual fatty acid chains from the lipid name
-           - ✓ `PC(16:0_18:1)` â†’ Successfully parses to chains: [16:0, 18:1]
-           - ✓ `PE(18:0_20:4)` â†’ Successfully parses to chains: [18:0, 20:4]
-           - →— `PC(34:1)` â†’ Cannot parse individual chains (consolidated format)
+           - ✓ `PC(16:0_18:1)`  →  Successfully parses to chains: [16:0, 18:1]
+           - ✓ `PE(18:0_20:4)`  →  Successfully parses to chains: [18:0, 20:4]
+           - — `PC(34:1)`  →  Cannot parse individual chains (consolidated format)
            
         2. **Classification by Saturation**: Counts double bonds in each chain
            - **SFA** (0 double bonds): 16:0, 18:0, 24:0
@@ -3642,15 +3666,15 @@ def display_saturation_plots(experiment, continuation_df):
            - **PUFA** (2+ double bonds): 18:2, 20:4, 22:6
         
         3. **Weighted Contribution Calculation**: Multiplies lipid concentration by fatty acid ratio
-           - Example: `PC(16:0_18:1)` at 100 ÂµM contributes:
-             * SFA: 100 Ã— 0.5 = 50 ÂµM (1 of 2 chains is saturated)
-             * MUFA: 100 Ã— 0.5 = 50 ÂµM (1 of 2 chains is monounsaturated)
-             * PUFA: 100 Ã— 0 = 0 ÂµM (no polyunsaturated chains)
+           - Example: `PC(16:0_18:1)` at 100 µM contributes:
+             * SFA: 100 × 0.5 = 50 µM (1 of 2 chains is saturated)
+             * MUFA: 100 × 0.5 = 50 µM (1 of 2 chains is monounsaturated)
+             * PUFA: 100 × 0 = 0 µM (no polyunsaturated chains)
            
-           - Why consolidated format fails: `PC(34:1)` at 100 ÂµM
-             * Could be `PC(16:0_18:1)`: 50 ÂµM SFA + 50 ÂµM MUFA
-             * Could be `PC(17:0_17:1)`: 50 ÂµM SFA + 50 ÂµM MUFA
-             * Could be `PC(18:0_16:1)`: 50 ÂµM SFA + 50 ÂµM MUFA
+           - Why consolidated format fails: `PC(34:1)` at 100 µM
+             * Could be `PC(16:0_18:1)`: 50 µM SFA + 50 µM MUFA
+             * Could be `PC(17:0_17:1)`: 50 µM SFA + 50 µM MUFA
+             * Could be `PC(18:0_16:1)`: 50 µM SFA + 50 µM MUFA
              * Many other possibilities - **algorithm cannot determine correct distribution**
         
         4. **Class-Level Summation**: All contributions within a lipid class are summed
@@ -3658,36 +3682,36 @@ def display_saturation_plots(experiment, continuation_df):
            - Total MUFA = sum of all MUFA contributions from all PC species
            - Total PUFA = sum of all PUFA contributions from all PC species
         
-        **ðŸ“Š Statistical Analysis Features:**
+        **📊 Statistical Analysis Features:**
         
-        - **Two-Level Correction System**: Controls false discoveries across lipid classes Ã— fatty acid types, and pairwise comparisons within each fatty acid type
+        - **Two-Level Correction System**: Controls false discoveries across lipid classes × fatty acid types, and pairwise comparisons within each fatty acid type
         - **Auto Mode**: Intelligently selects corrections based on number of tests and conditions
         - **Rigorous Testing**: Uses Welch's t-test/ANOVA with log10 transformation as standard practice
         - **Error Bars**: Show standard deviation for proper biological interpretation
         - **Post-hoc Analysis**: Tukey's HSD for parametric or Bonferroni correction for non-parametric tests
         
-        **⚠️Â Important Notes:**
+        **⚠️  Important Notes:**
         
-        - **Sample Size**: Analysis requires â‰¥2 biological replicates per condition
+        - **Sample Size**: Analysis requires ≥2 biological replicates per condition
         - **Multiple Testing**: Saturation analysis tests 3 fatty acid types per lipid class, creating higher statistical burden
         - **Data Format Requirements**: This analysis **requires** detailed fatty acid composition for accuracy
         """)
         
         # Big note about data format requirements with examples
         st.warning("""
-        ⚠️Â **Critical Data Format Requirement**
+        ⚠️  **Critical Data Format Requirement**
         
         Saturation analysis requires detailed fatty acid composition to accurately classify chains. The analysis 
         works differently depending on your data format:
         
         **✓ Detailed Format (Accurate Analysis Possible):**
-        - `PC(16:0_18:1)` â†’ Individual chains visible: 16:0 (SFA) + 18:1 (MUFA)
-        - `PE(18:0_20:4)` â†’ Individual chains visible: 18:0 (SFA) + 20:4 (PUFA)
-        - `Cer(d18:1/24:0)` â†’ Individual chains visible: d18:1 (MUFA) + 24:0 (SFA)
+        - `PC(16:0_18:1)`  →  Individual chains visible: 16:0 (SFA) + 18:1 (MUFA)
+        - `PE(18:0_20:4)`  →  Individual chains visible: 18:0 (SFA) + 20:4 (PUFA)
+        - `Cer(d18:1/24:0)`  →  Individual chains visible: d18:1 (MUFA) + 24:0 (SFA)
         
-        **→— Consolidated Format (Inaccurate Analysis):**
-        - `PC(34:1)` â†’ Total only: 34 carbons, 1 double bond (distribution unknown)
-        - `PE(38:4)` â†’ Total only: 38 carbons, 4 double bonds (distribution unknown)
+        **— Consolidated Format (Inaccurate Analysis):**
+        - `PC(34:1)`  →  Total only: 34 carbons, 1 double bond (distribution unknown)
+        - `PE(38:4)`  →  Total only: 38 carbons, 4 double bonds (distribution unknown)
         - Could represent many different combinations of SFA/MUFA/PUFA
         
         **Mixed Datasets:**
@@ -3696,19 +3720,19 @@ def display_saturation_plots(experiment, continuation_df):
         """)
         
         # Statistical methodology sections (moved out of checkbox)
-        st.markdown("### ðŸ”¬ Statistical Testing Process")
+        st.markdown("### 💡 Statistical Testing Process")
         st.markdown("""
-        **ðŸ“Š The Process:**
+        **📊 The Process:**
         - **2 Conditions**: Test + Level 1 correction (if testing multiple classes)
         - **3+ Conditions**: Three-step process to control false discoveries:
           1. **Omnibus Test**: "Are there ANY differences among groups?"
-          2. **Level 1 Correction**: Control false discoveries across lipid classes Ã— fatty acid types
+          2. **Level 1 Correction**: Control false discoveries across lipid classes × fatty acid types
           3. **Level 2 Post-hoc**: "Which specific pairs differ?"
         """)
         
-        st.markdown("### ðŸŽ¯ Two-Level Statistical Control")
+        st.markdown("### 🎯 Two-Level Statistical Control")
         st.markdown("""
-        **ðŸ·ï¸Â Level 1 - Between Class/FA Type Correction** (Applied to all analyses)
+        **🏷️  Level 1 - Between Class/FA Type Correction** (Applied to all analyses)
         
         | Choice | When to Use |
         |--------|-------------|
@@ -3716,7 +3740,7 @@ def display_saturation_plots(experiment, continuation_df):
         | **FDR** | Exploring multiple classes (balances discovery with false positive control) |
         | **Bonferroni** | Confirmatory studies where false positives are very costly |
         
-        **ðŸ” Level 2 - Within Class/FA Type Correction** (For 3+ conditions only)
+        **📍 Level 2 - Within Class/FA Type Correction** (For 3+ conditions only)
         
         | Choice | When to Use |
         |--------|-------------|
@@ -3724,16 +3748,16 @@ def display_saturation_plots(experiment, continuation_df):
         | **Standard** | Balanced approach: Tukey's HSD (parametric) or Bonferroni (non-parametric) |
         | **Bonferroni All** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
         
-        **ðŸ’¡ Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
+        **💡 Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
         """)
         
-        st.markdown("### ðŸ¤– Auto Mode Logic")
+        st.markdown("### 🤖 Auto Mode Logic")
         st.markdown("""
         - **Test Selection**: Always uses parametric tests (Welch's t-test/ANOVA) appropriate for typical lipidomics sample sizes
         - **Automatic Log Transformation**: Standard practice in lipidomics
         - **Smart Corrections**: 
-          * Level 1: Single class â†’ Uncorrected | Multiple classes â†’ FDR 
-          * Level 2: â‰¤2 conditions â†’ No post-hoc | 3-4 conditions â†’ Standard | 5+ conditions â†’ Conservative Bonferroni
+          * Level 1: Single class  →  Uncorrected | Multiple classes  →  FDR 
+          * Level 2: ≤2 conditions  →  No post-hoc | 3-4 conditions  →  Standard | 5+ conditions  →  Conservative Bonferroni
         """)
         
         st.markdown("---")
@@ -3775,7 +3799,7 @@ def display_saturation_plots(experiment, continuation_df):
             
             if consolidated_lipids_dict:
                 st.markdown("---")
-                st.subheader("⚠️Â Consolidated Format Lipids Detected")
+                st.subheader("⚠️  Consolidated Format Lipids Detected")
                 st.markdown("""
                 **Important:** Your dataset contains lipids in consolidated format (e.g., `PC(34:1)`) 
                 mixed with detailed format (e.g., `PC(16:0_18:1)`). Consolidated format lipids cannot 
@@ -3966,7 +3990,7 @@ def display_pathway_visualization(experiment, continuation_df):
     with st.expander("Class Level Breakdown - Pathway Visualization"):
         # Add the critical data format requirement warning
         st.warning("""
-        ⚠️Â **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
+        ⚠️  **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
         (e.g., PC(16:0_18:1)) vs. total composition (e.g., PC(34:1)). If your dataset uses total composition format, 
         the saturation analysis may be less accurate as it cannot precisely identify individual fatty acid chains.
         """)
@@ -3976,7 +4000,7 @@ def display_pathway_visualization(experiment, continuation_df):
         
         if not has_detailed_fa:
             st.warning("""
-            ⚠️Â Note: The pathway visualization works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            ⚠️  Note: The pathway visualization works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
             Your data appears to use total composition (e.g., PC(34:1)), which may affect the accuracy of the 
             saturation ratio calculations (shown by the color scale). The circle sizes (showing abundance) 
             remain accurate.
@@ -4011,7 +4035,7 @@ def display_pathway_visualization(experiment, continuation_df):
            - For each lipid molecule (e.g., PC(16:0_18:1)), the number of saturated and unsaturated fatty acid chains is counted:
              * Chains with 0 double bonds (e.g., 16:0) are counted as saturated
              * Chains with 1+ double bonds (e.g., 18:1) are counted as unsaturated
-           - The saturation ratio is calculated as: number of saturated chains Ã· total number of chains
+           - The saturation ratio is calculated as: number of saturated chains ÷ total number of chains
            - This ratio ranges from 0 (all unsaturated) to 1 (all saturated)
         """)
         st.markdown("---")
@@ -4109,8 +4133,8 @@ def display_volcano_statistical_options():
             options=["parametric", "non_parametric"],
             index=0,  # Default to parametric
             help="""
-            â€¢ Parametric: Welch's t-test (assumes log-normal distribution after transformation)
-            â€¢ Non-parametric: Mann-Whitney U (more conservative, no distribution assumptions)
+            • Parametric: Welch's t-test (assumes log-normal distribution after transformation)
+            • Non-parametric: Mann-Whitney U (more conservative, no distribution assumptions)
             """
         )
         
@@ -4120,9 +4144,9 @@ def display_volcano_statistical_options():
             options=["uncorrected", "fdr_bh", "bonferroni"],
             index=0,  # Default to uncorrected
             help="""
-            â€¢ Uncorrected: No correction (good for targeted hypothesis testing)
-            â€¢ FDR (Benjamini-Hochberg): Controls false discovery rate (recommended for exploratory analysis)
-            â€¢ Bonferroni: Conservative, controls family-wise error rate (very strict)
+            • Uncorrected: No correction (good for targeted hypothesis testing)
+            • FDR (Benjamini-Hochberg): Controls false discovery rate (recommended for exploratory analysis)
+            • Bonferroni: Conservative, controls family-wise error rate (very strict)
             """
         )
 
@@ -4139,20 +4163,20 @@ def display_volcano_statistical_options():
     
     # Show current settings
     st.markdown("---")
-    st.markdown("### ðŸ“‹ Current Settings Summary")
+    st.markdown("### 🔬 Current Settings Summary")
     
     col1, col2 = st.columns(2)
     with col1:
         st.write(f"- **Test Type**: {test_type.title()}")
         st.write(f"- **Correction**: {correction_method.upper().replace('_', '-')}")
     with col2:
-        st.write(f"- **Significance**: Î± = {alpha}")
+        st.write(f"- **Significance**: α = {alpha}")
         st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
     
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️Â **Critical for Hypothesis Testing**: The volcano plot tests each individual lipid species for 
+    ⚠️  **Critical for Hypothesis Testing**: The volcano plot tests each individual lipid species for 
     significant changes between conditions. When testing many lipids simultaneously, multiple testing 
     corrections become crucial to control false discoveries.
     
@@ -4181,13 +4205,13 @@ def apply_volcano_auto_mode_logic(n_lipids_tested):
     # Auto correction method based on number of tests
     if n_lipids_tested <= 10:
         auto_correction_method = "uncorrected"
-        auto_rationale = "Few lipids (â‰¤10) â†’ no correction needed"
+        auto_rationale = "Few lipids (≤10)  →  no correction needed"
     elif n_lipids_tested <= 50:
         auto_correction_method = "fdr_bh"
-        auto_rationale = "Moderate number of lipids â†’ FDR balances discovery and control"
+        auto_rationale = "Moderate number of lipids  →  FDR balances discovery and control"
     else:
         auto_correction_method = "fdr_bh"  # Still use FDR for large numbers
-        auto_rationale = "Many lipids â†’ FDR recommended for exploration"
+        auto_rationale = "Many lipids  →  FDR recommended for exploration"
     
     return {
         'correction_method': auto_correction_method,
@@ -4231,7 +4255,7 @@ def display_volcano_detailed_statistical_results(statistical_results, control_co
                 'p-value': f"{p_value:.2e}",
                 'Adj. p-value': f"{adj_p_value:.2e}",
                 'Test': results['test'],
-                'Significant': '✓' if results['significant'] else '→—'
+                'Significant': '✓' if results['significant'] else '—'
             }
             results_data.append(result_row)
         
@@ -4285,7 +4309,7 @@ def display_volcano_plot(experiment, continuation_df):
         st.markdown("""
         The volcano plot provides rigorous statistical analysis for identifying significantly altered lipid species between two experimental conditions.
 
-        **ðŸ”¬ Statistical Process:**
+        **💡 Statistical Process:**
 
         - **Welch's t-test**: Default parametric test that doesn't assume equal variances between groups
         - **Mann-Whitney U**: Non-parametric alternative for conservative analysis
@@ -4295,7 +4319,7 @@ def display_volcano_plot(experiment, continuation_df):
         - **Data Preprocessing**: Log10 transformation applied to normalize skewed lipidomics data
         - **Individual Testing**: Each lipid species tested independently
 
-        **ðŸŽ¯ What the Plot Shows:**
+        **🎯 What the Plot Shows:**
 
         - **X-axis (Log2 Fold Change)**: Magnitude and direction of change between experimental and control conditions
           - **Calculation**: Log2(Mean_Experimental / Mean_Control)
@@ -4306,7 +4330,7 @@ def display_volcano_plot(experiment, continuation_df):
         - **Y-axis**: -log10(adjusted p-value) when correction is applied, -log10(p-value) when uncorrected
         - **Red Dashed Lines**: Configurable significance (horizontal) and biological significance (vertical) thresholds
 
-        **⚠️Â Non-Parametric Test Note:**
+        **⚠️  Non-Parametric Test Note:**
 
         Mann-Whitney U tests with small sample sizes (n=3-6 per group) often produce identical p-values for many lipids,
         creating horizontal lines in the volcano plot. This is expected behavior due to the discrete nature of rank-based
@@ -4716,8 +4740,8 @@ def display_volcano_plot(experiment, continuation_df):
                         st.write("**Exclusion Reasons Summary:**")
                         for reason, count in exclusion_summary.items():
                             st.write(f"- {reason}: {count} lipids")
-                        st.success("→… No lipids were excluded from the analysis!")
-                        st.success("→… No lipids were excluded from the analysis!")
+                        st.success("→ No lipids were excluded from the analysis!")
+                        st.success("→ No lipids were excluded from the analysis!")
 
                 except Exception as e:
                     st.error(f"Error generating volcano plot: {str(e)}")
@@ -4932,7 +4956,7 @@ def display_fach_heatmaps(experiment, continuation_df):
         has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
         if not has_detailed_fa:
             st.warning("""
-            ⚠️Â Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            ⚠️  Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
             Your data appears to use total composition (e.g., PC(34:1)), which may affect accuracy.
             """)
         
