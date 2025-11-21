@@ -1078,7 +1078,6 @@ def manage_internal_standards(normalizer):
                 **Instructions:**
                 - Upload a CSV with:
                   - 1st column: Lipid molecule names
-                  - 2nd column: Lipid class names
                   - Remaining columns: Intensity values (one column per sample)
                 - The number of intensity columns must match your main dataset sample count
                 - Column names will be automatically standardized
@@ -2013,7 +2012,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
                     st.session_state.heatmap_fig, st.session_state.correlation_plots,
                     st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts,
                     st.session_state.saturation_plots, st.session_state.volcano_plots,
-                    st.session_state.pathway_visualization
+                    st.session_state.pathway_visualization, st.session_state.fach_plots
                 )
             if pdf_buffer:
                 st.success("PDF report generated successfully!")
