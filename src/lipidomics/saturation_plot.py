@@ -24,7 +24,8 @@ class SaturationPlot:
         """
         try:
             parts = mol_structure.split('(')[1][:-1].split('_')
-            fatty_acids = [fa.split(':')[-1] for fa in parts]
+            # Extract double bond count, stripping ;XO hydroxyl notation (e.g., ;2O, ;3O)
+            fatty_acids = [fa.split(':')[-1].split(';')[0] for fa in parts]
             ratios = [fatty_acids.count(x) for x in ['0', '1']]
             pufa_ratio = len(fatty_acids) - sum(ratios)
             ratios.append(pufa_ratio)

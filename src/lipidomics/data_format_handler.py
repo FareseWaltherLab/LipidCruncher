@@ -28,9 +28,6 @@ class DataFormatHandler:
             
             lipid_name = str(lipid_name).strip()
             
-            # Remove all ;N suffixes
-            lipid_name = re.sub(r';[0-9]+(?=[\s/_)]|$)', '', lipid_name)
-            
             # Extract deuteration or other modifications if present
             modification = ""
             mod_match = re.search(r'\(d\d+\)', lipid_name)
