@@ -10,16 +10,34 @@ class DataFormatHandler:
     All formats are standardized to use intensity[sample_name] columns.
     """
     
+    # MS-DIAL known metadata columns (to exclude from sample detection)
+    MSDIAL_METADATA_COLUMNS = {
+        'Alignment ID', 'Average Rt(min)', 'Average Mz', 'Metabolite name',
+        'Adduct type', 'Post curation result', 'Fill %', 'MS/MS assigned',
+        'Reference RT', 'Reference m/z', 'Formula', 'Ontology', 'INCHIKEY',
+        'SMILES', 'Annotation tag', 'Annotation tag (VS1.0)', 'RT matched', 
+        'm/z matched', 'MS/MS matched', 'Comment', 'Manually modified',
+        'Isotope tracking parent ID', 'Isotope tracking weight number',
+        'Total score', 'RT similarity', 'Dot product', 'Reverse dot product',
+        'Fragment presence %', 'S/N average', 'Spectrum reference file name',
+        'MS1 isotopic spectrum', 'MS/MS spectrum', 'Lipid IS'
+    }
+    
     @staticmethod
     def _standardize_lipid_name(lipid_name):
         """
         Standardizes lipid names to a consistent format: Class(chain details)(modifications)
+        
+        Preserves hydroxyl notation (;O, ;2O, ;3O) which is biologically meaningful.
+        
         Examples:
             LPC O-17:4 -> LPC(O-17:4)
             Cer d18:0/C24:0 -> Cer(d18:0_C24:0)
             CE 14:0;0 -> CE(14:0)
             LPC 18:1(d7) -> LPC(18:1)(d7)
             CerG1(d13:0_25:2) -> CerG1(d13:0_25:2)
+            Cer 18:1;2O/24:0 -> Cer(18:1;2O_24:0)  # MS-DIAL format with hydroxyl
+            Cer 18:0;3O/24:0;(2OH) -> Cer(18:0;3O_24:0;(2OH))  # Complex hydroxylation
         """
         try:
             # Strip any whitespace and handle empty/null cases
@@ -28,26 +46,57 @@ class DataFormatHandler:
             
             lipid_name = str(lipid_name).strip()
             
-            # Extract deuteration or other modifications if present
+            # Remove ;N suffixes ONLY when N is a plain number (not followed by O)
+            # This preserves ;2O, ;3O (hydroxyl groups) but removes ;0, ;1, etc.
+            # Pattern: semicolon + digits + NOT followed by 'O'
+            lipid_name = re.sub(r';(\d+)(?!O)(?=[\s/_)]|$)', '', lipid_name)
+            
+            # Extract deuteration modifications like (d7), (d9) at the END of the name
             modification = ""
-            mod_match = re.search(r'\(d\d+\)', lipid_name)
+            mod_match = re.search(r'\(d\d+\)$', lipid_name)
             if mod_match:
                 modification = mod_match.group()
-                lipid_name = lipid_name.replace(modification, '').strip()
+                lipid_name = lipid_name[:mod_match.start()].strip()
             
-            # If already in standard format Class(chains), just clean up the separators
-            if '(' in lipid_name and ')' in lipid_name:
-                class_name = lipid_name[:lipid_name.find('(')]
-                chain_info = lipid_name[lipid_name.find('(')+1:lipid_name.find(')')]
+            # Check if already in standard format Class(chains) 
+            # BUT be careful with embedded parentheses like ;(2OH)
+            # We check if there's a ( that comes BEFORE any chain info indicators
+            first_paren = lipid_name.find('(')
+            first_space = lipid_name.find(' ')
+            first_colon = lipid_name.find(':')
+            
+            # If lipid already has parentheses around chain info (not embedded like ;(2OH))
+            # Standard format: Class(chains) where ( appears before : or at start of chain info
+            if first_paren > 0 and (first_colon < 0 or first_paren < first_colon):
+                # Already has parentheses that look like class wrapper
+                class_name = lipid_name[:first_paren]
+                # Find the matching closing paren
+                paren_depth = 0
+                chain_end = first_paren
+                for i in range(first_paren, len(lipid_name)):
+                    if lipid_name[i] == '(':
+                        paren_depth += 1
+                    elif lipid_name[i] == ')':
+                        paren_depth -= 1
+                        if paren_depth == 0:
+                            chain_end = i
+                            break
+                chain_info = lipid_name[first_paren+1:chain_end]
+                # Get any trailing info (like additional modifications)
+                trailing = lipid_name[chain_end+1:].strip()
                 # Convert separators to underscore
                 chain_info = chain_info.replace('/', '_')
                 result = f"{class_name}({chain_info})"
+                if trailing:
+                    result = f"{result}{trailing}"
             else:
-                # Handle space-separated format
-                if ' ' in lipid_name:
-                    parts = lipid_name.split(maxsplit=1)
-                    class_name = parts[0]
-                    chain_info = parts[1]
+                # Handle space-separated format (common in MS-DIAL)
+                # Format: "Class chain1/chain2" or "Class chain1/chain2;(mod)"
+                if first_space > 0:
+                    class_name = lipid_name[:first_space]
+                    chain_info = lipid_name[first_space+1:]
+                    # Convert / to _ for chain separation
+                    chain_info = chain_info.replace('/', '_')
                     result = f"{class_name}({chain_info})"
                 else:
                     # If no obvious separation, try to find where class name ends
@@ -55,7 +104,10 @@ class DataFormatHandler:
                     if match:
                         class_name, chain_info = match.groups()
                         chain_info = chain_info.replace('/', '_')
-                        result = f"{class_name}({chain_info})"
+                        if chain_info:
+                            result = f"{class_name}({chain_info})"
+                        else:
+                            result = class_name
                     else:
                         result = lipid_name
             
@@ -94,7 +146,7 @@ class DataFormatHandler:
         
         Args:
             df (pd.DataFrame or str): Input dataframe or raw text for Metabolomics Workbench
-            data_format (str): 'lipidsearch', 'generic', or 'metabolomics_workbench'
+            data_format (str): 'lipidsearch', 'generic', 'metabolomics_workbench', or 'msdial'
             
         Returns:
             tuple: (standardized_df, success, message)
@@ -115,6 +167,12 @@ class DataFormatHandler:
                     standardized_df = DataFormatHandler._standardize_metabolomics_workbench(df)
                 else:
                     return None, False, "Invalid input type for Metabolomics Workbench format"
+            
+            elif data_format == 'msdial':
+                success, message = DataFormatHandler._validate_msdial(df)
+                if not success:
+                    return None, False, message
+                standardized_df = DataFormatHandler._standardize_msdial(df)
                 
             else:  # generic format
                 success, message = DataFormatHandler._validate_generic(df)
@@ -165,6 +223,381 @@ class DataFormatHandler:
             return False, "First column doesn't appear to contain lipid names (no letters found)."
             
         return True, "Valid generic format"
+    
+    # =========================================================================
+    # MS-DIAL Format Methods
+    # =========================================================================
+    
+    @staticmethod
+    def _detect_msdial_header_row(df):
+        """
+        Auto-detect where the actual data headers start in MS-DIAL format.
+        
+        MS-DIAL exports have metadata rows at the top (variable number, often 1-9)
+        containing sample-level info like Category, Tissue, Genotype, etc.
+        The actual column headers appear in the row where 'Alignment ID' is found
+        as text, followed by data rows with numeric Alignment IDs.
+        
+        Returns:
+            int: Index of the header row (0-based), or 0 if no metadata detected
+        """
+        # Check if first column header is already 'Alignment ID' (no metadata rows)
+        if df.columns[0] == 'Alignment ID':
+            return -1  # Headers are already in column names, no extra header row
+        
+        # Scan rows to find where headers are
+        for idx in range(min(20, len(df))):  # Check first 20 rows max
+            row = df.iloc[idx]
+            first_val = str(row.iloc[0]).strip()
+            
+            # The header row will have "Alignment ID" as text in first column
+            if first_val == 'Alignment ID':
+                return idx
+            
+            # Alternative: check for 'Metabolite name' which is more unique
+            if 'Metabolite name' in row.values:
+                return idx
+        
+        # If we didn't find explicit headers, check if data looks valid already
+        # (i.e., first row might be data if columns are correct)
+        return -1  # Assume no metadata header rows
+    
+    @staticmethod
+    def _detect_msdial_sample_columns(df, columns=None):
+        """
+        Detect sample intensity columns in MS-DIAL data.
+        
+        Sample columns are those that:
+        1. Are NOT in the known metadata columns set
+        2. Contain numeric data
+        3. Are NOT the 'Lipid IS' column or columns after it (if normalized data exists)
+        
+        Args:
+            df: DataFrame to analyze
+            columns: Optional list of column names (if different from df.columns)
+            
+        Returns:
+            tuple: (raw_sample_cols, normalized_sample_cols, lipid_is_col_idx)
+        """
+        if columns is None:
+            columns = df.columns.tolist()
+        
+        raw_sample_cols = []
+        normalized_sample_cols = []
+        lipid_is_idx = None
+        
+        # Find the 'Lipid IS' column which separates raw and normalized data
+        for idx, col in enumerate(columns):
+            if col == 'Lipid IS':
+                lipid_is_idx = idx
+                break
+        
+        # Iterate through columns and classify them
+        for idx, col in enumerate(columns):
+            # Skip known metadata columns
+            if col in DataFormatHandler.MSDIAL_METADATA_COLUMNS:
+                continue
+            
+            # Skip 'Lipid IS' column itself
+            if col == 'Lipid IS':
+                continue
+                
+            # Check if column contains numeric data (sample intensity)
+            if idx < len(df.columns):
+                col_data = df[col] if col in df.columns else None
+                if col_data is not None:
+                    # Try to determine if this is a sample column
+                    # Sample columns should have mostly numeric values
+                    try:
+                        numeric_count = pd.to_numeric(col_data, errors='coerce').notna().sum()
+                        if numeric_count > len(col_data) * 0.5:  # >50% numeric
+                            if lipid_is_idx is not None:
+                                if idx < lipid_is_idx:
+                                    raw_sample_cols.append(col)
+                                elif idx > lipid_is_idx:
+                                    normalized_sample_cols.append(col)
+                            else:
+                                # No Lipid IS column found, assume all are raw
+                                raw_sample_cols.append(col)
+                    except:
+                        pass
+        
+        return raw_sample_cols, normalized_sample_cols, lipid_is_idx
+    
+    @staticmethod
+    def _validate_msdial(df):
+        """
+        Validates MS-DIAL format with flexible column detection.
+        
+        Required: 
+            - Metabolite name column (or similar lipid identifier)
+            - At least one sample intensity column
+            
+        Optional (will use if present, gracefully degrade if not):
+            - Ontology (for ClassKey)
+            - Total score, MS/MS matched (for quality filtering)
+            - Average Rt(min), Average Mz (for additional info)
+        
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            # First, detect if there are metadata header rows
+            header_row_idx = DataFormatHandler._detect_msdial_header_row(df)
+            
+            # Get the actual column names
+            if header_row_idx >= 0:
+                # Headers are in a data row, need to extract them
+                actual_columns = df.iloc[header_row_idx].tolist()
+            else:
+                # Headers are already the column names
+                actual_columns = df.columns.tolist()
+            
+            # Check for lipid name column (required)
+            lipid_col = None
+            possible_lipid_cols = ['Metabolite name', 'Metabolite', 'Name', 'Lipid', 'LipidMolec']
+            
+            for col_name in possible_lipid_cols:
+                if col_name in actual_columns:
+                    lipid_col = col_name
+                    break
+            
+            if lipid_col is None:
+                return False, "No lipid name column found. Expected 'Metabolite name' or similar column."
+            
+            # Detect sample columns
+            # For validation, we need to work with the actual data
+            if header_row_idx >= 0:
+                # Create a temporary df with correct headers for analysis
+                temp_df = df.iloc[header_row_idx + 1:].copy()
+                temp_df.columns = actual_columns
+            else:
+                temp_df = df
+            
+            raw_samples, norm_samples, _ = DataFormatHandler._detect_msdial_sample_columns(
+                temp_df, actual_columns
+            )
+            
+            total_samples = len(raw_samples) + len(norm_samples)
+            if total_samples < 1:
+                return False, "No sample intensity columns detected. Check that your export includes sample data."
+            
+            # Build info about available optional columns for later use
+            available_features = {
+                'has_ontology': 'Ontology' in actual_columns,
+                'has_quality_score': 'Total score' in actual_columns,
+                'has_msms_matched': 'MS/MS matched' in actual_columns,
+                'has_rt': 'Average Rt(min)' in actual_columns,
+                'has_mz': 'Average Mz' in actual_columns,
+                'has_normalized_data': len(norm_samples) > 0,
+                'lipid_column': lipid_col,
+                'raw_sample_columns': raw_samples,
+                'normalized_sample_columns': norm_samples,
+                'header_row_index': header_row_idx,
+                'actual_columns': actual_columns
+            }
+            
+            # Store for use in standardization
+            st.session_state.msdial_features = available_features
+            
+            # Build informative message
+            msg_parts = [f"Valid MS-DIAL format: {len(raw_samples)} samples detected"]
+            if len(norm_samples) > 0:
+                msg_parts.append(f"(+ {len(norm_samples)} normalized columns available)")
+            if not available_features['has_ontology']:
+                msg_parts.append("Note: No 'Ontology' column - ClassKey will be inferred from lipid names")
+            if not available_features['has_quality_score']:
+                msg_parts.append("Note: No 'Total score' column - quality filtering unavailable")
+            
+            return True, " | ".join(msg_parts)
+            
+        except Exception as e:
+            return False, f"MS-DIAL validation error: {str(e)}"
+    
+    @staticmethod
+    def _standardize_msdial(df):
+        """
+        Standardizes MS-DIAL format to LipidCruncher standard format.
+        
+        Transforms:
+            - Metabolite name -> LipidMolec (with standardized naming)
+            - Ontology -> ClassKey (or inferred from lipid name)
+            - Average Rt(min) -> BaseRt
+            - Average Mz -> CalcMass
+            - Sample columns -> intensity[s1], intensity[s2], etc.
+            
+        Returns:
+            pd.DataFrame: Standardized dataframe
+        """
+        try:
+            # Retrieve the features detected during validation
+            features = st.session_state.get('msdial_features', {})
+            
+            header_row_idx = features.get('header_row_index', -1)
+            actual_columns = features.get('actual_columns', df.columns.tolist())
+            lipid_col = features.get('lipid_column', 'Metabolite name')
+            raw_sample_cols = features.get('raw_sample_columns', [])
+            norm_sample_cols = features.get('normalized_sample_columns', [])
+            
+            # Skip metadata rows if present and set proper headers
+            if header_row_idx >= 0:
+                # Store metadata for potential future use
+                metadata_df = df.iloc[:header_row_idx].copy()
+                st.session_state.msdial_metadata = metadata_df
+                
+                # Get actual data rows
+                data_df = df.iloc[header_row_idx + 1:].copy()
+                data_df.columns = actual_columns
+            else:
+                data_df = df.copy()
+            
+            # Reset index
+            data_df = data_df.reset_index(drop=True)
+            
+            # Determine which sample columns to use
+            # Check session state for user preference (if set by UI)
+            use_normalized = st.session_state.get('msdial_use_normalized', False)
+            
+            if use_normalized and len(norm_sample_cols) > 0:
+                sample_cols_to_use = norm_sample_cols
+                st.session_state.msdial_data_type = 'normalized'
+            else:
+                sample_cols_to_use = raw_sample_cols
+                st.session_state.msdial_data_type = 'raw'
+            
+            # Build the standardized dataframe
+            standardized_data = {}
+            
+            # LipidMolec - standardize lipid names
+            if lipid_col in data_df.columns:
+                standardized_data['LipidMolec'] = data_df[lipid_col].apply(
+                    DataFormatHandler._standardize_lipid_name
+                )
+            else:
+                return pd.DataFrame()  # Critical column missing
+            
+            # ClassKey - use Ontology if available, otherwise infer
+            if features.get('has_ontology', False) and 'Ontology' in data_df.columns:
+                standardized_data['ClassKey'] = data_df['Ontology'].fillna('Unknown')
+            else:
+                # Infer from standardized lipid names
+                standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(
+                    DataFormatHandler._infer_class_key
+                )
+            
+            # Optional columns
+            if features.get('has_rt', False) and 'Average Rt(min)' in data_df.columns:
+                standardized_data['BaseRt'] = pd.to_numeric(
+                    data_df['Average Rt(min)'], errors='coerce'
+                )
+            
+            if features.get('has_mz', False) and 'Average Mz' in data_df.columns:
+                standardized_data['CalcMass'] = pd.to_numeric(
+                    data_df['Average Mz'], errors='coerce'
+                )
+            
+            # Store quality columns for potential filtering (but don't include in main df)
+            if features.get('has_quality_score', False) and 'Total score' in data_df.columns:
+                st.session_state.msdial_quality_scores = pd.to_numeric(
+                    data_df['Total score'], errors='coerce'
+                )
+            
+            if features.get('has_msms_matched', False) and 'MS/MS matched' in data_df.columns:
+                st.session_state.msdial_msms_matched = data_df['MS/MS matched'].apply(
+                    lambda x: str(x).upper() == 'TRUE'
+                )
+            
+            # Sample intensity columns - rename to standard format
+            column_mapping = {}
+            for i, col in enumerate(sample_cols_to_use, 1):
+                new_col_name = f'intensity[s{i}]'
+                if col in data_df.columns:
+                    standardized_data[new_col_name] = pd.to_numeric(
+                        data_df[col], errors='coerce'
+                    ).fillna(0)
+                    column_mapping[col] = new_col_name
+            
+            # Create the standardized dataframe
+            result_df = pd.DataFrame(standardized_data)
+            
+            # Store column mapping for reference
+            mapping_df = pd.DataFrame({
+                'original_name': list(column_mapping.keys()),
+                'standardized_name': list(column_mapping.values())
+            })
+            st.session_state.column_mapping = mapping_df
+            st.session_state.n_intensity_cols = len(sample_cols_to_use)
+            
+            # Store original sample names for grouping UI
+            st.session_state.msdial_sample_names = {
+                f's{i}': col for i, col in enumerate(sample_cols_to_use, 1)
+            }
+            
+            return result_df
+            
+        except Exception as e:
+            st.error(f"Error standardizing MS-DIAL data: {str(e)}")
+            return pd.DataFrame()
+    
+    @staticmethod
+    def get_msdial_quality_filter_options():
+        """
+        Returns available quality filtering options for MS-DIAL data.
+        Call this after validation to determine what UI options to show.
+        
+        Returns:
+            dict: Available filtering options and their status
+        """
+        features = st.session_state.get('msdial_features', {})
+        
+        return {
+            'quality_filtering_available': features.get('has_quality_score', False),
+            'msms_filtering_available': features.get('has_msms_matched', False),
+            'normalized_data_available': features.get('has_normalized_data', False),
+            'raw_sample_count': len(features.get('raw_sample_columns', [])),
+            'normalized_sample_count': len(features.get('normalized_sample_columns', []))
+        }
+    
+    @staticmethod
+    def apply_msdial_quality_filter(df, min_score=None, require_msms=False):
+        """
+        Apply quality filtering to MS-DIAL data.
+        
+        Args:
+            df: Standardized dataframe
+            min_score: Minimum Total score threshold (0-100)
+            require_msms: If True, only keep rows where MS/MS matched is TRUE
+            
+        Returns:
+            pd.DataFrame: Filtered dataframe
+        """
+        mask = pd.Series([True] * len(df))
+        
+        # Apply score filter
+        if min_score is not None:
+            quality_scores = st.session_state.get('msdial_quality_scores')
+            if quality_scores is not None and len(quality_scores) == len(df):
+                mask = mask & (quality_scores >= min_score)
+        
+        # Apply MS/MS filter
+        if require_msms:
+            msms_matched = st.session_state.get('msdial_msms_matched')
+            if msms_matched is not None and len(msms_matched) == len(df):
+                mask = mask & msms_matched
+        
+        filtered_df = df[mask].reset_index(drop=True)
+        
+        # Also filter the quality columns in session state
+        if 'msdial_quality_scores' in st.session_state:
+            st.session_state.msdial_quality_scores = st.session_state.msdial_quality_scores[mask].reset_index(drop=True)
+        if 'msdial_msms_matched' in st.session_state:
+            st.session_state.msdial_msms_matched = st.session_state.msdial_msms_matched[mask].reset_index(drop=True)
+        
+        return filtered_df
+
+    # =========================================================================
+    # Existing Format Methods (LipidSearch, Generic, Metabolomics Workbench)
+    # =========================================================================
     
     @staticmethod
     def _standardize_lipidsearch(df):
