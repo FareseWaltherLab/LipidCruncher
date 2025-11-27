@@ -73,9 +73,17 @@ def initialize_session_state():
     if 'page' not in st.session_state:
         st.session_state.page = 'landing'
     
-    # NEW: Grade configuration state
+    # Grade configuration state (LipidSearch)
     if 'grade_config' not in st.session_state:
         st.session_state.grade_config = None
+    
+    # MS-DIAL configuration states
+    if 'msdial_quality_config' not in st.session_state:
+        st.session_state.msdial_quality_config = None
+    if 'msdial_features' not in st.session_state:
+        st.session_state.msdial_features = {}
+    if 'msdial_use_normalized' not in st.session_state:
+        st.session_state.msdial_use_normalized = False
 
 def display_landing_page():
     """Display the LipidCruncher landing page with enhanced module explanations."""
@@ -104,7 +112,7 @@ def display_landing_page():
 
     st.subheader("Key Features")
     st.markdown("""
-    - **Versatile Data Input**: Import datasets from LipidSearch, Metabolomics Workbench, or generic CSV formats.
+    - **Versatile Data Input**: Import datasets from LipidSearch, MS-DIAL, Metabolomics Workbench, or generic CSV formats.
     - **Robust Processing**: Standardize, filter, and normalize data with options tailored to your experiment.
     - **Rigorous Quality Control**: Ensure data integrity with diagnostic tools like box plots, CoV analysis, and PCA.
     - **Advanced Visualizations**: Gain insights through interactive volcano plots, heatmaps, and pathway maps.
@@ -118,7 +126,7 @@ def display_landing_page():
 
     st.markdown("**Module 1: Data Input, Standardization, Filtering, and Normalization**")
     st.markdown("""
-    - **Data Input**: Import data in flexible formats, including generic CSV, LipidSearch, and Metabolomics Workbench.
+    - **Data Input**: Import data in flexible formats, including generic CSV, LipidSearch, MS-DIAL, and Metabolomics Workbench.
     - **Standardization**: Automatically align column naming for consistency across datasets.
     - **Filtering**: Clean data by removing empty rows, duplicates, and replacing null values with zeros.
     - **Normalization**: Choose from four options: no normalization, internal standard-based, protein-based, or combined internal standard and protein normalization.
@@ -242,7 +250,7 @@ def main():
         if uploaded_file:
             df = load_and_validate_data(uploaded_file, data_format)
             if df is not None:
-                if data_format == 'Generic Format':
+                if data_format in ['Generic Format', 'MS-DIAL']:
                     display_column_mapping()
                 
                 confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, data_format)
@@ -258,17 +266,27 @@ def main():
                         if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
                             st.subheader("Data Standardization, Filtering, and Normalization Module")
                             
-                            # NEW: Grade filtering UI embedded in the cleaning section for LipidSearch
+                            # Quality filtering configuration (format-specific)
                             grade_config = None
+                            quality_config = None
+                            
                             if data_format == 'LipidSearch 5.0':
-                                # Show grade filtering UI in its own section before cleaning
+                                # Show grade filtering UI for LipidSearch
                                 with st.expander("Configure Grade Filtering (LipidSearch Only)", expanded=False):
                                     grade_config = get_grade_filtering_config(df_to_clean, data_format)
                                     st.session_state.grade_config = grade_config
                             
-                            # Pass grade_config to clean_data
+                            elif data_format == 'MS-DIAL':
+                                # Show quality filtering UI for MS-DIAL
+                                with st.expander("Configure MS-DIAL Data Options", expanded=True):
+                                    quality_config = get_msdial_quality_config()
+                                    st.session_state.msdial_quality_config = quality_config
+                            
+                            # Pass config to clean_data
                             cleaned_df, intsta_df = clean_data(
-                                df_to_clean, name_df, experiment, data_format, grade_config
+                                df_to_clean, name_df, experiment, data_format, 
+                                grade_config=grade_config,
+                                quality_config=quality_config
                             )
                             
                             if cleaned_df is not None:
@@ -384,7 +402,11 @@ def clear_session_state():
     st.session_state.continuation_df = None
     st.session_state.experiment = None
     st.session_state.format_type = None
-    st.session_state.grade_config = None  # NEW: Clear grade config
+    st.session_state.grade_config = None  # Clear LipidSearch grade config
+    # Clear MS-DIAL specific states
+    st.session_state.msdial_quality_config = None
+    st.session_state.msdial_features = {}
+    st.session_state.msdial_use_normalized = False
     
 def update_session_state(name_df, experiment, bqc_label):
     """
@@ -436,7 +458,7 @@ def update_session_state(name_df, experiment, bqc_label):
 def display_format_selection():
     return st.sidebar.selectbox(
         'Select Data Format',
-        ['Generic Format', 'Metabolomics Workbench', 'LipidSearch 5.0']
+        ['Generic Format', 'Metabolomics Workbench', 'LipidSearch 5.0', 'MS-DIAL']
     )
 
 def display_format_requirements(data_format):
@@ -488,6 +510,32 @@ def display_format_requirements(data_format):
         For instance, if your dataset comprises 10 samples, you should have the following columns: 
         MeanArea[s1], MeanArea[s2], ..., MeanArea[s10] for each respective sample intensity.
         """)
+    elif data_format == 'MS-DIAL':
+        st.info("""
+        **Dataset Requirements for MS-DIAL Format**
+        
+        Export your data from MS-DIAL using: **Export → Alignment Result → CSV format**
+        
+        **Required column:**
+        * `Metabolite name`: Lipid/metabolite identifiers
+        
+        **Optional columns (recommended for full functionality):**
+        * `Ontology`: Lipid class information (used for ClassKey)
+        * `Total score`: Quality score for filtering (0-100)
+        * `MS/MS matched`: Whether MS/MS spectrum was matched (TRUE/FALSE)
+        * `Average Rt(min)`: Retention time
+        * `Average Mz`: Mass-to-charge ratio
+        
+        **Sample columns:**
+        * Sample intensity columns are automatically detected
+        * If your export includes both raw and normalized data (separated by 'Lipid IS' column), 
+          you can choose which to use
+        
+        **Notes:**
+        * Metadata header rows are automatically skipped
+        * Hydroxyl notation (e.g., `;2O`, `;3O`) is preserved in lipid names
+        * Internal standards with (d5), (d7), (d9), ISTD, or SPLASH patterns are auto-detected
+        """)
     else:
         st.info("""
         **Dataset Requirements for Generic Format**
@@ -509,7 +557,7 @@ def display_format_requirements(data_format):
            * The number of intensity columns must match the total number of samples in your experiment
            * These columns will be automatically standardized to: intensity[s1], intensity[s2], ..., intensity[sN]
         
-        ⚠️  If your dataset contains any additional columns, please remove them before uploading.
+        ⚠️  If your dataset contains any additional columns, please remove them before uploading.
         Only the lipid names column followed by intensity columns should be present.
         
         Note: The lipid class (e.g., LPC, Cer, CE) will be automatically extracted from the lipid names to create the ClassKey.
@@ -535,6 +583,24 @@ def load_and_validate_data(uploaded_file, data_format):
                 return None
                 
             st.success("File uploaded and processed successfully!")
+            return df
+        
+        elif data_format == 'MS-DIAL':
+            # MS-DIAL format processing
+            df = pd.read_csv(uploaded_file)
+            st.success("File uploaded successfully!")
+            
+            df, success, message = lp.DataFormatHandler.validate_and_preprocess(
+                df,
+                'msdial'
+            )
+            
+            if not success:
+                st.error(message)
+                return None
+            
+            # Show info message with detected features
+            st.info(message)
             return df
             
         else:
@@ -818,7 +884,7 @@ def build_replicate_condition_pair(condition, experiment):
         st.sidebar.error(f"Error displaying condition {condition}: {str(e)}")
         st.write(f"Error in build_replicate_condition_pair: {e}")
 
-def clean_data(df, name_df, experiment, data_format, grade_config=None):
+def clean_data(df, name_df, experiment, data_format, grade_config=None, quality_config=None):
     """
     Clean data using appropriate cleaner based on the format.
     
@@ -828,6 +894,7 @@ def clean_data(df, name_df, experiment, data_format, grade_config=None):
         experiment: Experiment object
         data_format: Format type string
         grade_config (dict, optional): Custom grade configuration for LipidSearch data
+        quality_config (dict, optional): Quality filtering config for MS-DIAL data
     
     Returns:
         Tuple of (cleaned_df, intsta_df)
@@ -835,6 +902,9 @@ def clean_data(df, name_df, experiment, data_format, grade_config=None):
     if data_format == 'LipidSearch 5.0':
         cleaner = lp.CleanLipidSearchData()
         cleaned_df = cleaner.data_cleaner(df, name_df, experiment, grade_config)
+    elif data_format == 'MS-DIAL':
+        cleaner = lp.CleanMSDIALData()
+        cleaned_df = cleaner.data_cleaner(df, name_df, experiment, quality_config)
     else:
         cleaner = lp.CleanGenericData()
         cleaned_df = cleaner.data_cleaner(df, name_df, experiment)
@@ -933,9 +1003,9 @@ def get_grade_filtering_config(df, format_type):
             
             # Visual feedback
             if not selected_grades:
-                st.error(f"⚠️  **Warning:** No grades selected for {lipid_class}. This class will be completely excluded from analysis!")
+                st.error(f"⚠️  **Warning:** No grades selected for {lipid_class}. This class will be completely excluded from analysis!")
             elif 'D' in selected_grades:
-                st.warning(f"⚠️  **Caution:** Grade D included for {lipid_class}. This may include low-confidence identifications.")
+                st.warning(f"⚠️  **Caution:** Grade D included for {lipid_class}. This may include low-confidence identifications.")
             else:
                 st.success(f"✓ {lipid_class}: {', '.join(selected_grades)} accepted")
             
@@ -966,7 +1036,7 @@ def get_grade_filtering_config(df, format_type):
     
     with summary_col2:
         if abcd_classes:
-            st.markdown(f"**⚠️  Includes D** ({len(abcd_classes)} classes)")
+            st.markdown(f"**⚠️  Includes D** ({len(abcd_classes)} classes)")
             st.caption(', '.join(abcd_classes))
         if custom_classes:
             st.markdown(f"**⚙️  Custom** ({len(custom_classes)} classes)")
@@ -977,6 +1047,151 @@ def get_grade_filtering_config(df, format_type):
         st.error(f"**🚫 Excluded** ({len(excluded_classes)} classes): {', '.join(excluded_classes)}")
     
     return grade_config
+
+def get_msdial_quality_config():
+    """
+    Display MS-DIAL quality filtering UI.
+    
+    Returns:
+        dict: Quality configuration with 'total_score_threshold' and 'require_msms' keys
+              Returns None if quality filtering is not available
+    """
+    # Get the features detected during validation
+    features = st.session_state.get('msdial_features', {})
+    
+    quality_filtering_available = features.get('has_quality_score', False)
+    msms_filtering_available = features.get('has_msms_matched', False)
+    has_normalized_data = features.get('has_normalized_data', False)
+    raw_samples = features.get('raw_sample_columns', [])
+    norm_samples = features.get('normalized_sample_columns', [])
+    
+    st.markdown("---")
+    
+    # Section 1: Data Type Selection (if normalized data is available)
+    if has_normalized_data and len(norm_samples) > 0:
+        st.markdown("#### 📊 Data Type Selection")
+        st.markdown(f"""
+        Your MS-DIAL export contains both raw and pre-normalized intensity values:
+        - **Raw data**: {len(raw_samples)} sample columns
+        - **Normalized data**: {len(norm_samples)} sample columns (after 'Lipid IS' column)
+        """)
+        
+        data_type = st.radio(
+            "Select which data to use:",
+            [f"Raw intensity values ({len(raw_samples)} samples)", 
+             f"Pre-normalized values ({len(norm_samples)} samples)"],
+            index=0,
+            key="msdial_data_type_selection",
+            help="Choose raw data if you want to apply LipidCruncher's normalization. Choose pre-normalized if MS-DIAL already normalized your data."
+        )
+        
+        use_normalized = "Pre-normalized" in data_type
+        st.session_state.msdial_use_normalized = use_normalized
+        
+        if use_normalized:
+            st.info("📌 Using pre-normalized data. LipidCruncher's internal standard normalization will be skipped.")
+        else:
+            st.info("📌 Using raw intensity data. You can apply normalization in the next step.")
+        
+        st.markdown("---")
+    
+    # Section 2: Quality Filtering (if quality columns available)
+    if quality_filtering_available or msms_filtering_available:
+        st.markdown("#### 🎯 Quality Filtering Configuration")
+        
+        # Define quality options
+        quality_options = {
+            'Strict (Score ≥80, MS/MS required)': {
+                'total_score_threshold': 80,
+                'require_msms': True
+            },
+            'Moderate (Score ≥60)': {
+                'total_score_threshold': 60,
+                'require_msms': False
+            },
+            'Permissive (Score ≥40)': {
+                'total_score_threshold': 40,
+                'require_msms': False
+            },
+            'No filtering': {
+                'total_score_threshold': 0,
+                'require_msms': False
+            }
+        }
+        
+        st.markdown("""
+        MS-DIAL provides quality metrics for each identification. Choose a filtering level:
+        - **Strict**: Only highest confidence IDs (publication-ready)
+        - **Moderate**: Good balance of quality and coverage (recommended for exploration)
+        - **Permissive**: Includes lower confidence IDs (discovery mode)
+        - **No filtering**: Keep all identifications
+        """)
+        
+        selected_option = st.radio(
+            "Select quality filtering level:",
+            list(quality_options.keys()),
+            index=1,  # Default to Moderate
+            key="msdial_quality_level"
+        )
+        
+        quality_config = quality_options[selected_option].copy()
+        
+        # Show what this option means
+        if selected_option == 'Strict (Score ≥80, MS/MS required)':
+            st.success("✓ **Strict filtering**: Only highest confidence identifications. Ideal for publication-ready data.")
+        elif selected_option == 'Moderate (Score ≥60)':
+            st.info("✓ **Moderate filtering**: Good balance of quality and coverage. Recommended for exploratory analysis.")
+        elif selected_option == 'Permissive (Score ≥40)':
+            st.warning("⚠️ **Permissive filtering**: Includes lower confidence IDs. Use for discovery or when sample is limited.")
+        else:
+            st.warning("⚠️ **No filtering**: All identifications included. Quality may vary significantly.")
+        
+        # Show advanced options with a checkbox toggle (not an expander to avoid nesting)
+        show_advanced = st.checkbox("🔧 Customize thresholds", value=False, key="msdial_show_advanced")
+        
+        if show_advanced:
+            st.markdown("**Override the preset values with custom thresholds:**")
+            
+            if quality_filtering_available:
+                custom_score = st.slider(
+                    "Minimum Total Score:",
+                    min_value=0,
+                    max_value=100,
+                    value=quality_config['total_score_threshold'],
+                    step=5,
+                    help="Lipids with scores below this threshold will be excluded",
+                    key="msdial_custom_score"
+                )
+                quality_config['total_score_threshold'] = custom_score
+            
+            if msms_filtering_available:
+                custom_msms = st.checkbox(
+                    "Require MS/MS validation",
+                    value=quality_config['require_msms'],
+                    help="If checked, only lipids with MS/MS spectral match will be kept",
+                    key="msdial_custom_msms"
+                )
+                quality_config['require_msms'] = custom_msms
+        
+        # Summary
+        st.markdown("---")
+        st.markdown("##### 📋 Current Settings")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"**Score threshold:** ≥{quality_config['total_score_threshold']}")
+        with col2:
+            st.write(f"**MS/MS required:** {'Yes' if quality_config['require_msms'] else 'No'}")
+        
+        return quality_config
+    
+    else:
+        st.info("""
+        **Note:** Quality filtering is not available for this dataset.
+        
+        Your MS-DIAL export does not include 'Total score' or 'MS/MS matched' columns.
+        To enable quality filtering, re-export from MS-DIAL with these columns included.
+        """)
+        return None
 
 def handle_standards_upload(normalizer):
     st.info("""
@@ -1997,7 +2212,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # PDF Generation Section
     st.subheader("Generate PDF Report")
     st.warning(
-        "⚠️  Important: PDF Report Generation Guidelines\n\n"
+        "⚠️  Important: PDF Report Generation Guidelines\n\n"
         "1. Generate the PDF only after completing all desired analyses.\n"
         "2. Ensure all analyses you want in the report have been viewed at least once.\n"
         "3. Use this feature instead of downloading plots individually - it's more efficient for multiple downloads.\n"
@@ -2792,7 +3007,7 @@ def display_statistical_options():
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️  **Critical for Hypothesis Testing**: If you are conducting formal hypothesis testing (especially with multiple testing corrections), 
+    ⚠️  **Critical for Hypothesis Testing**: If you are conducting formal hypothesis testing (especially with multiple testing corrections), 
     only select lipid classes that are part of your specific research hypothesis. Including additional "exploratory" classes 
     will inflate your p-values and reduce statistical power to detect true effects in your classes of interest.
     
@@ -2801,7 +3016,7 @@ def display_statistical_options():
     
     # Complete guidance section - common information first, then mode-specific
     st.markdown("---")
-    st.markdown("### 🏷️ Class Concentration Bar Chart Analysis Guide")
+    st.markdown("### 🏷️ Class Concentration Bar Chart Analysis Guide")
     
     # Common information regardless of mode
     st.markdown("""
@@ -2871,7 +3086,7 @@ def display_statistical_options():
         st.markdown("""
             **🎯 Two-Level Statistical Control:**
             
-            **🏷️  Level 1 - Between-Class Correction** (Applied to all analyses)
+            **🏷️  Level 1 - Between-Class Correction** (Applied to all analyses)
             
             | Choice | When to Use |
             |--------|-------------|
@@ -2879,7 +3094,7 @@ def display_statistical_options():
             | **FDR** | Exploring multiple classes (balances discovery with false positive control) |
             | **Bonferroni** | Confirmatory studies where false positives are very costly |
             
-            **📍 Level 2 - Within-Class Correction** (For 3+ conditions only)
+            **🔍 Level 2 - Within-Class Correction** (For 3+ conditions only)
             
             | Choice | When to Use |
             |--------|-------------|
@@ -3432,7 +3647,7 @@ def display_saturation_statistical_options():
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️  **Critical for Hypothesis Testing**: Saturation plots test 3 fatty acid types (SFA, MUFA, PUFA) 
+    ⚠️  **Critical for Hypothesis Testing**: Saturation plots test 3 fatty acid types (SFA, MUFA, PUFA) 
     per lipid class, creating a higher multiple testing burden than other analyses. Consider this when 
     selecting correction methods, especially when testing many lipid classes simultaneously.
     
@@ -3548,7 +3763,7 @@ def display_saturation_compatibility_warning(continuation_df):
     
     if not has_detailed_fa:
         st.warning("""
-        ⚠️  **Data Format Issue**: Saturation plots require detailed fatty acid composition 
+        ⚠️  **Data Format Issue**: Saturation plots require detailed fatty acid composition 
         (e.g., PC(16:0_18:1)) to accurately classify chains as saturated, monounsaturated, 
         or polyunsaturated. Your data appears to use consolidated total composition 
         (e.g., PC(34:1)) which only shows total carbons and double bonds across all chains. 
@@ -3628,7 +3843,7 @@ def display_saturation_plots(experiment, continuation_df):
         display_saturation_compatibility_warning(continuation_df)
 
         # Show comprehensive analysis guide (moved outside checkbox)
-        st.markdown("### 🏷️ Saturation Plot Analysis Guide")
+        st.markdown("### 🏷️ Saturation Plot Analysis Guide")
         
         st.markdown("""
         **📊 What the Analysis Shows:**
@@ -3689,7 +3904,7 @@ def display_saturation_plots(experiment, continuation_df):
         - **Error Bars**: Show standard deviation for proper biological interpretation
         - **Post-hoc Analysis**: Tukey's HSD for parametric or Bonferroni correction for non-parametric tests
         
-        **⚠️  Important Notes:**
+        **⚠️  Important Notes:**
         
         - **Sample Size**: Analysis requires ≥2 biological replicates per condition
         - **Multiple Testing**: Saturation analysis tests 3 fatty acid types per lipid class, creating higher statistical burden
@@ -3698,7 +3913,7 @@ def display_saturation_plots(experiment, continuation_df):
         
         # Big note about data format requirements with examples
         st.warning("""
-        ⚠️  **Critical Data Format Requirement**
+        ⚠️  **Critical Data Format Requirement**
         
         Saturation analysis requires detailed fatty acid composition to accurately classify chains. The analysis 
         works differently depending on your data format:
@@ -3731,7 +3946,7 @@ def display_saturation_plots(experiment, continuation_df):
         
         st.markdown("### 🎯 Two-Level Statistical Control")
         st.markdown("""
-        **🏷️  Level 1 - Between Class/FA Type Correction** (Applied to all analyses)
+        **🏷️  Level 1 - Between Class/FA Type Correction** (Applied to all analyses)
         
         | Choice | When to Use |
         |--------|-------------|
@@ -3739,7 +3954,7 @@ def display_saturation_plots(experiment, continuation_df):
         | **FDR** | Exploring multiple classes (balances discovery with false positive control) |
         | **Bonferroni** | Confirmatory studies where false positives are very costly |
         
-        **📍 Level 2 - Within Class/FA Type Correction** (For 3+ conditions only)
+        **🔍 Level 2 - Within Class/FA Type Correction** (For 3+ conditions only)
         
         | Choice | When to Use |
         |--------|-------------|
@@ -3798,7 +4013,7 @@ def display_saturation_plots(experiment, continuation_df):
             
             if consolidated_lipids_dict:
                 st.markdown("---")
-                st.subheader("⚠️  Consolidated Format Lipids Detected")
+                st.subheader("⚠️  Consolidated Format Lipids Detected")
                 st.markdown("""
                 **Important:** Your dataset contains lipids in consolidated format (e.g., `PC(34:1)`) 
                 mixed with detailed format (e.g., `PC(16:0_18:1)`). Consolidated format lipids cannot 
@@ -3989,7 +4204,7 @@ def display_pathway_visualization(experiment, continuation_df):
     with st.expander("Class Level Breakdown - Pathway Visualization"):
         # Add the critical data format requirement warning
         st.warning("""
-        ⚠️  **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
+        ⚠️  **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
         (e.g., PC(16:0_18:1)) vs. total composition (e.g., PC(34:1)). If your dataset uses total composition format, 
         the saturation analysis may be less accurate as it cannot precisely identify individual fatty acid chains.
         """)
@@ -3999,7 +4214,7 @@ def display_pathway_visualization(experiment, continuation_df):
         
         if not has_detailed_fa:
             st.warning("""
-            ⚠️  Note: The pathway visualization works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            ⚠️  Note: The pathway visualization works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
             Your data appears to use total composition (e.g., PC(34:1)), which may affect the accuracy of the 
             saturation ratio calculations (shown by the color scale). The circle sizes (showing abundance) 
             remain accurate.
@@ -4175,7 +4390,7 @@ def display_volcano_statistical_options():
     # Important warning about hypothesis testing
     st.markdown("---")
     st.warning("""
-    ⚠️  **Critical for Hypothesis Testing**: The volcano plot tests each individual lipid species for 
+    ⚠️  **Critical for Hypothesis Testing**: The volcano plot tests each individual lipid species for 
     significant changes between conditions. When testing many lipids simultaneously, multiple testing 
     corrections become crucial to control false discoveries.
     
@@ -4329,7 +4544,7 @@ def display_volcano_plot(experiment, continuation_df):
         - **Y-axis**: -log10(adjusted p-value) when correction is applied, -log10(p-value) when uncorrected
         - **Red Dashed Lines**: Configurable significance (horizontal) and biological significance (vertical) thresholds
 
-        **⚠️  Non-Parametric Test Note:**
+        **⚠️  Non-Parametric Test Note:**
 
         Mann-Whitney U tests with small sample sizes (n=3-6 per group) often produce identical p-values for many lipids,
         creating horizontal lines in the volcano plot. This is expected behavior due to the discrete nature of rank-based
@@ -4955,7 +5170,7 @@ def display_fach_heatmaps(experiment, continuation_df):
         has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
         if not has_detailed_fa:
             st.warning("""
-            ⚠️  Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            ⚠️  Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
             Your data appears to use total composition (e.g., PC(34:1)), which may affect accuracy.
             """)
         

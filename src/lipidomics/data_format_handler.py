@@ -273,17 +273,38 @@ class DataFormatHandler:
         3. Are NOT the 'Lipid IS' column or columns after it (if normalized data exists)
         
         Args:
-            df: DataFrame to analyze
+            df: DataFrame to analyze (should have correct headers as columns)
             columns: Optional list of column names (if different from df.columns)
             
         Returns:
             tuple: (raw_sample_cols, normalized_sample_cols, lipid_is_col_idx)
+        """
+        raw_cols, norm_cols, lipid_is_idx, _, _ = \
+            DataFormatHandler._detect_msdial_sample_columns_with_indices(df, columns)
+        return raw_cols, norm_cols, lipid_is_idx
+    
+    @staticmethod
+    def _detect_msdial_sample_columns_with_indices(df, columns=None):
+        """
+        Detect sample intensity columns in MS-DIAL data, returning both names and indices.
+        
+        This handles the case where sample columns have duplicate names (raw vs normalized).
+        
+        Args:
+            df: DataFrame to analyze (should have correct headers as columns)
+            columns: Optional list of column names (if different from df.columns)
+            
+        Returns:
+            tuple: (raw_sample_cols, normalized_sample_cols, lipid_is_col_idx, 
+                   raw_sample_indices, normalized_sample_indices)
         """
         if columns is None:
             columns = df.columns.tolist()
         
         raw_sample_cols = []
         normalized_sample_cols = []
+        raw_sample_indices = []
+        normalized_sample_indices = []
         lipid_is_idx = None
         
         # Find the 'Lipid IS' column which separates raw and normalized data
@@ -292,7 +313,7 @@ class DataFormatHandler:
                 lipid_is_idx = idx
                 break
         
-        # Iterate through columns and classify them
+        # Iterate through columns BY INDEX to handle duplicates properly
         for idx, col in enumerate(columns):
             # Skip known metadata columns
             if col in DataFormatHandler.MSDIAL_METADATA_COLUMNS:
@@ -301,28 +322,37 @@ class DataFormatHandler:
             # Skip 'Lipid IS' column itself
             if col == 'Lipid IS':
                 continue
+            
+            # Skip NaN or empty column names
+            if pd.isna(col) or (isinstance(col, str) and not col.strip()):
+                continue
                 
             # Check if column contains numeric data (sample intensity)
-            if idx < len(df.columns):
-                col_data = df[col] if col in df.columns else None
-                if col_data is not None:
-                    # Try to determine if this is a sample column
-                    # Sample columns should have mostly numeric values
-                    try:
-                        numeric_count = pd.to_numeric(col_data, errors='coerce').notna().sum()
-                        if numeric_count > len(col_data) * 0.5:  # >50% numeric
-                            if lipid_is_idx is not None:
-                                if idx < lipid_is_idx:
-                                    raw_sample_cols.append(col)
-                                elif idx > lipid_is_idx:
-                                    normalized_sample_cols.append(col)
-                            else:
-                                # No Lipid IS column found, assume all are raw
-                                raw_sample_cols.append(col)
-                    except:
-                        pass
+            # Use iloc to access by position to avoid duplicate column issues
+            try:
+                col_data = df.iloc[:, idx]
+                # Try to determine if this is a sample column
+                # Sample columns should have mostly numeric values
+                numeric_values = pd.to_numeric(col_data, errors='coerce')
+                numeric_count = numeric_values.notna().sum()
+                
+                if numeric_count > len(col_data) * 0.5:  # >50% numeric
+                    if lipid_is_idx is not None:
+                        if idx < lipid_is_idx:
+                            raw_sample_cols.append(col)
+                            raw_sample_indices.append(idx)
+                        elif idx > lipid_is_idx:
+                            normalized_sample_cols.append(col)
+                            normalized_sample_indices.append(idx)
+                    else:
+                        # No Lipid IS column found, assume all are raw
+                        raw_sample_cols.append(col)
+                        raw_sample_indices.append(idx)
+            except Exception as e:
+                # Skip columns that cause errors
+                continue
         
-        return raw_sample_cols, normalized_sample_cols, lipid_is_idx
+        return raw_sample_cols, normalized_sample_cols, lipid_is_idx, raw_sample_indices, normalized_sample_indices
     
     @staticmethod
     def _validate_msdial(df):
@@ -355,17 +385,19 @@ class DataFormatHandler:
             
             # Check for lipid name column (required)
             lipid_col = None
+            lipid_col_idx = None
             possible_lipid_cols = ['Metabolite name', 'Metabolite', 'Name', 'Lipid', 'LipidMolec']
             
             for col_name in possible_lipid_cols:
                 if col_name in actual_columns:
                     lipid_col = col_name
+                    lipid_col_idx = actual_columns.index(col_name)
                     break
             
             if lipid_col is None:
                 return False, "No lipid name column found. Expected 'Metabolite name' or similar column."
             
-            # Detect sample columns
+            # Detect sample columns - now returns indices too
             # For validation, we need to work with the actual data
             if header_row_idx >= 0:
                 # Create a temporary df with correct headers for analysis
@@ -374,13 +406,20 @@ class DataFormatHandler:
             else:
                 temp_df = df
             
-            raw_samples, norm_samples, _ = DataFormatHandler._detect_msdial_sample_columns(
-                temp_df, actual_columns
-            )
+            raw_samples, norm_samples, lipid_is_idx, raw_indices, norm_indices = \
+                DataFormatHandler._detect_msdial_sample_columns_with_indices(
+                    temp_df, actual_columns
+                )
             
             total_samples = len(raw_samples) + len(norm_samples)
             if total_samples < 1:
                 return False, "No sample intensity columns detected. Check that your export includes sample data."
+            
+            # Build column index mapping for metadata columns
+            col_indices = {}
+            for idx, col in enumerate(actual_columns):
+                if col not in col_indices:  # Only store first occurrence for metadata
+                    col_indices[col] = idx
             
             # Build info about available optional columns for later use
             available_features = {
@@ -391,10 +430,14 @@ class DataFormatHandler:
                 'has_mz': 'Average Mz' in actual_columns,
                 'has_normalized_data': len(norm_samples) > 0,
                 'lipid_column': lipid_col,
+                'lipid_column_index': lipid_col_idx,
                 'raw_sample_columns': raw_samples,
+                'raw_sample_indices': raw_indices,
                 'normalized_sample_columns': norm_samples,
+                'normalized_sample_indices': norm_indices,
                 'header_row_index': header_row_idx,
-                'actual_columns': actual_columns
+                'actual_columns': actual_columns,
+                'column_indices': col_indices
             }
             
             # Store for use in standardization
@@ -436,18 +479,21 @@ class DataFormatHandler:
             header_row_idx = features.get('header_row_index', -1)
             actual_columns = features.get('actual_columns', df.columns.tolist())
             lipid_col = features.get('lipid_column', 'Metabolite name')
+            lipid_col_idx = features.get('lipid_column_index', 3)  # Default index for 'Metabolite name'
             raw_sample_cols = features.get('raw_sample_columns', [])
+            raw_sample_indices = features.get('raw_sample_indices', [])
             norm_sample_cols = features.get('normalized_sample_columns', [])
+            norm_sample_indices = features.get('normalized_sample_indices', [])
+            col_indices = features.get('column_indices', {})
             
-            # Skip metadata rows if present and set proper headers
+            # Skip metadata rows if present
             if header_row_idx >= 0:
                 # Store metadata for potential future use
                 metadata_df = df.iloc[:header_row_idx].copy()
                 st.session_state.msdial_metadata = metadata_df
                 
-                # Get actual data rows
+                # Get actual data rows - DO NOT set columns (use iloc instead)
                 data_df = df.iloc[header_row_idx + 1:].copy()
-                data_df.columns = actual_columns
             else:
                 data_df = df.copy()
             
@@ -460,62 +506,65 @@ class DataFormatHandler:
             
             if use_normalized and len(norm_sample_cols) > 0:
                 sample_cols_to_use = norm_sample_cols
+                sample_indices_to_use = norm_sample_indices
                 st.session_state.msdial_data_type = 'normalized'
             else:
                 sample_cols_to_use = raw_sample_cols
+                sample_indices_to_use = raw_sample_indices
                 st.session_state.msdial_data_type = 'raw'
             
-            # Build the standardized dataframe
+            # Build the standardized dataframe using POSITIONAL indexing (iloc)
             standardized_data = {}
             
-            # LipidMolec - standardize lipid names
-            if lipid_col in data_df.columns:
-                standardized_data['LipidMolec'] = data_df[lipid_col].apply(
-                    DataFormatHandler._standardize_lipid_name
-                )
-            else:
-                return pd.DataFrame()  # Critical column missing
+            # LipidMolec - standardize lipid names (use positional index)
+            standardized_data['LipidMolec'] = data_df.iloc[:, lipid_col_idx].apply(
+                DataFormatHandler._standardize_lipid_name
+            )
             
             # ClassKey - use Ontology if available, otherwise infer
-            if features.get('has_ontology', False) and 'Ontology' in data_df.columns:
-                standardized_data['ClassKey'] = data_df['Ontology'].fillna('Unknown')
+            if features.get('has_ontology', False) and 'Ontology' in col_indices:
+                ontology_idx = col_indices['Ontology']
+                standardized_data['ClassKey'] = data_df.iloc[:, ontology_idx].fillna('Unknown')
             else:
                 # Infer from standardized lipid names
                 standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(
                     DataFormatHandler._infer_class_key
                 )
             
-            # Optional columns
-            if features.get('has_rt', False) and 'Average Rt(min)' in data_df.columns:
+            # Optional columns - use positional indexing
+            if features.get('has_rt', False) and 'Average Rt(min)' in col_indices:
+                rt_idx = col_indices['Average Rt(min)']
                 standardized_data['BaseRt'] = pd.to_numeric(
-                    data_df['Average Rt(min)'], errors='coerce'
+                    data_df.iloc[:, rt_idx], errors='coerce'
                 )
             
-            if features.get('has_mz', False) and 'Average Mz' in data_df.columns:
+            if features.get('has_mz', False) and 'Average Mz' in col_indices:
+                mz_idx = col_indices['Average Mz']
                 standardized_data['CalcMass'] = pd.to_numeric(
-                    data_df['Average Mz'], errors='coerce'
+                    data_df.iloc[:, mz_idx], errors='coerce'
                 )
             
-            # Store quality columns for potential filtering (but don't include in main df)
-            if features.get('has_quality_score', False) and 'Total score' in data_df.columns:
+            # Store quality columns for potential filtering
+            if features.get('has_quality_score', False) and 'Total score' in col_indices:
+                score_idx = col_indices['Total score']
                 st.session_state.msdial_quality_scores = pd.to_numeric(
-                    data_df['Total score'], errors='coerce'
+                    data_df.iloc[:, score_idx], errors='coerce'
                 )
             
-            if features.get('has_msms_matched', False) and 'MS/MS matched' in data_df.columns:
-                st.session_state.msdial_msms_matched = data_df['MS/MS matched'].apply(
+            if features.get('has_msms_matched', False) and 'MS/MS matched' in col_indices:
+                msms_idx = col_indices['MS/MS matched']
+                st.session_state.msdial_msms_matched = data_df.iloc[:, msms_idx].apply(
                     lambda x: str(x).upper() == 'TRUE'
                 )
             
-            # Sample intensity columns - rename to standard format
+            # Sample intensity columns - use positional indexing to avoid duplicate name issues
             column_mapping = {}
-            for i, col in enumerate(sample_cols_to_use, 1):
+            for i, (col_name, col_idx) in enumerate(zip(sample_cols_to_use, sample_indices_to_use), 1):
                 new_col_name = f'intensity[s{i}]'
-                if col in data_df.columns:
-                    standardized_data[new_col_name] = pd.to_numeric(
-                        data_df[col], errors='coerce'
-                    ).fillna(0)
-                    column_mapping[col] = new_col_name
+                standardized_data[new_col_name] = pd.to_numeric(
+                    data_df.iloc[:, col_idx], errors='coerce'
+                ).fillna(0)
+                column_mapping[col_name] = new_col_name
             
             # Create the standardized dataframe
             result_df = pd.DataFrame(standardized_data)
