@@ -17,3 +17,4 @@ from .clean_generic_data import CleanGenericData
 from .data_format_handler import DataFormatHandler
 from .standards_plot import InternalStandardsPlotter
 from .FACH import FACH
+from .clean_msdial_data import CleanMSDIALData
