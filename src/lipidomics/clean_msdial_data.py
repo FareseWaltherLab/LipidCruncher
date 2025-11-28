@@ -386,7 +386,7 @@ class CleanMSDIALData:
                 cleaned_df = df_copy[~is_standard].copy().reset_index(drop=True)
                 
                 n_standards = len(internal_standards_df)
-                st.info(f"Detected {n_standards} internal standard(s) in MS-DIAL data")
+                # Message removed - info already shown in Manage Standards section
                 
                 return cleaned_df, internal_standards_df
             else:
@@ -411,15 +411,15 @@ def get_quality_filter_options():
         dict: Dictionary mapping option names to configuration dicts
     """
     return {
-        'Strict (Score ≥80, MS/MS required)': {
+        'Strict (Score â‰¥80, MS/MS required)': {
             'total_score_threshold': 80,
             'require_msms': True
         },
-        'Moderate (Score ≥60)': {
+        'Moderate (Score â‰¥60)': {
             'total_score_threshold': 60,
             'require_msms': False
         },
-        'Permissive (Score ≥40)': {
+        'Permissive (Score â‰¥40)': {
             'total_score_threshold': 40,
             'require_msms': False
         },

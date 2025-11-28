@@ -1146,11 +1146,21 @@ def get_msdial_quality_config():
         else:
             st.warning("⚠️ **No filtering**: All identifications included. Quality may vary significantly.")
         
+        # MS/MS validation option (if available)
+        if msms_filtering_available:
+            custom_msms = st.checkbox(
+                "Require MS/MS validation",
+                value=quality_config['require_msms'],
+                help="If checked, only lipids with MS/MS spectral match will be kept",
+                key="msdial_custom_msms"
+            )
+            quality_config['require_msms'] = custom_msms
+        
         # Show advanced options with a checkbox toggle (not an expander to avoid nesting)
-        show_advanced = st.checkbox("🔧 Customize thresholds", value=False, key="msdial_show_advanced")
+        show_advanced = st.checkbox("🔧 Customize score threshold", value=False, key="msdial_show_advanced")
         
         if show_advanced:
-            st.markdown("**Override the preset values with custom thresholds:**")
+            st.markdown("**Override the preset Total Score threshold:**")
             
             if quality_filtering_available:
                 custom_score = st.slider(
@@ -1163,15 +1173,6 @@ def get_msdial_quality_config():
                     key="msdial_custom_score"
                 )
                 quality_config['total_score_threshold'] = custom_score
-            
-            if msms_filtering_available:
-                custom_msms = st.checkbox(
-                    "Require MS/MS validation",
-                    value=quality_config['require_msms'],
-                    help="If checked, only lipids with MS/MS spectral match will be kept",
-                    key="msdial_custom_msms"
-                )
-                quality_config['require_msms'] = custom_msms
         
         # Summary
         st.markdown("---")

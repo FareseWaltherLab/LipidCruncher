@@ -569,12 +569,57 @@ class DataFormatHandler:
             # Create the standardized dataframe
             result_df = pd.DataFrame(standardized_data)
             
-            # Store column mapping for reference
-            mapping_df = pd.DataFrame({
-                'original_name': list(column_mapping.keys()),
-                'standardized_name': list(column_mapping.values())
+            # Build complete column mapping including metadata columns (like generic format)
+            complete_mapping = []
+            
+            # Add metadata column mappings
+            complete_mapping.append({
+                'original_name': lipid_col,
+                'standardized_name': 'LipidMolec'
             })
-            st.session_state.column_mapping = mapping_df
+            
+            if features.get('has_ontology', False) and 'Ontology' in col_indices:
+                complete_mapping.append({
+                    'original_name': 'Ontology',
+                    'standardized_name': 'ClassKey'
+                })
+            else:
+                complete_mapping.append({
+                    'original_name': f'{lipid_col} (inferred)',
+                    'standardized_name': 'ClassKey'
+                })
+            
+            if features.get('has_rt', False) and 'Average Rt(min)' in col_indices:
+                complete_mapping.append({
+                    'original_name': 'Average Rt(min)',
+                    'standardized_name': 'BaseRt'
+                })
+            
+            if features.get('has_mz', False) and 'Average Mz' in col_indices:
+                complete_mapping.append({
+                    'original_name': 'Average Mz',
+                    'standardized_name': 'CalcMass'
+                })
+            
+            # Add intensity column mappings
+            for orig_name, std_name in column_mapping.items():
+                complete_mapping.append({
+                    'original_name': orig_name,
+                    'standardized_name': std_name
+                })
+            
+            # Store complete mapping for display
+            # Put standardized_name first for better visibility in sidebar
+            mapping_df = pd.DataFrame(complete_mapping)
+            mapping_df = mapping_df[['standardized_name', 'original_name']]  # Swap column order
+            
+            # Validate that mapping_df has both required columns
+            if 'original_name' not in mapping_df.columns or 'standardized_name' not in mapping_df.columns:
+                st.error(f"Error: Column mapping DataFrame is malformed. Columns: {mapping_df.columns.tolist()}")
+                st.error(f"Complete mapping list: {complete_mapping}")
+            else:
+                st.session_state.column_mapping = mapping_df
+                
             st.session_state.n_intensity_cols = len(sample_cols_to_use)
             
             # Store original sample names for grouping UI
@@ -687,9 +732,10 @@ class DataFormatHandler:
             standardized_cols.append(f'intensity[s{i}]')
         
         # Create and store the mapping DataFrame
+        # Put standardized_name first for better visibility in sidebar
         mapping_df = pd.DataFrame({
-            'original_name': original_cols,
-            'standardized_name': standardized_cols
+            'standardized_name': standardized_cols,
+            'original_name': original_cols
         })
         
         # Store in session state for display
