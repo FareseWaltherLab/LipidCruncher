@@ -24,14 +24,17 @@ class SaturationPlot:
         """
         try:
             parts = mol_structure.split('(')[1][:-1].split('_')
-            # Extract double bond count, stripping ;XO hydroxyl notation (e.g., ;2O, ;3O)
-            fatty_acids = [fa.split(':')[-1].split(';')[0] for fa in parts]
+            # Extract double bond counts and strip hydroxyl notation (;XO patterns)
+            # Examples: '1;2O' -> '1', '0;3O' -> '0'
+            import re
+            fatty_acids = [re.sub(r';[\dO()]+', '', fa.split(':')[-1]) for fa in parts]
+            
             ratios = [fatty_acids.count(x) for x in ['0', '1']]
             pufa_ratio = len(fatty_acids) - sum(ratios)
             ratios.append(pufa_ratio)
             total = sum(ratios)
             return tuple(ratio / total for ratio in ratios) if total > 0 else (0, 0, 0)
-        except (IndexError, ValueError):
+        except (IndexError, ValueError, AttributeError):
             return (0, 0, 0)
 
     @staticmethod
@@ -688,24 +691,24 @@ class SaturationPlot:
         # Auto Level 1 (Between Class/FA combination) Correction
         if total_tests <= 3:  # Single class analysis
             auto_correction_method = "uncorrected"
-            auto_rationale = "Single class (≤3 tests) → no correction needed"
+            auto_rationale = "Single class (â‰¤3 tests) â†’ no correction needed"
         elif total_tests <= 15:  # Up to 5 classes
             auto_correction_method = "fdr_bh"
-            auto_rationale = f"Moderate testing burden ({total_tests} tests) → FDR recommended"
+            auto_rationale = f"Moderate testing burden ({total_tests} tests) â†’ FDR recommended"
         else:
             auto_correction_method = "fdr_bh"
-            auto_rationale = f"High testing burden ({total_tests} tests) → FDR for discovery balance"
+            auto_rationale = f"High testing burden ({total_tests} tests) â†’ FDR for discovery balance"
         
         # Auto Level 2 (Within-Class/FA combination) Correction
         if len(selected_conditions) <= 2:
             auto_posthoc_correction = "uncorrected"
-            auto_posthoc_rationale = "≤2 conditions → no post-hoc needed"
+            auto_posthoc_rationale = "â‰¤2 conditions â†’ no post-hoc needed"
         elif len(selected_conditions) <= 4:
             auto_posthoc_correction = "standard"
-            auto_posthoc_rationale = "Few conditions → standard post-hoc approach"
+            auto_posthoc_rationale = "Few conditions â†’ standard post-hoc approach"
         else:
             auto_posthoc_correction = "bonferroni_all"
-            auto_posthoc_rationale = "Many conditions → conservative Bonferroni"
+            auto_posthoc_rationale = "Many conditions â†’ conservative Bonferroni"
         
         return {
             'correction_method': auto_correction_method,

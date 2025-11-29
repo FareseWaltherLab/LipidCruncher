@@ -17,17 +17,29 @@ class PathwayViz:
         Returns:
             tuple: A tuple (num_saturated, num_unsaturated) representing the number of saturated and unsaturated chains.
         """
-        chains = mol_structure.split('(')[1][:-1].split('_')
-        sat_unsat_count = [0, 0]
-    
-        for chain in chains:
-            chain_saturation = chain.split(':')[-1]
-            if chain_saturation == '0' or '0' in chain_saturation and not chain_saturation.isnumeric():
-                sat_unsat_count[0] += 1  # Increase count of saturated chains
-            else:
-                sat_unsat_count[1] += 1  # Increase count of unsaturated chains
-    
-        return tuple(sat_unsat_count)
+        try:
+            chains = mol_structure.split('(')[1][:-1].split('_')
+            sat_unsat_count = [0, 0]
+        
+            for chain in chains:
+                # Get the double bond count (number after the last colon)
+                chain_saturation = chain.split(':')[-1]
+                
+                # Strip hydroxyl notation (;XO patterns) before checking saturation
+                # Examples: '1;2O' -> '1', '0;3O' -> '0'
+                import re
+                chain_saturation = re.sub(r';[\dO()]+', '', chain_saturation)
+                
+                if chain_saturation == '0' or '0' in chain_saturation and not chain_saturation.isnumeric():
+                    sat_unsat_count[0] += 1  # Increase count of saturated chains
+                else:
+                    sat_unsat_count[1] += 1  # Increase count of unsaturated chains
+        
+            return tuple(sat_unsat_count)
+        except (IndexError, ValueError, AttributeError):
+            # Return (0, 0) for lipids that can't be parsed
+            # This includes lipids without parentheses or without detailed FA composition
+            return (0, 0)
 
     @staticmethod
     @st.cache_data(ttl=3600)
