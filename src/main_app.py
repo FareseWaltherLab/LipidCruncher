@@ -1444,7 +1444,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         # Tabs for different data formats
         data_format_tab = st.radio(
             "Select data format to view cleaning details:",
-            ["LipidSearch Format", "Generic Format", "Metabolomics Workbench"],
+            ["LipidSearch Format", "Generic Format", "MS-DIAL Format", "Metabolomics Workbench"],
             horizontal=True
         )
        
@@ -1509,6 +1509,63 @@ def display_cleaned_data(unfiltered_df, intsta_df):
            
             st.info("This standardization process allows for consistent analysis regardless of the original format of your data.")
            
+        elif data_format_tab == "MS-DIAL Format":
+            st.markdown("#### Data Cleaning for MS-DIAL Format")
+            st.markdown("""
+            For MS-DIAL data, we perform the following standardization and cleaning steps:
+           
+            1. **Header Detection**: MS-DIAL exports contain metadata rows (typically rows 1-9). LipidCruncher 
+               automatically detects where the actual data begins by locating the row where 'Alignment ID' 
+               contains numeric values.
+           
+            2. **Column Standardization**: We map MS-DIAL columns to LipidCruncher's standard format:
+               - `Metabolite name` → `LipidMolec`
+               - `Ontology` → `ClassKey`
+               - `Average Rt(min)` → `BaseRt`
+               - `Average Mz` → `CalcMass`
+               - Sample intensity columns → `intensity[s1]`, `intensity[s2]`, etc.
+           
+            3. **Lipid Name Standardization**: Lipid names are standardized to consistent format while 
+               preserving biologically important hydroxyl notation:
+               - Cer 18:1;2O/24:0 → Cer(18:1;2O_24:0)
+               - PC 16:0_18:1 → PC(16:0_18:1)
+               - Hydroxyl groups (;0, ;2O, ;3O) are preserved
+           
+            4. **Quality Filtering**: MS-DIAL provides quality metrics that can be used for filtering:
+               - **Total Score**: Composite confidence score (0-100) based on accurate mass, isotopic 
+                 pattern, MS/MS spectrum match, and retention time
+               - **MS/MS Matched**: TRUE/FALSE indicating whether MS/MS spectrum validation passed
+               - Three filtering levels available: Strict (≥80 + MS/MS), Moderate (≥60), Permissive (≥40)
+               - Configurable above in the quality filtering section
+           
+            5. **Data Type Selection**: If your MS-DIAL export contains both raw and pre-normalized data 
+               (e.g., pmol/mg tissue after internal standard correction), you can choose which to use. 
+               Select raw data to apply LipidCruncher's normalization, or pre-normalized if MS-DIAL 
+               already performed normalization.
+           
+            6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
+               non-numeric entries replaced by zeros.
+           
+            7. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special 
+               characters) are removed.
+           
+            8. **Smart Deduplication**: When duplicate lipid identifications exist, the entry with the 
+               highest Total Score is retained, ensuring the most confident identification is used.
+           
+            9. **Internal Standards Extraction**: Standards are automatically detected by patterns including:
+               - Deuterated labels: (d5), (d7), (d9)
+               - ISTD markers in ClassKey or Ontology columns
+               - SPLASH LIPIDOMIX® standard patterns
+           
+            10. **Duplicate Removal**: Any remaining duplicate entries based on LipidMolec are removed.
+           
+            11. **Zero Filtering**: Removes lipid species where the BQC condition (if present) has 50% or more 
+                replicates with intensity values ≤ user-specified detection threshold OR every non-BQC 
+                condition has 75% or more replicates with such values.
+            """)
+           
+            st.info("MS-DIAL integration provides flexible quality control with support for both raw and pre-normalized data workflows.")
+        
         else:  # Metabolomics Workbench
             st.markdown("#### Data Cleaning for Metabolomics Workbench Format")
             st.markdown("""
