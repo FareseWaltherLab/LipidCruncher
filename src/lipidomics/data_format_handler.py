@@ -500,9 +500,10 @@ class DataFormatHandler:
             # Reset index
             data_df = data_df.reset_index(drop=True)
             
-            # Determine which sample columns to use
-            # Check session state for user preference (if set by UI)
-            use_normalized = st.session_state.get('msdial_use_normalized', False)
+            # Read from the widget key directly (msdial_data_type_selection) instead of the manually-set value
+            # This ensures we get the current selection, not the previous run's value
+            data_type_selection = st.session_state.get('msdial_data_type_selection', f"Raw intensity values ({len(raw_sample_cols)} samples)")
+            use_normalized = "Pre-normalized" in data_type_selection
             
             if use_normalized and len(norm_sample_cols) > 0:
                 sample_cols_to_use = norm_sample_cols
