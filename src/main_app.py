@@ -512,29 +512,45 @@ def display_format_requirements(data_format):
         """)
     elif data_format == 'MS-DIAL':
         st.info("""
-        **Dataset Requirements for MS-DIAL Format**
-        
-        Export your data from MS-DIAL using: **Export → Alignment Result → CSV format**
-        
-        **Required column:**
-        * `Metabolite name`: Lipid/metabolite identifiers
-        
-        **Optional columns (recommended for full functionality):**
-        * `Ontology`: Lipid class information (used for ClassKey)
-        * `Total score`: Quality score for filtering (0-100)
-        * `MS/MS matched`: Whether MS/MS spectrum was matched (TRUE/FALSE)
-        * `Average Rt(min)`: Retention time
-        * `Average Mz`: Mass-to-charge ratio
-        
-        **Sample columns:**
-        * Sample intensity columns are automatically detected
-        * If your export includes both raw and normalized data (separated by 'Lipid IS' column), 
-          you can choose which to use
-        
+        **📋 MS-DIAL Format Requirements**
+
+        **How to Export from MS-DIAL:**
+        1. In MS-DIAL: File → Export → Alignment Result → CSV format
+        2. Ensure the following columns are included in your export
+
+        **REQUIRED Column (must use exact name):**
+        * `Metabolite name` - Lipid/metabolite identifiers
+
+        **RECOMMENDED Columns (use exact names for auto-detection):**
+        * `Ontology` - Lipid class (e.g., Cer-NS, PC, PE)
+        * `Total score` - Quality score for filtering (0-100)
+        * `MS/MS matched` - Whether MS/MS spectrum was matched (TRUE/FALSE)
+        * `Average Rt(min)` - Retention time information
+        * `Average Mz` - Mass-to-charge ratio
+
+        **Sample Intensity Columns:**
+        * Your export should include sample intensity columns (one per sample)
+        * **CRITICAL:** Sample columns must be the LAST columns in your file
+
+        **File Structure (Column Order):**
+
+        **Option 1 - Raw data only:**
+        * Structure: [...metadata columns...] [sample 1] [sample 2] ... [sample N]
+        * Example with 7 samples: The LAST 7 columns must be your sample intensity columns
+
+        **Option 2 - Both raw AND pre-normalized data:**
+        * Structure: [...metadata columns...] [raw sample 1] ... [raw sample N] [Lipid IS] [normalized sample 1] ... [normalized sample N]
+        * The `Lipid IS` column separates raw from normalized data
+        * The `Lipid IS` column should contain the internal standard class used for normalization
+        * Example with 7 samples: The LAST 15 columns must be: 7 raw + 1 Lipid IS + 7 normalized
+        * You'll be able to choose which dataset to use after upload
+
         **Notes:**
-        * Metadata header rows are automatically skipped
-        * Hydroxyl notation (e.g., `;2O`, `;3O`) is preserved in lipid names
-        * Internal standards with (d5), (d7), (d9), ISTD, or SPLASH patterns are auto-detected
+        * ✓ Column names are case-sensitive and must match exactly
+        * ✓ Metadata header rows are automatically skipped
+        * ✓ Hydroxyl notation (`;2O`, `;3O`) is preserved in lipid names
+        * ✓ Internal standards with (d5), (d7), (d9), ISTD, or SPLASH patterns are auto-detected
+        * ✓ After upload, you can review and correct column mappings if needed
         """)
     else:
         st.info("""
@@ -1514,7 +1530,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
             st.markdown("""
             For MS-DIAL data, we perform the following standardization and cleaning steps:
            
-            1. **Header Detection**: MS-DIAL exports contain metadata rows (typically rows 1-9). LipidCruncher 
+            1. **Header Detection**: MS-DIAL exports contain metadata rows. LipidCruncher 
                automatically detects where the actual data begins by locating the row where 'Alignment ID' 
                contains numeric values.
            
