@@ -250,8 +250,17 @@ def main():
         if uploaded_file:
             df = load_and_validate_data(uploaded_file, data_format)
             if df is not None:
+                # Show column mapping validation/correction BEFORE defining experiment
                 if data_format in ['Generic Format', 'MS-DIAL']:
-                    display_column_mapping()
+                    mapping_valid, corrected_df = display_column_mapping(df, data_format)
+                    if not mapping_valid:
+                        st.sidebar.error("Please correct column mappings to proceed.")
+                        return
+                    
+                    # For MS-DIAL, DON'T apply corrections yet - wait for data type selection
+                    # For Generic, apply corrections now
+                    if data_format == 'Generic Format' and 'manual_column_correction' in st.session_state:
+                        df = apply_manual_column_correction(df, data_format)
                 
                 confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, data_format)
                 
@@ -277,10 +286,25 @@ def main():
                                     st.session_state.grade_config = grade_config
                             
                             elif data_format == 'MS-DIAL':
-                                # Show quality filtering UI for MS-DIAL
-                                with st.expander("Configure MS-DIAL Data Options", expanded=True):
-                                    quality_config = get_msdial_quality_config()
-                                    st.session_state.msdial_quality_config = quality_config
+                                # Check if both raw and normalized data available
+                                features = st.session_state.get('msdial_features', {})
+                                has_normalized = features.get('has_normalized_data', False)
+                                
+                                # Check if Total score was included in manual corrections
+                                manual_correction = st.session_state.get('manual_column_correction')
+                                has_total_score = True
+                                
+                                if manual_correction:
+                                    # If manual corrections exist, check if TotalScore is included
+                                    has_total_score = 'TotalScore' in manual_correction.get('metadata_mapping', {})
+                                
+                                if not has_total_score:
+                                    st.info("ℹ️ Quality filtering unavailable - Total score column was not selected in column mapping.")
+                                else:
+                                    # Show quality filtering UI for MS-DIAL
+                                    with st.expander("Configure MS-DIAL Data Options", expanded=True):
+                                        quality_config = get_msdial_quality_config()
+                                        st.session_state.msdial_quality_config = quality_config
                             
                             # Pass config to clean_data
                             cleaned_df, intsta_df = clean_data(
@@ -606,6 +630,9 @@ def load_and_validate_data(uploaded_file, data_format):
             df = pd.read_csv(uploaded_file)
             st.success("File uploaded successfully!")
             
+            # Store original data before standardization for potential manual corrections
+            st.session_state.original_uploaded_df = df.copy()
+            
             df, success, message = lp.DataFormatHandler.validate_and_preprocess(
                 df,
                 'msdial'
@@ -623,6 +650,9 @@ def load_and_validate_data(uploaded_file, data_format):
             # Standard CSV processing for other formats
             df = pd.read_csv(uploaded_file)
             st.success("File uploaded successfully!")
+            
+            # Store original data before standardization for potential manual corrections
+            st.session_state.original_uploaded_df = df.copy()
             
             df, success, message = lp.DataFormatHandler.validate_and_preprocess(
                 df,
@@ -814,9 +844,10 @@ def process_experiment(df, data_format='lipidsearch'):
     if not experiment.setup_experiment(n_conditions, conditions_list, number_of_samples_list):
         st.sidebar.error("All condition labels must be non-empty.")
         return False, None, None, None, False, None
-
+    
     # Rest of the function remains unchanged
     name_df, group_df, updated_df, valid_samples = process_group_samples(df, experiment, data_format)
+
     if not valid_samples:
         return False, None, None, None, False, None
 
@@ -830,14 +861,328 @@ def process_experiment(df, data_format='lipidsearch'):
 
     return confirmed, name_df, experiment, bqc_label, valid_samples, updated_df
 
-def display_column_mapping():
-    """Display the mapping between original and standardized column names in the sidebar."""
-    if st.session_state.get('column_mapping') is not None:
-        st.sidebar.subheader("Column Name Standardization")
+def display_column_mapping(df, data_format):
+    """
+    Display and optionally correct column mapping in the sidebar.
+    Called BEFORE experiment is defined.
+    """
+    if st.session_state.get('column_mapping') is None:
+        return True, None
+    
+    st.sidebar.subheader("Column Name Standardization")
+    
+    # Display initial mapping table
+    mapping_df = st.session_state.column_mapping.copy()
+    st.sidebar.dataframe(
+        mapping_df.reset_index(drop=True),
+        use_container_width=True
+    )
+    
+    # Ask if mappings look correct
+    st.sidebar.write("Do the column mappings look correct?")
+    mapping_correct = st.sidebar.radio(
+        "",
+        ['Yes', 'No'],
+        key='column_mapping_correct'
+    )
+    
+    if mapping_correct == 'Yes':
+        return True, None
+    else:
+        # Show correction interface
+        return handle_column_mapping_correction(df, mapping_df, data_format)
+
+def handle_column_mapping_correction(mapping_df, experiment, data_format):
+    """
+    Handle manual correction of column mappings following the Group Samples pattern.
+    
+    Args:
+        mapping_df: DataFrame with current column mappings
+        experiment: Experiment object
+        data_format: Data format string
+        
+    Returns:
+        tuple: (mapping_valid, corrected_mapping_df)
+    """
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🔧 Correct Column Mappings")
+    
+    # Initialize correction complete flag
+    if 'column_mapping_complete' not in st.session_state:
+        st.session_state.column_mapping_complete = False
+    
+    # Get all columns from the original data
+    if data_format == 'Generic Format':
+        # For Generic format, we need the original uploaded columns
+        if 'original_name' in mapping_df.columns:
+            all_original_cols = mapping_df['original_name'].tolist()
+        else:
+            # Fallback: get from original uploaded df
+            all_original_cols = st.session_state.get('original_uploaded_df', df).columns.tolist()
+    else:
+        # For MS-DIAL, get all columns from features
+        features = st.session_state.get('msdial_features', {})
+        if 'actual_columns' in features:
+            all_original_cols = features['actual_columns']
+        elif 'original_name' in mapping_df.columns:
+            all_original_cols = mapping_df['original_name'].tolist()
+        else:
+            # Fallback: get from original uploaded df
+            all_original_cols = st.session_state.get('original_uploaded_df', df).columns.tolist()
+    
+    # Define metadata columns based on format
+    if data_format == 'MS-DIAL':
+        metadata_options = [
+            ('Metabolite name', 'LipidMolec', True),
+            ('Total score', 'TotalScore', False),
+            ('MS/MS matched', 'MSMSMatched', False),
+            ('Average Rt(min)', 'BaseRt', False),
+            ('Average Mz', 'CalcMass', False)
+        ]
+        
+        st.sidebar.write("""
+        **Map your MS-DIAL columns:**
+        
+        📋 **Metadata Columns:**
+        Select the corresponding column from your file for each field below.
+        
+        ℹ️ Note: ClassKey will be automatically inferred from Metabolite name.
+        """)
+    else:  # Generic Format
+        metadata_options = [
+            ('Lipid Name', 'LipidMolec', True),
+            ('Lipid Class', 'ClassKey', False),
+            ('Retention Time', 'BaseRt', False),
+            ('Mass', 'CalcMass', False),
+            ('Adduct', 'Adduct', False),
+            ('Formula', 'Formula', False)
+        ]
+        
+        st.sidebar.write("""
+        **Map your columns:**
+        
+        📋 **Metadata Columns:**
+        Select the corresponding column from your file for each field below.
+        """)
+    
+    # Get current metadata columns from mapping
+    current_metadata_map = {}
+    if 'standardized_name' in mapping_df.columns and 'original_name' in mapping_df.columns:
+        for _, row in mapping_df.iterrows():
+            current_metadata_map[row['standardized_name']] = row['original_name']
+    
+    # Add N/A option for optional fields
+    dropdown_options = ['N/A'] + all_original_cols
+    
+    # Create 6 dropdowns for metadata columns
+    selected_metadata_mapping = {}
+    st.sidebar.markdown("#### 📋 Metadata Column Mapping")
+    
+    for orig_label, std_name, is_required in metadata_options:
+        label_text = f"{orig_label} {'(REQUIRED)' if is_required else '(optional)'}"
+        
+        # Get current selection
+        current_selection = current_metadata_map.get(std_name, 'N/A')
+        if current_selection not in dropdown_options:
+            current_selection = 'N/A'
+        
+        selected_col = st.sidebar.selectbox(
+            label_text,
+            options=dropdown_options,
+            index=dropdown_options.index(current_selection) if current_selection in dropdown_options else 0,
+            key=f'metadata_{std_name}'
+        )
+        
+        if selected_col != 'N/A':
+            selected_metadata_mapping[std_name] = selected_col
+    
+    # Validate required field
+    if 'LipidMolec' not in selected_metadata_mapping:
+        st.sidebar.error("❌ Lipid name/identifier column is required")
+        return False, None
+    
+    # Get selected metadata columns (for exclusion from sample columns)
+    selected_metadata_cols = list(selected_metadata_mapping.values())
+    
+    # Box 2: Sample columns
+    st.sidebar.markdown("#### 📊 Select Sample Intensity Columns")
+    
+    # Get auto-detected sample columns (always use these as default)
+    if data_format == 'MS-DIAL':
+        features = st.session_state.get('msdial_features', {})
+        auto_detected_samples = features.get('raw_sample_columns', [])
+    else:
+        # For Generic format, get from original mapping
+        auto_detected_samples = []
+        if 'standardized_name' in mapping_df.columns and 'original_name' in mapping_df.columns:
+            auto_detected_samples = [
+                row['original_name'] 
+                for _, row in mapping_df.iterrows() 
+                if row['standardized_name'].startswith('intensity[')
+            ]
+    
+    # Available columns = all columns minus selected metadata
+    available_for_samples = [col for col in all_original_cols if col not in selected_metadata_cols]
+    
+    # Get sample count from DataFrame structure
+    n_intensity_cols = len(auto_detected_samples)
+    
+    # Pre-populate with auto-detected samples
+    default_samples = [col for col in auto_detected_samples if col in available_for_samples]
+    
+    selected_sample_cols = st.sidebar.multiselect(
+        f"Choose sample intensity columns ({n_intensity_cols} detected):",
+        options=available_for_samples,
+        default=default_samples,
+        key='sample_columns_selection',
+        help="Select all columns containing sample intensity values"
+    )
+    
+    # Validate selections
+    if len(selected_sample_cols) >= 1:
+        # Create corrected mapping
+        corrected_mapping = []
+        
+        # Add metadata mappings
+        for std_name, orig_col in selected_metadata_mapping.items():
+            corrected_mapping.append({
+                'standardized_name': std_name,
+                'original_name': orig_col
+            })
+        
+        # Add sample mappings
+        for i, orig_col in enumerate(selected_sample_cols, 1):
+            corrected_mapping.append({
+                'standardized_name': f'intensity[s{i}]',
+                'original_name': orig_col
+            })
+        
+        corrected_mapping_df = pd.DataFrame(corrected_mapping)
+        
+        st.sidebar.success(f"✓ Selections valid: {len(selected_sample_cols)} sample columns, {len(selected_metadata_mapping)} metadata columns")
+        
+        # Show corrected mapping
+        st.sidebar.markdown("#### ✅ Corrected Column Mapping")
         st.sidebar.dataframe(
-            st.session_state.column_mapping.reset_index(drop=True),
+            corrected_mapping_df.reset_index(drop=True),
             use_container_width=True
         )
+        
+        # Update session state with corrected mapping
+        st.session_state.column_mapping = corrected_mapping_df
+        st.session_state.n_intensity_cols = len(selected_sample_cols)
+        st.session_state.column_mapping_complete = True
+        
+        # Store the manual correction info so we can apply it to the DataFrame
+        st.session_state.manual_column_correction = {
+            'metadata_mapping': selected_metadata_mapping,
+            'sample_cols': selected_sample_cols,
+            'sample_mapping': {orig: f'intensity[s{i}]' for i, orig in enumerate(selected_sample_cols, 1)}
+        }
+        
+        return True, None
+    else:
+        # Show validation error
+        if len(selected_sample_cols) < 1:
+            st.sidebar.error(f"❌ At least one sample column is required")
+        
+        st.session_state.column_mapping_complete = False
+        return False, None
+
+def apply_manual_column_correction(df, data_format):
+    """
+    Apply manual column corrections to the DataFrame.
+    This re-standardizes the DataFrame based on user's manual column selections.
+    
+    Args:
+        df: DataFrame with automatically standardized columns (not used, kept for API compatibility)
+        data_format: Data format string
+        
+    Returns:
+        DataFrame with manually corrected column standardization
+    """
+    if 'manual_column_correction' not in st.session_state:
+        return df
+    
+    if 'original_uploaded_df' not in st.session_state:
+        st.error("Original data not available for re-standardization")
+        return df
+    
+    correction = st.session_state.manual_column_correction
+    orig_df = st.session_state.original_uploaded_df.copy()
+    
+    # Create a new standardized DataFrame
+    standardized_data = {}
+    
+    if data_format == 'MS-DIAL':
+        # For MS-DIAL, we need to handle the header row situation
+        features = st.session_state.get('msdial_features', {})
+        header_row_idx = features.get('header_row_index', -1)
+        
+        if header_row_idx >= 0:
+            # Extract actual columns and data
+            actual_columns = orig_df.iloc[header_row_idx].tolist()
+            data_df = orig_df.iloc[header_row_idx + 1:].reset_index(drop=True)
+        else:
+            actual_columns = orig_df.columns.tolist()
+            data_df = orig_df
+        
+        # Map original column names to their positions
+        col_to_idx = {col: idx for idx, col in enumerate(actual_columns)}
+        
+        # Add metadata columns
+        for std_col, orig_col in correction['metadata_mapping'].items():
+            if orig_col in col_to_idx:
+                col_idx = col_to_idx[orig_col]
+                if std_col == 'LipidMolec':
+                    # Standardize lipid names
+                    standardized_data[std_col] = data_df.iloc[:, col_idx].apply(
+                        lp.DataFormatHandler._standardize_lipid_name
+                    )
+                else:
+                    standardized_data[std_col] = data_df.iloc[:, col_idx]
+        
+        # Always infer ClassKey from LipidMolec
+        if 'LipidMolec' in standardized_data:
+            standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(
+                lp.DataFormatHandler._infer_class_key
+            )
+        
+        # Add sample columns
+        for orig_col, std_col in correction['sample_mapping'].items():
+            if orig_col in col_to_idx:
+                col_idx = col_to_idx[orig_col]
+                standardized_data[std_col] = pd.to_numeric(
+                    data_df.iloc[:, col_idx], errors='coerce'
+                ).fillna(0)
+    
+    else:  # Generic Format
+        # For Generic, columns are straightforward
+        # Add metadata columns
+        for std_col, orig_col in correction['metadata_mapping'].items():
+            if orig_col in orig_df.columns:
+                if std_col == 'LipidMolec':
+                    # Standardize lipid names
+                    standardized_data[std_col] = orig_df[orig_col].apply(
+                        lp.DataFormatHandler._standardize_lipid_name
+                    )
+                else:
+                    standardized_data[std_col] = orig_df[orig_col]
+        
+        # Always infer ClassKey from LipidMolec
+        if 'LipidMolec' in standardized_data:
+            standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(
+                lp.DataFormatHandler._infer_class_key
+            )
+        
+        # Add sample columns
+        for orig_col, std_col in correction['sample_mapping'].items():
+            if orig_col in orig_df.columns:
+                standardized_data[std_col] = pd.to_numeric(
+                    orig_df[orig_col], errors='coerce'
+                ).fillna(0)
+    
+    return pd.DataFrame(standardized_data)
 
 def specify_bqc_samples(experiment):
     """
