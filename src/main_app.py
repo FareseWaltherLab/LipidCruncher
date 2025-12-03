@@ -544,8 +544,7 @@ def display_format_requirements(data_format):
         **REQUIRED Column (must use exact name):**
         * `Metabolite name` - Lipid/metabolite identifiers
 
-        **RECOMMENDED Columns (use exact names for auto-detection):**
-        * `Ontology` - Lipid class (e.g., Cer-NS, PC, PE)
+        **OPTIONAL Quality Columns (use exact names for auto-detection):**
         * `Total score` - Quality score for filtering (0-100)
         * `MS/MS matched` - Whether MS/MS spectrum was matched (TRUE/FALSE)
         * `Average Rt(min)` - Retention time information
@@ -571,6 +570,7 @@ def display_format_requirements(data_format):
         **Notes:**
         * ✓ Column names are case-sensitive and must match exactly
         * ✓ Metadata header rows are automatically skipped
+        * ✓ Lipid class (ClassKey) is automatically inferred from lipid names
         * ✓ Hydroxyl notation (`;2O`, `;3O`) is preserved in lipid names
         * ✓ Internal standards with (d5), (d7), (d9), ISTD, or SPLASH patterns are auto-detected
         * ✓ After upload, you can review and correct column mappings if needed
@@ -877,6 +877,39 @@ def display_column_mapping(df, data_format):
         use_container_width=True
     )
     
+    # For MS-DIAL, column names must be exact - no manual mapping needed
+    # Just show what was detected and allow continuing
+    if st.session_state.format_type == 'MS-DIAL':
+        
+        # Optional: Allow user to override sample column detection
+        with st.sidebar.expander("🔧 Override Sample Detection (Optional)", expanded=False):
+            st.write("Only change this if auto-detection incorrectly classified columns.")
+            
+            features = st.session_state.get('msdial_features', {})
+            detected_samples = features.get('raw_sample_columns', [])
+            all_columns = features.get('actual_columns', [])
+            
+            # Exclude known metadata columns
+            available_for_samples = [
+                col for col in all_columns 
+                if col not in lp.DataFormatHandler.MSDIAL_METADATA_COLUMNS
+            ]
+            
+            manual_samples = st.multiselect(
+                "Sample columns:",
+                options=available_for_samples,
+                default=detected_samples,
+                key='manual_sample_override',
+                help="Select all columns containing sample intensity data"
+            )
+            
+            if manual_samples and manual_samples != detected_samples:
+                st.session_state.msdial_features['raw_sample_columns'] = manual_samples
+                st.success(f"✓ Using {len(manual_samples)} manually selected samples")
+        
+        return True, None
+    
+    # For Generic Format, keep the existing Yes/No radio button flow
     # Ask if mappings look correct
     st.sidebar.write("Do the column mappings look correct?")
     mapping_correct = st.sidebar.radio(
@@ -888,7 +921,7 @@ def display_column_mapping(df, data_format):
     if mapping_correct == 'Yes':
         return True, None
     else:
-        # Show correction interface
+        # Show correction interface (Generic Format only)
         return handle_column_mapping_correction(df, mapping_df, data_format)
 
 def handle_column_mapping_correction(mapping_df, experiment, data_format):
@@ -903,6 +936,11 @@ def handle_column_mapping_correction(mapping_df, experiment, data_format):
     Returns:
         tuple: (mapping_valid, corrected_mapping_df)
     """
+    # MS-DIAL should not reach here - it uses exact column names
+    if data_format == 'MS-DIAL':
+        st.sidebar.error("MS-DIAL format uses exact column names. Please ensure your export has correct column names.")
+        return False, None
+    
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔧 Correct Column Mappings")
     
@@ -1892,7 +1930,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
            
             2. **Column Standardization**: We map MS-DIAL columns to LipidCruncher's standard format:
                - `Metabolite name` → `LipidMolec`
-               - `Ontology` → `ClassKey`
+               - `ClassKey` → Inferred from `LipidMolec` (e.g., Cer(18:1;2O_24:0) → Cer)
                - `Average Rt(min)` → `BaseRt`
                - `Average Mz` → `CalcMass`
                - Sample intensity columns → `intensity[s1]`, `intensity[s2]`, etc.
