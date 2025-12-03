@@ -286,9 +286,8 @@ def main():
                                     st.session_state.grade_config = grade_config
                             
                             elif data_format == 'MS-DIAL':
-                                # Check if both raw and normalized data available
-                                features = st.session_state.get('msdial_features', {})
-                                has_normalized = features.get('has_normalized_data', False)
+                                # Always show data type selection first (if both raw and normalized data available)
+                                get_msdial_data_type_selection()
                                 
                                 # Check if Total score was included in manual corrections
                                 manual_correction = st.session_state.get('manual_column_correction')
@@ -302,7 +301,7 @@ def main():
                                     st.info("ℹ️ Quality filtering unavailable - Total score column was not selected in column mapping.")
                                 else:
                                     # Show quality filtering UI for MS-DIAL
-                                    with st.expander("Configure MS-DIAL Data Options", expanded=True):
+                                    with st.expander("🎯 Configure Quality Filtering", expanded=True):
                                         quality_config = get_msdial_quality_config()
                                         st.session_state.msdial_quality_config = quality_config
                             
@@ -1409,27 +1408,25 @@ def get_grade_filtering_config(df, format_type):
     
     return grade_config
 
-def get_msdial_quality_config():
+def get_msdial_data_type_selection():
     """
-    Display MS-DIAL quality filtering UI.
+    Display MS-DIAL data type selection UI (raw vs pre-normalized).
+    This is separate from quality filtering to ensure it's always available
+    when both data types exist, regardless of whether quality filtering is possible.
     
     Returns:
-        dict: Quality configuration with 'total_score_threshold' and 'require_msms' keys
-              Returns None if quality filtering is not available
+        None (sets st.session_state.msdial_use_normalized)
     """
     # Get the features detected during validation
     features = st.session_state.get('msdial_features', {})
     
-    quality_filtering_available = features.get('has_quality_score', False)
-    msms_filtering_available = features.get('has_msms_matched', False)
     has_normalized_data = features.get('has_normalized_data', False)
     raw_samples = features.get('raw_sample_columns', [])
     norm_samples = features.get('normalized_sample_columns', [])
     
-    st.markdown("---")
-    
-    # Section 1: Data Type Selection (if normalized data is available)
+    # Data Type Selection (if normalized data is available)
     if has_normalized_data and len(norm_samples) > 0:
+        st.markdown("---")
         st.markdown("#### 📊 Data Type Selection")
         st.markdown(f"""
         Your MS-DIAL export contains both raw and pre-normalized intensity values:
@@ -1455,8 +1452,22 @@ def get_msdial_quality_config():
             st.info("📌 Using raw intensity data. You can apply normalization in the next step.")
         
         st.markdown("---")
+
+def get_msdial_quality_config():
+    """
+    Display MS-DIAL quality filtering UI.
     
-    # Section 2: Quality Filtering (if quality columns available)
+    Returns:
+        dict: Quality configuration with 'total_score_threshold' and 'require_msms' keys
+              Returns None if quality filtering is not available
+    """
+    # Get the features detected during validation
+    features = st.session_state.get('msdial_features', {})
+    
+    quality_filtering_available = features.get('has_quality_score', False)
+    msms_filtering_available = features.get('has_msms_matched', False)
+    
+    #Quality Filtering (if quality columns available)
     if quality_filtering_available or msms_filtering_available:
         st.markdown("#### 🎯 Quality Filtering Configuration")
         
