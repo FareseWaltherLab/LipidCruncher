@@ -464,10 +464,11 @@ class DataFormatHandler:
         
         Transforms:
             - Metabolite name -> LipidMolec (with standardized naming)
-            - Ontology -> ClassKey (or inferred from lipid name)
+            - ClassKey -> always inferred from LipidMolec (not from Ontology column)
             - Average Rt(min) -> BaseRt
             - Average Mz -> CalcMass
             - Sample columns -> intensity[s1], intensity[s2], etc.
+            - Quality columns (Total score, MS/MS matched) -> included for filtering
             
         Returns:
             pd.DataFrame: Standardized dataframe
@@ -522,15 +523,11 @@ class DataFormatHandler:
                 DataFormatHandler._standardize_lipid_name
             )
             
-            # ClassKey - use Ontology if available, otherwise infer
-            if features.get('has_ontology', False) and 'Ontology' in col_indices:
-                ontology_idx = col_indices['Ontology']
-                standardized_data['ClassKey'] = data_df.iloc[:, ontology_idx].fillna('Unknown')
-            else:
-                # Infer from standardized lipid names
-                standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(
-                    DataFormatHandler._infer_class_key
-                )
+            # ClassKey - always infer from standardized lipid names
+            # We don't use Ontology column even if present, to ensure consistency
+            standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(
+                DataFormatHandler._infer_class_key
+            )
             
             # Optional columns - use positional indexing
             if features.get('has_rt', False) and 'Average Rt(min)' in col_indices:
@@ -545,18 +542,23 @@ class DataFormatHandler:
                     data_df.iloc[:, mz_idx], errors='coerce'
                 )
             
-            # Store quality columns for potential filtering
+            # Store quality columns in dataframe for filtering (not just session state)
+            # These will be removed later during column extraction, but need to be present for filtering
             if features.get('has_quality_score', False) and 'Total score' in col_indices:
                 score_idx = col_indices['Total score']
-                st.session_state.msdial_quality_scores = pd.to_numeric(
+                quality_scores = pd.to_numeric(
                     data_df.iloc[:, score_idx], errors='coerce'
                 )
+                st.session_state.msdial_quality_scores = quality_scores
+                standardized_data['Total score'] = quality_scores
             
             if features.get('has_msms_matched', False) and 'MS/MS matched' in col_indices:
                 msms_idx = col_indices['MS/MS matched']
-                st.session_state.msdial_msms_matched = data_df.iloc[:, msms_idx].apply(
+                msms_matched = data_df.iloc[:, msms_idx].apply(
                     lambda x: str(x).upper() == 'TRUE'
                 )
+                st.session_state.msdial_msms_matched = msms_matched
+                standardized_data['MS/MS matched'] = data_df.iloc[:, msms_idx]
             
             # Sample intensity columns - use positional indexing to avoid duplicate name issues
             column_mapping = {}
@@ -579,16 +581,7 @@ class DataFormatHandler:
                 'standardized_name': 'LipidMolec'
             })
             
-            if features.get('has_ontology', False) and 'Ontology' in col_indices:
-                complete_mapping.append({
-                    'original_name': 'Ontology',
-                    'standardized_name': 'ClassKey'
-                })
-            else:
-                complete_mapping.append({
-                    'original_name': f'{lipid_col} (inferred)',
-                    'standardized_name': 'ClassKey'
-                })
+            # Note: ClassKey is always inferred from LipidMolec - no need to show in mapping
             
             if features.get('has_rt', False) and 'Average Rt(min)' in col_indices:
                 complete_mapping.append({

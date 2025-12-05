@@ -144,6 +144,7 @@ class CleanMSDIALData:
         # Apply Total Score filter if column exists
         if 'Total score' in filtered_df.columns:
             threshold = quality_config.get('total_score_threshold', 60)
+            pre_score_unique = filtered_df['LipidMolec'].nunique()
             # Convert to numeric, handling any non-numeric values
             filtered_df['Total score'] = pd.to_numeric(
                 filtered_df['Total score'], errors='coerce'
@@ -151,21 +152,47 @@ class CleanMSDIALData:
             filtered_df = filtered_df[
                 filtered_df['Total score'] >= threshold
             ]
-            score_filtered = initial_count - len(filtered_df)
-            if score_filtered > 0:
-                st.info(f"Quality filter: Removed {score_filtered} entries with Total score < {threshold}")
+            score_filtered_rows = initial_count - len(filtered_df)
+            score_filtered_unique = pre_score_unique - filtered_df['LipidMolec'].nunique()
+            if score_filtered_rows > 0:
+                st.info(f"⚠️ **Quality Filter:** Removed {score_filtered_unique} lipid species ({score_filtered_rows} total entries) with Total score < {threshold}")
         
         # Apply MS/MS matched filter if required and column exists
         if quality_config.get('require_msms', False):
             if 'MS/MS matched' in filtered_df.columns:
                 pre_msms_count = len(filtered_df)
+                pre_msms_unique_lipids = filtered_df['LipidMolec'].nunique()
+                filtered_df_before_msms = filtered_df.copy()  # Save for comparison
+                
                 # Handle various TRUE representations
                 filtered_df = filtered_df[
                     filtered_df['MS/MS matched'].astype(str).str.upper().isin(['TRUE', '1', 'YES'])
                 ]
+                
                 msms_filtered = pre_msms_count - len(filtered_df)
+                post_msms_unique_lipids = filtered_df['LipidMolec'].nunique()
+                unique_lipids_removed = pre_msms_unique_lipids - post_msms_unique_lipids
+                
                 if msms_filtered > 0:
-                    st.info(f"Quality filter: Removed {msms_filtered} entries without MS/MS validation")
+                    # Get the unique lipids that were removed
+                    remaining_lipids = set(filtered_df['LipidMolec'].unique())
+                    original_lipids = set(filtered_df_before_msms['LipidMolec'].unique())
+                    removed_lipids = original_lipids - remaining_lipids
+                    
+                    # Check if removed lipids are internal standards
+                    internal_std_patterns = ['d5', 'd7', 'd9', 'd3', 'd4', 'ISTD', 'SPLASH', 'istd']
+                    internal_std_removed = [lipid for lipid in removed_lipids 
+                                          if any(pattern in str(lipid) for pattern in internal_std_patterns)]
+                    regular_lipids_removed = len(removed_lipids) - len(internal_std_removed)
+                    
+                    if len(internal_std_removed) > 0 and regular_lipids_removed > 0:
+                        st.info(f"⚠️ **MS/MS Filter:** Removed {unique_lipids_removed} lipid species ({msms_filtered} entries) without MS/MS validation:\n"
+                               f"- {len(internal_std_removed)} internal standards\n"
+                               f"- {regular_lipids_removed} regular lipids")
+                    elif len(internal_std_removed) > 0:
+                        st.info(f"⚠️ **MS/MS Filter:** Removed {len(internal_std_removed)} internal standard(s) ({msms_filtered} entries) without MS/MS validation")
+                    else:
+                        st.info(f"⚠️ **MS/MS Filter:** Removed {unique_lipids_removed} lipid species ({msms_filtered} entries) without MS/MS validation")
         
         return filtered_df
     

@@ -300,8 +300,8 @@ def main():
                                 if not has_total_score:
                                     st.info("ℹ️ Quality filtering unavailable - Total score column was not selected in column mapping.")
                                 else:
-                                    # Show quality filtering UI for MS-DIAL
-                                    with st.expander("🎯 Configure Quality Filtering", expanded=True):
+                                    # Show quality filtering UI in expander below data type selection
+                                    with st.expander("🔬 Quality Filtering Configuration", expanded=True):
                                         quality_config = get_msdial_quality_config()
                                         st.session_state.msdial_quality_config = quality_config
                             
@@ -1309,6 +1309,11 @@ def clean_data(df, name_df, experiment, data_format, grade_config=None, quality_
     
     cleaned_df, intsta_df = cleaner.extract_internal_standards(cleaned_df)
     
+    # Clear UI message about internal standards extraction
+    if intsta_df is not None and not intsta_df.empty:
+        num_standards = intsta_df['LipidMolec'].nunique()
+        st.success(f"✓ **Internal Standards Extracted:** {num_standards} internal standard(s) separated for normalization (not filtered out)")
+    
     return cleaned_df, intsta_df
 
 def get_grade_filtering_config(df, format_type):
@@ -1507,72 +1512,70 @@ def get_msdial_quality_config():
     
     #Quality Filtering (if quality columns available)
     if quality_filtering_available or msms_filtering_available:
-        st.markdown("#### 🎯 Quality Filtering Configuration")
-        
-        # Define quality options
-        quality_options = {
-            'Strict (Score ≥80, MS/MS required)': {
-                'total_score_threshold': 80,
-                'require_msms': True
-            },
-            'Moderate (Score ≥60)': {
-                'total_score_threshold': 60,
-                'require_msms': False
-            },
-            'Permissive (Score ≥40)': {
-                'total_score_threshold': 40,
-                'require_msms': False
-            },
-            'No filtering': {
-                'total_score_threshold': 0,
-                'require_msms': False
+        # Case 1: Total score column is available - show full filtering UI
+        if quality_filtering_available:
+            # Define quality options
+            quality_options = {
+                'Strict (Score ≥80, MS/MS required)': {
+                    'total_score_threshold': 80,
+                    'require_msms': True
+                },
+                'Moderate (Score ≥60)': {
+                    'total_score_threshold': 60,
+                    'require_msms': False
+                },
+                'Permissive (Score ≥40)': {
+                    'total_score_threshold': 40,
+                    'require_msms': False
+                },
+                'No filtering': {
+                    'total_score_threshold': 0,
+                    'require_msms': False
+                }
             }
-        }
-        
-        st.markdown("""
-        MS-DIAL provides quality metrics for each identification. Choose a filtering level:
-        - **Strict**: Only highest confidence IDs (publication-ready)
-        - **Moderate**: Good balance of quality and coverage (recommended for exploration)
-        - **Permissive**: Includes lower confidence IDs (discovery mode)
-        - **No filtering**: Keep all identifications
-        """)
-        
-        selected_option = st.radio(
-            "Select quality filtering level:",
-            list(quality_options.keys()),
-            index=1,  # Default to Moderate
-            key="msdial_quality_level"
-        )
-        
-        quality_config = quality_options[selected_option].copy()
-        
-        # Show what this option means
-        if selected_option == 'Strict (Score ≥80, MS/MS required)':
-            st.success("✓ **Strict filtering**: Only highest confidence identifications. Ideal for publication-ready data.")
-        elif selected_option == 'Moderate (Score ≥60)':
-            st.info("✓ **Moderate filtering**: Good balance of quality and coverage. Recommended for exploratory analysis.")
-        elif selected_option == 'Permissive (Score ≥40)':
-            st.warning("⚠️ **Permissive filtering**: Includes lower confidence IDs. Use for discovery or when sample is limited.")
-        else:
-            st.warning("⚠️ **No filtering**: All identifications included. Quality may vary significantly.")
-        
-        # MS/MS validation option (if available)
-        if msms_filtering_available:
-            custom_msms = st.checkbox(
-                "Require MS/MS validation",
-                value=quality_config['require_msms'],
-                help="If checked, only lipids with MS/MS spectral match will be kept",
-                key="msdial_custom_msms"
-            )
-            quality_config['require_msms'] = custom_msms
-        
-        # Show advanced options with a checkbox toggle (not an expander to avoid nesting)
-        show_advanced = st.checkbox("🔧 Customize score threshold", value=False, key="msdial_show_advanced")
-        
-        if show_advanced:
-            st.markdown("**Override the preset Total Score threshold:**")
             
-            if quality_filtering_available:
+            st.markdown("""
+            MS-DIAL provides quality metrics for each identification. Choose a filtering level:
+            - **Strict**: Only highest confidence IDs (publication-ready)
+            - **Moderate**: Good balance of quality and coverage (recommended for exploration)
+            - **Permissive**: Includes lower confidence IDs (discovery mode)
+            - **No filtering**: Keep all identifications
+            """)
+            
+            selected_option = st.radio(
+                "Select quality filtering level:",
+                list(quality_options.keys()),
+                index=1,  # Default to Moderate
+                key="msdial_quality_level"
+            )
+            
+            quality_config = quality_options[selected_option].copy()
+            
+            # Show what this option means
+            if selected_option == 'Strict (Score ≥80, MS/MS required)':
+                st.success("✓ **Strict filtering**: Only highest confidence identifications. Ideal for publication-ready data.")
+            elif selected_option == 'Moderate (Score ≥60)':
+                st.info("✓ **Moderate filtering**: Good balance of quality and coverage. Recommended for exploratory analysis.")
+            elif selected_option == 'Permissive (Score ≥40)':
+                st.warning("⚠️ **Permissive filtering**: Includes lower confidence IDs. Use for discovery or when sample is limited.")
+            else:
+                st.warning("⚠️ **No filtering**: All identifications included. Quality may vary significantly.")
+            
+            # MS/MS validation option (if available)
+            if msms_filtering_available:
+                custom_msms = st.checkbox(
+                    "Require MS/MS validation",
+                    value=quality_config['require_msms'],
+                    help="If checked, only lipids with MS/MS spectral match will be kept",
+                    key="msdial_custom_msms"
+                )
+                quality_config['require_msms'] = custom_msms
+            
+            # Show advanced options with a checkbox toggle
+            show_advanced = st.checkbox("🔧 Customize score threshold", value=False, key="msdial_show_advanced")
+            
+            if show_advanced:
+                st.markdown("**Override the preset Total Score threshold:**")
                 custom_score = st.slider(
                     "Minimum Total Score:",
                     min_value=0,
@@ -1583,17 +1586,51 @@ def get_msdial_quality_config():
                     key="msdial_custom_score"
                 )
                 quality_config['total_score_threshold'] = custom_score
+            
+            # Summary
+            st.markdown("---")
+            st.markdown("##### 📋 Current Settings")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Score threshold:** ≥{quality_config['total_score_threshold']}")
+            with col2:
+                st.write(f"**MS/MS required:** {'Yes' if quality_config['require_msms'] else 'No'}")
+            
+            return quality_config
         
-        # Summary
-        st.markdown("---")
-        st.markdown("##### 📋 Current Settings")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"**Score threshold:** ≥{quality_config['total_score_threshold']}")
-        with col2:
-            st.write(f"**MS/MS required:** {'Yes' if quality_config['require_msms'] else 'No'}")
-        
-        return quality_config
+        # Case 2: Only MS/MS matched column available (no Total score)
+        elif msms_filtering_available:
+            st.warning("""
+            ⚠️ **Limited Quality Filtering Available**
+            
+            Your MS-DIAL export does not include the 'Total score' column, so score-based 
+            filtering is not available. However, you can still filter based on MS/MS validation.
+            
+            💡 **To enable full quality filtering:** Re-export from MS-DIAL with the 'Total score' column included.
+            """)
+            
+            st.markdown("---")
+            
+            # Only show MS/MS filtering option
+            require_msms = st.checkbox(
+                "✓ Require MS/MS validation",
+                value=False,
+                help="If checked, only lipids with MS/MS spectral match will be kept",
+                key="msdial_msms_only"
+            )
+            
+            quality_config = {
+                'total_score_threshold': 0,  # No score filtering
+                'require_msms': require_msms
+            }
+            
+            # Summary
+            st.markdown("---")
+            st.markdown("##### 📋 Current Settings")
+            st.write(f"**Score filtering:** Not available (no 'Total score' column)")
+            st.write(f"**MS/MS validation required:** {'Yes' if require_msms else 'No'}")
+            
+            return quality_config
     
     else:
         st.info("""
