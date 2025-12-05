@@ -2657,8 +2657,9 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     box_plot_fig1, box_plot_fig2 = display_box_plots(continuation_df, experiment)
     continuation_df, bqc_plot = conduct_bqc_quality_assessment(bqc_label, continuation_df, experiment)
    
-    # Only show retention time plots for LipidSearch 5.0
-    if format_type == 'LipidSearch 5.0':
+    # Show retention time plots for formats that have retention time and mass data
+    # (LipidSearch 5.0 always has these; MS-DIAL has them if Average Rt(min) and Average Mz were in the export)
+    if format_type in ['LipidSearch 5.0', 'MS-DIAL']:
         retention_time_plot = display_retention_time_plots(continuation_df, format_type)
    
     # Pairwise Correlation Analysis
@@ -2721,7 +2722,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     # PDF Generation Section
     st.subheader("Generate PDF Report")
     st.warning(
-        "⚠️  Important: PDF Report Generation Guidelines\n\n"
+        "⚠️  Important: PDF Report Generation Guidelines\n\n"
         "1. Generate the PDF only after completing all desired analyses.\n"
         "2. Ensure all analyses you want in the report have been viewed at least once.\n"
         "3. Use this feature instead of downloading plots individually - it's more efficient for multiple downloads.\n"
@@ -3112,20 +3113,23 @@ def display_retention_time_plots(continuation_df, format_type):
 
     Args:
         continuation_df (pd.DataFrame): The DataFrame containing lipidomic data after any necessary transformations.
-        format_type (str): The format of the input data (e.g., 'LipidSearch 5.0')
+        format_type (str): The format of the input data (e.g., 'LipidSearch 5.0', 'MS-DIAL')
 
     Returns:
         plotly.graph_objs._figure.Figure or None: The multi-class retention time comparison plot if generated, else None.
     """
-    if format_type == 'LipidSearch 5.0':
+    # Check if required columns are present for retention time plots
+    has_required_columns = 'BaseRt' in continuation_df.columns and 'CalcMass' in continuation_df.columns
+    
+    if (format_type in ['LipidSearch 5.0', 'MS-DIAL']) and has_required_columns:
         with st.expander('View Retention Time Plots: Check Sanity of Data'):
             # Add explanation about retention time analysis - ALWAYS VISIBLE
             st.markdown("### Retention Time Analysis")
             st.markdown("""
-            Retention time analysis is a crucial quality check for LipidSearch data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
+            Retention time analysis is a crucial quality check for lipidomics data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
             
             **What is Retention Time?**  
-            Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicity—more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
+            Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicityâ€"more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
             
             **What to Look For:**
             
