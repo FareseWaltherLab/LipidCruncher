@@ -1570,6 +1570,10 @@ def get_msdial_quality_config():
                     key="msdial_custom_msms"
                 )
                 quality_config['require_msms'] = custom_msms
+            else:
+                # Explain why MS/MS filtering is not available
+                st.warning("💡 **Note:** MS/MS validation filtering is not available because the 'MS/MS matched' column was not found in your export. To enable this feature, re-export from MS-DIAL with the 'MS/MS matched' column included.")
+                quality_config['require_msms'] = False
             
             # Show advanced options with a checkbox toggle
             show_advanced = st.checkbox("🔧 Customize score threshold", value=False, key="msdial_show_advanced")
@@ -1633,7 +1637,7 @@ def get_msdial_quality_config():
             return quality_config
     
     else:
-        st.info("""
+        st.warning("""
         **Note:** Quality filtering is not available for this dataset.
         
         Your MS-DIAL export does not include 'Total score' or 'MS/MS matched' columns.

@@ -31,7 +31,24 @@ class GroupSamples:
             actual_samples = len(value_columns)
             
             if expected_samples != actual_samples:
-                st.error(f"Number of samples in data ({actual_samples}) doesn't match experiment setup ({expected_samples})!")
+                # Check if this is an MS-DIAL specific issue with missing Lipid IS column
+                if (self.data_format == 'MS-DIAL' and 
+                    actual_samples == 2 * expected_samples):
+                    st.error(f"""
+                    **MS-DIAL Data Error:** Found {actual_samples} intensity columns but expected {expected_samples} samples.
+                    
+                    **Most likely cause:** Your MS-DIAL export contains both raw and normalized data, 
+                    but the 'Lipid IS' column is missing. Without this column, LipidCruncher cannot 
+                    distinguish between raw and normalized intensity columns.
+                    
+                    **Solution:** Re-export your data from MS-DIAL and ensure the 'Lipid IS' column 
+                    is included in the export. This column is used to separate raw from normalized values.
+                    
+                    Alternatively, if you only need one data type, re-export with only raw OR 
+                    normalized data (not both).
+                    """)
+                else:
+                    st.error(f"Number of samples in data ({actual_samples}) doesn't match experiment setup ({expected_samples})!")
                 return False
                 
             return True
