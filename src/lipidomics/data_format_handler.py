@@ -395,7 +395,7 @@ class DataFormatHandler:
                     break
             
             if lipid_col is None:
-                return False, "No lipid name column found. Expected 'Metabolite name' or similar column."
+                return False, "No lipid name column found. Expected 'Metabolite name' column."
             
             # Detect sample columns - now returns indices too
             # For validation, we need to work with the actual data
