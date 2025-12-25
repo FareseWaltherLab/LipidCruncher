@@ -134,9 +134,13 @@ class AbundanceBarChart:
                                               lipid_class: str, 
                                               selected_conditions: List[str], 
                                               experiment: Any, 
-                                              transformation_applied: str) -> Dict:
+                                              transformation_applied: str,
+                                              use_parametric: bool = False) -> Dict:
             """
             Helper function to perform Bonferroni-corrected pairwise comparisons.
+            
+            Args:
+                use_parametric: If True, use Welch's t-test; if False, use Mann-Whitney U
             """
             pairs = list(combinations(selected_conditions, 2))
             pairwise_p_values = []
@@ -161,21 +165,30 @@ class AbundanceBarChart:
                     
                     condition_data[condition] = sample_sums.values
             
-            # Perform pairwise tests
+            # Perform pairwise tests using appropriate test type
             for cond1, cond2 in pairs:
                 if cond1 in condition_data and cond2 in condition_data:
-                    _, p_val = mannwhitneyu(condition_data[cond1], condition_data[cond2], 
-                                          alternative='two-sided')
+                    if use_parametric:
+                        # Parametric: Welch's t-test (unequal variances)
+                        _, p_val = stats.ttest_ind(condition_data[cond1], condition_data[cond2], 
+                                                   equal_var=False)
+                    else:
+                        # Non-parametric: Mann-Whitney U
+                        _, p_val = mannwhitneyu(condition_data[cond1], condition_data[cond2], 
+                                              alternative='two-sided')
                     pairwise_p_values.append(p_val)
             
             # Apply Bonferroni correction to pairwise comparisons
             bonf_corrected = multipletests(pairwise_p_values, method='bonferroni')[1]
             
+            # Set method name based on test type used
+            method_name = "Welch's t-test + Bonferroni" if use_parametric else "Mann-Whitney U + Bonferroni"
+            
             tukey_results = {
                 'group1': [pair[0] for pair in pairs],
                 'group2': [pair[1] for pair in pairs],
                 'p_values': bonf_corrected,
-                'method': "Mann-Whitney U + Bonferroni"
+                'method': method_name
             }
             
             return tukey_results
@@ -362,18 +375,21 @@ class AbundanceBarChart:
                                 }
                                 statistical_results[lipid_class]['tukey_results'] = tukey_results
                             else:
-                                # Non-parametric: use Bonferroni approach
+                                # Non-parametric: use Bonferroni approach with Mann-Whitney U
                                 tukey_results = perform_bonferroni_posthoc_internal(
                                     continuation_df, lipid_class, selected_conditions, experiment, 
-                                    statistical_results[lipid_class]['transformation']
+                                    statistical_results[lipid_class]['transformation'],
+                                    use_parametric=False
                                 )
                                 statistical_results[lipid_class]['tukey_results'] = tukey_results
                                 
                         elif posthoc_correction == "bonferroni_all":
-                            # Always use Bonferroni regardless of test type
+                            # Use Bonferroni correction with test type matching the omnibus test
+                            is_parametric = "ANOVA" in statistical_results[lipid_class]['test']
                             tukey_results = perform_bonferroni_posthoc_internal(
                                 continuation_df, lipid_class, selected_conditions, experiment, 
-                                statistical_results[lipid_class]['transformation']
+                                statistical_results[lipid_class]['transformation'],
+                                use_parametric=is_parametric
                             )
                             statistical_results[lipid_class]['tukey_results'] = tukey_results
                             

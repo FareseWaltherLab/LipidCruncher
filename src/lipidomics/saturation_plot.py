@@ -97,8 +97,13 @@ class SaturationPlot:
         from scipy.stats import mannwhitneyu, kruskal
         
         def perform_bonferroni_posthoc_internal(continuation_df, lipid_class, fa_type, 
-                                              selected_conditions, experiment, transformation_applied):
-            """Helper function to perform Bonferroni-corrected pairwise comparisons."""
+                                              selected_conditions, experiment, transformation_applied,
+                                              use_parametric=False):
+            """Helper function to perform Bonferroni-corrected pairwise comparisons.
+            
+            Args:
+                use_parametric: If True, use Welch's t-test; if False, use Mann-Whitney U
+            """
             pairs = list(combinations(selected_conditions, 2))
             pairwise_p_values = []
             condition_data = {}
@@ -122,21 +127,30 @@ class SaturationPlot:
                     
                     condition_data[condition] = values
             
-            # Perform pairwise tests
+            # Perform pairwise tests using appropriate test type
             for cond1, cond2 in pairs:
                 if cond1 in condition_data and cond2 in condition_data:
-                    _, p_val = mannwhitneyu(condition_data[cond1], condition_data[cond2], 
-                                          alternative='two-sided')
+                    if use_parametric:
+                        # Parametric: Welch's t-test (unequal variances)
+                        _, p_val = stats.ttest_ind(condition_data[cond1], condition_data[cond2], 
+                                                   equal_var=False)
+                    else:
+                        # Non-parametric: Mann-Whitney U
+                        _, p_val = mannwhitneyu(condition_data[cond1], condition_data[cond2], 
+                                              alternative='two-sided')
                     pairwise_p_values.append(p_val)
             
             # Apply Bonferroni correction to pairwise comparisons
             bonf_corrected = multipletests(pairwise_p_values, method='bonferroni')[1]
             
+            # Set method name based on test type used
+            method_name = "Welch's t-test + Bonferroni" if use_parametric else "Mann-Whitney U + Bonferroni"
+            
             return {
                 'group1': [pair[0] for pair in pairs],
                 'group2': [pair[1] for pair in pairs],
                 'p_values': bonf_corrected,
-                'method': "Mann-Whitney U + Bonferroni"
+                'method': method_name
             }
         
         statistical_results = {}
@@ -341,18 +355,21 @@ class SaturationPlot:
                             }
                             statistical_results[lipid_class][fa_type]['tukey_results'] = tukey_results
                         else:
-                            # Non-parametric: use Bonferroni approach
+                            # Non-parametric: use Bonferroni approach with Mann-Whitney U
                             tukey_results = perform_bonferroni_posthoc_internal(
                                 continuation_df, lipid_class, fa_type, selected_conditions, experiment, 
-                                statistical_results[lipid_class][fa_type]['transformation']
+                                statistical_results[lipid_class][fa_type]['transformation'],
+                                use_parametric=False
                             )
                             statistical_results[lipid_class][fa_type]['tukey_results'] = tukey_results
                             
                     elif posthoc_correction == "bonferroni_all":
-                        # Always use Bonferroni regardless of test type
+                        # Use Bonferroni correction with test type matching the omnibus test
+                        is_parametric = "ANOVA" in statistical_results[lipid_class][fa_type]['test']
                         tukey_results = perform_bonferroni_posthoc_internal(
                             continuation_df, lipid_class, fa_type, selected_conditions, experiment, 
-                            statistical_results[lipid_class][fa_type]['transformation']
+                            statistical_results[lipid_class][fa_type]['transformation'],
+                            use_parametric=is_parametric
                         )
                         statistical_results[lipid_class][fa_type]['tukey_results'] = tukey_results
                         
@@ -691,24 +708,24 @@ class SaturationPlot:
         # Auto Level 1 (Between Class/FA combination) Correction
         if total_tests <= 3:  # Single class analysis
             auto_correction_method = "uncorrected"
-            auto_rationale = "Single class (â‰¤3 tests) â†’ no correction needed"
+            auto_rationale = "Single class (Ã¢â€°Â¤3 tests) Ã¢â€ â€™ no correction needed"
         elif total_tests <= 15:  # Up to 5 classes
             auto_correction_method = "fdr_bh"
-            auto_rationale = f"Moderate testing burden ({total_tests} tests) â†’ FDR recommended"
+            auto_rationale = f"Moderate testing burden ({total_tests} tests) Ã¢â€ â€™ FDR recommended"
         else:
             auto_correction_method = "fdr_bh"
-            auto_rationale = f"High testing burden ({total_tests} tests) â†’ FDR for discovery balance"
+            auto_rationale = f"High testing burden ({total_tests} tests) Ã¢â€ â€™ FDR for discovery balance"
         
         # Auto Level 2 (Within-Class/FA combination) Correction
         if len(selected_conditions) <= 2:
             auto_posthoc_correction = "uncorrected"
-            auto_posthoc_rationale = "â‰¤2 conditions â†’ no post-hoc needed"
+            auto_posthoc_rationale = "Ã¢â€°Â¤2 conditions Ã¢â€ â€™ no post-hoc needed"
         elif len(selected_conditions) <= 4:
             auto_posthoc_correction = "standard"
-            auto_posthoc_rationale = "Few conditions â†’ standard post-hoc approach"
+            auto_posthoc_rationale = "Few conditions Ã¢â€ â€™ standard post-hoc approach"
         else:
             auto_posthoc_correction = "bonferroni_all"
-            auto_posthoc_rationale = "Many conditions â†’ conservative Bonferroni"
+            auto_posthoc_rationale = "Many conditions Ã¢â€ â€™ conservative Bonferroni"
         
         return {
             'correction_method': auto_correction_method,
