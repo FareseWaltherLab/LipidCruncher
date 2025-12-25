@@ -269,20 +269,11 @@ class AbundanceBarChart:
                         test_chosen = "Kruskal-Wallis"
                     elif test_type in ["parametric", "auto"]:
                         # For both parametric and auto mode, use parametric tests
-                        try:
-                            from scipy.stats import alexandergovern
-                            result = alexandergovern(*transformed_data)
-                            statistic = result.statistic
-                            p_value = result.pvalue
-                            test_chosen = "Welch's ANOVA"
-                        except (ImportError, AttributeError):
-                            # SciPy version doesn't have alexandergovern
-                            statistic, p_value = stats.f_oneway(*transformed_data)
-                            test_chosen = "One-way ANOVA (Welch's unavailable)"
-                        except Exception as e:
-                            # Other unexpected errors
-                            statistic, p_value = stats.f_oneway(*transformed_data)
-                            test_chosen = "One-way ANOVA (fallback)"
+                        from scipy.stats import alexandergovern
+                        result = alexandergovern(*transformed_data)
+                        statistic = result.statistic
+                        p_value = result.pvalue
+                        test_chosen = "Welch's ANOVA"
                     
                     statistical_results[lipid_class] = {
                         'test': test_chosen,
@@ -330,8 +321,7 @@ class AbundanceBarChart:
             if not lipid_class.startswith('_'):
                 # Track significant omnibus tests for post-hoc analysis
                 if (len(selected_conditions) > 2 and 
-                    result['test'] in ["One-way ANOVA", "Welch's ANOVA", "One-way ANOVA (fallback)", 
-                                     "One-way ANOVA (Welch's unavailable)", "Kruskal-Wallis"] and
+                    result['test'] in ["Welch's ANOVA", "Kruskal-Wallis"] and
                     result['p-value'] <= alpha):  # Use uncorrected p-value for omnibus qualification
                     significant_omnibus_tests.append(lipid_class)
     

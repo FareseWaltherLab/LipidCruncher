@@ -235,18 +235,11 @@ class SaturationPlot:
                             statistic, p_value = kruskal(*transformed_data)
                             test_chosen = "Kruskal-Wallis"
                         elif test_type in ["parametric", "auto"]:
-                            try:
-                                from scipy.stats import alexandergovern
-                                result = alexandergovern(*transformed_data)
-                                statistic = result.statistic
-                                p_value = result.pvalue
-                                test_chosen = "Welch's ANOVA"
-                            except (ImportError, AttributeError):
-                                statistic, p_value = stats.f_oneway(*transformed_data)
-                                test_chosen = "One-way ANOVA (Welch's unavailable)"
-                            except Exception:
-                                statistic, p_value = stats.f_oneway(*transformed_data)
-                                test_chosen = "One-way ANOVA (fallback)"
+                            from scipy.stats import alexandergovern
+                            result = alexandergovern(*transformed_data)
+                            statistic = result.statistic
+                            p_value = result.pvalue
+                            test_chosen = "Welch's ANOVA"
                         
                         # Check for NaN p-values
                         if np.isnan(p_value) or np.isnan(statistic):
@@ -311,8 +304,7 @@ class SaturationPlot:
                 p_value_to_check = result.get('adjusted p-value', result['p-value'])
                 
                 if (len(selected_conditions) > 2 and 
-                    result['test'] in ["One-way ANOVA", "Welch's ANOVA", "One-way ANOVA (fallback)", 
-                                     "One-way ANOVA (Welch's unavailable)", "Kruskal-Wallis"] and
+                    result['test'] in ["Welch's ANOVA", "Kruskal-Wallis"] and
                     p_value_to_check <= alpha):
                     significant_omnibus_tests.append((lipid_class, fa_type))
     

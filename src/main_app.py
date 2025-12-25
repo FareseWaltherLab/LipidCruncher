@@ -3484,7 +3484,7 @@ def display_statistical_options():
                 For 3+ conditions only:
                 • Uncorrected: No pairwise correction
                 • Tukey's HSD: Recommended for parametric tests; uses Bonferroni-corrected pairwise tests for non-parametric
-                • Bonferroni All: Bonferroni correction for all pairwise tests
+                • Bonferroni: Bonferroni correction for all pairwise tests
                 """
             )
     
@@ -3613,7 +3613,7 @@ def display_statistical_options():
             |--------|-------------|
             | **Uncorrected** | Accept higher false positive risk for more discoveries |
             | **Standard** | Balanced approach: Tukey's HSD (parametric) or Bonferroni (non-parametric) |
-            | **Bonferroni All** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
+            | **Bonferroni** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
             
             💡 **Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
             """)
@@ -4126,7 +4126,7 @@ def display_saturation_statistical_options():
                 For 3+ conditions only:
                 • Uncorrected: No pairwise correction
                 • Tukey's HSD: Recommended for parametric tests; uses Bonferroni-corrected pairwise tests for non-parametric
-                • Bonferroni All: Bonferroni correction for all pairwise tests
+                • Bonferroni: Bonferroni correction for all pairwise tests
                 """
             )
     
@@ -4472,7 +4472,7 @@ def display_saturation_plots(experiment, continuation_df):
         |--------|-------------|
         | **Uncorrected** | Accept higher false positive risk for more discoveries |
         | **Standard** | Balanced approach: Tukey's HSD (parametric) or Bonferroni (non-parametric) |
-        | **Bonferroni All** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
+        | **Bonferroni** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
         
         **💡 Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
         """)
