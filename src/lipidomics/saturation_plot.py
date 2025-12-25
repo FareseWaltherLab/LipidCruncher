@@ -717,15 +717,14 @@ class SaturationPlot:
             auto_rationale = f"High testing burden ({total_tests} tests) Ã¢â€ â€™ FDR for discovery balance"
         
         # Auto Level 2 (Within-Class/FA combination) Correction
+        # Tukey's HSD is designed to control FWER for any number of pairwise comparisons
+        # It's more powerful than Bonferroni because it accounts for the correlation structure
         if len(selected_conditions) <= 2:
             auto_posthoc_correction = "uncorrected"
-            auto_posthoc_rationale = "Ã¢â€°Â¤2 conditions Ã¢â€ â€™ no post-hoc needed"
-        elif len(selected_conditions) <= 4:
-            auto_posthoc_correction = "standard"
-            auto_posthoc_rationale = "Few conditions Ã¢â€ â€™ standard post-hoc approach"
+            auto_posthoc_rationale = "≤2 conditions → no post-hoc needed"
         else:
-            auto_posthoc_correction = "bonferroni_all"
-            auto_posthoc_rationale = "Many conditions Ã¢â€ â€™ conservative Bonferroni"
+            auto_posthoc_correction = "standard"
+            auto_posthoc_rationale = "3+ conditions → Tukey's HSD (controls FWER)"
         
         return {
             'correction_method': auto_correction_method,

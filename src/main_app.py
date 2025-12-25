@@ -3744,15 +3744,14 @@ def apply_auto_mode_logic(selected_classes, selected_conditions):
         auto_rationale = "Multiple classes  →  FDR recommended for exploration"
     
     # Auto Level 2 (Within-Class) Correction
+    # Tukey's HSD is designed to control FWER for any number of pairwise comparisons
+    # It's more powerful than Bonferroni because it accounts for the correlation structure
     if len(selected_conditions) <= 2:
         auto_posthoc_correction = "uncorrected"
-        auto_posthoc_rationale = "≤2 conditions  →  no post-hoc needed"
-    elif len(selected_conditions) <= 4:
-        auto_posthoc_correction = "standard"  # Updated to use new naming
-        auto_posthoc_rationale = "Few conditions  →  standard post-hoc approach"
+        auto_posthoc_rationale = "≤2 conditions → no post-hoc needed"
     else:
-        auto_posthoc_correction = "bonferroni_all"  # Updated to use new naming
-        auto_posthoc_rationale = "Many conditions  →  conservative Bonferroni"
+        auto_posthoc_correction = "standard"
+        auto_posthoc_rationale = "3+ conditions → Tukey's HSD (controls FWER)"
     
     return {
         'correction_method': auto_correction_method,
