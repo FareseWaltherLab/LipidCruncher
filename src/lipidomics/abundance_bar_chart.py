@@ -119,7 +119,7 @@ class AbundanceBarChart:
             selected_classes: List of lipid classes to test
             test_type: "parametric", "non_parametric", or "auto"
             correction_method: "uncorrected", "fdr_bh", or "bonferroni" (Level 1 correction)
-            posthoc_correction: "uncorrected", "standard", or "bonferroni_all" (Level 2 correction)
+            posthoc_correction: "uncorrected", "standard", or "bonferroni" (Level 2 correction)
             alpha: Significance threshold
             auto_transform: Whether to apply log10 transformation automatically
             
@@ -341,7 +341,7 @@ class AbundanceBarChart:
                 if lipid_class in statistical_results:
                     try:
                         # Choose post-hoc method based on user selection and original test type
-                        if posthoc_correction == "standard":
+                        if posthoc_correction in ["standard", "tukey"]:
                             # Use standard approach: Tukey for parametric, Bonferroni for non-parametric
                             if ("ANOVA" in statistical_results[lipid_class]['test']):
                                 # Parametric post-hoc: Tukey's HSD
@@ -383,7 +383,7 @@ class AbundanceBarChart:
                                 )
                                 statistical_results[lipid_class]['tukey_results'] = tukey_results
                                 
-                        elif posthoc_correction == "bonferroni_all":
+                        elif posthoc_correction == "bonferroni":
                             # Use Bonferroni correction with test type matching the omnibus test
                             is_parametric = "ANOVA" in statistical_results[lipid_class]['test']
                             tukey_results = perform_bonferroni_posthoc_internal(

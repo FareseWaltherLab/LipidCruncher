@@ -3467,7 +3467,7 @@ def display_statistical_options():
             correction_method = st.selectbox(
                 "Between-Class Correction (Level 1)",
                 options=["uncorrected", "fdr_bh", "bonferroni"],
-                index=0,  # Default to uncorrected
+                index=1,  # Default to uncorrected
                 help="""
                 • Uncorrected: No correction (good for single hypothesis)
                 • FDR (Benjamini-Hochberg): Controls false discovery rate (for multiple classes)
@@ -3478,12 +3478,12 @@ def display_statistical_options():
         with col2:
             posthoc_correction = st.selectbox(
                 "Within-Class Correction (Level 2)",
-                options=["uncorrected", "standard", "bonferroni_all"],
-                index=0,  # Default to uncorrected
+                options=["uncorrected", "tukey", "bonferroni"],
+                index=1,  # Default to Tukey's HSD
                 help="""
                 For 3+ conditions only:
                 • Uncorrected: No pairwise correction
-                • Standard: Tukey's HSD (parametric) or Bonferroni (non-parametric) 
+                • Tukey's HSD: Recommended for parametric tests; uses Bonferroni-corrected pairwise tests for non-parametric
                 • Bonferroni All: Bonferroni correction for all pairwise tests
                 """
             )
@@ -3750,7 +3750,7 @@ def apply_auto_mode_logic(selected_classes, selected_conditions):
         auto_posthoc_correction = "uncorrected"
         auto_posthoc_rationale = "≤2 conditions → no post-hoc needed"
     else:
-        auto_posthoc_correction = "standard"
+        auto_posthoc_correction = "tukey"
         auto_posthoc_rationale = "3+ conditions → Tukey's HSD (controls FWER)"
     
     return {
@@ -4108,7 +4108,7 @@ def display_saturation_statistical_options():
             correction_method = st.selectbox(
                 "Between Class/FA Type Correction (Level 1)",
                 options=["uncorrected", "fdr_bh", "bonferroni"],
-                index=0,
+                index=1,
                 help="""
                 Note: Tests 3 fatty acid types (SFA, MUFA, PUFA) per lipid class
                 • Uncorrected: No correction (good for single class analysis)
@@ -4120,12 +4120,12 @@ def display_saturation_statistical_options():
         with col2:
             posthoc_correction = st.selectbox(
                 "Within Class/FA Type Correction (Level 2)",
-                options=["uncorrected", "standard", "bonferroni_all"],
-                index=0,
+                options=["uncorrected", "tukey", "bonferroni"],
+                index=1,  # Default to Tukey's HSD
                 help="""
                 For 3+ conditions only:
                 • Uncorrected: No pairwise correction
-                • Standard: Tukey's HSD (parametric) or Bonferroni (non-parametric) 
+                • Tukey's HSD: Recommended for parametric tests; uses Bonferroni-corrected pairwise tests for non-parametric
                 • Bonferroni All: Bonferroni correction for all pairwise tests
                 """
             )
@@ -4868,7 +4868,7 @@ def display_volcano_statistical_options():
         correction_method = st.selectbox(
             "Multiple Testing Correction",
             options=["uncorrected", "fdr_bh", "bonferroni"],
-            index=0,  # Default to uncorrected
+            index=1,  # Default to uncorrected
             help="""
             • Uncorrected: No correction (good for targeted hypothesis testing)
             • FDR (Benjamini-Hochberg): Controls false discovery rate (recommended for exploratory analysis)

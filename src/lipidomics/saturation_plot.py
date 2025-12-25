@@ -320,7 +320,7 @@ class SaturationPlot:
         if len(selected_conditions) > 2 and posthoc_correction != "uncorrected" and significant_omnibus_tests:
             for lipid_class, fa_type in significant_omnibus_tests:
                 try:
-                    if posthoc_correction == "standard":
+                    if posthoc_correction in ["standard", "tukey"]:
                         # Use standard approach: Tukey for parametric, Bonferroni for non-parametric
                         if ("ANOVA" in statistical_results[lipid_class][fa_type]['test']):
                             # Parametric post-hoc: Tukey's HSD
@@ -363,7 +363,7 @@ class SaturationPlot:
                             )
                             statistical_results[lipid_class][fa_type]['tukey_results'] = tukey_results
                             
-                    elif posthoc_correction == "bonferroni_all":
+                    elif posthoc_correction == "bonferroni":
                         # Use Bonferroni correction with test type matching the omnibus test
                         is_parametric = "ANOVA" in statistical_results[lipid_class][fa_type]['test']
                         tukey_results = perform_bonferroni_posthoc_internal(
@@ -723,7 +723,7 @@ class SaturationPlot:
             auto_posthoc_correction = "uncorrected"
             auto_posthoc_rationale = "≤2 conditions → no post-hoc needed"
         else:
-            auto_posthoc_correction = "standard"
+            auto_posthoc_correction = "tukey"
             auto_posthoc_rationale = "3+ conditions → Tukey's HSD (controls FWER)"
         
         return {
