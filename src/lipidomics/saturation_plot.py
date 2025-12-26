@@ -725,12 +725,12 @@ class SaturationPlot:
             'posthoc_rationale': auto_posthoc_rationale,
             'total_tests': total_tests
         }
-    
+
     @staticmethod
     def identify_consolidated_lipids(continuation_df, selected_classes):
         """
         Identify lipids that may be in consolidated format (e.g., PC(34:1) instead of PC(16:0_18:1)).
-        Excludes lipid classes that are always single-chain.
+        Excludes lipid classes that are truly single-chain.
         
         Args:
             continuation_df: DataFrame containing lipid data
@@ -739,10 +739,14 @@ class SaturationPlot:
         Returns:
             dict: Dictionary mapping lipid class to list of potentially consolidated lipids
         """
-        # Lipid classes that typically have only one fatty acid chain
+        # Lipid classes that have only ONE fatty acid chain
+        # Note: Sphingolipids (Cer, SM, etc.) have TWO chains (sphingoid base + fatty acid)
+        # and are NOT included here - they should be checked for consolidated format
         SINGLE_CHAIN_CLASSES = {
-            'CE', 'Cer', 'CerG1', 'CerG2', 'CerG3', 'SM', 'LPC', 'LPE', 'LPG', 
-            'LPI', 'LPS', 'LPA', 'MAG', 'ChE', 'FFA'
+            'CE', 'ChE',  # Cholesteryl esters - one FA attached to cholesterol
+            'LPC', 'LPE', 'LPG', 'LPI', 'LPS', 'LPA',  # Lysophospholipids - one FA chain
+            'MAG',  # Monoacylglycerol - one FA on glycerol
+            'FFA'   # Free fatty acids
         }
         
         consolidated_lipids = {}
@@ -756,6 +760,7 @@ class SaturationPlot:
             class_df = continuation_df[continuation_df['ClassKey'] == lipid_class]
             
             # Find lipids without underscore (consolidated format)
+            # Note: Standardization converts '/' to '_', so all detailed formats use '_'
             consolidated = []
             for lipid in class_df['LipidMolec']:
                 lipid_str = str(lipid)
