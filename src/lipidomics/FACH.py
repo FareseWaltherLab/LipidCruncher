@@ -140,11 +140,9 @@ class FACH:
     def create_fach_heatmap(data_dict):
         """
         Create side-by-side heatmaps for each condition with average DB and carbon chain length lines.
-        Includes annotations for both lines positioned outside the heatmap grid to avoid overlap,
-        with a semi-transparent background for clarity, and uses black text for all plot elements,
-        including subplot titles. Ensures x-axis numbers are not rotated (tickangle=0).
-        Uses a custom YlOrRd colorscale starting with yellowish at 0.
-        Y-axis starts slightly below the minimum carbon chain length.
+        Creates a proper 2D grid to ensure uniform cell sizes (squares) for each (Carbon, DB) combination.
+        Includes annotations for average lines positioned outside the heatmap grid.
+        Uses a custom YlOrRd colorscale starting with white at 0.
         Returns Plotly figure.
         """
         if not data_dict:
@@ -152,7 +150,7 @@ class FACH:
     
         # Find global min/max for consistent color scale
         all_proportions = pd.concat([df['Proportion'] for df in data_dict.values()])
-        vmin, vmax = all_proportions.min(), all_proportions.max()
+        vmin, vmax = 0, all_proportions.max()  # Always start at 0
     
         # Find global max for DB and min/max for Carbon to set consistent axes
         all_db = pd.concat([df['DB'] for df in data_dict.values()])
@@ -160,6 +158,10 @@ class FACH:
         max_db = int(all_db.max()) if not all_db.empty else 9
         min_carbon = int(all_carbon.min()) if not all_carbon.empty else 0
         max_carbon = int(all_carbon.max()) if not all_carbon.empty else 50
+    
+        # Create full grid coordinates
+        db_values = list(range(0, max_db + 1))
+        carbon_values = list(range(min_carbon, max_carbon + 1))
     
         # Create subplots: one per condition
         n_conditions = len(data_dict)
@@ -170,14 +172,15 @@ class FACH:
             shared_yaxes=True
         )
     
-        # Define custom YlOrRd colorscale (yellow at 0, progressing to red)
+        # Define custom colorscale (white at 0, progressing through yellow-orange-red)
         custom_colorscale = [
-            [0.0, 'rgb(255, 255, 204)'],  # Light yellow for 0%
-            [0.2, 'rgb(255, 204, 153)'],  # Light orange
-            [0.4, 'rgb(255, 153, 102)'],  # Orange
-            [0.6, 'rgb(255, 102, 51)'],   # Darker orange
-            [0.8, 'rgb(204, 51, 0)'],     # Red-orange
-            [1.0, 'rgb(153, 0, 0)']       # Dark red for max
+            [0.0, 'rgb(255, 255, 255)'],   # White for 0% (no data)
+            [0.001, 'rgb(255, 255, 204)'], # Light yellow for very small values
+            [0.2, 'rgb(255, 204, 153)'],   # Light orange
+            [0.4, 'rgb(255, 153, 102)'],   # Orange
+            [0.6, 'rgb(255, 102, 51)'],    # Darker orange
+            [0.8, 'rgb(204, 51, 0)'],      # Red-orange
+            [1.0, 'rgb(153, 0, 0)']        # Dark red for max
         ]
     
         col_idx = 1
@@ -190,14 +193,28 @@ class FACH:
                 avg_db = 0
                 avg_carbon = 0
     
+            # Create 2D matrix for heatmap (rows=Carbon, cols=DB)
+            # Initialize with 0 so all cells are rendered and hoverable
+            z_matrix = np.zeros((len(carbon_values), len(db_values)))
+            
+            # Fill in the matrix with actual values
+            for _, row in df.iterrows():
+                carbon_idx = int(row['Carbon']) - min_carbon
+                db_idx = int(row['DB'])
+                if 0 <= carbon_idx < len(carbon_values) and 0 <= db_idx < len(db_values):
+                    z_matrix[carbon_idx, db_idx] = row['Proportion']
+    
             heatmap = go.Heatmap(
-                x=df['DB'],
-                y=df['Carbon'],
-                z=df['Proportion'],
+                x=db_values,
+                y=carbon_values,
+                z=z_matrix,
                 colorscale=custom_colorscale,
                 zmin=vmin,
                 zmax=vmax,
-                colorbar=dict(title='Proportion (%)', titlefont=dict(color='black'), tickfont=dict(color='black'))
+                colorbar=dict(title='Proportion (%)', titlefont=dict(color='black'), tickfont=dict(color='black')),
+                hovertemplate='Double Bonds: %{x}<br>Carbon: %{y}<br>Proportion: %{z:.2f}%<extra></extra>',
+                xgap=1,
+                ygap=1
             )
             fig.add_trace(heatmap, row=1, col=col_idx)
     
@@ -211,10 +228,10 @@ class FACH:
             # Add annotation for average DB, positioned above the heatmap
             fig.add_annotation(
                 x=avg_db,
-                y=max_carbon + 2,
+                y=max_carbon + 1.5,
                 text=f'Avg DB: {avg_db:.1f}',
                 showarrow=False,
-                font=dict(size=14, color='black'),
+                font=dict(size=12, color='black'),
                 bgcolor='rgba(255, 255, 255, 0.8)',
                 xref=f'x{col_idx}',
                 yref=f'y{col_idx}',
@@ -231,12 +248,13 @@ class FACH:
             )
             # Add annotation for average Carbon, positioned to the right of the heatmap
             fig.add_annotation(
-                x=max_db + 1,
+                x=max_db + 0.5,
                 y=avg_carbon,
                 text=f'Avg C: {avg_carbon:.1f}',
                 showarrow=False,
-                font=dict(size=14, color='black'),
+                font=dict(size=12, color='black'),
                 bgcolor='rgba(255, 255, 255, 0.8)',
+                xanchor='left',
                 xref=f'x{col_idx}',
                 yref=f'y{col_idx}',
                 row=1,
@@ -246,8 +264,8 @@ class FACH:
             # Update x-axis to show all integers from 0 to max_db with no rotation
             fig.update_xaxes(
                 tickmode='array',
-                tickvals=list(range(max_db + 1)),
-                ticktext=list(range(max_db + 1)),
+                tickvals=db_values,
+                ticktext=db_values,
                 tickangle=0,
                 title_text='Double Bonds',
                 titlefont=dict(color='black'),
@@ -257,21 +275,20 @@ class FACH:
                 col=col_idx
             )
     
-            # Update y-axis - start slightly below minimum carbon chain length
-            y_range_min = min_carbon - 1 if min_carbon > 0 else 0
+            # Update y-axis
             if col_idx == 1:
                 fig.update_yaxes(
                     title_text='Carbon Chain Length',
                     titlefont=dict(color='black'),
                     tickfont=dict(color='black'),
-                    range=[y_range_min, max_carbon + 2.5],
+                    range=[min_carbon - 0.5, max_carbon + 2.5],
                     row=1,
                     col=col_idx
                 )
             else:
                 fig.update_yaxes(
                     tickfont=dict(color='black'),
-                    range=[y_range_min, max_carbon + 2.5],
+                    range=[min_carbon - 0.5, max_carbon + 2.5],
                     row=1,
                     col=col_idx
                 )
