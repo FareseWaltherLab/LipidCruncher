@@ -233,7 +233,7 @@ def main():
             st.error(f"Failed to load logo: {str(e)}")
             st.header("LipidCruncher")
         
-        st.markdown("Process, analyze and visualize lipidomics data from multiple sources.")
+        st.markdown("Process, analyze and visualize lipidomic data from multiple sources.")
         
         data_format = display_format_selection()
         display_format_requirements(data_format)
@@ -2677,7 +2677,7 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
         st.markdown("""
         ## 🧪 Statistical Testing in LipidCruncher
 
-        LipidCruncher uses rigorous statistical methods to help you identify meaningful differences in your lipidomics data. This guide explains everything you need to know—no statistics PhD required!
+        LipidCruncher uses rigorous statistical methods to help you identify meaningful differences in your lipidomic data. This guide explains everything you need to know—no statistics PhD required!
 
         ---
 
@@ -2695,12 +2695,12 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
 
         | Test Type | 2 Conditions | 3+ Conditions | When to Use |
         |-----------|--------------|---------------|-------------|
-        | **Parametric** | Welch's t-test | Welch's ANOVA | Default choice. Works great with log-transformed lipidomics data |
+        | **Parametric** | Welch's t-test | Welch's ANOVA | Default choice. Works great with log-transformed lipidomic data |
         | **Non-parametric** | Mann-Whitney U | Kruskal-Wallis | More conservative. Use when you want maximum rigor or have unusual distributions |
 
         **Why Welch's?** Unlike classic t-tests and ANOVA, Welch's versions don't assume equal variances across groups—important for biological data where variability often differs between conditions.
 
-        **Why log transformation?** Lipidomics data is typically right-skewed (a few very high values). Log10 transformation makes the data more symmetric and suitable for parametric tests. This is standard practice in the field.
+        **Why log transformation?** Lipidomic data is typically right-skewed (a few very high values). Log10 transformation makes the data more symmetric and suitable for parametric tests. This is standard practice in the field.
 
         ---
 
@@ -3054,7 +3054,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             # BQC analysis details - ALWAYS VISIBLE
             st.markdown("### Batch Quality Control (BQC) Analysis")
             st.markdown("""
-            Batch Quality Control (BQC) analysis evaluates the reliability of your lipidomics data by analyzing the variability of measurements in BQC samples, which are special quality control samples run alongside your experiment. This analysis uses the Coefficient of Variation (CoV) to measure how consistent the measurements are for each lipid across these samples.
+            Batch Quality Control (BQC) analysis evaluates the reliability of your lipidomic data by analyzing the variability of measurements in BQC samples, which are special quality control samples run alongside your experiment. This analysis uses the Coefficient of Variation (CoV) to measure how consistent the measurements are for each lipid across these samples.
 
             **What is CoV?**  
             The Coefficient of Variation (CoV) is a measure of relative variability, calculated as:
@@ -3229,7 +3229,7 @@ def display_retention_time_plots(continuation_df, format_type):
             # Add explanation about retention time analysis - ALWAYS VISIBLE
             st.markdown("### Retention Time Analysis")
             st.markdown("""
-            Retention time analysis is a crucial quality check for lipidomics data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
+            Retention time analysis is a crucial quality check for lipidomic data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
             
             **What is Retention Time?**  
             Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicityâ€"more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
@@ -3519,7 +3519,6 @@ def display_statistical_options():
     Display UI components for statistical testing options with auto/manual mode selection.
     Returns the selected options as a dictionary.
     """
-    st.subheader("Statistical Testing Options")
     
     # First choice: Auto vs Manual mode
     mode_choice = st.radio(
@@ -3747,7 +3746,13 @@ def apply_auto_mode_logic(selected_classes, selected_conditions):
 def display_abundance_bar_charts(experiment, continuation_df):
     """Display abundance bar charts with auto mode integration."""
     with st.expander("Class Concentration Bar Chart"):
-        # Get valid conditions (more than one sample) - FIX: Define this first
+        # Short description
+        st.markdown("""
+        Compare total lipid class concentrations across experimental conditions. 
+        Each bar shows the sum of all species within a class, with error bars indicating variability between replicates.
+        """)
+        
+        # Get valid conditions (more than one sample)
         valid_conditions = [
             cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) 
             if num_samples > 1
@@ -3757,40 +3762,42 @@ def display_abundance_bar_charts(experiment, continuation_df):
             st.warning("No conditions with multiple samples found. Bar chart analysis requires at least two replicates per condition.")
             return None, None
         
-        # Get statistical options first (without auto logic)
+        # --- Statistical Options Section ---
+        st.markdown("---")
+        st.markdown("#### ⚙️ Statistical Options")
         stat_options = display_statistical_options()
         
+        # --- Data Selection Section ---
         st.markdown("---")
+        st.markdown("#### 🎯 Data Selection")
         
-        # Get user selections
-        selected_conditions_list = st.multiselect(
-            'Add or remove conditions', 
-            valid_conditions, 
-            valid_conditions,
-            key='conditions_select'
-        )
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_conditions_list = st.multiselect(
+                'Conditions', 
+                valid_conditions, 
+                valid_conditions,
+                key='conditions_select'
+            )
+        with col2:
+            selected_classes_list = st.multiselect(
+                'Lipid Classes',
+                list(continuation_df['ClassKey'].value_counts().index), 
+                list(continuation_df['ClassKey'].value_counts().index),
+                key='classes_select'
+            )
         
-        selected_classes_list = st.multiselect(
-            'Add or remove classes:',
-            list(continuation_df['ClassKey'].value_counts().index), 
-            list(continuation_df['ClassKey'].value_counts().index),
-            key='classes_select'
-        )
-        
-        # Apply auto mode logic if selected (for any auto settings)
+        # Apply auto mode logic if selected
         if stat_options['mode_choice'] == "Auto":
             auto_settings = apply_auto_mode_logic(selected_classes_list, selected_conditions_list)
-            
-            # Override auto selections with intelligent recommendations
-            stat_options['test_type'] = "auto"  # Will be handled in the statistical function
+            stat_options['test_type'] = "auto"
             stat_options['correction_method'] = auto_settings['correction_method']
             stat_options['posthoc_correction'] = auto_settings['posthoc_correction']
         
         linear_fig, log10_fig = None, None
         
-        # Continue with statistical analysis using (possibly auto-modified) stat_options
         if selected_conditions_list and selected_classes_list:
-            # Perform statistical tests with user-selected options
+            # Perform statistical tests
             with st.spinner("Performing statistical analysis..."):
                 statistical_results = lp.AbundanceBarChart.perform_statistical_tests(
                     continuation_df, 
@@ -3804,92 +3811,81 @@ def display_abundance_bar_charts(experiment, continuation_df):
                     auto_transform=stat_options['auto_transform']
                 )
             
-            # Display detailed statistical results
-            display_detailed_statistical_results(statistical_results, selected_conditions_list)
+            # --- Results Section ---
+            st.markdown("---")
+            st.markdown("#### 📊 Results")
             
-            st.markdown("---")  # Separator before plots
-
-            # Generate linear scale chart
-            with st.spinner("Generating linear scale chart..."):
-                linear_fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
+            # Scale selection
+            scale_choice = st.radio(
+                "Select scale:",
+                options=["Log10 Scale", "Linear Scale"],
+                index=0,  # Default to Log10
+                horizontal=True
+            )
+            
+            # Generate chart based on selection
+            mode = 'log10 scale' if scale_choice == "Log10 Scale" else 'linear scale'
+            filename_suffix = "log10" if scale_choice == "Log10 Scale" else "linear"
+            
+            with st.spinner("Generating chart..."):
+                fig, abundance_df = lp.AbundanceBarChart.create_abundance_bar_chart(
                     df=continuation_df,
                     full_samples_list=experiment.full_samples_list,
                     individual_samples_list=experiment.individual_samples_list,
                     conditions_list=experiment.conditions_list,
                     selected_conditions=selected_conditions_list,
                     selected_classes=selected_classes_list,
-                    mode='linear scale',
+                    mode=mode,
                     anova_results=statistical_results
                 )
             
-            if linear_fig is not None and abundance_df is not None and not abundance_df.empty:
-                st.subheader("Linear Scale")
-                st.plotly_chart(linear_fig, use_container_width=True)
+            if fig is not None and abundance_df is not None and not abundance_df.empty:
+                st.plotly_chart(fig, use_container_width=True)
                 
-                # Add download options
                 col1, col2 = st.columns(2)
                 with col1:
-                    # SVG download for the linear scale plot
-                    svg_bytes = linear_fig.to_image(format="svg")
+                    svg_bytes = fig.to_image(format="svg")
                     svg_string = svg_bytes.decode('utf-8')
                     st.download_button(
                         label="Download SVG",
                         data=svg_string,
-                        file_name="abundance_bar_chart_linear.svg",
+                        file_name=f"abundance_bar_chart_{filename_suffix}.svg",
                         mime="image/svg+xml"
                     )
                 with col2:
-                    # CSV download for the data
                     csv_data = convert_df(abundance_df)
                     st.download_button(
                         label="Download CSV",
                         data=csv_data,
-                        file_name='abundance_bar_chart_linear.csv',
+                        file_name=f'abundance_bar_chart_{filename_suffix}.csv',
                         mime='text/csv',
-                        key='abundance_chart_download_linear'
+                        key='abundance_chart_download'
                     )
             
-            # Generate log10 scale chart
-            with st.spinner("Generating log10 scale chart..."):
-                log10_fig, abundance_df_log10 = lp.AbundanceBarChart.create_abundance_bar_chart(
-                    df=continuation_df,
-                    full_samples_list=experiment.full_samples_list,
-                    individual_samples_list=experiment.individual_samples_list,
-                    conditions_list=experiment.conditions_list,
-                    selected_conditions=selected_conditions_list,
-                    selected_classes=selected_classes_list,
-                    mode='log10 scale',
-                    anova_results=statistical_results
-                )
+            # Store both for PDF report (generate the other one in background)
+            other_mode = 'linear scale' if scale_choice == "Log10 Scale" else 'log10 scale'
+            other_fig, _ = lp.AbundanceBarChart.create_abundance_bar_chart(
+                df=continuation_df,
+                full_samples_list=experiment.full_samples_list,
+                individual_samples_list=experiment.individual_samples_list,
+                conditions_list=experiment.conditions_list,
+                selected_conditions=selected_conditions_list,
+                selected_classes=selected_classes_list,
+                mode=other_mode,
+                anova_results=statistical_results
+            )
             
-            if log10_fig is not None and abundance_df_log10 is not None and not abundance_df_log10.empty:
-                st.subheader("Log10 Scale")
-                st.plotly_chart(log10_fig, use_container_width=True)
-                
-                # Add download options
-                col1, col2 = st.columns(2)
-                with col1:
-                    # SVG download for the log10 scale plot
-                    svg_bytes = log10_fig.to_image(format="svg")
-                    svg_string = svg_bytes.decode('utf-8')
-                    st.download_button(
-                        label="Download SVG",
-                        data=svg_string,
-                        file_name="abundance_bar_chart_log10.svg",
-                        mime="image/svg+xml"
-                    )
-                with col2:
-                    # CSV download for the data
-                    csv_data_log10 = convert_df(abundance_df_log10)
-                    st.download_button(
-                        label="Download CSV",
-                        data=csv_data_log10,
-                        file_name='abundance_bar_chart_log10.csv',
-                        mime='text/csv',
-                        key='abundance_chart_download_log10'
-                    )
+            if scale_choice == "Log10 Scale":
+                log10_fig, linear_fig = fig, other_fig
+            else:
+                linear_fig, log10_fig = fig, other_fig
             
-            # Check if any conditions were removed due to having only one sample
+            # --- Detailed Statistics Section (at the end) ---
+            st.markdown("---")
+            st.markdown("#### 🔍 Detailed Statistics")
+            display_detailed_statistical_results(statistical_results, selected_conditions_list)
+            
+            # Note about excluded conditions
             removed_conditions = set(experiment.conditions_list) - set(valid_conditions)
             if removed_conditions:
                 st.info(f"Note: The following conditions were excluded due to having only one sample: {', '.join(removed_conditions)}")
@@ -3905,7 +3901,7 @@ def display_abundance_pie_charts(experiment, continuation_df):
     
     Args:
         experiment: Experiment object containing experimental setup information
-        continuation_df: DataFrame containing the lipidomics data
+        continuation_df: DataFrame containing the lipidomic data
         
     Returns:
         dict: Dictionary containing the generated pie chart figures by condition
@@ -4888,7 +4884,7 @@ def display_volcano_plot(experiment, continuation_df):
 
         Mann-Whitney U tests with small sample sizes (n=3-6) often produce identical p-values for many lipids,
         creating horizontal lines in the plot. This is expected behavior. Parametric tests (Welch's t-test) 
-        with log transformation provide better resolution for typical lipidomics data.
+        with log transformation provide better resolution for typical lipidomic data.
         """)
         st.markdown("---")
 
@@ -5315,7 +5311,7 @@ def display_lipidomic_heatmap(experiment, continuation_df):
     
     Args:
         experiment: Experiment object containing experimental setup information
-        continuation_df: DataFrame containing the lipidomics data
+        continuation_df: DataFrame containing the lipidomic data
         
     Returns:
         tuple: A tuple containing the regular heatmap figure and clustered heatmap figure
@@ -5498,7 +5494,7 @@ def display_fach_heatmaps(experiment, continuation_df):
     
     Args:
         experiment: Experiment object containing experimental setup information
-        continuation_df: DataFrame containing the lipidomics data
+        continuation_df: DataFrame containing the lipidomic data
     
     Returns:
         dict: Dictionary with lipid class as key and Plotly figure as value

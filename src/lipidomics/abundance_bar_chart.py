@@ -529,13 +529,17 @@ class AbundanceBarChart:
                 bargroupgap=0.1,
                 showlegend=True,
                 legend=dict(
+                    orientation="v",
                     yanchor="top",
-                    y=0.99,
-                    xanchor="right",
-                    x=1.15,
-                    font=dict(color='black')
+                    y=1,
+                    xanchor="left",
+                    x=1.02,
+                    font=dict(color='black'),
+                    bgcolor="rgba(255,255,255,0.8)",
+                    bordercolor="lightgray",
+                    borderwidth=1
                 ),
-                margin=dict(r=150),  # Add right margin for significance markers
+                margin=dict(r=180),  # Increased right margin for legend outside plot
                 height=max(400, len(abundance_df) * 30),  # Dynamic height based on number of classes
                 width=800,
                 plot_bgcolor='white',
