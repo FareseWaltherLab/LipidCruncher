@@ -3896,107 +3896,92 @@ def display_abundance_bar_charts(experiment, continuation_df):
         return linear_fig, log10_fig
 
 def display_abundance_pie_charts(experiment, continuation_df):
-    """
-    Display pie charts showing the proportional distribution of lipid classes for each condition.
-    
-    Args:
-        experiment: Experiment object containing experimental setup information
-        continuation_df: DataFrame containing the lipidomic data
-        
-    Returns:
-        dict: Dictionary containing the generated pie chart figures by condition
-    """
+    """Display pie charts showing the proportional distribution of lipid classes for each condition."""
     pie_charts = {}
     with st.expander("Class Concentration Pie Chart"):
+        # Short description
+        st.markdown("""
+        Visualize the relative proportions of lipid classes within each condition.
+        """)
+        
         # Get all lipid classes
         full_samples_list = experiment.full_samples_list
         all_classes = lp.AbundancePieChart.get_all_classes(continuation_df, full_samples_list)
         
-        # Select lipid classes
+        # Get conditions with multiple samples
+        conditions_with_samples = [
+            (condition, samples) 
+            for condition, samples in zip(experiment.conditions_list, experiment.individual_samples_list)
+            if len(samples) > 1
+        ]
+        
+        if not conditions_with_samples:
+            st.warning("No conditions with multiple samples found.")
+            return pie_charts
+        
+        # --- Data Selection Section ---
+        st.markdown("---")
+        st.markdown("#### 🎯 Data Selection")
+        
         selected_classes_list = st.multiselect(
-            'Select classes for the chart:', 
+            'Lipid Classes', 
             all_classes, 
             all_classes,
             key='pie_chart_classes'
         )
         
-        # Pie chart analysis details - ALWAYS VISIBLE
-        st.markdown("### Class Concentration Pie Chart Analysis")
-        st.markdown("""
-        Pie charts visualize the relative proportions of different lipid classes within each experimental condition, providing a quick overview of lipid composition.
-        
-        **What the Chart Shows:**
-        - Each segment represents a lipid class
-        - The size of each segment corresponds to the percentage of that class in the total lipid pool
-        - Hover over segments to see exact percentages
-        - Consistent colors are used for the same lipid class across different conditions
-        
-        **Data Processing:**
-        - For each condition, the total concentration of each lipid class is calculated by summing all species within that class
-        - The sum across all replicates is used to represent each condition
-        - Values are converted to percentages for the pie chart representation
-        """)
-        st.markdown("---")
-        
-        if selected_classes_list:
-            # Filter dataframe for selected classes
-            filtered_df = lp.AbundancePieChart.filter_df_for_selected_classes(continuation_df, full_samples_list, selected_classes_list)
-            
-            # Generate consistent colors for classes
-            color_mapping = lp.AbundancePieChart._generate_color_mapping(selected_classes_list)
-            
-            # Create list of conditions with multiple samples
-            conditions_with_samples = []
-            for condition, samples in zip(experiment.conditions_list, experiment.individual_samples_list):
-                if len(samples) > 1:  # Skip conditions with only one sample
-                    conditions_with_samples.append((condition, samples))
-            
-            if not conditions_with_samples:
-                st.warning("No conditions with multiple samples found.")
-                return pie_charts
-            
-            # Create separate rows for each condition
-            for condition, samples in conditions_with_samples:
-                st.subheader(f"{condition}")
-                fig, df = lp.AbundancePieChart.create_pie_chart(
-                    filtered_df, full_samples_list, condition, samples, color_mapping
-                )
-                if fig is not None:
-                    st.plotly_chart(fig, use_container_width=True)
-                    pie_charts[condition] = fig
-                    
-                    # Download options
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        plotly_svg_download_button(
-                            fig, f"abundance_pie_chart_{condition}.svg"
-                        )
-                    with col2:
-                        # Create a data frame with percentages for download
-                        available_samples = [sample for sample in samples if f"concentration[{sample}]" in filtered_df.columns]
-                        if available_samples:
-                            total_values = filtered_df[[f"concentration[{sample}]" for sample in available_samples]].sum(axis=1)
-                            percent_values = (total_values / total_values.sum() * 100).round(2)
-                            download_df = pd.DataFrame({
-                                'Class': filtered_df.index,
-                                'Total Concentration': total_values.values,
-                                'Percentage (%)': percent_values.values
-                            })
-                            csv_download = convert_df(download_df)
-                            st.download_button(
-                                label="Download CSV",
-                                data=csv_download,
-                                file_name=f'abundance_pie_chart_{condition}.csv',
-                                mime='text/csv'
-                            )
-                # Add a divider between conditions
-                st.markdown("---")
-        else:
+        if not selected_classes_list:
             st.warning("Please select at least one lipid class to create the pie charts.")
+            return pie_charts
+        
+        # --- Results Section ---
+        st.markdown("---")
+        st.markdown("#### 📊 Results")
+        
+        # Filter dataframe and generate color mapping
+        filtered_df = lp.AbundancePieChart.filter_df_for_selected_classes(
+            continuation_df, full_samples_list, selected_classes_list
+        )
+        color_mapping = lp.AbundancePieChart._generate_color_mapping(selected_classes_list)
+        
+        # Create chart for each condition
+        for condition, samples in conditions_with_samples:
+            st.markdown(f"##### {condition}")
+            fig, df = lp.AbundancePieChart.create_pie_chart(
+                filtered_df, full_samples_list, condition, samples, color_mapping
+            )
+            
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+                pie_charts[condition] = fig
+                
+                # Download options
+                col1, col2 = st.columns(2)
+                with col1:
+                    plotly_svg_download_button(fig, f"abundance_pie_chart_{condition}.svg")
+                with col2:
+                    available_samples = [
+                        sample for sample in samples 
+                        if f"concentration[{sample}]" in filtered_df.columns
+                    ]
+                    if available_samples:
+                        total_values = filtered_df[[f"concentration[{sample}]" for sample in available_samples]].sum(axis=1)
+                        percent_values = (total_values / total_values.sum() * 100).round(2)
+                        download_df = pd.DataFrame({
+                            'Class': filtered_df.index,
+                            'Total Concentration': total_values.values,
+                            'Percentage (%)': percent_values.values
+                        })
+                        csv_download = convert_df(download_df)
+                        st.download_button(
+                            label="Download CSV",
+                            data=csv_download,
+                            file_name=f'abundance_pie_chart_{condition}.csv',
+                            mime='text/csv',
+                            key=f'pie_chart_csv_{condition}'
+                        )
     
     return pie_charts
-
-# Add these UI functions to your main_app.py file
 
 def display_saturation_statistical_options():
     """
