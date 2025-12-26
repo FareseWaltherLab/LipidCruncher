@@ -207,6 +207,7 @@ class PathwayViz:
         pathway_dict = PathwayViz.create_pathway_dictionary(class_fold_change_df, class_saturation_ratio_df, control, experimental)
         color_contour, size = PathwayViz.prep_plot_inputs(pathway_dict)
         PathwayViz.render_plot(ax, color_contour, size, fig)
+        PathwayViz.draw_unit_circles(ax)  # Draw unit circles on top of data circles
         return fig, pathway_dict
 
     @staticmethod
@@ -257,12 +258,12 @@ class PathwayViz:
     @staticmethod
     def draw_all_circles(ax):
         """
-        Draws all circles representing lipid classes on a given axis.
+        Draws the large blue grouping circles representing pathway regions.
 
         Args:
             ax: Matplotlib axis to draw on.
         """
-        # Define coordinates and radius for each circle
+        # Large blue grouping circles only
         circle_data = [
             (5, 0, 0, 'b'),
             (2.5, -7.5 * math.cos(math.pi/6), -7.5 * math.cos(math.pi/3), 'b'),
@@ -270,29 +271,46 @@ class PathwayViz:
             (2.5, 10 + 2.5 * math.cos(math.pi/4), 15 + 2.5 * math.sin(math.pi/4), 'b'),
             (2.5, 12.5, 10, 'b'),
             (2.5, 10 + 2.5 * math.cos(math.pi/4), 5 - 2.5 * math.sin(math.pi/4), 'b'),
-            # Continue with small black circles
-            (0.5, 0, 0, 'black'),
-            (0.5, 0, 5, 'black'),
-            (0.5, 0, 10, 'black'),
-            (0.5, -10, 10, 'black'),
-            (0.5, -10, 5, 'black'),
-            (0.5, 5 * math.cos(math.pi/6), -5 * math.sin(math.pi/6), 'black'),
-            (0.5, 10 * math.cos(math.pi/6), -10 * math.sin(math.pi/6), 'black'),
-            (0.5, -5 * math.cos(math.pi/6), -5 * math.sin(math.pi/6), 'black'),
-            (0.5, -10 * math.cos(math.pi/6), -10 * math.sin(math.pi/6), 'black'),
-            (0.5, 10, 15, 'black'),
-            (0.5, 10 + 5 * math.cos(math.pi/4), 15 + 5 * math.sin(math.pi/4), 'black'),
-            (0.5, 10, 10, 'black'),
-            (0.5, 15, 10, 'black'),
-            (0.5, 10, 5, 'black'),
-            (0.5, 10 + 5 * math.cos(math.pi/4), 5 - 5 * math.sin(math.pi/4), 'black')
-            # Ensure to cover all necessary circles...
         ]
     
-        # Draw each circle on the axis
         for radius, x0, y0, color in circle_data:
             PathwayViz.draw_one_circle(ax, radius, x0, y0, color)
-            
+
+    @staticmethod
+    def draw_unit_circles(ax):
+        """
+        Draws the small black unit circles (fold change = 1 reference) for each lipid class.
+        Called AFTER render_plot so they appear on top of data circles.
+
+        Args:
+            ax: Matplotlib axis to draw on.
+        """
+        # Unit circles for all 18 lipid classes
+        # Order matches pathway_classes_list: TG, DG, PA, LPA, LCB, Cer, SM, PE, LPE, PC, LPC, PI, LPI, CDP-DAG, PG, LPG, PS, LPS
+        unit_circle_coords = [
+            (0, 0),                                                    # TG
+            (0, 5),                                                    # DG
+            (0, 10),                                                   # PA
+            (0, 15),                                                   # LPA
+            (-10, 15),                                                 # LCB
+            (-10, 10),                                                 # Cer
+            (-10, 5),                                                  # SM
+            (5 * math.cos(math.pi/6), -5 * math.sin(math.pi/6)),       # PE
+            (10 * math.cos(math.pi/6), -10 * math.sin(math.pi/6)),     # LPE
+            (-5 * math.cos(math.pi/6), -5 * math.sin(math.pi/6)),      # PC
+            (-10 * math.cos(math.pi/6), -10 * math.sin(math.pi/6)),    # LPC
+            (10, 15),                                                  # PI
+            (10 + 5 * math.cos(math.pi/4), 15 + 5 * math.sin(math.pi/4)),  # LPI
+            (5, 10),                                                   # CDP-DAG
+            (10, 10),                                                  # PG
+            (15, 10),                                                  # LPG
+            (10, 5),                                                   # PS
+            (10 + 5 * math.cos(math.pi/4), 5 - 5 * math.sin(math.pi/4)),   # LPS
+        ]
+        
+        for x0, y0 in unit_circle_coords:
+            ax.add_patch(plt.Circle((x0, y0), 0.5, color='black', fill=False))
+    
     @staticmethod
     def draw_connecting_lines(ax):
         """
