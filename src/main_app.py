@@ -2671,6 +2671,109 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
     continuation_df, pca_plot = display_pca_analysis(continuation_df, experiment)
    
     st.subheader("Data Visualization, Interpretation, and Analysis Module")
+
+    # Central statistical testing documentation
+    with st.expander("📊 About Statistical Testing"):
+        st.markdown("""
+        ## 🧪 Statistical Testing in LipidCruncher
+
+        LipidCruncher uses rigorous statistical methods to help you identify meaningful differences in your lipidomics data. This guide explains everything you need to know—no statistics PhD required!
+
+        ---
+
+        ### 🎯 The Big Picture
+
+        When comparing lipid levels across conditions, we're asking: *"Is this difference real, or just random noise?"*
+
+        Statistical tests give us a **p-value**—the probability of seeing this difference (or more extreme) by chance alone. Lower p-values = stronger evidence of a real difference.
+
+        **The catch?** When you test many things at once, some will look significant just by luck. Test 100 lipids, and ~5 will have p < 0.05 purely by chance. That's where multiple testing corrections come in.
+
+        ---
+
+        ### 🔬 Available Tests
+
+        | Test Type | 2 Conditions | 3+ Conditions | When to Use |
+        |-----------|--------------|---------------|-------------|
+        | **Parametric** | Welch's t-test | Welch's ANOVA | Default choice. Works great with log-transformed lipidomics data |
+        | **Non-parametric** | Mann-Whitney U | Kruskal-Wallis | More conservative. Use when you want maximum rigor or have unusual distributions |
+
+        **Why Welch's?** Unlike classic t-tests and ANOVA, Welch's versions don't assume equal variances across groups—important for biological data where variability often differs between conditions.
+
+        **Why log transformation?** Lipidomics data is typically right-skewed (a few very high values). Log10 transformation makes the data more symmetric and suitable for parametric tests. This is standard practice in the field.
+
+        ---
+
+        ### 🎚️ Two-Level Correction Framework
+
+        LipidCruncher uses a **two-level system** to control false discoveries at different scales:
+
+        #### Level 1: Between-Class Correction
+        *"Across all the lipid classes I'm testing, how do I control false discoveries?"*
+
+        | Method | What It Does | Best For |
+        |--------|--------------|----------|
+        | **Uncorrected** | Raw p-values, no adjustment | Single pre-specified hypothesis |
+        | **FDR** (Benjamini-Hochberg) | Controls the *proportion* of false discoveries | Exploratory analysis (recommended default) |
+        | **Bonferroni** | Strictest control, adjusts for every test | Confirmatory studies where false positives are costly |
+
+        #### Level 2: Within-Class Post-hoc Correction
+        *"With 3+ conditions, which specific pairs are different?"*
+
+        After a significant omnibus test (ANOVA/Kruskal-Wallis), post-hoc tests identify *which* groups differ:
+
+        | Method | What It Does | Best For |
+        |--------|--------------|----------|
+        | **Uncorrected** | Raw pairwise p-values | Maximum discovery (higher false positive risk) |
+        | **Tukey's HSD** | Controls family-wise error rate efficiently | Recommended for parametric tests |
+        | **Bonferroni** | Most conservative pairwise correction | Maximum rigor |
+
+        **Note:** Tukey's HSD is only available for parametric tests. When you select non-parametric analysis, the "Tukey's HSD" option automatically switches to Bonferroni-corrected Mann-Whitney U pairwise tests.
+
+        ---
+
+        ### 🤖 Auto Mode: Smart Defaults
+
+        Don't want to think about statistics? Auto mode applies field-standard choices:
+
+        - **Test type:** Parametric (Welch's) with log10 transformation
+        - **Level 1:** Uncorrected for single class → FDR for multiple classes
+        - **Level 2:** Uncorrected for ≤2 conditions → Tukey's HSD for 3+ conditions
+
+        These defaults balance discovery power with false positive control for typical lipidomics experiments.
+
+        ---
+
+        ### 📊 The Testing Process
+
+        **2 Conditions:** Direct pairwise test → Level 1 correction (if testing multiple classes)
+
+        **3+ Conditions:**
+
+        1. **Omnibus test** for each lipid class: "Are there ANY differences among groups?"
+        2. **Level 1 correction** adjusts all omnibus p-values across classes
+        3. **Post-hoc tests** run only for classes with significant omnibus results
+        4. **Level 2 correction** adjusts pairwise p-values within each class
+
+        **How the levels work together:**
+        - Level 1 asks: "Which lipid classes show any difference?" (corrects across classes)
+        - Level 2 asks: "Within those classes, which specific condition pairs differ?" (corrects within each class)
+
+        ---
+
+        ### ⚠️ Critical Best Practices
+
+        1. **Pre-specify your hypotheses.** Decide which lipid classes to test *before* looking at results. Adding "interesting-looking" classes after the fact inflates false positives.
+
+        2. **More tests = less power.** Each additional class or comparison dilutes your statistical power. Focus on what matters biologically.
+
+        3. **Sample size matters.** With n=3 per group (common in lipidomics), non-parametric tests have very limited resolution—you may see identical p-values for many comparisons. Parametric tests with log transformation typically perform better.
+
+        4. **Significance ≠ importance.** A tiny p-value doesn't mean a biologically meaningful effect. Always consider effect sizes (fold changes) alongside p-values.
+
+        **Rule of thumb:** FDR + Tukey's HSD works well for most lipidomics analyses.
+        """)
+
     # Analysis
     analysis_option = st.radio(
         "Select an analysis feature:",
@@ -3422,7 +3525,7 @@ def display_statistical_options():
     mode_choice = st.radio(
         "Select Analysis Mode:",
         options=["Manual", "Auto"],
-        index=0,  # Default to Manual
+        index=1,  # Default to Manual
         help="""
         • Manual: You control all statistical choices
         • Auto: Uses parametric tests with intelligent corrections based on your data
@@ -3434,15 +3537,6 @@ def display_statistical_options():
     alpha = 0.05
     
     if mode_choice == "Auto":
-        # Auto mode - show what will be decided
-        st.info("""
-        🤖 **Auto Mode**: Uses parametric statistical tests with intelligent corrections:
-        - **Test Type**: Parametric (Welch's t-test/ANOVA) with automatic log10 transformation
-        - **Level 1 Correction**: Based on number of lipid classes selected
-        - **Level 2 Correction**: Based on number of conditions selected
-        """)
-        
-        # Set placeholders for auto mode
         test_type = "auto"
         correction_method = "auto"
         posthoc_correction = "auto"
@@ -3499,126 +3593,16 @@ def display_statistical_options():
         """
     )
     
-    # Show current settings
-    st.markdown("---")
-    st.markdown("### 🔬 Current Settings Summary")
-    
-    if mode_choice == "Auto":
-        st.info("🤖 **Auto Mode**: Parametric tests with intelligent corrections will be applied")
-    else:
-        # Show current selections in a clean format
+    if mode_choice == "Manual":
+        st.markdown("---")
+        st.markdown("### 🔬 Current Settings Summary")
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"- **Mode**: Manual")
             st.write(f"- **Test Type**: {test_type.title()}")
             st.write(f"- **Level 1 Correction**: {correction_method.upper().replace('_', '-')}")
         with col2:
             st.write(f"- **Level 2 Correction**: {posthoc_correction.replace('_', ' ').title()}")
-            st.write(f"- **Significance**: α = {alpha}")
             st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
-    
-    # Important warning about hypothesis testing
-    st.markdown("---")
-    st.warning("""
-    ⚠️  **Critical for Hypothesis Testing**: If you are conducting formal hypothesis testing (especially with multiple testing corrections), 
-    only select lipid classes that are part of your specific research hypothesis. Including additional "exploratory" classes 
-    will inflate your p-values and reduce statistical power to detect true effects in your classes of interest.
-    
-    **Best Practice**: Pre-specify your lipid classes of interest based on biological rationale before looking at the data.
-    """)
-    
-    # Complete guidance section - common information first, then mode-specific
-    st.markdown("---")
-    st.markdown("### 🏷️ Class Concentration Bar Chart Analysis Guide")
-    
-    # Common information regardless of mode
-    st.markdown("""
-        **📊 What the Chart Shows:**
-        - **Each bar**: Mean concentration of a lipid class in a condition (sum of all individual lipid species within that class)
-        - **Error bars**: Standard deviation showing the variability within each condition
-        - **Stars**: Statistical significance: * p<0.05, ** p<0.01, *** p<0.001
-        - **Sample size (n)**: Number of biological replicates per condition (typically 3-6 in lipidomics), NOT the number of lipid species
-        """)
-    
-    if mode_choice == "Auto":
-        st.markdown("### 🤖 Auto Mode Guide")
-        st.markdown("""
-            **How Auto Mode Works:**
-            - **Test Selection**: Always uses parametric tests (Welch's t-test/ANOVA) which are appropriate for typical lipidomics sample sizes (n=3-6)
-            - **Automatic Log Transformation**: Applies log10 transformation which is standard practice in lipidomics
-            - **Smart Corrections**: Applies appropriate multiple testing corrections based on your experimental design
-            - **Robust Approach**: Welch's tests don't assume equal variances, making them robust for biological data
-            
-            **Auto Mode Logic:**
-            - **Level 1 (Between-Class)**: 1 class  →  Uncorrected | Multiple classes  →  FDR correction
-            - **Level 2 (Within-Class)**: ≤2 conditions  →  No post-hoc | 3-4 conditions  →  Standard approach | 5+ conditions  →  Conservative Bonferroni
-            
-            **Statistical Process:**
-            - **2 Conditions**: Welch's t-test + Level 1 correction (if multiple classes)
-            - **3+ Conditions**: Welch's ANOVA + Level 1 correction + Level 2 post-hoc (if omnibus significant)
-            
-            **When to Use Auto Mode:**
-            - Standard lipidomics analysis with typical sample sizes (n=3-6)
-            - When you want established best practices applied automatically
-            - For exploratory analysis where you want optimal statistical choices
-            """)
-    else:
-        # Show full guide for manual mode
-        st.markdown("### 🔧 Manual Mode Guide")
-        
-        st.markdown("""
-            **💡 Statistical Test Types:**
-            
-            **Parametric Tests (Welch's t-test/ANOVA):**
-            - **When to use**: Standard choice for lipidomics data with log transformation
-            - **Advantages**: More statistical power, widely accepted in the field
-            - **Assumptions**: Assumes normal distribution (typically met after log10 transformation)
-            - **Variance assumption**: Uses Welch's correction - does NOT assume equal variances
-            - **Sample size**: Appropriate for typical lipidomics studies (n=3-6 per group)
-            
-            **Non-parametric Tests (Mann-Whitney U/Kruskal-Wallis):**
-            - **When to use**: More conservative approach, no distribution assumptions
-            - **Advantages**: Robust to any data distribution, no transformation needed
-            - **Disadvantages**: Less statistical power than parametric tests
-            - **Best for**: When you prefer maximum conservatism or have highly skewed data even after transformation
-            
-            💡 **Key Point**: Non-parametric tests are more conservative (harder to detect significant differences) but make no assumptions about data distribution.
-            """)
-
-        st.markdown("""
-            **💡 Statistical Testing Process:**
-            
-            **📊 The Process:**
-            - **2 Conditions**: Test + Level 1 correction (if testing multiple classes)
-            - **3+ Conditions**: Three-step process to control false discoveries:
-              1. **Omnibus Test**: "Are there ANY differences among groups?"
-              2. **Level 1 Correction**: Control false discoveries across lipid classes
-              3. **Level 2 Post-hoc**: "Which specific pairs differ?"
-            """)
-
-        st.markdown("""
-            **🎯 Two-Level Statistical Control:**
-            
-            **🏷️  Level 1 - Between-Class Correction** (Applied to all analyses)
-            
-            | Choice | When to Use |
-            |--------|-------------|
-            | **Uncorrected** | Testing a single pre-specified lipid class with clear hypothesis |
-            | **FDR** | Exploring multiple classes (balances discovery with false positive control) |
-            | **Bonferroni** | Confirmatory studies where false positives are very costly |
-            
-            **🔍 Level 2 - Within-Class Correction** (For 3+ conditions only)
-            
-            | Choice | When to Use |
-            |--------|-------------|
-            | **Uncorrected** | Accept higher false positive risk for more discoveries |
-            | **Standard** | Balanced approach: Tukey's HSD (parametric) or Bonferroni (non-parametric) |
-            | **Bonferroni** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
-            
-            💡 **Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
-            """)
-
-        st.markdown("**Rule of thumb:** 1 class  →  Uncorrected Level 1 | Multiple classes  →  FDR Level 1 | High-stakes confirmatory  →  Bonferroni both levels")
     
     return {
         'test_type': test_type,
@@ -3819,42 +3803,6 @@ def display_abundance_bar_charts(experiment, continuation_df):
                     alpha=stat_options['alpha'],
                     auto_transform=stat_options['auto_transform']
                 )
-            
-            # Display auto mode results after analysis
-            if stat_options['mode_choice'] == "Auto":
-                auto_settings = apply_auto_mode_logic(selected_classes_list, selected_conditions_list)
-                
-                # Get the actual tests chosen from results
-                tests_chosen = set()
-                posthoc_methods = set()
-                
-                for lipid_class, result in statistical_results.items():
-                    if not lipid_class.startswith('_'):
-                        tests_chosen.add(result['test'])
-                        if result.get('tukey_results'):
-                            posthoc_methods.add(result['tukey_results']['method'])
-                
-                # Format test types display
-                if tests_chosen:
-                    test_display = ", ".join(sorted(tests_chosen))
-                else:
-                    test_display = "None (no valid data)"
-                
-                # Format posthoc display
-                if posthoc_methods:
-                    posthoc_display = ", ".join(sorted(posthoc_methods))
-                elif len(selected_conditions_list) <= 2:
-                    posthoc_display = "Not applicable (≤2 conditions)"
-                else:
-                    posthoc_display = "None (no significant omnibus tests)"
-                
-                st.info(f"""
-                🤖 **Auto Mode Results Applied:**
-                - **Tests Chosen**: {test_display}
-                - **Level 1 Correction**: {auto_settings['correction_method'].upper().replace('_', '-')} 
-                  ({auto_settings['correction_rationale']})
-                - **Level 2 Post-hoc**: {posthoc_display}
-                """)
             
             # Display detailed statistical results
             display_detailed_statistical_results(statistical_results, selected_conditions_list)
@@ -4065,7 +4013,7 @@ def display_saturation_statistical_options():
     mode_choice = st.radio(
         "Select Analysis Mode:",
         options=["Manual", "Auto"],
-        index=0,  # Default to Manual
+        index=1,  # Default to Manual
         help="""
         • Manual: You control all statistical choices
         • Auto: Uses parametric tests with intelligent corrections based on your data
@@ -4077,15 +4025,6 @@ def display_saturation_statistical_options():
     alpha = 0.05
     
     if mode_choice == "Auto":
-        # Auto mode - show what will be decided
-        st.info("""
-        🤖 **Auto Mode**: Uses parametric statistical tests with intelligent corrections:
-        - **Test Type**: Parametric (Welch's t-test/ANOVA) with automatic log10 transformation
-        - **Level 1 Correction**: Based on number of lipid classes × 3 fatty acid types
-        - **Level 2 Correction**: Based on number of conditions selected
-        """)
-        
-        # Set placeholders for auto mode
         test_type = "auto"
         correction_method = "auto"
         posthoc_correction = "auto"
@@ -4148,12 +4087,10 @@ def display_saturation_statistical_options():
         
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"- **Mode**: Manual")
             st.write(f"- **Test Type**: {test_type.title()}")
             st.write(f"- **Level 1 Correction**: {correction_method.upper().replace('_', '-')}")
         with col2:
             st.write(f"- **Level 2 Correction**: {posthoc_correction.replace('_', ' ').title()}")
-            st.write(f"- **Significance**: α = {alpha}")
             st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
     
     # Important warning about hypothesis testing
@@ -4289,48 +4226,6 @@ def display_saturation_compatibility_warning(continuation_df):
         which chains are saturated vs. unsaturated.
         """)
 
-
-def display_auto_mode_results(stat_options, selected_classes, selected_conditions, statistical_results):
-    """Display the results of auto mode logic after statistical analysis is complete."""
-    if stat_options['mode_choice'] == "Auto":
-        auto_settings = lp.SaturationPlot.apply_auto_mode_logic(selected_classes, selected_conditions)
-        
-        # Count actual tests performed
-        total_tests_performed = 0
-        tests_chosen = set()
-        posthoc_methods = set()
-        
-        for lipid_class, class_results in statistical_results.items():
-            if not lipid_class.startswith('_'):
-                for fa_type, result in class_results.items():
-                    total_tests_performed += 1
-                    tests_chosen.add(result['test'])
-                    if result.get('tukey_results'):
-                        posthoc_methods.add(result['tukey_results']['method'])
-        
-        # Format test types display
-        if tests_chosen:
-            test_display = ", ".join(sorted(tests_chosen))
-        else:
-            test_display = "None (no valid data)"
-        
-        # Format posthoc display
-        if posthoc_methods:
-            posthoc_display = ", ".join(sorted(posthoc_methods))
-        elif len(selected_conditions) <= 2:
-            posthoc_display = "Not applicable (≤2 conditions)"
-        else:
-            posthoc_display = "None (no significant omnibus tests)"
-        
-        st.info(f"""
-        🤖 **Auto Mode Results Applied:**
-        - **Tests Performed**: {total_tests_performed} total
-        - **Tests Chosen**: {test_display}
-        - **Level 1 Correction**: {auto_settings['correction_method'].upper().replace('_', '-')} 
-          ({auto_settings['correction_rationale']})
-        - **Level 2 Post-hoc**: {posthoc_display}
-        """)
-
 def display_excluded_conditions_warning(experiment, selected_conditions):
     """Display warning about conditions excluded due to insufficient samples."""
     # Get valid conditions (more than one sample)
@@ -4443,47 +4338,6 @@ def display_saturation_plots(experiment, continuation_df):
         **Mixed Datasets:**
         If your dataset contains both formats, you'll be prompted to exclude consolidated format lipids 
         from the saturation analysis. This ensures only lipids with accurate fatty acid information are analyzed.
-        """)
-        
-        # Statistical methodology sections (moved out of checkbox)
-        st.markdown("### 💡 Statistical Testing Process")
-        st.markdown("""
-        **📊 The Process:**
-        - **2 Conditions**: Test + Level 1 correction (if testing multiple classes)
-        - **3+ Conditions**: Three-step process to control false discoveries:
-          1. **Omnibus Test**: "Are there ANY differences among groups?"
-          2. **Level 1 Correction**: Control false discoveries across lipid classes × fatty acid types
-          3. **Level 2 Post-hoc**: "Which specific pairs differ?"
-        """)
-        
-        st.markdown("### 🎯 Two-Level Statistical Control")
-        st.markdown("""
-        **🏷️  Level 1 - Between Class/FA Type Correction** (Applied to all analyses)
-        
-        | Choice | When to Use |
-        |--------|-------------|
-        | **Uncorrected** | Testing a single pre-specified lipid class with clear hypothesis |
-        | **FDR** | Exploring multiple classes (balances discovery with false positive control) |
-        | **Bonferroni** | Confirmatory studies where false positives are very costly |
-        
-        **🔍 Level 2 - Within Class/FA Type Correction** (For 3+ conditions only)
-        
-        | Choice | When to Use |
-        |--------|-------------|
-        | **Uncorrected** | Accept higher false positive risk for more discoveries |
-        | **Standard** | Balanced approach: Tukey's HSD (parametric) or Bonferroni (non-parametric) |
-        | **Bonferroni** | Most conservative: Bonferroni for all pairwise tests regardless of original test type |
-        
-        **💡 Key Insight**: Level 1 and Level 2 control different error types - choose based on your research goals!
-        """)
-        
-        st.markdown("### 🤖 Auto Mode Logic")
-        st.markdown("""
-        - **Test Selection**: Always uses parametric tests (Welch's t-test/ANOVA) appropriate for typical lipidomics sample sizes
-        - **Automatic Log Transformation**: Standard practice in lipidomics
-        - **Smart Corrections**: 
-          * Level 1: Single class  →  Uncorrected | Multiple classes  →  FDR 
-          * Level 2: ≤2 conditions  →  No post-hoc | 3-4 conditions  →  Standard | 5+ conditions  →  Conservative Bonferroni
         """)
         
         st.markdown("---")
@@ -4607,9 +4461,6 @@ def display_saturation_plots(experiment, continuation_df):
                     alpha=stat_options['alpha'],
                     auto_transform=stat_options['auto_transform']
                 )
-            
-            # Display auto mode results after analysis
-            display_auto_mode_results(stat_options, selected_classes_list, selected_conditions_list, statistical_results)
             
             # Display detailed statistical results
             display_saturation_detailed_statistical_results(statistical_results, selected_conditions_list)
@@ -4899,18 +4750,6 @@ def display_volcano_statistical_options():
         st.write(f"- **Significance**: α = {alpha}")
         st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
     
-    # Important warning about hypothesis testing
-    st.markdown("---")
-    st.warning("""
-    ⚠️  **Critical for Hypothesis Testing**: The volcano plot tests each individual lipid species for 
-    significant changes between conditions. When testing many lipids simultaneously, multiple testing 
-    corrections become crucial to control false discoveries.
-    
-    **Best Practice**: 
-    - For **exploratory analysis**: Use FDR correction to balance discovery with false positive control
-    - For **confirmatory studies**: Use Bonferroni correction for strict control
-    """)
-    
     return {
         'test_type': test_type,
         'correction_method': correction_method,
@@ -5033,35 +4872,23 @@ def display_volcano_plot(experiment, continuation_df):
         # Show volcano plot analysis details
         st.markdown("### Volcano Plot Analysis")
         st.markdown("""
-        The volcano plot provides rigorous statistical analysis for identifying significantly altered lipid species between two experimental conditions.
-
-        **💡 Statistical Process:**
-
-        - **Welch's t-test**: Default parametric test that doesn't assume equal variances between groups
-        - **Mann-Whitney U**: Non-parametric alternative for conservative analysis
-        - **Multiple Testing Correction**: FDR or Bonferroni correction across all tested lipids
-        - **Automatic Log10 Transformation**: Standard practice in lipidomics for normalizing data
-        - **Rigorous Zero Handling**: Replaces zeros with small values to enable transformation
-        - **Data Preprocessing**: Log10 transformation applied to normalize skewed lipidomics data
-        - **Individual Testing**: Each lipid species tested independently
+        The volcano plot identifies significantly altered lipid species between two experimental conditions.
+        See the **"About Statistical Testing"** expander above for details on test selection and corrections.
 
         **🎯 What the Plot Shows:**
 
-        - **X-axis (Log2 Fold Change)**: Magnitude and direction of change between experimental and control conditions
-          - **Calculation**: Log2(Mean_Experimental / Mean_Control)
-          - **Interpretation**: Each unit represents a 2-fold change (e.g., +1 = 2x increase, -1 = 2x decrease)
-          - **Zero Handling**: For log transformation, zeros are replaced with small values (1/10th of minimum positive value)
-          - **Fold Change Formula**: Uses original concentration values (not log-transformed) for biological interpretation
+        - **X-axis (Log2 Fold Change)**: Magnitude and direction of change
+          - Each unit = 2-fold change (e.g., +1 = 2× increase, -1 = 2× decrease)
+          - Calculated from original concentration values for biological interpretability
 
-        - **Y-axis**: -log10(adjusted p-value) when correction is applied, -log10(p-value) when uncorrected
-        - **Red Dashed Lines**: Configurable significance (horizontal) and biological significance (vertical) thresholds
+        - **Y-axis**: -log10(p-value) — higher = more significant
+        - **Red Dashed Lines**: Configurable significance and fold-change thresholds
 
-        **⚠️  Non-Parametric Test Note:**
+        **⚠️ Non-Parametric Test Note:**
 
-        Mann-Whitney U tests with small sample sizes (n=3-6 per group) often produce identical p-values for many lipids,
-        creating horizontal lines in the volcano plot. This is expected behavior due to the discrete nature of rank-based
-        statistics with limited sample sizes. Parametric tests (Welch's t-test) with log transformation provide better
-        resolution and are recommended for typical lipidomics data.
+        Mann-Whitney U tests with small sample sizes (n=3-6) often produce identical p-values for many lipids,
+        creating horizontal lines in the plot. This is expected behavior. Parametric tests (Welch's t-test) 
+        with log transformation provide better resolution for typical lipidomics data.
         """)
         st.markdown("---")
 
