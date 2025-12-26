@@ -4506,130 +4506,178 @@ def display_pathway_visualization(experiment, continuation_df):
         matplotlib.figure.Figure or None: The pathway visualization figure if generated, otherwise None
     """
     with st.expander("Class Level Breakdown - Pathway Visualization"):
-        # Add the critical data format requirement warning
-        st.warning("""
-        ⚠️  **Critical Data Format Requirement**: This analysis works best with detailed fatty acid composition 
-        (e.g., PC(16:0_18:1)) vs. total composition (e.g., PC(34:1)). If your dataset uses total composition format, 
-        the saturation analysis may be less accurate as it cannot precisely identify individual fatty acid chains.
+        # Short description
+        st.markdown("""
+        Compare lipid class abundance and saturation between two conditions. 
+        Circle size represents fold change; circle color represents saturation ratio.
         """)
         
-        # Check if we have any detailed FA compositions
-        has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
+        # Calculation methodology
+        st.markdown("**Fold Change** (determines circle size):")
+        st.code("Fold Change = Mean_concentration_experimental / Mean_concentration_control", language=None)
+        st.markdown("Values >1 indicate increase in experimental condition; <1 indicate decrease.")
         
+        st.markdown("**Saturation Ratio** (determines circle color, range 0–1):")
+        st.code("Saturation Ratio = Total_saturated_chains / Total_chains (summed across all species in class)", language=None)
+        st.markdown("""
+        Each lipid species contributes its chain count (not weighted by concentration). 
+        Chains with 0 double bonds (e.g., 16:0) are saturated; chains with ≥1 double bonds (e.g., 18:1) are unsaturated.
+        """)
+        
+        # Compatibility warning (only if no detailed FA)
+        has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
         if not has_detailed_fa:
             st.warning("""
-            ⚠️  Note: The pathway visualization works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
-            Your data appears to use total composition (e.g., PC(34:1)), which may affect the accuracy of the 
-            saturation ratio calculations (shown by the color scale). The circle sizes (showing abundance) 
-            remain accurate.
+            ⚠️  Note: Saturation ratios require detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            Your data uses total composition format, which affects saturation accuracy. Fold changes remain accurate.
             """)
-
-        # Show explanation about the pathway visualization (always visible)
-        st.markdown("### Lipid Pathway Visualization")
-        st.markdown("""
-        The lipid pathway visualization provides a comprehensive view of how different lipid classes relate to each other in metabolic pathways and how they are affected by experimental conditions.
         
-        **What the Visualization Shows:**
+        # Get valid conditions (more than one replicate)
+        valid_conditions = [
+            cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) 
+            if num_samples > 1
+        ]
         
-        - **Circle Positions**: Each circle represents a different lipid class positioned according to metabolic relationships
-        - **Circle Size**: The size of each circle indicates the fold change in abundance between conditions 
-          - Larger circles = increased abundance in experimental condition
-          - Smaller circles = decreased abundance in experimental condition
-          - **Unit circle (fold change = 1)**: A circle with black perimeter and no fill color serves as the reference point, representing no change between conditions
-          - **Empty circles**: Lipid classes not detected in your dataset appear as empty positions (no visible circle)
-        - **Circle Color**: Color intensity represents the saturation ratio (proportion of saturated fatty acids)
-          - Warmer colors (red/yellow) = higher proportion of saturated fatty acids
-          - Cooler colors (blue/purple) = lower proportion of saturated fatty acids
+        if len(valid_conditions) < 2:
+            st.warning("At least two conditions with multiple replicates are required for pathway visualization.")
+            return None
         
-        **How the Data is Calculated:**
-        
-        1. **Fold Change Calculation**:
-           - For each lipid class, the average concentration in the experimental condition is divided by the average concentration in the control condition
-           - This ratio determines the circle size
-           - Values >1 indicate an increase in the experimental condition
-           - Values <1 indicate a decrease in the experimental condition
-        
-        2. **Saturation Ratio Calculation**:
-           - For each lipid molecule (e.g., PC(16:0_18:1)), the number of saturated and unsaturated fatty acid chains is counted:
-             * Chains with 0 double bonds (e.g., 16:0) are counted as saturated
-             * Chains with 1+ double bonds (e.g., 18:1) are counted as unsaturated
-           - The saturation ratio is calculated as: number of saturated chains ÷ total number of chains
-           - This ratio ranges from 0 (all unsaturated) to 1 (all saturated)
-        """)
+        # --- Data Selection Section ---
         st.markdown("---")
-
-        # Allow selection of control and experimental conditions
-        if len([x for x in experiment.number_of_samples_list if x > 1]) > 1:
-            control_condition = st.selectbox('Select Control Condition',
-                                             [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1], 
-                                             index=0)
-            experimental_condition = st.selectbox('Select Experimental Condition',
-                                                  [cond for cond, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1 and cond != control_condition], 
-                                                  index=0)
-    
-            # Check if both conditions are selected
-            if control_condition and experimental_condition:
-                with st.spinner("Generating pathway visualization..."):
-                    # Calculate saturation ratios
-                    class_saturation_ratio_df = lp.PathwayViz.calculate_class_saturation_ratio(continuation_df)
-                    
-                    # Calculate fold changes
-                    class_fold_change_df = lp.PathwayViz.calculate_class_fold_change(continuation_df, experiment, control_condition, experimental_condition)
-                    
-                    # Generate the visualization
-                    fig, pathway_dict = lp.PathwayViz.create_pathway_viz(class_fold_change_df, class_saturation_ratio_df, control_condition, experimental_condition)
-                    
-                    if fig is not None and pathway_dict:
-                        st.pyplot(fig)
-                        
-                        # Add SVG download button for the pathway visualization
-                        matplotlib_svg_download_button(fig, f"pathway_visualization_{control_condition}_vs_{experimental_condition}.svg")
-                        
-                        # Create a summary table of the data
-                        st.subheader("Pathway Data Summary")
-                        st.markdown(f"**Comparing {experimental_condition} to {control_condition}**")
-                        
-                        # Create a more informative dataframe
-                        pathway_df = pd.DataFrame({
-                            'Lipid Class': pathway_dict['class'],
-                            'Fold Change': pathway_dict['abundance ratio'],
-                            'Saturation Ratio': pathway_dict['saturated fatty acids ratio']
-                        })
-                        
-                        # Sort by absolute change
-                        pathway_df['Absolute Change'] = abs(pathway_df['Fold Change'] - 1)
-                        pathway_df = pathway_df.sort_values('Absolute Change', ascending=False)
-                        
-                        # Remove helper column and format others
-                        pathway_df = pathway_df.drop('Absolute Change', axis=1)
-                        pathway_df['Fold Change'] = pathway_df['Fold Change'].apply(lambda x: f"{x:.2f}")
-                        pathway_df['Saturation Ratio'] = pathway_df['Saturation Ratio'].apply(lambda x: f"{x:.2f}")
-                        
-                        # Display the dataframe
-                        st.dataframe(pathway_df)
-                        
-                        # Provide download button
-                        csv_download = convert_df(pathway_df)
-                        st.download_button(
-                            label="Download CSV",
-                            data=csv_download,
-                            file_name='pathway_visualization_data.csv',
-                            mime='text/csv')
-                        
-                        return fig
-                    else:
-                        st.warning("Unable to generate pathway visualization due to insufficient data.")
-                        st.markdown("""
-                        This could be due to:
-                        1. Missing lipid classes needed for the visualization
-                        2. Issues with fatty acid composition data
-                        3. Insufficient data for calculating fold changes
-                        
-                        Try using a dataset with more comprehensive lipid coverage or check the format of your fatty acid data.
-                        """)
-        else:
-            st.warning("At least two conditions with more than one replicate are required for pathway visualization.")
+        st.markdown("#### 🎯 Data Selection")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            control_condition = st.selectbox('Control Condition', valid_conditions, index=0, key='pathway_control')
+        with col2:
+            experimental_options = [c for c in valid_conditions if c != control_condition]
+            experimental_condition = st.selectbox('Experimental Condition', experimental_options, index=0, key='pathway_experimental')
+        
+        if not control_condition or not experimental_condition:
+            st.info("Select both control and experimental conditions to generate the visualization.")
+            return None
+        
+        # --- Consolidated Format Handling ---
+        filtered_df = continuation_df.copy()
+        all_classes = list(continuation_df['ClassKey'].unique())
+        consolidated_lipids_dict = lp.SaturationPlot.identify_consolidated_lipids(continuation_df, all_classes)
+        
+        if consolidated_lipids_dict:
+            st.markdown("---")
+            st.markdown("#### ⚠️ Consolidated Format Lipids")
+            st.markdown("""
+            Consolidated format lipids (e.g., PC(34:1)) cannot be accurately classified for saturation ratio 
+            because individual chain composition is unknown. This affects circle **colors**, not sizes.
+            """)
             
+            # Build summary table
+            summary_data = []
+            for lipid_class in all_classes:
+                total_in_class = len(continuation_df[continuation_df['ClassKey'] == lipid_class])
+                consolidated_in_class = len(consolidated_lipids_dict.get(lipid_class, []))
+                if consolidated_in_class > 0:
+                    pct = (consolidated_in_class / total_in_class) * 100
+                    summary_data.append({
+                        'Class': lipid_class,
+                        'Total Lipids': total_in_class,
+                        'Consolidated': consolidated_in_class,
+                        '% Consolidated': f"{pct:.1f}%"
+                    })
+            
+            if summary_data:
+                summary_df = pd.DataFrame(summary_data)
+                summary_df = summary_df.sort_values('Consolidated', ascending=False)
+                st.dataframe(summary_df.reset_index(drop=True), use_container_width=True)
+            
+            st.caption(
+                "Note: Single-chain classes (LPC, LPE, LPA, LPG, LPI, LPS, MAG, FFA, CE, ChE) "
+                "are excluded — their format is always accurate."
+            )
+            
+            # Flatten all consolidated lipids for multiselect
+            all_consolidated = []
+            for lipid_class, lipids in consolidated_lipids_dict.items():
+                all_consolidated.extend([(lipid, lipid_class) for lipid in lipids])
+            
+            display_options = [f"{lipid} ({lipid_class})" for lipid, lipid_class in all_consolidated]
+            lipid_to_display = {f"{lipid} ({lipid_class})": lipid for lipid, lipid_class in all_consolidated}
+            
+            lipids_to_exclude_display = st.multiselect(
+                f'Select lipids to exclude from saturation calculation ({len(all_consolidated)} detected):',
+                display_options,
+                default=[],
+                help="Excluding consolidated lipids improves saturation ratio accuracy but removes their abundance contribution.",
+                key='pathway_exclude_lipids'
+            )
+            
+            lipids_to_exclude = [lipid_to_display[display] for display in lipids_to_exclude_display]
+            
+            if lipids_to_exclude:
+                filtered_df = continuation_df[~continuation_df['LipidMolec'].isin(lipids_to_exclude)].copy()
+                st.success(f"✓ Excluded {len(lipids_to_exclude)} lipids from saturation calculation")
+        
+        # --- Results Section ---
+        st.markdown("---")
+        st.markdown("#### 📊 Results")
+        
+        with st.spinner("Generating pathway visualization..."):
+            # Calculate saturation ratios (using filtered df for accuracy)
+            class_saturation_ratio_df = lp.PathwayViz.calculate_class_saturation_ratio(filtered_df)
+            
+            # Calculate fold changes (using original df for complete abundance)
+            class_fold_change_df = lp.PathwayViz.calculate_class_fold_change(
+                continuation_df, experiment, control_condition, experimental_condition
+            )
+            
+            # Generate the visualization
+            fig, pathway_dict = lp.PathwayViz.create_pathway_viz(
+                class_fold_change_df, class_saturation_ratio_df, control_condition, experimental_condition
+            )
+            
+            if fig is not None and pathway_dict:
+                st.pyplot(fig)
+                
+                # Download buttons
+                col1, col2 = st.columns(2)
+                with col1:
+                    matplotlib_svg_download_button(fig, f"pathway_visualization_{control_condition}_vs_{experimental_condition}.svg")
+                with col2:
+                    # Prepare CSV data
+                    pathway_df = pd.DataFrame({
+                        'Lipid Class': pathway_dict['class'],
+                        'Fold Change': pathway_dict['abundance ratio'],
+                        'Saturation Ratio': pathway_dict['saturated fatty acids ratio']
+                    })
+                    pathway_df['Absolute Change'] = abs(pathway_df['Fold Change'] - 1)
+                    pathway_df = pathway_df.sort_values('Absolute Change', ascending=False)
+                    pathway_df = pathway_df.drop('Absolute Change', axis=1)
+                    pathway_df['Fold Change'] = pathway_df['Fold Change'].apply(lambda x: f"{x:.2f}")
+                    pathway_df['Saturation Ratio'] = pathway_df['Saturation Ratio'].apply(lambda x: f"{x:.2f}")
+                    
+                    csv_download = convert_df(pathway_df)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_download,
+                        file_name='pathway_visualization_data.csv',
+                        mime='text/csv',
+                        key='pathway_csv_download'
+                    )
+                
+                # Data summary
+                st.markdown(f"**Data Summary:** Comparing {experimental_condition} to {control_condition}")
+                st.dataframe(pathway_df, use_container_width=True)
+                
+                return fig
+            else:
+                st.warning("Unable to generate pathway visualization due to insufficient data.")
+                st.markdown("""
+                This could be due to:
+                - Missing lipid classes needed for the visualization
+                - Insufficient data for calculating fold changes
+                
+                Try using a dataset with more comprehensive lipid coverage.
+                """)
+        
         return None
                 
 def display_volcano_statistical_options():
@@ -5448,8 +5496,8 @@ def display_fach_heatmaps(experiment, continuation_df):
     with st.expander("Class Level Breakdown - Fatty Acid Composition Heatmaps"):
         # Short description
         st.markdown("""
-        Visualize lipid composition by carbon chain length (y-axis) and double bonds (x-axis). 
-        Color intensity shows proportional abundance within each class.
+        Visualize lipid distribution by carbon chain length (y-axis) and double bonds (x-axis). 
+        Color intensity shows proportional abundance within each class. Species with identical totals are aggregated.
         """)
         
         # Display compatibility warning if no detailed FA composition
