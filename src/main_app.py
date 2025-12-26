@@ -5446,62 +5446,77 @@ def display_fach_heatmaps(experiment, continuation_df):
     """
     fach_plots = {}
     with st.expander("Class Level Breakdown - Fatty Acid Composition Heatmaps"):
-        # Display compatibility warning
+        # Short description
+        st.markdown("""
+        Visualize lipid composition by carbon chain length (y-axis) and double bonds (x-axis). 
+        Color intensity shows proportional abundance within each class.
+        """)
+        
+        # Display compatibility warning if no detailed FA composition
         has_detailed_fa = any('_' in str(lipid) for lipid in continuation_df['LipidMolec'])
         if not has_detailed_fa:
             st.warning("""
-            ⚠️  Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
+            ⚠️  Note: FACH works best with detailed fatty acid composition (e.g., PC(16:0_18:1)).
             Your data appears to use total composition (e.g., PC(34:1)), which may affect accuracy.
             """)
         
-        st.markdown("### Fatty Acid Composition Heatmap Analysis")
-        st.markdown("""
-        Fatty Acid Composition Heatmaps (FACH) visualize the relative abundance of lipids within a selected class,
-        grouped by total carbon chain length (y-axis) and number of double bonds (x-axis).
-        
-        - **Color intensity**: Represents the proportion of total class abundance (sum of mean concentrations).
-        - **Darker colors**: Indicate higher proportional abundance.
-        - **Data processing**: Mean concentrations are calculated per condition, then converted to percentages.
-        - **Use case**: Compare fatty acid composition across conditions to identify specific changes in carbon chain length or unsaturation.
-        """)
-        st.markdown("---")
-        
-        # Select class (single)
-        all_classes = sorted(continuation_df['ClassKey'].unique())
-        selected_class = st.selectbox('Select lipid class:', all_classes, key='fach_class_select')
-        
-        # Select conditions
+        # Get valid conditions
         valid_conditions = [c for i, c in enumerate(experiment.conditions_list) if experiment.number_of_samples_list[i] > 0]
-        selected_conditions = st.multiselect('Select conditions:', valid_conditions, default=valid_conditions[:2], key='fach_conditions_select')
         
-        if selected_class and selected_conditions:
-            with st.spinner("Generating Fatty Acid Composition Heatmap..."):
-                data_dict = lp.FACH.prepare_fach_data(continuation_df, experiment, selected_class, selected_conditions)
-                if data_dict:
-                    fig = lp.FACH.create_fach_heatmap(data_dict)
-                    if fig:
-                        st.plotly_chart(fig, use_container_width=True)
-                        fach_plots[selected_class] = fig
-                        
-                        # Download options
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            plotly_svg_download_button(fig, f"fach_{selected_class}.svg")
-                        with col2:
-                            # Combined CSV download
-                            combined_df = pd.concat([df.assign(Condition=cond) for cond, df in data_dict.items()])
-                            csv = combined_df.to_csv(index=False)
-                            st.download_button(
-                                label="Download CSV",
-                                data=csv,
-                                file_name=f"fach_data_{selected_class}.csv",
-                                mime="text/csv",
-                                key=f"fach_download_{selected_class}"
-                            )
-                else:
-                    st.warning("No data available for the selected class and conditions. Ensure the lipid class contains parseable lipid names (e.g., PC(34:1) or PC(16:0_18:1)).")
-        else:
+        if not valid_conditions:
+            st.warning("No conditions with samples found.")
+            return fach_plots
+        
+        # --- Data Selection Section ---
+        st.markdown("---")
+        st.markdown("#### 🎯 Data Selection")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            all_classes = sorted(continuation_df['ClassKey'].unique())
+            selected_class = st.selectbox('Lipid Class', all_classes, key='fach_class_select')
+        with col2:
+            selected_conditions = st.multiselect(
+                'Conditions', 
+                valid_conditions, 
+                default=valid_conditions[:2], 
+                key='fach_conditions_select'
+            )
+        
+        if not selected_class or not selected_conditions:
             st.info("Select a lipid class and at least one condition to generate the heatmap.")
+            return fach_plots
+        
+        # --- Results Section ---
+        st.markdown("---")
+        st.markdown("#### 📊 Results")
+        
+        with st.spinner("Generating Fatty Acid Composition Heatmap..."):
+            data_dict = lp.FACH.prepare_fach_data(continuation_df, experiment, selected_class, selected_conditions)
+            
+            if data_dict:
+                fig = lp.FACH.create_fach_heatmap(data_dict)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+                    fach_plots[selected_class] = fig
+                    
+                    # Download options
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        plotly_svg_download_button(fig, f"fach_{selected_class}.svg")
+                    with col2:
+                        # Combined CSV download
+                        combined_df = pd.concat([df.assign(Condition=cond) for cond, df in data_dict.items()])
+                        csv = combined_df.to_csv(index=False)
+                        st.download_button(
+                            label="Download CSV",
+                            data=csv,
+                            file_name=f"fach_data_{selected_class}.csv",
+                            mime="text/csv",
+                            key=f"fach_download_{selected_class}"
+                        )
+            else:
+                st.warning("No data available for the selected class and conditions. Ensure the lipid class contains parseable lipid names (e.g., PC(34:1) or PC(16:0_18:1)).")
     
     return fach_plots
 
