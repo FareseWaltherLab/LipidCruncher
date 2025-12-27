@@ -485,122 +485,142 @@ def display_format_selection():
     )
 
 def display_format_requirements(data_format):
-    """Display format-specific requirements."""
+    """Display format-specific requirements in a collapsible, easy-to-read format."""
+    
     if data_format == 'Metabolomics Workbench':
-        st.info("""
-        **Dataset Requirements for Metabolomics Workbench Format**
-        
-        The file must be a CSV containing:
-        1. Required section markers:
-           * MS_METABOLITE_DATA_START
-           * MS_METABOLITE_DATA_END
-           
-        2. Three essential rows in the data section:
-           * Row 1: Sample names
-           * Row 2: Experimental conditions - one condition string per sample
-           * Row 3+: Lipid measurements with lipid names in first column
-           
-        Example:
-        ```
-        MS_METABOLITE_DATA_START
-        Samples,Sample1,Sample2,Sample3,Sample4
-        Factors,WT,WT,KO,KO
-        LPC(16:0),234.5,256.7,189.3,201.4
-        PE(18:0_20:4),456.7,478.2,390.1,405.6
-        MS_METABOLITE_DATA_END
-        ```
-        
-        The data will be automatically processed to:
-        * Extract the tabular data section
-        * Standardize lipid names (e.g., "LPC 16:0"  →  "LPC(16:0)")
-        * Create intensity columns (named as intensity[s1], intensity[s2], etc.)
-        * Use the condition strings to suggest experimental setup
-        """)
+        with st.expander("📋 Data Format Requirements", expanded=False):
+            st.markdown("""
+### 🔬 Metabolomics Workbench Format
+
+**Required Structure:**
+
+| Component | Description |
+|-----------|-------------|
+| `MS_METABOLITE_DATA_START` | Section start marker |
+| Row 1 | Sample names |
+| Row 2 | Condition labels (one per sample) |
+| Row 3+ | Lipid data (name in first column) |
+| `MS_METABOLITE_DATA_END` | Section end marker |
+
+**Example:**
+```
+MS_METABOLITE_DATA_START
+Samples,Sample1,Sample2,Sample3,Sample4
+Factors,WT,WT,KO,KO
+LPC(16:0),234.5,256.7,189.3,201.4
+PE(18:0_20:4),456.7,478.2,390.1,405.6
+MS_METABOLITE_DATA_END
+```
+
+**✨ Auto-processing:** Lipid names standardized, intensity columns created, conditions extracted.
+            """)
+    
     elif data_format == 'LipidSearch 5.0':
-        st.info("""
-        **Dataset Requirements for LipidSearch 5.0 Module**
-        
-        Required columns:
-        * `LipidMolec`: The molecule identifier for the lipid
-        * `ClassKey`: The classification key for the lipid type
-        * `CalcMass`: The calculated mass of the lipid molecule
-        * `BaseRt`: The base retention time
-        * `TotalGrade`: The overall quality grade of the lipid data
-        * `TotalSmpIDRate(%)`: The total sample identification rate
-        * `FAKey`: The fatty acid key associated with the lipid
-        
-        Additionally, each sample in your dataset must have a corresponding MeanArea column to represent intensity values. 
-        For instance, if your dataset comprises 10 samples, you should have the following columns: 
-        MeanArea[s1], MeanArea[s2], ..., MeanArea[s10] for each respective sample intensity.
-        """)
+        with st.expander("📋 Data Format Requirements", expanded=False):
+            st.markdown("""
+### 🔬 LipidSearch 5.0 Format
+
+**Required Columns:**
+
+| Column | Description |
+|--------|-------------|
+| `LipidMolec` | Lipid molecule identifier |
+| `ClassKey` | Lipid class (e.g., PC, PE, TG) |
+| `CalcMass` | Calculated mass |
+| `BaseRt` | Retention time |
+| `TotalGrade` | Quality grade (A/B/C/D) |
+| `TotalSmpIDRate(%)` | Sample identification rate |
+| `FAKey` | Fatty acid key |
+| `MeanArea[s1]`, `MeanArea[s2]`, ... | Intensity per sample |
+
+**Example column structure:**
+```
+LipidMolec | ClassKey | CalcMass | BaseRt | TotalGrade | ... | MeanArea[s1] | MeanArea[s2] | ...
+```
+
+**💡 Tip:** Export directly from LipidSearch — column names should match automatically.
+            """)
+    
     elif data_format == 'MS-DIAL':
-        st.info("""
-        **📋 MS-DIAL Format Requirements**
+        with st.expander("📋 Data Format Requirements", expanded=False):
+            st.markdown("""
+### 🔬 MS-DIAL Format
 
-        **How to Export from MS-DIAL:**
-        1. In MS-DIAL: File → Export → Alignment Result → CSV format
-        2. Ensure the following columns are included in your export
+**How to Export:** File → Export → Alignment Result → CSV
 
-        **REQUIRED Column (must use exact name):**
-        * `Metabolite name` - Lipid/metabolite identifiers
+**Required Columns:**
 
-        **OPTIONAL Quality Columns (use exact names for auto-detection):**
-        * `Total score` - Quality score for filtering (0-100)
-        * `MS/MS matched` - Whether MS/MS spectrum was matched (TRUE/FALSE)
-        * `Average Rt(min)` - Retention time information
-        * `Average Mz` - Mass-to-charge ratio
+| Column | Description |
+|--------|-------------|
+| `Metabolite name` | Lipid identifiers (exact name required) |
+| Sample columns | Intensity values — **must be LAST columns** |
 
-        **Sample Intensity Columns:**
-        * Your export should include sample intensity columns (one per sample)
-        * **CRITICAL:** Sample columns must be the LAST columns in your file
+**Optional Columns** (enable extra features):
 
-        **File Structure (Column Order):**
+| Column | Feature Enabled |
+|--------|-----------------|
+| `Total score` | Quality filtering (0-100) |
+| `MS/MS matched` | MS/MS validation filter |
+| `Average Rt(min)` | Retention time plots |
+| `Average Mz` | Retention time plots |
 
-        **Option 1 - Raw data only:**
-        * Structure: [...metadata columns...] [sample 1] [sample 2] ... [sample N]
-        * Example with 7 samples: The LAST 7 columns must be your sample intensity columns
+---
 
-        **Option 2 - Both raw AND pre-normalized data:**
-        * Structure: [...metadata columns...] [raw sample 1] ... [raw sample N] [Lipid IS] [normalized sample 1] ... [normalized sample N]
-        * The `Lipid IS` column separates raw from normalized data
-        * The `Lipid IS` column should contain the internal standard class used for normalization
-        * Example with 7 samples: The LAST 15 columns must be: 7 raw + 1 Lipid IS + 7 normalized
-        * You'll be able to choose which dataset to use after upload
+**📁 File Structure Options:**
 
-        **Notes:**
-        * ✓ Column names are case-sensitive and must match exactly
-        * ✓ Metadata header rows are automatically skipped
-        * ✓ Lipid class (ClassKey) is automatically inferred from lipid names
-        * ✓ Hydroxyl notation (`;2O`, `;3O`) is preserved in lipid names
-        * ✓ Internal standards with (d5), (d7), (d9), ISTD, or SPLASH patterns are auto-detected
-        * ✓ After upload, you can review and correct column mappings if needed
-        """)
-    else:
-        st.info("""
-        **Dataset Requirements for Generic Format**
-        
-        IMPORTANT: Your dataset must contain ONLY these columns in this order:
-        
-        1. **First Column - Lipid Names:**
-           * Can have any column name
-           * Must contain lipid molecule identifiers
-           * Will be standardized to match the standard format. For example:
-             - LPC O-18:1         -> LPC(O-18:1)
-             - Cer d18:0/C24:0    -> Cer(d18:0_C24:0)
-             - CE 14:0;0          -> CE(14:0)
-             - PA 16:0/18:1+O     -> PA(16:0_18:1+O)
-             
-        2. **Remaining Columns - Intensity Values Only:**
-           * Can have any column names
-           * Each column should contain intensity values for one sample
-           * The number of intensity columns must match the total number of samples in your experiment
-           * These columns will be automatically standardized to: intensity[s1], intensity[s2], ..., intensity[sN]
-        
-        ⚠️  If your dataset contains any additional columns, please remove them before uploading.
-        Only the lipid names column followed by intensity columns should be present.
-        
-        Note: The lipid class (e.g., LPC, Cer, CE) will be automatically extracted from the lipid names to create the ClassKey.
-                """)
+**Option A — Raw data only:**
+```
+[metadata cols...] [sample1] [sample2] ... [sampleN]
+```
+
+**Option B — Raw + Pre-normalized:**
+```
+[metadata cols...] [raw1]...[rawN] [Lipid IS] [norm1]...[normN]
+```
+The `Lipid IS` column separates raw from normalized data. You'll choose which to use after upload.
+
+---
+
+**✨ Auto-features:**
+- ClassKey inferred from lipid names
+- Hydroxyl notation preserved (`;2O`, `;3O`)
+- Internal standards detected: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`
+- Column mappings reviewable after upload
+            """)
+    
+    else:  # Generic Format
+        with st.expander("📋 Data Format Requirements", expanded=False):
+            st.markdown("""
+### 🔬 Generic Format
+
+**Simple structure — just two things:**
+
+| Position | Content |
+|----------|---------|
+| Column 1 | Lipid names |
+| Columns 2+ | Sample intensities (one column per sample) |
+
+**⚠️ Important:** No extra columns allowed! Remove any metadata columns before upload.
+
+---
+
+**Lipid Name Standardization Examples:**
+
+| Your Format | → Standardized |
+|-------------|----------------|
+| `LPC O-18:1` | `LPC(O-18:1)` |
+| `Cer d18:1;2O/24:0` | `Cer(d18:1;2O_24:0)` |
+| `SM 18:1;2O/16:0` | `SM(18:1;2O_16:0)` |
+| `PA 16:0/18:1` | `PA(16:0_18:1)` |
+
+---
+
+**✨ Auto-features:**
+- Lipid names standardized to `Class(chains)` format
+- Hydroxyl notation preserved (`;2O`, `;3O`)
+- ClassKey extracted from lipid names
+- Intensity columns renamed to `intensity[s1]`, `intensity[s2]`, ...
+            """)
 
 def load_and_validate_data(uploaded_file, data_format):
     """
