@@ -70,6 +70,47 @@ class LipidomicHeatmap:
         ).unstack(fill_value=0) * 100
         
         return n_clusters, class_percentages
+
+    @staticmethod
+    def identify_clusters_and_concentration_percentages(z_scores_df, filtered_df, n_clusters):
+        """
+        Calculate the percentage of total concentration for each lipid class within each cluster.
+        
+        Args:
+            z_scores_df (pd.DataFrame): DataFrame with Z-scores (used for clustering).
+            filtered_df (pd.DataFrame): Original filtered DataFrame with concentration values.
+            n_clusters (int): Number of clusters.
+            
+        Returns:
+            pd.DataFrame: DataFrame with concentration-based percentages per cluster.
+        """
+        _, cluster_labels, _ = LipidomicHeatmap.perform_clustering(z_scores_df, n_clusters)
+        
+        # Get concentration columns
+        conc_cols = [col for col in filtered_df.columns if col.startswith('concentration[')]
+        
+        # Create a copy with cluster assignments
+        # Need to align with z_scores_df index
+        clustered_conc_df = filtered_df.set_index(['LipidMolec', 'ClassKey']).copy()
+        clustered_conc_df = clustered_conc_df.loc[z_scores_df.index]  # Align order
+        clustered_conc_df['Cluster'] = cluster_labels
+        
+        # Calculate total concentration per lipid (sum across all samples)
+        clustered_conc_df['TotalConc'] = clustered_conc_df[conc_cols].sum(axis=1)
+        
+        # Reset index to access ClassKey as column
+        clustered_conc_df = clustered_conc_df.reset_index()
+        
+        # Group by Cluster and ClassKey, sum concentrations
+        cluster_class_conc = clustered_conc_df.groupby(['Cluster', 'ClassKey'])['TotalConc'].sum()
+        
+        # Calculate percentage within each cluster
+        cluster_totals = cluster_class_conc.groupby('Cluster').sum()
+        conc_percentages = cluster_class_conc.groupby('Cluster').apply(
+            lambda x: (x / x.sum()) * 100
+        ).unstack(fill_value=0)
+        
+        return conc_percentages
     
     @staticmethod
     def generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters):

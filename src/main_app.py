@@ -5235,170 +5235,179 @@ def display_lipidomic_heatmap(experiment, continuation_df):
     clustered_heatmap = None
     
     with st.expander("Species Level Breakdown - Lipidomic Heatmap"):
-        # Heatmap analysis details - ALWAYS VISIBLE
-        st.markdown("### Lipidomic Heatmap Analysis")
+        # Concise description with formula
         st.markdown("""
-        Heatmaps provide a comprehensive visualization of lipid abundance patterns across multiple samples and conditions.
-        
-        **What the Heatmap Shows:**
-        
-        - **Rows**: Individual lipid molecules (e.g., PC(16:0_18:1))
-        - **Columns**: Individual samples grouped by condition
-        - **Colors**: Represent standardized abundance values (Z-scores)
-          - Red: Higher than average abundance
-          - Blue: Lower than average abundance
-          - White: Close to average abundance
-        - **Z-scores**: Standardized values that show how many standard deviations a data point is from the mean
-          - Z-score = (Value - Mean) / Standard Deviation
-          - This normalization enables comparison across lipids with different absolute abundances
-        
-        **Heatmap Types:**
-        
-        1. **Regular Heatmap**: 
-           - Shows lipids in their original order
-           - Preserves the organization of your input data
-           - Useful when you have a specific ordering in mind (e.g., by lipid class)
-        
-        2. **Clustered Heatmap**:
-           - Groups similar lipids together based on their abundance patterns
-           - Uses hierarchical clustering with Ward's method
-           - Reveals co-regulated lipid groups that might have similar biological functions
-           - Dashed lines separate distinct clusters
-           - Number of clusters can be adjusted using the slider
+        Visualize lipid abundance patterns across samples. Colors represent Z-scores (standardized values).
         """)
+        
+        st.markdown("**Z-score** (color scale):")
+        st.code("Z-score = (Value - Mean) / Standard_Deviation", language=None)
+        st.markdown("Red = above average, Blue = below average, White = average. Enables comparison across lipids with different absolute abundances.")
+        
+        # --- Data Selection Section ---
         st.markdown("---")
+        st.markdown("#### 🎯 Data Selection")
         
-        # Let user select conditions and classes
         all_conditions = experiment.conditions_list
-        selected_conditions = st.multiselect(
-            "Select conditions:", 
-            all_conditions, 
-            default=all_conditions
-        )
+        all_classes = list(continuation_df['ClassKey'].unique())
         
-        # Filter for conditions with multiple samples
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_conditions = st.multiselect(
+                "Conditions", 
+                all_conditions, 
+                default=all_conditions,
+                key='heatmap_conditions'
+            )
+        with col2:
+            selected_classes = st.multiselect(
+                "Lipid Classes", 
+                all_classes, 
+                default=all_classes,
+                key='heatmap_classes'
+            )
+        
+        # Filter for conditions with samples
         selected_conditions = [condition for condition in selected_conditions 
                              if len(experiment.individual_samples_list[experiment.conditions_list.index(condition)]) > 0]
         
-        all_classes = continuation_df['ClassKey'].unique()
-        selected_classes = st.multiselect(
-            "Select lipid classes:", 
-            all_classes, 
-            default=all_classes
-        )
+        if not selected_conditions or not selected_classes:
+            st.warning("Please select at least one condition and one lipid class.")
+            return regular_heatmap, clustered_heatmap
         
-        # Choose number of clusters for hierarchical clustering
-        n_clusters = st.slider(
-            "Number of clusters:", 
-            min_value=2, 
-            max_value=10, 
-            value=5,
-            help="Adjust the number of clusters in the hierarchical clustering. More clusters will create more detailed groupings."
-        )
+        # --- Heatmap Settings Section ---
+        st.markdown("---")
+        st.markdown("#### ⚙️ Heatmap Settings")
         
-        if selected_conditions and selected_classes:
-            # Filter data based on selections
-            filtered_df, selected_samples = lp.LipidomicHeatmap.filter_data(
-                continuation_df, 
-                selected_conditions, 
-                selected_classes, 
-                experiment.conditions_list, 
-                experiment.individual_samples_list
-            )
-            
-            if filtered_df.empty:
-                st.warning("No data available for the selected conditions and classes.")
-                return None
-            
-            # Compute Z-scores
-            with st.spinner("Computing Z-scores..."):
-                z_scores_df = lp.LipidomicHeatmap.compute_z_scores(filtered_df)
-            
-            # Heatmap type selection
+        col1, col2 = st.columns(2)
+        with col1:
             heatmap_type = st.radio(
-                "Select Heatmap Type", 
+                "Heatmap Type", 
                 ["Clustered", "Regular"], 
                 index=0,
-                help="Clustered heatmap groups similar lipids together. Regular heatmap preserves the original order."
+                help="Clustered: groups similar lipids. Regular: preserves original order.",
+                key='heatmap_type'
             )
-            
-            # Generate and display the appropriate heatmap
+        with col2:
             if heatmap_type == "Clustered":
-                with st.spinner("Generating clustered heatmap..."):
-                    clustered_heatmap = lp.LipidomicHeatmap.generate_clustered_heatmap(
-                        z_scores_df, 
-                        selected_samples, 
-                        n_clusters
+                n_clusters = st.slider(
+                    "Number of Clusters", 
+                    min_value=2, 
+                    max_value=10, 
+                    value=5,
+                    help="More clusters = more detailed groupings.",
+                    key='heatmap_clusters'
+                )
+            else:
+                st.markdown("")  # Empty placeholder for alignment
+                n_clusters = 5  # Default value (not used for regular)
+        
+        # Filter data based on selections
+        filtered_df, selected_samples = lp.LipidomicHeatmap.filter_data(
+            continuation_df, 
+            selected_conditions, 
+            selected_classes, 
+            experiment.conditions_list, 
+            experiment.individual_samples_list
+        )
+        
+        if filtered_df.empty:
+            st.warning("No data available for the selected conditions and classes.")
+            return regular_heatmap, clustered_heatmap
+        
+        # --- Results Section ---
+        st.markdown("---")
+        st.markdown("#### 📈 Results")
+        
+        # Compute Z-scores
+        with st.spinner("Computing Z-scores..."):
+            z_scores_df = lp.LipidomicHeatmap.compute_z_scores(filtered_df)
+        
+        # Generate and display the appropriate heatmap
+        if heatmap_type == "Clustered":
+            with st.spinner("Generating clustered heatmap..."):
+                clustered_heatmap = lp.LipidomicHeatmap.generate_clustered_heatmap(
+                    z_scores_df, 
+                    selected_samples, 
+                    n_clusters
+                )
+                
+                st.plotly_chart(clustered_heatmap, use_container_width=True)
+                
+                # Download options
+                col1, col2 = st.columns(2)
+                with col1:
+                    plotly_svg_download_button(clustered_heatmap, "lipidomic_clustered_heatmap.svg")
+                with col2:
+                    csv_download = convert_df(z_scores_df.reset_index())
+                    st.download_button(
+                        "Download CSV", 
+                        csv_download, 
+                        'clustered_heatmap_data.csv', 
+                        'text/csv',
+                        key='clustered_heatmap_csv'
                     )
-                    
-                    # Display the clustered heatmap
-                    st.plotly_chart(clustered_heatmap, use_container_width=True)
-                    
-                    # Add download options
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        plotly_svg_download_button(clustered_heatmap, "Lipidomic_Clustered_Heatmap.svg")
-                    with col2:
-                        csv_download = convert_df(z_scores_df.reset_index())
-                        st.download_button(
-                            "Download CSV", 
-                            csv_download, 
-                            'clustered_heatmap_data.csv', 
-                            'text/csv'
-                        )
-                    
-                    # Display cluster information
-                    st.subheader("Cluster Composition")
-                    st.markdown("""
-                    The table below shows the percentage distribution of lipid classes within each cluster.
-                    This helps identify which lipid classes are enriched in specific clusters.
-                    """)
-                    
-                    # Get cluster percentages
+                
+                # Cluster composition
+                st.markdown("---")
+                st.markdown("##### Cluster Composition")
+                
+                composition_view = st.radio(
+                    "Show composition by:",
+                    ["Species Count", "Total Concentration"],
+                    horizontal=True,
+                    key='cluster_composition_view',
+                    help="Species Count: % of lipid species. Total Concentration: % of summed abundance."
+                )
+                
+                if composition_view == "Species Count":
                     _, class_percentages = lp.LipidomicHeatmap.identify_clusters_and_percentages(
                         z_scores_df, 
                         n_clusters
                     )
-                    
-                    # Display cluster percentages
-                    if not class_percentages.empty:
-                        # Format percentages to 1 decimal place
-                        formatted_percentages = class_percentages.round(1)
-                        st.dataframe(formatted_percentages)
-                        
-                        # Add download option for cluster composition
-                        csv_download = convert_df(formatted_percentages.reset_index())
-                        st.download_button(
-                            "Download Cluster Composition CSV", 
-                            csv_download, 
-                            'cluster_composition.csv', 
-                            'text/csv'
-                        )
-            else:
-                with st.spinner("Generating regular heatmap..."):
-                    regular_heatmap = lp.LipidomicHeatmap.generate_regular_heatmap(
-                        z_scores_df, 
-                        selected_samples
+                    st.markdown("Percentage of lipid species within each cluster.")
+                else:
+                    class_percentages = lp.LipidomicHeatmap.identify_clusters_and_concentration_percentages(
+                        z_scores_df,
+                        filtered_df,
+                        n_clusters
                     )
+                    st.markdown("Percentage of total concentration within each cluster.")
+                
+                if not class_percentages.empty:
+                    formatted_percentages = class_percentages.round(1)
+                    st.dataframe(formatted_percentages, use_container_width=True)
                     
-                    # Display the regular heatmap
-                    st.plotly_chart(regular_heatmap, use_container_width=True)
-                    
-                    # Add download options
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        plotly_svg_download_button(regular_heatmap, "Lipidomic_Regular_Heatmap.svg")
-                    with col2:
-                        csv_download = convert_df(z_scores_df.reset_index())
-                        st.download_button(
-                            "Download CSV", 
-                            csv_download, 
-                            'regular_heatmap_data.csv', 
-                            'text/csv'
-                        )
-            
+                    csv_download = convert_df(formatted_percentages.reset_index())
+                    st.download_button(
+                        "Download CSV", 
+                        csv_download, 
+                        f'cluster_composition_{composition_view.lower().replace(" ", "_")}.csv', 
+                        'text/csv',
+                        key='cluster_composition_csv'
+                    )
         else:
-            st.warning("Please select at least one condition and one lipid class to generate the heatmap.")
+            with st.spinner("Generating regular heatmap..."):
+                regular_heatmap = lp.LipidomicHeatmap.generate_regular_heatmap(
+                    z_scores_df, 
+                    selected_samples
+                )
+                
+                st.plotly_chart(regular_heatmap, use_container_width=True)
+                
+                # Download options
+                col1, col2 = st.columns(2)
+                with col1:
+                    plotly_svg_download_button(regular_heatmap, "lipidomic_regular_heatmap.svg")
+                with col2:
+                    csv_download = convert_df(z_scores_df.reset_index())
+                    st.download_button(
+                        "Download CSV", 
+                        csv_download, 
+                        'regular_heatmap_data.csv', 
+                        'text/csv',
+                        key='regular_heatmap_csv'
+                    )
     
     return regular_heatmap, clustered_heatmap
 
