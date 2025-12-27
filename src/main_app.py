@@ -2940,37 +2940,13 @@ def display_box_plots(continuation_df, experiment):
         f"{str(continuation_df.index.tolist())}_{st.session_state.box_plot_counter}".encode()
     ).hexdigest()
     
-    expand_box_plot = st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns')
-    with expand_box_plot:
-        # Box plot analysis details - ALWAYS VISIBLE
-        st.markdown("### Box Plot Analysis")
+    with st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns'):
+        # Concise description
         st.markdown("""
-        Box plots are powerful diagnostic tools that help assess data quality and identify potential anomalies in your lipidomic dataset. LipidCruncher generates two complementary visualizations:
-        
-        **1. Missing Values Distribution:**
-        This plot shows the percentage of missing (zero) values for each sample in your dataset. A higher percentage may indicate:
-        - Lower sensitivity for that sample during analysis
-        - Technical issues during sample preparation or data acquisition
-        - Biological differences resulting in fewer detectable lipids
-        
-        Ideally, samples from the same experimental condition should show similar percentages. Substantial differences between replicates could signal potential quality issues.
-        
-        **2. Box Plot of Non-Zero Concentrations:**
-        This visualization displays the distribution of non-zero concentration values for each sample using standard box plot elements:
-        - The box shows the interquartile range (25th to 75th percentile)
-        - The horizontal line inside the box represents the median
-        - The whiskers extend to the most extreme data points within 1.5 times the interquartile range
-        - Individual points beyond the whiskers represent potential outliers
-        
-        What to look for:
-        - Similar median values and box sizes across replicates of the same condition indicate good reproducibility
-        - Unusual distributions (very high/low median, wide/narrow box) may suggest technical issues
-        - Consistent differences between experimental conditions may reflect genuine biological effects
-        
-        These visualizations help you make informed decisions about the quality and reliability of your lipidomic data before proceeding with further analysis.
+        Assess data quality and identify anomalies. Two diagnostic visualizations help detect technical issues or outliers.
         """)
-        # Add a divider
-        st.markdown("---")
+        
+        st.markdown("**What to look for:** Similar patterns across replicates indicate good reproducibility. Large differences may signal quality issues.")
         
         # Creating a deep copy for visualization
         visualization_df = continuation_df.copy(deep=True)
@@ -2984,22 +2960,26 @@ def display_box_plots(continuation_df, experiment):
         mean_area_df = lp.BoxPlot.create_mean_area_df(visualization_df, current_samples)
         zero_values_percent_list = lp.BoxPlot.calculate_missing_values_percentage(mean_area_df)
         
-        st.subheader("Missing Values Distribution")
+        # --- Results Section ---
+        st.markdown("---")
+        st.markdown("#### 📈 Results")
         
-        # Generate and display the first plot (Missing Values Distribution)
+        # Missing Values Distribution
+        st.markdown("##### Missing Values Distribution")
+        st.markdown("Percentage of zero values per sample. High percentages may indicate lower sensitivity or technical issues.")
+        
         fig1 = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
         st.plotly_chart(fig1, use_container_width=True)
         
-        # Add SVG download button for the missing values plot
-        plotly_svg_download_button(fig1, "missing_values_distribution.svg")
-        
-        # Data for download (Missing Values)
+        # Download buttons for missing values
         missing_values_data = np.vstack((current_samples, zero_values_percent_list)).T
         missing_values_df = pd.DataFrame(missing_values_data, columns=["Sample", "Percentage Missing"])
         missing_values_csv = convert_df(missing_values_df)
         
         col1, col2 = st.columns(2)
         with col1:
+            plotly_svg_download_button(fig1, "missing_values_distribution.svg")
+        with col2:
             st.download_button(
                 label="Download CSV",
                 data=missing_values_csv,
@@ -3010,20 +2990,20 @@ def display_box_plots(continuation_df, experiment):
         
         st.markdown("---")
         
-        st.subheader("Box Plot of Non-Zero Concentrations")
+        # Box Plot of Non-Zero Concentrations
+        st.markdown("##### Concentration Distribution")
+        st.markdown("Log10-transformed non-zero concentrations. Box = IQR (25th-75th percentile), line = median, points = outliers.")
         
-        # Generate and display the second plot (Box Plot)
         fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
         st.plotly_chart(fig2, use_container_width=True)
         
-        # Add SVG download button for the box plot
-        plotly_svg_download_button(fig2, "box_plot.svg")
-        
-        # Provide option to download the raw data for Box Plot
+        # Download buttons for box plot
         csv_data = convert_df(mean_area_df)
         
         col1, col2 = st.columns(2)
         with col1:
+            plotly_svg_download_button(fig2, "box_plot.svg")
+        with col2:
             st.download_button(
                 label="Download CSV",
                 data=csv_data,
@@ -3106,130 +3086,139 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
     """
     Conducts quality assessment using BQC samples and generates a CoV scatter plot.
     """
-    scatter_plot = None  # Initialize scatter_plot to None
+    scatter_plot = None
     if bqc_label is not None:
         with st.expander("Quality Check Using BQC Samples"):
-            # BQC analysis details - ALWAYS VISIBLE
-            st.markdown("### Batch Quality Control (BQC) Analysis")
+            # Concise description with formula
             st.markdown("""
-            Batch Quality Control (BQC) analysis evaluates the reliability of your lipidomic data by analyzing the variability of measurements in BQC samples, which are special quality control samples run alongside your experiment. This analysis uses the Coefficient of Variation (CoV) to measure how consistent the measurements are for each lipid across these samples.
-
-            **What is CoV?**  
-            The Coefficient of Variation (CoV) is a measure of relative variability, calculated as:
-
-            ```
-            CoV = (Standard Deviation / Mean) × 100%
-            ```
-
-            A lower CoV indicates more consistent measurements, suggesting higher reliability. CoV is computed for each lipid species across all BQC samples.
-
-            **Filtering Option:**  
-            You can filter out lipids with high CoV values (above your chosen threshold) to focus on reliable data for downstream analyses. If you select "Yes" for filtering:  
-            - Lipids with CoV above the threshold are listed in a table.  
-            - You can review these lipids and choose to add back any you want to keep (e.g., lipids critical to your study).
+            Evaluate measurement reliability using Batch Quality Control (BQC) samples. Lower CoV = more consistent measurements.
             """)
+            
+            st.markdown("**Coefficient of Variation (CoV):**")
+            st.code("CoV = (Standard_Deviation / Mean) × 100%", language=None)
+            st.markdown("Blue points are below threshold (reliable), red points are above (variable).")
+            
+            # --- Settings Section ---
             st.markdown("---")
-            # Move threshold setting outside the filter option
-            st.subheader("CoV Threshold Setting")
+            st.markdown("#### ⚙️ Settings")
+            
             cov_threshold = st.number_input(
-                'Set CoV threshold (%)',
+                'CoV Threshold (%)',
                 min_value=10,
                 max_value=1000,
                 value=30,
                 step=1,
-                help="Data points above this threshold will be highlighted in red and can optionally be filtered out."
+                help="Points above threshold highlighted in red.",
+                key='bqc_cov_threshold'
             )
+            
+            # --- Results Section ---
+            st.markdown("---")
+            st.markdown("#### 📈 Results")
+            
             bqc_sample_index = experiment.conditions_list.index(bqc_label)
-            # Generate and display the plot with the threshold
             scatter_plot, prepared_df, reliable_data_percent, filtered_lipids = lp.BQCQualityCheck.generate_and_display_cov_plot(
                 data_df,
                 experiment,
                 bqc_sample_index,
                 cov_threshold=cov_threshold
             )
-            # Display the plot
+            
             st.plotly_chart(scatter_plot, use_container_width=True)
-            plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg")
-            csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
-            st.download_button(
-                "Download CSV",
-                data=csv_data,
-                file_name="CoV_Plot_Data.csv",
-                mime='text/csv'
-            )
-            # Display reliability assessment with appropriate color coding
+            
+            # Reliability assessment
             if reliable_data_percent >= 80:
-                st.success(f"{reliable_data_percent:.1f}% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
+                st.success(f"{reliable_data_percent:.1f}% of datapoints are reliable (CoV < {cov_threshold}%).")
             elif reliable_data_percent >= 50:
-                st.warning(f"{reliable_data_percent:.1f}% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
+                st.warning(f"{reliable_data_percent:.1f}% of datapoints are reliable (CoV < {cov_threshold}%).")
             else:
-                st.error(f"Less than 50% of the datapoints are confidently reliable (CoV < {cov_threshold}%).")
-            # Filtering section for CoV only
-            if prepared_df is not None and not prepared_df.empty:
-                st.subheader("Data Filtering Options")
-                # CoV-based filtering
-                filter_cov = st.radio(
-                    f"Filter lipids with CoV >= {cov_threshold}%?",
-                    ("No", "Yes"),
-                    index=0
+                st.error(f"Less than 50% of datapoints are reliable (CoV < {cov_threshold}%).")
+            
+            # Download buttons
+            csv_data = convert_df(prepared_df[['LipidMolec', 'cov', 'mean']].dropna())
+            col1, col2 = st.columns(2)
+            with col1:
+                plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg")
+            with col2:
+                st.download_button(
+                    "Download CSV",
+                    data=csv_data,
+                    file_name="cov_plot_data.csv",
+                    mime='text/csv',
+                    key='bqc_csv_download'
                 )
+            
+            # --- Filtering Section ---
+            if prepared_df is not None and not prepared_df.empty:
+                st.markdown("---")
+                st.markdown("#### 🔧 Data Filtering")
+                
+                filter_cov = st.radio(
+                    f"Filter lipids with CoV ≥ {cov_threshold}%?",
+                    ("No", "Yes"),
+                    index=0,
+                    horizontal=True,
+                    key='bqc_filter_choice'
+                )
+                
                 cov_to_keep = []
                 if filter_cov == "Yes":
                     cov_filtered_df = prepared_df[prepared_df['cov'] >= cov_threshold][['LipidMolec', 'ClassKey', 'cov', 'mean']]
                     cov_filtered_df['cov'] = cov_filtered_df['cov'].round(2)
                     cov_filtered_df['mean'] = cov_filtered_df['mean'].round(4)
-                    cov_filtered_df['Reason'] = f'CoV >= {cov_threshold}%'
+                    
                     if not cov_filtered_df.empty:
-                        st.subheader("Lipids with High CoV")
-                        st.markdown("""
-                        The following lipids have CoV values above the threshold.
-                        You can review them and select any to keep in the dataset.
-                        """)
-                        display_cols = ['LipidMolec', 'ClassKey', 'cov', 'mean', 'Reason']
-                        st.dataframe(cov_filtered_df[display_cols])
+                        st.markdown("##### Lipids Above Threshold")
+                        st.dataframe(cov_filtered_df, use_container_width=True)
+                        
                         cov_to_keep = st.multiselect(
-                            "Select lipids to keep despite high CoV:",
-                            options=cov_filtered_df['LipidMolec'],
-                            format_func=lambda x: f"{x} (CoV: {cov_filtered_df[cov_filtered_df['LipidMolec'] == x]['cov'].iloc[0]}%, Mean: {cov_filtered_df[cov_filtered_df['LipidMolec'] == x]['mean'].iloc[0]})",
-                            help="Select any lipids you want to retain in the dataset."
+                            "Keep despite high CoV:",
+                            options=cov_filtered_df['LipidMolec'].tolist(),
+                            format_func=lambda x: f"{x} (CoV: {cov_filtered_df[cov_filtered_df['LipidMolec'] == x]['cov'].iloc[0]}%)",
+                            help="Select lipids to retain in the dataset.",
+                            key='bqc_lipids_to_keep'
                         )
                     else:
-                        st.info(f"No lipids with CoV >= {cov_threshold}% found.")
+                        st.info(f"No lipids with CoV ≥ {cov_threshold}% found.")
                 else:
-                    # If No, keep all (don't filter any high CoV)
                     cov_high = prepared_df[prepared_df['cov'] >= cov_threshold]['LipidMolec'].tolist()
                     cov_to_keep = cov_high
+                
                 # Apply filters
                 filtered_df = data_df.copy()
-                # No zero-based filtering, only CoV-based
                 cov_to_remove = [lipid for lipid in prepared_df[prepared_df['cov'] >= cov_threshold]['LipidMolec'] if lipid not in cov_to_keep]
-                to_remove = set(cov_to_remove)
-                # Apply removal
-                filtered_df = filtered_df[~filtered_df['LipidMolec'].isin(to_remove)]
-                # Sort and reset
+                filtered_df = filtered_df[~filtered_df['LipidMolec'].isin(set(cov_to_remove))]
                 filtered_df = filtered_df.sort_values(by='ClassKey').reset_index(drop=True)
-                # Calculate statistics
+                
+                # Summary
                 removed_count = len(data_df) - len(filtered_df)
                 percentage_removed = round((removed_count / len(data_df)) * 100, 1) if len(data_df) > 0 else 0
+                
                 if removed_count > 0:
-                    st.warning(f"Filtering removed {removed_count} lipid species ({percentage_removed:.1f}% of the dataset).")
+                    st.warning(f"Removed {removed_count} lipids ({percentage_removed:.1f}% of dataset).")
                 else:
-                    st.success("No lipids were removed after filtering.")
-                # Calculate added back counts for CoV filter
+                    st.success("No lipids removed.")
+                
                 kept_cov = len(cov_to_keep) if filter_cov == "Yes" else 0
                 if kept_cov > 0:
-                    st.info(f"Added back {kept_cov} lipids based on your selections despite filtering criteria.")
-                st.write('Final filtered dataset:')
-                st.dataframe(filtered_df)
+                    st.info(f"Retained {kept_cov} lipids despite high CoV.")
+                
+                # Filtered dataset
+                st.markdown("##### Filtered Dataset")
+                st.dataframe(filtered_df, use_container_width=True)
+                
                 csv = filtered_df.to_csv(index=False)
                 st.download_button(
-                    label="Download Data",
+                    label="Download Filtered Data",
                     data=csv,
-                    file_name='Filtered_Data.csv',
-                    mime='text/csv'
+                    file_name='filtered_data.csv',
+                    mime='text/csv',
+                    key='bqc_filtered_download'
                 )
-                data_df = filtered_df  # Update data_df with the filtered dataset
-    return data_df, scatter_plot  # Always return a tuple
+                
+                data_df = filtered_df
+    
+    return data_df, scatter_plot
 
 def integrate_retention_time_plots(continuation_df):
     """
@@ -3364,9 +3353,6 @@ def display_retention_time_plots(continuation_df, format_type):
 def analyze_pairwise_correlation(continuation_df, experiment):
     """
     Analyzes pairwise correlations for given conditions in the experiment data.
-    This function creates a Streamlit expander for displaying pairwise correlation analysis.
-    It allows the user to select a condition from those with multiple replicates and a sample type.
-    The function then computes and displays a correlation heatmap for the selected condition.
     
     Args:
         continuation_df (pd.DataFrame): The DataFrame containing the normalized or cleaned data.
@@ -3375,88 +3361,91 @@ def analyze_pairwise_correlation(continuation_df, experiment):
     Returns:
         tuple: A tuple containing the selected condition and the matplotlib figure, or (None, None) if no plot was generated.
     """
-    expand_corr = st.expander('Pairwise Correlation Analysis')
-    with expand_corr:
-        # Correlation analysis details - ALWAYS VISIBLE
-        st.markdown("### Pairwise Correlation Analysis")
+    with st.expander('Pairwise Correlation Analysis'):
+        # Concise description
         st.markdown("""
-        Pairwise correlation analysis helps assess the reproducibility of your lipidomic measurements by calculating how closely related the measurements are between sample replicates.    **What is Correlation Analysis?**  
-        Correlation analysis calculates the Pearson correlation coefficient between pairs of samples. This coefficient:
-        - Ranges from -1 to 1
-        - Values close to 1 indicate strong positive correlation (similar patterns)
-        - Values close to 0 indicate no correlation
-        - Values close to -1 indicate strong negative correlation (opposite patterns)
-        
-        **The Correlation Heatmap:**
-        - The heatmap displays correlation coefficients between all pairs of replicates
-        - Blue colors indicate higher correlation (more similar)
-        - Red colors indicate lower correlation (less similar)
-        - Only the lower triangle is shown to avoid redundancy
-        
-        **Interpreting Correlation Values:**
-        - For biological replicates: Higher correlations suggest good reproducibility, while lower correlations may indicate potential issues or greater biological variation.
-        - For technical replicates: Even higher correlations are typically expected, as they represent repeated measurements of the same sample, with lower values potentially signaling technical issues.
-        
-        **Data Preprocessing:**
-        - Missing (zero) values are removed before calculating correlations
-        - This ensures that correlations are based only on lipids detected in both samples
-        
-        Low correlation between replicates may indicate:
-        1. Sample preparation inconsistencies
-        2. Instrument performance issues
-        3. True biological variation
-        4. Potential outlier samples
-        
-        This analysis helps identify samples that might need to be excluded or further investigated before proceeding with biological interpretation.
+        Assess reproducibility by calculating Pearson correlation coefficients between sample replicates.
         """)
-        st.markdown("---")
+        
+        st.markdown("**Interpretation:** Values close to 1 = similar patterns (good). Blue = higher correlation, Red = lower correlation.")
         
         # Filter out conditions with only one replicate
-        multi_replicate_conditions = [condition for condition, num_samples in zip(experiment.conditions_list, experiment.number_of_samples_list) if num_samples > 1]
+        multi_replicate_conditions = [
+            condition for condition, num_samples 
+            in zip(experiment.conditions_list, experiment.number_of_samples_list) 
+            if num_samples > 1
+        ]
         
-        # Ensure there are multi-replicate conditions before proceeding
-        if multi_replicate_conditions:
-            selected_condition = st.selectbox('Select a condition', multi_replicate_conditions)
-            condition_index = experiment.conditions_list.index(selected_condition)
-            
-            sample_type = st.selectbox(
-                'Select the type of your samples', 
-                ['biological replicates', 'technical replicates'],
-                help="Biological replicates: different samples from the same condition. Technical replicates: repeated measurements of the same sample."
+        if not multi_replicate_conditions:
+            st.error("No conditions with multiple replicates found. Correlation analysis requires at least two replicates.")
+            return None, None
+        
+        # --- Data Selection Section ---
+        st.markdown("---")
+        st.markdown("#### 🎯 Data Selection")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_condition = st.selectbox(
+                'Condition', 
+                multi_replicate_conditions,
+                key='corr_condition'
             )
-            
-            mean_area_df = lp.Correlation.prepare_data_for_correlation(continuation_df, experiment.individual_samples_list, condition_index)
-            correlation_df, v_min, thresh = lp.Correlation.compute_correlation(mean_area_df, sample_type)
-            fig = lp.Correlation.render_correlation_plot(correlation_df, v_min, thresh, experiment.conditions_list[condition_index])
-            
-            st.pyplot(fig)
-            matplotlib_svg_download_button(fig, f"correlation_plot_{experiment.conditions_list[condition_index]}.svg")
-            
-            st.write('Find the exact correlation coefficients in the table below:')
-            st.write(correlation_df)
+        with col2:
+            sample_type = st.selectbox(
+                'Sample Type', 
+                ['biological replicates', 'technical replicates'],
+                help="Biological: different samples, same condition. Technical: repeated measurements, same sample.",
+                key='corr_sample_type'
+            )
+        
+        # --- Results Section ---
+        st.markdown("---")
+        st.markdown("#### 📈 Results")
+        
+        condition_index = experiment.conditions_list.index(selected_condition)
+        mean_area_df = lp.Correlation.prepare_data_for_correlation(
+            continuation_df, experiment.individual_samples_list, condition_index
+        )
+        correlation_df, v_min, thresh = lp.Correlation.compute_correlation(mean_area_df, sample_type)
+        fig = lp.Correlation.render_correlation_plot(
+            correlation_df, v_min, thresh, experiment.conditions_list[condition_index]
+        )
+        
+        st.pyplot(fig)
+        
+        # Download buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            matplotlib_svg_download_button(fig, f"correlation_plot_{selected_condition}.svg")
+        with col2:
             csv_download = convert_df(correlation_df)
             st.download_button(
                 label="Download CSV",
                 data=csv_download,
-                file_name='Correlation_Matrix_' + experiment.conditions_list[condition_index] + '.csv',
-                mime='text/csv'
+                file_name=f'correlation_matrix_{selected_condition}.csv',
+                mime='text/csv',
+                key='corr_csv_download'
             )
-            
-            # Highlight potentially problematic correlations
-            low_correlations = []
-            min_threshold = 0.7 if sample_type == 'biological replicates' else 0.8
-            
-            for i in range(len(correlation_df.columns)):
-                for j in range(i+1, len(correlation_df.columns)):
-                    if correlation_df.iloc[j, i] < min_threshold:
-                        low_correlations.append(
-                            f"{correlation_df.columns[i]} and {correlation_df.index[j]}: {correlation_df.iloc[j, i]:.3f}"
-                        )
-                
-            return selected_condition, fig
-        else:
-            st.error("No conditions with multiple replicates found. Correlation analysis requires at least two replicates.")
-            return None, None
+        
+        # Correlation matrix table
+        st.markdown("##### Correlation Coefficients")
+        st.dataframe(correlation_df, use_container_width=True)
+        
+        # Flag low correlations
+        min_threshold = 0.7 if sample_type == 'biological replicates' else 0.8
+        low_correlations = []
+        for i in range(len(correlation_df.columns)):
+            for j in range(i + 1, len(correlation_df.columns)):
+                if correlation_df.iloc[j, i] < min_threshold:
+                    low_correlations.append(
+                        f"{correlation_df.columns[i]} ↔ {correlation_df.index[j]}: {correlation_df.iloc[j, i]:.3f}"
+                    )
+        
+        if low_correlations:
+            st.warning(f"**Low correlations detected** (< {min_threshold}): " + " | ".join(low_correlations))
+        
+        return selected_condition, fig
         
 def display_pca_analysis(continuation_df, experiment):
     """
@@ -3469,107 +3458,82 @@ def display_pca_analysis(continuation_df, experiment):
     Returns:
         tuple: A tuple containing the updated continuation_df and the PCA plot.
     """
-    from scipy.stats import chi2  # Add import here
+    from scipy.stats import chi2
     
     pca_plot = None
     with st.expander("Principal Component Analysis (PCA)"):
-        # PCA analysis details - ALWAYS VISIBLE
-        st.markdown("### Principal Component Analysis (PCA)")
+        # Concise description
         st.markdown("""
-        PCA is a powerful dimensionality reduction technique that helps visualize complex lipidomic datasets by transforming high-dimensional data into a set of linearly uncorrelated variables called principal components.
-        
-        **What is PCA?**  
-        PCA identifies the directions (principal components) in which your data varies the most. These components are ordered by the amount of variance they explain:
-        - Principal Component 1 (PC1) explains the largest portion of variance
-        - Principal Component 2 (PC2) explains the second largest portion
-        
-        The percentage shown next to each PC indicates how much of the total variance that component explains.
-        
-        **The PCA Plot:**
-        - Each point represents one sample
-        - Points that cluster together have similar lipid profiles
-        - Greater distances between points indicate greater differences in lipid profiles
-        - Confidence ellipses (95% confidence) are drawn around each experimental condition
-        
-        **Interpreting the Plot:**
-        - **Well-separated clusters**: Different experimental conditions show distinct lipid profiles
-        - **Overlapping clusters**: Conditions have similar lipid profiles
-        - **Tight clusters**: Good reproducibility within conditions
-        - **Spread-out clusters**: Higher variability within conditions
-        - **Outliers**: Samples falling outside their group's confidence ellipse may indicate anomalies
-        
-        **Data Preprocessing:**
-        - Data is standardized (centered and scaled) before PCA
-        - This ensures that variables with larger values don't dominate the analysis
-        
-        **When to Remove Samples:**
-        Consider removing samples that:
-        1. Fall far outside their expected cluster
-        2. Don't group with their biological replicates
-        3. Show unusual patterns confirmed by other quality metrics
-        
-        **Note:** Sample removal should be done cautiously and documented. Biological outliers may represent real variation rather than technical issues.
+        Visualize sample clustering based on lipid profiles. Each point = one sample, ellipses = 95% confidence intervals.
         """)
-        st.markdown("---")
         
-        # Sample removal interface
+        st.markdown("**Interpretation:** Clustered points = similar profiles. Separated clusters = distinct conditions. Outliers fall outside ellipses.")
+        
+        # --- Settings Section ---
+        st.markdown("---")
+        st.markdown("#### ⚙️ Settings")
+        
         samples_to_remove = st.multiselect(
-            'Select samples to remove from the analysis (optional):',
+            'Exclude Samples (optional)',
             experiment.full_samples_list,
-            help="Select any samples that you want to exclude from the PCA analysis. This is useful if you suspect certain samples are outliers."
+            help="Exclude suspected outliers from analysis.",
+            key='pca_samples_remove'
         )
         
-        # Validate if we have enough samples after removal
         if samples_to_remove:
             remaining_count = len(experiment.full_samples_list) - len(samples_to_remove)
             if remaining_count < 2:
-                st.error('At least two samples are required for a meaningful PCA analysis!')
+                st.error('At least two samples required for PCA.')
+                return continuation_df, pca_plot
             else:
                 continuation_df = experiment.remove_bad_samples(samples_to_remove, continuation_df)
-                st.success(f"Analysis will proceed with {remaining_count} samples.")
+                st.warning(f"⚠️ {len(samples_to_remove)} sample(s) excluded from **all downstream analyses**, not just PCA.")
+                st.success(f"Proceeding with {remaining_count} samples.")
         
-        # Generate and display PCA plot
-        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list)
-        st.plotly_chart(pca_plot, use_container_width=True)
-        plotly_svg_download_button(pca_plot, "pca_plot.svg")
+        # --- Results Section ---
+        st.markdown("---")
+        st.markdown("#### 📈 Results")
         
-        # Show the PCA data table
-        csv_data = convert_df(pca_df)
-        st.download_button(
-            label="Download CSV",
-            data=csv_data,
-            file_name="PCA_data.csv",
-            mime="text/csv"
+        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(
+            continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list
         )
+        st.plotly_chart(pca_plot, use_container_width=True)
         
-        # Add interpretation suggestions based on the plot
+        # Download buttons
+        csv_data = convert_df(pca_df)
+        col1, col2 = st.columns(2)
+        with col1:
+            plotly_svg_download_button(pca_plot, "pca_plot.svg")
+        with col2:
+            st.download_button(
+                label="Download CSV",
+                data=csv_data,
+                file_name="pca_data.csv",
+                mime="text/csv",
+                key='pca_csv_download'
+            )
+        
+        # Outlier detection
+        all_outliers = []
         for condition in pca_df['Condition'].unique():
             condition_df = pca_df[pca_df['Condition'] == condition]
-            if len(condition_df) >= 3:  # Only check if we have at least 3 samples
-                # Calculate the Mahalanobis distance for each point
+            if len(condition_df) >= 3:
                 center = condition_df[['PC1', 'PC2']].mean().values
                 cov = np.cov(condition_df['PC1'], condition_df['PC2'])
                 
-                # If the covariance matrix is singular, we can't compute Mahalanobis distances
                 try:
                     inv_cov = np.linalg.inv(cov)
-                    
-                    # Check for potential outliers
-                    potential_outliers = []
                     for _, row in condition_df.iterrows():
                         point = np.array([row['PC1'], row['PC2']])
                         dist = np.sqrt(np.dot(np.dot((point - center), inv_cov), (point - center).T))
-                        # Using chi-square distribution with 2 degrees of freedom (for 2D) and p=0.05
                         if dist > np.sqrt(chi2.ppf(0.95, 2)):
-                            potential_outliers.append(row['Sample'])
-                    
-                    if potential_outliers:
-                        st.warning(f"**Potential outliers detected in {condition}:** {', '.join(potential_outliers)}")
-                        st.write("These samples fall outside the 95% confidence ellipse. Consider examining them more closely.")
+                            all_outliers.append(f"{row['Sample']} ({condition})")
                 except np.linalg.LinAlgError:
-                    # Covariance matrix is singular
                     pass
         
+        if all_outliers:
+            st.warning(f"**Potential outliers** (outside 95% ellipse): " + " | ".join(all_outliers))
+    
     return continuation_df, pca_plot
 
 def display_statistical_options():
