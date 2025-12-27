@@ -4684,60 +4684,34 @@ def display_volcano_statistical_options():
     """
     Display UI components for volcano plot statistical testing options.
     """
-    st.subheader("Statistical Testing Options")
-    
-    # Fixed significance threshold
     alpha = 0.05
     
-    # Manual mode controls
     col1, col2 = st.columns(2)
     
     with col1:
-        # Test type selection
         test_type = st.selectbox(
-            "Statistical Test Type",
+            "Test Type",
             options=["parametric", "non_parametric"],
-            index=0,  # Default to parametric
-            help="""
-            • Parametric: Welch's t-test (assumes log-normal distribution after transformation)
-            • Non-parametric: Mann-Whitney U (more conservative, no distribution assumptions)
-            """
+            index=0,
+            help="Parametric: Welch's t-test | Non-parametric: Mann-Whitney U",
+            key='volcano_test_type'
         )
         
     with col2:
         correction_method = st.selectbox(
             "Multiple Testing Correction",
             options=["uncorrected", "fdr_bh", "bonferroni"],
-            index=1,  # Default to uncorrected
-            help="""
-            • Uncorrected: No correction (good for targeted hypothesis testing)
-            • FDR (Benjamini-Hochberg): Controls false discovery rate (recommended for exploratory analysis)
-            • Bonferroni: Conservative, controls family-wise error rate (very strict)
-            """
+            index=1,
+            help="Uncorrected | FDR (recommended) | Bonferroni (strict)",
+            key='volcano_correction'
         )
 
-    # Auto-transformation option
     auto_transform = st.checkbox(
         "Auto-transform data (log10)",
-        value=True,  # Default to True
-        help="""
-        Automatically applies log10 transformation to all data. 
-        Log10 transformation is standard practice in lipidomics as it often 
-        normalizes skewed concentration data and is biologically interpretable.
-        """
+        value=True,
+        help="Standard practice in lipidomics to normalize skewed data.",
+        key='volcano_transform'
     )
-    
-    # Show current settings
-    st.markdown("---")
-    st.markdown("### 🔬 Current Settings Summary")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write(f"- **Test Type**: {test_type.title()}")
-        st.write(f"- **Correction**: {correction_method.upper().replace('_', '-')}")
-    with col2:
-        st.write(f"- **Significance**: α = {alpha}")
-        st.write(f"- **Auto-transform**: {'Yes' if auto_transform else 'No'}")
     
     return {
         'test_type': test_type,
@@ -4858,443 +4832,391 @@ def display_volcano_plot(experiment, continuation_df):
     """
     volcano_plots = {}
     with st.expander("Species Level Breakdown - Volcano Plot"):
-        # Show volcano plot analysis details
-        st.markdown("### Volcano Plot Analysis")
+        # Short description with formula
         st.markdown("""
-        The volcano plot identifies significantly altered lipid species between two experimental conditions.
-        See the **"About Statistical Testing"** expander above for details on test selection and corrections.
-
-        **🎯 What the Plot Shows:**
-
-        - **X-axis (Log2 Fold Change)**: Magnitude and direction of change
-          - Each unit = 2-fold change (e.g., +1 = 2× increase, -1 = 2× decrease)
-          - Calculated from original concentration values for biological interpretability
-
-        - **Y-axis**: -log10(p-value) — higher = more significant
-        - **Red Dashed Lines**: Configurable significance and fold-change thresholds
-
-        **⚠️ Non-Parametric Test Note:**
-
-        Mann-Whitney U tests with small sample sizes (n=3-6) often produce identical p-values for many lipids,
-        creating horizontal lines in the plot. This is expected behavior. Parametric tests (Welch's t-test) 
-        with log transformation provide better resolution for typical lipidomic data.
+        Identify significantly altered lipid species between two conditions.
         """)
-        st.markdown("---")
-
-        # Get statistical options using the specialized UI function
-        stat_options = display_volcano_statistical_options()
-        st.markdown("---")
-
-        # Condition selection
+        
+        st.markdown("**Fold Change** (x-axis, log2-transformed):")
+        st.code("Fold Change = Mean_concentration_experimental / Mean_concentration_control", language=None)
+        st.markdown('**Significance** (y-axis): -log10(p-value). Higher = more significant. See "About Statistical Testing" for methodology.')
+        
+        # Get valid conditions
         conditions_with_replicates = [
             condition for index, condition in enumerate(experiment.conditions_list)
             if experiment.number_of_samples_list[index] > 1
         ]
 
-        if len(conditions_with_replicates) <= 1:
-            st.error('You need at least two conditions with more than one replicate to create a volcano plot.')
+        if len(conditions_with_replicates) < 2:
+            st.warning('At least two conditions with multiple replicates are required for volcano plot.')
             return volcano_plots
-
-        control_condition = st.selectbox('Select Control Condition', conditions_with_replicates)
-        available_experimental = [cond for cond in conditions_with_replicates if cond != control_condition]
+        
+        # --- Statistical Options Section ---
+        st.markdown("---")
+        st.markdown("#### ⚙️ Statistical Options")
+        stat_options = display_volcano_statistical_options()
+        
+        # --- Data Selection Section ---
+        st.markdown("---")
+        st.markdown("#### 🎯 Data Selection")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            control_condition = st.selectbox('Control Condition', conditions_with_replicates, key='volcano_control')
+        with col2:
+            available_experimental = [c for c in conditions_with_replicates if c != control_condition]
+            experimental_condition = st.selectbox('Experimental Condition', available_experimental, key='volcano_experimental')
 
         if not available_experimental:
             st.error("Need at least two different conditions with multiple replicates.")
             return volcano_plots
 
-        default_experimental = available_experimental[0] if available_experimental else conditions_with_replicates[0]
-        experimental_condition = st.selectbox('Select Experimental Condition', available_experimental,
-                                             index=0 if available_experimental else 0)
-
-        # Class selection
         selected_classes_list = st.multiselect(
-            'Select lipid classes to include:',
+            'Lipid Classes',
             list(continuation_df['ClassKey'].value_counts().index),
             list(continuation_df['ClassKey'].value_counts().index),
             key='volcano_classes_select'
         )
 
-        # Threshold settings
-        col1, col2 = st.columns(2)
-        with col1:
-            p_value_threshold = st.number_input(
-                'Significance threshold (p-value)',
-                min_value=0.001, max_value=0.1, value=0.05, step=0.001,
-                help="P-value threshold for statistical significance"
-            )
-        with col2:
-            fold_change_threshold = st.number_input(
-                'Biological significance threshold (fold change)',
-                min_value=1.1, max_value=5.0, value=2.0, step=0.1,
-                help="Minimum fold change considered biologically significant"
-            )
-
-        q_value_threshold = -np.log10(p_value_threshold)
-        log2_fc_threshold = np.log2(fold_change_threshold)
-
-        # Display options
-        hide_non_significant = st.checkbox(
-            'Hide non-significant data points',
-            value=False,
-            help="Hide points that don't meet both statistical and biological significance thresholds"
-        )
-
-        # Initialize session state for custom labels and positions
+        # Initialize session state for custom labels
         if 'custom_labeled_lipids' not in st.session_state:
             st.session_state.custom_labeled_lipids = []
         if 'custom_label_positions' not in st.session_state:
             st.session_state.custom_label_positions = {}
 
-        # Define use_adjusted_p based on correction_method
         use_adjusted_p = stat_options['correction_method'] != "uncorrected"
 
-        # Generate enhanced volcano plot
-        if selected_classes_list and control_condition != experimental_condition:
-            with st.spinner("Performing enhanced statistical analysis..."):
-                try:
-                    # Get samples for conditions
-                    control_samples, experimental_samples = lp.VolcanoPlot._get_samples_for_conditions(
-                        experiment, control_condition, experimental_condition
+        # Validation
+        if not selected_classes_list:
+            st.warning("Please select at least one lipid class.")
+            return volcano_plots
+        if control_condition == experimental_condition:
+            st.warning("Please select different conditions for control and experimental groups.")
+            return volcano_plots
+        
+        # --- Results Section ---
+        st.markdown("---")
+        st.markdown("#### 📈 Results")
+        
+        # Significance & Display Settings (applies to all plots)
+        st.markdown("**Significance & Display Settings**")
+        col1, col2 = st.columns(2)
+        with col1:
+            p_value_threshold = st.number_input(
+                'P-value threshold',
+                min_value=0.001, max_value=0.1, value=0.05, step=0.001,
+                help="Statistical significance cutoff",
+                key='volcano_pval'
+            )
+        with col2:
+            fold_change_threshold = st.number_input(
+                'Fold change threshold',
+                min_value=1.1, max_value=5.0, value=2.0, step=0.1,
+                help="Biological significance cutoff",
+                key='volcano_fc'
+            )
+
+        q_value_threshold = -np.log10(p_value_threshold)
+        log2_fc_threshold = np.log2(fold_change_threshold)
+
+        hide_non_significant = st.checkbox(
+            'Hide non-significant points',
+            value=False,
+            help="Hide points that don't meet both thresholds",
+            key='volcano_hide'
+        )
+
+        with st.spinner("Performing statistical analysis..."):
+            try:
+                # Get samples for conditions
+                control_samples, experimental_samples = lp.VolcanoPlot._get_samples_for_conditions(
+                    experiment, control_condition, experimental_condition
+                )
+                df_processed, control_cols, experimental_cols = lp.VolcanoPlot._prepare_data(
+                    continuation_df, control_samples, experimental_samples
+                )
+                df_processed = df_processed[df_processed['ClassKey'].isin(selected_classes_list)]
+                statistical_results = lp.VolcanoPlot.perform_statistical_tests(
+                    df_processed, control_cols, experimental_cols,
+                    stat_options['test_type'], stat_options['correction_method'],
+                    stat_options['alpha'], stat_options['auto_transform']
+                )
+                volcano_df, removed_lipids_df = lp.VolcanoPlot._format_results_enhanced(
+                    df_processed, statistical_results, control_cols, experimental_cols
+                )
+
+                # --- Volcano Plot ---
+                st.markdown("---")
+                st.markdown("##### Volcano Plot")
+                
+                # Labeling options
+                st.markdown("**Labeling Options**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    top_n_labels = st.number_input(
+                        'Top N lipids to label:',
+                        min_value=0, max_value=50, step=1, value=0,
+                        key='top_n_labels',
+                        help="Most significant lipids to label automatically"
                     )
-                    df_processed, control_cols, experimental_cols = lp.VolcanoPlot._prepare_data(
-                        continuation_df, control_samples, experimental_samples
+                with col2:
+                    adjust_labels = st.checkbox("Enable label adjustment", value=False, key='volcano_adjust')
+
+                available_lipids = volcano_df['LipidMolec'].tolist()
+                st.session_state.custom_labeled_lipids = st.multiselect(
+                    'Additional lipids to label:',
+                    available_lipids,
+                    default=st.session_state.custom_labeled_lipids,
+                    key='custom_lipid_labels'
+                )
+
+                # Combine top N and user-selected lipids
+                p_col = '-log10(adjusted_pValue)' if use_adjusted_p else '-log10(pValue)'
+                top_n_lipids = volcano_df.sort_values(p_col, ascending=False).head(top_n_labels)['LipidMolec'].tolist()
+                all_lipids_to_label = list(set(top_n_lipids + st.session_state.custom_labeled_lipids))
+
+                # Label adjustment UI
+                if adjust_labels and all_lipids_to_label:
+                    with st.container():
+                        st.markdown("**Label Position Adjustments:**")
+                        for lipid in all_lipids_to_label:
+                            key = f"pos_{lipid}"
+                            if key not in st.session_state.custom_label_positions:
+                                st.session_state.custom_label_positions[key] = (0.0, 0.0)
+
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            with col1:
+                                st.text(lipid)
+                            with col2:
+                                x_offset = st.number_input(
+                                    "X", value=st.session_state.custom_label_positions[key][0],
+                                    step=0.1, key=f"x_offset_{lipid}", label_visibility="collapsed"
+                                )
+                            with col3:
+                                y_offset = st.number_input(
+                                    "Y", value=st.session_state.custom_label_positions[key][1],
+                                    step=0.1, key=f"y_offset_{lipid}", label_visibility="collapsed"
+                                )
+                            st.session_state.custom_label_positions[key] = (x_offset, y_offset)
+
+                # Create color mapping and plot
+                color_mapping = lp.VolcanoPlot._generate_color_mapping(volcano_df)
+                
+                plot = lp.VolcanoPlot._create_plot_enhanced(
+                    volcano_df, color_mapping, q_value_threshold, hide_non_significant,
+                    use_adjusted_p, log2_fc_threshold, top_n_labels=0
+                )
+
+                # Add annotations for labeled lipids
+                if all_lipids_to_label:
+                    plot.layout.annotations = []
+                    char_width = 0.05
+                    label_height = 0.3
+                    buffer = 0.2
+                    placed_boxes = []
+                    candidates = [
+                        (0.1, 0.3, 'left'), (-0.1, 0.3, 'right'),
+                        (0.1, -0.3, 'left'), (-0.1, -0.3, 'right'),
+                        (0.3, 0.1, 'left'), (0.3, -0.1, 'left'),
+                        (-0.3, 0.1, 'right'), (-0.3, -0.1, 'right')
+                    ]
+
+                    for lipid in all_lipids_to_label:
+                        row = volcano_df[volcano_df['LipidMolec'] == lipid].iloc[0]
+                        color = color_mapping[row['ClassKey']]
+                        point_x = row['FoldChange']
+                        point_y = row[p_col]
+                        key = f"pos_{lipid}"
+                        custom_x, custom_y = st.session_state.custom_label_positions.get(key, (0.0, 0.0))
+                        w = len(lipid) * char_width
+                        placed = False
+
+                        for cand_i, (dx, dy, align) in enumerate(candidates):
+                            scale = 1 + (cand_i // len(candidates)) * 0.5
+                            label_x = point_x + dx * scale + custom_x
+                            label_y = point_y + dy * scale + custom_y
+
+                            if align == 'left':
+                                left = label_x
+                                right = label_x + w
+                            else:
+                                left = label_x - w
+                                right = label_x
+
+                            bottom = label_y - label_height / 2
+                            top = label_y + label_height / 2
+
+                            overlap = False
+                            for box in placed_boxes:
+                                if not (right < box['left'] - buffer or left > box['right'] + buffer or
+                                        top < box['bottom'] - buffer or bottom > box['top'] + buffer):
+                                    overlap = True
+                                    break
+
+                            if not overlap:
+                                plot.add_annotation(
+                                    x=label_x, y=label_y, text=lipid,
+                                    showarrow=False, font=dict(color=color, size=12), align=align
+                                )
+                                plot.add_annotation(
+                                    x=point_x, y=point_y, ax=label_x, ay=label_y,
+                                    axref='x', ayref='y', text='',
+                                    showarrow=True, arrowhead=1, arrowsize=1, arrowwidth=1, arrowcolor='black'
+                                )
+                                placed_boxes.append({
+                                    'left': left - buffer, 'right': right + buffer,
+                                    'bottom': bottom - buffer, 'top': top + buffer
+                                })
+                                placed = True
+                                break
+
+                        if not placed:
+                            align_fallback = 'left' if point_x > 0 else 'right'
+                            label_x_fallback = point_x + (0.1 if align_fallback == 'left' else -0.1) + custom_x
+                            label_y_fallback = point_y + 0.2 + custom_y
+                            plot.add_annotation(
+                                x=label_x_fallback, y=label_y_fallback, text=lipid,
+                                showarrow=False, font=dict(color=color, size=12), align=align_fallback
+                            )
+                            plot.add_annotation(
+                                x=point_x, y=point_y, ax=label_x_fallback, ay=label_y_fallback,
+                                axref='x', ayref='y', text='',
+                                showarrow=True, arrowhead=1, arrowsize=1, arrowwidth=1, arrowcolor='black'
+                            )
+
+                # Display plot
+                st.plotly_chart(plot, use_container_width=True)
+                volcano_plots['main'] = plot
+
+                # Download buttons
+                col1, col2 = st.columns(2)
+                with col1:
+                    svg_bytes = plot.to_image(format="svg")
+                    st.download_button(
+                        label="Download SVG", data=svg_bytes.decode('utf-8'),
+                        file_name=f"volcano_plot_{experimental_condition}_vs_{control_condition}.svg",
+                        mime="image/svg+xml", key='volcano_svg'
                     )
-                    df_processed = df_processed[df_processed['ClassKey'].isin(selected_classes_list)]
-                    statistical_results = lp.VolcanoPlot.perform_statistical_tests(
-                        df_processed, control_cols, experimental_cols,
-                        stat_options['test_type'], stat_options['correction_method'],
-                        stat_options['alpha'], stat_options['auto_transform']
-                    )
-                    volcano_df, removed_lipids_df = lp.VolcanoPlot._format_results_enhanced(
-                        df_processed, statistical_results, control_cols, experimental_cols
+                with col2:
+                    png_bytes = plot.to_image(format="png")
+                    st.download_button(
+                        label="Download PNG", data=png_bytes,
+                        file_name=f"volcano_plot_{experimental_condition}_vs_{control_condition}.png",
+                        mime="image/png", key='volcano_png'
                     )
 
-                    # Display detailed statistical results
+                # Detailed statistical results
+                show_detailed = st.checkbox("Show detailed statistical results", value=False, key='volcano_show_stats')
+                if show_detailed:
                     display_volcano_detailed_statistical_results(
                         statistical_results, control_condition, experimental_condition
                     )
 
-                    st.markdown("---")
-                    st.subheader("Volcano Plot")
+                # --- Concentration vs Fold Change Plot ---
+                st.markdown("---")
+                st.markdown("##### Concentration vs. Fold Change")
+                st.markdown("Relationship between lipid abundance and fold change.")
+                
+                concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(
+                    volcano_df, color_mapping, q_value_threshold, hide_non_significant, use_adjusted_p=True
+                )
+                st.plotly_chart(concentration_vs_fold_change_plot, use_container_width=True)
+                volcano_plots['concentration_vs_fold_change'] = concentration_vs_fold_change_plot
 
-                    # Restore top N labeling option
-                    top_n_labels = st.number_input(
-                        'Number of top lipids to label (ranked by p-value):',
-                        min_value=0, max_value=50, step=1,
-                        value=0,
-                        key='top_n_labels',
-                        help="Enter the number of most significant lipids to label on the plot automatically."
+                col1, col2 = st.columns(2)
+                with col1:
+                    svg_bytes = concentration_vs_fold_change_plot.to_image(format="svg")
+                    st.download_button(
+                        label="Download SVG", data=svg_bytes.decode('utf-8'),
+                        file_name=f"conc_vs_fc_{experimental_condition}_vs_{control_condition}.svg",
+                        mime="image/svg+xml", key='conc_fc_svg'
+                    )
+                with col2:
+                    png_bytes = concentration_vs_fold_change_plot.to_image(format="png")
+                    st.download_button(
+                        label="Download PNG", data=png_bytes,
+                        file_name=f"conc_vs_fc_{experimental_condition}_vs_{control_condition}.png",
+                        mime="image/png", key='conc_fc_png'
                     )
 
-                    # Add multiselect for user to choose additional lipids to label
-                    available_lipids = volcano_df['LipidMolec'].tolist()
-                    st.session_state.custom_labeled_lipids = st.multiselect(
-                        'Select additional lipids to label on the plot (in addition to top N):',
-                        available_lipids,
-                        default=st.session_state.custom_labeled_lipids,
-                        key='custom_lipid_labels'
-                    )
-
-                    # Combine top N and user-selected lipids
-                    p_col = '-log10(adjusted_pValue)' if use_adjusted_p else '-log10(pValue)'
-                    top_n_lipids = volcano_df.sort_values(p_col, ascending=False).head(top_n_labels)['LipidMolec'].tolist()
-                    all_lipids_to_label = list(set(top_n_lipids + st.session_state.custom_labeled_lipids))
-
-                    # Label adjustment checkbox
-                    adjust_labels = st.checkbox("Enable label adjustment", value=False)
-
-                    # If adjust_labels, show adjustment inputs for all labeled lipids
-                    if adjust_labels and all_lipids_to_label:
-                        with st.container():
-                            st.markdown("### Label Position Adjustments")
-                            for lipid in all_lipids_to_label:
-                                key = f"pos_{lipid}"
-                                if key not in st.session_state.custom_label_positions:
-                                    st.session_state.custom_label_positions[key] = (0.0, 0.0)
-
-                                st.markdown(f"**{lipid}**")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    x_offset = st.number_input(
-                                        "X offset",
-                                        value=st.session_state.custom_label_positions[key][0],
-                                        step=0.1,
-                                        key=f"x_offset_{lipid}"
-                                    )
-                                with col2:
-                                    y_offset = st.number_input(
-                                        "Y offset",
-                                        value=st.session_state.custom_label_positions[key][1],
-                                        step=0.1,
-                                        key=f"y_offset_{lipid}"
-                                    )
-
-                                st.session_state.custom_label_positions[key] = (x_offset, y_offset)
-
-                    # Create color mapping
-                    color_mapping = lp.VolcanoPlot._generate_color_mapping(volcano_df)
-
-                    # Create plot with all selected labels
-                    plot = lp.VolcanoPlot._create_plot_enhanced(
-                        volcano_df, color_mapping, q_value_threshold, hide_non_significant,
-                        use_adjusted_p, log2_fc_threshold, top_n_labels=0  # Set to 0 to handle labeling manually
-                    )
-
-                    # Add annotations for both top N and user-selected lipids
-                    if all_lipids_to_label:
-                        plot.layout.annotations = []  # Clear existing annotations
-                        char_width = 0.05
-                        label_height = 0.3
-                        buffer = 0.2
-                        placed_boxes = []
-                        candidates = [
-                            (0.1, 0.3, 'left'), (-0.1, 0.3, 'right'),
-                            (0.1, -0.3, 'left'), (-0.1, -0.3, 'right'),
-                            (0.3, 0.1, 'left'), (0.3, -0.1, 'left'),
-                            (-0.3, 0.1, 'right'), (-0.3, -0.1, 'right')
-                        ]
-
-                        for lipid in all_lipids_to_label:
-                            row = volcano_df[volcano_df['LipidMolec'] == lipid].iloc[0]
-                            color = color_mapping[row['ClassKey']]
-                            point_x = row['FoldChange']
-                            point_y = row[p_col]
-                            key = f"pos_{lipid}"
-                            custom_x, custom_y = st.session_state.custom_label_positions.get(key, (0.0, 0.0))
-                            w = len(lipid) * char_width
-                            placed = False
-
-                            for cand_i, (dx, dy, align) in enumerate(candidates):
-                                scale = 1 + (cand_i // len(candidates)) * 0.5
-                                label_x = point_x + dx * scale + custom_x
-                                label_y = point_y + dy * scale + custom_y
-
-                                if align == 'left':
-                                    left = label_x
-                                    right = label_x + w
-                                else:
-                                    left = label_x - w
-                                    right = label_x
-
-                                bottom = label_y - label_height / 2
-                                top = label_y + label_height / 2
-
-                                overlap = False
-                                for box in placed_boxes:
-                                    if not (right < box['left'] - buffer or left > box['right'] + buffer or
-                                            top < box['bottom'] - buffer or bottom > box['top'] + buffer):
-                                        overlap = True
-                                        break
-
-                                if not overlap:
-                                    plot.add_annotation(
-                                        x=label_x,
-                                        y=label_y,
-                                        text=lipid,
-                                        showarrow=False,
-                                        font=dict(color=color, size=12),
-                                        align=align
-                                    )
-                                    plot.add_annotation(
-                                        x=point_x,
-                                        y=point_y,
-                                        ax=label_x,
-                                        ay=label_y,
-                                        axref='x',
-                                        ayref='y',
-                                        text='',
-                                        showarrow=True,
-                                        arrowhead=1,
-                                        arrowsize=1,
-                                        arrowwidth=1,
-                                        arrowcolor='black'
-                                    )
-                                    placed_boxes.append({
-                                        'left': left - buffer,
-                                        'right': right + buffer,
-                                        'bottom': bottom - buffer,
-                                        'top': top + buffer
-                                    })
-                                    placed = True
-                                    break
-
-                            if not placed:
-                                align_fallback = 'left' if point_x > 0 else 'right'
-                                label_x_fallback = point_x + (0.1 if align_fallback == 'left' else -0.1) + custom_x
-                                label_y_fallback = point_y + 0.2 + custom_y
-                                plot.add_annotation(
-                                    x=label_x_fallback,
-                                    y=label_y_fallback,
-                                    text=lipid,
-                                    showarrow=False,
-                                    font=dict(color=color, size=12),
-                                    align=align_fallback
-                                )
-                                plot.add_annotation(
-                                    x=point_x,
-                                    y=point_y,
-                                    ax=label_x_fallback,
-                                    ay=label_y_fallback,
-                                    axref='x',
-                                    ayref='y',
-                                    text='',
-                                    showarrow=True,
-                                    arrowhead=1,
-                                    arrowsize=1,
-                                    arrowwidth=1,
-                                    arrowcolor='black'
-                                )
-
-                    # Display main volcano plot
-                    st.plotly_chart(plot, use_container_width=True)
-                    volcano_plots['main'] = plot
-
-                    # Add download options for main plot
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        svg_bytes = plot.to_image(format="svg")
-                        svg_string = svg_bytes.decode('utf-8')
-                        st.download_button(
-                            label="Download SVG",
-                            data=svg_string,
-                            file_name=f"volcano_plot_{experimental_condition}_vs_{control_condition}.svg",
-                            mime="image/svg+xml"
-                        )
-                    with col2:
-                        png_bytes = plot.to_image(format="png")
-                        st.download_button(
-                            label="Download PNG",
-                            data=png_bytes,
-                            file_name=f"volcano_plot_{experimental_condition}_vs_{control_condition}.png",
-                            mime="image/png"
-                        )
-
-                    st.markdown("---")
-
-                    # Generate and display the concentration vs. fold change plot
-                    st.subheader("Concentration vs. Fold Change Plot")
-                    st.markdown("""
-                    This plot shows the relationship between a lipid's abundance and its fold change,
-                    using the same statistical framework as the main volcano plot.
-                    """)
-                    concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(
-                        volcano_df, color_mapping, q_value_threshold, hide_non_significant, use_adjusted_p=True
-                    )
-                    st.plotly_chart(concentration_vs_fold_change_plot, use_container_width=True)
-                    volcano_plots['concentration_vs_fold_change'] = concentration_vs_fold_change_plot
-
-                    # Add download options for concentration plot
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        svg_bytes = concentration_vs_fold_change_plot.to_image(format="svg")
-                        svg_string = svg_bytes.decode('utf-8')
-                        st.download_button(
-                            label="Download SVG",
-                            data=svg_string,
-                            file_name=f"concentration_vs_fold_change_{experimental_condition}_vs_{control_condition}.svg",
-                            mime="image/svg+xml"
-                        )
-                    with col2:
-                        png_bytes = concentration_vs_fold_change_plot.to_image(format="png")
-                        st.download_button(
-                            label="Download PNG",
-                            data=png_bytes,
-                            file_name=f"concentration_vs_fold_change_{experimental_condition}_vs_{control_condition}.png",
-                            mime="image/png"
-                        )
-
-                    st.markdown("---")
-
-                    # Lipid concentration distribution
-                    st.subheader("Individual Lipid Analysis")
-                    st.markdown("""
-                    Select specific lipids to examine their concentration distributions in detail.
-                    """)
-                    all_classes = list(volcano_df['ClassKey'].unique())
-                    selected_class = st.selectbox('Select Lipid Class for Detailed Analysis:', all_classes)
-
+                # --- Individual Lipid Analysis ---
+                st.markdown("---")
+                st.markdown("##### Individual Lipid Analysis")
+                st.markdown("Examine concentration distributions for specific lipids.")
+                
+                all_classes = list(volcano_df['ClassKey'].unique())
+                col1, col2 = st.columns(2)
+                with col1:
+                    selected_class = st.selectbox('Lipid Class:', all_classes, key='volcano_detail_class')
+                with col2:
                     if selected_class:
                         class_lipids = volcano_df[volcano_df['ClassKey'] == selected_class]['LipidMolec'].unique().tolist()
-                        # Default to most significantly changed lipids
                         sorted_lipids = volcano_df[volcano_df['ClassKey'] == selected_class].sort_values(
                             '-log10(adjusted_pValue)', ascending=False
                         )['LipidMolec'].tolist()
+                        
                         selected_lipids = st.multiselect(
-                            'Select Lipids for Detailed View:',
+                            'Lipids:',
                             class_lipids,
-                            default=sorted_lipids[:3] if len(sorted_lipids) >= 3 else sorted_lipids
+                            default=sorted_lipids[:3] if len(sorted_lipids) >= 3 else sorted_lipids,
+                            key='volcano_detail_lipids'
                         )
-
-                        if selected_lipids:
-                            selected_conditions = [control_condition, experimental_condition]
-                            with st.spinner("Generating concentration distribution plot..."):
-                                plot_df = lp.VolcanoPlot.create_concentration_distribution_data(
-                                    continuation_df, selected_lipids, selected_conditions, experiment
-                                )
-                                fig = lp.VolcanoPlot.create_concentration_distribution_plot(
-                                    plot_df, selected_lipids, selected_conditions
-                                )
-                                st.pyplot(fig)
-                                volcano_plots['concentration_distribution'] = fig
-
-                                # Add download options
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    buf = io.BytesIO()
-                                    fig.savefig(buf, format='svg', bbox_inches='tight')
-                                    buf.seek(0)
-                                    svg_string = buf.getvalue().decode('utf-8')
-                                    st.download_button(
-                                        label="Download SVG",
-                                        data=svg_string,
-                                        file_name=f"concentration_distribution_{experimental_condition}_vs_{control_condition}.svg",
-                                        mime="image/svg+xml"
-                                    )
-                                with col2:
-                                    csv_data = plot_df.to_csv(index=False).encode('utf-8')
-                                    st.download_button(
-                                        label="Download CSV",
-                                        data=csv_data,
-                                        file_name=f"concentration_distribution_data_{experimental_condition}_vs_{control_condition}.csv",
-                                        mime="text/csv"
-                                    )
-
-                    st.markdown("---")
-
-                    # Display excluded lipids information
-                    st.subheader("Excluded Lipids")
-                    st.markdown("""
-                    The following lipids were excluded from the statistical analysis. This provides transparency
-                    about which lipids couldn't be analyzed and why.
-                    """)
-                    if not removed_lipids_df.empty:
-                        st.dataframe(removed_lipids_df)
-                        csv_excluded = removed_lipids_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="Download CSV",
-                            data=csv_excluded,
-                            file_name=f"excluded_lipids_{experimental_condition}_vs_{control_condition}.csv",
-                            mime="text/csv"
-                        )
-
-                        # Show summary of exclusion reasons
-                        exclusion_summary = removed_lipids_df['Reason'].value_counts()
-                        st.write("**Exclusion Reasons Summary:**")
-                        for reason, count in exclusion_summary.items():
-                            st.write(f"- {reason}: {count} lipids")
                     else:
-                        st.success("→ No lipids were excluded from the analysis!")
+                        selected_lipids = []
 
-                except Exception as e:
-                    st.error(f"Error generating volcano plot: {str(e)}")
-                    import traceback
-                    st.error(f"Debug info: {traceback.format_exc()}")
+                if selected_lipids:
+                    selected_conditions = [control_condition, experimental_condition]
+                    with st.spinner("Generating distribution plot..."):
+                        plot_df = lp.VolcanoPlot.create_concentration_distribution_data(
+                            continuation_df, selected_lipids, selected_conditions, experiment
+                        )
+                        fig = lp.VolcanoPlot.create_concentration_distribution_plot(
+                            plot_df, selected_lipids, selected_conditions
+                        )
+                        st.pyplot(fig)
+                        volcano_plots['concentration_distribution'] = fig
 
-        else:
-            if not selected_classes_list:
-                st.warning("Please select at least one lipid class to generate the volcano plot.")
-            if control_condition == experimental_condition:
-                st.warning("Please select different conditions for control and experimental groups.")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            buf = io.BytesIO()
+                            fig.savefig(buf, format='svg', bbox_inches='tight')
+                            buf.seek(0)
+                            st.download_button(
+                                label="Download SVG", data=buf.getvalue().decode('utf-8'),
+                                file_name=f"conc_dist_{experimental_condition}_vs_{control_condition}.svg",
+                                mime="image/svg+xml", key='dist_svg'
+                            )
+                        with col2:
+                            st.download_button(
+                                label="Download CSV", data=plot_df.to_csv(index=False).encode('utf-8'),
+                                file_name=f"conc_dist_data_{experimental_condition}_vs_{control_condition}.csv",
+                                mime="text/csv", key='dist_csv'
+                            )
+
+                # --- Excluded Lipids ---
+                st.markdown("---")
+                st.markdown("##### Excluded Lipids")
+                if not removed_lipids_df.empty:
+                    st.dataframe(removed_lipids_df, use_container_width=True)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            label="Download CSV", data=removed_lipids_df.to_csv(index=False).encode('utf-8'),
+                            file_name=f"excluded_lipids_{experimental_condition}_vs_{control_condition}.csv",
+                            mime="text/csv", key='excluded_csv'
+                        )
+                    with col2:
+                        exclusion_summary = removed_lipids_df['Reason'].value_counts()
+                        summary_text = " | ".join([f"{reason}: {count}" for reason, count in exclusion_summary.items()])
+                        st.markdown(f"**Reasons:** {summary_text}")
+                else:
+                    st.success("✓ No lipids were excluded from the analysis.")
+
+            except Exception as e:
+                st.error(f"Error generating volcano plot: {str(e)}")
+                import traceback
+                st.error(f"Debug info: {traceback.format_exc()}")
 
     return volcano_plots
 
