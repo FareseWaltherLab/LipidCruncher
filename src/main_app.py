@@ -1439,7 +1439,7 @@ def get_msdial_data_type_selection():
     # Data Type Selection (if normalized data is available)
     if has_normalized_data and len(norm_samples) > 0:
         st.markdown("---")
-        st.markdown("#### 📊 Data Type Selection")
+        st.markdown("##### 📊 Data Type Selection")
         st.markdown(f"""
         Your MS-DIAL export contains both raw and pre-normalized intensity values:
         - **Raw data**: {len(raw_samples)} sample columns
@@ -1579,7 +1579,7 @@ def manage_internal_standards(normalizer):
     if 'standard_source_preference' not in st.session_state:
         st.session_state.standard_source_preference = "Automatic Detection"
     
-    st.markdown("#### 🏷️ Standards Source")
+    st.markdown("##### 🏷️ Standards Source")
     
     # Radio button for standards source
     standards_source = st.radio(
@@ -1962,7 +1962,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
     # ==========================================================================
     # Final Filtered Data (OUTSIDE expander)
     # ==========================================================================
-    st.markdown("#### 📋 Final Filtered Data (Pre-Normalization)")
+    st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
     display_data(filtered_df, "Data", "final_filtered_data.csv", key_suffix="filtered")
     
     # ==========================================================================
@@ -1986,7 +1986,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         
         if show_plots:
             st.markdown("---")
-            st.markdown("#### 📊 Internal Standards Consistency")
+            st.markdown("##### 📊 Internal Standards Consistency")
             st.markdown("*Consistent bar heights across samples indicate good sample preparation and instrument performance.*")
             
             conditions = st.session_state.experiment.conditions_list
@@ -2075,7 +2075,7 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     # ==========================================================================
     # Class Selection
     # ==========================================================================
-    st.markdown("#### 🎯 Select Lipid Classes")
+    st.markdown("##### 🎯 Select Lipid Classes")
     selected_classes = st.multiselect(
         'Classes to analyze:',
         options=all_class_lst,
@@ -2106,7 +2106,7 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     # ==========================================================================
     # Normalization Method Selection
     # ==========================================================================
-    st.markdown("#### ⚙️ Normalization Method")
+    st.markdown("##### ⚙️ Normalization Method")
     
     # Determine available options
     normalization_options = ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Both'] if has_standards else ['None (pre-normalized data)', 'Protein-based']
@@ -2217,7 +2217,7 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     # Final Normalized Data
     # ==========================================================================
     if normalized_df is not None:
-        st.markdown("#### 📊 Final Normalized Data")
+        st.markdown("##### 📊 Final Normalized Data")
         st.dataframe(normalized_df, use_container_width=True)
         csv = normalized_df.to_csv(index=False)
         st.download_button(
@@ -2804,10 +2804,10 @@ def display_box_plots(continuation_df, experiment):
         
         # --- Results Section ---
         st.markdown("---")
-        st.markdown("#### 📈 Results")
+        st.markdown("##### 📈 Results")
         
         # Missing Values Distribution
-        st.markdown("##### Missing Values Distribution")
+        st.markdown("###### Missing Values Distribution")
         st.markdown("Percentage of zero values per sample. High percentages may indicate lower sensitivity or technical issues.")
         
         fig1 = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
@@ -2833,7 +2833,7 @@ def display_box_plots(continuation_df, experiment):
         st.markdown("---")
         
         # Box Plot of Non-Zero Concentrations
-        st.markdown("##### Concentration Distribution")
+        st.markdown("###### Concentration Distribution")
         st.markdown("Log10-transformed non-zero concentrations. Box = IQR (25th-75th percentile), line = median, points = outliers.")
         
         fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
@@ -2942,7 +2942,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             
             # --- Settings Section ---
             st.markdown("---")
-            st.markdown("#### ⚙️ Settings")
+            st.markdown("##### ⚙️ Settings")
             
             cov_threshold = st.number_input(
                 'CoV Threshold (%)',
@@ -2956,7 +2956,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             
             # --- Results Section ---
             st.markdown("---")
-            st.markdown("#### 📈 Results")
+            st.markdown("##### 📈 Results")
             
             bqc_sample_index = experiment.conditions_list.index(bqc_label)
             scatter_plot, prepared_df, reliable_data_percent, filtered_lipids = lp.BQCQualityCheck.generate_and_display_cov_plot(
@@ -2993,7 +2993,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
             # --- Filtering Section ---
             if prepared_df is not None and not prepared_df.empty:
                 st.markdown("---")
-                st.markdown("#### 🔧 Data Filtering")
+                st.markdown("##### 🔧 Data Filtering")
                 
                 filter_cov = st.radio(
                     f"Filter lipids with CoV ≥ {cov_threshold}%?",
@@ -3010,7 +3010,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                     cov_filtered_df['mean'] = cov_filtered_df['mean'].round(4)
                     
                     if not cov_filtered_df.empty:
-                        st.markdown("##### Lipids Above Threshold")
+                        st.markdown("###### Lipids Above Threshold")
                         st.dataframe(cov_filtered_df, use_container_width=True)
                         
                         cov_to_keep = st.multiselect(
@@ -3046,7 +3046,7 @@ def conduct_bqc_quality_assessment(bqc_label, data_df, experiment):
                     st.info(f"Retained {kept_cov} lipids despite high CoV.")
                 
                 # Filtered dataset
-                st.markdown("##### Filtered Dataset")
+                st.markdown("###### Filtered Dataset")
                 st.dataframe(filtered_df, use_container_width=True)
                 
                 csv = filtered_df.to_csv(index=False)
@@ -3224,7 +3224,7 @@ def analyze_pairwise_correlation(continuation_df, experiment):
         
         # --- Data Selection Section ---
         st.markdown("---")
-        st.markdown("#### 🎯 Data Selection")
+        st.markdown("##### 🎯 Data Selection")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -3243,7 +3243,7 @@ def analyze_pairwise_correlation(continuation_df, experiment):
         
         # --- Results Section ---
         st.markdown("---")
-        st.markdown("#### 📈 Results")
+        st.markdown("##### 📈 Results")
         
         condition_index = experiment.conditions_list.index(selected_condition)
         mean_area_df = lp.Correlation.prepare_data_for_correlation(
@@ -3271,7 +3271,7 @@ def analyze_pairwise_correlation(continuation_df, experiment):
             )
         
         # Correlation matrix table
-        st.markdown("##### Correlation Coefficients")
+        st.markdown("###### Correlation Coefficients")
         st.dataframe(correlation_df, use_container_width=True)
         
         # Flag low correlations
@@ -3313,7 +3313,7 @@ def display_pca_analysis(continuation_df, experiment):
         
         # --- Settings Section ---
         st.markdown("---")
-        st.markdown("#### ⚙️ Settings")
+        st.markdown("##### ⚙️ Settings")
         
         samples_to_remove = st.multiselect(
             'Exclude Samples (optional)',
@@ -3334,7 +3334,7 @@ def display_pca_analysis(continuation_df, experiment):
         
         # --- Results Section ---
         st.markdown("---")
-        st.markdown("#### 📈 Results")
+        st.markdown("##### 📈 Results")
         
         pca_plot, pca_df = lp.PCAAnalysis.plot_pca(
             continuation_df, experiment.full_samples_list, experiment.extensive_conditions_list
@@ -3628,12 +3628,12 @@ def display_abundance_bar_charts(experiment, continuation_df):
         
         # --- Statistical Options Section ---
         st.markdown("---")
-        st.markdown("#### ⚙️ Statistical Options")
+        #
         stat_options = display_statistical_options()
         
         # --- Data Selection Section ---
         st.markdown("---")
-        st.markdown("#### 🎯 Data Selection")
+        st.markdown("##### 🎯 Data Selection")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -3677,7 +3677,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
             
             # --- Results Section ---
             st.markdown("---")
-            st.markdown("#### 📊 Results")
+            st.markdown("##### 📊 Results")
             
             # Scale selection
             scale_choice = st.radio(
@@ -3746,7 +3746,7 @@ def display_abundance_bar_charts(experiment, continuation_df):
             
             # --- Detailed Statistics Section (at the end) ---
             st.markdown("---")
-            st.markdown("#### 🔍 Detailed Statistics")
+            st.markdown("##### 🔍 Detailed Statistics")
             display_detailed_statistical_results(statistical_results, selected_conditions_list)
             
             # Note about excluded conditions
@@ -3785,7 +3785,7 @@ def display_abundance_pie_charts(experiment, continuation_df):
         
         # --- Data Selection Section ---
         st.markdown("---")
-        st.markdown("#### 🎯 Data Selection")
+        st.markdown("##### 🎯 Data Selection")
         
         selected_classes_list = st.multiselect(
             'Lipid Classes', 
@@ -3810,7 +3810,7 @@ def display_abundance_pie_charts(experiment, continuation_df):
         
         # Create chart for each condition
         for condition, samples in conditions_with_samples:
-            st.markdown(f"##### {condition}")
+            st.markdown(f"###### {condition}")
             fig, df = lp.AbundancePieChart.create_pie_chart(
                 filtered_df, full_samples_list, condition, samples, color_mapping
             )
@@ -4130,7 +4130,7 @@ def display_saturation_plots(experiment, continuation_df):
         
         if consolidated_lipids_dict:
             st.markdown("---")
-            st.markdown("#### ⚠️ Consolidated Format Lipids")
+            st.markdown("##### ⚠️ Consolidated Format Lipids")
             st.markdown("""
 **No perfect solution exists for consolidated format lipids:**
 - **Include:** The lipid's abundance is counted, but SFA/MUFA/PUFA classification is based only on total double bonds (inaccurate)
@@ -4209,7 +4209,7 @@ For multi-chain lipids, decide based on your analysis goals.
         
         # --- Results Section ---
         st.markdown("---")
-        st.markdown("#### 📊 Results")
+        st.markdown("##### 📊 Results")
         
         # Plot options
         col1, col2 = st.columns(2)
@@ -4659,12 +4659,12 @@ def display_volcano_plot(experiment, continuation_df):
         
         # --- Statistical Options Section ---
         st.markdown("---")
-        st.markdown("#### ⚙️ Statistical Options")
+        st.markdown("##### ⚙️ Statistical Options")
         stat_options = display_volcano_statistical_options()
         
         # --- Data Selection Section ---
         st.markdown("---")
-        st.markdown("#### 🎯 Data Selection")
+        st.markdown("##### 🎯 Data Selection")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -4702,7 +4702,7 @@ def display_volcano_plot(experiment, continuation_df):
         
         # --- Results Section ---
         st.markdown("---")
-        st.markdown("#### 📈 Results")
+        st.markdown("##### 📈 Results")
         
         # Significance & Display Settings (applies to all plots)
         st.markdown("**Significance & Display Settings**")
@@ -4753,7 +4753,7 @@ def display_volcano_plot(experiment, continuation_df):
 
                 # --- Volcano Plot ---
                 st.markdown("---")
-                st.markdown("##### Volcano Plot")
+                st.markdown("###### Volcano Plot")
                 
                 # Labeling options
                 st.markdown("**Labeling Options**")
@@ -4920,7 +4920,7 @@ def display_volcano_plot(experiment, continuation_df):
 
                 # --- Concentration vs Fold Change Plot ---
                 st.markdown("---")
-                st.markdown("##### Concentration vs. Fold Change")
+                st.markdown("###### Concentration vs. Fold Change")
                 st.markdown("Relationship between lipid abundance and fold change.")
                 
                 concentration_vs_fold_change_plot, download_df = lp.VolcanoPlot._create_concentration_vs_fold_change_plot(

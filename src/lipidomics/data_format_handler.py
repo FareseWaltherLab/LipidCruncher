@@ -121,7 +121,6 @@ class DataFormatHandler:
             print(f"Error standardizing lipid name '{lipid_name}': {str(e)}")
             return lipid_name
     
-    @staticmethod
     def _infer_class_key(lipid_molec):
         """
         Infers ClassKey from LipidMolec naming convention.
@@ -129,8 +128,16 @@ class DataFormatHandler:
         Examples:
             CL(18:2/16:0/18:1/18:2) -> CL
             LPC(18:1)(d7) -> LPC
+            SPLASH(FA 20:4)(d11) -> FA
+            SPLASH(LPC 18:1)(d7) -> LPC
         """
         try:
+            # Handle SPLASH standards: extract actual lipid class from within
+            # Pattern: SPLASH(CLASS chain:db)(dN) -> CLASS
+            splash_match = re.match(r'^SPLASH\s*\(\s*([A-Za-z]+)', lipid_molec, re.IGNORECASE)
+            if splash_match:
+                return splash_match.group(1).strip()
+            
             # Extract everything before the first parenthesis or space
             match = re.match(r'^([A-Za-z][A-Za-z0-9]*)', lipid_molec)
             if match:
