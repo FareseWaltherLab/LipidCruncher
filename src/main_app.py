@@ -275,13 +275,16 @@ def main():
                         if st.session_state.module == "Data Cleaning, Filtering, & Normalization":
                             st.subheader("Data Standardization, Filtering, and Normalization Module")
                             
+                            # FIRST: Show documentation expander
+                            display_data_processing_docs(data_format)
+                            
                             # Quality filtering configuration (format-specific)
                             grade_config = None
                             quality_config = None
                             
                             if data_format == 'LipidSearch 5.0':
                                 # Show grade filtering UI for LipidSearch
-                                with st.expander("Configure Grade Filtering (LipidSearch Only)", expanded=False):
+                                with st.expander("⚙️ Configure Grade Filtering", expanded=False):
                                     grade_config = get_grade_filtering_config(df_to_clean, data_format)
                                     st.session_state.grade_config = grade_config
                             
@@ -298,10 +301,10 @@ def main():
                                     has_total_score = 'TotalScore' in manual_correction.get('metadata_mapping', {})
                                 
                                 if not has_total_score:
-                                    st.info("ℹ️ Quality filtering unavailable - Total score column was not selected in column mapping.")
+                                    st.info("ℹ️ Quality filtering unavailable — Total score column was not selected in column mapping.")
                                 else:
                                     # Show quality filtering UI in expander below data type selection
-                                    with st.expander("🔬 Quality Filtering Configuration", expanded=True):
+                                    with st.expander("⚙️ Configure Quality Filtering", expanded=False):
                                         quality_config = get_msdial_quality_config()
                                         st.session_state.msdial_quality_config = quality_config
                             
@@ -390,7 +393,7 @@ def main():
                     
                     else:
                         clear_session_state()
-                        st.info("Please confirm your inputs in the sidebar to proceed with data cleaning and analysis.")
+                        st.info("Please confirm your inputs in the sidebar to proceed with data filtering and analysis.")
                 else:
                     st.error("Please ensure your experiment description is valid before proceeding.")
 
@@ -1329,10 +1332,11 @@ def clean_data(df, name_df, experiment, data_format, grade_config=None, quality_
     
     cleaned_df, intsta_df = cleaner.extract_internal_standards(cleaned_df)
     
-    # Clear UI message about internal standards extraction
+    # Store count for display elsewhere (don't show message here)
     if intsta_df is not None and not intsta_df.empty:
-        num_standards = intsta_df['LipidMolec'].nunique()
-        st.success(f"✓ **Internal Standards Extracted:** {num_standards} internal standard(s) separated for normalization (not filtered out)")
+        st.session_state.extracted_standards_count = intsta_df['LipidMolec'].nunique()
+    else:
+        st.session_state.extracted_standards_count = 0
     
     return cleaned_df, intsta_df
 
@@ -1356,21 +1360,6 @@ def get_grade_filtering_config(df, format_type):
     if 'ClassKey' not in df.columns or 'TotalGrade' not in df.columns:
         return None
     
-    st.markdown("---")
-    st.markdown("### 🎯 Grade Filtering Configuration")
-    
-    st.markdown("""
-    LipidSearch assigns quality grades (A, B, C, D) to each lipid identification:
-    - **Grade A**: Highest confidence identifications
-    - **Grade B**: Good quality identifications
-    - **Grade C**: Lower confidence identifications
-    - **Grade D**: Lowest confidence identifications
-    
-    **Default Behavior:**
-    - Most lipid classes: Accept grades A and B only
-    - LPC and SM classes: Accept grades A, B, and C
-    """)
-    
     # Get unique classes from the data
     all_classes = sorted(df['ClassKey'].unique())
     
@@ -1379,95 +1368,41 @@ def get_grade_filtering_config(df, format_type):
         "Grade filtering mode:",
         ["Use Default Settings", "Customize by Class"],
         index=0,
-        help="Default settings follow LipidSearch best practices. Customize if you have specific requirements.",
+        horizontal=True,
         key="grade_filter_mode"
     )
     
     if use_custom == "Use Default Settings":
-        st.success("✓ Using default grade filtering: A/B for all classes, plus C for LPC and SM.")
+        st.success("✓ Default: A/B for all classes, plus C for LPC and SM.")
         return None
     
     # Custom settings
     st.markdown("---")
-    st.markdown("#### 🔬 Select Acceptable Grades by Lipid Class")
-    st.info("💡 **Tip:** Select the grades you want to accept for each lipid class. Clear selections will exclude that class entirely.")
     
     grade_config = {}
     
-    # Process each lipid class with better spacing and clarity
+    # Create columns for compact layout
+    cols = st.columns(3)
+    
     for idx, lipid_class in enumerate(all_classes):
-        # Add spacing between classes
-        if idx > 0:
-            st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Create a container for each class with visual separation
-        with st.container():
-            # Class header with colored background
-            st.markdown(f"""
-            <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
-                <h4 style="margin: 0; color: #1f77b4;">📊 {lipid_class}</h4>
-            </div>
-            """, unsafe_allow_html=True)
-            
+        with cols[idx % 3]:
             # Default grades based on class
             if lipid_class in ['LPC', 'SM']:
                 default_grades = ['A', 'B', 'C']
             else:
                 default_grades = ['A', 'B']
             
-            # Multiselect with clear labeling
             selected_grades = st.multiselect(
-                f"Select acceptable grades for **{lipid_class}** class:",
+                f"**{lipid_class}**",
                 options=['A', 'B', 'C', 'D'],
                 default=default_grades,
-                key=f"grade_select_{lipid_class}",
-                help=f"Choose which quality grades to accept for {lipid_class} lipids"
+                key=f"grade_select_{lipid_class}"
             )
             
-            # Visual feedback
             if not selected_grades:
-                st.error(f"⚠️  **Warning:** No grades selected for {lipid_class}. This class will be completely excluded from analysis!")
-            elif 'D' in selected_grades:
-                st.warning(f"⚠️  **Caution:** Grade D included for {lipid_class}. This may include low-confidence identifications.")
-            else:
-                st.success(f"✓ {lipid_class}: {', '.join(selected_grades)} accepted")
+                st.error("⚠️ Will be excluded!")
             
             grade_config[lipid_class] = selected_grades
-    
-    st.markdown("---")
-    
-    # Summary of selections
-    st.markdown("### 📊 Configuration Summary")
-    
-    # Count classes by grade selection
-    abc_classes = [cls for cls, grades in grade_config.items() if set(grades) == {'A', 'B', 'C'}]
-    ab_classes = [cls for cls, grades in grade_config.items() if set(grades) == {'A', 'B'}]
-    abcd_classes = [cls for cls, grades in grade_config.items() if 'D' in grades]
-    custom_classes = [cls for cls, grades in grade_config.items() 
-                     if set(grades) not in [{'A', 'B', 'C'}, {'A', 'B'}] and 'D' not in grades]
-    excluded_classes = [cls for cls, grades in grade_config.items() if not grades]
-    
-    summary_col1, summary_col2 = st.columns(2)
-    
-    with summary_col1:
-            st.markdown(f"**→ A, B only** ({len(ab_classes)} classes)")
-            st.markdown(f"**→ A, B only** ({len(ab_classes)} classes)")
-            st.caption(', '.join(ab_classes))
-            st.markdown(f"**→ A, B, C** ({len(abc_classes)} classes)")
-            st.markdown(f"**→ A, B, C** ({len(abc_classes)} classes)")
-            st.caption(', '.join(abc_classes))
-    
-    with summary_col2:
-        if abcd_classes:
-            st.markdown(f"**⚠️  Includes D** ({len(abcd_classes)} classes)")
-            st.caption(', '.join(abcd_classes))
-        if custom_classes:
-            st.markdown(f"**⚙️  Custom** ({len(custom_classes)} classes)")
-            for cls in custom_classes:
-                st.caption(f"• {cls}: {', '.join(grade_config[cls])}")
-    
-    if excluded_classes:
-        st.error(f"**🚫 Excluded** ({len(excluded_classes)} classes): {', '.join(excluded_classes)}")
     
     return grade_config
 
@@ -1530,140 +1465,73 @@ def get_msdial_quality_config():
     quality_filtering_available = features.get('has_quality_score', False)
     msms_filtering_available = features.get('has_msms_matched', False)
     
-    #Quality Filtering (if quality columns available)
-    if quality_filtering_available or msms_filtering_available:
-        # Case 1: Total score column is available - show full filtering UI
-        if quality_filtering_available:
-            # Define quality options
-            quality_options = {
-                'Strict (Score ≥80, MS/MS required)': {
-                    'total_score_threshold': 80,
-                    'require_msms': True
-                },
-                'Moderate (Score ≥60)': {
-                    'total_score_threshold': 60,
-                    'require_msms': False
-                },
-                'Permissive (Score ≥40)': {
-                    'total_score_threshold': 40,
-                    'require_msms': False
-                },
-                'No filtering': {
-                    'total_score_threshold': 0,
-                    'require_msms': False
-                }
-            }
-            
-            st.markdown("""
-            MS-DIAL provides quality metrics for each identification. Choose a filtering level:
-            - **Strict**: Only highest confidence IDs (publication-ready)
-            - **Moderate**: Good balance of quality and coverage (recommended for exploration)
-            - **Permissive**: Includes lower confidence IDs (discovery mode)
-            - **No filtering**: Keep all identifications
-            """)
-            
-            selected_option = st.radio(
-                "Select quality filtering level:",
-                list(quality_options.keys()),
-                index=1,  # Default to Moderate
-                key="msdial_quality_level"
-            )
-            
-            quality_config = quality_options[selected_option].copy()
-            
-            # Show what this option means
-            if selected_option == 'Strict (Score ≥80, MS/MS required)':
-                st.success("✓ **Strict filtering**: Only highest confidence identifications. Ideal for publication-ready data.")
-            elif selected_option == 'Moderate (Score ≥60)':
-                st.info("✓ **Moderate filtering**: Good balance of quality and coverage. Recommended for exploratory analysis.")
-            elif selected_option == 'Permissive (Score ≥40)':
-                st.warning("⚠️ **Permissive filtering**: Includes lower confidence IDs. Use for discovery or when sample is limited.")
-            else:
-                st.warning("⚠️ **No filtering**: All identifications included. Quality may vary significantly.")
-            
-            # MS/MS validation option (if available)
-            if msms_filtering_available:
+    if not quality_filtering_available and not msms_filtering_available:
+        st.warning("Quality filtering unavailable — no 'Total score' or 'MS/MS matched' columns found.")
+        return None
+    
+    # Case 1: Total score column is available
+    if quality_filtering_available:
+        quality_options = {
+            'Strict (Score ≥80, MS/MS required)': {'total_score_threshold': 80, 'require_msms': True},
+            'Moderate (Score ≥60)': {'total_score_threshold': 60, 'require_msms': False},
+            'Permissive (Score ≥40)': {'total_score_threshold': 40, 'require_msms': False},
+            'No filtering': {'total_score_threshold': 0, 'require_msms': False}
+        }
+        
+        selected_option = st.radio(
+            "Quality filtering level:",
+            list(quality_options.keys()),
+            index=1,  # Default to Moderate
+            horizontal=True,
+            key="msdial_quality_level"
+        )
+        
+        quality_config = quality_options[selected_option].copy()
+        
+        # MS/MS validation override (if available)
+        if msms_filtering_available:
+            col1, col2 = st.columns(2)
+            with col1:
                 custom_msms = st.checkbox(
                     "Require MS/MS validation",
                     value=quality_config['require_msms'],
-                    help="If checked, only lipids with MS/MS spectral match will be kept",
                     key="msdial_custom_msms"
                 )
                 quality_config['require_msms'] = custom_msms
-            else:
-                # Explain why MS/MS filtering is not available
-                st.warning("💡 **Note:** MS/MS validation filtering is not available because the 'MS/MS matched' column was not found in your export. To enable this feature, re-export from MS-DIAL with the 'MS/MS matched' column included.")
-                quality_config['require_msms'] = False
-            
-            # Show advanced options with a checkbox toggle
-            show_advanced = st.checkbox("🔧 Customize score threshold", value=False, key="msdial_show_advanced")
-            
-            if show_advanced:
-                st.markdown("**Override the preset Total Score threshold:**")
-                custom_score = st.slider(
-                    "Minimum Total Score:",
-                    min_value=0,
-                    max_value=100,
-                    value=quality_config['total_score_threshold'],
-                    step=5,
-                    help="Lipids with scores below this threshold will be excluded",
-                    key="msdial_custom_score"
-                )
-                quality_config['total_score_threshold'] = custom_score
-            
-            # Summary
-            st.markdown("---")
-            st.markdown("##### 📋 Current Settings")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**Score threshold:** ≥{quality_config['total_score_threshold']}")
-            with col2:
-                st.write(f"**MS/MS required:** {'Yes' if quality_config['require_msms'] else 'No'}")
-            
-            return quality_config
         
-        # Case 2: Only MS/MS matched column available (no Total score)
-        elif msms_filtering_available:
-            st.warning("""
-            ⚠️ **Limited Quality Filtering Available**
-            
-            Your MS-DIAL export does not include the 'Total score' column, so score-based 
-            filtering is not available. However, you can still filter based on MS/MS validation.
-            
-            💡 **To enable full quality filtering:** Re-export from MS-DIAL with the 'Total score' column included.
-            """)
-            
-            st.markdown("---")
-            
-            # Only show MS/MS filtering option
-            require_msms = st.checkbox(
-                "✓ Require MS/MS validation",
-                value=False,
-                help="If checked, only lipids with MS/MS spectral match will be kept",
-                key="msdial_msms_only"
+        # Advanced: custom score threshold
+        with st.expander("🔧 Custom threshold", expanded=False):
+            custom_score = st.slider(
+                "Minimum Total Score:",
+                min_value=0,
+                max_value=100,
+                value=quality_config['total_score_threshold'],
+                step=5,
+                key="msdial_custom_score"
             )
-            
-            quality_config = {
-                'total_score_threshold': 0,  # No score filtering
-                'require_msms': require_msms
-            }
-            
-            # Summary
-            st.markdown("---")
-            st.markdown("##### 📋 Current Settings")
-            st.write(f"**Score filtering:** Not available (no 'Total score' column)")
-            st.write(f"**MS/MS validation required:** {'Yes' if require_msms else 'No'}")
-            
-            return quality_config
-    
-    else:
-        st.warning("""
-        **Note:** Quality filtering is not available for this dataset.
+            quality_config['total_score_threshold'] = custom_score
         
-        Your MS-DIAL export does not include 'Total score' or 'MS/MS matched' columns.
-        To enable quality filtering, re-export from MS-DIAL with these columns included.
-        """)
-        return None
+        # Summary
+        st.success(f"✓ Score ≥{quality_config['total_score_threshold']}, MS/MS {'required' if quality_config['require_msms'] else 'optional'}")
+        
+        return quality_config
+    
+    # Case 2: Only MS/MS matched column available
+    elif msms_filtering_available:
+        st.info("Score filtering unavailable (no 'Total score' column). MS/MS filtering only.")
+        
+        require_msms = st.checkbox(
+            "Require MS/MS validation",
+            value=False,
+            key="msdial_msms_only"
+        )
+        
+        return {
+            'total_score_threshold': 0,
+            'require_msms': require_msms
+        }
+    
+    return None
 
 def handle_standards_upload(normalizer):
     st.info("""
@@ -1809,406 +1677,355 @@ def manage_internal_standards(normalizer):
                     st.error(f"Error reading standards file: {str(e)}")
 
 
-def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None):
+def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None, 
+                      bqc_threshold=0.5, non_bqc_threshold=0.75):
     """
     Applies the zero-value filter to the cleaned dataframe.
-   
-    For each lipid species, removes the species if the BQC condition (if present) has 50% or more
-    replicates with values <= threshold OR every non-BQC condition has 75% or more replicates
-    with values <= threshold. If no BQC condition exists, only the non-BQC condition applies.
-   
+    
     Args:
         cleaned_df (pd.DataFrame): Cleaned dataframe
         experiment (Experiment): Experiment object
         data_format (str): Data format
         bqc_label (str, optional): Label for Batch Quality Control samples
-       
+        bqc_threshold (float): Proportion threshold for BQC condition (default 0.5 = 50%)
+        non_bqc_threshold (float): Proportion threshold for non-BQC conditions (default 0.75 = 75%)
+        
     Returns:
         tuple: (filtered DataFrame, list of removed species)
     """
-    default_threshold = 30000.0 if data_format == 'LipidSearch 5.0' else 0.0
-    threshold = st.number_input(
-        'Enter detection threshold (values <= this are considered zero for filtering)',
+    default_detection = 30000.0 if data_format == 'LipidSearch 5.0' else 0.0
+    detection_threshold = st.number_input(
+        'Detection threshold (values ≤ this are considered zero)',
         min_value=0.0,
-        value=default_threshold,
+        value=default_detection,
         step=1.0,
-        help="For non-LipidSearch formats, 0 means only exact zeros are considered. Enter a value >0 if needed.",
-        key="zero_filter_threshold"
+        help="For non-LipidSearch formats, 0 means only exact zeros. Increase if your data has a noise floor.",
+        key="zero_filter_detection_threshold"
     )
-   
+    
     # Get all lipid species before filtering
     all_species = cleaned_df['LipidMolec'].tolist()
-   
+    
     # List to keep track of rows to keep
     to_keep = []
-   
+    
+    has_bqc = bqc_label is not None and bqc_label in experiment.conditions_list
+    
     for idx, row in cleaned_df.iterrows():
         non_bqc_all_fail = True
-        bqc_fail = False if bqc_label is None or bqc_label not in experiment.conditions_list else True  # Default to False if no valid BQC condition
-       
+        bqc_fail = True if has_bqc else False
+        
         for cond_idx, cond_samples in enumerate(experiment.individual_samples_list):
-            if not cond_samples:  # Skip empty conditions
+            if not cond_samples:
                 continue
-           
+            
             zero_count = 0
             n_samples = len(cond_samples)
-           
+            
             for sample in cond_samples:
                 col = f'intensity[{sample}]'
                 if col in cleaned_df.columns:
                     value = row[col]
-                    if value <= threshold:
+                    if value <= detection_threshold:
                         zero_count += 1
-           
-            # Set threshold based on whether the condition is BQC
-            zero_threshold = 0.5 if experiment.conditions_list[cond_idx] == bqc_label else 0.75
-           
-            # Calculate zero proportion
+            
+            # Use the appropriate threshold
+            is_bqc_condition = experiment.conditions_list[cond_idx] == bqc_label
+            threshold = bqc_threshold if is_bqc_condition else non_bqc_threshold
+            
             zero_proportion = zero_count / n_samples if n_samples > 0 else 1.0
-           
-            # Check if condition passes its threshold
-            if zero_proportion < zero_threshold:
-                if experiment.conditions_list[cond_idx] == bqc_label:
+            
+            if zero_proportion < threshold:
+                if is_bqc_condition:
                     bqc_fail = False
                 else:
                     non_bqc_all_fail = False
-       
-        # Retain lipid if BQC does not fail AND not all non-BQC conditions fail
+        
         if not bqc_fail and not non_bqc_all_fail:
             to_keep.append(idx)
-   
+    
     filtered_df = cleaned_df.loc[to_keep].reset_index(drop=True)
-   
-    # Compute removed species
-    removed_species = [species for species in all_species if species not in filtered_df['LipidMolec'].tolist()]
-   
+    removed_species = [s for s in all_species if s not in filtered_df['LipidMolec'].tolist()]
+    
     return filtered_df, removed_species
+
+def display_data_processing_docs(data_format):
+    """Display documentation about data standardization and filtering for the current format."""
+    
+    with st.expander("📖 About Data Standardization and Filtering", expanded=False):
+        
+        cleaning_docs = {
+            'LipidSearch 5.0': """
+### 🔬 Data Cleaning Pipeline
+
+| Step | Action |
+|------|--------|
+| 1. Column Standardization | Extract LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, MeanArea columns |
+| 2. Data Type Conversion | Convert MeanArea to numeric (non-numeric → 0) |
+| 3. Lipid Name Standardization | Standardize to `Class(chains)` format |
+| 4. Grade Filtering | Filter by quality grade (**configurable below**) |
+| 5. Best Peak Selection | Keep entry with highest TotalSmpIDRate(%) per lipid |
+| 6. Missing FA Keys | Remove rows without FAKey (except Ch class, deuterated standards) |
+| 7. Duplicate Removal | Remove duplicates by LipidMolec |
+| 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+
+---
+
+#### ⚙️ Grade Filtering (Configurable)
+
+LipidSearch assigns quality grades to each identification:
+
+| Grade | Confidence | Default Action |
+|-------|------------|----------------|
+| A | Highest | ✓ Keep |
+| B | Good | ✓ Keep |
+| C | Lower | ✓ Keep for LPC/SM only |
+| D | Lowest | ✗ Remove |
+
+**→ Configure in "Configure Grade Filtering" section below.**
+            """,
+            
+            'MS-DIAL': """
+### 🔬 Data Cleaning Pipeline
+
+| Step | Action |
+|------|--------|
+| 1. Header Detection | Auto-detect data start row (skip metadata rows) |
+| 2. Column Mapping | `Metabolite name` → LipidMolec, `Average Rt(min)` → BaseRt, `Average Mz` → CalcMass |
+| 3. ClassKey Inference | Extract class from lipid name (e.g., `Cer(18:1;2O_24:0)` → `Cer`) |
+| 4. Lipid Name Standardization | Standardize format, preserve hydroxyl notation (`;2O`, `;3O`) |
+| 5. Quality Filtering | Filter by Total Score and/or MS/MS validation (**configurable below**) |
+| 6. Data Type Selection | Choose raw or pre-normalized (if both available) |
+| 7. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
+| 8. Smart Deduplication | Keep entry with highest Total Score per lipid |
+| 9. Internal Standards | Auto-detect: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH` patterns |
+| 10. Duplicate Removal | Remove remaining duplicates by LipidMolec |
+| 11. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+
+---
+
+#### ⚙️ Quality Filtering (Configurable)
+
+MS-DIAL provides quality metrics for filtering:
+
+| Preset | Total Score | MS/MS Required | Use Case |
+|--------|-------------|----------------|----------|
+| Strict | ≥80 | Yes | Publication-ready |
+| Moderate | ≥60 | No | Exploratory analysis |
+| Permissive | ≥40 | No | Discovery |
+
+**→ Configure in "Configure Quality Filtering" section below.**
+            """,
+            
+            'Metabolomics Workbench': """
+### 🔬 Data Cleaning Pipeline
+
+| Step | Action |
+|------|--------|
+| 1. Section Extraction | Extract data between `MS_METABOLITE_DATA_START` and `MS_METABOLITE_DATA_END` |
+| 2. Header Processing | Row 1 → sample names, Row 2 → conditions |
+| 3. Column Standardization | First column → LipidMolec, remaining → `intensity[s1]`, `intensity[s2]`, ... |
+| 4. Lipid Name Standardization | Standardize to `Class(chains)` format |
+| 5. ClassKey Extraction | Extract class from lipid name |
+| 6. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
+| 7. Conditions Storage | Store conditions for experiment setup suggestions |
+| 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+            """,
+            
+            'Generic Format': """
+### 🔬 Data Cleaning Pipeline
+
+| Step | Action |
+|------|--------|
+| 1. Column Standardization | First column → LipidMolec, remaining → `intensity[s1]`, `intensity[s2]`, ... |
+| 2. Lipid Name Standardization | Standardize to `Class(chains)` format, preserve hydroxyl notation |
+| 3. ClassKey Extraction | Extract class from lipid name (e.g., `PC(16:0_18:1)` → `PC`) |
+| 4. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
+| 5. Invalid Lipid Removal | Remove empty names, single special characters |
+| 6. Duplicate Removal | Remove duplicates by LipidMolec |
+| 7. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+            """
+        }
+        
+        # Display documentation for current format
+        st.markdown(cleaning_docs.get(data_format, cleaning_docs['Generic Format']))
+        
+        # Zero filtering explanation (applies to all formats)
+        st.markdown("---")
+        st.markdown("""
+#### 🔧 Zero Filtering (Configurable)
+
+Removes lipid species with too many zero/below-detection values:
+
+| Condition Type | Default Threshold | Action |
+|----------------|-------------------|--------|
+| BQC (if present) | ≥50% zeros | Remove species |
+| All non-BQC conditions | ≥75% zeros each | Remove species |
+
+*Thresholds are adjustable in "Configure Zero Filtering" section below.*
+        """)
+        
+        # Show internal standards extraction result
+        standards_count = st.session_state.get('extracted_standards_count', 0)
+        if standards_count > 0:
+            st.markdown("---")
+            st.success(f"✓ **Internal Standards Extracted:** {standards_count} internal standard(s) separated for normalization (not filtered out)")
 
 def display_cleaned_data(unfiltered_df, intsta_df):
     """
     Display cleaned data and manage internal standards with simplified workflow.
-    Includes grade filtering, zero filter application, and display of removed species.
+    Includes zero filter application and display of removed species.
     """
     # Update session state with new data if provided
     if unfiltered_df is not None:
         st.session_state.cleaned_df = unfiltered_df.copy()
         
         # CRITICAL: Only set intsta_df if user is in "Automatic Detection" mode
-        # Don't overwrite if user has switched to "Upload Custom Standards"
         if 'standard_source_preference' not in st.session_state or st.session_state.standard_source_preference == "Automatic Detection":
             st.session_state.intsta_df = intsta_df.copy() if intsta_df is not None else pd.DataFrame()
-        # If in custom mode, preserve whatever is in intsta_df (could be empty or custom uploaded)
     
     # Create normalizer instance
     normalizer = lp.NormalizeData()
     
-    # Display cleaned data
-    with st.expander("Clean and Filter Data"):
-        # Data cleaning process details - ALWAYS VISIBLE
-        st.markdown("### Data Cleaning, Standardization and Filtering Process")
-        st.markdown("""
-        LipidCruncher performs a systematic cleaning and standardization process on your uploaded data
-        to ensure consistency, reliability, and compatibility with downstream analyses. The specific
-        procedures applied depend on your data format.
-        """)
-        
-        # Tabs for different data formats
-        data_format_tab = st.radio(
-            "Select data format to view cleaning details:",
-            ["LipidSearch Format", "Generic Format", "MS-DIAL Format", "Metabolomics Workbench"],
-            horizontal=True
-        )
-       
-        if data_format_tab == "LipidSearch Format":
-            st.markdown("#### Data Cleaning for LipidSearch Format")
-            st.markdown("""
-            For LipidSearch data, we perform the following standardization and cleaning steps:
-           
-            1. **Column Standardization**: We extract and standardize essential columns including LipidMolec,
-               ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, and all MeanArea
-               columns for each sample.
-           
-            2. **Data Type Conversion**: MeanArea columns are converted to numeric format, with any
-               non-numeric entries replaced by zeros to maintain data integrity.
-           
-            3. **Lipid Name Standardization**: Names of lipid molecules are standardized to ensure
-               uniform formatting across the dataset.
-           
-            4. **Quality Filtering**: By default, entries with grades 'A' and 'B' are retained for most classes,
-               with grades 'A', 'B', and 'C' accepted for LPC and SM classes. You can customize this below.
-           
-            5. **Best Peak Selection**: For each unique lipid, the entry with the highest TotalSmpIDRate(%)
-               is selected, as this indicates the most reliable measurement across samples.
-           
-            6. **Missing FA Keys Handling**: Rows with missing FA keys are removed, with exceptions
-               for cholesterol (Ch) class molecules and deuterated standards.
-           
-            7. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
-           
-            8. **Zero Filtering**: Removes lipid species where the BQC condition (if present) has 50% or more replicates with intensity values <= user-specified detection threshold OR every non-BQC condition has 75% or more replicates with such values.
-            """)
-           
-            st.info("This process ensures that only high-quality, consistent data points are retained for analysis.")
-           
-        elif data_format_tab == "Generic Format":
-            st.markdown("#### Data Cleaning for Generic Format")
-            st.markdown("""
-            For Generic Format data, we perform the following standardization and cleaning steps:
-           
-            1. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining
-               columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
-           
-            2. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format:
-               Class(chain details). For example:
-               - LPC O-17:4  →  LPC(O-17:4)
-               - Cer d18:0/C24:0  →  Cer(d18:0_C24:0)
-               - CE 14:0;0  →  CE(14:0)
-           
-            3. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class
-               from the standardized lipid name (e.g., 'PC' from 'PC(16:0_18:1)').
-           
-            4. **Data Type Conversion**: Intensity columns are converted to numeric format, with any
-               non-numeric entries replaced by zeros.
-           
-            5. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special
-               characters, strings with only special characters) are removed.
-           
-            6. **Duplicate Removal**: Duplicate entries based on LipidMolec are removed.
-           
-            7. **Zero Filtering**: Removes lipid species where the BQC condition (if present) has 50% or more replicates with intensity values <= user-specified detection threshold OR every non-BQC condition has 75% or more replicates with such values.
-            """)
-           
-            st.info("This standardization process allows for consistent analysis regardless of the original format of your data.")
-           
-        elif data_format_tab == "MS-DIAL Format":
-            st.markdown("#### Data Cleaning for MS-DIAL Format")
-            st.markdown("""
-            For MS-DIAL data, we perform the following standardization and cleaning steps:
-           
-            1. **Header Detection**: MS-DIAL exports contain metadata rows. LipidCruncher 
-               automatically detects where the actual data begins by locating the row where 'Alignment ID' 
-               contains numeric values.
-           
-            2. **Column Standardization**: We map MS-DIAL columns to LipidCruncher's standard format:
-               - `Metabolite name` → `LipidMolec`
-               - `ClassKey` → Inferred from `LipidMolec` (e.g., Cer(18:1;2O_24:0) → Cer)
-               - `Average Rt(min)` → `BaseRt`
-               - `Average Mz` → `CalcMass`
-               - Sample intensity columns → `intensity[s1]`, `intensity[s2]`, etc.
-           
-            3. **Lipid Name Standardization**: Lipid names are standardized to consistent format while 
-               preserving biologically important hydroxyl notation:
-               - Cer 18:1;2O/24:0 → Cer(18:1;2O_24:0)
-               - PC 16:0_18:1 → PC(16:0_18:1)
-               - Hydroxyl groups (;0, ;2O, ;3O) are preserved
-           
-            4. **Quality Filtering**: MS-DIAL provides quality metrics that can be used for filtering:
-               - **Total Score**: Composite confidence score (0-100) based on accurate mass, isotopic 
-                 pattern, MS/MS spectrum match, and retention time
-               - **MS/MS Matched**: TRUE/FALSE indicating whether MS/MS spectrum validation passed
-               - Three filtering levels available: Strict (≥80 + MS/MS), Moderate (≥60), Permissive (≥40)
-               - Configurable above in the quality filtering section
-           
-            5. **Data Type Selection**: If your MS-DIAL export contains both raw and pre-normalized data 
-               (e.g., pmol/mg tissue after internal standard correction), you can choose which to use. 
-               Select raw data to apply LipidCruncher's normalization, or pre-normalized if MS-DIAL 
-               already performed normalization.
-           
-            6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any 
-               non-numeric entries replaced by zeros.
-           
-            7. **Invalid Lipid Removal**: Rows with invalid lipid names (empty strings, single special 
-               characters) are removed.
-           
-            8. **Smart Deduplication**: When duplicate lipid identifications exist, the entry with the 
-               highest Total Score is retained, ensuring the most confident identification is used.
-           
-            9. **Internal Standards Extraction**: Standards are automatically detected by patterns including:
-               - Deuterated labels: (d5), (d7), (d9)
-               - ISTD markers in ClassKey or Ontology columns
-               - SPLASH LIPIDOMIX® standard patterns
-           
-            10. **Duplicate Removal**: Any remaining duplicate entries based on LipidMolec are removed.
-           
-            11. **Zero Filtering**: Removes lipid species where the BQC condition (if present) has 50% or more 
-                replicates with intensity values ≤ user-specified detection threshold OR every non-BQC 
-                condition has 75% or more replicates with such values.
-            """)
-           
-            st.info("MS-DIAL integration provides flexible quality control with support for both raw and pre-normalized data workflows.")
-        
-        else:  # Metabolomics Workbench
-            st.markdown("#### Data Cleaning for Metabolomics Workbench Format")
-            st.markdown("""
-            For Metabolomics Workbench data, we perform the following standardization and cleaning steps:
-           
-            1. **Section Extraction**: Data is extracted from between the 'MS_METABOLITE_DATA_START' and
-               'MS_METABOLITE_DATA_END' markers.
-           
-            2. **Header Processing**: The first row is processed as sample names, and the second row as
-               experimental conditions.
-           
-            3. **Column Standardization**: The first column is standardized as 'LipidMolec', and remaining
-               columns are formatted as 'intensity[s1]', 'intensity[s2]', etc.
-           
-            4. **Lipid Name Standardization**: Lipid names are standardized to follow a consistent format,
-               similar to the Generic Format process.
-           
-            5. **Class Key Extraction**: A 'ClassKey' column is generated by extracting the lipid class
-               from the standardized lipid name.
-           
-            6. **Data Type Conversion**: Intensity columns are converted to numeric format, with any
-               non-numeric entries replaced by zeros.
-           
-            7. **Experimental Conditions Storage**: The experimental conditions from the second row are
-               stored and used to suggest the experimental setup.
-           
-            8. **Zero Filtering**: Removes lipid species where the BQC condition (if present) has 50% or more replicates with intensity values <= user-specified detection threshold OR every non-BQC condition has 75% or more replicates with such values.
-            """)
-           
-            st.info("This process ensures that your Metabolomics Workbench data is properly formatted for analysis in LipidCruncher.")
-       
-        # Add a divider
-        st.markdown("---")
-       
-        # Zero filtering section
-        st.subheader("Zero Filtering")
-        st.markdown("""
-        This filter removes lipid species if the BQC condition (if present) has 50% or more replicates with intensity values
-        less than or equal to the specified detection threshold (considered as zero or below detection) OR if every non-BQC
-        condition has 75% or more such replicates. If no BQC condition exists, only the non-BQC condition applies.
-        """)
+    # Check if experiment has BQC samples
+    bqc_label = st.session_state.get('bqc_label')
+    has_bqc = bqc_label is not None and bqc_label in st.session_state.experiment.conditions_list
+    
+    # ==========================================================================
+    # Configure Zero Filtering expander
+    # ==========================================================================
+    with st.expander("⚙️ Configure Zero Filtering", expanded=False):
         
         # Check if cleaned_df is valid
         if st.session_state.cleaned_df is None or st.session_state.cleaned_df.empty:
             st.error("No valid cleaned data available for zero filtering.")
             return None
         
-        # Apply filter
+        st.markdown("Adjust thresholds for removing lipid species with too many zero/below-detection values.")
+        
+        # Threshold sliders
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            non_bqc_pct = st.slider(
+                "Non-BQC threshold (%)",
+                min_value=50,
+                max_value=100,
+                value=75,
+                step=5,
+                help="Remove species if ALL non-BQC conditions have ≥ this % zeros",
+                key="non_bqc_zero_threshold"
+            )
+            non_bqc_threshold = non_bqc_pct / 100.0
+        
+        with col2:
+            if has_bqc:
+                bqc_pct = st.slider(
+                    f"BQC threshold (%) — {bqc_label}",
+                    min_value=25,
+                    max_value=100,
+                    value=50,
+                    step=5,
+                    help="Remove species if BQC condition has ≥ this % zeros",
+                    key="bqc_zero_threshold"
+                )
+                bqc_threshold = bqc_pct / 100.0
+            else:
+                bqc_threshold = 0.5
+                st.info("No BQC condition — only non-BQC threshold applies.")
+        
+        # Apply filter with user-selected thresholds
         filtered_df, removed_species = apply_zero_filter(
             st.session_state.cleaned_df,
             st.session_state.experiment,
             st.session_state.format_type,
-            bqc_label=st.session_state.bqc_label
+            bqc_label=bqc_label,
+            bqc_threshold=bqc_threshold,
+            non_bqc_threshold=non_bqc_threshold
         )
         
-        # Display removed species immediately after the threshold input
+        # Display results
         removed = len(removed_species)
         if removed > 0:
-            st.info(f"Removed {removed} species based on zero filter ({removed / len(st.session_state.cleaned_df) * 100:.1f}%)")
-            st.markdown("**Removed Species:**")
-            removed_df = pd.DataFrame({'Removed LipidMolec': removed_species})
-            st.dataframe(removed_df)
+            st.warning(f"**Result:** Removed {removed} species ({removed / len(st.session_state.cleaned_df) * 100:.1f}% of dataset)")
+            removed_df = pd.DataFrame({'LipidMolec': removed_species})
+            st.dataframe(removed_df, use_container_width=True, height=150)
             csv = removed_df.to_csv(index=False)
             st.download_button(
                 label="Download Removed Species",
                 data=csv,
                 file_name="removed_species.csv",
-                mime="text/csv"
+                mime="text/csv",
+                key="download_removed_species"
             )
         else:
-            st.info("No species removed by zero filter")
+            st.success("**Result:** No species removed")
         
         # Update session state with filtered data
         st.session_state.cleaned_df = filtered_df
         st.session_state.continuation_df = filtered_df
-        
-        # Display the filtered data within the main expander
-        st.markdown("---")
-        st.subheader("Final Cleaned and Filtered Data")
-        st.write("This table shows your data after all cleaning steps, including zero filtering:")
-        display_data(filtered_df, "Data", "final_cleaned_data.csv")
     
-    # Internal standards management
+    # ==========================================================================
+    # Final Filtered Data (OUTSIDE expander)
+    # ==========================================================================
+    st.markdown("#### 📋 Final Filtered Data (Pre-Normalization)")
+    display_data(filtered_df, "Data", "final_filtered_data.csv", key_suffix="filtered")
+    
+    # ==========================================================================
+    # Manage Internal Standards expander
+    # ==========================================================================
     with st.expander("Manage Internal Standards"):
-        # Internal standards detection details - ALWAYS VISIBLE
-        st.markdown("### Internal Standards Detection")
         st.markdown("""
-        LipidCruncher automatically identifies internal standards from the SPLASH LIPIDOMIX® Mass Spec Standard (Avanti Polar Lipids, Cat# 330707-1)
-        by detecting patterns like "+D7" or ":(s)" notation in lipid names. If you use custom standards with different naming conventions, you can upload them using the
-        option below.
+        Internal standards are automatically detected from SPLASH LIPIDOMIX® patterns 
+        (`(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`). Upload custom standards if needed.
         """)
-           
-        # Add a divider
         st.markdown("---")
-       
         manage_internal_standards(normalizer)
         
-        # CRITICAL FIX: Only show plots based on mode and data availability
+        # Show plots if standards are available
         show_plots = False
-        if st.session_state.standard_source_preference == "Automatic Detection":
+        if st.session_state.get('standard_source_preference') == "Automatic Detection":
             show_plots = not st.session_state.intsta_df.empty
-        else:  # Upload Custom Standards
+        else:
             show_plots = ('preserved_intsta_df' in st.session_state and 
                          st.session_state.preserved_intsta_df is not None and 
                          not st.session_state.preserved_intsta_df.empty)
         
         if show_plots:
-            st.markdown("### Internal Standards Consistency Plots")
-            st.markdown("""
-            These stacked bar plots show the raw intensity values of internal standards across all samples, separated by class.
-            For classes with multiple standards, bars are stacked by individual standard.
-            Consistent bar heights across samples indicate good sample preparation and instrument performance.
-            """)
-           
-            # Add multiselect for conditions
+            st.markdown("---")
+            st.markdown("#### 📊 Internal Standards Consistency")
+            
             conditions = st.session_state.experiment.conditions_list
             selected_conditions = st.multiselect(
-                'Select conditions to display:',
+                'Select conditions:',
                 conditions,
-                default=conditions
+                default=conditions,
+                key='standards_conditions_select'
             )
-           
-            # Get selected samples in original order
+            
             selected_samples = []
             for cond in selected_conditions:
                 idx = conditions.index(cond)
                 selected_samples.extend(st.session_state.experiment.individual_samples_list[idx])
-           
-            # Preserve original full order but filter to selected
+            
             full_samples = st.session_state.experiment.full_samples_list
             selected_samples_ordered = [s for s in full_samples if s in selected_samples]
-           
-            # Generate plots with selected samples
-            figs = lp.InternalStandardsPlotter.create_consistency_plots(
-                st.session_state.intsta_df,
-                selected_samples_ordered
-            )
-           
-            if figs:
-                for fig in figs:
-                    st.plotly_chart(fig, use_container_width=True)
-                   
-                    # Add download options
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        plotly_svg_download_button(fig, f"internal_standards_consistency_{fig.layout.title.text.replace(' ', '_')}.svg")
-                    with col2:
-                        # Compute data for this fig
-                        class_key = fig.layout.title.text.split(' for ')[-1]
-                        class_df = st.session_state.intsta_df[st.session_state.intsta_df['ClassKey'] == class_key]
-                        intensity_cols = [f'intensity[{s}]' for s in selected_samples_ordered if f'intensity[{s}]' in class_df.columns]
-                        melted_df = pd.melt(
-                            class_df,
-                            id_vars=['LipidMolec'],
-                            value_vars=intensity_cols,
-                            var_name='Sample_Column',
-                            value_name='Intensity'
-                        )
-                        melted_df['Sample'] = melted_df['Sample_Column'].str.replace('intensity[', '', regex=False).str.replace(']', '', regex=False)
-                        csv = melted_df.to_csv(index=False)
-                        st.download_button(
-                            label="Download CSV",
-                            data=csv,
-                            file_name=f'internal_standards_consistency_{class_key}.csv',
-                            mime='text/csv'
-                        )
-            else:
-                st.info("No internal standards available for consistency plots.")
-        else:
-            st.info("No internal standards available for consistency plots.")
-   
-    # Return the filtered dataframe for further processing
+            
+            if selected_samples_ordered:
+                intsta_to_plot = st.session_state.preserved_intsta_df if 'preserved_intsta_df' in st.session_state and st.session_state.preserved_intsta_df is not None and not st.session_state.preserved_intsta_df.empty else st.session_state.intsta_df
+                
+                if intsta_to_plot is not None and not intsta_to_plot.empty:
+                    plots = lp.InternalStandardsPlotter.create_consistency_plots(
+                        intsta_to_plot,
+                        selected_samples_ordered
+                    )
+                    
+                    if plots:
+                        for fig in plots:
+                            st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("No standards data available for plotting.")
+    
     return filtered_df
             
 def rename_intensity_to_concentration(df):
@@ -2431,7 +2248,7 @@ def handle_data_normalization(cleaned_df, intsta_df, experiment, format_type):
 
     # Display normalized data (always show it)
     if normalized_df is not None:
-        st.subheader("View Normalized Dataset")
+        st.markdown("#### 📊 Final Normalized Data")
         st.write(normalized_df)
         csv = normalized_df.to_csv(index=False)
         st.download_button(
