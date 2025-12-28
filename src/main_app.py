@@ -2099,24 +2099,22 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     if not has_standards:
         st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
     
-    # Handle case where saved method is no longer available
-    if 'normalization_method' not in st.session_state:
-        st.session_state.normalization_method = 'None'
+    # Initialize the radio key if it doesn't exist or if saved method is no longer available
+    if 'norm_method_selection' not in st.session_state:
+        st.session_state.norm_method_selection = 'None'
     
-    if st.session_state.normalization_method not in normalization_options:
-        if not (st.session_state.normalization_method in ['Internal Standards', 'Both']):
-            st.session_state.normalization_method = 'None'
-    
-    default_index = normalization_options.index(st.session_state.normalization_method) if st.session_state.normalization_method in normalization_options else 0
+    # Handle case where saved method is no longer available (e.g., standards removed)
+    if st.session_state.norm_method_selection not in normalization_options:
+        st.session_state.norm_method_selection = 'None'
     
     normalization_method = st.radio(
         "Method:",
         options=normalization_options,
         key='norm_method_selection',
-        index=default_index,
         horizontal=True
     )
     
+    # Keep legacy session state in sync for backward compatibility
     st.session_state.normalization_method = normalization_method
 
     normalized_df = filtered_df.copy()
@@ -2132,25 +2130,27 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
         # ----------------------------------------------------------------------
         if normalization_method in ['Protein-based', 'Both']:
             with st.expander("⚙️ Protein Concentration Data", expanded=True):
-                protein_df = st.session_state.get('protein_df')
+                # Get fresh protein data from user input
                 new_protein_df = collect_protein_concentrations(experiment)
                 
                 if new_protein_df is not None:
+                    # User provided valid data - apply normalization
                     st.session_state.protein_df = new_protein_df
-                    protein_df = new_protein_df
-                
-                if protein_df is not None:
                     try:
                         normalized_df = normalized_data_object.normalize_using_bca(
                             normalized_df, 
-                            protein_df, 
+                            new_protein_df, 
                             preserve_prefix=True
                         )
-                        st.session_state.normalization_settings['protein'] = {'protein_df': protein_df}
+                        st.session_state.normalization_settings['protein'] = {'protein_df': new_protein_df}
                         st.success("✓ Protein normalization applied")
                     except Exception as e:
                         st.error(f"Protein normalization error: {str(e)}")
                         return None
+                else:
+                    # No data yet (waiting for CSV upload) - don't apply normalization
+                    if 'protein' in st.session_state.get('normalization_settings', {}):
+                        del st.session_state.normalization_settings['protein']
 
         # ----------------------------------------------------------------------
         # Internal standards normalization
@@ -2237,20 +2237,34 @@ def process_class_standards(selected_classes, standards_by_class, intsta_df, sav
         st.error("No internal standards available for normalization.")
         return None
     
+    # Identify classes without specific standards and show warnings at the top
     for lipid_class in selected_classes:
+        class_specific_standards = standards_by_class.get(lipid_class, [])
+        if not class_specific_standards:
+            # Determine what standard will be used (saved mapping or first available)
+            if saved_mappings and lipid_class in saved_mappings and saved_mappings[lipid_class] in all_available_standards:
+                default_standard = saved_mappings[lipid_class]
+            else:
+                default_standard = all_available_standards[0]
+            st.warning(f"No specific standards available for {lipid_class}. Defaulting to {default_standard}.")
+    
+    for lipid_class in selected_classes:
+        # Determine default standard
         default_standard = None
+        
+        # Try saved mapping first
         if saved_mappings and lipid_class in saved_mappings:
             default_standard = saved_mappings[lipid_class]
             if default_standard not in all_available_standards:
                 default_standard = None
 
+        # If no saved mapping, use class-specific or fall back to first available
         if not default_standard:
             class_specific_standards = standards_by_class.get(lipid_class, [])
             if class_specific_standards:
                 default_standard = class_specific_standards[0]
             else:
                 default_standard = all_available_standards[0]
-                st.warning(f"No specific standards available for {lipid_class}. Defaulting to {default_standard}.")
 
         default_idx = all_available_standards.index(default_standard) if default_standard in all_available_standards else 0
 
@@ -2330,14 +2344,33 @@ def collect_protein_concentrations(experiment):
     Args:
         experiment (Experiment): The experiment object containing the list of sample names.
     Returns:
-        pd.DataFrame: A DataFrame with 'Sample' and 'Concentration' columns
+        pd.DataFrame or None: A DataFrame with 'Sample' and 'Concentration' columns,
+                              or None if input is incomplete
     """
+    # Initialize method selection key if not present
+    if 'protein_input_method' not in st.session_state:
+        st.session_state.protein_input_method = "Upload CSV File"
+    
+    # Track previous method to detect changes
+    prev_method = st.session_state.get('protein_input_method_prev')
+    
     method = st.radio(
         "Input method:",
         ["Manual Input", "Upload CSV File"],
-        index=1,
+        key='protein_input_method',
         horizontal=True
     )
+    
+    # Detect method change and clear stale data
+    if prev_method is not None and prev_method != method:
+        # Method changed - clear the stored protein_df to prevent stale data
+        if 'protein_df' in st.session_state:
+            del st.session_state.protein_df
+        if 'normalization_settings' in st.session_state and 'protein' in st.session_state.normalization_settings:
+            del st.session_state.normalization_settings['protein']
+    
+    # Update previous method tracker
+    st.session_state.protein_input_method_prev = method
     
     if method == "Manual Input":
         protein_concentrations = {}
@@ -2391,6 +2424,8 @@ def collect_protein_concentrations(experiment):
                 st.error(f"Error reading CSV: {str(e)}")
                 return None
         
+        # No file uploaded yet - show info message
+        st.info("Please upload a CSV file with protein concentrations.")
         return None
         
 def display_data(df, title, filename, key_suffix=''):
