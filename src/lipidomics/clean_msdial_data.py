@@ -116,27 +116,15 @@ class CleanMSDIALData:
     
     def _apply_quality_filter(self, df, quality_config):
         """
-        Apply quality filtering based on Total Score and MS/MS matched status.
+        Apply quality filtering based on Total Score and MS/MS matched.
         
-        MS-DIAL provides quality metrics:
-        - Total score: Composite confidence score (0-100)
-        - MS/MS matched: TRUE/FALSE indicating MS/MS validation
-        
-        Args:
-            df (pd.DataFrame): Input dataframe
-            quality_config (dict): Configuration with keys:
-                - 'total_score_threshold': Minimum Total score (default: 60)
-                - 'require_msms': Whether to require MS/MS matched = TRUE (default: False)
-                
         Returns:
-            pd.DataFrame: Filtered dataframe
+            tuple: (filtered_df, messages_list) where messages_list contains filter result strings
         """
+        messages = []
+        
         if quality_config is None:
-            # Default: Moderate filtering (score >= 60, no MS/MS requirement)
-            quality_config = {
-                'total_score_threshold': 60,
-                'require_msms': False
-            }
+            return df, messages
         
         filtered_df = df.copy()
         initial_count = len(filtered_df)
@@ -144,7 +132,6 @@ class CleanMSDIALData:
         # Apply Total Score filter if column exists
         if 'Total score' in filtered_df.columns:
             threshold = quality_config.get('total_score_threshold', 60)
-            pre_score_unique = filtered_df['LipidMolec'].nunique()
             # Convert to numeric, handling any non-numeric values
             filtered_df['Total score'] = pd.to_numeric(
                 filtered_df['Total score'], errors='coerce'
@@ -152,49 +139,23 @@ class CleanMSDIALData:
             filtered_df = filtered_df[
                 filtered_df['Total score'] >= threshold
             ]
-            score_filtered_rows = initial_count - len(filtered_df)
-            score_filtered_unique = pre_score_unique - filtered_df['LipidMolec'].nunique()
-            if score_filtered_rows > 0:
-                st.info(f"⚠️ **Quality Filter:** Removed {score_filtered_unique} lipid species ({score_filtered_rows} total entries) with Total score < {threshold}")
+            score_filtered = initial_count - len(filtered_df)
+            if score_filtered > 0:
+                messages.append(f"Quality filter: Removed {score_filtered} entries with Total score < {threshold}")
         
         # Apply MS/MS matched filter if required and column exists
         if quality_config.get('require_msms', False):
             if 'MS/MS matched' in filtered_df.columns:
                 pre_msms_count = len(filtered_df)
-                pre_msms_unique_lipids = filtered_df['LipidMolec'].nunique()
-                filtered_df_before_msms = filtered_df.copy()  # Save for comparison
-                
                 # Handle various TRUE representations
                 filtered_df = filtered_df[
                     filtered_df['MS/MS matched'].astype(str).str.upper().isin(['TRUE', '1', 'YES'])
                 ]
-                
                 msms_filtered = pre_msms_count - len(filtered_df)
-                post_msms_unique_lipids = filtered_df['LipidMolec'].nunique()
-                unique_lipids_removed = pre_msms_unique_lipids - post_msms_unique_lipids
-                
                 if msms_filtered > 0:
-                    # Get the unique lipids that were removed
-                    remaining_lipids = set(filtered_df['LipidMolec'].unique())
-                    original_lipids = set(filtered_df_before_msms['LipidMolec'].unique())
-                    removed_lipids = original_lipids - remaining_lipids
-                    
-                    # Check if removed lipids are internal standards
-                    internal_std_patterns = ['d5', 'd7', 'd9', 'd3', 'd4', 'ISTD', 'SPLASH', 'istd']
-                    internal_std_removed = [lipid for lipid in removed_lipids 
-                                          if any(pattern in str(lipid) for pattern in internal_std_patterns)]
-                    regular_lipids_removed = len(removed_lipids) - len(internal_std_removed)
-                    
-                    if len(internal_std_removed) > 0 and regular_lipids_removed > 0:
-                        st.info(f"⚠️ **MS/MS Filter:** Removed {unique_lipids_removed} lipid species ({msms_filtered} entries) without MS/MS validation:\n"
-                               f"- {len(internal_std_removed)} internal standards\n"
-                               f"- {regular_lipids_removed} regular lipids")
-                    elif len(internal_std_removed) > 0:
-                        st.info(f"⚠️ **MS/MS Filter:** Removed {len(internal_std_removed)} internal standard(s) ({msms_filtered} entries) without MS/MS validation")
-                    else:
-                        st.info(f"⚠️ **MS/MS Filter:** Removed {unique_lipids_removed} lipid species ({msms_filtered} entries) without MS/MS validation")
+                    messages.append(f"MS/MS filter: Removed {msms_filtered} entries without MS/MS validation")
         
-        return filtered_df
+        return filtered_df, messages
     
     def _remove_invalid_lipid_rows(self, df):
         """
@@ -307,7 +268,9 @@ class CleanMSDIALData:
             cleaned_df = df.copy()
             
             # Step 1: Apply quality filtering (before column extraction)
-            cleaned_df = self._apply_quality_filter(cleaned_df, quality_config)
+            cleaned_df, filter_messages = self._apply_quality_filter(cleaned_df, quality_config)
+            # Store messages for display in main_app.py (always update to clear stale messages)
+            st.session_state.msdial_filter_messages = filter_messages  # Will be empty list if no filtering
             if cleaned_df.empty:
                 st.warning("No data remaining after quality filtering")
                 return cleaned_df

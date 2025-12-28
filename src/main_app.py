@@ -307,6 +307,13 @@ def main():
                                     with st.expander("⚙️ Configure Quality Filtering", expanded=False):
                                         quality_config = get_msdial_quality_config()
                                         st.session_state.msdial_quality_config = quality_config
+                                        
+                                        # Display filter messages from previous run (if any)
+                                        if 'msdial_filter_messages' in st.session_state and st.session_state.msdial_filter_messages:
+                                            st.markdown("---")
+                                            st.markdown("**Filter Results:**")
+                                            for msg in st.session_state.msdial_filter_messages:
+                                                st.info(msg)
                             
                             # Pass config to clean_data
                             cleaned_df, intsta_df = clean_data(
@@ -314,6 +321,13 @@ def main():
                                 grade_config=grade_config,
                                 quality_config=quality_config
                             )
+                            
+                            # Display MS-DIAL filter results (if any) right after cleaning
+                            if data_format == 'MS-DIAL' and 'msdial_filter_messages' in st.session_state:
+                                for msg in st.session_state.msdial_filter_messages:
+                                    st.info(msg)
+                                # Clear after displaying so they don't persist incorrectly
+                                del st.session_state.msdial_filter_messages
                             
                             if cleaned_df is not None:
                                 st.session_state.experiment = experiment
@@ -1499,8 +1513,9 @@ def get_msdial_quality_config():
                 )
                 quality_config['require_msms'] = custom_msms
         
-        # Advanced: custom score threshold
-        with st.expander("🔧 Custom threshold", expanded=False):
+        # Advanced: custom score threshold (using checkbox since we may be inside an expander)
+        show_custom = st.checkbox("Customize score threshold", value=False, key="msdial_show_custom_threshold")
+        if show_custom:
             custom_score = st.slider(
                 "Minimum Total Score:",
                 min_value=0,
@@ -2094,18 +2109,18 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     st.markdown("#### ⚙️ Normalization Method")
     
     # Determine available options
-    normalization_options = ['None', 'Internal Standards', 'Protein-based', 'Both'] if has_standards else ['None', 'Protein-based']
+    normalization_options = ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Both'] if has_standards else ['None (pre-normalized data)', 'Protein-based']
     
     if not has_standards:
         st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
     
     # Initialize the radio key if it doesn't exist or if saved method is no longer available
     if 'norm_method_selection' not in st.session_state:
-        st.session_state.norm_method_selection = 'None'
+        st.session_state.norm_method_selection = 'None (pre-normalized data)'
     
     # Handle case where saved method is no longer available (e.g., standards removed)
     if st.session_state.norm_method_selection not in normalization_options:
-        st.session_state.norm_method_selection = 'None'
+        st.session_state.norm_method_selection = 'None (pre-normalized data)'
     
     normalization_method = st.radio(
         "Method:",
@@ -2119,7 +2134,7 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
 
     normalized_df = filtered_df.copy()
 
-    if normalization_method != 'None':
+    if normalization_method != 'None (pre-normalized data)':
         if 'normalization_settings' not in st.session_state:
             st.session_state.normalization_settings = {}
         
