@@ -2740,7 +2740,8 @@ def quality_check_and_analysis_module(continuation_df, intsta_df, experiment, bq
                     st.session_state.heatmap_fig, st.session_state.correlation_plots,
                     st.session_state.abundance_bar_charts, st.session_state.abundance_pie_charts,
                     st.session_state.saturation_plots, st.session_state.volcano_plots,
-                    st.session_state.pathway_visualization, st.session_state.fach_plots
+                    st.session_state.pathway_visualization, st.session_state.fach_plots,
+                    experiment=experiment, format_type=format_type
                 )
             if pdf_buffer:
                 st.success("PDF report generated successfully!")
@@ -5307,7 +5308,8 @@ def display_fach_heatmaps(experiment, continuation_df):
 
 def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_plot, pca_plot,
                        heatmap_figs, correlation_plots, abundance_bar_charts, abundance_pie_charts,
-                       saturation_plots, volcano_plots, pathway_visualization, fach_plots=None):
+                       saturation_plots, volcano_plots, pathway_visualization, fach_plots=None,
+                       experiment=None, format_type=None):
     """
     Generate a PDF report containing all generated plots.
     
@@ -5325,16 +5327,135 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
         volcano_plots: Dictionary of volcano plot figures
         pathway_visualization: Matplotlib figure for pathway visualization
         fach_plots: Dictionary of FACH figures (default None)
+        experiment: Experiment object with experimental setup info (default None)
+        format_type: String indicating data format type (default None)
     
     Returns:
         BytesIO: Buffer containing the generated PDF
     """
+    from datetime import datetime
+    
     pdf_buffer = io.BytesIO()
     
     try:
         pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
+        page_width, page_height = letter
         
-        # Page 1: Box Plots
+        # === Page 1: Metadata / Cover Page ===
+        # Title
+        pdf.setFont("Helvetica-Bold", 24)
+        pdf.drawCentredString(page_width / 2, page_height - 100, "LipidCruncher Analysis Report")
+        
+        # Subtitle
+        pdf.setFont("Helvetica", 14)
+        pdf.drawCentredString(page_width / 2, page_height - 130, "Quality Check & Lipidomic Analysis Summary")
+        
+        # Horizontal line
+        pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
+        pdf.setLineWidth(1)
+        pdf.line(50, page_height - 150, page_width - 50, page_height - 150)
+        
+        # Report metadata section
+        y_position = page_height - 190
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(50, y_position, "Report Information")
+        y_position -= 25
+        
+        pdf.setFont("Helvetica", 11)
+        pdf.drawString(70, y_position, f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+        y_position -= 20
+        
+        if format_type:
+            pdf.drawString(70, y_position, f"Data Format: {format_type}")
+            y_position -= 20
+        
+        # Experiment details section
+        if experiment:
+            y_position -= 15
+            pdf.setFont("Helvetica-Bold", 12)
+            pdf.drawString(50, y_position, "Experimental Design")
+            y_position -= 25
+            
+            pdf.setFont("Helvetica", 11)
+            pdf.drawString(70, y_position, f"Number of Conditions: {experiment.n_conditions}")
+            y_position -= 20
+            
+            pdf.drawString(70, y_position, f"Total Samples: {len(experiment.full_samples_list)}")
+            y_position -= 25
+            
+            # Conditions table header
+            pdf.setFont("Helvetica-Bold", 10)
+            pdf.drawString(70, y_position, "Condition")
+            pdf.drawString(250, y_position, "Samples")
+            pdf.drawString(400, y_position, "Sample IDs")
+            y_position -= 5
+            pdf.line(70, y_position, page_width - 50, y_position)
+            y_position -= 15
+            
+            # Conditions details
+            pdf.setFont("Helvetica", 10)
+            for i, (condition, n_samples, samples) in enumerate(zip(
+                experiment.conditions_list,
+                experiment.number_of_samples_list,
+                experiment.individual_samples_list
+            )):
+                if y_position < 150:
+                    break
+                pdf.drawString(70, y_position, str(condition)[:25])
+                pdf.drawString(250, y_position, str(n_samples))
+                samples_str = ", ".join(samples[:5])
+                if len(samples) > 5:
+                    samples_str += f" ... (+{len(samples) - 5} more)"
+                pdf.drawString(400, y_position, samples_str[:35])
+                y_position -= 18
+        
+        # Analyses included section
+        y_position -= 20
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(50, y_position, "Analyses Included in This Report")
+        y_position -= 25
+        
+        pdf.setFont("Helvetica", 10)
+        analyses = []
+        analyses.append("• Distribution Box Plots")
+        if bqc_plot is not None:
+            analyses.append("• BQC Quality Assessment")
+        if retention_time_plot is not None:
+            analyses.append("• Retention Time Analysis")
+        if pca_plot is not None:
+            analyses.append("• Principal Component Analysis (PCA)")
+        if correlation_plots:
+            analyses.append(f"• Pairwise Correlation ({len(correlation_plots)} condition(s))")
+        if abundance_bar_charts and any(v is not None for v in abundance_bar_charts.values()):
+            analyses.append("• Class Concentration Bar Charts")
+        if abundance_pie_charts:
+            analyses.append(f"• Class Concentration Pie Charts ({len(abundance_pie_charts)} condition(s))")
+        if saturation_plots:
+            analyses.append(f"• Saturation Profiles ({len(saturation_plots)} class(es))")
+        if fach_plots:
+            analyses.append(f"• Fatty Acid Composition Heatmaps ({len(fach_plots)} class(es))")
+        if volcano_plots:
+            analyses.append("• Volcano Plot Analysis")
+        if pathway_visualization is not None:
+            analyses.append("• Lipid Pathway Visualization")
+        if heatmap_figs:
+            analyses.append(f"• Lipidomic Heatmap(s) ({len(heatmap_figs)} type(s))")
+        
+        for analysis in analyses:
+            if y_position < 80:
+                break
+            pdf.drawString(70, y_position, analysis)
+            y_position -= 16
+        
+        # Footer
+        pdf.setFont("Helvetica-Oblique", 9)
+        pdf.drawCentredString(page_width / 2, 50, "Generated by LipidCruncher - The Farese and Walther Lab")
+        pdf.drawCentredString(page_width / 2, 38, "https://github.com/FareseWaltherLab/LipidCruncher")
+        
+        # === Page 2: Box Plots ===
+        pdf.showPage()
+        pdf.setPageSize(letter)
+        
         # Convert Plotly figures to PNG for the box plots
         box_plot1_bytes = pio.to_image(box_plot_fig1, format='png', width=800, height=600, scale=2)
         box_plot2_bytes = pio.to_image(box_plot_fig2, format='png', width=800, height=600, scale=2)
@@ -5347,28 +5468,32 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
         img2 = ImageReader(io.BytesIO(box_plot2_bytes))
         pdf.drawImage(img2, 50, 50, width=500, height=300, preserveAspectRatio=True)
         
-        # Page 2: BQC Plot
-        pdf.showPage()
+        # === BQC Plot (only if exists) ===
         if bqc_plot is not None:
+            pdf.showPage()
+            pdf.setPageSize(letter)
             bqc_bytes = pio.to_image(bqc_plot, format='png', width=800, height=600, scale=2)
             bqc_img = ImageReader(io.BytesIO(bqc_bytes))
             pdf.drawImage(bqc_img, 50, 100, width=500, height=400, preserveAspectRatio=True)
+            pdf.drawString(50, 80, "BQC Quality Assessment")
         
-        # Page 3: Retention Time Plot
-        pdf.showPage()
-        pdf.setPageSize(landscape(letter))
+        # === Retention Time Plot (only if exists) ===
         if retention_time_plot is not None:
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
             rt_bytes = pio.to_image(retention_time_plot, format='png', width=1000, height=700, scale=2)
             rt_img = ImageReader(io.BytesIO(rt_bytes))
             pdf.drawImage(rt_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 30, "Retention Time vs. Mass Plot")
         
-        # Page 4: PCA Plot
-        pdf.showPage()
-        pdf.setPageSize(landscape(letter))
+        # === PCA Plot (only if exists) ===
         if pca_plot is not None:
+            pdf.showPage()
+            pdf.setPageSize(landscape(letter))
             pca_bytes = pio.to_image(pca_plot, format='png', width=1000, height=700, scale=2)
             pca_img = ImageReader(io.BytesIO(pca_bytes))
             pdf.drawImage(pca_img, 50, 50, width=700, height=500, preserveAspectRatio=True)
+            pdf.drawString(50, 30, "Principal Component Analysis (PCA)")
         
         # Pages for Correlation Plots
         for condition, corr_fig in correlation_plots.items():
@@ -5490,16 +5615,64 @@ def generate_pdf_report(box_plot_fig1, box_plot_fig2, bqc_plot, retention_time_p
     return pdf_buffer
 
 def add_heatmap_to_pdf(pdf, heatmap_fig, title):
+    """
+    Add a heatmap figure to the PDF with proper scaling to prevent label cut-off.
+    Optimized for heatmaps with many lipids (rows) and fewer samples (columns).
+    
+    Args:
+        pdf: ReportLab canvas object
+        heatmap_fig: Plotly figure object containing the heatmap
+        title: String title for the heatmap
+    """
+    import copy
+    
     pdf.showPage()
-    pdf.setPageSize(landscape(letter))
-    heatmap_bytes = pio.to_image(heatmap_fig, format='png', width=900, height=600, scale=2)
+    pdf.setPageSize(letter)  # Portrait orientation - better for tall heatmaps
+    page_width, page_height = letter
+    
+    # Create a copy of the figure to modify without affecting the original
+    fig_copy = copy.deepcopy(heatmap_fig)
+    
+    # Update the figure layout: more left margin, larger y-axis font
+    fig_copy.update_layout(
+        margin=dict(l=180, r=100, t=60, b=60),
+        yaxis=dict(tickfont=dict(size=11)),  # Larger, readable font
+        xaxis=dict(tickfont=dict(size=10)),
+    )
+    
+    # Export with tall aspect ratio (narrow and tall)
+    heatmap_bytes = pio.to_image(
+        fig_copy, 
+        format='png', 
+        width=900,    # Narrower
+        height=1200,  # Taller - more room for lipid names
+        scale=2
+    )
     heatmap_img = ImageReader(io.BytesIO(heatmap_bytes))
-    page_width, page_height = landscape(letter)
-    img_width = 700
-    img_height = (img_width / 900) * 600
+    
+    # Page margins: 30pt left/right, 50pt bottom, 40pt top
+    available_width = page_width - 60
+    available_height = page_height - 90
+    
+    # Maintain aspect ratio (900/1200 = 0.75)
+    img_aspect = 900 / 1200
+    page_aspect = available_width / available_height
+    
+    if img_aspect > page_aspect:
+        img_width = available_width
+        img_height = available_width / img_aspect
+    else:
+        img_height = available_height
+        img_width = available_height * img_aspect
+    
+    # Center horizontally
     x_position = (page_width - img_width) / 2
-    y_position = (page_height - img_height) / 2
+    y_position = 50 + (available_height - img_height) / 2
+    
     pdf.drawImage(heatmap_img, x_position, y_position, width=img_width, height=img_height, preserveAspectRatio=True)
+    
+    # Add title below the image
+    pdf.setFont("Helvetica-Bold", 11)
     pdf.drawString(x_position, y_position - 20, title)
 
 if __name__ == "__main__":
