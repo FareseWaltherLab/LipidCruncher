@@ -85,11 +85,26 @@ def initialize_session_state():
     if 'msdial_use_normalized' not in st.session_state:
         st.session_state.msdial_use_normalized = False
 
-def display_landing_page():
-    """Display the LipidCruncher landing page with enhanced module explanations."""
-    # Load and display the logo
+def load_module_image(filename, caption=None):
+    """Helper function to load and display a module PDF as an image."""
     try:
-        logo_path = os.path.join(IMAGES_DIR, 'logo.tif')
+        pdf_path = os.path.join(IMAGES_DIR, filename)
+        if os.path.exists(pdf_path):
+            images = convert_from_path(pdf_path, dpi=300)
+            if images:
+                img_byte_arr = io.BytesIO()
+                images[0].save(img_byte_arr, format='PNG')
+                st.image(img_byte_arr.getvalue(), caption=caption, use_column_width=True)
+                return True
+    except Exception as e:
+        st.warning(f"Could not load {filename}: {str(e)}")
+    return False
+
+def display_landing_page():
+    """Display the LipidCruncher landing page."""
+    # Logo
+    try:
+        logo_path = os.path.join(IMAGES_DIR, 'new_logo.tif')
         if os.path.exists(logo_path):
             logo = Image.open(logo_path)
             st.image(logo, width=720)
@@ -100,119 +115,100 @@ def display_landing_page():
         st.error(f"Failed to load logo: {str(e)}")
         st.header("LipidCruncher")
 
+    # Tagline
     st.markdown("""
-    **LipidCruncher** is an open-source web platform developed by **[The Farese and Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther)** to transform lipidomic data analysis. 
-    Designed to overcome traditional challenges like manual spreadsheet handling and insufficient quality assessment, LipidCruncher offers a comprehensive 
-    solution that streamlines data standardization, normalization, and rigorous quality control while providing powerful visualization tools. 
-    The platform significantly accelerates the research iteration process, allowing scientists to quickly identify anomalies and patterns through advanced 
-    features including volcano plots, lipid saturation profiles, pathway mapping, and interactive heatmaps—all within an intuitive interface that requires 
-    no bioinformatics expertise. LipidCruncher empowers researchers to efficiently convert complex lipid datasets into scientific insights, regardless 
-    of their specific research focus.
-    """, unsafe_allow_html=True)
-
-    st.subheader("Key Features")
-    st.markdown("""
-    - **Versatile Data Input**: Import datasets from LipidSearch, MS-DIAL, Metabolomics Workbench, or generic CSV formats.
-    - **Robust Processing**: Standardize, filter, and normalize data with options tailored to your experiment.
-    - **Rigorous Quality Control**: Ensure data integrity with diagnostic tools like box plots, CoV analysis, and PCA.
-    - **Advanced Visualizations**: Gain insights through interactive volcano plots, heatmaps, and pathway maps.
-    - **Open Access**: Freely available online with source code on The Farese and Walther Lab [GitHub](https://github.com/FareseWaltherLab/LipidCruncher).
-    """)
-
-    st.subheader("How It Works")
-    st.markdown("""
-    LipidCruncher organizes the lipidomics analysis pipeline into three integrated modules, each designed to simplify and standardize critical steps from raw data to scientific insight:
-    """)
-
-    st.markdown("**Module 1: Data Input, Standardization, Filtering, and Normalization**")
-    st.markdown("""
-    - **Data Input**: Import data in flexible formats, including generic CSV, LipidSearch, MS-DIAL, and Metabolomics Workbench.
-    - **Standardization**: Automatically align column naming for consistency across datasets.
-    - **Filtering**: Clean data by removing empty rows, duplicates, and replacing null values with zeros.
-    - **Normalization**: Choose from four options: no normalization, internal standard-based, protein-based, or combined internal standard and protein normalization.
-    """)
-
-    st.markdown("**Module 2: Quality Check and Anomaly Detection**")
-    st.markdown("""
-    - **Box Plots**: Visualize concentration distributions to confirm uniformity among replicates.
-    - **Zero-Value Analysis**: Identify samples with excessive missing data.
-    - **CoV Analysis**: Assess measurement precision using batch quality control (BQC) samples.
-    - **Correlation Analysis**: Identify outliers through pairwise correlations between replicates.
-    - **PCA**: Visualize sample clustering and flag potential outliers.
-    """)
-
-    st.markdown("**Module 3: Data Visualization, Interpretation, and Analysis**")
-    st.markdown("""
-    - **Bar and Pie Charts**: Display lipid class concentrations and proportional distributions.
-    - **Metabolic Network Visualization**: Map lipid class changes in a metabolic context.
-    - **Saturation Profiles**: Analyze fatty acid saturation levels (SFA, MUFA, PUFA).
-    - **Volcano Plots**: Highlight significant lipid changes with customizable thresholds.
-    - **Heatmaps**: Provide a high-resolution view of lipidomic alterations with interactive features.
-    """)
-
-    st.subheader("Pipeline Overview")
-    try:
-        pdf_path = os.path.join(IMAGES_DIR, 'figure1.pdf')
-        images = convert_from_path(pdf_path, dpi=300)
-        if images:
-            fig1_image = images[0]
-            img_byte_arr = io.BytesIO()
-            fig1_image.save(img_byte_arr, format='PNG')
-            img_byte_arr = img_byte_arr.getvalue()
-            st.image(img_byte_arr, caption="Overview of the LipidCruncher Analysis Pipeline", use_column_width=True)
-            with open(pdf_path, "rb") as pdf_file:
-                pdf_bytes = pdf_file.read()
-        else:
-            st.warning("No pages found in Figure 1 PDF.")
-    except Exception as e:
-        st.warning(f"Could not load Figure 1 PDF: {str(e)}. Please ensure 'figure1.pdf' is in the './images/' directory and Poppler is installed.")
-
-    st.subheader("Learn More")
+    *An open-source platform for processing, visualizing, and analyzing lipidomic data.*
     
-    st.markdown("""
-    To explore LipidCruncher and see how we utilized it in a case study, 
-    read our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1) published on bioRxiv.
-    """, unsafe_allow_html=True)
-    
-    st.subheader("Get Started")
-    st.markdown("""
-    Upload your lipidomic dataset to begin analyzing it with LipidCruncher.
+    Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther) 
+    to bridge the gap between lipidomic data generation and biological insight—no bioinformatics expertise required.
     """)
-    
-    # Center the "Start Crunching" button
-    col1, col2, col3 = st.columns([2, 1, 2])
+
+    # Quick highlights
+    col1, col2, col3, col4 = st.columns(4)
+    col1.markdown("**📂 4 Formats**<br>LipidSearch, MS-DIAL, Generic, Metabolomics Workbench", unsafe_allow_html=True)
+    col2.markdown("**🔬 QC + Normalization**<br>Integrated quality control with flexible normalization", unsafe_allow_html=True)
+    col3.markdown("**📊 Lipid-Specific Viz**<br>Saturation profiles, pathway maps, lipidomic heatmap", unsafe_allow_html=True)
+    col4.markdown("**📈 Publication-Ready**<br>Interactive plots, SVG export, PDF reports", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # The Three Modules
+    st.subheader("🚀 How It Works")
+    st.markdown("LipidCruncher guides you through three intuitive modules:")
+
+    # Module 1
+    st.markdown("#### Module 1: Standardize & Normalize")
+    st.markdown("""
+    **Get your data analysis-ready in minutes.** Import data from LipidSearch, MS-DIAL, Metabolomics Workbench, or a generic CSV format. 
+    Define your experiment by assigning samples to conditions, then apply automatic column standardization, 
+    filtering (duplicates, empty rows, zero values), and flexible normalization (internal standards, protein concentration, or both). 
+    Internal standards consistency plots help verify sample preparation and instrument performance.
+    """)
+    load_module_image('module1.pdf')
+
+    st.markdown("---")
+
+    # Module 2
+    st.markdown("#### Module 2: Quality Check")
+    st.markdown("""
+    **Trust your data before you analyze it.** Box plots assess data quality and validate normalization—replicates 
+    within a condition should exhibit similar medians and interquartile ranges. CoV analysis of batch quality control (BQC) 
+    samples evaluates measurement precision. Correlation heatmaps and PCA detect outliers and visualize sample clustering.
+    """)
+    load_module_image('module2.pdf')
+
+    st.markdown("---")
+
+    # Module 3
+    st.markdown("#### Module 3: Visualize & Analyze")
+    st.markdown("""
+    **Turn complex lipid profiles into biological insights.** Bar & pie charts, volcano plots, saturation profiles (SFA, MUFA, PUFA), 
+    metabolic pathway mapping, clustered heatmaps, and fatty acid composition analysis—all interactive with SVG/CSV export.
+    """)
+    load_module_image('module3.pdf')
+
+    st.markdown("---")
+
+    # Call to Action
+    st.subheader("🎯 Ready to Crunch?")
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("Start Crunching"):
+        if st.button("🚀 Start Crunching", use_container_width=True):
             st.session_state.page = 'app'
             st.experimental_rerun()
-    
-    st.subheader("Test Datasets")
-    st.markdown("""
-    Want to explore LipidCruncher but don't have your own dataset? 
-    Try our sample datasets available on our lab's [GitHub](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets). 
-    These datasets are from the case study analyzed in our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1.article-metrics) 
-    describing LipidCruncher's features. The LipidSearch dataset is the original dataset containing raw, unprocessed values.
-    Additionally, we provide the same data in Generic and Metabolomics Workbench formats, which include pre-normalized values for your convenience.
 
-   
+    st.markdown("---")
+
+    # Resources in columns
+    col1, col2 = st.columns(2)
     
-    The case study experiment includes three conditions with four replicates each:
-    - **WT** (Wild Type): samples s1-s4
-    - **ADGAT-DKO** (Double Knockout): samples s5-s8
-    - **BQC** (Batch Quality Control): samples s9-s12
-    """)
-                
-    st.subheader("Tip")
-    st.markdown("""
-    💡 **Important**: When you need to switch to a different analysis with a different dataset, 
-    first refresh the page and start from the homepage. This ensures a clean session and prevents 
-    any conflicts with previously loaded data.
-    """)
-    
-    st.subheader("Support")
-    st.markdown("""
-    For reporting bugs, feature requests, or any questions or comments, please email lipidcruncher@gmail.com.
-    """)
+    with col1:
+        st.markdown("#### 📚 Resources")
+        st.markdown("""
+        - 📄 [Read our paper on bioRxiv](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1)
+        - 💻 [Source code on GitHub](https://github.com/FareseWaltherLab/LipidCruncher)
+        - 📊 [Sample datasets](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets)
+        """)
+
+    with col2:
+        st.markdown("#### 🧪 Try Our Test Data")
+        st.markdown("""
+        No dataset? No problem! Our sample data includes:
+        - **WT** (Wild Type): 4 replicates
+        - **ADGAT-DKO** (Double Knockout): 4 replicates  
+        - **BQC** (Batch Quality Control): 4 replicates
+        """)
+
+    st.markdown("---")
+
+    # Footer
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("#### 💡 Pro Tip")
+        st.markdown("Starting a new analysis? Refresh the page first to ensure a clean session.")
+    with col2:
+        st.markdown("#### 📧 Support")
+        st.markdown("Questions, bugs, or feature requests? Email **abdih@mskcc.org**")
 
 def main():
     """Main function for the Lipidomics Analysis Module Streamlit application."""
@@ -222,7 +218,7 @@ def main():
         display_landing_page()
     elif st.session_state.page == 'app':
         try:
-            logo_path = os.path.join(IMAGES_DIR, 'logo.tif')
+            logo_path = os.path.join(IMAGES_DIR, 'new_logo.tif')
             if os.path.exists(logo_path):
                 logo = Image.open(logo_path)
                 st.image(logo, width=720)
