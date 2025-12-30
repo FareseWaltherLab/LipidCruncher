@@ -1,6 +1,6 @@
 # 🧬 LipidCruncher
 
-**From raw lipidomics data to biological insights—no bioinformatics expertise required.**
+**From complex lipidomics data to biological insights—no bioinformatics expertise required.**
 
 Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther) at Memorial Sloan Kettering Cancer Center.
 
@@ -16,21 +16,21 @@ Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/fare
 |---|---|
 | 📂 **4 Data Formats** | LipidSearch, MS-DIAL, Metabolomics Workbench, Generic CSV |
 | 🔬 **QC + Normalization** | Integrated quality control with flexible normalization options |
-| 📊 **Lipid-Specific Viz** | Saturation profiles, pathway maps, FACH analysis, and more |
+| 📊 **Lipid-Specific Viz** | Saturation profiles, pathway maps, fatty acid composition heatmaps, and more |
 | 📈 **Publication-Ready** | Interactive plots with SVG export and PDF reports |
 
 ---
 
 ## 🚀 How It Works
 
-### Module 1: Standardize & Normalize
+### Module 1: Standardize, Filter & Normalize
 Import your data, define experimental conditions, and apply automatic standardization, filtering, and normalization (internal standards, protein concentration, or both). Internal standards consistency plots verify sample prep quality.
 
 ### Module 2: Quality Check
-Validate your data before analysis. Box plots confirm normalization success, CoV analysis assesses BQC precision, and correlation heatmaps + PCA detect outliers.
+Validate your data before analysis. Box plots assess data quality and confirm normalization success, CoV analysis evaluates BQC precision, and correlation heatmaps + PCA detect outliers.
 
 ### Module 3: Visualize & Analyze
-Explore your lipidome with bar/pie charts, volcano plots, saturation profiles, metabolic pathway maps, clustered heatmaps, and fatty acid composition analysis—all interactive.
+Explore your lipidomic dataset with bar/pie charts, volcano plots, saturation profiles, metabolic pathway maps, clustered heatmaps, and fatty acid composition analysis—all interactive.
 
 ---
 
@@ -74,7 +74,7 @@ See `requirements.txt` for versions.
 
 ## 📧 Support
 
-Questions, bugs, or feature requests? **lipidcruncher@gmail.com**
+Questions, bugs, or feature requests? **abdih@mskcc.org**
 
 ---
 
