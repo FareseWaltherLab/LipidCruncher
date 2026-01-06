@@ -340,37 +340,37 @@ def main():
                                     st.session_state.cleaned_df = cleaned_df
                                     st.session_state.continuation_df = cleaned_df
                                 
-                                normalized_df = handle_data_normalization(
-                                    cleaned_df, 
-                                    st.session_state.intsta_df,
-                                    experiment, 
-                                    data_format
-                                )
-                                
-                                if normalized_df is not None:
-                                    st.session_state.normalized_df = normalized_df
-                                    st.session_state.continuation_df = normalized_df
+                                    normalized_df = handle_data_normalization(
+                                        cleaned_df, 
+                                        st.session_state.intsta_df,
+                                        experiment, 
+                                        data_format
+                                    )
                                     
-                                    _, right_column = st.columns([3, 1])
-                                    with right_column:
-                                        if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
-                                            st.session_state.module = "Quality Check & Analysis"
-                                            st.session_state.preserved_data = {
-                                                'cleaned_df': st.session_state.cleaned_df,
-                                                'intsta_df': st.session_state.intsta_df,
-                                                'normalized_df': st.session_state.normalized_df,
-                                                'continuation_df': st.session_state.continuation_df,
-                                                'normalization_method': st.session_state.normalization_method,
-                                                'selected_classes': st.session_state.selected_classes,
-                                                'create_norm_dataset': st.session_state.create_norm_dataset,
-                                                'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
-                                                'protein_df': st.session_state.get('protein_df'),
-                                                'standard_source_preference': st.session_state.get('standard_source_preference'),
-                                                'class_standard_map': st.session_state.get('class_standard_map'),
-                                                'standard_concentrations': st.session_state.get('standard_concentrations'),
-                                                'grade_config': st.session_state.get('grade_config')
-                                            }
-                                            st.experimental_rerun()
+                                    if normalized_df is not None:
+                                        st.session_state.normalized_df = normalized_df
+                                        st.session_state.continuation_df = normalized_df
+                                        
+                                        _, right_column = st.columns([3, 1])
+                                        with right_column:
+                                            if st.button("Next: Quality Check & Analysis", key="next_to_qc_analysis"):
+                                                st.session_state.module = "Quality Check & Analysis"
+                                                st.session_state.preserved_data = {
+                                                    'cleaned_df': st.session_state.cleaned_df,
+                                                    'intsta_df': st.session_state.intsta_df,
+                                                    'normalized_df': st.session_state.normalized_df,
+                                                    'continuation_df': st.session_state.continuation_df,
+                                                    'normalization_method': st.session_state.normalization_method,
+                                                    'selected_classes': st.session_state.selected_classes,
+                                                    'create_norm_dataset': st.session_state.create_norm_dataset,
+                                                    'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
+                                                    'protein_df': st.session_state.get('protein_df'),
+                                                    'standard_source_preference': st.session_state.get('standard_source_preference'),
+                                                    'class_standard_map': st.session_state.get('class_standard_map'),
+                                                    'standard_concentrations': st.session_state.get('standard_concentrations'),
+                                                    'grade_config': st.session_state.get('grade_config')
+                                                }
+                                                st.experimental_rerun()
                                             
                         elif st.session_state.module == "Quality Check & Analysis":
                             if st.session_state.cleaned_df is not None:
@@ -566,7 +566,7 @@ LipidMolec | ClassKey | CalcMass | BaseRt | TotalGrade | ... | MeanArea[s1] | Me
 | Column | Description |
 |--------|-------------|
 | `Metabolite name` | Lipid identifiers (exact name required) |
-| Sample columns | Intensity values — **must be LAST columns** |
+| Sample columns | Intensity values — **must be LAST columns** and **uniquely named** |
 
 **Optional Columns** (enable extra features):
 
@@ -591,6 +591,12 @@ LipidMolec | ClassKey | CalcMass | BaseRt | TotalGrade | ... | MeanArea[s1] | Me
 [metadata cols...] [raw1]...[rawN] [Lipid IS] [norm1]...[normN]
 ```
 The `Lipid IS` column separates raw from normalized data. You'll choose which to use after upload.
+
+---
+
+**⚠️ Important:**
+- All sample column names must be **unique** — duplicate names will cause parsing errors
+- Lipid names must be **identified** (not "Unknown") for meaningful analysis
 
 ---
 

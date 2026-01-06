@@ -136,12 +136,19 @@ class CleanMSDIALData:
             filtered_df['Total score'] = pd.to_numeric(
                 filtered_df['Total score'], errors='coerce'
             )
-            filtered_df = filtered_df[
-                filtered_df['Total score'] >= threshold
-            ]
-            score_filtered = initial_count - len(filtered_df)
-            if score_filtered > 0:
-                messages.append(f"Quality filter: Removed {score_filtered} entries with Total score < {threshold}")
+            
+            # Check if we have any valid scores
+            valid_scores = filtered_df['Total score'].notna().sum()
+            if valid_scores == 0:
+                st.warning("Total score column exists but contains no valid numeric values. Skipping score filter.")
+            elif threshold > 0:
+                # Only filter if threshold > 0 (skip if "No filtering" selected)
+                filtered_df = filtered_df[
+                    filtered_df['Total score'] >= threshold
+                ]
+                score_filtered = initial_count - len(filtered_df)
+                if score_filtered > 0:
+                    st.info(f"Quality filter: Removed {score_filtered} entries with Total score < {threshold}")
         
         # Apply MS/MS matched filter if required and column exists
         if quality_config.get('require_msms', False):
@@ -185,6 +192,13 @@ class CleanMSDIALData:
                 else:
                     return df_copy  # No lipid column found, return unchanged
             
+            initial_count = len(df_copy)
+            
+            # Count different types of invalid entries for diagnostics
+            nan_count = df_copy[lipid_col].isna().sum()
+            empty_count = (df_copy[lipid_col].astype(str).str.strip() == '').sum()
+            unknown_count = (df_copy[lipid_col].astype(str).str.upper() == 'UNKNOWN').sum()
+            
             # Define invalid patterns
             invalid_patterns = [
                 r'^\s*$',           # Empty strings or pure whitespace
@@ -205,7 +219,23 @@ class CleanMSDIALData:
             # Also remove NaN values
             valid_mask = valid_mask & ~df_copy[lipid_col].isna()
             
-            return df_copy[valid_mask]
+            result_df = df_copy[valid_mask]
+            removed_count = initial_count - len(result_df)
+            
+            # Show diagnostic info if many rows removed
+            if removed_count > 0:
+                st.info(f"Removed {removed_count} entries with invalid lipid names: "
+                       f"{nan_count} NaN, {empty_count} empty, {unknown_count} 'Unknown'")
+                
+                # If everything was removed, show sample of what lipid names looked like
+                if len(result_df) == 0:
+                    sample_names = df_copy[lipid_col].dropna().head(10).tolist()
+                    if sample_names:
+                        st.warning(f"Sample lipid names from dataset: {sample_names[:5]}")
+                    else:
+                        st.warning("All lipid name entries are NaN or empty.")
+            
+            return result_df
             
         except Exception as e:
             st.error(f"Error removing invalid lipid rows: {str(e)}")
