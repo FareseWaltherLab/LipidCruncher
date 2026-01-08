@@ -735,8 +735,9 @@ def process_group_samples(df, experiment, data_format):
     if group_df.empty:
         st.sidebar.error("Error building sample groups!")
         return None, None, None, False
-        
-    st.sidebar.write(group_df)
+    
+    # Use st.sidebar.dataframe() to avoid markdown parsing issues with pipe characters in conditions
+    st.sidebar.dataframe(group_df, use_container_width=True)
 
     # Now handle_manual_grouping returns both group_df and updated df
     group_df, updated_df = handle_manual_grouping(group_df, experiment, grouped_samples, df)
@@ -805,7 +806,7 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
                 # Generate and display name_df to show the new sample order
                 name_df = grouped_samples.update_sample_names(group_df)
                 st.sidebar.write("New sample order after regrouping:")
-                st.sidebar.write(name_df)
+                st.sidebar.dataframe(name_df, use_container_width=True, hide_index=True)
                 
                 return group_df, df_reordered
                 
@@ -855,9 +856,10 @@ def process_experiment(df, data_format='lipidsearch'):
             number_of_samples_list = [sample_counts[condition] for condition in conditions_list]
             
             # Display the detected setup
+            # Use st.sidebar.text() to avoid markdown parsing of pipe characters in condition names
             st.sidebar.write("Using detected setup:")
             for cond, count in zip(conditions_list, number_of_samples_list):
-                st.sidebar.write(f"* {cond}: {count} samples")
+                st.sidebar.text(f"• {cond}: {count} samples")
         
         else:
             # Manual setup remains unchanged
@@ -1311,11 +1313,12 @@ def build_replicate_condition_pair(condition, experiment):
         samples = experiment.individual_samples_list[index]
 
         if len(samples) > 5:
-            display_text = f"- {samples[0]} to {samples[-1]} (total {len(samples)}) correspond to {condition}"
+            display_text = f"• {samples[0]} to {samples[-1]} (total {len(samples)}) correspond to {condition}"
         else:
-            display_text = f"- {'-'.join(samples)} correspond to {condition}"
+            display_text = f"• {'-'.join(samples)} correspond to {condition}"
         
-        st.sidebar.write(display_text)
+        # Use st.sidebar.text() to avoid markdown parsing of pipe characters in condition names
+        st.sidebar.text(display_text)
         
     except Exception as e:
         st.sidebar.error(f"Error displaying condition {condition}: {str(e)}")
