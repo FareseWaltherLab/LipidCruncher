@@ -128,7 +128,7 @@ def display_landing_page():
     col1.markdown("**📂 4 Formats**<br>LipidSearch, MS-DIAL, Generic, Metabolomics Workbench", unsafe_allow_html=True)
     col2.markdown("**🔬 QC + Normalization**<br>Integrated quality control with flexible normalization", unsafe_allow_html=True)
     col3.markdown("**📊 Lipid-Specific Viz**<br>Saturation profiles, pathway maps, lipidomic heatmap", unsafe_allow_html=True)
-    col4.markdown("**📈 Publication-Ready**<br>Interactive plots, SVG export, PDF reports", unsafe_allow_html=True)
+    col4.markdown("**📈 High-Quality Outputs**<br>Interactive plots, SVG export, PDF reports", unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -137,7 +137,7 @@ def display_landing_page():
     st.markdown("LipidCruncher guides you through three intuitive modules:")
 
     # Module 1
-    st.markdown("#### Module 1: Standardize & Normalize")
+    st.markdown("#### Module 1: Standardize, Filter, & Normalize")
     st.markdown("""
     **Get your data analysis-ready in minutes.** Import data from LipidSearch, MS-DIAL, Metabolomics Workbench, or a generic CSV format. 
     Define your experiment by assigning samples to conditions, then apply automatic column standardization, 
