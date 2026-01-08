@@ -245,6 +245,33 @@ class NormalizeData:
         st.success(f"✓ Loaded {len(result_df)} standards with complete intensity data")
         return result_df
 
+    def remove_standards_from_main_dataset(self, cleaned_df, standards_df):
+        """
+        Remove any lipids from the main dataset that match the uploaded standards.
+        This ensures standards are not included in the analysis.
+        
+        Args:
+            cleaned_df (pd.DataFrame): The main cleaned dataset
+            standards_df (pd.DataFrame): The standards dataset
+            
+        Returns:
+            tuple: (updated_cleaned_df, list of removed lipid names)
+        """
+        if standards_df is None or standards_df.empty:
+            return cleaned_df, []
+        
+        # Get standard lipid names
+        standard_names = set(standards_df['LipidMolec'].unique())
+        
+        # Find which standards exist in the main dataset
+        existing_in_dataset = cleaned_df[cleaned_df['LipidMolec'].isin(standard_names)]['LipidMolec'].unique().tolist()
+        
+        if existing_in_dataset:
+            # Remove these lipids from cleaned_df
+            cleaned_df = cleaned_df[~cleaned_df['LipidMolec'].isin(standard_names)].copy()
+        
+        return cleaned_df, existing_in_dataset
+    
     def _extract_standards_from_dataset(self, standards_df, full_df, expected_intensity_cols):
         """
         Extract standards from the main dataset (legacy mode).
