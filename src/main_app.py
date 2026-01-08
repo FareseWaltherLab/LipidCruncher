@@ -1668,6 +1668,21 @@ def manage_internal_standards(normalizer):
                     st.session_state.intsta_df = new_standards_df
                     st.session_state.preserved_intsta_df = new_standards_df.copy()
                     
+                    # For external standards mode, check if any standards exist in the main dataset
+                    # and remove them to prevent standards from being analyzed
+                    if not use_legacy_mode:
+                        cleaned_df, removed_lipids = normalizer.remove_standards_from_main_dataset(
+                            st.session_state.cleaned_df,
+                            new_standards_df
+                        )
+                        if removed_lipids:
+                            st.session_state.cleaned_df = cleaned_df
+                            st.warning(
+                                f"⚠️ Removed {len(removed_lipids)} standard lipid(s) from main dataset: "
+                                f"{', '.join(removed_lipids[:5])}"
+                                f"{'...' if len(removed_lipids) > 5 else ''}"
+                            )
+                    
                     st.success(f"✓ Loaded {len(new_standards_df)} custom standards")
                     display_data(new_standards_df, "Custom Standards", "custom_standards.csv", "uploaded")
                 
@@ -2816,7 +2831,10 @@ def display_box_plots(continuation_df, experiment):
         st.markdown("###### Missing Values Distribution")
         st.markdown("Percentage of zero values per sample. High percentages may indicate lower sensitivity or technical issues.")
         
-        fig1 = lp.BoxPlot.plot_missing_values(current_samples, zero_values_percent_list)
+        fig1 = lp.BoxPlot.plot_missing_values(
+            current_samples, zero_values_percent_list,
+            experiment.conditions_list, experiment.individual_samples_list
+        )
         st.plotly_chart(fig1, use_container_width=True)
         
         # Download buttons for missing values
@@ -2842,7 +2860,10 @@ def display_box_plots(continuation_df, experiment):
         st.markdown("###### Concentration Distribution")
         st.markdown("Log10-transformed non-zero concentrations. Box = IQR (25th-75th percentile), line = median, points = outliers.")
         
-        fig2 = lp.BoxPlot.plot_box_plot(mean_area_df, current_samples)
+        fig2 = lp.BoxPlot.plot_box_plot(
+            mean_area_df, current_samples,
+            experiment.conditions_list, experiment.individual_samples_list
+        )
         st.plotly_chart(fig2, use_container_width=True)
         
         # Download buttons for box plot
@@ -3120,82 +3141,88 @@ def display_retention_time_plots(continuation_df, format_type):
     has_required_columns = 'BaseRt' in continuation_df.columns and 'CalcMass' in continuation_df.columns
     
     if (format_type in ['LipidSearch 5.0', 'MS-DIAL']) and has_required_columns:
-        with st.expander('View Retention Time Plots: Check Sanity of Data'):
-            # Add explanation about retention time analysis - ALWAYS VISIBLE
-            st.markdown("### Retention Time Analysis")
+        with st.expander('Retention Time Analysis'):
+            # Concise description
             st.markdown("""
-            Retention time analysis is a crucial quality check for lipidomic data. This visualization plots the retention time of each lipid against its calculated mass, allowing you to verify the consistency and reliability of lipid identification.
-            
-            **What is Retention Time?**  
-            Retention time is the duration a molecule takes to travel through a chromatography column. It directly correlates with a lipid's hydrophobicityâ€"more hydrophobic lipids interact more strongly with the column and typically have longer retention times.
-            
-            **What to Look For:**
-            
-            1. **Class-specific Clustering**: Lipids from the same class should form distinct clusters in the plot. Each lipid class has characteristic hydrophobicity patterns, resulting in similar retention times for molecules within that class.
-            
-            2. **Mass-Retention Time Relationship**: Within a lipid class:
-               - Longer fatty acid chains (higher mass) generally show longer retention times
-               - More saturated lipids (fewer double bonds) typically elute later than their unsaturated counterparts
-            
-            3. **Outliers**: Points that deviate significantly from their class's typical pattern may indicate:
-               - Incorrect lipid identification
-               - Co-eluting compounds
-               - Unusual structural features
-            
-            **Two Viewing Modes:**
-            
-            - **Individual Mode**: Displays separate plots for each lipid class, allowing detailed examination of class-specific patterns
-            - **Comparison Mode**: Shows multiple lipid classes in a single plot with color coding, enabling direct comparison between classes
-            
-            This analysis helps confirm the analytical integrity of your data and can reveal potential misidentifications or chromatographic issues.
+            Verify lipid identification quality by plotting retention time vs. calculated mass for each lipid class.
             """)
-            st.markdown("---")
             
-            # Get the viewing mode selection
-            mode = st.radio('Select a viewing mode', ['Comparison Mode', 'Individual Mode'])
+            st.markdown("**What to look for:** Lipids within each class should cluster together, and classes should follow expected elution order (e.g., TGs elute last due to high hydrophobicity). Outliers may indicate misidentifications.")
+            
+            # --- Settings Section ---
+            st.markdown("---")
+            st.markdown("##### ⚙️ Settings")
+            
+            mode = st.radio(
+                'Viewing Mode',
+                ['Comparison Mode', 'Individual Mode'],
+                horizontal=True,
+                key='rt_viewing_mode'
+            )
             
             if mode == 'Individual Mode':
-                # Handling individual retention time plots
+                # --- Results Section ---
+                st.markdown("---")
+                st.markdown("##### 📈 Results")
+                
                 plots = lp.RetentionTime.plot_single_retention(continuation_df)
                 for idx, (plot, retention_df) in enumerate(plots, 1):
                     st.plotly_chart(plot, use_container_width=True)
-                    plotly_svg_download_button(plot, f"retention_time_plot_{idx}.svg")
-                    csv_download = convert_df(retention_df)
-                    st.download_button(
-                        label="Download CSV", 
-                        data=csv_download, 
-                        file_name=f'retention_plot_{idx}.csv', 
-                        mime='text/csv'
-                    )
-                return None
-            elif mode == 'Comparison Mode':
-                # Handling comparison mode for retention time plots
-                all_lipid_classes_lst = continuation_df['ClassKey'].value_counts().index.tolist()
-                # Use multiselect with instruction text
-                st.markdown("**Select lipid classes to compare:**")
-                selected_classes_list = st.multiselect(
-                    'Add/Remove classes for comparison:',
-                    all_lipid_classes_lst, 
-                    default=all_lipid_classes_lst[:min(5, len(all_lipid_classes_lst))]  # Default to first 5 classes or fewer
-                )
-                
-                if selected_classes_list:  # Ensuring that selected_classes_list is not empty
-                    plot, retention_df = lp.RetentionTime.plot_multi_retention(continuation_df, selected_classes_list)
-                    if plot:
-                        st.plotly_chart(plot, use_container_width=True)
-                        plotly_svg_download_button(plot, "retention_time_comparison.svg")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        plotly_svg_download_button(plot, f"retention_time_plot_{idx}.svg")
+                    with col2:
                         csv_download = convert_df(retention_df)
                         st.download_button(
                             label="Download CSV", 
                             data=csv_download, 
-                            file_name='Retention_Time_Comparison.csv', 
-                            mime='text/csv'
+                            file_name=f'retention_plot_{idx}.csv', 
+                            mime='text/csv',
+                            key=f'rt_csv_individual_{idx}'
                         )
-                        return plot
-                else:
-                    st.warning("Please select at least one lipid class to generate the comparison plot.")
+                    st.markdown("---")
+                return None
+                
+            elif mode == 'Comparison Mode':
+                # --- Data Selection Section ---
+                st.markdown("---")
+                st.markdown("##### 🎯 Data Selection")
+                
+                all_lipid_classes_lst = continuation_df['ClassKey'].value_counts().index.tolist()
+                selected_classes_list = st.multiselect(
+                    'Lipid Classes',
+                    all_lipid_classes_lst, 
+                    default=all_lipid_classes_lst[:min(5, len(all_lipid_classes_lst))],
+                    key='rt_class_selection'
+                )
+                
+                if not selected_classes_list:
+                    st.warning("Please select at least one lipid class.")
+                    return None
+                
+                # --- Results Section ---
+                st.markdown("---")
+                st.markdown("##### 📈 Results")
+                
+                plot, retention_df = lp.RetentionTime.plot_multi_retention(continuation_df, selected_classes_list)
+                if plot:
+                    st.plotly_chart(plot, use_container_width=True)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        plotly_svg_download_button(plot, "retention_time_comparison.svg")
+                    with col2:
+                        csv_download = convert_df(retention_df)
+                        st.download_button(
+                            label="Download CSV", 
+                            data=csv_download, 
+                            file_name='retention_time_comparison.csv', 
+                            mime='text/csv',
+                            key='rt_csv_comparison'
+                        )
+                    return plot
     else:
-        # For other formats, return None (retention time plots not applicable)
         return None
     
 def analyze_pairwise_correlation(continuation_df, experiment):
@@ -3279,19 +3306,6 @@ def analyze_pairwise_correlation(continuation_df, experiment):
         # Correlation matrix table
         st.markdown("###### Correlation Coefficients")
         st.dataframe(correlation_df, use_container_width=True)
-        
-        # Flag low correlations
-        min_threshold = 0.7 if sample_type == 'biological replicates' else 0.8
-        low_correlations = []
-        for i in range(len(correlation_df.columns)):
-            for j in range(i + 1, len(correlation_df.columns)):
-                if correlation_df.iloc[j, i] < min_threshold:
-                    low_correlations.append(
-                        f"{correlation_df.columns[i]} ↔ {correlation_df.index[j]}: {correlation_df.iloc[j, i]:.3f}"
-                    )
-        
-        if low_correlations:
-            st.warning(f"**Low correlations detected** (< {min_threshold}): " + " | ".join(low_correlations))
         
         return selected_condition, fig
         
