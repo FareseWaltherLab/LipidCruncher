@@ -179,6 +179,76 @@ def display_landing_page():
 
     st.markdown("---")
 
+    # What's New
+    st.markdown("#### ✨ What's New in Version 1.2")
+    
+    with st.expander("New Features & Improvements", expanded=False):
+        st.markdown("""
+        ### Major Features
+        - **MS-DIAL Format Support**: Full integration with MS-DIAL exports including quality filtering (Total score, MS/MS matched), 
+          dual data type selection (raw vs. pre-normalized), and automatic internal standards detection
+        - **External Standards Upload**: Upload complete standards files with intensity values—standards no longer need to exist in your dataset
+        - **Configurable Zero Filtering**: Adjustable thresholds for lipid filtering (non-BQC: 50-100%, BQC: 25-100%)
+        
+        ### UI/UX Improvements
+        - **Redesigned Landing Page**: New module images, concise descriptions, and cleaner visual hierarchy
+        - **Streamlined Data Processing**: Collapsible format requirements, improved column mapping validation
+        - **Consolidated Statistical Documentation**: Central "About Statistical Testing" expander replaces duplicated explanations
+        - **Better Statistical Defaults**: FDR for Level 1 correction, Tukey's HSD for Level 2 (renamed from "Standard")
+        - **Cleaner Analysis Sections**: Consistent headers, two-column layouts, side-by-side download buttons throughout
+        - **Improved PDF Reports**: Metadata cover page, fixed empty pages, better heatmap scaling for many lipids
+        - **Box Plots by Condition**: Samples now colored by experimental condition with colorblind-friendly palette
+        - **Internal Standards Visualization**: Separate subplots for multiple standards within the same class
+        """)
+    
+    with st.expander("⚠️ Bug Fixes", expanded=False):
+        st.markdown("""
+        ### Statistical Testing Bug (Bonferroni All Post-Hoc)
+        
+        *Affected Feature*: Statistical testing with "Bonferroni All" post-hoc correction (Level 2) in Abundance Bar Charts and Saturation Plots
+        
+        *Issue*: When using the "Bonferroni All" option for pairwise comparisons, the software incorrectly applied non-parametric tests 
+        (Mann-Whitney U) even when you selected parametric analysis. This made the analysis overly conservative—combining the strictest 
+        correction method with the least powerful test type—potentially causing real differences to be missed.
+        
+        *Who is affected*: Users who selected Parametric tests (Welch's t-test/ANOVA) AND "Bonferroni All" for Level 2 correction AND had 3+ conditions.
+        
+        *Recommendation*: If you used these settings and found fewer significant results than expected, consider re-running your analysis.
+        
+        ---
+        
+        ### Sphingolipid Classification in Saturation Analysis
+        
+        *Problem*: Sphingolipids (Cer, SM, CerG1, CerG2, CerG3) were incorrectly classified as "single-chain" lipids and excluded from 
+        consolidated format detection. In reality, sphingolipids have two chains: a sphingoid base (e.g., d18:1) and a fatty acyl chain (e.g., 24:0).
+        
+        This meant consolidated sphingolipids like Cer(42:1) or SM(34:1) were silently included in saturation analysis without warning, 
+        potentially producing inaccurate SFA/MUFA/PUFA results.
+        
+        *Solution*: Sphingolipids are now correctly recognized as two-chain lipids. Consolidated sphingolipids are detected and flagged, 
+        allowing users to review and decide whether to include or exclude them.
+        
+        ---
+        
+        ### Fatty Acid Composition Heatmap Display Issues
+        
+        *Issues*: (1) Heatmap cells appeared as stretched rectangles instead of uniform squares. (2) Hover text only worked for some cells.
+        
+        *Solution*: We now construct a complete 2D grid matrix, ensuring each Carbon × Double Bond cell renders as a uniform square with 
+        full hover support. Empty cells display as white.
+        
+        ---
+        
+        ### Other Fixes
+        - Fixed session state issues causing double-click required for normalization method switching
+        - Fixed pathway visualization missing unit circles (LPA, LCB, CDP-DAG)
+        - Fixed SPLASH standard ClassKey inference
+        - Fixed markdown parsing of pipe characters in condition names
+        - Fixed volcano plot duplicate messages
+        """)
+
+    st.markdown("---")
+
     # Resources in columns
     col1, col2 = st.columns(2)
     
