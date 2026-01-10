@@ -257,16 +257,17 @@ def display_landing_page():
         st.markdown("""
         - 📄 [Read our paper on bioRxiv](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1)
         - 💻 [Source code on GitHub](https://github.com/FareseWaltherLab/LipidCruncher)
-        - 📊 [Sample datasets](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets)
         """)
 
     with col2:
         st.markdown("#### 🧪 Try Our Test Data")
         st.markdown("""
-        No dataset? No problem! Our sample data includes:
-        - **WT** (Wild Type): 4 replicates
-        - **ADGAT-DKO** (Double Knockout): 4 replicates  
-        - **BQC** (Batch Quality Control): 4 replicates
+        No dataset? No problem! Sample data available for all formats:
+        - **Generic/LipidSearch**: ADGAT-DKO adipose tissue study
+        - **MS-DIAL**: Mouse adrenal gland fads2 KO vs WT
+        - **Metabolomics Workbench**: Mouse HFD serum study
+
+        Click **"Load Sample Data"** in the sidebar after selecting your format!
         """)
 
     st.markdown("---")
