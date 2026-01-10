@@ -303,15 +303,23 @@ def main():
         
         data_format = display_format_selection()
         display_format_requirements(data_format)
-        
+
+        # Add sample data loading option
+        sample_data_info = display_sample_data_option(data_format)
+
         st.session_state.format_type = data_format
-        
+
         file_types = ['csv'] if data_format == 'Metabolomics Workbench' else ['csv', 'txt']
-        
-        uploaded_file = st.sidebar.file_uploader(
-            f'Upload your {data_format} dataset', 
-            type=file_types
-        )
+
+        # Check if sample data should be loaded
+        uploaded_file = None
+        if 'load_sample' in st.session_state and st.session_state.load_sample:
+            uploaded_file = load_sample_dataset(data_format)
+        else:
+            uploaded_file = st.sidebar.file_uploader(
+                f'Upload your {data_format} dataset',
+                type=file_types
+            )
         
         if uploaded_file:
             df = load_and_validate_data(uploaded_file, data_format)
@@ -710,6 +718,83 @@ The `Lipid IS` column separates raw from normalized data. You'll choose which to
 - ClassKey extracted from lipid names
 - Intensity columns renamed to `intensity[s1]`, `intensity[s2]`, ...
             """)
+
+def display_sample_data_option(data_format):
+    """Display sample data loading option with brief experiment description."""
+
+    # Map data formats to their sample file info
+    sample_data_map = {
+        'Generic Format': {
+            'file': 'generic_format_test_dataset.csv',
+            'description': 'ADGAT-DKO case study (normalized): inguinal white adipose tissue comparing WT vs ADGAT-DKO mice. 3 conditions: WT (4 replicates), ADGAT-DKO (4 replicates), BQC (4 replicates).'
+        },
+        'LipidSearch 5.0': {
+            'file': 'lipidsearch5_test_dataset.csv',
+            'description': 'ADGAT-DKO case study (raw LipidSearch output): same experiment with quality grades and retention times. 3 conditions: WT (4 replicates), ADGAT-DKO (4 replicates), BQC (4 replicates).'
+        },
+        'MS-DIAL': {
+            'file': 'msdial_test_dataset.csv',
+            'description': 'Mouse adrenal gland lipidomics: fads2 knockout vs wild-type. 3 conditions: fads2 KO (3 replicates), Wild-type (3 replicates), Blank (1 sample).'
+        },
+        'Metabolomics Workbench': {
+            'file': 'mw_test_dataset.csv',
+            'description': 'Mouse serum HFD study: 2×2 factorial design (Normal/HFD × Water/DCA). 4 treatment groups (11 replicates each), plus TQC (12 samples) and Blank (2 samples).'
+        }
+    }
+
+    info = sample_data_map.get(data_format)
+    if not info:
+        return None
+
+    # Check if sample data is currently loaded
+    sample_loaded = st.session_state.get('load_sample', False)
+
+    if sample_loaded:
+        # Show option to clear and use file uploader instead
+        st.sidebar.info(f"📁 Using sample: {info['file']}")
+        if st.sidebar.button("Clear & Upload Your Data", key=f"clear_sample_{data_format}"):
+            st.session_state.load_sample = False
+            st.experimental_rerun()
+    else:
+        with st.sidebar.expander("🧪 Try Sample Data", expanded=False):
+            st.markdown(f"**{data_format} Example:**")
+            st.caption(info['description'])
+
+            if st.button(f"Load Sample Data", key=f"load_sample_{data_format}"):
+                st.session_state.load_sample = True
+                st.experimental_rerun()
+
+    return info
+
+def load_sample_dataset(data_format):
+    """Load the sample dataset for the selected format."""
+
+    sample_files = {
+        'Generic Format': 'generic_format_test_dataset.csv',
+        'LipidSearch 5.0': 'lipidsearch5_test_dataset.csv',
+        'MS-DIAL': 'msdial_test_dataset.csv',
+        'Metabolomics Workbench': 'mw_test_dataset.csv'
+    }
+
+    filename = sample_files.get(data_format)
+    if not filename:
+        return None
+
+    # Construct path to sample dataset
+    sample_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sample_datasets', filename)
+
+    if not os.path.exists(sample_path):
+        st.error(f"Sample dataset not found: {sample_path}")
+        return None
+
+    # Read file content and create BytesIO object (compatible with pd.read_csv)
+    with open(sample_path, 'rb') as f:
+        content = f.read()
+
+    file_obj = io.BytesIO(content)
+    file_obj.name = filename  # Add name attribute for compatibility
+
+    return file_obj
 
 def load_and_validate_data(uploaded_file, data_format):
     """

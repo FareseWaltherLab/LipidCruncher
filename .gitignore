@@ -10,6 +10,10 @@ __pycache__/
 *.swp
 *.log
 
+# Documentation working files
+*.docx
+*.doc
+
 # Existing rules
 LipidCruncher/*.json
 lipidcruncher_env/
