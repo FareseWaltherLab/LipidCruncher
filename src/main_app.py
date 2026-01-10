@@ -181,16 +181,19 @@ def display_landing_page():
 
     # What's New
     st.markdown("#### ✨ What's New in Version 1.2")
-    
+
     with st.expander("New Features & Improvements", expanded=False):
         st.markdown("""
         ### Major Features
-        - **MS-DIAL Format Support**: Full integration with MS-DIAL exports including quality filtering (Total score, MS/MS matched), 
+        - **Increased File Upload Limit**: Now supports files up to 800MB for larger lipidomics datasets
+        - **MS-DIAL Format Support**: Full integration with MS-DIAL exports including quality filtering (Total score, MS/MS matched),
           dual data type selection (raw vs. pre-normalized), and automatic internal standards detection
         - **External Standards Upload**: Upload complete standards files with intensity values—standards no longer need to exist in your dataset
         - **Configurable Zero Filtering**: Adjustable thresholds for lipid filtering (non-BQC: 50-100%, BQC: 25-100%)
-        
+
         ### UI/UX Improvements
+        - **One-Click Sample Data Loading**: Try LipidCruncher instantly with built-in test datasets for all formats—no download required
+        - **Streamlined Generic Format**: Simplified column mapping—auto-detection handles it reliably
         - **Redesigned Landing Page**: New module images, concise descriptions, and cleaner visual hierarchy
         - **Streamlined Data Processing**: Collapsible format requirements, improved column mapping validation
         - **Consolidated Statistical Documentation**: Central "About Statistical Testing" expander replaces duplicated explanations
@@ -240,6 +243,7 @@ def display_landing_page():
         ---
         
         ### Other Fixes
+        - Fixed manual sample grouping error when rearranging samples
         - Fixed session state issues causing double-click required for normalization method switching
         - Fixed pathway visualization missing unit circles (LPA, LCB, CDP-DAG)
         - Fixed SPLASH standard ClassKey inference
