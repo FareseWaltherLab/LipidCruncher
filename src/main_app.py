@@ -946,7 +946,7 @@ def handle_manual_grouping(group_df, experiment, grouped_samples, df):
                 # Generate and display name_df to show the new sample order
                 name_df = grouped_samples.update_sample_names(group_df)
                 st.sidebar.write("New sample order after regrouping:")
-                st.sidebar.dataframe(name_df, use_container_width=True, hide_index=True)
+                st.sidebar.dataframe(name_df, use_container_width=True)
                 
                 return group_df, df_reordered
                 
