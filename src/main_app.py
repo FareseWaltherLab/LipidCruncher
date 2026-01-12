@@ -323,7 +323,8 @@ def main():
         else:
             uploaded_file = st.sidebar.file_uploader(
                 f'Upload your {data_format} dataset',
-                type=file_types
+                type=file_types,
+                help="Limit 800MB per file"
             )
         
         if uploaded_file:
