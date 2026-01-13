@@ -429,6 +429,8 @@ def main():
                                                     'normalized_df': st.session_state.normalized_df,
                                                     'continuation_df': st.session_state.continuation_df,
                                                     'normalization_method': st.session_state.normalization_method,
+                                                    'norm_method_selection': st.session_state.get('norm_method_selection'),
+                                                    'protein_input_method': st.session_state.get('protein_input_method'),
                                                     'selected_classes': st.session_state.selected_classes,
                                                     'create_norm_dataset': st.session_state.create_norm_dataset,
                                                     'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
@@ -439,7 +441,7 @@ def main():
                                                     'grade_config': st.session_state.get('grade_config')
                                                 }
                                                 st.experimental_rerun()
-                                            
+
                         elif st.session_state.module == "Quality Check & Analysis":
                             if st.session_state.cleaned_df is not None:
                                 quality_check_and_analysis_module(
@@ -452,12 +454,25 @@ def main():
                             
                             if st.button("Back to Data Standardization, Filtering, and Normalization", key="back_to_cleaning"):
                                 st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+                                # Get values from existing preserved_data (set when going forward) if available
+                                # This prevents overwriting the correct values with stale session state values
+                                existing_norm_selection = None
+                                existing_protein_input_method = None
+                                if 'preserved_data' in st.session_state:
+                                    existing_norm_selection = st.session_state.preserved_data.get('norm_method_selection') or st.session_state.get('norm_method_selection')
+                                    existing_protein_input_method = st.session_state.preserved_data.get('protein_input_method') or st.session_state.get('protein_input_method')
+                                else:
+                                    existing_norm_selection = st.session_state.get('norm_method_selection')
+                                    existing_protein_input_method = st.session_state.get('protein_input_method')
+
                                 st.session_state.preserved_data = {
                                     'cleaned_df': st.session_state.cleaned_df,
                                     'intsta_df': st.session_state.intsta_df,
                                     'normalized_df': st.session_state.normalized_df,
                                     'continuation_df': st.session_state.continuation_df,
                                     'normalization_method': st.session_state.normalization_method,
+                                    'norm_method_selection': existing_norm_selection,
+                                    'protein_input_method': existing_protein_input_method,
                                     'selected_classes': st.session_state.selected_classes,
                                     'create_norm_dataset': st.session_state.create_norm_dataset,
                                     'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
@@ -475,24 +490,6 @@ def main():
                 else:
                     st.error("Please ensure your experiment description is valid before proceeding.")
 
-        # Restore preserved state if returning from Quality Check & Analysis
-        if 'preserved_data' in st.session_state and st.session_state.module == "Data Cleaning, Filtering, & Normalization":
-            for key, value in st.session_state.preserved_data.items():
-                if value is not None:
-                    # CRITICAL FIX: Don't restore intsta_df if user is in "Upload Custom Standards" mode
-                    # This prevents auto-detected standards from reappearing when switching modes
-                    if key == 'intsta_df':
-                        # Only restore intsta_df if we're in Automatic Detection mode OR if no mode is set yet
-                        restored_preference = st.session_state.preserved_data.get('standard_source_preference', 'Automatic Detection')
-                        if restored_preference == "Automatic Detection":
-                            setattr(st.session_state, key, value)
-                        # If in Upload Custom Standards mode, keep intsta_df empty unless custom file was uploaded
-                        elif 'preserved_intsta_df' not in st.session_state.preserved_data or st.session_state.preserved_data['preserved_intsta_df'] is None:
-                            st.session_state.intsta_df = pd.DataFrame()
-                    else:
-                        setattr(st.session_state, key, value)
-            del st.session_state.preserved_data
-        
         # Add a button to return to the landing page
         if st.button("Back to Home"):
             st.session_state.page = 'landing'
@@ -548,6 +545,12 @@ def update_session_state(name_df, experiment, bqc_label):
     # IMPORTANT FIX: Make sure to preserve normalization settings through navigation
     if 'preserved_data' in st.session_state:
         # Restore preserved normalization settings when returning from other modules
+        if 'norm_method_selection' in st.session_state.preserved_data:
+            st.session_state.norm_method_selection = st.session_state.preserved_data['norm_method_selection']
+        if 'normalization_method' in st.session_state.preserved_data:
+            st.session_state.normalization_method = st.session_state.preserved_data['normalization_method']
+        if 'protein_input_method' in st.session_state.preserved_data:
+            st.session_state.protein_input_method = st.session_state.preserved_data['protein_input_method']
         if 'preserved_intsta_df' in st.session_state.preserved_data:
             st.session_state.preserved_intsta_df = st.session_state.preserved_data['preserved_intsta_df']
         if 'protein_df' in st.session_state.preserved_data:
@@ -558,6 +561,15 @@ def update_session_state(name_df, experiment, bqc_label):
             st.session_state.class_standard_map = st.session_state.preserved_data['class_standard_map']
         if 'standard_concentrations' in st.session_state.preserved_data:
             st.session_state.standard_concentrations = st.session_state.preserved_data['standard_concentrations']
+        # Special handling for intsta_df based on standard_source_preference
+        if 'intsta_df' in st.session_state.preserved_data:
+            restored_preference = st.session_state.preserved_data.get('standard_source_preference', 'Automatic Detection')
+            if restored_preference == "Automatic Detection":
+                st.session_state.intsta_df = st.session_state.preserved_data['intsta_df']
+            elif st.session_state.preserved_data.get('preserved_intsta_df') is None:
+                st.session_state.intsta_df = pd.DataFrame()
+        # Delete preserved_data after restoring to prevent conflicts on subsequent reruns
+        del st.session_state.preserved_data
 
 def display_format_selection():
     return st.sidebar.selectbox(
@@ -1972,14 +1984,15 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     if not has_standards:
         st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
     
-    # Initialize the radio key if it doesn't exist or if saved method is no longer available
+    # Initialize if not exists (restoration from preserved_data happens earlier in update_session_state)
     if 'norm_method_selection' not in st.session_state:
-        st.session_state.norm_method_selection = 'None (pre-normalized data)'
-    
+        st.session_state['norm_method_selection'] = 'None (pre-normalized data)'
+
     # Handle case where saved method is no longer available (e.g., standards removed)
-    if st.session_state.norm_method_selection not in normalization_options:
-        st.session_state.norm_method_selection = 'None (pre-normalized data)'
-    
+    current_selection = st.session_state.get('norm_method_selection')
+    if current_selection not in normalization_options:
+        st.session_state['norm_method_selection'] = 'None (pre-normalized data)'
+
     normalization_method = st.radio(
         "Method:",
         options=normalization_options,
@@ -2247,22 +2260,35 @@ def collect_protein_concentrations(experiment):
     
     if method == "Manual Input":
         protein_concentrations = {}
-        
+
+        # Get preserved protein_df to use for restoring values
+        preserved_protein_df = st.session_state.get('protein_df')
+        preserved_values = {}
+        if preserved_protein_df is not None and 'Sample' in preserved_protein_df.columns and 'Concentration' in preserved_protein_df.columns:
+            preserved_values = dict(zip(preserved_protein_df['Sample'], preserved_protein_df['Concentration']))
+
+        # Restore widget session state keys BEFORE widgets render
+        # This is needed because number_input uses session state value if key exists, ignoring 'value' param
+        for sample in experiment.full_samples_list:
+            widget_key = f"protein_{sample}"
+            if sample in preserved_values and widget_key not in st.session_state:
+                st.session_state[widget_key] = float(preserved_values[sample])
+
         # Use columns for compact layout
         cols = st.columns(3)
         for idx, sample in enumerate(experiment.full_samples_list):
             with cols[idx % 3]:
                 concentration = st.number_input(
                     f'{sample}:',
-                    min_value=0.0, 
-                    max_value=1000000.0, 
-                    value=1.0, 
+                    min_value=0.0,
+                    max_value=1000000.0,
+                    value=1.0,  # Default only used if key not in session state
                     step=0.1,
                     key=f"protein_{sample}"
                 )
                 protein_concentrations[sample] = concentration
 
-        protein_df = pd.DataFrame(list(protein_concentrations.items()), 
+        protein_df = pd.DataFrame(list(protein_concentrations.items()),
                                 columns=['Sample', 'Concentration'])
         return protein_df
     
@@ -5533,4 +5559,18 @@ def add_heatmap_to_pdf(pdf, heatmap_fig, title):
     pdf.drawString(x_position, y_position - 20, title)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error("""
+        **Something went wrong**
+
+        An unexpected error occurred. Please try the following:
+        1. Refresh the page to start a new session
+        2. Make sure your data file is in the correct format
+        3. If the problem persists, contact support at **abdih@mskcc.org**
+        """)
+        # Log the technical details to console for debugging (not shown to user)
+        import traceback
+        print(f"Unhandled error: {str(e)}")
+        traceback.print_exc()

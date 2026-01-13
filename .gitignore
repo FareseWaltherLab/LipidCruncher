@@ -26,3 +26,4 @@ lipidcruncher_env/
 __pycache__/
 *.pyc
 .coverage
+task-definition.json
