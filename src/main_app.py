@@ -2235,7 +2235,7 @@ def collect_protein_concentrations(experiment):
     """
     # Initialize method selection key if not present
     if 'protein_input_method' not in st.session_state:
-        st.session_state.protein_input_method = "Upload CSV File"
+        st.session_state.protein_input_method = "Manual Input"
     
     # Track previous method to detect changes
     prev_method = st.session_state.get('protein_input_method_prev')
