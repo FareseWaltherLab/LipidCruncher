@@ -137,7 +137,7 @@ def display_landing_page():
     st.markdown("LipidCruncher guides you through three intuitive modules:")
 
     # Module 1
-    st.markdown("#### Module 1: Standardize, Filter, & Normalize")
+    st.markdown("#### Module 1: Filter and Normalize")
     st.markdown("""
     **Get your data analysis-ready in minutes.** Import data from LipidSearch, MS-DIAL, Metabolomics Workbench, or a generic CSV format. 
     Define your experiment by assigning samples to conditions, then apply automatic column standardization, 
@@ -160,7 +160,7 @@ def display_landing_page():
     st.markdown("---")
 
     # Module 3
-    st.markdown("#### Module 3: Visualize & Analyze")
+    st.markdown("#### Module 3: Visualize and Analyze")
     st.markdown("""
     **Turn complex lipid profiles into biological insights.** Bar & pie charts, volcano plots, saturation profiles (SFA, MUFA, PUFA), 
     metabolic pathway mapping, clustered heatmaps, and fatty acid composition analysis—all interactive with SVG/CSV export.
