@@ -2312,36 +2312,47 @@ def collect_protein_concentrations(experiment):
     
     else:  # Upload CSV
         st.markdown("**CSV format:** Single column named `Concentration` with one value per sample (in order).")
-        
+
+        # Check if we have preserved protein data from previous session (returning from another page)
+        force_restore = st.session_state.pop('_force_restore_protein_inputs', False)
+        preserved_protein_df = st.session_state.get('protein_df')
+
         uploaded_file = st.file_uploader("Upload CSV", type="csv", key="protein_csv_upload")
-        
+
         if uploaded_file is not None:
             try:
                 protein_df = pd.read_csv(uploaded_file)
-                
+
                 if 'Concentration' not in protein_df.columns:
                     st.error(f"CSV must contain a column named 'Concentration'. Found: {list(protein_df.columns)}")
                     return None
-                    
+
                 if len(protein_df) != len(experiment.full_samples_list):
                     st.error(f"Row count ({len(protein_df)}) doesn't match sample count ({len(experiment.full_samples_list)})")
                     return None
-                
+
                 protein_df['Concentration'] = pd.to_numeric(protein_df['Concentration'], errors='coerce')
                 if protein_df['Concentration'].isna().any():
                     st.error("Some concentration values couldn't be converted to numbers.")
                     return None
-                
+
                 protein_df['Sample'] = experiment.full_samples_list
                 st.success(f"✓ Loaded {len(protein_df)} concentration values")
-                
+
                 return protein_df
-                
+
             except Exception as e:
                 st.error(f"Error reading CSV: {str(e)}")
                 return None
-        
-        # No file uploaded yet - show info message
+
+        # No new file uploaded - check if we have preserved data to restore
+        if preserved_protein_df is not None and 'Sample' in preserved_protein_df.columns and 'Concentration' in preserved_protein_df.columns:
+            # Validate that preserved data matches current experiment
+            if len(preserved_protein_df) == len(experiment.full_samples_list):
+                st.success(f"✓ Using previously loaded {len(preserved_protein_df)} concentration values")
+                return preserved_protein_df
+
+        # No file uploaded and no preserved data - show info message
         st.info("Please upload a CSV file with protein concentrations.")
         return None
         
