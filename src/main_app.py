@@ -180,7 +180,7 @@ def display_landing_page():
     st.markdown("---")
 
     # What's New
-    st.markdown("#### ✨ What's New in Version 1.2")
+    st.markdown("#### ✨ What's New in Version 1.2 (January 13, 2026)")
 
     with st.expander("New Features & Improvements", expanded=False):
         st.markdown("""
