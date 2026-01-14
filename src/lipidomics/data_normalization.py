@@ -99,18 +99,19 @@ class NormalizeData:
         """
         try:
             normalized_df = df.copy()
-            
-            # Set up protein concentrations
-            if 'Sample' in protein_df.columns:
-                protein_df.set_index('Sample', inplace=True)
+
+            # Set up protein concentrations (use a copy to avoid modifying the original)
+            protein_lookup = protein_df.copy()
+            if 'Sample' in protein_lookup.columns:
+                protein_lookup.set_index('Sample', inplace=True)
                 
             # Find and normalize intensity columns
             intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
             
             for col in intensity_cols:
                 sample_name = col[col.find('[')+1:col.find(']')]
-                if sample_name in protein_df.index:
-                    conc_value = protein_df.loc[sample_name, 'Concentration']
+                if sample_name in protein_lookup.index:
+                    conc_value = protein_lookup.loc[sample_name, 'Concentration']
                     if conc_value <= 0:
                         st.warning(f"Skipping {sample_name} - protein concentration is zero or negative")
                         continue
