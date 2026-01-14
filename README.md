@@ -17,7 +17,7 @@ Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/fare
 | 📂 **4 Data Formats** | LipidSearch, MS-DIAL, Metabolomics Workbench, Generic CSV |
 | 🔬 **QC + Normalization** | Integrated quality control with flexible normalization options |
 | 📊 **Lipid-Specific Viz** | Saturation profiles, pathway maps, fatty acid composition heatmaps, and more |
-| 📈 **Publication-Ready** | Interactive plots with SVG export and PDF reports |
+| 📈 **High-Quality Outputs** | Interactive plots with SVG export and PDF reports |
 
 ---
 
@@ -36,10 +36,9 @@ Explore your lipidomic dataset with bar/pie charts, volcano plots, saturation pr
 
 ## 🧪 Try It Out
 
-**No dataset?** Use our [sample data](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets) from the ADGAT-DKO case study:
-- **WT** (Wild Type): samples s1–s4  
-- **ADGAT-DKO** (Double Knockout): samples s5–s8  
-- **BQC** (Batch Quality Control): samples s9–s12
+**No dataset?** Click "Load Sample Data" in the app to instantly try LipidCruncher with built-in test datasets for all supported formats (LipidSearch, MS-DIAL, Generic). No download required.
+
+Sample datasets are also available in the [sample_datasets](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets) folder.
 
 ---
 
