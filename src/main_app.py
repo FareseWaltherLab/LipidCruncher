@@ -717,15 +717,15 @@ The `Lipid IS` column separates raw from normalized data. You'll choose which to
 | Your Format | → Standardized |
 |-------------|----------------|
 | `LPC O-18:1` | `LPC(O-18:1)` |
+| `LPC 18:1(d7)` | `LPC(18:1)(d7)` |
 | `Cer d18:1;2O/24:0` | `Cer(d18:1;2O_24:0)` |
-| `SM 18:1;2O/16:0` | `SM(18:1;2O_16:0)` |
-| `PA 16:0/18:1` | `PA(16:0_18:1)` |
+| `PC 16:0/18:1` | `PC(16:0_18:1)` |
 
 ---
 
 **✨ Auto-features:**
 - Lipid names standardized to `Class(chains)` format
-- Hydroxyl notation preserved (`;2O`, `;3O`)
+- All chain notation preserved (`;O`, `;2O`, `;3O`, etc.)
 - ClassKey extracted from lipid names
 - Intensity columns renamed to `intensity[s1]`, `intensity[s2]`, ...
             """)

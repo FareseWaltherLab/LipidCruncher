@@ -27,13 +27,12 @@ class DataFormatHandler:
     def _standardize_lipid_name(lipid_name):
         """
         Standardizes lipid names to a consistent format: Class(chain details)(modifications)
-        
-        Preserves hydroxyl notation (;O, ;2O, ;3O) which is biologically meaningful.
-        
+
+        Preserves all chain notation including hydroxyl groups (;O, ;2O, ;3O, ;0, etc.).
+
         Examples:
             LPC O-17:4 -> LPC(O-17:4)
             Cer d18:0/C24:0 -> Cer(d18:0_C24:0)
-            CE 14:0;0 -> CE(14:0)
             LPC 18:1(d7) -> LPC(18:1)(d7)
             CerG1(d13:0_25:2) -> CerG1(d13:0_25:2)
             Cer 18:1;2O/24:0 -> Cer(18:1;2O_24:0)  # MS-DIAL format with hydroxyl
@@ -45,12 +44,7 @@ class DataFormatHandler:
                 return "Unknown"
             
             lipid_name = str(lipid_name).strip()
-            
-            # Remove ;N suffixes ONLY when N is a plain number (not followed by O)
-            # This preserves ;2O, ;3O (hydroxyl groups) but removes ;0, ;1, etc.
-            # Pattern: semicolon + digits + NOT followed by 'O'
-            lipid_name = re.sub(r';(\d+)(?!O)(?=[\s/_)]|$)', '', lipid_name)
-            
+
             # Extract deuteration modifications like (d7), (d9) at the END of the name
             modification = ""
             mod_match = re.search(r'\(d\d+\)$', lipid_name)
