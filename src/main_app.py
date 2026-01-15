@@ -4171,6 +4171,8 @@ For multi-chain lipids, decide based on your analysis goals.
         
         # Generate plots
         with st.spinner("Generating saturation plots..."):
+            # Filter by selected classes
+            filtered_continuation_df = filtered_continuation_df[filtered_continuation_df['ClassKey'].isin(selected_classes_list)]
             plots = lp.SaturationPlot.create_plots(
                 filtered_continuation_df,
                 experiment, 
