@@ -1539,7 +1539,7 @@ def manage_internal_standards(normalizer):
             if st.button("Clear Standards", key="clear_custom_standards"):
                 st.session_state.intsta_df = pd.DataFrame()
                 st.session_state.preserved_intsta_df = None
-                st.rerun()
+                st.experimental_rerun()
         
         if uploaded_file is not None:
             try:
