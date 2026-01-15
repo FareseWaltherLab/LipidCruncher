@@ -4880,11 +4880,11 @@ def display_volcano_plot(experiment, continuation_df):
                         mime="image/svg+xml", key='conc_fc_svg'
                     )
                 with col2:
-                    png_bytes = concentration_vs_fold_change_plot.to_image(format="png")
+                    csv_data = download_df.to_csv(index=False).encode('utf-8')
                     st.download_button(
-                        label="Download PNG", data=png_bytes,
-                        file_name=f"conc_vs_fc_{experimental_condition}_vs_{control_condition}.png",
-                        mime="image/png", key='conc_fc_png'
+                        label="Download CSV", data=csv_data,
+                        file_name=f"conc_vs_fc_{experimental_condition}_vs_{control_condition}.csv",
+                        mime="text/csv", key='conc_fc_csv'
                     )
 
                 # --- Individual Lipid Analysis ---
