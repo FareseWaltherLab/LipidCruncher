@@ -434,6 +434,7 @@ def main():
                                                     'selected_classes': st.session_state.selected_classes,
                                                     'create_norm_dataset': st.session_state.create_norm_dataset,
                                                     'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
+                                                    'preserved_standards_mode': st.session_state.get('preserved_standards_mode'),
                                                     'protein_df': st.session_state.get('protein_df'),
                                                     'standard_source_preference': st.session_state.get('standard_source_preference'),
                                                     'class_standard_map': st.session_state.get('class_standard_map'),
@@ -484,6 +485,7 @@ def main():
                                     'selected_classes': st.session_state.selected_classes,
                                     'create_norm_dataset': st.session_state.create_norm_dataset,
                                     'preserved_intsta_df': st.session_state.get('preserved_intsta_df'),
+                                    'preserved_standards_mode': st.session_state.get('preserved_standards_mode'),
                                     'protein_df': existing_protein_df,
                                     'standard_source_preference': st.session_state.get('standard_source_preference'),
                                     'class_standard_map': st.session_state.get('class_standard_map'),
@@ -561,6 +563,8 @@ def update_session_state(name_df, experiment, bqc_label):
             st.session_state.protein_input_method = st.session_state.preserved_data['protein_input_method']
         if 'preserved_intsta_df' in st.session_state.preserved_data:
             st.session_state.preserved_intsta_df = st.session_state.preserved_data['preserved_intsta_df']
+        if 'preserved_standards_mode' in st.session_state.preserved_data:
+            st.session_state.preserved_standards_mode = st.session_state.preserved_data['preserved_standards_mode']
         if 'protein_df' in st.session_state.preserved_data:
             st.session_state.protein_df = st.session_state.preserved_data['protein_df']
             st.session_state._force_restore_protein_inputs = True
@@ -575,7 +579,10 @@ def update_session_state(name_df, experiment, bqc_label):
             restored_preference = st.session_state.preserved_data.get('standard_source_preference', 'Automatic Detection')
             if restored_preference == "Automatic Detection":
                 st.session_state.intsta_df = st.session_state.preserved_data['intsta_df']
-            elif st.session_state.preserved_data.get('preserved_intsta_df') is None:
+            elif st.session_state.preserved_data.get('preserved_intsta_df') is not None:
+                # Restore uploaded custom standards
+                st.session_state.intsta_df = st.session_state.preserved_data['preserved_intsta_df'].copy()
+            else:
                 st.session_state.intsta_df = pd.DataFrame()
         # Delete preserved_data after restoring to prevent conflicts on subsequent reruns
         del st.session_state.preserved_data
@@ -1482,19 +1489,29 @@ def manage_internal_standards(normalizer):
             st.session_state.intsta_df = pd.DataFrame()
         
         st.markdown("**Are standards present in your main dataset?**")
+        # Determine default index based on preserved mode (False = "No" mode = index 1)
+        default_index = 0 if st.session_state.get('preserved_standards_mode', True) else 1
         standards_in_dataset = st.radio(
             "Standards location:",
             options=[
                 "Yes — Extract from dataset",
                 "No — Uploading complete standards data"
             ],
+            index=default_index,
             key="standards_mode_selection",
             horizontal=True,
             label_visibility="collapsed"
         )
         
         use_legacy_mode = standards_in_dataset.startswith("Yes")
-        
+
+        # Clear preserved standards if mode changed
+        if 'preserved_standards_mode' in st.session_state:
+            if st.session_state.preserved_standards_mode != use_legacy_mode:
+                st.session_state.preserved_intsta_df = None
+                st.session_state.intsta_df = pd.DataFrame()
+                st.session_state.preserved_standards_mode = use_legacy_mode
+
         # Mode-specific format guidance
         if use_legacy_mode:
             st.markdown("**CSV format:** Single column with lipid names (must exist in your dataset)")
@@ -1507,11 +1524,18 @@ def manage_internal_standards(normalizer):
             key="standards_file_uploader"
         )
         
-        # If file uploader was cleared, reset standards
+        # If file uploader is empty but we have preserved standards, show them
+        # (This happens when returning from navigation - file_uploader resets but data is preserved)
         if uploaded_file is None and 'preserved_intsta_df' in st.session_state and st.session_state.preserved_intsta_df is not None:
-            st.session_state.intsta_df = pd.DataFrame()
-            st.session_state.preserved_intsta_df = None
-            st.warning("Standards cleared.")
+            # Restore intsta_df from preserved data and display
+            st.session_state.intsta_df = st.session_state.preserved_intsta_df.copy()
+            st.success(f"✓ Loaded {len(st.session_state.preserved_intsta_df)} custom standards")
+            display_data(st.session_state.preserved_intsta_df, "Custom Standards", "custom_standards.csv", "uploaded")
+            # Provide option to clear standards
+            if st.button("Clear Standards", key="clear_custom_standards"):
+                st.session_state.intsta_df = pd.DataFrame()
+                st.session_state.preserved_intsta_df = None
+                st.rerun()
         
         if uploaded_file is not None:
             try:
@@ -1526,6 +1550,7 @@ def manage_internal_standards(normalizer):
                 if new_standards_df is not None:
                     st.session_state.intsta_df = new_standards_df
                     st.session_state.preserved_intsta_df = new_standards_df.copy()
+                    st.session_state.preserved_standards_mode = use_legacy_mode
                     
                     # For external standards mode, check if any standards exist in the main dataset
                     # and remove them to prevent standards from being analyzed
