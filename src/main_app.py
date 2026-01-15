@@ -1449,19 +1449,22 @@ def manage_internal_standards(normalizer):
     # Initialize with automatic detection as default
     if 'standard_source_preference' not in st.session_state:
         st.session_state.standard_source_preference = "Automatic Detection"
-    
+
+    # Sync radio key with preference (avoids double-click issue)
+    if 'standards_source_radio' not in st.session_state:
+        st.session_state.standards_source_radio = st.session_state.standard_source_preference
+
     st.markdown("##### 🏷️ Standards Source")
-    
+
     # Radio button for standards source
     standards_source = st.radio(
         "Standards source:",
         ["Automatic Detection", "Upload Custom Standards"],
-        index=0 if st.session_state.standard_source_preference == "Automatic Detection" else 1,
         horizontal=True,
         key="standards_source_radio",
         label_visibility="collapsed"
     )
-    
+
     # Save the preference
     st.session_state.standard_source_preference = standards_source
     
@@ -1489,15 +1492,16 @@ def manage_internal_standards(normalizer):
             st.session_state.intsta_df = pd.DataFrame()
         
         st.markdown("**Are standards present in your main dataset?**")
-        # Determine default index based on preserved mode (False = "No" mode = index 1)
-        default_index = 0 if st.session_state.get('preserved_standards_mode', True) else 1
+        # Sync radio key with preserved mode (avoids double-click issue)
+        if 'standards_mode_selection' not in st.session_state:
+            default_mode = "Yes — Extract from dataset" if st.session_state.get('preserved_standards_mode', True) else "No — Uploading complete standards data"
+            st.session_state.standards_mode_selection = default_mode
         standards_in_dataset = st.radio(
             "Standards location:",
             options=[
                 "Yes — Extract from dataset",
                 "No — Uploading complete standards data"
             ],
-            index=default_index,
             key="standards_mode_selection",
             horizontal=True,
             label_visibility="collapsed"
