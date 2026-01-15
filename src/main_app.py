@@ -4498,82 +4498,80 @@ def apply_volcano_auto_mode_logic(n_lipids_tested):
 
 def display_volcano_detailed_statistical_results(statistical_results, control_condition, experimental_condition):
     """
-    Display detailed statistical test results for volcano plot in an expandable section.
+    Display detailed statistical test results for volcano plot.
     """
-    show_detailed_stats = st.checkbox("Show detailed statistical analysis", key="show_detailed_volcano_stats")
-    if show_detailed_stats:
-        st.write("### Detailed Statistical Test Results")
-        
-        # Extract parameters
-        params = statistical_results.get('_parameters', {})
-        n_tests = params.get('n_tests_performed', 0)
-        
-        st.write(f"**Comparison**: {experimental_condition} vs {control_condition}")
-        st.write(f"**Tests performed**: {n_tests} individual lipid species")
-        st.write(f"**Test method**: {params.get('test_type', 'Unknown').title()}")
-        st.write(f"**Correction method**: {params.get('correction_method', 'Unknown').replace('_', '-').upper()}")
-        st.write(f"**Transformation**: {'Log10' if params.get('auto_transform', False) else 'None'}")
-        
-        # Create a table for statistical results
-        results_data = []
-        for lipid_name, results in statistical_results.items():
-            if lipid_name.startswith('_'):  # Skip metadata
-                continue
-                
-            p_value = results['p-value']
-            adj_p_value = results.get('adjusted_p_value', p_value)
-            fold_change = results['fold_change']
-            log2_fc = results['log2_fold_change']
-            
-            result_row = {
-                'Lipid': lipid_name,
-                'Class': results['class_key'],
-                'Log2 FC': f"{log2_fc:.3f}",
-                'Fold Change': f"{fold_change:.3f}",
-                'p-value': f"{p_value:.2e}",
-                'Adj. p-value': f"{adj_p_value:.2e}",
-                'Test': results['test'],
-                'Significant': '✓' if results['significant'] else '—'
-            }
-            results_data.append(result_row)
-        
-        if results_data:
-            results_df = pd.DataFrame(results_data)
-            
-            # Sort by absolute log2 fold change to show most changed lipids first
-            results_df['abs_log2_fc'] = results_df['Log2 FC'].astype(float).abs()
-            results_df = results_df.sort_values('abs_log2_fc', ascending=False)
-            results_df = results_df.drop('abs_log2_fc', axis=1)
-            
-            st.dataframe(results_df, use_container_width=True, height=400)
-            
-            # Download option
-            csv_data = results_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Download CSV",
-                data=csv_data,
-                file_name=f'volcano_statistical_results_{experimental_condition}_vs_{control_condition}.csv',
-                mime='text/csv'
-            )
-            
-            # Summary statistics
-            st.write("### Summary Statistics")
-            n_significant = sum(1 for r in statistical_results.values() 
-                              if isinstance(r, dict) and r.get('significant', False))
-            n_upregulated = sum(1 for r in statistical_results.values() 
-                               if isinstance(r, dict) and r.get('significant', False) and r.get('log2_fold_change', 0) > 0)
-            n_downregulated = sum(1 for r in statistical_results.values() 
-                                 if isinstance(r, dict) and r.get('significant', False) and r.get('log2_fold_change', 0) < 0)
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Tested", n_tests)
-            with col2:
-                st.metric("Significant", n_significant)
-            with col3:
-                st.metric("Upregulated", n_upregulated)
-            with col4:
-                st.metric("Downregulated", n_downregulated)
+    st.write("### Detailed Statistical Test Results")
+
+    # Extract parameters
+    params = statistical_results.get('_parameters', {})
+    n_tests = params.get('n_tests_performed', 0)
+
+    st.write(f"**Comparison**: {experimental_condition} vs {control_condition}")
+    st.write(f"**Tests performed**: {n_tests} individual lipid species")
+    st.write(f"**Test method**: {params.get('test_type', 'Unknown').title()}")
+    st.write(f"**Correction method**: {params.get('correction_method', 'Unknown').replace('_', '-').upper()}")
+    st.write(f"**Transformation**: {'Log10' if params.get('auto_transform', False) else 'None'}")
+
+    # Create a table for statistical results
+    results_data = []
+    for lipid_name, results in statistical_results.items():
+        if lipid_name.startswith('_'):  # Skip metadata
+            continue
+
+        p_value = results['p-value']
+        adj_p_value = results.get('adjusted_p_value', p_value)
+        fold_change = results['fold_change']
+        log2_fc = results['log2_fold_change']
+
+        result_row = {
+            'Lipid': lipid_name,
+            'Class': results['class_key'],
+            'Log2 FC': f"{log2_fc:.3f}",
+            'Fold Change': f"{fold_change:.3f}",
+            'p-value': f"{p_value:.2e}",
+            'Adj. p-value': f"{adj_p_value:.2e}",
+            'Test': results['test'],
+            'Significant': '✓' if results['significant'] else '—'
+        }
+        results_data.append(result_row)
+
+    if results_data:
+        results_df = pd.DataFrame(results_data)
+
+        # Sort by absolute log2 fold change to show most changed lipids first
+        results_df['abs_log2_fc'] = results_df['Log2 FC'].astype(float).abs()
+        results_df = results_df.sort_values('abs_log2_fc', ascending=False)
+        results_df = results_df.drop('abs_log2_fc', axis=1)
+
+        st.dataframe(results_df, use_container_width=True, height=400)
+
+        # Download option
+        csv_data = results_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name=f'volcano_statistical_results_{experimental_condition}_vs_{control_condition}.csv',
+            mime='text/csv'
+        )
+
+        # Summary statistics
+        st.write("### Summary Statistics")
+        n_significant = sum(1 for r in statistical_results.values()
+                          if isinstance(r, dict) and r.get('significant', False))
+        n_upregulated = sum(1 for r in statistical_results.values()
+                           if isinstance(r, dict) and r.get('significant', False) and r.get('log2_fold_change', 0) > 0)
+        n_downregulated = sum(1 for r in statistical_results.values()
+                             if isinstance(r, dict) and r.get('significant', False) and r.get('log2_fold_change', 0) < 0)
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Tested", n_tests)
+        with col2:
+            st.metric("Significant", n_significant)
+        with col3:
+            st.metric("Upregulated", n_upregulated)
+        with col4:
+            st.metric("Downregulated", n_downregulated)
 
 def display_volcano_plot(experiment, continuation_df):
     """
