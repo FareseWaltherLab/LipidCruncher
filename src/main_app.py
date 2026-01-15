@@ -245,10 +245,15 @@ def display_landing_page():
         ### Other Fixes
         - Fixed manual sample grouping error when rearranging samples
         - Fixed session state issues causing double-click required for normalization method switching
+        - Fixed double-click issue on radio buttons in manage internal standards
         - Fixed pathway visualization missing unit circles (LPA, LCB, CDP-DAG)
         - Fixed SPLASH standard ClassKey inference
         - Fixed markdown parsing of pipe characters in condition names
         - Fixed volcano plot duplicate messages
+        - Fixed volcano plot duplicate checkbox in detailed stats
+        - Fixed saturation plots not filtering by selected lipid classes
+        - Fixed compatibility with older Streamlit versions
+        - Changed concentration vs fold change plot download from PNG to CSV for better data accessibility
         """)
 
     st.markdown("---")
@@ -3242,8 +3247,6 @@ def display_pca_analysis(continuation_df, experiment):
     Returns:
         tuple: A tuple containing the updated continuation_df and the PCA plot.
     """
-    from scipy.stats import chi2
-    
     pca_plot = None
     with st.expander("Principal Component Analysis (PCA)"):
         # Concise description
@@ -3296,28 +3299,7 @@ def display_pca_analysis(continuation_df, experiment):
                 mime="text/csv",
                 key='pca_csv_download'
             )
-        
-        # Outlier detection
-        all_outliers = []
-        for condition in pca_df['Condition'].unique():
-            condition_df = pca_df[pca_df['Condition'] == condition]
-            if len(condition_df) >= 3:
-                center = condition_df[['PC1', 'PC2']].mean().values
-                cov = np.cov(condition_df['PC1'], condition_df['PC2'])
-                
-                try:
-                    inv_cov = np.linalg.inv(cov)
-                    for _, row in condition_df.iterrows():
-                        point = np.array([row['PC1'], row['PC2']])
-                        dist = np.sqrt(np.dot(np.dot((point - center), inv_cov), (point - center).T))
-                        if dist > np.sqrt(chi2.ppf(0.95, 2)):
-                            all_outliers.append(f"{row['Sample']} ({condition})")
-                except np.linalg.LinAlgError:
-                    pass
-        
-        if all_outliers:
-            st.warning(f"**Potential outliers** (outside 95% ellipse): " + " | ".join(all_outliers))
-    
+
     return continuation_df, pca_plot
 
 def display_statistical_options():
