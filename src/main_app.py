@@ -76,6 +76,10 @@ def initialize_session_state():
     # Grade configuration state (LipidSearch)
     if 'grade_config' not in st.session_state:
         st.session_state.grade_config = None
+    if 'grade_filter_mode_saved' not in st.session_state:
+        st.session_state.grade_filter_mode_saved = 0  # 0 = "Use Default Settings", 1 = "Customize by Class"
+    if 'grade_selections_saved' not in st.session_state:
+        st.session_state.grade_selections_saved = {}  # {lipid_class: [selected_grades]}
     
     # MS-DIAL configuration states
     if 'msdial_quality_config' not in st.session_state:
@@ -519,6 +523,8 @@ def clear_session_state():
     st.session_state.experiment = None
     st.session_state.format_type = None
     st.session_state.grade_config = None  # Clear LipidSearch grade config
+    st.session_state.grade_filter_mode_saved = 0  # Reset to default mode
+    st.session_state.grade_selections_saved = {}  # Clear saved selections
     # Clear MS-DIAL specific states
     st.session_state.msdial_quality_config = None
     st.session_state.msdial_features = {}
@@ -1259,10 +1265,12 @@ def get_grade_filtering_config(df, format_type):
     use_custom = st.radio(
         "Grade filtering mode:",
         ["Use Default Settings", "Customize by Class"],
-        index=0,
+        index=st.session_state.grade_filter_mode_saved,
         horizontal=True,
         key="grade_filter_mode"
     )
+    # Save the selection to session state
+    st.session_state.grade_filter_mode_saved = 0 if use_custom == "Use Default Settings" else 1
     
     if use_custom == "Use Default Settings":
         st.success("✓ Default: A/B for all classes, plus C for LPC and SM.")
@@ -1278,22 +1286,27 @@ def get_grade_filtering_config(df, format_type):
     
     for idx, lipid_class in enumerate(all_classes):
         with cols[idx % 3]:
-            # Default grades based on class
-            if lipid_class in ['LPC', 'SM']:
+            # Use saved selection if available, otherwise use default grades based on class
+            if lipid_class in st.session_state.grade_selections_saved:
+                default_grades = st.session_state.grade_selections_saved[lipid_class]
+            elif lipid_class in ['LPC', 'SM']:
                 default_grades = ['A', 'B', 'C']
             else:
                 default_grades = ['A', 'B']
-            
+
             selected_grades = st.multiselect(
                 f"**{lipid_class}**",
                 options=['A', 'B', 'C', 'D'],
                 default=default_grades,
                 key=f"grade_select_{lipid_class}"
             )
-            
+
+            # Save the selection to session state
+            st.session_state.grade_selections_saved[lipid_class] = selected_grades
+
             if not selected_grades:
                 st.error("⚠️ Will be excluded!")
-            
+
             grade_config[lipid_class] = selected_grades
     
     return grade_config
