@@ -2331,12 +2331,16 @@ def collect_protein_concentrations(experiment):
         # Check if we need to force-restore (coming back from another page)
         force_restore = st.session_state.pop('_force_restore_protein_inputs', False)
 
-        # Restore widget session state keys BEFORE widgets render
-        # This is needed because number_input uses session state value if key exists, ignoring 'value' param
+        # Initialize session state for all samples BEFORE widgets render
+        # This avoids the Streamlit warning about both value and session state being set
         for sample in experiment.full_samples_list:
             widget_key = f"protein_{sample}"
-            if sample in preserved_values and (force_restore or widget_key not in st.session_state):
+            if force_restore and sample in preserved_values:
+                # Force restore from preserved values (returning from another page)
                 st.session_state[widget_key] = float(preserved_values[sample])
+            elif widget_key not in st.session_state:
+                # Initialize with preserved value or default
+                st.session_state[widget_key] = float(preserved_values.get(sample, 1.0))
 
         # Use columns for compact layout
         cols = st.columns(3)
@@ -2346,7 +2350,6 @@ def collect_protein_concentrations(experiment):
                     f'{sample}:',
                     min_value=0.0,
                     max_value=1000000.0,
-                    value=1.0,  # Default only used if key not in session state
                     step=0.1,
                     key=f"protein_{sample}"
                 )
