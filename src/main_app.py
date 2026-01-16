@@ -566,6 +566,8 @@ def update_session_state(name_df, experiment, bqc_label):
             st.session_state.normalization_method = st.session_state.preserved_data['normalization_method']
         if 'protein_input_method' in st.session_state.preserved_data:
             st.session_state.protein_input_method = st.session_state.preserved_data['protein_input_method']
+            # Sync prev tracker to avoid false method-change detection on first render
+            st.session_state.protein_input_method_prev = st.session_state.preserved_data['protein_input_method']
         if 'preserved_intsta_df' in st.session_state.preserved_data:
             st.session_state.preserved_intsta_df = st.session_state.preserved_data['preserved_intsta_df']
         if 'preserved_standards_mode' in st.session_state.preserved_data:
@@ -2238,7 +2240,7 @@ def apply_standards_normalization(df, class_to_standard_map, selected_classes, i
     selected_standards = set(added_intsta_species_lst)
     
     # Initialize or retrieve concentration values from session state
-    if 'standard_concentrations' not in st.session_state:
+    if st.session_state.get('standard_concentrations') is None:
         st.session_state.standard_concentrations = {}
     
     intsta_concentration_dict = {}
