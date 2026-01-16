@@ -1599,11 +1599,15 @@ def manage_internal_standards(normalizer):
             except Exception as e:
                 st.error(f"Error reading file: {str(e)}")
 
-def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None, 
+def _save_detection_threshold():
+    """Callback to immediately save detection threshold when changed."""
+    st.session_state._preserved_zero_filter_detection_threshold = st.session_state.zero_filter_detection_threshold
+
+def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None,
                       bqc_threshold=0.5, non_bqc_threshold=0.75):
     """
     Applies the zero-value filter to the cleaned dataframe.
-    
+
     Args:
         cleaned_df (pd.DataFrame): Cleaned dataframe
         experiment (Experiment): Experiment object
@@ -1611,7 +1615,7 @@ def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None,
         bqc_label (str, optional): Label for Batch Quality Control samples
         bqc_threshold (float): Proportion threshold for BQC condition (default 0.5 = 50%)
         non_bqc_threshold (float): Proportion threshold for non-BQC conditions (default 0.75 = 75%)
-        
+
     Returns:
         tuple: (filtered DataFrame, list of removed species)
     """
@@ -1624,10 +1628,9 @@ def apply_zero_filter(cleaned_df, experiment, data_format, bqc_label=None,
         value=preserved_detection,
         step=1.0,
         help="For non-LipidSearch formats, 0 means only exact zeros. Increase if your data has a noise floor.",
-        key="zero_filter_detection_threshold"
+        key="zero_filter_detection_threshold",
+        on_change=_save_detection_threshold
     )
-    # Save current value to preserved key after widget renders
-    st.session_state._preserved_zero_filter_detection_threshold = detection_threshold
     
     # Get all lipid species before filtering
     all_species = cleaned_df['LipidMolec'].tolist()
@@ -1829,9 +1832,16 @@ def display_cleaned_data(unfiltered_df, intsta_df):
         
         st.markdown("Adjust thresholds for removing lipid species with too many zero/below-detection values.")
         
+        # Callbacks to immediately save slider values when changed
+        def _save_non_bqc_threshold():
+            st.session_state._preserved_non_bqc_zero_threshold = st.session_state.non_bqc_zero_threshold
+
+        def _save_bqc_threshold():
+            st.session_state._preserved_bqc_zero_threshold = st.session_state.bqc_zero_threshold
+
         # Threshold sliders
         col1, col2 = st.columns(2)
-        
+
         with col1:
             # Use preserved key to persist value across page navigation
             default_non_bqc = st.session_state.get('_preserved_non_bqc_zero_threshold', 75)
@@ -1842,12 +1852,11 @@ def display_cleaned_data(unfiltered_df, intsta_df):
                 value=default_non_bqc,
                 step=5,
                 help="Remove species if ALL non-BQC conditions have ≥ this % zeros",
-                key="non_bqc_zero_threshold"
+                key="non_bqc_zero_threshold",
+                on_change=_save_non_bqc_threshold
             )
-            # Save current value to preserved key after widget renders
-            st.session_state._preserved_non_bqc_zero_threshold = non_bqc_pct
             non_bqc_threshold = non_bqc_pct / 100.0
-        
+
         with col2:
             if has_bqc:
                 # Use preserved key to persist value across page navigation
@@ -1859,10 +1868,9 @@ def display_cleaned_data(unfiltered_df, intsta_df):
                     value=default_bqc,
                     step=5,
                     help="Remove species if BQC condition has ≥ this % zeros",
-                    key="bqc_zero_threshold"
+                    key="bqc_zero_threshold",
+                    on_change=_save_bqc_threshold
                 )
-                # Save current value to preserved key after widget renders
-                st.session_state._preserved_bqc_zero_threshold = bqc_pct
                 bqc_threshold = bqc_pct / 100.0
             else:
                 bqc_threshold = 0.5
