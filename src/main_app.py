@@ -88,6 +88,11 @@ def initialize_session_state():
         st.session_state.msdial_features = {}
     if 'msdial_use_normalized' not in st.session_state:
         st.session_state.msdial_use_normalized = False
+    # MS-DIAL UI selection persistence
+    if 'msdial_data_type_index' not in st.session_state:
+        st.session_state.msdial_data_type_index = 0  # 0 = Raw, 1 = Pre-normalized
+    if 'msdial_quality_level_index' not in st.session_state:
+        st.session_state.msdial_quality_level_index = 1  # Default to Moderate
 
 def load_module_image(filename, caption=None):
     """Helper function to load and display a module PDF as an image."""
@@ -529,6 +534,8 @@ def clear_session_state():
     st.session_state.msdial_quality_config = None
     st.session_state.msdial_features = {}
     st.session_state.msdial_use_normalized = False
+    st.session_state.msdial_data_type_index = 0
+    st.session_state.msdial_quality_level_index = 1
     
 def update_session_state(name_df, experiment, bqc_label):
     """
@@ -1401,15 +1408,18 @@ def get_msdial_data_type_selection():
         - **Normalized data**: {len(norm_samples)} sample columns (after 'Lipid IS' column)
         """)
         
+        options = [f"Raw intensity values ({len(raw_samples)} samples)",
+                   f"Pre-normalized values ({len(norm_samples)} samples)"]
         data_type = st.radio(
             "Select which data to use:",
-            [f"Raw intensity values ({len(raw_samples)} samples)", 
-             f"Pre-normalized values ({len(norm_samples)} samples)"],
-            index=0,
+            options,
+            index=st.session_state.msdial_data_type_index,
             key="msdial_data_type_selection",
             help="Choose raw data if you want to apply LipidCruncher's normalization. Choose pre-normalized if MS-DIAL already normalized your data."
         )
-        
+
+        # Update session state index for persistence
+        st.session_state.msdial_data_type_index = options.index(data_type)
         use_normalized = "Pre-normalized" in data_type
         st.session_state.msdial_use_normalized = use_normalized
         
@@ -1446,15 +1456,18 @@ def get_msdial_quality_config():
             'Permissive (Score ≥40)': {'total_score_threshold': 40, 'require_msms': False},
             'No filtering': {'total_score_threshold': 0, 'require_msms': False}
         }
-        
+        quality_options_list = list(quality_options.keys())
+
         selected_option = st.radio(
             "Quality filtering level:",
-            list(quality_options.keys()),
-            index=1,  # Default to Moderate
+            quality_options_list,
+            index=st.session_state.msdial_quality_level_index,
             horizontal=True,
             key="msdial_quality_level"
         )
-        
+
+        # Update session state index for persistence
+        st.session_state.msdial_quality_level_index = quality_options_list.index(selected_option)
         quality_config = quality_options[selected_option].copy()
         
         # MS/MS validation override (if available)
