@@ -2355,18 +2355,20 @@ def apply_standards_normalization(df, class_to_standard_map, selected_classes, i
     
     st.write("Enter the concentration of each selected internal standard (µM):")
     for standard in selected_standards:
-        # Use previously entered value as default if available
-        default_value = st.session_state.standard_concentrations.get(standard, 1.0)
-        
+        widget_key = f"conc_{standard}"
+
+        # Initialize widget key from preserved concentrations if not already set
+        if widget_key not in st.session_state:
+            st.session_state[widget_key] = st.session_state.standard_concentrations.get(standard, 1.0)
+
         concentration = st.number_input(
             f"Concentration (µM) for {standard}",
             min_value=0.0,
-            value=default_value,
             step=0.1,
-            key=f"conc_{standard}"
+            key=widget_key
         )
-        
-        # Store current value in session state
+
+        # Sync back to standard_concentrations for session preservation
         st.session_state.standard_concentrations[standard] = concentration
         
         if concentration <= 0:
@@ -4838,24 +4840,31 @@ def display_volcano_plot(experiment, continuation_df):
                     with st.container():
                         st.markdown("**Label Position Adjustments:**")
                         for lipid in all_lipids_to_label:
-                            key = f"pos_{lipid}"
-                            if key not in st.session_state.custom_label_positions:
-                                st.session_state.custom_label_positions[key] = (0.0, 0.0)
+                            pos_key = f"pos_{lipid}"
+                            x_widget_key = f"x_offset_{lipid}"
+                            y_widget_key = f"y_offset_{lipid}"
+
+                            # Initialize widget keys from custom_label_positions if not already set
+                            if pos_key not in st.session_state.custom_label_positions:
+                                st.session_state.custom_label_positions[pos_key] = (0.0, 0.0)
+                            if x_widget_key not in st.session_state:
+                                st.session_state[x_widget_key] = st.session_state.custom_label_positions[pos_key][0]
+                            if y_widget_key not in st.session_state:
+                                st.session_state[y_widget_key] = st.session_state.custom_label_positions[pos_key][1]
 
                             col1, col2, col3 = st.columns([2, 1, 1])
                             with col1:
                                 st.text(lipid)
                             with col2:
                                 x_offset = st.number_input(
-                                    "X", value=st.session_state.custom_label_positions[key][0],
-                                    step=0.1, key=f"x_offset_{lipid}", label_visibility="collapsed"
+                                    "X", step=0.1, key=x_widget_key, label_visibility="collapsed"
                                 )
                             with col3:
                                 y_offset = st.number_input(
-                                    "Y", value=st.session_state.custom_label_positions[key][1],
-                                    step=0.1, key=f"y_offset_{lipid}", label_visibility="collapsed"
+                                    "Y", step=0.1, key=y_widget_key, label_visibility="collapsed"
                                 )
-                            st.session_state.custom_label_positions[key] = (x_offset, y_offset)
+                            # Sync back for preservation
+                            st.session_state.custom_label_positions[pos_key] = (x_offset, y_offset)
 
                 # Create color mapping and plot
                 color_mapping = lp.VolcanoPlot._generate_color_mapping(volcano_df)
