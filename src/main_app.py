@@ -263,6 +263,8 @@ def display_landing_page():
         - Fixed saturation plots not filtering by selected lipid classes
         - Fixed compatibility with older Streamlit versions
         - Changed concentration vs fold change plot download from PNG to CSV for better data accessibility
+        - Fixed various MS-DIAL issues (group reordering, data type/quality filter selections, sample column override)
+        - Fixed widget state issues causing selections to reset on page navigation (zero filtering, grade filtering, protein input, custom standards)
         """)
 
     st.markdown("---")
