@@ -21,8 +21,7 @@ class CleanMSDIALData:
     def __init__(self):
         pass
     
-    @st.cache_data(ttl=3600)
-    def _convert_columns_to_numeric(_self, df, full_samples_list):
+    def _convert_columns_to_numeric(self, df, full_samples_list):
         """
         Converts intensity data columns to numeric type and handles null/negative values.
         
@@ -44,8 +43,7 @@ class CleanMSDIALData:
             st.error(f"Error converting columns to numeric: {str(e)}")
             return pd.DataFrame()
     
-    @st.cache_data(ttl=3600)
-    def _extract_relevant_columns(_self, df, full_samples_list):
+    def _extract_relevant_columns(self, df, full_samples_list):
         """
         Extracts relevant columns for analysis from the DataFrame.
         
