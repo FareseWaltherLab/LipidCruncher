@@ -345,6 +345,9 @@ def main():
                     if not mapping_valid:
                         st.sidebar.error("Please correct column mappings to proceed.")
                         return
+                    # Use corrected DataFrame if override was applied
+                    if corrected_df is not None:
+                        df = corrected_df
 
                 confirmed, name_df, experiment, bqc_label, valid_samples, updated_df = process_experiment(df, data_format)
                 
@@ -705,7 +708,6 @@ The `Lipid IS` column separates raw from normalized data. You'll choose which to
 
 **⚠️ Important:**
 - All sample column names must be **unique** — duplicate names will cause parsing errors
-- Lipid names must be **identified** (not "Unknown") for meaningful analysis
 
 ---
 
@@ -1107,21 +1109,21 @@ def display_column_mapping(df, data_format):
     # For MS-DIAL, column names must be exact - no manual mapping needed
     # Just show what was detected and allow continuing
     if st.session_state.format_type == 'MS-DIAL':
-        
+
         # Optional: Allow user to override sample column detection
         with st.sidebar.expander("🔧 Override Sample Detection (Optional)", expanded=False):
             st.write("Only change this if auto-detection incorrectly classified columns.")
-            
+
             features = st.session_state.get('msdial_features', {})
             detected_samples = features.get('raw_sample_columns', [])
             all_columns = features.get('actual_columns', [])
-            
+
             # Exclude known metadata columns
             available_for_samples = [
-                col for col in all_columns 
+                col for col in all_columns
                 if col not in lp.DataFormatHandler.MSDIAL_METADATA_COLUMNS
             ]
-            
+
             manual_samples = st.multiselect(
                 "Sample columns:",
                 options=available_for_samples,
@@ -1129,11 +1131,82 @@ def display_column_mapping(df, data_format):
                 key='manual_sample_override',
                 help="Select all columns containing sample intensity data"
             )
-            
+
             if manual_samples and manual_samples != detected_samples:
+                # Update the feature list
                 st.session_state.msdial_features['raw_sample_columns'] = manual_samples
+
+                # Get current DataFrame and rebuild intensity columns
+                current_df = df.copy()
+
+                # Get the current column mapping to find original names
+                current_mapping = st.session_state.column_mapping
+
+                # Build reverse lookup: standardized_name -> original_name
+                std_to_orig = dict(zip(
+                    current_mapping['standardized_name'],
+                    current_mapping['original_name']
+                ))
+
+                # Identify which intensity columns to keep (by original name)
+                intensity_cols_to_keep = []
+                for col in current_df.columns:
+                    if col.startswith('intensity['):
+                        orig_name = std_to_orig.get(col)
+                        if orig_name in manual_samples:
+                            intensity_cols_to_keep.append(col)
+
+                # Get non-intensity columns (metadata)
+                non_intensity_cols = [col for col in current_df.columns if not col.startswith('intensity[')]
+
+                # Build new DataFrame with only selected intensity columns
+                new_df = current_df[non_intensity_cols + intensity_cols_to_keep].copy()
+
+                # Rename intensity columns to be sequential
+                rename_map = {}
+                new_mapping_rows = []
+
+                # Keep metadata mappings
+                for _, row in current_mapping.iterrows():
+                    if not row['standardized_name'].startswith('intensity['):
+                        new_mapping_rows.append({
+                            'standardized_name': row['standardized_name'],
+                            'original_name': row['original_name']
+                        })
+
+                # Create new sequential intensity column names
+                for i, old_col in enumerate(intensity_cols_to_keep, 1):
+                    new_col = f'intensity[s{i}]'
+                    rename_map[old_col] = new_col
+                    orig_name = std_to_orig.get(old_col, old_col)
+                    new_mapping_rows.append({
+                        'standardized_name': new_col,
+                        'original_name': orig_name
+                    })
+
+                new_df = new_df.rename(columns=rename_map)
+
+                # Update session state
+                st.session_state.n_intensity_cols = len(intensity_cols_to_keep)
+                st.session_state.column_mapping = pd.DataFrame(new_mapping_rows)
+
+                # Update sample name mapping
+                st.session_state.msdial_sample_names = {
+                    f's{i}': orig for i, orig in enumerate(manual_samples, 1)
+                }
+
                 st.success(f"✓ Using {len(manual_samples)} manually selected samples")
-        
+
+                # Display updated mapping table
+                st.write("**Updated column mapping:**")
+                st.dataframe(
+                    st.session_state.column_mapping.reset_index(drop=True),
+                    use_container_width=True
+                )
+
+                # Return the modified DataFrame
+                return True, new_df
+
         return True, None
 
     # For Generic Format, just display the mapping and continue
