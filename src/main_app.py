@@ -3311,21 +3311,21 @@ def analyze_pairwise_correlation(continuation_df, experiment):
         # --- Data Selection Section ---
         st.markdown("---")
         st.markdown("##### 🎯 Data Selection")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            selected_condition = st.selectbox(
-                'Condition', 
-                multi_replicate_conditions,
-                key='corr_condition'
-            )
-        with col2:
-            sample_type = st.selectbox(
-                'Sample Type', 
-                ['biological replicates', 'technical replicates'],
-                help="Biological: different samples, same condition. Technical: repeated measurements, same sample.",
-                key='corr_sample_type'
-            )
+
+        selected_condition = st.selectbox(
+            'Condition',
+            multi_replicate_conditions,
+            key='corr_condition'
+        )
+
+        # Auto-detect sample type based on BQC presence
+        bqc_label = st.session_state.get('bqc_label')
+        if bqc_label is not None:
+            sample_type = 'technical replicates'
+            st.info("**Sample type:** Technical replicates (BQC samples detected)")
+        else:
+            sample_type = 'biological replicates'
+            st.info("**Sample type:** Biological replicates (no BQC samples)")
         
         # --- Results Section ---
         st.markdown("---")
