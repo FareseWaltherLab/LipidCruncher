@@ -384,27 +384,24 @@ def main():
                                     quality_config = get_msdial_quality_config()
                                     st.session_state.msdial_quality_config = quality_config
 
-                                    # Display filter messages from previous run (if any)
-                                    if 'msdial_filter_messages' in st.session_state and st.session_state.msdial_filter_messages:
-                                        st.markdown("---")
-                                        st.markdown("**Filter Results:**")
-                                        for msg in st.session_state.msdial_filter_messages:
-                                            st.info(msg)
-                            
+                                    # Create placeholder for filter messages
+                                    filter_messages_placeholder = st.empty()
+
                             # Pass config to clean_data
                             cleaned_df, intsta_df = clean_data(
-                                df_to_clean, name_df, experiment, data_format, 
+                                df_to_clean, name_df, experiment, data_format,
                                 grade_config=grade_config,
                                 quality_config=quality_config
                             )
-                            
-                            # Display MS-DIAL filter results (if any) right after cleaning
-                            if data_format == 'MS-DIAL' and 'msdial_filter_messages' in st.session_state:
-                                for msg in st.session_state.msdial_filter_messages:
-                                    st.info(msg)
-                                # Clear after displaying so they don't persist incorrectly
-                                del st.session_state.msdial_filter_messages
-                            
+
+                            # Display MS-DIAL filter messages inside the expander placeholder
+                            if data_format == 'MS-DIAL' and 'msdial_filter_messages' in st.session_state and st.session_state.msdial_filter_messages:
+                                with filter_messages_placeholder.container():
+                                    st.markdown("---")
+                                    st.markdown("**Filter Results:**")
+                                    for msg in st.session_state.msdial_filter_messages:
+                                        st.info(msg)
+
                             if cleaned_df is not None:
                                 st.session_state.experiment = experiment
                                 st.session_state.format_type = data_format
@@ -1302,13 +1299,7 @@ def clean_data(df, name_df, experiment, data_format, grade_config=None, quality_
         cleaned_df = cleaner.data_cleaner(df, name_df, experiment)
     
     cleaned_df, intsta_df = cleaner.extract_internal_standards(cleaned_df)
-    
-    # Store count for display elsewhere (don't show message here)
-    if intsta_df is not None and not intsta_df.empty:
-        st.session_state.extracted_standards_count = intsta_df['LipidMolec'].nunique()
-    else:
-        st.session_state.extracted_standards_count = 0
-    
+
     return cleaned_df, intsta_df
 
 def get_grade_filtering_config(df, format_type):
@@ -1866,12 +1857,6 @@ Removes lipid species with too many zero/below-detection values:
 
 *Thresholds are adjustable in "Configure Zero Filtering" section below.*
         """)
-        
-        # Show internal standards extraction result
-        standards_count = st.session_state.get('extracted_standards_count', 0)
-        if standards_count > 0:
-            st.markdown("---")
-            st.success(f"✓ **Internal Standards Extracted:** {standards_count} internal standard(s) separated for normalization (not filtered out)")
 
 def display_cleaned_data(unfiltered_df, intsta_df):
     """
@@ -1991,7 +1976,7 @@ def display_cleaned_data(unfiltered_df, intsta_df):
     # ==========================================================================
     with st.expander("Manage Internal Standards"):
         st.markdown("""
-        Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`), 
+        Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
         `ISTD`/`IS` markers in class names, and SPLASH LIPIDOMIX® patterns.
         """)
         manage_internal_standards(normalizer)

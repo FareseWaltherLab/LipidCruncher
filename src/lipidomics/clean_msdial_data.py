@@ -140,7 +140,7 @@ class CleanMSDIALData:
             # Check if we have any valid scores
             valid_scores = filtered_df['Total score'].notna().sum()
             if valid_scores == 0:
-                st.warning("Total score column exists but contains no valid numeric values. Skipping score filter.")
+                messages.append("⚠️ Total score column exists but contains no valid numeric values. Skipping score filter.")
             elif threshold > 0:
                 # Only filter if threshold > 0 (skip if "No filtering" selected)
                 filtered_df = filtered_df[
@@ -148,7 +148,7 @@ class CleanMSDIALData:
                 ]
                 score_filtered = initial_count - len(filtered_df)
                 if score_filtered > 0:
-                    st.info(f"Quality filter: Removed {score_filtered} entries with Total score < {threshold}")
+                    messages.append(f"Quality filter: Removed {score_filtered} entries with Total score < {threshold}")
         
         # Apply MS/MS matched filter if required and column exists
         if quality_config.get('require_msms', False):
