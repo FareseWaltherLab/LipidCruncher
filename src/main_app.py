@@ -2081,23 +2081,36 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     # Keep legacy session state in sync for backward compatibility
     st.session_state.normalization_method = normalization_method
 
+    # Track if we're entering protein normalization section after being away
+    # This ensures fresh state when switching between normalization methods
+    uses_protein = normalization_method in ['Protein-based', 'Both']
+    prev_uses_protein = st.session_state.get('_prev_norm_uses_protein', False)
+    if uses_protein and not prev_uses_protein:
+        # Entering protein section after being in a non-protein mode - clear ALL stale state
+        if 'protein_df' in st.session_state:
+            del st.session_state.protein_df
+        if 'protein_input_method' in st.session_state:
+            del st.session_state.protein_input_method
+        if 'protein_input_method_prev' in st.session_state:
+            del st.session_state.protein_input_method_prev
+        for sample in experiment.full_samples_list:
+            widget_key = f"protein_{sample}"
+            if widget_key in st.session_state:
+                del st.session_state[widget_key]
+    st.session_state._prev_norm_uses_protein = uses_protein
+
     normalized_df = filtered_df.copy()
 
     if normalization_method != 'None (pre-normalized data)':
         if 'normalization_settings' not in st.session_state:
             st.session_state.normalization_settings = {}
-        
+
         do_standards = normalization_method in ['Internal Standards', 'Both'] and has_standards
-        
+
         # ----------------------------------------------------------------------
         # Protein-based normalization
         # ----------------------------------------------------------------------
-        if normalization_method in ['Protein-based', 'Both']:
-            # Check if we need to restore protein data from preserved_data (returning from another page)
-            if 'preserved_data' in st.session_state and 'protein_df' in st.session_state.preserved_data:
-                st.session_state.protein_df = st.session_state.preserved_data['protein_df']
-                st.session_state._force_restore_protein_inputs = True
-
+        if uses_protein:
             with st.expander("⚙️ Protein Concentration Data", expanded=True):
                 # Get fresh protein data from user input
                 new_protein_df = collect_protein_concentrations(experiment)
@@ -2330,7 +2343,6 @@ def collect_protein_concentrations(experiment):
         horizontal=True
     )
     
-    # DEBUG: Check method change detection
     # Detect method change and clear stale data
     if prev_method is not None and prev_method != method:
         # Method changed - clear the stored protein_df to prevent stale data
@@ -2338,6 +2350,11 @@ def collect_protein_concentrations(experiment):
             del st.session_state.protein_df
         if 'normalization_settings' in st.session_state and 'protein' in st.session_state.normalization_settings:
             del st.session_state.normalization_settings['protein']
+        # Also clear individual manual input widget keys to prevent stale values
+        for sample in experiment.full_samples_list:
+            widget_key = f"protein_{sample}"
+            if widget_key in st.session_state:
+                del st.session_state[widget_key]
 
     # Update previous method tracker
     st.session_state.protein_input_method_prev = method
