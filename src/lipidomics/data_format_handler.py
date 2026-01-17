@@ -502,10 +502,10 @@ class DataFormatHandler:
             # Reset index
             data_df = data_df.reset_index(drop=True)
             
-            # Read from the widget key directly (msdial_data_type_selection) instead of the manually-set value
-            # This ensures we get the current selection, not the previous run's value
-            data_type_selection = st.session_state.get('msdial_data_type_selection', f"Raw intensity values ({len(raw_sample_cols)} samples)")
-            use_normalized = "Pre-normalized" in data_type_selection
+            # Use persisted index as source of truth (0 = raw, 1 = pre-normalized)
+            # This is more reliable than widget key when navigating between pages
+            persisted_index = st.session_state.get('msdial_data_type_index', 0)
+            use_normalized = (persisted_index == 1)
             
             if use_normalized and len(norm_sample_cols) > 0:
                 sample_cols_to_use = norm_sample_cols

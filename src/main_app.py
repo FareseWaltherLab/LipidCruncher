@@ -1389,17 +1389,17 @@ def get_msdial_data_type_selection():
     Display MS-DIAL data type selection UI (raw vs pre-normalized).
     This is separate from quality filtering to ensure it's always available
     when both data types exist, regardless of whether quality filtering is possible.
-    
+
     Returns:
         None (sets st.session_state.msdial_use_normalized)
     """
     # Get the features detected during validation
     features = st.session_state.get('msdial_features', {})
-    
+
     has_normalized_data = features.get('has_normalized_data', False)
     raw_samples = features.get('raw_sample_columns', [])
     norm_samples = features.get('normalized_sample_columns', [])
-    
+
     # Data Type Selection (if normalized data is available)
     if has_normalized_data and len(norm_samples) > 0:
         st.markdown("---")
@@ -1409,27 +1409,41 @@ def get_msdial_data_type_selection():
         - **Raw data**: {len(raw_samples)} sample columns
         - **Normalized data**: {len(norm_samples)} sample columns (after 'Lipid IS' column)
         """)
-        
+
         options = [f"Raw intensity values ({len(raw_samples)} samples)",
                    f"Pre-normalized values ({len(norm_samples)} samples)"]
+
+        # Initialize widget key from persisted index BEFORE rendering radio
+        # This ensures consistency when navigating between pages
+        widget_key = "msdial_data_type_selection"
+        persisted_index = st.session_state.get('msdial_data_type_index', 0)
+        if persisted_index < len(options):
+            st.session_state[widget_key] = options[persisted_index]
+
+        def on_data_type_change():
+            selection = st.session_state[widget_key]
+            new_index = options.index(selection) if selection in options else 0
+            st.session_state.msdial_data_type_index = new_index
+            st.session_state.msdial_use_normalized = "Pre-normalized" in selection
+
         data_type = st.radio(
             "Select which data to use:",
             options,
-            index=st.session_state.msdial_data_type_index,
-            key="msdial_data_type_selection",
+            key=widget_key,
+            on_change=on_data_type_change,
             help="Choose raw data if you want to apply LipidCruncher's normalization. Choose pre-normalized if MS-DIAL already normalized your data."
         )
 
-        # Update session state index for persistence
-        st.session_state.msdial_data_type_index = options.index(data_type)
+        # Keep session state in sync after render
         use_normalized = "Pre-normalized" in data_type
+        st.session_state.msdial_data_type_index = options.index(data_type) if data_type in options else 0
         st.session_state.msdial_use_normalized = use_normalized
-        
+
         if use_normalized:
             st.info("📌 Using pre-normalized data. LipidCruncher's internal standard normalization will be skipped.")
         else:
             st.info("📌 Using raw intensity data. You can apply normalization in the next step.")
-        
+
         st.markdown("---")
 
 def get_msdial_quality_config():
@@ -2130,9 +2144,17 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     st.markdown("##### ⚙️ Normalization Method")
     
     # Determine available options
-    normalization_options = ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Both'] if has_standards else ['None (pre-normalized data)', 'Protein-based']
-    
-    if not has_standards:
+    # Check if using pre-normalized MS-DIAL data (internal standards normalization not applicable)
+    is_msdial_prenormalized = (format_type == 'MS-DIAL' and
+                               st.session_state.get('msdial_data_type_index', 0) == 1)
+
+    if is_msdial_prenormalized:
+        normalization_options = ['None (pre-normalized data)', 'Protein-based']
+        st.markdown("*Internal standards options unavailable — using pre-normalized MS-DIAL data.*")
+    elif has_standards:
+        normalization_options = ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Both']
+    else:
+        normalization_options = ['None (pre-normalized data)', 'Protein-based']
         st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
     
     # Initialize if not exists (restoration from preserved_data happens earlier in update_session_state)
