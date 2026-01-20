@@ -189,7 +189,7 @@ def display_landing_page():
     st.markdown("---")
 
     # What's New
-    st.markdown("#### ✨ What's New in Version 1.2 (January 13, 2026)")
+    st.markdown("#### ✨ What's New in Version 1.2 (January 20, 2026)")
 
     with st.expander("New Features & Improvements", expanded=False):
         st.markdown("""
@@ -765,19 +765,42 @@ def display_sample_data_option(data_format):
     sample_data_map = {
         'Generic Format': {
             'file': 'generic_format_test_dataset.csv',
-            'description': 'ADGAT-DKO case study (normalized): inguinal white adipose tissue comparing WT vs ADGAT-DKO mice. 3 conditions: WT (4 replicates), ADGAT-DKO (4 replicates), BQC (4 replicates).'
+            'description': '''ADGAT-DKO case study (normalized): inguinal white adipose tissue, WT vs ADGAT-DKO.
+
+**Sample order:**
+1. WT (s1–s4, n=4)
+2. ADGAT-DKO (s5–s8, n=4)
+3. BQC (s9–s12, n=4)'''
         },
         'LipidSearch 5.0': {
             'file': 'lipidsearch5_test_dataset.csv',
-            'description': 'ADGAT-DKO case study (raw LipidSearch output): same experiment with quality grades and retention times. 3 conditions: WT (4 replicates), ADGAT-DKO (4 replicates), BQC (4 replicates).'
+            'description': '''ADGAT-DKO case study (raw): inguinal white adipose tissue, WT vs ADGAT-DKO. Includes quality grades and retention times.
+
+**Sample order:**
+1. WT (s1–s4, n=4)
+2. ADGAT-DKO (s5–s8, n=4)
+3. BQC (s9–s12, n=4)'''
         },
         'MS-DIAL': {
             'file': 'msdial_test_dataset.csv',
-            'description': 'Mouse adrenal gland lipidomics: fads2 knockout vs wild-type. 3 conditions: fads2 KO (3 replicates), Wild-type (3 replicates), Blank (1 sample).'
+            'description': '''Mouse adrenal gland lipidomics: fads2 knockout vs wild-type.
+
+**Sample order:**
+1. Blank (n=1)
+2. fads2 KO (n=3)
+3. Wild-type (n=3)'''
         },
         'Metabolomics Workbench': {
             'file': 'mw_test_dataset.csv',
-            'description': 'Mouse serum HFD study: 2×2 factorial design (Normal/HFD × Water/DCA). 4 treatment groups (11 replicates each), plus TQC (12 samples) and Blank (2 samples).'
+            'description': '''Mouse serum HFD study: 2×2 factorial (Normal/HFD × Water/DCA).
+
+**Sample order:**
+1. Normal+Water (S1A–S11A, n=11)
+2. Normal+DCA (S1B–S11B, n=11)
+3. HFD+Water (S1C–S11C, n=11)
+4. HFD+DCA (S1D–S11D, n=11)
+5. Blank (n=2)
+6. TQC (n=12)'''
         }
     }
 
@@ -797,7 +820,7 @@ def display_sample_data_option(data_format):
     else:
         with st.sidebar.expander("🧪 Try Sample Data", expanded=False):
             st.markdown(f"**{data_format} Example:**")
-            st.caption(info['description'])
+            st.markdown(info['description'], unsafe_allow_html=False)
 
             if st.button(f"Load Sample Data", key=f"load_sample_{data_format}"):
                 st.session_state.load_sample = True
