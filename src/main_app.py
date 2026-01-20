@@ -255,6 +255,7 @@ def display_landing_page():
         - Fixed manual sample grouping error when rearranging samples
         - Fixed session state issues causing double-click required for normalization method switching
         - Fixed double-click issue on radio buttons in manage internal standards
+        - Fixed number input widgets requiring double entry to update values
         - Fixed pathway visualization missing unit circles (LPA, LCB, CDP-DAG)
         - Fixed SPLASH standard ClassKey inference
         - Fixed markdown parsing of pipe characters in condition names
