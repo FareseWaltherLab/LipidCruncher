@@ -765,7 +765,7 @@ def display_sample_data_option(data_format):
     # Map data formats to their sample file info
     sample_data_map = {
         'Generic Format': {
-            'file': 'generic_format_test_dataset.csv',
+            'file': 'generic_test_dataset.csv',
             'description': '''ADGAT-DKO case study (normalized): inguinal white adipose tissue, WT vs ADGAT-DKO.
 
 **Sample order:**
@@ -833,7 +833,7 @@ def load_sample_dataset(data_format):
     """Load the sample dataset for the selected format."""
 
     sample_files = {
-        'Generic Format': 'generic_format_test_dataset.csv',
+        'Generic Format': 'generic_test_dataset.csv',
         'LipidSearch 5.0': 'lipidsearch5_test_dataset.csv',
         'MS-DIAL': 'msdial_test_dataset.csv',
         'Metabolomics Workbench': 'mw_test_dataset.csv'
