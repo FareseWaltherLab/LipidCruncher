@@ -318,9 +318,19 @@ git branch
 
 ---
 
-## Reference: v2.0 Services
+## Reference: v2.0 Code
 
 Check these for reusable code (in `refactor/v2.0` branch):
+
+### Models
+| Model | Location | Purpose |
+|-------|----------|---------|
+| ExperimentConfig | `src/lipidcruncher/core/models/experiment.py` | Experiment setup config |
+| LipidData | `src/lipidcruncher/core/models/lipid_data.py` | Data structure |
+| NormalizationConfig | `src/lipidcruncher/core/models/normalization.py` | Normalization settings |
+| StatisticsConfig | `src/lipidcruncher/core/models/statistics.py` | Statistical test settings |
+
+### Services
 
 | Service | Location | Purpose |
 |---------|----------|---------|
