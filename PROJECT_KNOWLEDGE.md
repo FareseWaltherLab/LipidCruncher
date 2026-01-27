@@ -22,12 +22,26 @@
 - Start `main_app.py` fresh — don't import from `old_main_app.py`. Build features incrementally using the new architecture. Use `old_main_app.py` as reference only.
 
 ### 🔄 Phase 2: Extract Models (IN PROGRESS)
+
+| Model | Status | Tests | Commit |
+|-------|--------|-------|--------|
+| ExperimentConfig | ✅ Done | 35 tests | `f7b3641` |
+| NormalizationConfig | ✅ Done | 61 tests | `58349ed` |
+| StatisticalTestConfig | ⬜ Not Started | - | - |
+
+**Created Files:**
+- `src/app/models/experiment.py` — ExperimentConfig with computed sample lists
+- `src/app/models/normalization.py` — NormalizationConfig with method validation
+- `tests/unit/test_experiment_config.py` — 35 tests
+- `tests/unit/test_normalization_config.py` — 61 tests
+- `pytest.ini` — Test configuration with pythonpath
+
 ### ⬜ Phase 3: Extract Services (NOT STARTED)
 ### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Extract Pydantic models** (ExperimentConfig, NormalizationConfig, StatisticalTestConfig)
+1. **Extract StatisticalTestConfig model** (last Phase 2 model)
 2. Then proceed to Phase 3: Extract FormatDetectionService (with unit tests)
 
 ---
@@ -256,9 +270,17 @@ def normalize_data(df, config):
 
 ### Phase 2: Extract Models
 Extract Pydantic models for configuration objects:
-- ExperimentConfig
-- NormalizationConfig
-- StatisticalTestConfig
+- ✅ ExperimentConfig — experiment setup with computed sample lists
+- ✅ NormalizationConfig — normalization method with validation
+- ⬜ StatisticalTestConfig — statistical testing options (mode, test_type, corrections)
+
+**StatisticalTestConfig Details (from old_main_app.py:3481-3577):**
+- `mode`: 'auto' or 'manual'
+- `test_type`: 'parametric', 'non_parametric', 'auto'
+- `correction_method`: 'uncorrected', 'fdr_bh', 'bonferroni', 'auto' (Level 1)
+- `posthoc_correction`: 'uncorrected', 'tukey', 'bonferroni', 'auto' (Level 2)
+- `alpha`: 0.05 (significance threshold)
+- `auto_transform`: bool (log10 transformation)
 
 ### Phase 3: Extract Services (one at a time)
 For each service:
