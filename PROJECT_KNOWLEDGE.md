@@ -1,7 +1,35 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** January 2026
+**Last Updated:** January 26, 2026
 **Current Branch:** `refactor/v3.0`
+
+---
+
+## Current Progress
+
+### ✅ Phase 1: Setup (PARTIALLY COMPLETE)
+
+| Task | Status | Commit |
+|------|--------|--------|
+| Create `refactor/v3.0` branch from `main` | ✅ Done | `5ab5142` |
+| Rename `main_app.py` → `old_main_app.py` | ✅ Done | `5ab5142` |
+| Create folder structure `src/app/` | ✅ Done | `5ab5142` |
+| Create new minimal `main_app.py` | ✅ Done | `5ab5142` |
+| Create `tests/fixtures/` structure | ✅ Done | `5ab5142` |
+| Write integration tests | ⬜ TODO | - |
+| Generate edge case datasets | ⬜ TODO | - |
+
+### ⬜ Phase 2: Extract Models (NOT STARTED)
+### ⬜ Phase 3: Extract Services (NOT STARTED)
+### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
+### ⬜ Phase 5: Polish (NOT STARTED)
+
+### Next Steps
+1. **Write integration tests** covering:
+   - 4 sample datasets (LipidSearch, MS-DIAL, Generic, Metabolomics Workbench) - "golden path" tests
+   - 17 edge case datasets - boundary conditions and error handling
+2. **Generate edge case datasets** in `tests/fixtures/edge_cases/` using generator scripts
+3. Then proceed to Phase 2: Extract Pydantic models
 
 ---
 
