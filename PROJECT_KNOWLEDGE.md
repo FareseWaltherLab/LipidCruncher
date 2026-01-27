@@ -7,7 +7,7 @@
 
 ## Current Progress
 
-### ✅ Phase 1: Setup (PARTIALLY COMPLETE)
+### ✅ Phase 1: Setup (COMPLETE)
 
 | Task | Status | Commit |
 |------|--------|--------|
@@ -16,20 +16,33 @@
 | Create folder structure `src/app/` | ✅ Done | `5ab5142` |
 | Create new minimal `main_app.py` | ✅ Done | `5ab5142` |
 | Create `tests/fixtures/` structure | ✅ Done | `5ab5142` |
-| Write integration tests | ⬜ TODO | - |
-| Generate edge case datasets | ⬜ TODO | - |
 
-### ⬜ Phase 2: Extract Models (NOT STARTED)
+**Decisions:**
+- Skip upfront integration tests — `old_main_app.py` is tightly coupled to Streamlit, making it hard to test. Write unit tests as each service is extracted instead.
+- Start `main_app.py` fresh — don't import from `old_main_app.py`. Build features incrementally using the new architecture. Use `old_main_app.py` as reference only.
+
+### 🔄 Phase 2: Extract Models (IN PROGRESS)
 ### ⬜ Phase 3: Extract Services (NOT STARTED)
 ### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Write integration tests** covering:
-   - 4 sample datasets (LipidSearch, MS-DIAL, Generic, Metabolomics Workbench) - "golden path" tests
-   - 17 edge case datasets - boundary conditions and error handling
-2. **Generate edge case datasets** in `tests/fixtures/edge_cases/` using generator scripts
-3. Then proceed to Phase 2: Extract Pydantic models
+1. **Extract Pydantic models** (ExperimentConfig, NormalizationConfig, StatisticalTestConfig)
+2. Then proceed to Phase 3: Extract FormatDetectionService (with unit tests)
+
+---
+
+## Extraction Workflow
+
+For each component (model, service, etc.):
+
+1. **Identify what's needed** — read `old_main_app.py` to understand full requirements (reference only, don't import)
+2. **Check v2.0 for clean implementations** — v2.0 has well-structured code worth reusing
+3. **Use/adapt v2.0 code** where it fits the requirements
+4. **Supplement from `old_main_app.py`** where v2.0 is missing features
+5. **Write unit tests** for the extracted component
+6. **Add to `main_app.py`** and test the feature
+7. **Commit**
 
 ---
 
@@ -62,13 +75,13 @@ Upload CSV → Format Detection → Data Cleaning → Zero Filtering → Normali
 | Branch | Purpose |
 |--------|---------|
 | `main` | Production code - fully functional, monolithic |
-| `refactor/v2.0` | **Reference only** - has clean architecture patterns but missing main's features |
-| `refactor/v3.0` | **Active development** - refactoring from main using v2.0 patterns |
+| `refactor/v2.0` | **Valuable resource** - clean architecture AND reusable code (may be missing some main features) |
+| `refactor/v3.0` | **Active development** - combining best of both branches |
 
 ### Key Principle
-- **Start from `main`** (working code with all features)
-- **Use `refactor/v2.0` as reference** (architecture patterns, not code to copy)
-- **Refactor incrementally** with testing at each step
+- **Check v2.0 first** for clean, well-structured implementations
+- **Use `old_main_app.py`** to understand full requirements and fill gaps where v2.0 is missing features
+- **Refactor incrementally** with unit tests for each extracted component
 
 ---
 
@@ -151,53 +164,28 @@ LipidCruncher/
 
 ## Testing Strategy
 
-### Integration Testing (From Day 1)
+### Unit Tests (As You Extract)
 
-Create integration tests BEFORE extracting services to establish a "golden path" baseline.
+Write unit tests for each service as it's extracted. Services are pure Python (no Streamlit), making them easy to test.
 
-#### Sample Dataset Tests
 ```python
-def test_full_pipeline_lipidsearch():
-    """sample_datasets/lipidsearch5_sample_dataset.csv through full pipeline"""
-
-def test_full_pipeline_msdial():
-    """sample_datasets/msdial_test_dataset.csv through full pipeline"""
-
-def test_full_pipeline_generic():
-    """sample_datasets/generic_sample_dataset.csv through full pipeline"""
-
-def test_full_pipeline_metabolomics_workbench():
-    """sample_datasets/metabolomic_workbench_sample_data.csv through full pipeline"""
+# Example: test for FormatDetectionService
+def test_detect_lipidsearch_format():
+    df = pd.read_csv("sample_datasets/lipidsearch5_sample_dataset.csv")
+    result = FormatDetectionService.detect_format(df)
+    assert result == "LipidSearch 5.0"
 ```
 
-#### Edge Case Datasets (Generated)
-Create `tests/fixtures/generators/` with scripts to generate edge case CSVs:
+### Integration Tests (After Services Extracted)
 
-| Edge Case | Description | File |
-|-----------|-------------|------|
-| Empty file | No data rows | `edge_empty.csv` |
-| Single row | Minimal valid data | `edge_single_row.csv` |
-| All zeros | All intensity values are 0 | `edge_all_zeros.csv` |
-| Missing columns | Required columns missing | `edge_missing_cols.csv` |
-| Extra columns | Unexpected columns present | `edge_extra_cols.csv` |
-| Special characters | Lipid names with special chars | `edge_special_chars.csv` |
-| Large numbers | Very large intensity values | `edge_large_numbers.csv` |
-| Negative values | Negative intensities | `edge_negative_values.csv` |
-| Mixed case | Column names in mixed case | `edge_mixed_case.csv` |
-| Duplicate lipids | Same lipid multiple times | `edge_duplicates.csv` |
-| Unicode | Unicode characters in names | `edge_unicode.csv` |
-| Whitespace | Leading/trailing whitespace | `edge_whitespace.csv` |
-| NaN values | Various NaN representations | `edge_nan_values.csv` |
-| One sample per group | Minimal group sizes | `edge_one_per_group.csv` |
-| Unbalanced groups | Very different group sizes | `edge_unbalanced.csv` |
-| No internal standards | Data without IS lipids | `edge_no_standards.csv` |
-| All grades filtered | All lipids have grade D | `edge_all_filtered.csv` |
+Once services are extracted, create integration tests that run data through the full pipeline:
+- 4 sample datasets (LipidSearch, MS-DIAL, Generic, Metabolomics Workbench)
+- Edge case datasets as needed
 
-#### Testing After Each Change
-1. Run integration tests: `pytest tests/integration/ -v`
-2. Run unit tests: `pytest tests/unit/ -v`
-3. Manual app test: `streamlit run src/main_app.py`
-4. Commit if passing
+### Testing After Each Change
+1. Run unit tests: `pytest tests/unit/ -v`
+2. Manual app test: `streamlit run src/main_app.py`
+3. Commit if passing
 
 ---
 
@@ -260,13 +248,11 @@ def normalize_data(df, config):
 
 ## Refactoring Phases
 
-### Phase 1: Setup
+### Phase 1: Setup ✅
 1. Create `refactor/v3.0` branch from `main`
 2. Rename `main_app.py` → `old_main_app.py`
 3. Create folder structure: `src/app/{models, services, adapters, workflows, ui}`
 4. Create new minimal `main_app.py`
-5. **Create integration test baseline** using `old_main_app.py` functions
-6. **Generate edge case test datasets**
 
 ### Phase 2: Extract Models
 Extract Pydantic models for configuration objects:
@@ -334,7 +320,7 @@ git branch
 
 ## Reference: v2.0 Services
 
-Use these as architectural reference (in `refactor/v2.0` branch):
+Check these for reusable code (in `refactor/v2.0` branch):
 
 | Service | Location | Purpose |
 |---------|----------|---------|
@@ -372,6 +358,5 @@ Use these as architectural reference (in `refactor/v2.0` branch):
 **DON'T:**
 - Import Streamlit in services
 - Store state in service classes
-- Skip integration testing
 - Make large changes without commits
-- Copy code blindly from v2.0
+- Use v2.0 code without checking if `old_main_app.py` has additional features needed

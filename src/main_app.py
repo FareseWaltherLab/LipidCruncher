@@ -1,29 +1,31 @@
 """
 LipidCruncher - Lipidomics Data Analysis Application
 
-This is the refactored entry point. During the transition period,
-it imports from old_main_app.py. As services are extracted, this file
-will be updated to use the new architecture:
-
+Refactored architecture:
     UI Layer (this file)
         → Workflows (app/workflows/)
             → Adapters (app/adapters/)
                 → Services (app/services/)
                     → Models (app/models/)
 
-Target: < 500 lines after refactoring is complete.
+Reference: old_main_app.py contains the original monolithic implementation.
 """
 
-# =============================================================================
-# TRANSITION PERIOD: Import and run the old monolithic app
-# As we extract services, we'll gradually replace these imports
-# =============================================================================
-
-# Import everything from old_main_app to maintain functionality
-from old_main_app import *
+import streamlit as st
 
 # =============================================================================
-# REFACTORED IMPORTS (uncomment as services are extracted)
+# Page Configuration
+# =============================================================================
+
+st.set_page_config(
+    page_title="LipidCruncher",
+    page_icon="🧬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# =============================================================================
+# Imports (uncomment as components are extracted)
 # =============================================================================
 
 # Phase 2: Models
@@ -32,24 +34,24 @@ from old_main_app import *
 # Phase 3: Services
 # from app.services import FormatDetectionService
 # from app.services import DataCleaningService
-# from app.services import ZeroFilteringService
 # from app.services import NormalizationService
-# from app.services import StandardsService
 
-# Phase 4: Workflows & Adapters
-# from app.adapters import StreamlitAdapter
+# Phase 4: Workflows & UI
 # from app.workflows import DataPipelineWorkflow
-
-# Phase 4: UI Components
 # from app.ui import FileUploadComponent
-# from app.ui import GroupingComponent
-# from app.ui import NormalizationComponent
 
 # =============================================================================
-# MAIN ENTRY POINT
+# Main Application
 # =============================================================================
 
-if __name__ == "__main__":
-    # Currently runs the old app via the wildcard import above
-    # After refactoring, this will orchestrate the new architecture
-    pass
+st.title("LipidCruncher")
+st.caption("Lipidomics Data Analysis Application")
+
+st.info("🚧 Refactoring in progress. Features will be added incrementally.")
+
+# TODO: Add file upload
+# TODO: Add format detection
+# TODO: Add data cleaning
+# TODO: Add normalization
+# TODO: Add statistical analysis
+# TODO: Add visualization
