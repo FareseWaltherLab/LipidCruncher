@@ -1,7 +1,7 @@
 """
 Experiment configuration model.
 """
-from pydantic import BaseModel, Field, field_validator, computed_field
+from pydantic import BaseModel, Field, field_validator, computed_field, model_validator
 from typing import List
 
 
@@ -40,6 +40,21 @@ class ExperimentConfig(BaseModel):
         if not all(count > 0 for count in v):
             raise ValueError("All sample counts must be greater than 0")
         return v
+
+    @model_validator(mode='after')
+    def validate_list_lengths(self) -> 'ExperimentConfig':
+        """Ensure conditions_list and number_of_samples_list match n_conditions."""
+        if len(self.conditions_list) != self.n_conditions:
+            raise ValueError(
+                f"Length of conditions_list ({len(self.conditions_list)}) "
+                f"must match n_conditions ({self.n_conditions})"
+            )
+        if len(self.number_of_samples_list) != self.n_conditions:
+            raise ValueError(
+                f"Length of number_of_samples_list ({len(self.number_of_samples_list)}) "
+                f"must match n_conditions ({self.n_conditions})"
+            )
+        return self
 
     @computed_field
     @property
