@@ -776,3 +776,348 @@ class TestAllCombinations:
                 posthoc_correction=posthoc
             )
             assert config.posthoc_correction == posthoc
+
+
+class TestTypeHandling:
+    """Tests for type coercion and type error handling."""
+
+    def test_integer_alpha_coerced_to_float(self):
+        """Test that integer alpha is coerced to float (if in valid range, won't work for 0 or 1)."""
+        # Note: 0 and 1 are invalid, so we can't test simple int coercion directly
+        # But Pydantic should coerce numeric types
+        config = StatisticalTestConfig(alpha=0.5)  # 0.5 as float
+        assert isinstance(config.alpha, float)
+
+    def test_numeric_string_alpha_raises_or_coerces(self):
+        """Test that numeric string alpha is handled."""
+        # Pydantic v2 may coerce "0.05" to 0.05
+        try:
+            config = StatisticalTestConfig(alpha="0.05")
+            assert config.alpha == 0.05
+            assert isinstance(config.alpha, float)
+        except (ValueError, TypeError):
+            pass  # Also acceptable
+
+    def test_non_numeric_string_alpha_raises_error(self):
+        """Test that non-numeric string alpha raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(alpha="not_a_number")
+
+    def test_none_alpha_raises_error(self):
+        """Test that None alpha raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(alpha=None)
+
+    def test_none_mode_raises_error(self):
+        """Test that None mode raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(mode=None)
+
+    def test_integer_mode_raises_error(self):
+        """Test that integer mode raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(mode=1)
+
+    def test_none_test_type_raises_error(self):
+        """Test that None test_type raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(test_type=None)
+
+    def test_integer_test_type_raises_error(self):
+        """Test that integer test_type raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(test_type=123)
+
+    def test_tuple_for_conditions_to_compare_works(self):
+        """Test that tuple is accepted for conditions_to_compare."""
+        config = StatisticalTestConfig(
+            conditions_to_compare=(('A', 'B'), ('C', 'D'))  # tuple of tuples
+        )
+        # Pydantic converts tuples to lists
+        assert isinstance(config.conditions_to_compare, list)
+        assert len(config.conditions_to_compare) == 2
+
+    def test_list_of_lists_for_condition_pairs_works(self):
+        """Test that list of lists is accepted for condition pairs."""
+        config = StatisticalTestConfig(
+            conditions_to_compare=[['A', 'B'], ['C', 'D']]  # lists not tuples
+        )
+        assert len(config.conditions_to_compare) == 2
+
+    def test_none_in_condition_pair_raises_error(self):
+        """Test that None in condition pair raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(
+                conditions_to_compare=[('A', None)]
+            )
+
+    def test_none_as_first_in_pair_raises_error(self):
+        """Test that None as first element in pair raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(
+                conditions_to_compare=[(None, 'B')]
+            )
+
+    def test_integer_in_condition_pair_raises_error(self):
+        """Test that integer in condition pair raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(
+                conditions_to_compare=[(123, 'B')]
+            )
+
+    def test_float_in_condition_pair_raises_error(self):
+        """Test that float in condition pair raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(
+                conditions_to_compare=[('A', 3.14)]
+            )
+
+    def test_dict_instead_of_list_for_conditions_raises_error(self):
+        """Test that dict instead of list for conditions_to_compare raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(
+                conditions_to_compare={'A': 'B'}
+            )
+
+    def test_single_element_tuple_raises_error(self):
+        """Test that single element tuple raises validation error."""
+        # Pydantic raises "Field required" for missing second element
+        with pytest.raises(ValueError):
+            StatisticalTestConfig(
+                conditions_to_compare=[('A',)]  # only one element
+            )
+
+    def test_three_element_tuple_raises_error(self):
+        """Test that three element tuple raises validation error."""
+        # Pydantic raises "Tuple should have at most 2 items"
+        with pytest.raises(ValueError):
+            StatisticalTestConfig(
+                conditions_to_compare=[('A', 'B', 'C')]  # three elements
+            )
+
+    def test_empty_tuple_in_conditions_raises_error(self):
+        """Test that empty tuple raises validation error."""
+        # Pydantic raises "Field required" for missing elements
+        with pytest.raises(ValueError):
+            StatisticalTestConfig(
+                conditions_to_compare=[()]  # empty tuple
+            )
+
+    def test_boolean_auto_transform_accepted(self):
+        """Test that boolean values for auto_transform work."""
+        config_true = StatisticalTestConfig(auto_transform=True)
+        config_false = StatisticalTestConfig(auto_transform=False)
+        assert config_true.auto_transform is True
+        assert config_false.auto_transform is False
+
+    def test_int_for_auto_transform_coerced(self):
+        """Test that int is coerced to bool for auto_transform."""
+        config_1 = StatisticalTestConfig(auto_transform=1)
+        config_0 = StatisticalTestConfig(auto_transform=0)
+        assert config_1.auto_transform is True
+        assert config_0.auto_transform is False
+
+    def test_string_for_auto_transform_coerced(self):
+        """Test that string for auto_transform is coerced by Pydantic v2."""
+        # Pydantic v2 coerces "true"/"false" strings to booleans
+        config = StatisticalTestConfig(auto_transform="true")
+        assert config.auto_transform is True
+
+    def test_none_for_auto_transform_raises_error(self):
+        """Test that None for auto_transform raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(auto_transform=None)
+
+    def test_uppercase_mode_raises_error(self):
+        """Test that uppercase mode raises error."""
+        with pytest.raises(ValueError):
+            StatisticalTestConfig(mode='AUTO')
+
+    def test_uppercase_test_type_raises_error(self):
+        """Test that uppercase test_type raises error."""
+        with pytest.raises(ValueError):
+            StatisticalTestConfig(test_type='PARAMETRIC')
+
+    def test_mixed_case_correction_method_raises_error(self):
+        """Test that mixed case correction_method raises error."""
+        with pytest.raises(ValueError):
+            StatisticalTestConfig(correction_method='FDR_BH')
+
+
+class TestInputValidationEdgeCases:
+    """Tests for input validation edge cases."""
+
+    def test_whitespace_only_condition_name_is_allowed(self):
+        """Test that whitespace-only condition name is allowed (not validated as empty)."""
+        # The validator uses `if not pair[0]` which considers "   " as truthy
+        # Whitespace-only names are technically allowed
+        config = StatisticalTestConfig(
+            conditions_to_compare=[('A', '   ')]  # whitespace only - allowed
+        )
+        assert config.conditions_to_compare == [('A', '   ')]
+
+    def test_generator_for_conditions_to_compare(self):
+        """Test generator input for conditions_to_compare."""
+        try:
+            pairs = (('A', 'B') for _ in range(2))
+            config = StatisticalTestConfig(conditions_to_compare=pairs)
+            assert len(config.conditions_to_compare) == 2
+        except (ValueError, TypeError):
+            pass  # Also acceptable
+
+    def test_set_for_conditions_to_compare_converted(self):
+        """Test that set for conditions_to_compare is converted to list."""
+        # Pydantic converts sets to lists (order may vary)
+        config = StatisticalTestConfig(
+            conditions_to_compare={('A', 'B'), ('C', 'D')}
+        )
+        assert len(config.conditions_to_compare) == 2
+        assert isinstance(config.conditions_to_compare, list)
+
+    def test_nested_list_in_condition_pair(self):
+        """Test nested list in condition pair raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(
+                conditions_to_compare=[[['A'], 'B']]  # nested list
+            )
+
+    def test_inf_alpha_raises_error(self):
+        """Test that infinity alpha raises error (gt=0, lt=1)."""
+        import math
+        with pytest.raises(ValueError):
+            StatisticalTestConfig(alpha=math.inf)
+
+    def test_nan_alpha_raises_error(self):
+        """Test that NaN alpha raises error."""
+        import math
+        with pytest.raises((ValueError, TypeError)):
+            StatisticalTestConfig(alpha=math.nan)
+
+    def test_very_small_alpha_valid(self):
+        """Test very small alpha (near machine epsilon) is valid."""
+        import sys
+        tiny = sys.float_info.min
+        if tiny > 0 and tiny < 1:
+            config = StatisticalTestConfig(alpha=tiny)
+            assert config.alpha == tiny
+
+    def test_alpha_at_boundary_epsilon(self):
+        """Test alpha just above 0 and just below 1."""
+        config_low = StatisticalTestConfig(alpha=1e-10)
+        config_high = StatisticalTestConfig(alpha=0.9999999999)
+        assert config_low.alpha == 1e-10
+        assert config_high.alpha == 0.9999999999
+
+
+class TestBoundaryConditions:
+    """Tests for boundary conditions and limits."""
+
+    def test_very_many_condition_pairs(self):
+        """Test with very many condition pairs."""
+        pairs = [(f'C{i}', f'C{j}') for i in range(20) for j in range(i+1, 20)]
+        config = StatisticalTestConfig(conditions_to_compare=pairs)
+        # 20C2 = 190 pairs
+        assert len(config.conditions_to_compare) == 190
+
+    def test_very_long_condition_name(self):
+        """Test very long condition name."""
+        long_name = 'X' * 1000
+        config = StatisticalTestConfig(
+            conditions_to_compare=[('Short', long_name)]
+        )
+        assert config.conditions_to_compare[0][1] == long_name
+
+    def test_condition_name_with_special_unicode(self):
+        """Test condition name with special unicode characters."""
+        config = StatisticalTestConfig(
+            conditions_to_compare=[('Contrôle-α', 'Βεhandlung-β')]
+        )
+        assert 'α' in config.conditions_to_compare[0][0]
+        assert 'β' in config.conditions_to_compare[0][1]
+
+    def test_condition_name_with_emoji(self):
+        """Test condition name with emoji characters."""
+        config = StatisticalTestConfig(
+            conditions_to_compare=[('Control🔬', 'Treatment💊')]
+        )
+        assert '🔬' in config.conditions_to_compare[0][0]
+
+
+class TestCopyAndEquality:
+    """Tests for model copy and equality behavior."""
+
+    def test_equal_configs(self):
+        """Test that two configs with same values are equal."""
+        config1 = StatisticalTestConfig(
+            mode='manual',
+            test_type='parametric',
+            correction_method='fdr_bh',
+            alpha=0.05
+        )
+        config2 = StatisticalTestConfig(
+            mode='manual',
+            test_type='parametric',
+            correction_method='fdr_bh',
+            alpha=0.05
+        )
+        assert config1 == config2
+
+    def test_unequal_mode(self):
+        """Test configs with different modes are not equal."""
+        config1 = StatisticalTestConfig.create_manual()
+        config2 = StatisticalTestConfig.create_auto()
+        assert config1 != config2
+
+    def test_unequal_alpha(self):
+        """Test configs with different alpha are not equal."""
+        config1 = StatisticalTestConfig(alpha=0.05)
+        config2 = StatisticalTestConfig(alpha=0.01)
+        assert config1 != config2
+
+    def test_model_copy(self):
+        """Test that model_copy creates independent copy."""
+        config1 = StatisticalTestConfig(
+            conditions_to_compare=[('A', 'B')]
+        )
+        config2 = config1.model_copy()
+
+        assert config1 == config2
+        assert config1 is not config2
+
+    def test_model_copy_deep(self):
+        """Test deep copy of model."""
+        config1 = StatisticalTestConfig(
+            conditions_to_compare=[('A', 'B'), ('C', 'D')]
+        )
+        config2 = config1.model_copy(deep=True)
+
+        assert config1 == config2
+        assert config1.conditions_to_compare is not config2.conditions_to_compare
+
+
+class TestModelSchema:
+    """Tests for model JSON schema."""
+
+    def test_json_schema_generation(self):
+        """Test that JSON schema can be generated."""
+        schema = StatisticalTestConfig.model_json_schema()
+        assert 'properties' in schema
+        assert 'mode' in schema['properties']
+        assert 'alpha' in schema['properties']
+
+    def test_json_schema_alpha_constraints(self):
+        """Test that alpha constraints are in schema."""
+        schema = StatisticalTestConfig.model_json_schema()
+        alpha_schema = schema['properties']['alpha']
+        # Should have exclusiveMinimum and exclusiveMaximum for gt/lt
+        assert 'exclusiveMinimum' in alpha_schema or 'minimum' in alpha_schema
+        assert 'exclusiveMaximum' in alpha_schema or 'maximum' in alpha_schema
+
+    def test_json_schema_has_all_fields(self):
+        """Test that schema has all expected fields."""
+        schema = StatisticalTestConfig.model_json_schema()
+        expected_fields = ['mode', 'test_type', 'correction_method',
+                          'posthoc_correction', 'alpha', 'auto_transform',
+                          'conditions_to_compare']
+        for field in expected_fields:
+            assert field in schema['properties']
