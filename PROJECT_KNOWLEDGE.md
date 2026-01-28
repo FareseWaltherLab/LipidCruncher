@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** January 26, 2026
+**Last Updated:** January 27, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -21,28 +21,30 @@
 - Skip upfront integration tests — `old_main_app.py` is tightly coupled to Streamlit, making it hard to test. Write unit tests as each service is extracted instead.
 - Start `main_app.py` fresh — don't import from `old_main_app.py`. Build features incrementally using the new architecture. Use `old_main_app.py` as reference only.
 
-### 🔄 Phase 2: Extract Models (IN PROGRESS)
+### ✅ Phase 2: Extract Models (COMPLETE)
 
 | Model | Status | Tests | Commit |
 |-------|--------|-------|--------|
 | ExperimentConfig | ✅ Done | 35 tests | `f7b3641` |
 | NormalizationConfig | ✅ Done | 61 tests | `58349ed` |
-| StatisticalTestConfig | ⬜ Not Started | - | - |
+| StatisticalTestConfig | ✅ Done | 92 tests | `9661dc8` |
 
 **Created Files:**
 - `src/app/models/experiment.py` — ExperimentConfig with computed sample lists
 - `src/app/models/normalization.py` — NormalizationConfig with method validation
+- `src/app/models/statistics.py` — StatisticalTestConfig with mode/correction validation
 - `tests/unit/test_experiment_config.py` — 35 tests
 - `tests/unit/test_normalization_config.py` — 61 tests
+- `tests/unit/test_statistics_config.py` — 92 tests
 - `pytest.ini` — Test configuration with pythonpath
 
-### ⬜ Phase 3: Extract Services (NOT STARTED)
+### 🔄 Phase 3: Extract Services (NEXT)
 ### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Extract StatisticalTestConfig model** (last Phase 2 model)
-2. Then proceed to Phase 3: Extract FormatDetectionService (with unit tests)
+1. **Extract FormatDetectionService** (first Phase 3 service)
+2. Then proceed to DataCleaningService
 
 ---
 
