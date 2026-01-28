@@ -38,13 +38,26 @@
 - `tests/unit/test_statistics_config.py` — 92 tests
 - `pytest.ini` — Test configuration with pythonpath
 
-### 🔄 Phase 3: Extract Services (NEXT)
+### 🔄 Phase 3: Extract Services (IN PROGRESS)
+
+| Service | Status | Tests | Commit |
+|---------|--------|-------|--------|
+| FormatDetectionService | ✅ Done | 133 tests | `af1a42f` |
+| DataCleaningService | ⬜ Pending | - | - |
+| ZeroFilteringService | ⬜ Pending | - | - |
+| NormalizationService | ⬜ Pending | - | - |
+| StandardsService | ⬜ Pending | - | - |
+
+**Created Files:**
+- `src/app/services/format_detection.py` — Auto-detect data format from column signatures
+- `tests/unit/test_format_detection.py` — 133 tests
+
 ### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Extract FormatDetectionService** (first Phase 3 service)
-2. Then proceed to DataCleaningService
+1. **Extract DataCleaningService** (next Phase 3 service)
+2. Then proceed to ZeroFilteringService
 
 ---
 
