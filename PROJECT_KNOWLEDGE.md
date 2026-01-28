@@ -43,7 +43,7 @@
 | Service | Status | Tests | Commit |
 |---------|--------|-------|--------|
 | FormatDetectionService | ✅ Done | 133 tests | `af1a42f` |
-| DataCleaningService | ⬜ Pending | - | - |
+| DataCleaningService | ✅ Done | 143 tests | `ef09322` |
 | ZeroFilteringService | ⬜ Pending | - | - |
 | NormalizationService | ⬜ Pending | - | - |
 | StandardsService | ⬜ Pending | - | - |
@@ -51,13 +51,21 @@
 **Created Files:**
 - `src/app/services/format_detection.py` — Auto-detect data format from column signatures
 - `tests/unit/test_format_detection.py` — 133 tests
+- `src/app/services/data_cleaning/` — Modular package for data cleaning:
+  - `__init__.py` — Main DataCleaningService with format dispatching
+  - `base.py` — Common methods (validation, conversion, row filtering)
+  - `configs.py` — GradeFilterConfig, QualityFilterConfig, CleaningResult
+  - `lipidsearch.py` — LipidSearch 5.0 cleaner (grade filtering, AUC selection)
+  - `msdial.py` — MS-DIAL cleaner (quality filtering, deduplication)
+  - `generic.py` — Generic/Metabolomics Workbench cleaner
+- `tests/unit/test_data_cleaning.py` — 143 tests
 
 ### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Extract DataCleaningService** (next Phase 3 service)
-2. Then proceed to ZeroFilteringService
+1. **Extract ZeroFilteringService** (next Phase 3 service)
+2. Then proceed to NormalizationService
 
 ---
 
