@@ -45,7 +45,7 @@
 | FormatDetectionService | ✅ Done | 133 tests | `af1a42f` |
 | DataCleaningService | ✅ Done | 143 tests | `ef09322` |
 | ZeroFilteringService | ✅ Done | 102 tests | `7c66478` |
-| NormalizationService | ⬜ Pending | - | - |
+| NormalizationService | ✅ Done | 115 tests | `4ce8397` |
 | StandardsService | ⬜ Pending | - | - |
 
 **Created Files:**
@@ -64,13 +64,17 @@
   - `ZeroFilteringResult` — Result with filtered_df and removed species
   - `ZeroFilteringService` — Static methods for filtering and statistics
 - `tests/unit/test_zero_filtering.py` — 102 tests
+- `src/app/services/normalization.py` — Data normalization service
+  - `NormalizationResult` — Result with normalized_df, removed_standards, method_applied
+  - `NormalizationService` — Static methods for IS, protein, and combined normalization
+- `tests/unit/test_normalization.py` — 115 tests
 
 ### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Extract NormalizationService** (next Phase 3 service)
-2. Then proceed to StandardsService
+1. **Extract StandardsService** (next Phase 3 service)
+2. Then proceed to Phase 4: Workflows & UI
 
 ---
 
