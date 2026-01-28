@@ -34,8 +34,8 @@
 - `src/app/models/normalization.py` — NormalizationConfig with method validation
 - `src/app/models/statistics.py` — StatisticalTestConfig with mode/correction validation
 - `tests/unit/test_experiment_config.py` — 105 tests (includes type handling, input validation, boundary conditions)
-- `tests/unit/test_normalization_config.py` — 61 tests
-- `tests/unit/test_statistics_config.py` — 92 tests
+- `tests/unit/test_normalization_config.py` — 108 tests (includes type handling, input validation, boundary conditions)
+- `tests/unit/test_statistics_config.py` — 137 tests (includes type handling, input validation, boundary conditions)
 - `pytest.ini` — Test configuration with pythonpath
 
 ### 🔄 Phase 3: Extract Services (IN PROGRESS)
@@ -69,9 +69,8 @@
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Add type handling tests to StatisticalTestConfig** (92 tests → ~110+ tests) - missing type coercion for alpha, None in condition pairs
-2. **Extract NormalizationService** (next Phase 3 service)
-3. Then proceed to StandardsService
+1. **Extract NormalizationService** (next Phase 3 service)
+2. Then proceed to StandardsService
 
 ---
 
