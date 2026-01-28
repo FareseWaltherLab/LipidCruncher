@@ -44,7 +44,7 @@
 |---------|--------|-------|--------|
 | FormatDetectionService | ✅ Done | 133 tests | `af1a42f` |
 | DataCleaningService | ✅ Done | 143 tests | `ef09322` |
-| ZeroFilteringService | ⬜ Pending | - | - |
+| ZeroFilteringService | ✅ Done | 102 tests | `7e971f7` |
 | NormalizationService | ⬜ Pending | - | - |
 | StandardsService | ⬜ Pending | - | - |
 
@@ -59,13 +59,18 @@
   - `msdial.py` — MS-DIAL cleaner (quality filtering, deduplication)
   - `generic.py` — Generic/Metabolomics Workbench cleaner
 - `tests/unit/test_data_cleaning.py` — 143 tests
+- `src/app/services/zero_filtering.py` — Zero value filtering with configurable thresholds
+  - `ZeroFilterConfig` — Configurable thresholds (detection, BQC, non-BQC)
+  - `ZeroFilteringResult` — Result with filtered_df and removed species
+  - `ZeroFilteringService` — Static methods for filtering and statistics
+- `tests/unit/test_zero_filtering.py` — 102 tests
 
 ### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Extract ZeroFilteringService** (next Phase 3 service)
-2. Then proceed to NormalizationService
+1. **Extract NormalizationService** (next Phase 3 service)
+2. Then proceed to StandardsService
 
 ---
 
