@@ -46,7 +46,7 @@
 | DataCleaningService | ✅ Done | 143 tests | `ef09322` |
 | ZeroFilteringService | ✅ Done | 102 tests | `7c66478` |
 | NormalizationService | ✅ Done | 115 tests | `4ce8397` |
-| StandardsService | ✅ Done | 153 tests | - |
+| StandardsService | ✅ Done | 153 tests | `f8a6cbe` |
 
 **Created Files:**
 - `src/app/services/format_detection.py` — Auto-detect data format from column signatures
