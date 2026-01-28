@@ -69,8 +69,9 @@
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Extract NormalizationService** (next Phase 3 service)
-2. Then proceed to StandardsService
+1. **Add tests to test_experiment_config.py** (currently 35 tests, should match depth of newer test files ~60+ tests)
+2. **Extract NormalizationService** (next Phase 3 service)
+3. Then proceed to StandardsService
 
 ---
 
