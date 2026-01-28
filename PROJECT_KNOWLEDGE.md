@@ -27,7 +27,7 @@
 |-------|--------|-------|--------|
 | ExperimentConfig | ✅ Done | 35 tests | `f7b3641` |
 | NormalizationConfig | ✅ Done | 61 tests | `58349ed` |
-| StatisticalTestConfig | ✅ Done | 92 tests | `9661dc8` |
+| StatisticalTestConfig | ✅ Done | 92 tests | `ac35c31` |
 
 **Created Files:**
 - `src/app/models/experiment.py` — ExperimentConfig with computed sample lists
