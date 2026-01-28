@@ -26,7 +26,7 @@
 | Model | Status | Tests | Commit |
 |-------|--------|-------|--------|
 | ExperimentConfig | ✅ Done | 105 tests | `f7b3641` |
-| NormalizationConfig | ✅ Done | 61 tests | `58349ed` |
+| NormalizationConfig | ✅ Done | 108 tests | `58349ed` |
 | StatisticalTestConfig | ✅ Done | 92 tests | `ac35c31` |
 
 **Created Files:**
@@ -69,10 +69,9 @@
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Add type handling tests to NormalizationConfig** (61 tests → ~80+ tests) - missing type coercion, None handling, wrong collection types
-2. **Add type handling tests to StatisticalTestConfig** (92 tests → ~110+ tests) - missing type coercion for alpha, None in condition pairs
-3. **Extract NormalizationService** (next Phase 3 service)
-4. Then proceed to StandardsService
+1. **Add type handling tests to StatisticalTestConfig** (92 tests → ~110+ tests) - missing type coercion for alpha, None in condition pairs
+2. **Extract NormalizationService** (next Phase 3 service)
+3. Then proceed to StandardsService
 
 ---
 

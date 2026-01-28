@@ -695,3 +695,467 @@ class TestNormalizationConfigRealWorldScenarios:
 
         assert config.get_protein_concentration('Control_1') == 1.2
         assert config.get_protein_concentration('Treatment_A_1') == 1.4
+
+
+class TestNormalizationConfigTypeHandling:
+    """Tests for type coercion and type error handling."""
+
+    def test_integer_intsta_concentration_coerced_to_float(self):
+        """Test that integer concentrations are coerced to floats."""
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={'PC': 'PC(15:0/18:1)'},
+            intsta_concentrations={'PC(15:0/18:1)': 1}  # int, not float
+        )
+        assert config.intsta_concentrations['PC(15:0/18:1)'] == 1.0
+        assert isinstance(config.intsta_concentrations['PC(15:0/18:1)'], float)
+
+    def test_integer_protein_concentration_coerced_to_float(self):
+        """Test that integer protein concentrations are coerced to floats."""
+        config = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': 2, 's2': 3}  # ints
+        )
+        assert config.protein_concentrations['s1'] == 2.0
+        assert isinstance(config.protein_concentrations['s1'], float)
+
+    def test_string_method_literal_required(self):
+        """Test that method must be a valid string literal."""
+        with pytest.raises(ValueError):
+            NormalizationConfig(method='NONE')  # wrong case
+
+    def test_integer_method_raises_error(self):
+        """Test that integer method raises validation error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(method=1)
+
+    def test_none_method_value_raises_error(self):
+        """Test that None as method value raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(method=None)
+
+    def test_list_instead_of_dict_for_internal_standards_raises_error(self):
+        """Test that list instead of dict for internal_standards raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards=['PC(15:0/18:1)', 'PE(17:0/17:0)'],
+                intsta_concentrations={'PC(15:0/18:1)': 1.0}
+            )
+
+    def test_list_instead_of_dict_for_concentrations_raises_error(self):
+        """Test that list instead of dict for concentrations raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards={'PC': 'PC(15:0/18:1)'},
+                intsta_concentrations=[1.0, 0.5]
+            )
+
+    def test_list_instead_of_dict_for_protein_concentrations_raises_error(self):
+        """Test that list instead of dict for protein_concentrations raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='protein',
+                protein_concentrations=[2.5, 3.0]
+            )
+
+    def test_tuple_for_selected_classes_works(self):
+        """Test that tuple is accepted for selected_classes."""
+        config = NormalizationConfig(
+            method='none',
+            selected_classes=('PC', 'PE', 'TG')  # tuple instead of list
+        )
+        # Pydantic converts tuples to lists
+        assert isinstance(config.selected_classes, list)
+        assert config.selected_classes == ['PC', 'PE', 'TG']
+
+    def test_set_for_selected_classes_handling(self):
+        """Test that set input for selected_classes is handled."""
+        # Sets might work but lose order
+        try:
+            config = NormalizationConfig(
+                method='none',
+                selected_classes={'PC', 'PE'}  # set
+            )
+            assert len(config.selected_classes) == 2
+        except (ValueError, TypeError):
+            pass  # Also acceptable
+
+    def test_numeric_string_concentration_coerced_to_float(self):
+        """Test that numeric string concentration values are coerced to floats."""
+        # Pydantic v2 coerces numeric strings to floats
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={'PC': 'PC(15:0/18:1)'},
+            intsta_concentrations={'PC(15:0/18:1)': '1.0'}  # string coerced
+        )
+        assert config.intsta_concentrations['PC(15:0/18:1)'] == 1.0
+        assert isinstance(config.intsta_concentrations['PC(15:0/18:1)'], float)
+
+    def test_numeric_string_protein_concentration_coerced_to_float(self):
+        """Test that numeric string protein concentration values are coerced."""
+        # Pydantic v2 coerces numeric strings to floats
+        config = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': '2.5'}  # string coerced
+        )
+        assert config.protein_concentrations['s1'] == 2.5
+        assert isinstance(config.protein_concentrations['s1'], float)
+
+    def test_non_numeric_string_concentration_raises_error(self):
+        """Test that non-numeric string concentration values raise error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards={'PC': 'PC(15:0/18:1)'},
+                intsta_concentrations={'PC(15:0/18:1)': 'not_a_number'}
+            )
+
+    def test_non_numeric_string_protein_concentration_raises_error(self):
+        """Test that non-numeric string protein concentration values raise error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='protein',
+                protein_concentrations={'s1': 'invalid'}
+            )
+
+    def test_none_value_in_internal_standards_dict(self):
+        """Test that None value in internal_standards dict raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards={'PC': None},  # None value
+                intsta_concentrations={'PC(15:0/18:1)': 1.0}
+            )
+
+    def test_none_value_in_intsta_concentrations_dict(self):
+        """Test that None value in intsta_concentrations dict raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards={'PC': 'PC(15:0/18:1)'},
+                intsta_concentrations={'PC(15:0/18:1)': None}  # None value
+            )
+
+    def test_none_value_in_protein_concentrations_dict(self):
+        """Test that None value in protein_concentrations dict raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='protein',
+                protein_concentrations={'s1': None}  # None value
+            )
+
+    def test_none_in_selected_classes_list(self):
+        """Test that None in selected_classes list raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='none',
+                selected_classes=['PC', None, 'PE']
+            )
+
+    def test_integer_in_selected_classes_raises_error(self):
+        """Test that integer in selected_classes raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='none',
+                selected_classes=['PC', 123, 'PE']
+            )
+
+    def test_nested_dict_for_internal_standards_raises_error(self):
+        """Test that nested dict for internal_standards raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards={'PC': {'name': 'PC(15:0/18:1)'}},  # nested
+                intsta_concentrations={'PC(15:0/18:1)': 1.0}
+            )
+
+    def test_nested_list_in_selected_classes_raises_error(self):
+        """Test that nested list in selected_classes raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='none',
+                selected_classes=[['PC'], ['PE']]  # nested lists
+            )
+
+    def test_boolean_concentration_coerced(self):
+        """Test that boolean concentrations are coerced (True=1.0)."""
+        # True should become 1.0, which is positive and valid
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={'PC': 'PC(15:0/18:1)'},
+            intsta_concentrations={'PC(15:0/18:1)': True}  # True = 1.0
+        )
+        assert config.intsta_concentrations['PC(15:0/18:1)'] == 1.0
+
+    def test_boolean_false_concentration_fails_validation(self):
+        """Test that False concentration (0.0) fails positive validation."""
+        with pytest.raises(ValueError, match="positive"):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards={'PC': 'PC(15:0/18:1)'},
+                intsta_concentrations={'PC(15:0/18:1)': False}  # False = 0.0
+            )
+
+    def test_dict_instead_of_list_for_selected_classes_raises(self):
+        """Test that dict instead of list for selected_classes raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            NormalizationConfig(
+                method='none',
+                selected_classes={'PC': 1, 'PE': 2}
+            )
+
+    def test_mixed_types_in_concentration_values(self):
+        """Test mixed int/float concentration values work."""
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={'PC': 'PC(15:0/18:1)', 'PE': 'PE(17:0/17:0)'},
+            intsta_concentrations={
+                'PC(15:0/18:1)': 1,    # int
+                'PE(17:0/17:0)': 0.5   # float
+            }
+        )
+        assert config.intsta_concentrations['PC(15:0/18:1)'] == 1.0
+        assert config.intsta_concentrations['PE(17:0/17:0)'] == 0.5
+
+
+class TestNormalizationConfigInputValidation:
+    """Tests for input validation edge cases."""
+
+    def test_empty_string_key_in_internal_standards(self):
+        """Test empty string as key in internal_standards."""
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={'': 'PC(15:0/18:1)'},  # empty key
+            intsta_concentrations={'PC(15:0/18:1)': 1.0}
+        )
+        # Empty string keys are technically valid for dict
+        assert config.internal_standards.get('') == 'PC(15:0/18:1)'
+
+    def test_empty_string_value_in_internal_standards(self):
+        """Test empty string as value in internal_standards."""
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={'PC': ''},  # empty value
+            intsta_concentrations={'': 1.0}  # matching empty key
+        )
+        assert config.get_standard_for_class('PC') == ''
+
+    def test_empty_string_in_selected_classes(self):
+        """Test empty string in selected_classes is allowed."""
+        config = NormalizationConfig(
+            method='none',
+            selected_classes=['PC', '', 'PE']
+        )
+        assert '' in config.selected_classes
+
+    def test_whitespace_only_class_in_selected_classes(self):
+        """Test whitespace-only class name is allowed."""
+        config = NormalizationConfig(
+            method='none',
+            selected_classes=['PC', '   ', 'PE']
+        )
+        assert '   ' in config.selected_classes
+
+    def test_generator_for_selected_classes(self):
+        """Test generator input for selected_classes."""
+        try:
+            config = NormalizationConfig(
+                method='none',
+                selected_classes=(x for x in ['PC', 'PE', 'TG'])
+            )
+            assert config.selected_classes == ['PC', 'PE', 'TG']
+        except (ValueError, TypeError):
+            pass  # Also acceptable
+
+    def test_inf_concentration_handling(self):
+        """Test infinity concentration handling."""
+        import math
+        # Infinity should fail the positive check? Actually inf > 0 is True
+        config = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': math.inf}
+        )
+        assert config.protein_concentrations['s1'] == math.inf
+
+    def test_nan_concentration_handling(self):
+        """Test NaN concentration handling."""
+        import math
+        # NaN comparisons are tricky - NaN <= 0 is False, but NaN > 0 is also False
+        # The validator uses `if conc <= 0` so NaN should pass the check
+        # but this may not be desired behavior
+        try:
+            config = NormalizationConfig(
+                method='protein',
+                protein_concentrations={'s1': math.nan}
+            )
+            # If it passes, NaN is stored
+            assert math.isnan(config.protein_concentrations['s1'])
+        except ValueError:
+            pass  # Also acceptable if validation catches NaN
+
+    def test_very_small_positive_concentration(self):
+        """Test very small positive concentration (near machine epsilon)."""
+        import sys
+        tiny = sys.float_info.min
+        config = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': tiny}
+        )
+        assert config.protein_concentrations['s1'] == tiny
+
+    def test_negative_zero_concentration_fails(self):
+        """Test negative zero concentration fails validation."""
+        # -0.0 equals 0.0 in Python, so should fail
+        with pytest.raises(ValueError, match="positive"):
+            NormalizationConfig(
+                method='protein',
+                protein_concentrations={'s1': -0.0}
+            )
+
+
+class TestNormalizationConfigBoundaryConditions:
+    """Tests for boundary conditions and limits."""
+
+    def test_very_large_concentration_dictionary(self):
+        """Test with many entries in concentration dictionary."""
+        standards = {f'Class_{i}': f'Standard_{i}' for i in range(100)}
+        concentrations = {f'Standard_{i}': 1.0 + i * 0.01 for i in range(100)}
+
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards=standards,
+            intsta_concentrations=concentrations
+        )
+        assert len(config.internal_standards) == 100
+        assert len(config.intsta_concentrations) == 100
+
+    def test_very_long_class_name(self):
+        """Test very long lipid class name."""
+        long_class = 'X' * 1000
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={long_class: 'Standard'},
+            intsta_concentrations={'Standard': 1.0}
+        )
+        assert config.get_standard_for_class(long_class) == 'Standard'
+
+    def test_very_long_standard_name(self):
+        """Test very long internal standard name."""
+        long_standard = 'Y' * 1000
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={'PC': long_standard},
+            intsta_concentrations={long_standard: 1.0}
+        )
+        assert config.get_standard_for_class('PC') == long_standard
+        assert config.get_standard_concentration(long_standard) == 1.0
+
+    def test_very_long_sample_name(self):
+        """Test very long sample name."""
+        long_sample = 'Z' * 1000
+        config = NormalizationConfig(
+            method='protein',
+            protein_concentrations={long_sample: 2.5}
+        )
+        assert config.get_protein_concentration(long_sample) == 2.5
+
+    def test_many_selected_classes(self):
+        """Test with many selected classes."""
+        classes = [f'Class_{i}' for i in range(500)]
+        config = NormalizationConfig(
+            method='none',
+            selected_classes=classes
+        )
+        assert len(config.selected_classes) == 500
+
+    def test_maximum_float_concentration(self):
+        """Test maximum float concentration."""
+        import sys
+        config = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': sys.float_info.max}
+        )
+        assert config.protein_concentrations['s1'] == sys.float_info.max
+
+
+class TestNormalizationConfigCopyAndEquality:
+    """Tests for model copy and equality behavior."""
+
+    def test_equal_configs(self):
+        """Test that two configs with same values are equal."""
+        config1 = NormalizationConfig(
+            method='protein',
+            selected_classes=['PC', 'PE'],
+            protein_concentrations={'s1': 2.5, 's2': 3.0}
+        )
+        config2 = NormalizationConfig(
+            method='protein',
+            selected_classes=['PC', 'PE'],
+            protein_concentrations={'s1': 2.5, 's2': 3.0}
+        )
+        assert config1 == config2
+
+    def test_unequal_method(self):
+        """Test configs with different methods are not equal."""
+        config1 = NormalizationConfig(method='none')
+        config2 = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': 2.5}
+        )
+        assert config1 != config2
+
+    def test_unequal_concentrations(self):
+        """Test configs with different concentrations are not equal."""
+        config1 = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': 2.5}
+        )
+        config2 = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': 3.0}
+        )
+        assert config1 != config2
+
+    def test_model_copy(self):
+        """Test that model_copy creates independent copy."""
+        config1 = NormalizationConfig(
+            method='protein',
+            protein_concentrations={'s1': 2.5}
+        )
+        config2 = config1.model_copy()
+
+        assert config1 == config2
+        assert config1 is not config2
+
+    def test_model_copy_deep(self):
+        """Test deep copy of model."""
+        config1 = NormalizationConfig(
+            method='protein',
+            selected_classes=['PC', 'PE'],
+            protein_concentrations={'s1': 2.5}
+        )
+        config2 = config1.model_copy(deep=True)
+
+        assert config1 == config2
+        assert config1.selected_classes is not config2.selected_classes
+        assert config1.protein_concentrations is not config2.protein_concentrations
+
+
+class TestNormalizationConfigModelSchema:
+    """Tests for model JSON schema."""
+
+    def test_json_schema_generation(self):
+        """Test that JSON schema can be generated."""
+        schema = NormalizationConfig.model_json_schema()
+        assert 'properties' in schema
+        assert 'method' in schema['properties']
+        assert 'selected_classes' in schema['properties']
+
+    def test_json_schema_method_enum(self):
+        """Test that method has enum values in schema."""
+        schema = NormalizationConfig.model_json_schema()
+        method_schema = schema['properties']['method']
+        # Check that the valid method values are documented
+        assert 'enum' in method_schema or 'const' in method_schema or 'anyOf' in method_schema
