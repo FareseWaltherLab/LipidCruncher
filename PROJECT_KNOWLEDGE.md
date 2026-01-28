@@ -44,7 +44,7 @@
 |---------|--------|-------|--------|
 | FormatDetectionService | ✅ Done | 133 tests | `af1a42f` |
 | DataCleaningService | ✅ Done | 143 tests | `ef09322` |
-| ZeroFilteringService | ✅ Done | 102 tests | `7e971f7` |
+| ZeroFilteringService | ✅ Done | 102 tests | `7c66478` |
 | NormalizationService | ⬜ Pending | - | - |
 | StandardsService | ⬜ Pending | - | - |
 
