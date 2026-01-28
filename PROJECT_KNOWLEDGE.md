@@ -38,7 +38,7 @@
 - `tests/unit/test_statistics_config.py` — 137 tests (includes type handling, input validation, boundary conditions)
 - `pytest.ini` — Test configuration with pythonpath
 
-### 🔄 Phase 3: Extract Services (IN PROGRESS)
+### ✅ Phase 3: Extract Services (COMPLETE)
 
 | Service | Status | Tests | Commit |
 |---------|--------|-------|--------|
@@ -46,7 +46,7 @@
 | DataCleaningService | ✅ Done | 143 tests | `ef09322` |
 | ZeroFilteringService | ✅ Done | 102 tests | `7c66478` |
 | NormalizationService | ✅ Done | 115 tests | `4ce8397` |
-| StandardsService | ⬜ Pending | - | - |
+| StandardsService | ✅ Done | 153 tests | - |
 
 **Created Files:**
 - `src/app/services/format_detection.py` — Auto-detect data format from column signatures
@@ -68,13 +68,19 @@
   - `NormalizationResult` — Result with normalized_df, removed_standards, method_applied
   - `NormalizationService` — Static methods for IS, protein, and combined normalization
 - `tests/unit/test_normalization.py` — 115 tests
+- `src/app/services/standards.py` — Internal standards management service
+  - `StandardsExtractionResult` — Result with data_df, standards_df, patterns matched
+  - `StandardsValidationResult` — Validation result with errors/warnings
+  - `StandardsProcessingResult` — Result with processed standards and source mode
+  - `StandardsService` — Static methods for detection, extraction, validation, and processing
+- `tests/unit/test_standards.py` — 153 tests
 
 ### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Extract StandardsService** (next Phase 3 service)
-2. Then proceed to Phase 4: Workflows & UI
+1. **Phase 3 Complete** — All services extracted
+2. **Begin Phase 4** — Extract Workflows & UI
 
 ---
 
@@ -209,6 +215,23 @@ LipidCruncher/
 ---
 
 ## Testing Strategy
+
+### Unit Test Depth & Coverage Requirements
+
+**Target: 100+ tests per service** — This project maintains comprehensive unit test coverage. Each service should have approximately 100-150 tests covering:
+
+1. **Core Functionality Tests** — Test each public method's primary purpose
+2. **Edge Cases** — Empty DataFrames, None values, missing columns, single rows
+3. **Boundary Conditions** — Threshold values, large datasets, special characters
+4. **Type Handling** — String/int/float coercion, object dtypes, mixed types
+5. **Error Conditions** — Invalid inputs, missing required data, validation failures
+6. **Integration Scenarios** — Realistic multi-step workflows
+
+**Test Structure Pattern:**
+- Group tests by class (e.g., `TestDetectStandards`, `TestValidateStandards`)
+- Use descriptive test names (e.g., `test_detect_d7_pattern`, `test_empty_dataframe_raises_error`)
+- Use pytest fixtures for reusable test data
+- Follow Arrange-Act-Assert pattern
 
 ### Unit Tests (As You Extract)
 
