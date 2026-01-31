@@ -81,7 +81,7 @@
 |-----------|--------|-------|--------|
 | StreamlitAdapter | ✅ Done | 75 tests | `b077cb1` |
 | DataIngestionWorkflow | ✅ Done | 125 tests | `b077cb1` |
-| NormalizationWorkflow | ✅ Done | 98 tests | `dc102ff` |
+| NormalizationWorkflow | ✅ Done | 98 tests | `341ba71` |
 
 **Created Files:**
 - `src/app/adapters/streamlit_adapter.py` — Session state management and caching wrappers
