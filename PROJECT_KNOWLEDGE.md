@@ -106,7 +106,7 @@
 
 **Strategy:** Build the UI module by module, wiring up existing workflows before extracting new ones.
 
-#### Module 1: Filter and Normalize (COMPLETE)
+#### Module 1: Filter and Normalize (IN PROGRESS)
 Workflows and UI implemented:
 - ✅ `DataIngestionWorkflow` — upload → format detection → cleaning → zero filtering → standards
 - ✅ `NormalizationWorkflow` — normalization pipeline
@@ -114,6 +114,15 @@ Workflows and UI implemented:
 - ✅ Sidebar: file upload, sample grouping, experiment config
 - ✅ Main area: data preview, filtering options, normalization settings
 - ✅ Workflows wired up and tested
+- ✅ Landing page extracted to `src/app/ui/landing_page.py`
+- ✅ Format requirements extracted to `src/app/ui/format_requirements.py`
+
+**Remaining Tasks (UI Polish):**
+1. ⬜ Check for large methods in `main_app.py` — break down methods >50 lines
+2. ⬜ Match all UI instructions to old_main_app.py:
+   - ⬜ "Try Sample Data" section needs emoji and explanation (compare with old app)
+   - ⬜ Format requirements incomplete — copy full text from old_main_app.py
+   - ⬜ Review all user-facing text for consistency with old app
 
 **`main_app.py` now includes:**
 - Landing page with module descriptions
