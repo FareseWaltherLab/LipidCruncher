@@ -79,8 +79,8 @@
 
 | Component | Status | Tests | Commit |
 |-----------|--------|-------|--------|
-| StreamlitAdapter | ✅ Done | — | — |
-| DataIngestionWorkflow | ✅ Done | 33 tests | — |
+| StreamlitAdapter | ✅ Done | 75 tests | `b077cb1` |
+| DataIngestionWorkflow | ✅ Done | 125 tests | `b077cb1` |
 
 **Created Files:**
 - `src/app/adapters/streamlit_adapter.py` — Session state management and caching wrappers
@@ -90,7 +90,8 @@
   - `IngestionConfig` — Configuration for the ingestion workflow
   - `IngestionResult` — Complete result with cleaned_df, standards, and validation status
   - `DataIngestionWorkflow` — Orchestrates format detection → cleaning → zero filtering → standards
-- `tests/unit/test_data_ingestion_workflow.py` — 33 tests
+- `tests/unit/test_data_ingestion_workflow.py` — 125 tests (comprehensive fixtures for all formats)
+- `tests/unit/test_streamlit_adapter.py` — 75 tests (SessionState, utility methods, mocked session state)
 
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
@@ -243,6 +244,22 @@ LipidCruncher/
 4. **Type Handling** — String/int/float coercion, object dtypes, mixed types
 5. **Error Conditions** — Invalid inputs, missing required data, validation failures
 6. **Integration Scenarios** — Realistic multi-step workflows
+
+**⚠️ IMPORTANT: Maintain Test Depth for All New Code**
+
+All future tests MUST maintain the same level of depth and coverage as existing tests. Reference these examples:
+- `test_format_detection.py` — 133 tests
+- `test_data_cleaning.py` — 143 tests
+- `test_standards.py` — 153 tests
+- `test_data_ingestion_workflow.py` — 125 tests
+- `test_streamlit_adapter.py` — 75 tests
+
+When writing new tests:
+- Create comprehensive fixtures covering all data formats (LipidSearch, MS-DIAL, Generic)
+- Include edge case fixtures (empty, single row, all zeros, NaN values, duplicates, special characters)
+- Test each public method with multiple scenarios
+- Use `MockSessionState` for Streamlit session state mocking (supports both dict and attribute access)
+- Use keyword arguments for Pydantic models like `ExperimentConfig`
 
 **Test Structure Pattern:**
 - Group tests by class (e.g., `TestDetectStandards`, `TestValidateStandards`)
