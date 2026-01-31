@@ -301,30 +301,211 @@ def display_processing_results(result):
 # UI Components - Normalization
 # =============================================================================
 
-def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, experiment: ExperimentConfig, data_format: str):
-    """Display normalization options and apply normalization."""
-    st.subheader("Normalization")
-
-    # Get available classes
+def _display_class_selection(cleaned_df: pd.DataFrame) -> list:
+    """Display lipid class selection UI. Returns selected classes or None."""
     available_classes = NormalizationWorkflow.get_available_classes(cleaned_df)
 
-    # Class selection
     with st.expander("Select Lipid Classes", expanded=True):
         select_all = st.checkbox("Select All Classes", value=True)
         if select_all:
-            selected_classes = available_classes
+            return available_classes
         else:
-            selected_classes = st.multiselect(
+            return st.multiselect(
                 "Classes to include:",
                 options=available_classes,
                 default=available_classes
             )
 
+
+def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes: list) -> tuple:
+    """Display internal standards configuration UI. Returns (internal_standards, intsta_concentrations) or (None, None)."""
+    st.markdown("---")
+    st.markdown("**Internal Standards Configuration**")
+
+    if intsta_df is None or intsta_df.empty:
+        st.error("No internal standards detected. Please upload standards or use a different method.")
+        return None, None
+
+    standards_by_class = NormalizationWorkflow.get_standards_by_class(intsta_df)
+    all_standards = NormalizationWorkflow.get_available_standards(intsta_df)
+
+    if not all_standards:
+        st.error("No internal standards available.")
+        return None, None
+
+    st.info(f"Detected {len(all_standards)} internal standards")
+
+    internal_standards = {}
+    intsta_concentrations = {}
+
+    # Standard-to-class mapping
+    with st.expander("Standard-to-Class Mapping", expanded=True):
+        for lipid_class in selected_classes:
+            class_standards = standards_by_class.get(lipid_class, [])
+            default_std = class_standards[0] if class_standards else all_standards[0]
+
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                st.text(lipid_class)
+            with col2:
+                selected_std = st.selectbox(
+                    f"Standard for {lipid_class}",
+                    options=all_standards,
+                    index=all_standards.index(default_std) if default_std in all_standards else 0,
+                    key=f"std_{lipid_class}",
+                    label_visibility="collapsed"
+                )
+                internal_standards[lipid_class] = selected_std
+
+    # Standard concentrations
+    with st.expander("Standard Concentrations (optional)", expanded=False):
+        st.caption("Leave at 1.0 for relative normalization, or enter actual concentrations.")
+        for std in set(internal_standards.values()):
+            conc = st.number_input(
+                f"{std} concentration:",
+                min_value=0.0001,
+                value=1.0,
+                step=0.1,
+                key=f"conc_{std}"
+            )
+            intsta_concentrations[std] = conc
+
+    return internal_standards, intsta_concentrations
+
+
+def _display_protein_config(experiment: ExperimentConfig) -> dict:
+    """Display protein concentration configuration UI. Returns protein_concentrations dict."""
+    st.markdown("---")
+    st.markdown("**Protein Concentrations**")
+
+    sample_names = experiment.full_samples_list
+    protein_concentrations = {}
+
+    with st.expander("Enter Protein Concentrations", expanded=True):
+        st.caption("Enter protein concentration for each sample (e.g., mg/mL).")
+
+        input_method = st.radio(
+            "Input method:",
+            ["Manual entry", "Same for all"],
+            horizontal=True
+        )
+
+        if input_method == "Same for all":
+            default_conc = st.number_input(
+                "Protein concentration for all samples:",
+                min_value=0.0001,
+                value=1.0,
+                step=0.1
+            )
+            for sample in sample_names:
+                protein_concentrations[sample] = default_conc
+        else:
+            for i, condition in enumerate(experiment.conditions_list):
+                st.markdown(f"**{condition}**")
+                start_idx = sum(experiment.number_of_samples_list[:i])
+                end_idx = start_idx + experiment.number_of_samples_list[i]
+                condition_samples = sample_names[start_idx:end_idx]
+
+                cols = st.columns(min(len(condition_samples), 4))
+                for j, sample in enumerate(condition_samples):
+                    with cols[j % len(cols)]:
+                        conc = st.number_input(
+                            sample,
+                            min_value=0.0001,
+                            value=1.0,
+                            step=0.1,
+                            key=f"protein_{sample}"
+                        )
+                        protein_concentrations[sample] = conc
+
+    return protein_concentrations
+
+
+def _apply_normalization(
+    cleaned_df: pd.DataFrame,
+    intsta_df: pd.DataFrame,
+    experiment: ExperimentConfig,
+    data_format: str,
+    config_method: str,
+    selected_classes: list,
+    internal_standards: dict,
+    intsta_concentrations: dict,
+    protein_concentrations: dict
+) -> None:
+    """Handle the Apply Normalization button click."""
+    with st.spinner("Normalizing data..."):
+        try:
+            norm_config = NormalizationConfig(
+                method=config_method,
+                selected_classes=selected_classes,
+                internal_standards=internal_standards if internal_standards else None,
+                intsta_concentrations=intsta_concentrations if intsta_concentrations else None,
+                protein_concentrations=protein_concentrations if protein_concentrations else None
+            )
+
+            format_map = {
+                'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
+                'MS-DIAL': DataFormat.MSDIAL,
+                'Generic Format': DataFormat.GENERIC,
+                'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
+            }
+
+            workflow_config = NormalizationWorkflowConfig(
+                experiment=experiment,
+                normalization=norm_config,
+                data_format=format_map.get(data_format, DataFormat.GENERIC)
+            )
+
+            result = NormalizationWorkflow.run(
+                df=cleaned_df,
+                config=workflow_config,
+                intsta_df=intsta_df
+            )
+
+            if result.success:
+                st.session_state.normalization_result = result
+                st.session_state.normalized_df = result.normalized_df
+                st.session_state.continuation_df = result.normalized_df
+                st.success(f"Normalization complete! Method: {result.method_applied}")
+            else:
+                for error in result.validation_errors:
+                    st.error(error)
+
+        except Exception as e:
+            st.error(f"Normalization error: {e}")
+
+
+def _display_normalization_results() -> None:
+    """Display normalization results from session state."""
+    result = st.session_state.get('normalization_result')
+    if not result or not result.success:
+        return
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Lipids", result.lipids_after)
+    col2.metric("Samples", result.samples_processed)
+    col3.metric("Standards Removed", len(result.removed_standards))
+
+    if result.removed_standards:
+        with st.expander("Removed Standards", expanded=False):
+            for std in result.removed_standards:
+                st.text(f"• {std}")
+
+    if result.normalized_df is not None:
+        display_data_preview(result.normalized_df, "Normalized Data")
+
+
+def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, experiment: ExperimentConfig, data_format: str):
+    """Display normalization options and apply normalization."""
+    st.subheader("Normalization")
+
+    # Class selection
+    selected_classes = _display_class_selection(cleaned_df)
     if not selected_classes:
         st.warning("Please select at least one lipid class.")
         return None
 
-    # Normalization method selection
+    # Method selection
     st.markdown("**Normalization Method**")
     method = st.radio(
         "Choose a method:",
@@ -333,7 +514,6 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
         help="'Both' applies internal standards first, then protein concentration."
     )
 
-    # Map UI method names to config values
     method_map = {
         'None': 'none',
         'Internal Standards': 'internal_standard',
@@ -342,175 +522,30 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
     }
     config_method = method_map[method]
 
-    # Internal standards configuration
+    # Collect configuration based on method
     internal_standards = {}
     intsta_concentrations = {}
-
-    if method in ['Internal Standards', 'Both']:
-        st.markdown("---")
-        st.markdown("**Internal Standards Configuration**")
-
-        if intsta_df is None or intsta_df.empty:
-            st.error("No internal standards detected. Please upload standards or use a different method.")
-            return None
-
-        # Get standards by class
-        standards_by_class = NormalizationWorkflow.get_standards_by_class(intsta_df)
-        all_standards = NormalizationWorkflow.get_available_standards(intsta_df)
-
-        if not all_standards:
-            st.error("No internal standards available.")
-            return None
-
-        st.info(f"Detected {len(all_standards)} internal standards")
-
-        # Show mapping UI
-        with st.expander("Standard-to-Class Mapping", expanded=True):
-            for lipid_class in selected_classes:
-                class_standards = standards_by_class.get(lipid_class, [])
-                default_std = class_standards[0] if class_standards else all_standards[0]
-
-                col1, col2 = st.columns([1, 2])
-                with col1:
-                    st.text(lipid_class)
-                with col2:
-                    selected_std = st.selectbox(
-                        f"Standard for {lipid_class}",
-                        options=all_standards,
-                        index=all_standards.index(default_std) if default_std in all_standards else 0,
-                        key=f"std_{lipid_class}",
-                        label_visibility="collapsed"
-                    )
-                    internal_standards[lipid_class] = selected_std
-
-        # Standard concentrations (optional)
-        with st.expander("Standard Concentrations (optional)", expanded=False):
-            st.caption("Leave at 1.0 for relative normalization, or enter actual concentrations.")
-            for std in set(internal_standards.values()):
-                conc = st.number_input(
-                    f"{std} concentration:",
-                    min_value=0.0001,
-                    value=1.0,
-                    step=0.1,
-                    key=f"conc_{std}"
-                )
-                intsta_concentrations[std] = conc
-
-    # Protein concentration configuration
     protein_concentrations = {}
 
+    if method in ['Internal Standards', 'Both']:
+        internal_standards, intsta_concentrations = _display_internal_standards_config(intsta_df, selected_classes)
+        if internal_standards is None:
+            return None
+
     if method in ['Protein Concentration', 'Both']:
-        st.markdown("---")
-        st.markdown("**Protein Concentrations**")
+        protein_concentrations = _display_protein_config(experiment)
 
-        # Get sample names from experiment
-        sample_names = experiment.full_samples_list
-
-        with st.expander("Enter Protein Concentrations", expanded=True):
-            st.caption("Enter protein concentration for each sample (e.g., mg/mL).")
-
-            # Input method choice
-            input_method = st.radio(
-                "Input method:",
-                ["Manual entry", "Same for all"],
-                horizontal=True
-            )
-
-            if input_method == "Same for all":
-                default_conc = st.number_input(
-                    "Protein concentration for all samples:",
-                    min_value=0.0001,
-                    value=1.0,
-                    step=0.1
-                )
-                for sample in sample_names:
-                    protein_concentrations[sample] = default_conc
-            else:
-                # Group by condition for easier entry
-                for i, condition in enumerate(experiment.conditions_list):
-                    st.markdown(f"**{condition}**")
-                    start_idx = sum(experiment.number_of_samples_list[:i])
-                    end_idx = start_idx + experiment.number_of_samples_list[i]
-                    condition_samples = sample_names[start_idx:end_idx]
-
-                    cols = st.columns(min(len(condition_samples), 4))
-                    for j, sample in enumerate(condition_samples):
-                        with cols[j % len(cols)]:
-                            conc = st.number_input(
-                                sample,
-                                min_value=0.0001,
-                                value=1.0,
-                                step=0.1,
-                                key=f"protein_{sample}"
-                            )
-                            protein_concentrations[sample] = conc
-
-    # Apply normalization button
+    # Apply button
     st.markdown("---")
     if st.button("Apply Normalization", type="primary"):
-        with st.spinner("Normalizing data..."):
-            try:
-                # Create normalization config
-                norm_config = NormalizationConfig(
-                    method=config_method,
-                    selected_classes=selected_classes,
-                    internal_standards=internal_standards if internal_standards else None,
-                    intsta_concentrations=intsta_concentrations if intsta_concentrations else None,
-                    protein_concentrations=protein_concentrations if protein_concentrations else None
-                )
+        _apply_normalization(
+            cleaned_df, intsta_df, experiment, data_format,
+            config_method, selected_classes,
+            internal_standards, intsta_concentrations, protein_concentrations
+        )
 
-                # Map UI format to DataFormat enum
-                format_map = {
-                    'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
-                    'MS-DIAL': DataFormat.MSDIAL,
-                    'Generic Format': DataFormat.GENERIC,
-                    'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
-                }
-
-                # Create workflow config
-                workflow_config = NormalizationWorkflowConfig(
-                    experiment=experiment,
-                    normalization=norm_config,
-                    data_format=format_map.get(data_format, DataFormat.GENERIC)
-                )
-
-                # Run workflow
-                result = NormalizationWorkflow.run(
-                    df=cleaned_df,
-                    config=workflow_config,
-                    intsta_df=intsta_df
-                )
-
-                if result.success:
-                    st.session_state.normalization_result = result
-                    st.session_state.normalized_df = result.normalized_df
-                    st.session_state.continuation_df = result.normalized_df
-                    st.success(f"Normalization complete! Method: {result.method_applied}")
-                else:
-                    for error in result.validation_errors:
-                        st.error(error)
-
-            except Exception as e:
-                st.error(f"Normalization error: {e}")
-
-    # Display normalization results
-    if st.session_state.get('normalization_result'):
-        result = st.session_state.normalization_result
-        if result.success:
-            # Show statistics
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Lipids", result.lipids_after)
-            col2.metric("Samples", result.samples_processed)
-            col3.metric("Standards Removed", len(result.removed_standards))
-
-            if result.removed_standards:
-                with st.expander("Removed Standards", expanded=False):
-                    for std in result.removed_standards:
-                        st.text(f"• {std}")
-
-            # Show normalized data preview
-            if result.normalized_df is not None:
-                display_data_preview(result.normalized_df, "Normalized Data")
+    # Results display
+    _display_normalization_results()
 
     return st.session_state.get('normalized_df')
 
