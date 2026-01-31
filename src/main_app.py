@@ -11,13 +11,10 @@ Refactored architecture:
 Reference: old_main_app.py contains the original monolithic implementation.
 """
 
-import os
-import io
 from pathlib import Path
 
 import streamlit as st
 import pandas as pd
-from PIL import Image
 
 # =============================================================================
 # Configuration
@@ -32,7 +29,6 @@ st.set_page_config(
 
 # Paths
 BASE_DIR = Path(__file__).parent
-IMAGES_DIR = BASE_DIR / "images"
 SAMPLE_DATA_DIR = BASE_DIR.parent / "sample_datasets"
 
 # =============================================================================
@@ -45,6 +41,8 @@ from app.models.normalization import NormalizationConfig
 from app.services.format_detection import FormatDetectionService, DataFormat
 from app.workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
+from app.ui.landing_page import display_landing_page, display_logo
+from app.ui.format_requirements import display_format_requirements
 
 
 # =============================================================================
@@ -52,97 +50,6 @@ from app.workflows.normalization import NormalizationWorkflow, NormalizationWork
 # =============================================================================
 
 StreamlitAdapter.initialize_session_state()
-
-
-# =============================================================================
-# UI Components - Landing Page
-# =============================================================================
-
-def display_logo():
-    """Display the LipidCruncher logo."""
-    try:
-        logo_path = IMAGES_DIR / "new_logo.tif"
-        if logo_path.exists():
-            logo = Image.open(logo_path)
-            st.image(logo, width=720)
-        else:
-            st.header("LipidCruncher")
-    except Exception:
-        st.header("LipidCruncher")
-
-
-def display_landing_page():
-    """Display the LipidCruncher landing page."""
-    display_logo()
-
-    # Tagline
-    st.markdown("""
-    *An open-source platform for processing, visualizing, and analyzing lipidomic data.*
-
-    Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther)
-    to bridge the gap between lipidomic data generation and biological insight—no bioinformatics expertise required.
-    """)
-
-    # Quick highlights
-    col1, col2, col3, col4 = st.columns(4)
-    col1.markdown("**4 Formats**<br>LipidSearch, MS-DIAL, Generic, Metabolomics Workbench", unsafe_allow_html=True)
-    col2.markdown("**QC + Normalization**<br>Integrated quality control with flexible normalization", unsafe_allow_html=True)
-    col3.markdown("**Lipid-Specific Viz**<br>Saturation profiles, pathway maps, lipidomic heatmap", unsafe_allow_html=True)
-    col4.markdown("**High-Quality Outputs**<br>Interactive plots, SVG export, PDF reports", unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # The Three Modules
-    st.subheader("How It Works")
-    st.markdown("LipidCruncher guides you through three intuitive modules:")
-
-    # Module 1
-    st.markdown("#### Module 1: Filter and Normalize")
-    st.markdown("""
-    **Get your data analysis-ready in minutes.** Import data from LipidSearch, MS-DIAL, Metabolomics Workbench, or a generic CSV format.
-    Define your experiment by assigning samples to conditions, then apply automatic column standardization,
-    filtering (duplicates, empty rows, zero values), and flexible normalization (internal standards, protein concentration, or both).
-    Internal standards consistency plots help verify sample preparation and instrument performance.
-    """)
-
-    st.markdown("---")
-
-    # Module 2
-    st.markdown("#### Module 2: Quality Check")
-    st.markdown("""
-    **Trust your data before you analyze it.** Box plots assess data quality and validate normalization—replicates
-    within a condition should exhibit similar medians and interquartile ranges. CoV analysis of batch quality control (BQC)
-    samples evaluates measurement precision. Correlation heatmaps and PCA detect outliers and visualize sample clustering.
-    """)
-
-    st.markdown("---")
-
-    # Module 3
-    st.markdown("#### Module 3: Visualize and Analyze")
-    st.markdown("""
-    **Turn complex lipid profiles into biological insights.** Bar & pie charts, volcano plots, saturation profiles (SFA, MUFA, PUFA),
-    metabolic pathway mapping, clustered heatmaps, and fatty acid composition analysis—all interactive with SVG/CSV export.
-    """)
-
-    st.markdown("---")
-
-    # Call to Action
-    st.subheader("Ready to Crunch?")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("Start Crunching", use_container_width=True, type="primary"):
-            st.session_state.page = 'app'
-            st.rerun()
-
-    st.markdown("---")
-
-    # Tips
-    with st.expander("Tips for Getting Started", expanded=False):
-        st.markdown("""
-        - **New to LipidCruncher?** Try one of the sample datasets after selecting your format
-        - **Have your own data?** Make sure it matches one of the supported formats (see format requirements after starting)
-        - **Starting fresh?** Refresh the page to clear any previous session data
-        """)
 
 
 # =============================================================================
@@ -155,98 +62,6 @@ def display_format_selection() -> str:
         'Select Data Format',
         ['Generic Format', 'Metabolomics Workbench', 'LipidSearch 5.0', 'MS-DIAL']
     )
-
-
-def display_format_requirements(data_format: str):
-    """Display format-specific requirements in a collapsible section."""
-
-    if data_format == 'Metabolomics Workbench':
-        with st.expander("Data Format Requirements", expanded=False):
-            st.markdown("""
-### Metabolomics Workbench Format
-
-**Required Structure:**
-
-| Component | Description |
-|-----------|-------------|
-| `MS_METABOLITE_DATA_START` | Section start marker |
-| Row 1 | Sample names |
-| Row 2 | Condition labels (one per sample) |
-| Row 3+ | Lipid data (name in first column) |
-| `MS_METABOLITE_DATA_END` | Section end marker |
-
-**Example:**
-```
-MS_METABOLITE_DATA_START
-Samples,Sample1,Sample2,Sample3,Sample4
-Factors,WT,WT,KO,KO
-LPC(16:0),234.5,256.7,189.3,201.4
-PE(18:0_20:4),456.7,478.2,390.1,405.6
-MS_METABOLITE_DATA_END
-```
-            """)
-
-    elif data_format == 'LipidSearch 5.0':
-        with st.expander("Data Format Requirements", expanded=False):
-            st.markdown("""
-### LipidSearch 5.0 Format
-
-**Required Columns:**
-
-| Column | Description |
-|--------|-------------|
-| `LipidMolec` | Lipid molecule identifier |
-| `ClassKey` | Lipid class (e.g., PC, PE, TG) |
-| `CalcMass` | Calculated mass |
-| `BaseRt` | Retention time |
-| `TotalGrade` | Quality grade (A/B/C/D) |
-| `FAKey` | Fatty acid key |
-| `MeanArea[s1]`, `MeanArea[s2]`, ... | Intensity per sample |
-
-**Tip:** Export directly from LipidSearch — column names should match automatically.
-            """)
-
-    elif data_format == 'MS-DIAL':
-        with st.expander("Data Format Requirements", expanded=False):
-            st.markdown("""
-### MS-DIAL Format
-
-**How to Export:** File → Export → Alignment Result → CSV
-
-**Required Columns:**
-
-| Column | Description |
-|--------|-------------|
-| `Metabolite name` | Lipid identifiers |
-| Sample columns | Intensity values — must be LAST columns |
-
-**Optional Columns** (enable extra features):
-
-| Column | Feature Enabled |
-|--------|-----------------|
-| `Total score` | Quality filtering (0-100) |
-| `MS/MS matched` | MS/MS validation filter |
-| `Average Rt(min)` | Retention time plots |
-
-**Important:** All sample column names must be unique.
-            """)
-
-    else:  # Generic Format
-        with st.expander("Data Format Requirements", expanded=False):
-            st.markdown("""
-### Generic Format
-
-**Required Columns:**
-
-| Column | Description |
-|--------|-------------|
-| Column 1 | Lipid names (will become `LipidMolec`) |
-| Remaining columns | Sample intensities |
-
-**Optional:** A `ClassKey` column for lipid class assignments.
-
-**Internal Standards:** Detected automatically by patterns: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`
-            """)
 
 
 def load_sample_dataset(data_format: str) -> pd.DataFrame:
@@ -284,7 +99,7 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
         if st.sidebar.button("Clear & Upload Your Data"):
             st.session_state.using_sample_data = False
             StreamlitAdapter.reset_data_state()
-            st.rerun()
+            st.experimental_rerun()
         return st.session_state.raw_df
 
     # File upload
@@ -722,7 +537,7 @@ def display_app_page():
         # Back to landing button
         if st.button("← Back to Home"):
             st.session_state.page = 'landing'
-            st.rerun()
+            st.experimental_rerun()
         return
 
     # Show data preview
@@ -789,7 +604,7 @@ def display_app_page():
         if st.button("← Back to Home"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()
-            st.rerun()
+            st.experimental_rerun()
 
 
 # =============================================================================
