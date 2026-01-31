@@ -81,6 +81,7 @@
 |-----------|--------|-------|--------|
 | StreamlitAdapter | ✅ Done | 75 tests | `b077cb1` |
 | DataIngestionWorkflow | ✅ Done | 125 tests | `b077cb1` |
+| NormalizationWorkflow | ✅ Done | 98 tests | `dc102ff` |
 
 **Created Files:**
 - `src/app/adapters/streamlit_adapter.py` — Session state management and caching wrappers
@@ -90,13 +91,18 @@
   - `IngestionConfig` — Configuration for the ingestion workflow
   - `IngestionResult` — Complete result with cleaned_df, standards, and validation status
   - `DataIngestionWorkflow` — Orchestrates format detection → cleaning → zero filtering → standards
+- `src/app/workflows/normalization.py` — Normalization pipeline orchestration
+  - `NormalizationWorkflowConfig` — Configuration for normalization workflow
+  - `NormalizationWorkflowResult` — Complete result with normalized_df, method_applied, statistics
+  - `NormalizationWorkflow` — Orchestrates class selection → method config → normalization → column restoration
 - `tests/unit/test_data_ingestion_workflow.py` — 125 tests (comprehensive fixtures for all formats)
 - `tests/unit/test_streamlit_adapter.py` — 75 tests (SessionState, utility methods, mocked session state)
+- `tests/unit/test_normalization_workflow.py` — 98 tests (all methods, edge cases, integration scenarios)
 
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Continue Phase 4** — Extract more workflows (NormalizationWorkflow, QualityCheckWorkflow)
+1. **Continue Phase 4** — Extract QualityCheckWorkflow for box plots and quality assessment
 2. **Create UI components** — Extract Streamlit UI components from old_main_app.py
 3. **Integrate into main_app.py** — Wire up workflows and UI components
 
