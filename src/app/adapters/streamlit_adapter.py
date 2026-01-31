@@ -422,15 +422,18 @@ class StreamlitAdapter:
     @staticmethod
     def config_to_dict(config: Any) -> Optional[Dict[str, Any]]:
         """
-        Convert a dataclass config to dict for caching.
+        Convert a config object to dict for caching.
 
         Args:
-            config: Dataclass instance or None
+            config: Config instance (dataclass or regular class) or None
 
         Returns:
             Dict representation or None
         """
         if config is None:
             return None
-        from dataclasses import asdict
-        return asdict(config)
+        from dataclasses import asdict, is_dataclass
+        if is_dataclass(config):
+            return asdict(config)
+        # For regular classes, use vars() to get instance attributes
+        return vars(config).copy()
