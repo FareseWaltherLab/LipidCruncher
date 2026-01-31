@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** January 27, 2026
+**Last Updated:** January 30, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -75,12 +75,29 @@
   - `StandardsService` — Static methods for detection, extraction, validation, and processing
 - `tests/unit/test_standards.py` — 153 tests
 
-### ⬜ Phase 4: Extract Workflows & UI (NOT STARTED)
+### 🔄 Phase 4: Extract Workflows & UI (IN PROGRESS)
+
+| Component | Status | Tests | Commit |
+|-----------|--------|-------|--------|
+| StreamlitAdapter | ✅ Done | — | — |
+| DataIngestionWorkflow | ✅ Done | 33 tests | — |
+
+**Created Files:**
+- `src/app/adapters/streamlit_adapter.py` — Session state management and caching wrappers
+  - `SessionState` — Type-safe container for all session state variables
+  - `StreamlitAdapter` — Static methods for session state, caching, and service wrappers
+- `src/app/workflows/data_ingestion.py` — Data ingestion pipeline orchestration
+  - `IngestionConfig` — Configuration for the ingestion workflow
+  - `IngestionResult` — Complete result with cleaned_df, standards, and validation status
+  - `DataIngestionWorkflow` — Orchestrates format detection → cleaning → zero filtering → standards
+- `tests/unit/test_data_ingestion_workflow.py` — 33 tests
+
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
 ### Next Steps
-1. **Phase 3 Complete** — All services extracted
-2. **Begin Phase 4** — Extract Workflows & UI
+1. **Continue Phase 4** — Extract more workflows (NormalizationWorkflow, QualityCheckWorkflow)
+2. **Create UI components** — Extract Streamlit UI components from old_main_app.py
+3. **Integrate into main_app.py** — Wire up workflows and UI components
 
 ---
 
