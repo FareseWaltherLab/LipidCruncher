@@ -64,19 +64,59 @@ def display_format_selection() -> str:
     )
 
 
+def get_sample_data_info(data_format: str) -> dict:
+    """Get sample dataset info including file path and description."""
+    sample_info = {
+        'Generic Format': {
+            'file': 'generic_sample_dataset.csv',
+            'description': """ADGAT-DKO case study (normalized): inguinal white adipose tissue, WT vs ADGAT-DKO.
+
+**Sample order:**
+1. WT (s1–s4, n=4)
+2. ADGAT-DKO (s5–s8, n=4)
+3. BQC (s9–s12, n=4)"""
+        },
+        'LipidSearch 5.0': {
+            'file': 'lipidsearch5_sample_dataset.csv',
+            'description': """ADGAT-DKO case study (raw): inguinal white adipose tissue, WT vs ADGAT-DKO. Includes quality grades and retention times.
+
+**Sample order:**
+1. WT (s1–s4, n=4)
+2. ADGAT-DKO (s5–s8, n=4)
+3. BQC (s9–s12, n=4)"""
+        },
+        'MS-DIAL': {
+            'file': 'msdial_test_dataset.csv',
+            'description': """Mouse adrenal gland lipidomics: fads2 knockout vs wild-type.
+
+**Sample order:**
+1. Blank (n=1)
+2. fads2 KO (n=3)
+3. Wild-type (n=3)"""
+        },
+        'Metabolomics Workbench': {
+            'file': 'metabolomic_workbench_sample_data.csv',
+            'description': """Mouse serum HFD study: 2×2 factorial (Normal/HFD × Water/DCA).
+
+**Sample order:**
+1. Normal+Water (S1A–S11A, n=11)
+2. Normal+DCA (S1B–S11B, n=11)
+3. HFD+Water (S1C–S11C, n=11)
+4. HFD+DCA (S1D–S11D, n=11)
+5. Blank (n=2)
+6. TQC (n=12)"""
+        },
+    }
+    return sample_info.get(data_format)
+
+
 def load_sample_dataset(data_format: str) -> pd.DataFrame:
     """Load a sample dataset for the selected format."""
-    sample_files = {
-        'LipidSearch 5.0': 'lipidsearch5_sample_dataset.csv',
-        'MS-DIAL': 'msdial_test_dataset.csv',
-        'Generic Format': 'generic_sample_dataset.csv',
-        'Metabolomics Workbench': 'metabolomic_workbench_sample_data.csv',
-    }
-
-    filename = sample_files.get(data_format)
-    if filename:
-        filepath = SAMPLE_DATA_DIR / filename
+    info = get_sample_data_info(data_format)
+    if info:
+        filepath = SAMPLE_DATA_DIR / info['file']
         if filepath.exists():
+            st.session_state.sample_data_file = info['file']
             return pd.read_csv(filepath)
     return None
 
@@ -85,19 +125,26 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
     """Display file upload widget and sample data option."""
 
     # Sample data option
-    with st.sidebar.expander("Try Sample Data", expanded=False):
-        if st.button(f"Load {data_format} Sample", key="load_sample"):
+    with st.sidebar.expander("🧪 Try Sample Data", expanded=False):
+        info = get_sample_data_info(data_format)
+        if info:
+            st.markdown(f"**{data_format} Example:**")
+            st.markdown(info['description'])
+            st.markdown("---")
+        if st.button("Load Sample Data", key="load_sample"):
             sample_df = load_sample_dataset(data_format)
             if sample_df is not None:
                 st.session_state.using_sample_data = True
                 st.session_state.raw_df = sample_df
-                st.sidebar.success(f"Loaded sample dataset!")
-                return sample_df
+                st.experimental_rerun()
 
     # Check if using sample data
     if st.session_state.get('using_sample_data') and st.session_state.get('raw_df') is not None:
+        sample_file = st.session_state.get('sample_data_file', 'sample data')
+        st.sidebar.info(f"📁 Using sample: {sample_file}")
         if st.sidebar.button("Clear & Upload Your Data"):
             st.session_state.using_sample_data = False
+            st.session_state.sample_data_file = None
             StreamlitAdapter.reset_data_state()
             st.experimental_rerun()
         return st.session_state.raw_df

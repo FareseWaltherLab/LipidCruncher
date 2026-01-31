@@ -13,7 +13,7 @@ import streamlit as st
 # =============================================================================
 
 METABOLOMICS_WORKBENCH_REQUIREMENTS = """
-### Metabolomics Workbench Format
+### 🔬 Metabolomics Workbench Format
 
 **Required Structure:**
 
@@ -34,10 +34,12 @@ LPC(16:0),234.5,256.7,189.3,201.4
 PE(18:0_20:4),456.7,478.2,390.1,405.6
 MS_METABOLITE_DATA_END
 ```
+
+**✨ Auto-processing:** Lipid names standardized, intensity columns created, conditions extracted.
 """
 
 LIPIDSEARCH_REQUIREMENTS = """
-### LipidSearch 5.0 Format
+### 🔬 LipidSearch 5.0 Format
 
 **Required Columns:**
 
@@ -48,14 +50,20 @@ LIPIDSEARCH_REQUIREMENTS = """
 | `CalcMass` | Calculated mass |
 | `BaseRt` | Retention time |
 | `TotalGrade` | Quality grade (A/B/C/D) |
+| `TotalSmpIDRate(%)` | Sample identification rate |
 | `FAKey` | Fatty acid key |
 | `MeanArea[s1]`, `MeanArea[s2]`, ... | Intensity per sample |
 
-**Tip:** Export directly from LipidSearch — column names should match automatically.
+**Example column structure:**
+```
+LipidMolec | ClassKey | CalcMass | BaseRt | TotalGrade | ... | MeanArea[s1] | MeanArea[s2] | ...
+```
+
+**💡 Tip:** Export directly from LipidSearch — column names should match automatically.
 """
 
 MSDIAL_REQUIREMENTS = """
-### MS-DIAL Format
+### 🔬 MS-DIAL Format
 
 **How to Export:** File → Export → Alignment Result → CSV
 
@@ -63,8 +71,8 @@ MSDIAL_REQUIREMENTS = """
 
 | Column | Description |
 |--------|-------------|
-| `Metabolite name` | Lipid identifiers |
-| Sample columns | Intensity values — must be LAST columns |
+| `Metabolite name` | Lipid identifiers (exact name required) |
+| Sample columns | Intensity values — **must be LAST columns** and **uniquely named** |
 
 **Optional Columns** (enable extra features):
 
@@ -73,23 +81,67 @@ MSDIAL_REQUIREMENTS = """
 | `Total score` | Quality filtering (0-100) |
 | `MS/MS matched` | MS/MS validation filter |
 | `Average Rt(min)` | Retention time plots |
+| `Average Mz` | Retention time plots |
 
-**Important:** All sample column names must be unique.
+---
+
+**📁 File Structure Options:**
+
+**Option A — Raw data only:**
+```
+[metadata cols...] [sample1] [sample2] ... [sampleN]
+```
+
+**Option B — Raw + Pre-normalized:**
+```
+[metadata cols...] [raw1]...[rawN] [Lipid IS] [norm1]...[normN]
+```
+The `Lipid IS` column separates raw from normalized data. You'll choose which to use after upload.
+
+---
+
+**⚠️ Important:**
+- All sample column names must be **unique** — duplicate names will cause parsing errors
+
+---
+
+**✨ Auto-features:**
+- ClassKey inferred from lipid names
+- Hydroxyl notation preserved (`;2O`, `;3O`)
+- Internal standards detected: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`
+- Column mappings reviewable after upload
 """
 
 GENERIC_REQUIREMENTS = """
-### Generic Format
+### 🔬 Generic Format
 
-**Required Columns:**
+**Simple structure — just two things:**
 
-| Column | Description |
-|--------|-------------|
-| Column 1 | Lipid names (will become `LipidMolec`) |
-| Remaining columns | Sample intensities |
+| Position | Content |
+|----------|---------|
+| Column 1 | Lipid names |
+| Columns 2+ | Sample intensities (one column per sample) |
 
-**Optional:** A `ClassKey` column for lipid class assignments.
+**⚠️ Important:** No extra columns allowed! Remove any metadata columns before upload.
 
-**Internal Standards:** Detected automatically by patterns: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`
+---
+
+**Lipid Name Standardization Examples:**
+
+| Your Format | → Standardized |
+|-------------|----------------|
+| `LPC O-18:1` | `LPC(O-18:1)` |
+| `LPC 18:1(d7)` | `LPC(18:1)(d7)` |
+| `Cer d18:1;2O/24:0` | `Cer(d18:1;2O_24:0)` |
+| `PC 16:0/18:1` | `PC(16:0_18:1)` |
+
+---
+
+**✨ Auto-features:**
+- Lipid names standardized to `Class(chains)` format
+- All chain notation preserved (`;O`, `;2O`, `;3O`, etc.)
+- ClassKey extracted from lipid names
+- Intensity columns renamed to `intensity[s1]`, `intensity[s2]`, ...
 """
 
 
@@ -113,5 +165,5 @@ def display_format_requirements(data_format: str):
 
     requirements_text = requirements_map.get(data_format, GENERIC_REQUIREMENTS)
 
-    with st.expander("Data Format Requirements", expanded=False):
+    with st.expander("📋 Data Format Requirements", expanded=False):
         st.markdown(requirements_text)

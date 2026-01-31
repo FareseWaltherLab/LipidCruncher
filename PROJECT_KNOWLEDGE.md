@@ -118,7 +118,7 @@ Workflows and UI implemented:
 - ✅ Format requirements extracted to `src/app/ui/format_requirements.py`
 
 **Remaining Tasks (UI Polish):**
-1. ⬜ Check for large methods in `main_app.py` — break down methods >50 lines
+1. ✅ Check for large methods in `main_app.py` — break down methods >50 lines (`0d37dba`)
 2. ⬜ Match all UI instructions to old_main_app.py:
    - ⬜ "Try Sample Data" section needs emoji and explanation (compare with old app)
    - ⬜ Format requirements incomplete — copy full text from old_main_app.py
