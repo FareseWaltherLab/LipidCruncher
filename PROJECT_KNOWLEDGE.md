@@ -101,10 +101,35 @@
 
 ### ⬜ Phase 5: Polish (NOT STARTED)
 
-### Next Steps
-1. **Continue Phase 4** — Extract QualityCheckWorkflow for box plots and quality assessment
-2. **Create UI components** — Extract Streamlit UI components from old_main_app.py
-3. **Integrate into main_app.py** — Wire up workflows and UI components
+### Next Steps — Page-by-Page UI Build
+
+**Strategy:** Build the UI module by module, wiring up existing workflows before extracting new ones.
+
+#### Module 1: Filter and Normalize (COMPLETE)
+Workflows and UI implemented:
+- ✅ `DataIngestionWorkflow` — upload → format detection → cleaning → zero filtering → standards
+- ✅ `NormalizationWorkflow` — normalization pipeline
+- ✅ Landing page with "Start Analysis" button
+- ✅ Sidebar: file upload, sample grouping, experiment config
+- ✅ Main area: data preview, filtering options, normalization settings
+- ✅ Workflows wired up and tested
+
+**`main_app.py` now includes:**
+- Landing page with module descriptions
+- Format selection and requirements display
+- Sample data loading
+- File upload with format detection
+- Sample grouping and experiment configuration
+- Data ingestion with zero filtering
+- Normalization UI (class selection, method selection, IS mapping, protein concentrations)
+
+#### Module 2: Quality Check (NOT STARTED)
+1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
+2. ⬜ Build Module 2 UI
+
+#### Module 3: Visualize and Analyze (NOT STARTED)
+1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps
+2. ⬜ Build Module 3 UI
 
 ---
 

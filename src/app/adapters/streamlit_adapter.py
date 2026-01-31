@@ -164,6 +164,12 @@ class StreamlitAdapter:
         if 'preserved_standards_mode' not in st.session_state:
             st.session_state.preserved_standards_mode = defaults.preserved_standards_mode
 
+        # UI-specific state (not in SessionState dataclass)
+        if 'using_sample_data' not in st.session_state:
+            st.session_state.using_sample_data = False
+        if 'ingestion_result' not in st.session_state:
+            st.session_state.ingestion_result = None
+
     @staticmethod
     def reset_data_state() -> None:
         """Reset all data-related session state for a fresh upload."""
@@ -177,6 +183,8 @@ class StreamlitAdapter:
         st.session_state.grade_config = None
         st.session_state.msdial_quality_config = None
         st.session_state.original_auto_intsta_df = None
+        st.session_state.using_sample_data = False
+        st.session_state.ingestion_result = None
 
     @staticmethod
     def reset_normalization_state() -> None:
