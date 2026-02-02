@@ -29,11 +29,13 @@ class SessionState:
     """
     # Data states
     raw_df: Optional[pd.DataFrame] = None
+    standardized_df: Optional[pd.DataFrame] = None
     cleaned_df: Optional[pd.DataFrame] = None
     intsta_df: Optional[pd.DataFrame] = None
     normalized_df: Optional[pd.DataFrame] = None
     continuation_df: Optional[pd.DataFrame] = None
     original_column_order: Optional[List[str]] = None
+    column_mapping: Optional[pd.DataFrame] = None
 
     # Experiment configuration
     experiment: Optional[ExperimentConfig] = None
@@ -97,6 +99,8 @@ class StreamlitAdapter:
         # Data states
         if 'raw_df' not in st.session_state:
             st.session_state.raw_df = defaults.raw_df
+        if 'standardized_df' not in st.session_state:
+            st.session_state.standardized_df = defaults.standardized_df
         if 'cleaned_df' not in st.session_state:
             st.session_state.cleaned_df = defaults.cleaned_df
         if 'intsta_df' not in st.session_state:
@@ -107,6 +111,8 @@ class StreamlitAdapter:
             st.session_state.continuation_df = defaults.continuation_df
         if 'original_column_order' not in st.session_state:
             st.session_state.original_column_order = defaults.original_column_order
+        if 'column_mapping' not in st.session_state:
+            st.session_state.column_mapping = defaults.column_mapping
 
         # Experiment configuration
         if 'experiment' not in st.session_state:
@@ -174,14 +180,19 @@ class StreamlitAdapter:
     def reset_data_state() -> None:
         """Reset all data-related session state for a fresh upload."""
         st.session_state.raw_df = None
+        st.session_state.standardized_df = None
         st.session_state.cleaned_df = None
         st.session_state.intsta_df = None
         st.session_state.normalized_df = None
         st.session_state.continuation_df = None
+        st.session_state.column_mapping = None
+        st.session_state.original_column_order = None
         st.session_state.experiment = None
         st.session_state.confirmed = False
+        st.session_state.grouping_complete = True
         st.session_state.grade_config = None
         st.session_state.msdial_quality_config = None
+        st.session_state.msdial_features = {}
         st.session_state.original_auto_intsta_df = None
         st.session_state.using_sample_data = False
         st.session_state.ingestion_result = None

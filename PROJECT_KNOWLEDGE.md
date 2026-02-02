@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** January 30, 2026
+**Last Updated:** February 2, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -123,13 +123,23 @@ Workflows and UI implemented:
    - ⬜ "Try Sample Data" section needs emoji and explanation (compare with old app)
    - ⬜ Format requirements incomplete — copy full text from old_main_app.py
    - ⬜ Review all user-facing text for consistency with old app
+3. ✅ Make sidebar identical to old app (except Define Experiment section):
+   - ✅ Add "Column Name Standardization" section - display mapping table after file upload
+   - ✅ Add "Override Sample Detection" expander for MS-DIAL format
+   - ✅ Add "Group Samples" dataframe display (shows sample-condition mapping)
+   - ✅ Add "Are your samples properly grouped together?" radio with manual regrouping option
+   - ✅ Add explicit "Specify Label of BQC Samples" section with Yes/No radio
+   - ✅ Add "Confirm Inputs" section with summary and checkbox confirmation
 
 **`main_app.py` now includes:**
 - Landing page with module descriptions
 - Format selection and requirements display
 - Sample data loading
 - File upload with format detection
-- Sample grouping and experiment configuration
+- Column name standardization display (with MS-DIAL sample override)
+- Group samples dataframe display with manual regrouping option
+- Explicit BQC sample specification (Yes/No radio)
+- Confirm inputs section with sample-condition summary
 - Data ingestion with zero filtering
 - Normalization UI (class selection, method selection, IS mapping, protein concentrations)
 
