@@ -119,11 +119,13 @@ Workflows and UI implemented:
 
 **Remaining Tasks (UI Polish):**
 1. ✅ Check for large methods in `main_app.py` — break down methods >50 lines (`0d37dba`)
-2. ⬜ Match all UI instructions to old_main_app.py:
+2. ✅ Fix Metabolomics Workbench format loading (read as text, not CSV) (`183187a`)
+3. ✅ Fix sample column detection after standardization (use `intensity[...]` pattern) (`183187a`)
+4. ⬜ Match all UI instructions to old_main_app.py:
    - ⬜ "Try Sample Data" section needs emoji and explanation (compare with old app)
    - ⬜ Format requirements incomplete — copy full text from old_main_app.py
    - ⬜ Review all user-facing text for consistency with old app
-3. ✅ Make sidebar identical to old app (except Define Experiment section):
+5. ✅ Make sidebar identical to old app (except Define Experiment section):
    - ✅ Add "Column Name Standardization" section - display mapping table after file upload
    - ✅ Add "Override Sample Detection" expander for MS-DIAL format
    - ✅ Add "Group Samples" dataframe display (shows sample-condition mapping)
@@ -134,8 +136,8 @@ Workflows and UI implemented:
 **`main_app.py` now includes:**
 - Landing page with module descriptions
 - Format selection and requirements display
-- Sample data loading
-- File upload with format detection
+- Sample data loading (all 4 formats working)
+- File upload with format detection (Metabolomics Workbench reads as text)
 - Column name standardization display (with MS-DIAL sample override)
 - Group samples dataframe display with manual regrouping option
 - Explicit BQC sample specification (Yes/No radio)
