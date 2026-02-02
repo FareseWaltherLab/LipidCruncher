@@ -12,6 +12,14 @@ from pathlib import Path
 import streamlit as st
 from PIL import Image
 
+
+def _safe_rerun():
+    """Rerun the app, compatible with both old and new Streamlit versions."""
+    if hasattr(st, 'rerun'):
+        st.rerun()
+    else:
+        st.experimental_rerun()
+
 try:
     from pdf2image import convert_from_path
     PDF2IMAGE_AVAILABLE = True
@@ -156,7 +164,7 @@ def _display_call_to_action() -> None:
     with btn_col2:
         if st.button("🚀 Start Crunching", use_container_width=True, type="primary"):
             st.session_state.page = 'app'
-            st.experimental_rerun()
+            _safe_rerun()
 
     st.markdown("---")
 

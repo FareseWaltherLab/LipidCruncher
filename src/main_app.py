@@ -46,6 +46,18 @@ from app.ui.format_requirements import display_format_requirements
 
 
 # =============================================================================
+# Streamlit Compatibility
+# =============================================================================
+
+def safe_rerun():
+    """Rerun the app, compatible with both old and new Streamlit versions."""
+    if hasattr(st, 'rerun'):
+        st.rerun()
+    else:
+        st.experimental_rerun()
+
+
+# =============================================================================
 # Session State Initialization
 # =============================================================================
 
@@ -68,7 +80,7 @@ def get_sample_data_info(data_format: str) -> dict:
     """Get sample dataset info including file path and description."""
     sample_info = {
         'Generic Format': {
-            'file': 'generic_sample_dataset.csv',
+            'file': 'generic_test_dataset.csv',
             'description': """ADGAT-DKO case study (normalized): inguinal white adipose tissue, WT vs ADGAT-DKO.
 
 **Sample order:**
@@ -77,7 +89,7 @@ def get_sample_data_info(data_format: str) -> dict:
 3. BQC (s9–s12, n=4)"""
         },
         'LipidSearch 5.0': {
-            'file': 'lipidsearch5_sample_dataset.csv',
+            'file': 'lipidsearch5_test_dataset.csv',
             'description': """ADGAT-DKO case study (raw): inguinal white adipose tissue, WT vs ADGAT-DKO. Includes quality grades and retention times.
 
 **Sample order:**
@@ -95,7 +107,7 @@ def get_sample_data_info(data_format: str) -> dict:
 3. Wild-type (n=3)"""
         },
         'Metabolomics Workbench': {
-            'file': 'metabolomic_workbench_sample_data.csv',
+            'file': 'mw_test_dataset.csv',
             'description': """Mouse serum HFD study: 2×2 factorial (Normal/HFD × Water/DCA).
 
 **Sample order:**
@@ -136,7 +148,7 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
             if sample_df is not None:
                 st.session_state.using_sample_data = True
                 st.session_state.raw_df = sample_df
-                st.experimental_rerun()
+                safe_rerun()
 
     # Check if using sample data
     if st.session_state.get('using_sample_data') and st.session_state.get('raw_df') is not None:
@@ -146,7 +158,7 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
             st.session_state.using_sample_data = False
             st.session_state.sample_data_file = None
             StreamlitAdapter.reset_data_state()
-            st.experimental_rerun()
+            safe_rerun()
         return st.session_state.raw_df
 
     # File upload
@@ -619,7 +631,7 @@ def display_app_page():
         # Back to landing button
         if st.button("← Back to Home"):
             st.session_state.page = 'landing'
-            st.experimental_rerun()
+            safe_rerun()
         return
 
     # Show data preview
@@ -686,7 +698,7 @@ def display_app_page():
         if st.button("← Back to Home"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()
-            st.experimental_rerun()
+            safe_rerun()
 
 
 # =============================================================================
