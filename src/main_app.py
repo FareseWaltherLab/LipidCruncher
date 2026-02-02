@@ -133,7 +133,24 @@ def load_sample_dataset(data_format: str) -> pd.DataFrame:
         filepath = SAMPLE_DATA_DIR / info['file']
         if filepath.exists():
             st.session_state.sample_data_file = info['file']
-            return pd.read_csv(filepath)
+
+            if data_format == 'Metabolomics Workbench':
+                # Metabolomics Workbench needs raw text for parsing special markers
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    text_content = f.read()
+                # Process through handler which returns standardized DataFrame
+                standardized_df, success, message = DataFormatHandler.validate_and_preprocess(
+                    text_content, 'Metabolomics Workbench'
+                )
+                if success:
+                    # Store as already standardized
+                    st.session_state.standardized_df = standardized_df
+                    return standardized_df
+                else:
+                    st.sidebar.error(message)
+                    return None
+            else:
+                return pd.read_csv(filepath)
     return None
 
 
@@ -175,9 +192,24 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
 
     if uploaded_file is not None:
         try:
-            df = pd.read_csv(uploaded_file)
-            st.session_state.raw_df = df
-            return df
+            if data_format == 'Metabolomics Workbench':
+                # Metabolomics Workbench needs raw text for parsing special markers
+                text_content = uploaded_file.getvalue().decode('utf-8')
+                # Process through handler which returns standardized DataFrame
+                standardized_df, success, message = DataFormatHandler.validate_and_preprocess(
+                    text_content, 'Metabolomics Workbench'
+                )
+                if success:
+                    st.session_state.raw_df = standardized_df
+                    st.session_state.standardized_df = standardized_df
+                    return standardized_df
+                else:
+                    st.sidebar.error(message)
+                    return None
+            else:
+                df = pd.read_csv(uploaded_file)
+                st.session_state.raw_df = df
+                return df
         except Exception as e:
             st.sidebar.error(f"Error reading file: {e}")
             return None
@@ -194,11 +226,16 @@ def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> pd.DataFram
     Standardize uploaded data and create column mapping.
     Returns the standardized DataFrame.
     """
+    # Metabolomics Workbench is already standardized during file loading
+    # (it requires raw text parsing, done in load_sample_dataset/display_file_upload)
+    if data_format == 'Metabolomics Workbench':
+        st.session_state.format_type = data_format
+        return df
+
     format_map = {
         'LipidSearch 5.0': 'lipidsearch',
         'MS-DIAL': 'msdial',
         'Generic Format': 'generic',
-        'Metabolomics Workbench': 'Metabolomics Workbench',
     }
     internal_format = format_map.get(data_format, 'generic')
 
@@ -338,31 +375,27 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> tuple:
 # =============================================================================
 
 def detect_sample_columns(df: pd.DataFrame, data_format: str) -> list:
-    """Detect intensity/sample columns based on format."""
-    if data_format == 'LipidSearch 5.0':
-        return [col for col in df.columns if col.startswith('MeanArea[')]
-    elif data_format == 'MS-DIAL':
-        # MS-DIAL: columns after metadata are samples
-        metadata_cols = FormatDetectionService.MSDIAL_METADATA_COLUMNS
-        return [col for col in df.columns if col not in metadata_cols]
-    else:
-        # Generic: columns after LipidMolec/ClassKey
-        metadata = {'LipidMolec', 'ClassKey'}
-        return [col for col in df.columns if col not in metadata]
+    """Detect intensity/sample columns based on format.
+
+    After standardization, all formats use intensity[...] columns for sample data.
+    """
+    # After standardization, all formats use intensity[...] columns
+    return [col for col in df.columns if col.startswith('intensity[')]
 
 
 def extract_sample_names(columns: list, data_format: str) -> list:
-    """Extract clean sample names from column names."""
-    if data_format == 'LipidSearch 5.0':
-        # Extract name from MeanArea[name]
-        names = []
-        for col in columns:
-            if col.startswith('MeanArea[') and col.endswith(']'):
-                names.append(col[9:-1])  # Remove MeanArea[ and ]
-            else:
-                names.append(col)
-        return names
-    return columns
+    """Extract clean sample names from column names.
+
+    After standardization, all formats use intensity[sample_name] pattern.
+    """
+    names = []
+    for col in columns:
+        if col.startswith('intensity[') and col.endswith(']'):
+            # Extract name from intensity[name]
+            names.append(col[10:-1])  # Remove 'intensity[' and ']'
+        else:
+            names.append(col)
+    return names
 
 
 def display_experiment_definition(df: pd.DataFrame, data_format: str, sample_cols: list) -> tuple:
