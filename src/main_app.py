@@ -712,12 +712,10 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str):
         st.session_state.confirmed = True
         st.session_state.standardized_df = updated_df
         return experiment, bqc_label
-
-    # Return existing experiment if already confirmed
-    if st.session_state.get('confirmed'):
-        return st.session_state.get('experiment'), st.session_state.get('bqc_label')
-
-    return None, None
+    else:
+        # Checkbox unchecked - clear confirmed state
+        st.session_state.confirmed = False
+        return None, None
 
 
 # =============================================================================
@@ -1046,9 +1044,6 @@ def display_app_page():
             safe_rerun()
         return
 
-    # Show raw data preview
-    display_data_preview(raw_df, "Uploaded Data")
-
     # Standardize data if not already done
     if st.session_state.get('standardized_df') is None:
         standardized_df = standardize_uploaded_data(raw_df, data_format)
@@ -1075,11 +1070,14 @@ def display_app_page():
     experiment, bqc_label = display_sample_grouping(df, data_format)
 
     if experiment is None:
-        st.info("Configure your experiment in the sidebar to proceed.")
+        st.info("Configure your experiment in the sidebar and check 'Confirm Inputs' to proceed.")
         return
 
     # Main area: Processing Module
     st.subheader("Data Standardization, Filtering, and Normalization")
+
+    # Show raw data preview (only after confirmation)
+    display_data_preview(raw_df, "Uploaded Data")
 
     # Process data button
     if st.button("Process Data", type="primary"):
