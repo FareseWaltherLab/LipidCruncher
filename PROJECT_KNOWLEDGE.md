@@ -143,10 +143,10 @@ Components added (partial - need refinement):
    - ✅ Zero filtering config UI (thresholds adjustable)
 
 **Critical Issues to Fix:**
-1. ⬜ **Remove manual buttons** - Get rid of "Process Data" and "Apply Normalization" buttons
-   - Flow should run automatically after sidebar confirmation (like old app)
-   - Data cleaning → zero filtering → normalization should flow without clicks
-2. ⬜ **Automatic flow execution** - After confirm checkbox, all processing runs at once
+1. ✅ **Remove manual buttons** - Got rid of "Process Data" and "Apply Normalization" buttons (`c34b656`)
+   - Flow now runs automatically after sidebar confirmation (like old app)
+   - Data cleaning → zero filtering → normalization flows without clicks
+2. ✅ **Automatic flow execution** - After confirm checkbox, all processing runs at once (`c34b656`)
 3. ⬜ **Add "Manage Internal Standards" expander** - Allow upload/edit of standards
 4. ⬜ **Add lipid class multiselect** - Select which classes to include in normalization
 5. ⬜ **Add "About Normalization" section** - Documentation expander for normalization
