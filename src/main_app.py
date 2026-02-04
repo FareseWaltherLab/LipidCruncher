@@ -1196,6 +1196,214 @@ def display_processing_results(result):
 
 
 # =============================================================================
+# UI Components - Manage Internal Standards
+# =============================================================================
+
+def display_manage_internal_standards(
+    cleaned_df: pd.DataFrame,
+    auto_detected_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Display the Manage Internal Standards expander.
+
+    Allows users to:
+    - Use automatically detected standards
+    - Upload custom standards (from dataset or external)
+    - Clear custom standards
+
+    Args:
+        cleaned_df: The cleaned data DataFrame (for extracting standards)
+        auto_detected_df: Auto-detected internal standards DataFrame
+
+    Returns:
+        The active internal standards DataFrame to use for normalization
+    """
+    from app.services.standards import StandardsService
+
+    with st.expander("Manage Internal Standards", expanded=False):
+        st.markdown("""
+Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
+`ISTD`/`IS` markers in class names, and SPLASH LIPIDOMIX® patterns.
+        """)
+
+        # Initialize session state for standards management
+        if 'standards_source' not in st.session_state:
+            st.session_state.standards_source = "Automatic Detection"
+        if 'custom_standards_df' not in st.session_state:
+            st.session_state.custom_standards_df = None
+        if 'original_auto_intsta_df' not in st.session_state:
+            st.session_state.original_auto_intsta_df = auto_detected_df
+
+        # Standards source selection
+        st.markdown("##### 🏷️ Standards Source")
+
+        standards_source = st.radio(
+            "Standards source:",
+            ["Automatic Detection", "Upload Custom Standards"],
+            horizontal=True,
+            key="standards_source_radio",
+            label_visibility="collapsed"
+        )
+        st.session_state.standards_source = standards_source
+
+        if standards_source == "Automatic Detection":
+            # Clear custom standards when switching to automatic
+            if st.session_state.custom_standards_df is not None:
+                st.session_state.custom_standards_df = None
+
+            # Show auto-detected standards
+            if auto_detected_df is not None and not auto_detected_df.empty:
+                st.success(f"✓ Found {len(auto_detected_df)} standards")
+                st.dataframe(auto_detected_df, use_container_width=True)
+
+                # Download button
+                csv = auto_detected_df.to_csv(index=False)
+                st.download_button(
+                    label="Download Detected Standards",
+                    data=csv,
+                    file_name="detected_standards.csv",
+                    mime="text/csv",
+                    key="download_auto_standards"
+                )
+                return auto_detected_df
+            else:
+                st.warning("No internal standards automatically detected in dataset.")
+                return pd.DataFrame()
+
+        else:  # Upload Custom Standards
+            st.markdown("---")
+
+            # Mode selection: standards in dataset or external
+            st.markdown("**Are standards present in your main dataset?**")
+
+            standards_location = st.radio(
+                "Standards location:",
+                options=[
+                    "Yes — Extract from dataset",
+                    "No — Uploading complete standards data"
+                ],
+                key="standards_location_radio",
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+
+            use_extract_mode = "Yes" in standards_location
+
+            # Format guidance
+            st.markdown("---")
+            if use_extract_mode:
+                st.markdown("""
+**CSV format:** Single column with lipid names (must exist in your dataset).
+
+Example:
+```
+LipidMolec
+PC(15:0-18:1(d7))
+PE(15:0-18:1(d7))
+SM(18:1(d9))
+```
+                """)
+            else:
+                st.markdown("""
+**CSV format:** 1st column = lipid names, remaining columns = intensity values per sample.
+
+Example:
+```
+LipidMolec,s1,s2,s3,s4
+PC(15:0-18:1(d7)),1000,1200,1100,1050
+PE(15:0-18:1(d7)),800,850,820,810
+```
+                """)
+
+            # File uploader
+            uploaded_file = st.file_uploader(
+                "Upload standards CSV",
+                type=['csv'],
+                key="standards_file_uploader"
+            )
+
+            # Show preserved custom standards if file uploader is empty
+            if uploaded_file is None and st.session_state.custom_standards_df is not None:
+                st.success(f"✓ Using {len(st.session_state.custom_standards_df)} custom standards")
+                st.dataframe(st.session_state.custom_standards_df, use_container_width=True)
+
+                # Clear button
+                if st.button("Clear Custom Standards", key="clear_custom_standards"):
+                    st.session_state.custom_standards_df = None
+                    st.session_state.standards_source = "Automatic Detection"
+                    safe_rerun()
+
+                return st.session_state.custom_standards_df
+
+            # Process uploaded file
+            if uploaded_file is not None:
+                try:
+                    uploaded_df = pd.read_csv(uploaded_file)
+
+                    # Process using StandardsService
+                    result = StandardsService.process_standards_file(
+                        uploaded_df=uploaded_df,
+                        cleaned_df=cleaned_df,
+                        standards_in_dataset=use_extract_mode
+                    )
+
+                    if result.standards_df is not None and not result.standards_df.empty:
+                        st.session_state.custom_standards_df = result.standards_df
+
+                        # For external standards, remove them from main dataset if present
+                        if not use_extract_mode:
+                            filtered_df, removed_lipids = StandardsService.remove_standards_from_dataset(
+                                cleaned_df,
+                                result.standards_df
+                            )
+                            if removed_lipids:
+                                st.session_state.cleaned_df = filtered_df
+                                preview = removed_lipids[:5]
+                                more = f"... and {len(removed_lipids) - 5} more" if len(removed_lipids) > 5 else ""
+                                st.warning(
+                                    f"⚠️ Removed {len(removed_lipids)} standard(s) from main dataset: "
+                                    f"{', '.join(preview)}{more}"
+                                )
+
+                        # Show processing info
+                        if result.duplicates_removed > 0:
+                            st.info(f"Removed {result.duplicates_removed} duplicate standard(s).")
+
+                        st.success(f"✓ Loaded {result.standards_count} custom standards (mode: {result.source_mode})")
+                        st.dataframe(result.standards_df, use_container_width=True)
+
+                        # Download button
+                        csv = result.standards_df.to_csv(index=False)
+                        st.download_button(
+                            label="Download Custom Standards",
+                            data=csv,
+                            file_name="custom_standards.csv",
+                            mime="text/csv",
+                            key="download_custom_standards"
+                        )
+
+                        return result.standards_df
+                    else:
+                        st.error("No valid standards found in uploaded file.")
+                        return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
+
+                except ValueError as ve:
+                    st.error(str(ve))
+                    return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
+                except Exception as e:
+                    st.error(f"Error reading file: {str(e)}")
+                    return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
+
+            # No file uploaded yet, return auto-detected as fallback
+            if auto_detected_df is not None and not auto_detected_df.empty:
+                st.info("Upload a CSV file or switch to Automatic Detection.")
+                return auto_detected_df
+            else:
+                st.warning("No standards available. Please upload a standards file.")
+                return pd.DataFrame()
+
+
+# =============================================================================
 # UI Components - Normalization
 # =============================================================================
 
@@ -1636,11 +1844,14 @@ def display_app_page():
     st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
     display_data_preview(st.session_state.cleaned_df, "Cleaned Data")
 
-    # Step 7: Internal Standards info
-    intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
-    if intsta_df is not None and not intsta_df.empty:
-        with st.expander(f"Internal Standards ({len(intsta_df)} detected)", expanded=False):
-            st.dataframe(intsta_df, use_container_width=True)
+    # Step 7: Manage Internal Standards
+    auto_detected_intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
+    intsta_df = display_manage_internal_standards(
+        cleaned_df=st.session_state.cleaned_df,
+        auto_detected_df=auto_detected_intsta_df
+    )
+    # Update session state with the active standards
+    st.session_state.intsta_df = intsta_df
 
     # Step 8: Normalization (automatic - no button needed)
     st.markdown("---")

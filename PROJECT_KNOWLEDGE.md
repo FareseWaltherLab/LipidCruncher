@@ -147,21 +147,25 @@ Components added (partial - need refinement):
    - Flow now runs automatically after sidebar confirmation (like old app)
    - Data cleaning → zero filtering → normalization flows without clicks
 2. ✅ **Automatic flow execution** - After confirm checkbox, all processing runs at once (`df50fdc`)
-3. ⬜ **Add "Manage Internal Standards" expander** - Allow upload/edit of standards
+3. ✅ **Add "Manage Internal Standards" expander** - Allow upload/edit of standards
+   - Radio toggle between "Automatic Detection" and "Upload Custom Standards"
+   - For custom upload: choice of "Extract from dataset" vs "Complete external standards"
+   - File uploader with format guidance
+   - Clear custom standards option
 4. ✅ **Add lipid class multiselect** - Select which classes to include in normalization (`df50fdc`)
 5. ✅ **Add "About Normalization" section** - Documentation expander for normalization (`df50fdc`)
-6. ⬜ **Match old app expander structure exactly:**
-   - "📖 About Data Standardization and Filtering" expander
-   - "⚙️ Configure Grade/Quality Filtering" expander (format-specific)
-   - "⚙️ Configure Zero Filtering" expander
-   - "📋 Final Filtered Data" section (always visible)
-   - "Manage Internal Standards" expander
-   - "📖 About Normalization" expander
-   - Normalization method selection (radio)
-   - Class selection (multiselect)
-   - Standard-to-class mapping (if IS method selected)
-   - Protein concentrations input (if protein method selected)
-   - Normalized data display
+6. ✅ **Match old app expander structure exactly:**
+   - ✅ "📖 About Data Standardization and Filtering" expander
+   - ✅ "⚙️ Configure Grade/Quality Filtering" expander (format-specific)
+   - ✅ "⚙️ Configure Zero Filtering" expander
+   - ✅ "📋 Final Filtered Data" section (always visible)
+   - ✅ "Manage Internal Standards" expander
+   - ✅ "📖 About Normalization" expander
+   - ✅ Normalization method selection (radio)
+   - ✅ Class selection (multiselect)
+   - ✅ Standard-to-class mapping (if IS method selected)
+   - ✅ Protein concentrations input (if protein method selected)
+   - ✅ Normalized data display
 7. ⬜ **Verify zero filtering is being applied correctly**
 8. ⬜ **Match exact text/labels from old app**
 
@@ -180,7 +184,7 @@ Components added (partial - need refinement):
 - Data type selection for MS-DIAL (raw vs pre-normalized)
 - Zero filtering configuration with interactive live preview
 - Final filtered data preview before normalization
-- Internal standards display
+- **Manage Internal Standards expander** (auto-detect or upload custom standards)
 - Normalization UI (class selection, method selection, IS mapping, protein concentrations)
 
 #### Module 2: Quality Check (NOT STARTED)
