@@ -116,6 +116,7 @@ Workflows and UI implemented:
 - ✅ Workflows wired up and tested
 - ✅ Landing page extracted to `src/app/ui/landing_page.py`
 - ✅ Format requirements extracted to `src/app/ui/format_requirements.py`
+- ✅ Zero filtering UI extracted to `src/app/ui/zero_filtering.py` (with detection threshold input)
 
 **Remaining Tasks (UI Polish):**
 1. ✅ Check for large methods in `main_app.py` — break down methods >50 lines (`0d37dba`)
@@ -166,7 +167,7 @@ Components added (partial - need refinement):
    - ✅ Standard-to-class mapping (if IS method selected)
    - ✅ Protein concentrations input (if protein method selected)
    - ✅ Normalized data display
-7. ⬜ **Verify zero filtering is being applied correctly**
+7. ✅ **Verify zero filtering is being applied correctly** — Added detection threshold input, extracted to `src/app/ui/zero_filtering.py`
 8. ⬜ **Match exact text/labels from old app**
 9. ⬜ **Add internal standards consistency plots** - Bar charts showing standards across samples
    - Condition multiselect to filter which samples to display
@@ -574,9 +575,11 @@ Check these for reusable code (in `refactor/v2.0` branch):
 - Test edge cases with generated datasets
 - Commit after each working change
 - Use type hints
+- **Follow target architecture** — place new UI components in `src/app/ui/`, not in `main_app.py`
 
 **DON'T:**
 - Import Streamlit in services
 - Store state in service classes
 - Make large changes without commits
 - Use v2.0 code without checking if `old_main_app.py` has additional features needed
+- Add new UI functions to `main_app.py` — extract to `src/app/ui/` instead
