@@ -169,7 +169,7 @@ Components added (partial - need refinement):
    - ✅ Normalized data display
 7. ✅ **Verify zero filtering is being applied correctly** — Added detection threshold input, extracted to `src/app/ui/zero_filtering.py` (`4e7efd7`)
 8. ⬜ **Match exact text/labels from old app**
-9. ✅ **Add internal standards consistency plots** - Bar charts showing standards across samples
+9. ✅ **Add internal standards consistency plots** (`f9e99f5`) - Bar charts showing standards across samples
    - Condition multiselect to filter which samples to display
    - Uses `InternalStandardsPlotter.create_consistency_plots()` from legacy modules
    - Extracted to `src/app/ui/standards_plots.py`
