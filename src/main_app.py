@@ -203,6 +203,7 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
                     text_content, 'Metabolomics Workbench'
                 )
                 if success:
+                    st.sidebar.success("File uploaded and processed successfully!")
                     st.session_state.raw_df = standardized_df
                     st.session_state.standardized_df = standardized_df
                     return standardized_df
@@ -211,6 +212,7 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
                     return None
             else:
                 df = pd.read_csv(uploaded_file)
+                st.sidebar.success("File uploaded successfully!")
                 st.session_state.raw_df = df
                 return df
         except Exception as e:
@@ -1042,53 +1044,6 @@ def display_quality_filtering_config() -> dict:
     return None
 
 
-# =============================================================================
-# UI Components - Data Processing Display
-# =============================================================================
-
-def display_data_preview(df: pd.DataFrame, title: str = "Data Preview"):
-    """Display a preview of the DataFrame."""
-    with st.expander(title, expanded=True):
-        st.dataframe(df.head(10), use_container_width=True)
-        st.caption(f"Showing first 10 of {len(df)} rows, {len(df.columns)} columns")
-
-
-def display_processing_results(result):
-    """Display results from DataIngestionWorkflow."""
-    if not result.is_valid:
-        for error in result.validation_errors:
-            st.error(error)
-        return
-
-    # Success message
-    st.success(f"Data cleaned successfully! Format: {result.detected_format.value}")
-
-    # Cleaning messages
-    if result.cleaning_messages:
-        with st.expander("Processing Details", expanded=False):
-            for msg in result.cleaning_messages:
-                st.info(msg)
-
-    # Zero filtering stats
-    if result.zero_filtered:
-        st.info(
-            f"Zero filtering: {result.species_before_filter} → {result.species_after_filter} species "
-            f"({result.species_removed_count} removed, {result.removal_percentage:.1f}%)"
-        )
-
-    # Warnings
-    for warning in result.validation_warnings:
-        st.warning(warning)
-
-    # Display cleaned data
-    if result.cleaned_df is not None:
-        display_data_preview(result.cleaned_df, "Cleaned Data")
-
-    # Internal standards
-    if result.internal_standards_df is not None and not result.internal_standards_df.empty:
-        with st.expander(f"Internal Standards ({len(result.internal_standards_df)} detected)", expanded=False):
-            st.dataframe(result.internal_standards_df, use_container_width=True)
-
 
 # =============================================================================
 # UI Components - Manage Internal Standards
@@ -1344,9 +1299,6 @@ def _display_class_selection(cleaned_df: pd.DataFrame) -> list:
 
 def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes: list) -> tuple:
     """Display internal standards configuration UI. Returns (internal_standards, intsta_concentrations) or (None, None)."""
-    st.markdown("---")
-    st.markdown("**Internal Standards Configuration**")
-
     if intsta_df is None or intsta_df.empty:
         st.error("No internal standards detected. Please upload standards or use a different method.")
         return None, None
@@ -1442,8 +1394,6 @@ def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes
 
 def _display_protein_config(experiment: ExperimentConfig) -> dict:
     """Display protein concentration configuration UI. Returns protein_concentrations dict or None."""
-    st.markdown("---")
-    st.markdown("**Protein Concentrations**")
 
     sample_names = experiment.full_samples_list
     protein_concentrations = {}
@@ -1605,8 +1555,6 @@ def _run_normalization(
 
 def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, experiment: ExperimentConfig, data_format: str):
     """Display normalization options and apply normalization automatically."""
-    st.subheader("Normalization")
-
     # About Normalization Methods (documentation)
     with st.expander("📖 About Normalization Methods", expanded=False):
         st.markdown("""
@@ -1688,7 +1636,6 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
             return None
 
     # Apply normalization automatically (no button needed)
-    st.markdown("---")
     result = _run_normalization(
         cleaned_df, intsta_df, experiment, data_format,
         config_method, selected_classes,
@@ -1698,16 +1645,6 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     # Display results
     if result and result.success:
         st.markdown("##### 📊 Final Normalized Data")
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Lipids", result.lipids_after)
-        col2.metric("Samples", result.samples_processed)
-        col3.metric("Standards Removed", len(result.removed_standards))
-
-        if result.removed_standards:
-            with st.expander("Removed Standards", expanded=False):
-                for std in result.removed_standards:
-                    st.text(f"• {std}")
 
         if result.normalized_df is not None:
             st.dataframe(result.normalized_df, use_container_width=True)
@@ -1731,24 +1668,29 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
 # =============================================================================
 
 def display_app_page():
-    """Display the main application page (Module 1)."""
-    display_logo()
-    st.markdown("Process, analyze and visualize lipidomic data from multiple sources.")
+    """Display the main application page (Module 1) with centered layout matching landing page."""
+    # Centered layout matching landing page width
+    _, center, _ = st.columns([1, 3, 1])
 
-    # Sidebar: Format selection
+    # Sidebar: Format selection (must happen before center content that depends on it)
     data_format = display_format_selection()
-    display_format_requirements(data_format)
+
+    with center:
+        display_logo()
+        st.markdown("Process, analyze and visualize lipidomic data from multiple sources.")
+        display_format_requirements(data_format)
 
     # Sidebar: File upload
     raw_df = display_file_upload(data_format)
 
     if raw_df is None:
-        st.info("Upload a dataset or load sample data to begin.")
+        with center:
+            st.info("Upload a dataset or load sample data to begin.")
 
-        # Back to landing button
-        if st.button("← Back to Home"):
-            st.session_state.page = 'landing'
-            safe_rerun()
+            # Back to landing button
+            if st.button("← Back to Home"):
+                st.session_state.page = 'landing'
+                safe_rerun()
         return
 
     # Standardize data if not already done
@@ -1777,138 +1719,129 @@ def display_app_page():
     experiment, bqc_label = display_sample_grouping(df, data_format)
 
     if experiment is None:
-        st.info("Configure your experiment in the sidebar and check 'Confirm Inputs' to proceed.")
+        with center:
+            st.info("Configure your experiment in the sidebar and check 'Confirm Inputs' to proceed.")
         return
 
     # ==========================================================================
     # Main area: Processing Module (Automatic Flow)
     # ==========================================================================
-    st.subheader("Data Standardization, Filtering, and Normalization")
+    with center:
+        st.subheader("Data Standardization, Filtering, and Normalization")
 
-    # Step 1: Data processing documentation
-    display_data_processing_docs(data_format)
+        # Step 1: Data processing documentation
+        display_data_processing_docs(data_format)
 
-    # Step 2: Format-specific filtering configuration
-    grade_config = None
-    quality_config = None
+        # Step 2: Format-specific filtering configuration
+        grade_config = None
+        quality_config = None
 
-    if data_format == 'LipidSearch 5.0':
-        grade_config_dict = display_grade_filtering_config(raw_df)
-        if grade_config_dict is not None:
-            grade_config = GradeFilterConfig(grade_config=grade_config_dict)
+        if data_format == 'LipidSearch 5.0':
+            grade_config_dict = display_grade_filtering_config(raw_df)
+            if grade_config_dict is not None:
+                grade_config = GradeFilterConfig(grade_config=grade_config_dict)
 
-    elif data_format == 'MS-DIAL':
-        # Data type selection (raw vs normalized)
-        display_msdial_data_type_selection()
+        elif data_format == 'MS-DIAL':
+            # Data type selection (raw vs normalized)
+            display_msdial_data_type_selection()
 
-        # Quality filtering
-        quality_config_dict = display_quality_filtering_config()
-        if quality_config_dict is not None:
-            quality_config = QualityFilterConfig(
-                total_score_threshold=quality_config_dict.get('total_score_threshold', 0),
-                require_msms=quality_config_dict.get('require_msms', False)
-            )
-
-    # Step 3: Automatic data processing (runs on every confirmation)
-    # Build config hash to detect when settings change
-    config_hash = f"{data_format}_{grade_config}_{quality_config}"
-
-    # Process data automatically (no button needed)
-    format_map = {
-        'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
-        'MS-DIAL': DataFormat.MSDIAL,
-        'Generic Format': DataFormat.GENERIC,
-        'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
-    }
-
-    # Run ingestion workflow (clean data WITHOUT zero filtering - user configures thresholds after)
-    config = IngestionConfig(
-        experiment=experiment,
-        data_format=format_map.get(data_format),
-        bqc_label=bqc_label,
-        apply_zero_filter=False,  # Don't apply yet - let user configure
-        grade_config=grade_config,
-        quality_config=quality_config,
-    )
-
-    try:
-        result = DataIngestionWorkflow.run(df, config)
-        st.session_state.ingestion_result = result
-        st.session_state.pre_filter_df = result.cleaned_df  # Store pre-filter version
-
-        if result.is_valid:
-            st.session_state.cleaned_df = result.cleaned_df
-            st.session_state.intsta_df = result.internal_standards_df
-            st.session_state.continuation_df = result.cleaned_df
-    except Exception as e:
-        st.error(f"Processing error: {e}")
-        return
-
-    # Step 4: Display results (automatic - no button needed)
-    if not result.is_valid:
-        for error in result.validation_errors:
-            st.error(error)
-        return
-
-    # Show cleaning success message
-    st.success(f"Data cleaned successfully! Format: {result.detected_format.value}")
-
-    # Show cleaning messages
-    if result.cleaning_messages:
-        with st.expander("Processing Details", expanded=False):
-            for msg in result.cleaning_messages:
-                st.info(msg)
-
-    # Show warnings
-    for warning in result.validation_warnings:
-        st.warning(warning)
-
-    # Step 5: Zero Filtering Configuration (interactive)
-    pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
-    if pre_filter_df is not None and not pre_filter_df.empty:
-        filtered_df, removed_species, zero_config = display_zero_filtering_config(
-            pre_filter_df, experiment, bqc_label,
-            data_format=st.session_state.get('format_type')
-        )
-
-        # Update session state with filtered data
-        if filtered_df is not None:
-            st.session_state.cleaned_df = filtered_df
-            st.session_state.continuation_df = filtered_df
-
-            # Display zero filtering summary outside expander
-            if removed_species:
-                st.info(
-                    f"Zero filtering: {len(pre_filter_df)} → {len(filtered_df)} species "
-                    f"({len(removed_species)} removed, {len(removed_species)/len(pre_filter_df)*100:.1f}%)"
+            # Quality filtering
+            quality_config_dict = display_quality_filtering_config()
+            if quality_config_dict is not None:
+                quality_config = QualityFilterConfig(
+                    total_score_threshold=quality_config_dict.get('total_score_threshold', 0),
+                    require_msms=quality_config_dict.get('require_msms', False)
                 )
 
-    # Step 6: Show final filtered data
-    st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
-    display_data_preview(st.session_state.cleaned_df, "Cleaned Data")
+        # Step 3: Automatic data processing (runs on every confirmation)
+        # Build config hash to detect when settings change
+        config_hash = f"{data_format}_{grade_config}_{quality_config}"
 
-    # Step 7: Manage Internal Standards
-    auto_detected_intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
-    intsta_df = display_manage_internal_standards(
-        cleaned_df=st.session_state.cleaned_df,
-        auto_detected_df=auto_detected_intsta_df
-    )
-    # Update session state with the active standards
-    st.session_state.intsta_df = intsta_df
+        # Process data automatically (no button needed)
+        format_map = {
+            'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
+            'MS-DIAL': DataFormat.MSDIAL,
+            'Generic Format': DataFormat.GENERIC,
+            'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
+        }
 
-    # Step 8: Normalization (automatic - no button needed)
-    st.markdown("---")
-    display_normalization_ui(
-        cleaned_df=st.session_state.cleaned_df,
-        intsta_df=intsta_df,
-        experiment=experiment,
-        data_format=data_format
-    )
+        # Run ingestion workflow (clean data WITHOUT zero filtering - user configures thresholds after)
+        config = IngestionConfig(
+            experiment=experiment,
+            data_format=format_map.get(data_format),
+            bqc_label=bqc_label,
+            apply_zero_filter=False,  # Don't apply yet - let user configure
+            grade_config=grade_config,
+            quality_config=quality_config,
+        )
 
-    # Navigation
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
+        try:
+            result = DataIngestionWorkflow.run(df, config)
+            st.session_state.ingestion_result = result
+            st.session_state.pre_filter_df = result.cleaned_df  # Store pre-filter version
+
+            if result.is_valid:
+                st.session_state.cleaned_df = result.cleaned_df
+                st.session_state.intsta_df = result.internal_standards_df
+                st.session_state.continuation_df = result.cleaned_df
+        except Exception as e:
+            st.error(f"Processing error: {e}")
+            return
+
+        # Step 4: Display results (automatic - no button needed)
+        if not result.is_valid:
+            for error in result.validation_errors:
+                st.error(error)
+            return
+
+        # Show warnings
+        for warning in result.validation_warnings:
+            st.warning(warning)
+
+        # Step 5: Zero Filtering Configuration (interactive)
+        pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
+        if pre_filter_df is not None and not pre_filter_df.empty:
+            filtered_df, removed_species, zero_config = display_zero_filtering_config(
+                pre_filter_df, experiment, bqc_label,
+                data_format=st.session_state.get('format_type')
+            )
+
+            # Update session state with filtered data
+            if filtered_df is not None:
+                st.session_state.cleaned_df = filtered_df
+                st.session_state.continuation_df = filtered_df
+
+        # Step 6: Show final filtered data (outside expander, matching old app)
+        st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
+        st.dataframe(st.session_state.cleaned_df, use_container_width=True)
+        csv = st.session_state.cleaned_df.to_csv(index=False)
+        st.download_button(
+            label="Download Filtered Data",
+            data=csv,
+            file_name="final_filtered_data.csv",
+            mime="text/csv",
+            key="download_filtered_data"
+        )
+
+        # Step 7: Manage Internal Standards
+        auto_detected_intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
+        intsta_df = display_manage_internal_standards(
+            cleaned_df=st.session_state.cleaned_df,
+            auto_detected_df=auto_detected_intsta_df
+        )
+        # Update session state with the active standards
+        st.session_state.intsta_df = intsta_df
+
+        # Step 8: Normalization (automatic - no button needed)
+        display_normalization_ui(
+            cleaned_df=st.session_state.cleaned_df,
+            intsta_df=intsta_df,
+            experiment=experiment,
+            data_format=data_format
+        )
+
+        # Navigation
+        st.markdown("---")
         if st.button("← Back to Home"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()
