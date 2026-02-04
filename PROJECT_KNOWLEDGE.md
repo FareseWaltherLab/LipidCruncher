@@ -168,6 +168,10 @@ Components added (partial - need refinement):
    - ✅ Normalized data display
 7. ⬜ **Verify zero filtering is being applied correctly**
 8. ⬜ **Match exact text/labels from old app**
+9. ⬜ **Add internal standards consistency plots** - Bar charts showing standards across samples
+   - Condition multiselect to filter which samples to display
+   - Uses `InternalStandardsPlotter.create_consistency_plots()` from legacy modules
+   - Shows consistent bar heights = good sample prep/instrument performance
 
 **`main_app.py` now includes:**
 - Landing page with module descriptions
