@@ -1321,19 +1321,25 @@ PE(15:0-18:1(d7)),800,850,820,810
 # =============================================================================
 
 def _display_class_selection(cleaned_df: pd.DataFrame) -> list:
-    """Display lipid class selection UI. Returns selected classes or None."""
+    """Display lipid class selection UI. Returns selected classes or empty list."""
     available_classes = NormalizationWorkflow.get_available_classes(cleaned_df)
 
-    with st.expander("Select Lipid Classes", expanded=True):
-        select_all = st.checkbox("Select All Classes", value=True)
-        if select_all:
-            return available_classes
-        else:
-            return st.multiselect(
-                "Classes to include:",
-                options=available_classes,
-                default=available_classes
-            )
+    # Initialize session state for persistence (matches old app pattern)
+    if 'selected_classes' not in st.session_state:
+        st.session_state.selected_classes = available_classes.copy()
+
+    def update_selected_classes():
+        st.session_state.selected_classes = st.session_state.temp_selected_classes
+
+    selected_classes = st.multiselect(
+        'Classes to analyze:',
+        options=available_classes,
+        default=available_classes if not st.session_state.selected_classes else st.session_state.selected_classes,
+        key='temp_selected_classes',
+        on_change=update_selected_classes
+    )
+
+    return selected_classes
 
 
 def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes: list) -> tuple:
@@ -1352,92 +1358,197 @@ def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes
         st.error("No internal standards available.")
         return None, None
 
-    st.info(f"Detected {len(all_standards)} internal standards")
-
     internal_standards = {}
     intsta_concentrations = {}
 
-    # Standard-to-class mapping
-    with st.expander("Standard-to-Class Mapping", expanded=True):
+    # Retrieve saved mappings for session state persistence
+    saved_mappings = st.session_state.get('class_standard_map', {})
+
+    with st.expander("⚙️ Internal Standards Mapping", expanded=True):
+        # Show warnings for classes without specific standards
         for lipid_class in selected_classes:
             class_standards = standards_by_class.get(lipid_class, [])
-            default_std = class_standards[0] if class_standards else all_standards[0]
+            if not class_standards:
+                if saved_mappings and lipid_class in saved_mappings and saved_mappings[lipid_class] in all_standards:
+                    default_standard = saved_mappings[lipid_class]
+                else:
+                    default_standard = all_standards[0]
+                st.warning(f"No specific standards available for {lipid_class}. Defaulting to {default_standard}.")
+
+        # Class-to-standard mapping (double-column layout)
+        for lipid_class in selected_classes:
+            # Determine default standard (saved mapping -> class-specific -> first available)
+            default_std = None
+            if saved_mappings and lipid_class in saved_mappings:
+                default_std = saved_mappings[lipid_class]
+                if default_std not in all_standards:
+                    default_std = None
+            if not default_std:
+                class_standards = standards_by_class.get(lipid_class, [])
+                default_std = class_standards[0] if class_standards else all_standards[0]
+
+            default_idx = all_standards.index(default_std) if default_std in all_standards else 0
 
             col1, col2 = st.columns([1, 2])
             with col1:
                 st.text(lipid_class)
             with col2:
                 selected_std = st.selectbox(
-                    f"Standard for {lipid_class}",
+                    f'Select internal standard for {lipid_class}',
                     options=all_standards,
-                    index=all_standards.index(default_std) if default_std in all_standards else 0,
-                    key=f"std_{lipid_class}",
+                    index=default_idx,
+                    key=f'standard_selection_{lipid_class}',
                     label_visibility="collapsed"
                 )
                 internal_standards[lipid_class] = selected_std
 
-    # Standard concentrations
-    with st.expander("Standard Concentrations (optional)", expanded=False):
-        st.caption("Leave at 1.0 for relative normalization, or enter actual concentrations.")
+        # Save mapping to session state for persistence
+        st.session_state.class_standard_map = internal_standards
+
+        # Standard concentrations (always visible, not optional)
+        if st.session_state.get('standard_concentrations') is None:
+            st.session_state.standard_concentrations = {}
+
+        st.write("Enter the concentration of each selected internal standard (µM):")
+
+        all_concentrations_valid = True
         for std in set(internal_standards.values()):
+            widget_key = f"conc_{std}"
+            # Initialize from preserved concentrations if not already set
+            if widget_key not in st.session_state:
+                st.session_state[widget_key] = st.session_state.standard_concentrations.get(std, 1.0)
+
             conc = st.number_input(
-                f"{std} concentration:",
-                min_value=0.0001,
-                value=1.0,
+                f"Concentration (µM) for {std}",
+                min_value=0.0,
                 step=0.1,
-                key=f"conc_{std}"
+                key=widget_key
             )
+
+            # Sync back for session preservation
+            st.session_state.standard_concentrations[std] = conc
+
+            if conc <= 0:
+                st.error(f"Please enter a valid concentration for {std}")
+                all_concentrations_valid = False
             intsta_concentrations[std] = conc
+
+        if not all_concentrations_valid:
+            st.error("Please enter valid concentrations for all standards")
+            return None, None
 
     return internal_standards, intsta_concentrations
 
 
 def _display_protein_config(experiment: ExperimentConfig) -> dict:
-    """Display protein concentration configuration UI. Returns protein_concentrations dict."""
+    """Display protein concentration configuration UI. Returns protein_concentrations dict or None."""
     st.markdown("---")
     st.markdown("**Protein Concentrations**")
 
     sample_names = experiment.full_samples_list
     protein_concentrations = {}
 
-    with st.expander("Enter Protein Concentrations", expanded=True):
-        st.caption("Enter protein concentration for each sample (e.g., mg/mL).")
+    with st.expander("⚙️ Protein Concentration Data", expanded=True):
+        # Initialize method selection key if not present
+        if 'protein_input_method' not in st.session_state:
+            st.session_state.protein_input_method = "Manual Input"
 
-        input_method = st.radio(
+        # Track previous method to detect changes
+        prev_method = st.session_state.get('protein_input_method_prev')
+
+        method = st.radio(
             "Input method:",
-            ["Manual entry", "Same for all"],
+            ["Manual Input", "Upload CSV File"],
+            key='protein_input_method',
             horizontal=True
         )
 
-        if input_method == "Same for all":
-            default_conc = st.number_input(
-                "Protein concentration for all samples:",
-                min_value=0.0001,
-                value=1.0,
-                step=0.1
-            )
+        # Detect method change and clear stale data
+        if prev_method is not None and prev_method != method:
+            if 'protein_df' in st.session_state:
+                del st.session_state.protein_df
             for sample in sample_names:
-                protein_concentrations[sample] = default_conc
-        else:
-            for i, condition in enumerate(experiment.conditions_list):
-                st.markdown(f"**{condition}**")
-                start_idx = sum(experiment.number_of_samples_list[:i])
-                end_idx = start_idx + experiment.number_of_samples_list[i]
-                condition_samples = sample_names[start_idx:end_idx]
+                widget_key = f"protein_{sample}"
+                if widget_key in st.session_state:
+                    del st.session_state[widget_key]
 
-                cols = st.columns(min(len(condition_samples), 4))
-                for j, sample in enumerate(condition_samples):
-                    with cols[j % len(cols)]:
-                        conc = st.number_input(
-                            sample,
-                            min_value=0.0001,
-                            value=1.0,
-                            step=0.1,
-                            key=f"protein_{sample}"
-                        )
-                        protein_concentrations[sample] = conc
+        st.session_state.protein_input_method_prev = method
 
-    return protein_concentrations
+        if method == "Manual Input":
+            # Get preserved protein data for restoring values
+            preserved_protein_df = st.session_state.get('protein_df')
+            preserved_values = {}
+            if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
+                preserved_values = preserved_protein_df
+            elif preserved_protein_df is not None and hasattr(preserved_protein_df, 'columns'):
+                if 'Sample' in preserved_protein_df.columns and 'Concentration' in preserved_protein_df.columns:
+                    preserved_values = dict(zip(preserved_protein_df['Sample'], preserved_protein_df['Concentration']))
+
+            # Initialize session state for all samples BEFORE widgets render
+            for sample in sample_names:
+                widget_key = f"protein_{sample}"
+                if widget_key not in st.session_state:
+                    st.session_state[widget_key] = float(preserved_values.get(sample, 1.0))
+
+            # 3-column flat grid layout (matches old app)
+            cols = st.columns(3)
+            for idx, sample in enumerate(sample_names):
+                with cols[idx % 3]:
+                    concentration = st.number_input(
+                        f'{sample}:',
+                        min_value=0.0,
+                        max_value=1000000.0,
+                        step=0.1,
+                        key=f"protein_{sample}"
+                    )
+                    protein_concentrations[sample] = concentration
+
+            # Preserve in session state
+            st.session_state.protein_df = protein_concentrations.copy()
+            return protein_concentrations
+
+        else:  # Upload CSV File
+            st.markdown("**CSV format:** Single column named `Concentration` with one value per sample (in order).")
+
+            preserved_protein_df = st.session_state.get('protein_df')
+
+            uploaded_file = st.file_uploader("Upload CSV", type="csv", key="protein_csv_upload")
+
+            if uploaded_file is not None:
+                try:
+                    csv_df = pd.read_csv(uploaded_file)
+
+                    if 'Concentration' not in csv_df.columns:
+                        st.error(f"CSV must contain a column named 'Concentration'. Found: {list(csv_df.columns)}")
+                        return None
+
+                    if len(csv_df) != len(sample_names):
+                        st.error(f"Row count ({len(csv_df)}) doesn't match sample count ({len(sample_names)})")
+                        return None
+
+                    csv_df['Concentration'] = pd.to_numeric(csv_df['Concentration'], errors='coerce')
+                    if csv_df['Concentration'].isna().any():
+                        st.error("Some concentration values couldn't be converted to numbers.")
+                        return None
+
+                    # Convert to dict for NormalizationConfig compatibility
+                    protein_concentrations = dict(zip(sample_names, csv_df['Concentration'].tolist()))
+                    st.session_state.protein_df = protein_concentrations.copy()
+                    st.success(f"✓ Loaded {len(protein_concentrations)} concentration values")
+                    return protein_concentrations
+
+                except Exception as e:
+                    st.error(f"Error reading CSV: {str(e)}")
+                    return None
+
+            # No new file uploaded - check preserved data
+            if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
+                if len(preserved_protein_df) == len(sample_names):
+                    st.success(f"✓ Using previously loaded {len(preserved_protein_df)} concentration values")
+                    return preserved_protein_df
+
+            st.info("Please upload a CSV file with protein concentrations.")
+            return None
 
 
 def _run_normalization(
@@ -1521,12 +1632,28 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
     # Check if we have standards available
     has_standards = intsta_df is not None and not intsta_df.empty
 
+    # Check if using pre-normalized MS-DIAL data (IS normalization not applicable)
+    is_msdial_prenormalized = (data_format == 'MS-DIAL' and
+                               st.session_state.get('msdial_use_normalized', False))
+
     # Determine available normalization options
-    if has_standards:
+    if is_msdial_prenormalized:
+        normalization_options = ['None (pre-normalized data)', 'Protein-based']
+        st.markdown("*Internal standards options unavailable — using pre-normalized MS-DIAL data.*")
+    elif has_standards:
         normalization_options = ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Both']
     else:
         normalization_options = ['None (pre-normalized data)', 'Protein-based']
         st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
+
+    # Initialize session state for normalization method
+    if 'norm_method_selection' not in st.session_state:
+        st.session_state['norm_method_selection'] = 'None (pre-normalized data)'
+
+    # Handle case where saved method is no longer available (e.g., standards removed)
+    current_selection = st.session_state.get('norm_method_selection')
+    if current_selection not in normalization_options:
+        st.session_state['norm_method_selection'] = 'None (pre-normalized data)'
 
     # Method selection
     st.markdown("##### ⚙️ Normalization Method")
@@ -1557,6 +1684,8 @@ After normalization, `intensity[...]` columns become `concentration[...]` column
 
     if method in ['Protein-based', 'Both']:
         protein_concentrations = _display_protein_config(experiment)
+        if protein_concentrations is None:
+            return None
 
     # Apply normalization automatically (no button needed)
     st.markdown("---")
