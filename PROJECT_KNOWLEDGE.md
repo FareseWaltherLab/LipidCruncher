@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** February 2, 2026 (night)
+**Last Updated:** February 3, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -143,13 +143,13 @@ Components added (partial - need refinement):
    - ✅ Zero filtering config UI (thresholds adjustable)
 
 **Critical Issues to Fix:**
-1. ✅ **Remove manual buttons** - Got rid of "Process Data" and "Apply Normalization" buttons (`c34b656`)
+1. ✅ **Remove manual buttons** - Got rid of "Process Data" and "Apply Normalization" buttons (`df50fdc`)
    - Flow now runs automatically after sidebar confirmation (like old app)
    - Data cleaning → zero filtering → normalization flows without clicks
-2. ✅ **Automatic flow execution** - After confirm checkbox, all processing runs at once (`c34b656`)
+2. ✅ **Automatic flow execution** - After confirm checkbox, all processing runs at once (`df50fdc`)
 3. ⬜ **Add "Manage Internal Standards" expander** - Allow upload/edit of standards
-4. ⬜ **Add lipid class multiselect** - Select which classes to include in normalization
-5. ⬜ **Add "About Normalization" section** - Documentation expander for normalization
+4. ✅ **Add lipid class multiselect** - Select which classes to include in normalization (`df50fdc`)
+5. ✅ **Add "About Normalization" section** - Documentation expander for normalization (`df50fdc`)
 6. ⬜ **Match old app expander structure exactly:**
    - "📖 About Data Standardization and Filtering" expander
    - "⚙️ Configure Grade/Quality Filtering" expander (format-specific)
