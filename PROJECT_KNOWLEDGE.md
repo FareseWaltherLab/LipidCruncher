@@ -173,11 +173,13 @@ Components added (partial - need refinement):
    - Condition multiselect to filter which samples to display
    - Uses `InternalStandardsPlotter.create_consistency_plots()` from legacy modules
    - Extracted to `src/app/ui/standards_plots.py`
-10. ⬜ **Make normalization section UI identical to old app**
-   - Class multiselect to select which lipid classes to normalize is missing — must match old app
-   - Keep double-column layout for standard-to-class mapping (new design improvement)
-   - Protein concentration input must NOT be optional — always show when protein method is selected
-   - Compare every element (labels, order, layout) against `old_main_app.py` normalization section
+10. ✅ **Make normalization section UI identical to old app** (`1d78365`)
+   - Class multiselect now matches old app (direct multiselect with session state, no expander/checkbox)
+   - Double-column layout kept for standard-to-class mapping (new design improvement)
+   - Protein input matches old app: Manual Input / Upload CSV File, 3-column grid, always visible
+   - Standards mapping and concentrations merged into single expander with validation
+   - Added MS-DIAL pre-normalized check to disable IS normalization options
+   - Added normalization method session state initialization and invalid selection guard
 
 **`main_app.py` now includes:**
 - Landing page with module descriptions
