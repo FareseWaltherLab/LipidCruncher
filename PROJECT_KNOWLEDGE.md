@@ -169,10 +169,10 @@ Components added (partial - need refinement):
    - ✅ Normalized data display
 7. ✅ **Verify zero filtering is being applied correctly** — Added detection threshold input, extracted to `src/app/ui/zero_filtering.py` (`4e7efd7`)
 8. ⬜ **Match exact text/labels from old app**
-9. ⬜ **Add internal standards consistency plots** - Bar charts showing standards across samples
+9. ✅ **Add internal standards consistency plots** - Bar charts showing standards across samples
    - Condition multiselect to filter which samples to display
    - Uses `InternalStandardsPlotter.create_consistency_plots()` from legacy modules
-   - Shows consistent bar heights = good sample prep/instrument performance
+   - Extracted to `src/app/ui/standards_plots.py`
 
 **`main_app.py` now includes:**
 - Landing page with module descriptions
@@ -190,6 +190,7 @@ Components added (partial - need refinement):
 - Zero filtering configuration with interactive live preview
 - Final filtered data preview before normalization
 - **Manage Internal Standards expander** (auto-detect or upload custom standards)
+- **Internal standards consistency plots** (bar charts with condition filtering)
 - Normalization UI (class selection, method selection, IS mapping, protein concentrations)
 
 #### Module 2: Quality Check (NOT STARTED)

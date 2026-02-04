@@ -1105,6 +1105,7 @@ def display_manage_internal_standards(
     - Use automatically detected standards
     - Upload custom standards (from dataset or external)
     - Clear custom standards
+    - View consistency plots for internal standards
 
     Args:
         cleaned_df: The cleaned data DataFrame (for extracting standards)
@@ -1114,6 +1115,10 @@ def display_manage_internal_standards(
         The active internal standards DataFrame to use for normalization
     """
     from app.services.standards import StandardsService
+    from app.ui.standards_plots import display_standards_consistency_plots
+
+    # Track the active standards DataFrame (set in branches below)
+    active_standards_df = pd.DataFrame()
 
     with st.expander("Manage Internal Standards", expanded=False):
         st.markdown("""
@@ -1160,10 +1165,10 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
                     mime="text/csv",
                     key="download_auto_standards"
                 )
-                return auto_detected_df
+                active_standards_df = auto_detected_df
             else:
                 st.warning("No internal standards automatically detected in dataset.")
-                return pd.DataFrame()
+                active_standards_df = pd.DataFrame()
 
         else:  # Upload Custom Standards
             st.markdown("---")
@@ -1228,10 +1233,10 @@ PE(15:0-18:1(d7)),800,850,820,810
                     st.session_state.standards_source = "Automatic Detection"
                     safe_rerun()
 
-                return st.session_state.custom_standards_df
+                active_standards_df = st.session_state.custom_standards_df
 
             # Process uploaded file
-            if uploaded_file is not None:
+            elif uploaded_file is not None:
                 try:
                     uploaded_df = pd.read_csv(uploaded_file)
 
@@ -1277,25 +1282,38 @@ PE(15:0-18:1(d7)),800,850,820,810
                             key="download_custom_standards"
                         )
 
-                        return result.standards_df
+                        active_standards_df = result.standards_df
                     else:
                         st.error("No valid standards found in uploaded file.")
-                        return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
+                        active_standards_df = auto_detected_df if auto_detected_df is not None else pd.DataFrame()
 
                 except ValueError as ve:
                     st.error(str(ve))
-                    return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
+                    active_standards_df = auto_detected_df if auto_detected_df is not None else pd.DataFrame()
                 except Exception as e:
                     st.error(f"Error reading file: {str(e)}")
-                    return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
+                    active_standards_df = auto_detected_df if auto_detected_df is not None else pd.DataFrame()
 
-            # No file uploaded yet, return auto-detected as fallback
-            if auto_detected_df is not None and not auto_detected_df.empty:
-                st.info("Upload a CSV file or switch to Automatic Detection.")
-                return auto_detected_df
             else:
-                st.warning("No standards available. Please upload a standards file.")
-                return pd.DataFrame()
+                # No file uploaded yet, use auto-detected as fallback
+                if auto_detected_df is not None and not auto_detected_df.empty:
+                    st.info("Upload a CSV file or switch to Automatic Detection.")
+                    active_standards_df = auto_detected_df
+                else:
+                    st.warning("No standards available. Please upload a standards file.")
+                    active_standards_df = pd.DataFrame()
+
+        # Show consistency plots if we have standards and experiment config
+        if (active_standards_df is not None and
+            not active_standards_df.empty and
+            'experiment' in st.session_state and
+            st.session_state.experiment is not None):
+            display_standards_consistency_plots(
+                intsta_df=active_standards_df,
+                experiment=st.session_state.experiment
+            )
+
+    return active_standards_df
 
 
 # =============================================================================
