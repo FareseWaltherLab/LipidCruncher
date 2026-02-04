@@ -82,7 +82,7 @@
 | StreamlitAdapter | ✅ Done | 75 tests | `b077cb1` |
 | DataIngestionWorkflow | ✅ Done | 125 tests | `b077cb1` |
 | NormalizationWorkflow | ✅ Done | 98 tests | `341ba71` |
-| **Module 1 UI** | ✅ Done | - | `062785e` |
+| **Module 1 UI** | ✅ Done | - | `4a428fd` |
 
 **Created Files:**
 - `src/app/adapters/streamlit_adapter.py` — Session state management and caching wrappers
@@ -106,7 +106,7 @@
 
 **Strategy:** Build the UI module by module, wiring up existing workflows before extracting new ones.
 
-#### Module 1: Filter and Normalize (IN PROGRESS - UI needs work)
+#### Module 1: Filter and Normalize (COMPLETE)
 Workflows and UI implemented:
 - ✅ `DataIngestionWorkflow` — upload → format detection → cleaning → zero filtering → standards
 - ✅ `NormalizationWorkflow` — normalization pipeline
@@ -135,15 +135,7 @@ Workflows and UI implemented:
    - ✅ Add "Confirm Inputs" section with summary and checkbox confirmation
 6. ✅ Fix UI flow gating — content only shows after "Confirm Inputs" checked (`162178f`)
 
-**Current Task: Make Module 1 Main Page Identical to Old App**
-
-Components added (partial - need refinement):
-   - ✅ Data processing documentation expander (format-specific pipeline docs)
-   - ✅ Grade filtering config for LipidSearch (A/B/C/D per class)
-   - ✅ Quality filtering config for MS-DIAL (Score threshold + MS/MS)
-   - ✅ Zero filtering config UI (thresholds adjustable)
-
-**Critical Issues to Fix:**
+**Completed Tasks:**
 1. ✅ **Remove manual buttons** - Got rid of "Process Data" and "Apply Normalization" buttons (`df50fdc`)
    - Flow now runs automatically after sidebar confirmation (like old app)
    - Data cleaning → zero filtering → normalization flows without clicks
@@ -168,7 +160,15 @@ Components added (partial - need refinement):
    - ✅ Protein concentrations input (if protein method selected)
    - ✅ Normalized data display
 7. ✅ **Verify zero filtering is being applied correctly** — Added detection threshold input, extracted to `src/app/ui/zero_filtering.py` (`4e7efd7`)
-8. ⬜ **Match exact text/labels from old app**
+8. ✅ **Match exact text/labels from old app** (`4a428fd`)
+   - Removed "Data cleaned successfully" message and "Processing Details" expander
+   - Added "File uploaded successfully!" in sidebar after upload
+   - Removed zero filtering summary line outside expander
+   - Moved "Final Filtered Data" outside expander (matches old app)
+   - Removed large "Normalization" subheader and redundant dividers/titles
+   - Removed Lipids/Samples/Standards metrics from normalization results
+   - Centered main page with `st.columns([1, 3, 1])` matching landing page width
+   - Format requirements expander at top of centered content
 9. ✅ **Add internal standards consistency plots** (`f9e99f5`) - Bar charts showing standards across samples
    - Condition multiselect to filter which samples to display
    - Uses `InternalStandardsPlotter.create_consistency_plots()` from legacy modules
