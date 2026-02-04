@@ -39,6 +39,8 @@ from app.adapters.streamlit_adapter import StreamlitAdapter, SessionState
 from app.models.experiment import ExperimentConfig
 from app.models.normalization import NormalizationConfig
 from app.services.format_detection import FormatDetectionService, DataFormat
+from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
+from app.services.zero_filtering import ZeroFilterConfig
 from app.workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
 from app.ui.landing_page import display_landing_page, display_logo
@@ -719,6 +721,433 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str):
 
 
 # =============================================================================
+# UI Components - Data Processing Documentation
+# =============================================================================
+
+def display_data_processing_docs(data_format: str):
+    """Display format-specific data processing documentation."""
+    cleaning_docs = {
+        'LipidSearch 5.0': """
+### 🔬 Data Cleaning Pipeline
+
+| Step | Action |
+|------|--------|
+| 1. Column Standardization | Extract LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, MeanArea columns |
+| 2. Data Type Conversion | Convert MeanArea to numeric (non-numeric → 0) |
+| 3. Lipid Name Standardization | Standardize to `Class(chains)` format |
+| 4. Grade Filtering | Filter by quality grade (**configurable below**) |
+| 5. Best Peak Selection | Keep entry with highest TotalSmpIDRate(%) per lipid |
+| 6. Missing FA Keys | Remove rows without FAKey (except Ch class, deuterated standards) |
+| 7. Duplicate Removal | Remove duplicates by LipidMolec |
+| 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+
+---
+
+#### ⚙️ Grade Filtering (Configurable)
+
+LipidSearch assigns quality grades to each identification:
+
+| Grade | Confidence | Default Action |
+|-------|------------|----------------|
+| A | Highest | ✓ Keep |
+| B | Good | ✓ Keep |
+| C | Lower | ✓ Keep for LPC/SM only |
+| D | Lowest | ✗ Remove |
+
+**→ Configure in "Configure Grade Filtering" section below.**
+        """,
+
+        'MS-DIAL': """
+### 🔬 Data Cleaning Pipeline
+
+| Step | Action |
+|------|--------|
+| 1. Header Detection | Auto-detect data start row (skip metadata rows) |
+| 2. Column Mapping | `Metabolite name` → LipidMolec, `Average Rt(min)` → BaseRt, `Average Mz` → CalcMass |
+| 3. ClassKey Inference | Extract class from lipid name (e.g., `Cer(18:1;2O_24:0)` → `Cer`) |
+| 4. Lipid Name Standardization | Standardize format, preserve hydroxyl notation (`;2O`, `;3O`) |
+| 5. Quality Filtering | Filter by Total Score and/or MS/MS validation (**configurable below**) |
+| 6. Data Type Selection | Choose raw or pre-normalized (if both available) |
+| 7. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
+| 8. Smart Deduplication | Keep entry with highest Total Score per lipid |
+| 9. Internal Standards | Auto-detect: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH` patterns |
+| 10. Duplicate Removal | Remove remaining duplicates by LipidMolec |
+| 11. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+
+---
+
+#### ⚙️ Quality Filtering (Configurable)
+
+MS-DIAL provides quality metrics for filtering:
+
+| Preset | Total Score | MS/MS Required | Use Case |
+|--------|-------------|----------------|----------|
+| Strict | ≥80 | Yes | Publication-ready |
+| Moderate | ≥60 | No | Exploratory analysis |
+| Permissive | ≥40 | No | Discovery |
+
+**→ Configure in "Configure Quality Filtering" section below.**
+        """,
+
+        'Metabolomics Workbench': """
+### 🔬 Data Cleaning Pipeline
+
+| Step | Action |
+|------|--------|
+| 1. Section Extraction | Extract data between `MS_METABOLITE_DATA_START` and `MS_METABOLITE_DATA_END` |
+| 2. Header Processing | Row 1 → sample names, Row 2 → conditions |
+| 3. Column Standardization | First column → LipidMolec, remaining → `intensity[s1]`, `intensity[s2]`, ... |
+| 4. Lipid Name Standardization | Standardize to `Class(chains)` format |
+| 5. ClassKey Extraction | Extract class from lipid name |
+| 6. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
+| 7. Conditions Storage | Store conditions for experiment setup suggestions |
+| 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+        """,
+
+        'Generic Format': """
+### 🔬 Data Cleaning Pipeline
+
+| Step | Action |
+|------|--------|
+| 1. Column Standardization | First column → LipidMolec, remaining → `intensity[s1]`, `intensity[s2]`, ... |
+| 2. Lipid Name Standardization | Standardize to `Class(chains)` format, preserve hydroxyl notation |
+| 3. ClassKey Extraction | Extract class from lipid name (e.g., `PC(16:0_18:1)` → `PC`) |
+| 4. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
+| 5. Invalid Lipid Removal | Remove empty names, single special characters |
+| 6. Duplicate Removal | Remove duplicates by LipidMolec |
+| 7. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+        """
+    }
+
+    with st.expander("📖 About Data Standardization and Filtering", expanded=False):
+        st.markdown(cleaning_docs.get(data_format, cleaning_docs['Generic Format']))
+
+        # Zero filtering explanation (applies to all formats)
+        st.markdown("---")
+        st.markdown("""
+#### 🔧 Zero Filtering (Configurable)
+
+Removes lipid species with too many zero/below-detection values:
+
+| Condition Type | Default Threshold | Action |
+|----------------|-------------------|--------|
+| BQC (if present) | ≥50% zeros | Remove species |
+| All non-BQC conditions | ≥75% zeros each | Remove species |
+
+*Thresholds are adjustable in "Configure Zero Filtering" section below.*
+        """)
+
+
+# =============================================================================
+# UI Components - Format-Specific Filtering
+# =============================================================================
+
+def display_grade_filtering_config(df: pd.DataFrame) -> dict:
+    """
+    Display LipidSearch grade filtering configuration.
+
+    Returns:
+        dict: Grade config mapping class to acceptable grades, or None for defaults
+    """
+    # Check if the required columns exist
+    if 'ClassKey' not in df.columns or 'TotalGrade' not in df.columns:
+        return None
+
+    # Get unique classes from the data
+    all_classes = sorted(df['ClassKey'].dropna().unique())
+    if not all_classes:
+        return None
+
+    with st.expander("⚙️ Configure Grade Filtering", expanded=False):
+        # Initialize session state for persistence
+        if 'grade_filter_mode' not in st.session_state:
+            st.session_state.grade_filter_mode = "Use Default Settings"
+        if 'grade_selections' not in st.session_state:
+            st.session_state.grade_selections = {}
+
+        use_custom = st.radio(
+            "Grade filtering mode:",
+            ["Use Default Settings", "Customize by Class"],
+            index=0 if st.session_state.grade_filter_mode == "Use Default Settings" else 1,
+            horizontal=True,
+            key="grade_filter_mode_radio"
+        )
+        st.session_state.grade_filter_mode = use_custom
+
+        if use_custom == "Use Default Settings":
+            st.success("✓ Default: A/B for all classes, plus C for LPC and SM.")
+            return None
+
+        # Custom settings
+        st.markdown("---")
+        grade_config = {}
+        cols = st.columns(3)
+
+        for idx, lipid_class in enumerate(all_classes):
+            with cols[idx % 3]:
+                # Get saved or default grades
+                if lipid_class in st.session_state.grade_selections:
+                    default_grades = st.session_state.grade_selections[lipid_class]
+                elif lipid_class in ['LPC', 'SM']:
+                    default_grades = ['A', 'B', 'C']
+                else:
+                    default_grades = ['A', 'B']
+
+                selected_grades = st.multiselect(
+                    f"**{lipid_class}**",
+                    options=['A', 'B', 'C', 'D'],
+                    default=default_grades,
+                    key=f"grade_select_{lipid_class}"
+                )
+
+                st.session_state.grade_selections[lipid_class] = selected_grades
+
+                if not selected_grades:
+                    st.error("⚠️ Will be excluded!")
+
+                grade_config[lipid_class] = selected_grades
+
+        return grade_config
+
+
+def display_msdial_data_type_selection():
+    """Display MS-DIAL data type selection (raw vs pre-normalized)."""
+    features = st.session_state.get('msdial_features', {})
+    has_normalized_data = features.get('has_normalized_data', False)
+    raw_samples = features.get('raw_sample_columns', [])
+    norm_samples = features.get('normalized_sample_columns', [])
+
+    if has_normalized_data and len(norm_samples) > 0:
+        st.markdown("##### 📊 Data Type Selection")
+        st.markdown(f"""
+Your MS-DIAL export contains both raw and pre-normalized intensity values:
+- **Raw data**: {len(raw_samples)} sample columns
+- **Normalized data**: {len(norm_samples)} sample columns (after 'Lipid IS' column)
+        """)
+
+        # Initialize session state
+        if 'msdial_use_normalized' not in st.session_state:
+            st.session_state.msdial_use_normalized = False
+
+        options = [
+            f"Raw intensity values ({len(raw_samples)} samples)",
+            f"Pre-normalized values ({len(norm_samples)} samples)"
+        ]
+
+        data_type = st.radio(
+            "Select which data to use:",
+            options,
+            index=1 if st.session_state.msdial_use_normalized else 0,
+            key="msdial_data_type_radio",
+            help="Choose raw data if you want to apply LipidCruncher's normalization. Choose pre-normalized if MS-DIAL already normalized your data."
+        )
+
+        use_normalized = "Pre-normalized" in data_type
+        st.session_state.msdial_use_normalized = use_normalized
+
+        if use_normalized:
+            st.info("📌 Using pre-normalized data. LipidCruncher's internal standard normalization will be skipped.")
+        else:
+            st.info("📌 Using raw intensity data. You can apply normalization in the next step.")
+
+        st.markdown("---")
+
+
+def display_quality_filtering_config() -> dict:
+    """
+    Display MS-DIAL quality filtering configuration.
+
+    Returns:
+        dict: Quality config with 'total_score_threshold' and 'require_msms' keys
+    """
+    features = st.session_state.get('msdial_features', {})
+    quality_filtering_available = features.get('has_quality_score', False)
+    msms_filtering_available = features.get('has_msms_matched', False)
+
+    if not quality_filtering_available and not msms_filtering_available:
+        st.warning("Quality filtering unavailable — no 'Total score' or 'MS/MS matched' columns found.")
+        return None
+
+    with st.expander("⚙️ Configure Quality Filtering", expanded=False):
+        # Initialize session state
+        if 'msdial_quality_level' not in st.session_state:
+            st.session_state.msdial_quality_level = 'Moderate (Score ≥60)'
+
+        if quality_filtering_available:
+            quality_options = {
+                'Strict (Score ≥80, MS/MS required)': {'total_score_threshold': 80, 'require_msms': True},
+                'Moderate (Score ≥60)': {'total_score_threshold': 60, 'require_msms': False},
+                'Permissive (Score ≥40)': {'total_score_threshold': 40, 'require_msms': False},
+                'No filtering': {'total_score_threshold': 0, 'require_msms': False}
+            }
+            quality_options_list = list(quality_options.keys())
+
+            # Find current index
+            current_idx = 1  # Default to Moderate
+            if st.session_state.msdial_quality_level in quality_options_list:
+                current_idx = quality_options_list.index(st.session_state.msdial_quality_level)
+
+            selected_option = st.radio(
+                "Quality filtering level:",
+                quality_options_list,
+                index=current_idx,
+                horizontal=True,
+                key="msdial_quality_level_radio"
+            )
+            st.session_state.msdial_quality_level = selected_option
+
+            quality_config = quality_options[selected_option].copy()
+
+            # MS/MS validation override (if available)
+            if msms_filtering_available:
+                col1, col2 = st.columns(2)
+                with col1:
+                    custom_msms = st.checkbox(
+                        "Require MS/MS validation",
+                        value=quality_config['require_msms'],
+                        key="msdial_custom_msms"
+                    )
+                    quality_config['require_msms'] = custom_msms
+
+            # Advanced: custom score threshold
+            show_custom = st.checkbox("Customize score threshold", value=False, key="msdial_show_custom_threshold")
+            if show_custom:
+                custom_score = st.slider(
+                    "Minimum Total Score:",
+                    min_value=0,
+                    max_value=100,
+                    value=quality_config['total_score_threshold'],
+                    step=5,
+                    key="msdial_custom_score"
+                )
+                quality_config['total_score_threshold'] = custom_score
+
+            # Summary
+            st.markdown("---")
+            st.markdown(f"**Current settings:** Score ≥ {quality_config['total_score_threshold']}, "
+                       f"MS/MS required: {'Yes' if quality_config['require_msms'] else 'No'}")
+
+            return quality_config
+
+        elif msms_filtering_available:
+            # Only MS/MS filtering available
+            require_msms = st.checkbox(
+                "Require MS/MS validation",
+                value=False,
+                key="msdial_msms_only"
+            )
+            return {'total_score_threshold': 0, 'require_msms': require_msms}
+
+    return None
+
+
+# =============================================================================
+# UI Components - Zero Filtering Configuration
+# =============================================================================
+
+def display_zero_filtering_config(
+    cleaned_df: pd.DataFrame,
+    experiment: ExperimentConfig,
+    bqc_label: str = None
+) -> tuple:
+    """
+    Display zero filtering configuration with live preview.
+
+    Returns:
+        tuple: (filtered_df, removed_species list, config dict)
+    """
+    from app.services.zero_filtering import ZeroFilteringService, ZeroFilterConfig
+
+    has_bqc = bqc_label is not None and bqc_label in experiment.conditions_list
+
+    with st.expander("⚙️ Configure Zero Filtering", expanded=False):
+        if cleaned_df is None or cleaned_df.empty:
+            st.error("No valid cleaned data available for zero filtering.")
+            return None, [], {}
+
+        st.markdown("Adjust thresholds for removing lipid species with too many zero/below-detection values.")
+
+        # Initialize session state for persistence
+        if '_preserved_non_bqc_zero_threshold' not in st.session_state:
+            st.session_state._preserved_non_bqc_zero_threshold = 75
+        if '_preserved_bqc_zero_threshold' not in st.session_state:
+            st.session_state._preserved_bqc_zero_threshold = 50
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            non_bqc_pct = st.slider(
+                "Non-BQC threshold (%)",
+                min_value=50,
+                max_value=100,
+                value=st.session_state._preserved_non_bqc_zero_threshold,
+                step=5,
+                help="Remove species if ALL non-BQC conditions have ≥ this % zeros",
+                key="non_bqc_zero_threshold"
+            )
+            st.session_state._preserved_non_bqc_zero_threshold = non_bqc_pct
+            non_bqc_threshold = non_bqc_pct / 100.0
+
+        with col2:
+            if has_bqc:
+                bqc_pct = st.slider(
+                    f"BQC threshold (%) — {bqc_label}",
+                    min_value=25,
+                    max_value=100,
+                    value=st.session_state._preserved_bqc_zero_threshold,
+                    step=5,
+                    help="Remove species if BQC condition has ≥ this % zeros",
+                    key="bqc_zero_threshold"
+                )
+                st.session_state._preserved_bqc_zero_threshold = bqc_pct
+                bqc_threshold = bqc_pct / 100.0
+            else:
+                bqc_threshold = 0.5
+                st.info("No BQC condition — only non-BQC threshold applies.")
+
+        # Apply filter with user-selected thresholds
+        zero_config = ZeroFilterConfig(
+            bqc_threshold=bqc_threshold,
+            non_bqc_threshold=non_bqc_threshold
+        )
+
+        try:
+            filter_result = ZeroFilteringService.filter_zeros(
+                df=cleaned_df,
+                experiment=experiment,
+                config=zero_config,
+                bqc_label=bqc_label
+            )
+
+            removed_count = len(filter_result.removed_species)
+            if removed_count > 0:
+                st.warning(f"**Result:** Will remove {removed_count} species "
+                          f"({filter_result.removal_percentage:.1f}% of dataset)")
+                removed_df = pd.DataFrame({'LipidMolec': filter_result.removed_species})
+                st.dataframe(removed_df, use_container_width=True, height=150)
+
+                csv = removed_df.to_csv(index=False)
+                st.download_button(
+                    label="Download Removed Species",
+                    data=csv,
+                    file_name="removed_species.csv",
+                    mime="text/csv",
+                    key="download_removed_species"
+                )
+            else:
+                st.success("**Result:** No species will be removed")
+
+            return filter_result.filtered_df, filter_result.removed_species, {
+                'bqc_threshold': bqc_threshold,
+                'non_bqc_threshold': non_bqc_threshold
+            }
+
+        except ValueError as e:
+            st.error(f"Zero filtering error: {e}")
+            return cleaned_df, [], {}
+
+
+# =============================================================================
 # UI Components - Data Processing Display
 # =============================================================================
 
@@ -1073,16 +1502,43 @@ def display_app_page():
         st.info("Configure your experiment in the sidebar and check 'Confirm Inputs' to proceed.")
         return
 
-    # Main area: Processing Module
+    # ==========================================================================
+    # Main area: Processing Module (Step-by-Step Flow)
+    # ==========================================================================
     st.subheader("Data Standardization, Filtering, and Normalization")
 
-    # Show raw data preview (only after confirmation)
+    # Step 1: Data processing documentation
+    display_data_processing_docs(data_format)
+
+    # Step 2: Format-specific filtering configuration
+    grade_config = None
+    quality_config = None
+
+    if data_format == 'LipidSearch 5.0':
+        grade_config_dict = display_grade_filtering_config(raw_df)
+        if grade_config_dict is not None:
+            grade_config = GradeFilterConfig(grade_config=grade_config_dict)
+
+    elif data_format == 'MS-DIAL':
+        # Data type selection (raw vs normalized)
+        display_msdial_data_type_selection()
+
+        # Quality filtering
+        quality_config_dict = display_quality_filtering_config()
+        if quality_config_dict is not None:
+            quality_config = QualityFilterConfig(
+                total_score_threshold=quality_config_dict.get('total_score_threshold', 0),
+                require_msms=quality_config_dict.get('require_msms', False)
+            )
+
+    # Step 3: Show uploaded data preview
     display_data_preview(raw_df, "Uploaded Data")
 
-    # Process data button
-    if st.button("Process Data", type="primary"):
+    # Step 4: Process Data button (initial cleaning without zero filtering)
+    process_clicked = st.button("Process Data", type="primary", key="process_data_btn")
+
+    if process_clicked:
         with st.spinner("Processing data..."):
-            # Map UI format to DataFormat enum
             format_map = {
                 'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
                 'MS-DIAL': DataFormat.MSDIAL,
@@ -1090,16 +1546,20 @@ def display_app_page():
                 'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
             }
 
+            # First pass: clean data WITHOUT zero filtering (user configures thresholds after)
             config = IngestionConfig(
                 experiment=experiment,
                 data_format=format_map.get(data_format),
                 bqc_label=bqc_label,
-                apply_zero_filter=True,
+                apply_zero_filter=False,  # Don't apply yet - let user configure
+                grade_config=grade_config,
+                quality_config=quality_config,
             )
 
             try:
                 result = DataIngestionWorkflow.run(df, config)
                 st.session_state.ingestion_result = result
+                st.session_state.pre_filter_df = result.cleaned_df  # Store pre-filter version
 
                 if result.is_valid:
                     st.session_state.cleaned_df = result.cleaned_df
@@ -1108,17 +1568,61 @@ def display_app_page():
             except Exception as e:
                 st.error(f"Processing error: {e}")
 
-    # Display results if available
+    # Step 5: Display results if available
     if st.session_state.get('ingestion_result'):
         result = st.session_state.ingestion_result
-        display_processing_results(result)
 
-        # Normalization UI (only if ingestion was successful)
-        if result.is_valid and result.cleaned_df is not None:
+        if not result.is_valid:
+            for error in result.validation_errors:
+                st.error(error)
+        else:
+            # Show cleaning success message
+            st.success(f"Data cleaned successfully! Format: {result.detected_format.value}")
+
+            # Show cleaning messages
+            if result.cleaning_messages:
+                with st.expander("Processing Details", expanded=False):
+                    for msg in result.cleaning_messages:
+                        st.info(msg)
+
+            # Show warnings
+            for warning in result.validation_warnings:
+                st.warning(warning)
+
+            # Step 6: Zero Filtering Configuration (interactive)
+            pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
+            if pre_filter_df is not None and not pre_filter_df.empty:
+                filtered_df, removed_species, zero_config = display_zero_filtering_config(
+                    pre_filter_df, experiment, bqc_label
+                )
+
+                # Update session state with filtered data
+                if filtered_df is not None:
+                    st.session_state.cleaned_df = filtered_df
+                    st.session_state.continuation_df = filtered_df
+
+                    # Display zero filtering summary outside expander
+                    if removed_species:
+                        st.info(
+                            f"Zero filtering: {len(pre_filter_df)} → {len(filtered_df)} species "
+                            f"({len(removed_species)} removed, {len(removed_species)/len(pre_filter_df)*100:.1f}%)"
+                        )
+
+            # Step 7: Show final filtered data
+            st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
+            display_data_preview(st.session_state.cleaned_df, "Cleaned Data")
+
+            # Step 8: Internal Standards info
+            intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
+            if intsta_df is not None and not intsta_df.empty:
+                with st.expander(f"Internal Standards ({len(intsta_df)} detected)", expanded=False):
+                    st.dataframe(intsta_df, use_container_width=True)
+
+            # Step 9: Normalization UI
             st.markdown("---")
             display_normalization_ui(
-                cleaned_df=result.cleaned_df,
-                intsta_df=result.internal_standards_df,
+                cleaned_df=st.session_state.cleaned_df,
+                intsta_df=intsta_df,
                 experiment=experiment,
                 data_format=data_format
             )

@@ -27,3 +27,6 @@ __pycache__/
 *.pyc
 .coverage
 task-definition.json
+
+# Project development notes
+PROJECT_KNOWLEDGE.md

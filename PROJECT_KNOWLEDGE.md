@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** February 2, 2026
+**Last Updated:** February 2, 2026 (night)
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -106,7 +106,7 @@
 
 **Strategy:** Build the UI module by module, wiring up existing workflows before extracting new ones.
 
-#### Module 1: Filter and Normalize (IN PROGRESS)
+#### Module 1: Filter and Normalize (COMPLETE)
 Workflows and UI implemented:
 - ✅ `DataIngestionWorkflow` — upload → format detection → cleaning → zero filtering → standards
 - ✅ `NormalizationWorkflow` — normalization pipeline
@@ -121,10 +121,10 @@ Workflows and UI implemented:
 1. ✅ Check for large methods in `main_app.py` — break down methods >50 lines (`0d37dba`)
 2. ✅ Fix Metabolomics Workbench format loading (read as text, not CSV) (`183187a`)
 3. ✅ Fix sample column detection after standardization (use `intensity[...]` pattern) (`183187a`)
-4. ⬜ Match all UI instructions to old_main_app.py:
-   - ⬜ "Try Sample Data" section needs emoji and explanation (compare with old app)
-   - ⬜ Format requirements incomplete — copy full text from old_main_app.py
-   - ⬜ Review all user-facing text for consistency with old app
+4. ✅ Match all UI instructions to old_main_app.py:
+   - ✅ "Try Sample Data" section — verified identical to old app
+   - ✅ Format requirements — verified identical to old app
+   - ✅ User-facing text — verified consistent with old app
 5. ✅ Make sidebar identical to old app (except Define Experiment section):
    - ✅ Add "Column Name Standardization" section - display mapping table after file upload
    - ✅ Add "Override Sample Detection" expander for MS-DIAL format
@@ -132,6 +132,18 @@ Workflows and UI implemented:
    - ✅ Add "Are your samples properly grouped together?" radio with manual regrouping option
    - ✅ Add explicit "Specify Label of BQC Samples" section with Yes/No radio
    - ✅ Add "Confirm Inputs" section with summary and checkbox confirmation
+6. ✅ Fix UI flow gating — content only shows after "Confirm Inputs" checked (`162178f`)
+
+**Completed: Module 1 Main Page Flow Matches Old App**
+The new app now has a step-by-step flow matching the old app:
+   - ✅ Add data processing documentation expander (format-specific pipeline docs)
+   - ✅ Add quality/grade filtering controls (LipidSearch: Grade A/B/C/D, MS-DIAL: Quality score + MS/MS)
+   - ✅ Add zero filtering configuration UI (interactive with live preview)
+   - ✅ Show data cleaning results before normalization
+   - ✅ Add normalization method selection UI (already implemented)
+   - ✅ Add internal standards mapping UI (already implemented)
+   - ✅ Add protein concentration input UI (already implemented)
+   - ✅ Show step-by-step processing results
 
 **`main_app.py` now includes:**
 - Landing page with module descriptions
@@ -142,7 +154,13 @@ Workflows and UI implemented:
 - Group samples dataframe display with manual regrouping option
 - Explicit BQC sample specification (Yes/No radio)
 - Confirm inputs section with sample-condition summary
-- Data ingestion with zero filtering
+- Data processing documentation expander (format-specific pipeline docs)
+- Grade filtering configuration for LipidSearch (A/B/C/D per class)
+- Quality filtering configuration for MS-DIAL (Score threshold + MS/MS)
+- Data type selection for MS-DIAL (raw vs pre-normalized)
+- Zero filtering configuration with interactive live preview
+- Final filtered data preview before normalization
+- Internal standards display
 - Normalization UI (class selection, method selection, IS mapping, protein concentrations)
 
 #### Module 2: Quality Check (NOT STARTED)
