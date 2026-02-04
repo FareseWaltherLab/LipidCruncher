@@ -106,7 +106,7 @@
 
 **Strategy:** Build the UI module by module, wiring up existing workflows before extracting new ones.
 
-#### Module 1: Filter and Normalize (COMPLETE)
+#### Module 1: Filter and Normalize (IN PROGRESS - UI needs work)
 Workflows and UI implemented:
 - ✅ `DataIngestionWorkflow` — upload → format detection → cleaning → zero filtering → standards
 - ✅ `NormalizationWorkflow` — normalization pipeline
@@ -134,16 +134,36 @@ Workflows and UI implemented:
    - ✅ Add "Confirm Inputs" section with summary and checkbox confirmation
 6. ✅ Fix UI flow gating — content only shows after "Confirm Inputs" checked (`162178f`)
 
-**Completed: Module 1 Main Page Flow Matches Old App**
-The new app now has a step-by-step flow matching the old app:
-   - ✅ Add data processing documentation expander (format-specific pipeline docs)
-   - ✅ Add quality/grade filtering controls (LipidSearch: Grade A/B/C/D, MS-DIAL: Quality score + MS/MS)
-   - ✅ Add zero filtering configuration UI (interactive with live preview)
-   - ✅ Show data cleaning results before normalization
-   - ✅ Add normalization method selection UI (already implemented)
-   - ✅ Add internal standards mapping UI (already implemented)
-   - ✅ Add protein concentration input UI (already implemented)
-   - ✅ Show step-by-step processing results
+**Current Task: Make Module 1 Main Page Identical to Old App**
+
+Components added (partial - need refinement):
+   - ✅ Data processing documentation expander (format-specific pipeline docs)
+   - ✅ Grade filtering config for LipidSearch (A/B/C/D per class)
+   - ✅ Quality filtering config for MS-DIAL (Score threshold + MS/MS)
+   - ✅ Zero filtering config UI (thresholds adjustable)
+
+**Critical Issues to Fix:**
+1. ⬜ **Remove manual buttons** - Get rid of "Process Data" and "Apply Normalization" buttons
+   - Flow should run automatically after sidebar confirmation (like old app)
+   - Data cleaning → zero filtering → normalization should flow without clicks
+2. ⬜ **Automatic flow execution** - After confirm checkbox, all processing runs at once
+3. ⬜ **Add "Manage Internal Standards" expander** - Allow upload/edit of standards
+4. ⬜ **Add lipid class multiselect** - Select which classes to include in normalization
+5. ⬜ **Add "About Normalization" section** - Documentation expander for normalization
+6. ⬜ **Match old app expander structure exactly:**
+   - "📖 About Data Standardization and Filtering" expander
+   - "⚙️ Configure Grade/Quality Filtering" expander (format-specific)
+   - "⚙️ Configure Zero Filtering" expander
+   - "📋 Final Filtered Data" section (always visible)
+   - "Manage Internal Standards" expander
+   - "📖 About Normalization" expander
+   - Normalization method selection (radio)
+   - Class selection (multiselect)
+   - Standard-to-class mapping (if IS method selected)
+   - Protein concentrations input (if protein method selected)
+   - Normalized data display
+7. ⬜ **Verify zero filtering is being applied correctly**
+8. ⬜ **Match exact text/labels from old app**
 
 **`main_app.py` now includes:**
 - Landing page with module descriptions
