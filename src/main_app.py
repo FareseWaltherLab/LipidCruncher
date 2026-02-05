@@ -1676,7 +1676,7 @@ def display_app_page():
     data_format = display_format_selection()
 
     with center:
-        display_logo()
+        display_logo(centered=True)
         st.markdown("Process, analyze and visualize lipidomic data from multiple sources.")
         display_format_requirements(data_format)
 
