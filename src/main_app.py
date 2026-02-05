@@ -868,12 +868,23 @@ def display_grade_filtering_config(df: pd.DataFrame) -> dict:
         if 'grade_selections' not in st.session_state:
             st.session_state.grade_selections = {}
 
+        options = ["Use Default Settings", "Customize by Class"]
+        widget_key = "grade_filter_mode_radio"
+
+        # Initialize widget key from persisted value BEFORE rendering
+        persisted_value = st.session_state.get('grade_filter_mode', "Use Default Settings")
+        if persisted_value in options:
+            st.session_state[widget_key] = persisted_value
+
+        def on_grade_mode_change():
+            st.session_state.grade_filter_mode = st.session_state[widget_key]
+
         use_custom = st.radio(
             "Grade filtering mode:",
-            ["Use Default Settings", "Customize by Class"],
-            index=0 if st.session_state.grade_filter_mode == "Use Default Settings" else 1,
+            options,
             horizontal=True,
-            key="grade_filter_mode_radio"
+            key=widget_key,
+            on_change=on_grade_mode_change
         )
         st.session_state.grade_filter_mode = use_custom
 
@@ -928,24 +939,41 @@ Your MS-DIAL export contains both raw and pre-normalized intensity values:
 - **Normalized data**: {len(norm_samples)} sample columns (after 'Lipid IS' column)
         """)
 
-        # Initialize session state
-        if 'msdial_use_normalized' not in st.session_state:
-            st.session_state.msdial_use_normalized = False
-
         options = [
             f"Raw intensity values ({len(raw_samples)} samples)",
             f"Pre-normalized values ({len(norm_samples)} samples)"
         ]
 
+        # Initialize widget key from persisted index BEFORE rendering radio
+        # This ensures consistency when navigating between pages
+        widget_key = "msdial_data_type_radio"
+        persisted_index = st.session_state.get('msdial_data_type_index', 0)
+        if persisted_index < len(options):
+            st.session_state[widget_key] = options[persisted_index]
+
+        def on_data_type_change():
+            """Callback to update session state immediately when selection changes."""
+            selection = st.session_state[widget_key]
+            new_index = options.index(selection) if selection in options else 0
+            st.session_state.msdial_data_type_index = new_index
+            st.session_state.msdial_use_normalized = "Pre-normalized" in selection
+            # Clear cached data to force re-standardization with new selection
+            st.session_state.standardized_df = None
+            st.session_state.cleaned_df = None
+            st.session_state.pre_filter_df = None
+            st.session_state.continuation_df = None
+
         data_type = st.radio(
             "Select which data to use:",
             options,
-            index=1 if st.session_state.msdial_use_normalized else 0,
-            key="msdial_data_type_radio",
+            key=widget_key,
+            on_change=on_data_type_change,
             help="Choose raw data if you want to apply LipidCruncher's normalization. Choose pre-normalized if MS-DIAL already normalized your data."
         )
 
+        # Keep session state in sync after render
         use_normalized = "Pre-normalized" in data_type
+        st.session_state.msdial_data_type_index = options.index(data_type) if data_type in options else 0
         st.session_state.msdial_use_normalized = use_normalized
 
         if use_normalized:
@@ -984,18 +1012,22 @@ def display_quality_filtering_config() -> dict:
                 'No filtering': {'total_score_threshold': 0, 'require_msms': False}
             }
             quality_options_list = list(quality_options.keys())
+            widget_key = "msdial_quality_level_radio"
 
-            # Find current index
-            current_idx = 1  # Default to Moderate
-            if st.session_state.msdial_quality_level in quality_options_list:
-                current_idx = quality_options_list.index(st.session_state.msdial_quality_level)
+            # Initialize widget key from persisted value BEFORE rendering
+            persisted_value = st.session_state.get('msdial_quality_level', 'Moderate (Score ≥60)')
+            if persisted_value in quality_options_list:
+                st.session_state[widget_key] = persisted_value
+
+            def on_quality_level_change():
+                st.session_state.msdial_quality_level = st.session_state[widget_key]
 
             selected_option = st.radio(
                 "Quality filtering level:",
                 quality_options_list,
-                index=current_idx,
                 horizontal=True,
-                key="msdial_quality_level_radio"
+                key=widget_key,
+                on_change=on_quality_level_change
             )
             st.session_state.msdial_quality_level = selected_option
 
