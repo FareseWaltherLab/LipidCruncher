@@ -1030,6 +1030,13 @@ def display_quality_filtering_config() -> dict:
             st.markdown(f"**Current settings:** Score ≥ {quality_config['total_score_threshold']}, "
                        f"MS/MS required: {'Yes' if quality_config['require_msms'] else 'No'}")
 
+            # Display filter results from previous processing run
+            ingestion_result = st.session_state.get('ingestion_result')
+            if ingestion_result and ingestion_result.cleaning_messages:
+                st.markdown("**Filter Results:**")
+                for msg in ingestion_result.cleaning_messages:
+                    st.info(msg)
+
             return quality_config
 
         elif msms_filtering_available:
@@ -1812,6 +1819,11 @@ def display_app_page():
                 st.session_state.continuation_df = filtered_df
 
         # Step 6: Show final filtered data (outside expander, matching old app)
+        # Sort by ClassKey so all species of the same class are grouped together
+        if 'ClassKey' in st.session_state.cleaned_df.columns:
+            st.session_state.cleaned_df = st.session_state.cleaned_df.sort_values('ClassKey').reset_index(drop=True)
+            st.session_state.continuation_df = st.session_state.cleaned_df
+
         st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
         st.dataframe(st.session_state.cleaned_df, use_container_width=True)
         csv = st.session_state.cleaned_df.to_csv(index=False)

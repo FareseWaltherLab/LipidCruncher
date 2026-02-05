@@ -106,7 +106,7 @@
 
 **Strategy:** Build the UI module by module, wiring up existing workflows before extracting new ones.
 
-#### Module 1: Filter and Normalize (COMPLETE)
+#### Module 1: Filter and Normalize (BUGS TO FIX)
 Workflows and UI implemented:
 - ✅ `DataIngestionWorkflow` — upload → format detection → cleaning → zero filtering → standards
 - ✅ `NormalizationWorkflow` — normalization pipeline
@@ -199,6 +199,10 @@ Workflows and UI implemented:
 - **Manage Internal Standards expander** (auto-detect or upload custom standards)
 - **Internal standards consistency plots** (bar charts with condition filtering)
 - Normalization UI (class selection, method selection, IS mapping, protein concentrations)
+
+**Bugs to Fix Before Module 2 (TOP PRIORITY):**
+1. ⬜ **MS-DIAL quality filtering lacks filtering summary** — Old app showed a message about how many lipids were removed during quality filtering. Current implementation doesn't display this feedback.
+2. ⬜ **Final filtered data: lipid classes not sorted properly** — Classes appear interleaved (e.g., a PE species in the middle of DG species). Data should be sorted/grouped by ClassKey so all species of the same class appear together.
 
 #### Module 2: Quality Check (NOT STARTED)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
