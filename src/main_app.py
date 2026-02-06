@@ -1062,12 +1062,17 @@ def display_quality_filtering_config() -> dict:
             st.markdown(f"**Current settings:** Score ≥ {quality_config['total_score_threshold']}, "
                        f"MS/MS required: {'Yes' if quality_config['require_msms'] else 'No'}")
 
-            # Display filter results from previous processing run
-            ingestion_result = st.session_state.get('ingestion_result')
-            if ingestion_result and ingestion_result.cleaning_messages:
-                st.markdown("**Filter Results:**")
-                for msg in ingestion_result.cleaning_messages:
-                    st.info(msg)
+            # Show filter results only if they match the current config
+            # (results are stored after workflow runs, so they reflect previous run with same config)
+            last_config = st.session_state.get('last_quality_config')
+            if (last_config and
+                last_config.get('total_score_threshold') == quality_config['total_score_threshold'] and
+                last_config.get('require_msms') == quality_config['require_msms']):
+                ingestion_result = st.session_state.get('ingestion_result')
+                if ingestion_result and ingestion_result.cleaning_messages:
+                    st.markdown("**Filter Results:**")
+                    for msg in ingestion_result.cleaning_messages:
+                        st.info(msg)
 
             return quality_config
 
@@ -1774,6 +1779,7 @@ def display_app_page():
         # Step 2: Format-specific filtering configuration
         grade_config = None
         quality_config = None
+        quality_config_dict = None
 
         if data_format == 'LipidSearch 5.0':
             grade_config_dict = display_grade_filtering_config(raw_df)
@@ -1814,10 +1820,16 @@ def display_app_page():
             quality_config=quality_config,
         )
 
+        # Capture previous config BEFORE running workflow (to detect config changes)
+        prev_quality_config = st.session_state.get('last_quality_config')
+
         try:
             result = DataIngestionWorkflow.run(df, config)
             st.session_state.ingestion_result = result
             st.session_state.pre_filter_df = result.cleaned_df  # Store pre-filter version
+            # Store the config used so we can verify results match current settings
+            if quality_config_dict is not None:
+                st.session_state.last_quality_config = quality_config_dict.copy()
 
             if result.is_valid:
                 st.session_state.cleaned_df = result.cleaned_df
@@ -1836,6 +1848,14 @@ def display_app_page():
         # Show warnings
         for warning in result.validation_warnings:
             st.warning(warning)
+
+        # If quality config changed, rerun so the expander shows updated results
+        if data_format == 'MS-DIAL' and quality_config_dict:
+            config_changed = not (prev_quality_config and
+                                 prev_quality_config.get('total_score_threshold') == quality_config_dict.get('total_score_threshold') and
+                                 prev_quality_config.get('require_msms') == quality_config_dict.get('require_msms'))
+            if config_changed:
+                safe_rerun()
 
         # Step 5: Zero Filtering Configuration (interactive)
         pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
