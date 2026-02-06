@@ -301,8 +301,14 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> tuple:
             )
 
             if manual_samples and manual_samples != detected_samples:
-                # Update the feature list
+                # Update the feature list for both raw and normalized sample columns
+                # (MS-DIAL exports have same sample names before and after 'Lipid IS' column)
                 st.session_state.msdial_features['raw_sample_columns'] = manual_samples
+
+                # Filter normalized columns to match the manual selection
+                current_norm_samples = features.get('normalized_sample_columns', [])
+                filtered_norm_samples = [s for s in current_norm_samples if s in manual_samples]
+                st.session_state.msdial_features['normalized_sample_columns'] = filtered_norm_samples
 
                 # Get current DataFrame and rebuild intensity columns
                 current_df = df.copy()
@@ -1766,6 +1772,10 @@ def display_app_page():
         with center:
             st.info("Configure your experiment in the sidebar and check 'Confirm Inputs' to proceed.")
         return
+
+    # After sample grouping, use the potentially reordered DataFrame from session state
+    # (display_sample_grouping updates st.session_state.standardized_df when user regroups samples)
+    df = st.session_state.standardized_df
 
     # ==========================================================================
     # Main area: Processing Module (Automatic Flow)
