@@ -41,7 +41,7 @@ from app.models.normalization import NormalizationConfig
 from app.services.format_detection import FormatDetectionService, DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from app.services.zero_filtering import ZeroFilterConfig
-from app.workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig
+from app.workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig, IngestionResult
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
@@ -1346,13 +1346,20 @@ def _display_class_selection(cleaned_df: pd.DataFrame) -> list:
     if 'selected_classes' not in st.session_state:
         st.session_state.selected_classes = available_classes.copy()
 
+    # Validate that saved classes still exist in available classes
+    # (data may have changed due to new file or config changes)
+    valid_saved_classes = [c for c in st.session_state.selected_classes if c in available_classes]
+
+    # Determine default: use valid saved classes, or all available if none saved
+    default_classes = valid_saved_classes if valid_saved_classes else available_classes
+
     def update_selected_classes():
         st.session_state.selected_classes = st.session_state.temp_selected_classes
 
     selected_classes = st.multiselect(
         'Classes to analyze:',
         options=available_classes,
-        default=available_classes if not st.session_state.selected_classes else st.session_state.selected_classes,
+        default=default_classes,
         key='temp_selected_classes',
         on_change=update_selected_classes
     )
@@ -1575,16 +1582,8 @@ def _run_normalization(
     intsta_concentrations: dict,
     protein_concentrations: dict
 ) -> NormalizationWorkflowResult:
-    """Run normalization workflow and return result."""
+    """Run normalization workflow and return result (cached for performance)."""
     try:
-        norm_config = NormalizationConfig(
-            method=config_method,
-            selected_classes=selected_classes,
-            internal_standards=internal_standards if internal_standards else None,
-            intsta_concentrations=intsta_concentrations if intsta_concentrations else None,
-            protein_concentrations=protein_concentrations if protein_concentrations else None
-        )
-
         format_map = {
             'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
             'MS-DIAL': DataFormat.MSDIAL,
@@ -1592,16 +1591,40 @@ def _run_normalization(
             'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
         }
 
-        workflow_config = NormalizationWorkflowConfig(
-            experiment=experiment,
-            normalization=norm_config,
-            data_format=format_map.get(data_format, DataFormat.GENERIC)
+        # Use cached adapter method for performance
+        df_hash = StreamlitAdapter.compute_df_hash(cleaned_df)
+        experiment_dict = StreamlitAdapter.experiment_to_dict(experiment)
+        format_type_value = format_map.get(data_format, DataFormat.GENERIC).value
+
+        # Call cached normalization workflow
+        (
+            normalized_df,
+            success,
+            method_applied,
+            removed_standards,
+            validation_errors,
+            validation_warnings,
+        ) = StreamlitAdapter.run_normalization(
+            _df_hash=df_hash,
+            df=cleaned_df,
+            experiment_dict=experiment_dict,
+            method=config_method,
+            selected_classes=selected_classes,
+            format_type=format_type_value,
+            internal_standards=internal_standards if internal_standards else None,
+            intsta_concentrations=intsta_concentrations if intsta_concentrations else None,
+            protein_concentrations=protein_concentrations if protein_concentrations else None,
+            intsta_df=intsta_df,
         )
 
-        result = NormalizationWorkflow.run(
-            df=cleaned_df,
-            config=workflow_config,
-            intsta_df=intsta_df
+        # Reconstruct result object for compatibility
+        result = NormalizationWorkflowResult(
+            normalized_df=normalized_df,
+            success=success,
+            method_applied=method_applied,
+            removed_standards=removed_standards,
+            validation_errors=validation_errors,
+            validation_warnings=validation_warnings,
         )
 
         if result.success:
@@ -1834,20 +1857,48 @@ def display_app_page():
         }
 
         # Run ingestion workflow (clean data WITHOUT zero filtering - user configures thresholds after)
-        config = IngestionConfig(
-            experiment=experiment,
-            data_format=format_map.get(data_format),
-            bqc_label=bqc_label,
-            apply_zero_filter=False,  # Don't apply yet - let user configure
-            grade_config=grade_config,
-            quality_config=quality_config,
-        )
+        # Use cached adapter method for performance
+        df_hash = StreamlitAdapter.compute_df_hash(df)
+        experiment_dict = StreamlitAdapter.experiment_to_dict(experiment)
+        format_type_value = format_map.get(data_format).value if format_map.get(data_format) else None
+        grade_config_dict_for_cache = StreamlitAdapter.config_to_dict(grade_config)
+        quality_config_dict_for_cache = StreamlitAdapter.config_to_dict(quality_config)
 
         # Capture previous config BEFORE running workflow (to detect config changes)
         prev_quality_config = st.session_state.get('last_quality_config')
 
         try:
-            result = DataIngestionWorkflow.run(df, config)
+            # Call cached ingestion workflow
+            (
+                cleaned_df,
+                intsta_df,
+                detected_format,
+                is_valid,
+                validation_errors,
+                validation_warnings,
+                cleaning_messages,
+            ) = StreamlitAdapter.run_ingestion(
+                _df_hash=df_hash,
+                df=df,
+                experiment_dict=experiment_dict,
+                format_type=format_type_value,
+                bqc_label=bqc_label,
+                apply_zero_filter=False,  # Don't apply yet - let user configure
+                grade_config_dict=grade_config_dict_for_cache,
+                quality_config_dict=quality_config_dict_for_cache,
+            )
+
+            # Reconstruct result object for compatibility
+            result = IngestionResult(
+                detected_format=DataFormat(detected_format),
+                cleaned_df=cleaned_df,
+                internal_standards_df=intsta_df,
+                is_valid=is_valid,
+                validation_errors=validation_errors,
+                validation_warnings=validation_warnings,
+                cleaning_messages=cleaning_messages,
+            )
+
             st.session_state.ingestion_result = result
             st.session_state.pre_filter_df = result.cleaned_df  # Store pre-filter version
             # Store the config used so we can verify results match current settings

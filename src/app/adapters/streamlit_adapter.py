@@ -17,6 +17,8 @@ from ..services.data_cleaning import DataCleaningService, CleaningResult, GradeF
 from ..services.zero_filtering import ZeroFilteringService, ZeroFilterConfig, ZeroFilteringResult
 from ..services.normalization import NormalizationService, NormalizationResult
 from ..services.standards import StandardsService, StandardsExtractionResult, StandardsValidationResult
+from ..workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig, IngestionResult
+from ..workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
 
 
 @dataclass
@@ -402,6 +404,143 @@ class StreamlitAdapter:
         )
 
         return result.normalized_df, result.removed_standards, result.method_applied
+
+    # ==================== Cached Workflow Wrappers ====================
+
+    @staticmethod
+    @st.cache_data(show_spinner="Processing data...")
+    def run_ingestion(
+        _df_hash: str,
+        df: pd.DataFrame,
+        experiment_dict: Dict[str, Any],
+        format_type: str,
+        bqc_label: Optional[str] = None,
+        apply_zero_filter: bool = False,
+        grade_config_dict: Optional[Dict[str, Any]] = None,
+        quality_config_dict: Optional[Dict[str, Any]] = None
+    ) -> Tuple[
+        Optional[pd.DataFrame],  # cleaned_df
+        Optional[pd.DataFrame],  # internal_standards_df
+        str,                     # detected_format
+        bool,                    # is_valid
+        List[str],               # validation_errors
+        List[str],               # validation_warnings
+        List[str],               # cleaning_messages
+    ]:
+        """
+        Cached data ingestion workflow wrapper.
+
+        Args:
+            _df_hash: Hash of DataFrame for cache invalidation
+            df: Raw DataFrame to process
+            experiment_dict: Serialized ExperimentConfig
+            format_type: Format type string
+            bqc_label: BQC condition label
+            apply_zero_filter: Whether to apply zero filtering
+            grade_config_dict: Serialized GradeFilterConfig (LipidSearch only)
+            quality_config_dict: Serialized QualityFilterConfig (MS-DIAL only)
+
+        Returns:
+            Tuple of (cleaned_df, intsta_df, format, is_valid, errors, warnings, messages)
+        """
+        # Reconstruct objects from dicts
+        experiment = ExperimentConfig(**experiment_dict)
+        data_format = DataFormat(format_type) if format_type else None
+        grade_config = GradeFilterConfig(**grade_config_dict) if grade_config_dict else None
+        quality_config = QualityFilterConfig(**quality_config_dict) if quality_config_dict else None
+
+        config = IngestionConfig(
+            experiment=experiment,
+            data_format=data_format,
+            bqc_label=bqc_label,
+            apply_zero_filter=apply_zero_filter,
+            grade_config=grade_config,
+            quality_config=quality_config,
+        )
+
+        result = DataIngestionWorkflow.run(df, config)
+
+        return (
+            result.cleaned_df,
+            result.internal_standards_df,
+            result.detected_format.value,
+            result.is_valid,
+            result.validation_errors,
+            result.validation_warnings,
+            result.cleaning_messages,
+        )
+
+    @staticmethod
+    @st.cache_data(show_spinner="Normalizing data...")
+    def run_normalization(
+        _df_hash: str,
+        df: pd.DataFrame,
+        experiment_dict: Dict[str, Any],
+        method: str,
+        selected_classes: List[str],
+        format_type: str,
+        internal_standards: Optional[Dict[str, str]] = None,
+        intsta_concentrations: Optional[Dict[str, float]] = None,
+        protein_concentrations: Optional[Dict[str, float]] = None,
+        intsta_df: Optional[pd.DataFrame] = None
+    ) -> Tuple[
+        Optional[pd.DataFrame],  # normalized_df
+        bool,                    # success
+        str,                     # method_applied
+        List[str],               # removed_standards
+        List[str],               # validation_errors
+        List[str],               # validation_warnings
+    ]:
+        """
+        Cached normalization workflow wrapper.
+
+        Args:
+            _df_hash: Hash of DataFrame for cache invalidation
+            df: Cleaned DataFrame to normalize
+            experiment_dict: Serialized ExperimentConfig
+            method: Normalization method
+            selected_classes: Classes to normalize
+            format_type: Data format string
+            internal_standards: Class -> standard mapping
+            intsta_concentrations: Standard -> concentration mapping
+            protein_concentrations: Sample -> protein concentration mapping
+            intsta_df: Internal standards DataFrame
+
+        Returns:
+            Tuple of (normalized_df, success, method_applied, removed_standards, errors, warnings)
+        """
+        # Reconstruct objects from dicts
+        experiment = ExperimentConfig(**experiment_dict)
+        data_format = DataFormat(format_type) if format_type else DataFormat.GENERIC
+
+        norm_config = NormalizationConfig(
+            method=method,
+            selected_classes=selected_classes,
+            internal_standards=internal_standards,
+            intsta_concentrations=intsta_concentrations,
+            protein_concentrations=protein_concentrations
+        )
+
+        workflow_config = NormalizationWorkflowConfig(
+            experiment=experiment,
+            normalization=norm_config,
+            data_format=data_format
+        )
+
+        result = NormalizationWorkflow.run(
+            df=df,
+            config=workflow_config,
+            intsta_df=intsta_df
+        )
+
+        return (
+            result.normalized_df,
+            result.success,
+            result.method_applied,
+            result.removed_standards,
+            result.validation_errors,
+            result.validation_warnings,
+        )
 
     # ==================== Utility Methods ====================
 
