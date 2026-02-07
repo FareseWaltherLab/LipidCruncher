@@ -465,7 +465,7 @@ def display_experiment_definition(df: pd.DataFrame, data_format: str, sample_col
     number_of_samples_list = []
 
     for i in range(n_conditions):
-        col1, col2 = st.sidebar.columns([2, 1])
+        col1, col2 = st.sidebar.columns([3, 2])
         with col1:
             cond_name = st.text_input(
                 f'Condition {i + 1}',
