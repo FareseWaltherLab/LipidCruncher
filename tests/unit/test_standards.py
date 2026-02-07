@@ -1817,3 +1817,219 @@ class TestIntegrationScenarios:
         )
         assert suggestions['PC'] is not None
         assert suggestions['PE'] is None  # No PE standards
+
+
+# =============================================================================
+# Standards Column Standardization Edge Cases (Bug Fix Tests)
+# =============================================================================
+
+class TestStandardsColumnStandardization:
+    """
+    Edge case tests for _standardize_columns method.
+
+    These tests verify that ClassKey columns are correctly identified when
+    standardizing uploaded standards files. The logic needs to distinguish
+    between ClassKey columns (non-numeric text) and intensity columns (numeric).
+    """
+
+    def test_standardize_with_classkey_column(self):
+        """Test standardization when ClassKey column is present."""
+        df = pd.DataFrame({
+            'Standard Name': ['PC(15:0)(d7)', 'PE(17:0)(d5)'],
+            'Class': ['PC', 'PE'],  # ClassKey column (non-numeric)
+            'Sample1': [500.0, 600.0],
+            'Sample2': [520.0, 620.0],
+        })
+        expected_cols = ['intensity[s1]', 'intensity[s2]']
+
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert 'LipidMolec' in result.columns
+        assert 'ClassKey' in result.columns
+        assert 'intensity[s1]' in result.columns
+        assert 'intensity[s2]' in result.columns
+        assert result['ClassKey'].iloc[0] == 'PC'
+
+    def test_standardize_without_classkey_infers_from_name(self):
+        """Test that ClassKey is inferred from LipidMolec when not provided."""
+        df = pd.DataFrame({
+            'Standard Name': ['PC(15:0)(d7)', 'PE(17:0)(d5)'],
+            'Sample1': [500.0, 600.0],  # Numeric - intensity column
+            'Sample2': [520.0, 620.0],
+        })
+        expected_cols = ['intensity[s1]', 'intensity[s2]']
+
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert 'LipidMolec' in result.columns
+        assert 'ClassKey' in result.columns
+        # ClassKey should be inferred from lipid name
+        assert result['ClassKey'].iloc[0] == 'PC'
+        assert result['ClassKey'].iloc[1] == 'PE'
+
+    def test_standardize_classkey_with_short_names(self):
+        """Test ClassKey detection with typical short class names (PC, PE, TG)."""
+        df = pd.DataFrame({
+            'Lipid': ['PC(d7)', 'PE(d5)', 'TG(d9)'],
+            'Class': ['PC', 'PE', 'TG'],  # Short alphabetic strings
+            'Intensity1': [100.0, 200.0, 300.0],
+        })
+        expected_cols = ['intensity[s1]']
+
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert 'ClassKey' in result.columns
+        assert set(result['ClassKey'].unique()) == {'PC', 'PE', 'TG'}
+
+    def test_standardize_numeric_second_column_not_classkey(self):
+        """Test that numeric second column is treated as intensity, not ClassKey."""
+        df = pd.DataFrame({
+            'Lipid': ['PC(d7)', 'PE(d5)'],
+            'Conc1': [100.0, 200.0],  # Numeric - should be intensity
+            'Conc2': [110.0, 210.0],
+        })
+        expected_cols = ['intensity[s1]', 'intensity[s2]']
+
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        # ClassKey should be inferred, not taken from Conc1
+        assert 'ClassKey' in result.columns
+        assert result['ClassKey'].iloc[0] == 'PC'  # Inferred from lipid name
+        assert 'intensity[s1]' in result.columns
+        assert 'intensity[s2]' in result.columns
+
+    def test_standardize_mixed_classkey_values(self):
+        """Test ClassKey with mixed-length class names."""
+        df = pd.DataFrame({
+            'Lipid': ['PC(d7)', 'CerG1(d5)', 'SM(d9)', 'Cholesterol(d7)'],
+            'Class': ['PC', 'CerG1', 'SM', 'Chol'],  # Various lengths
+            'Value': [100.0, 200.0, 300.0, 400.0],
+        })
+        expected_cols = ['intensity[s1]']
+
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert 'ClassKey' in result.columns
+        assert 'PC' in result['ClassKey'].values
+        assert 'CerG1' in result['ClassKey'].values
+
+    def test_standardize_empty_dataframe_raises(self):
+        """Test that empty DataFrame with no columns raises error."""
+        df = pd.DataFrame()
+        expected_cols = ['intensity[s1]']
+
+        with pytest.raises(ValueError, match="no columns"):
+            StandardsService._standardize_columns(df, expected_cols)
+
+    def test_standardize_single_column_infers_classkey(self):
+        """Test standardization with only lipid name column."""
+        df = pd.DataFrame({
+            'Lipid': ['PC(d7)', 'PE(d5)'],
+        })
+        expected_cols = []
+
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert 'LipidMolec' in result.columns
+        assert 'ClassKey' in result.columns
+        assert result['ClassKey'].iloc[0] == 'PC'
+
+    def test_standardize_classkey_column_named_classkey(self):
+        """Test when second column is explicitly named 'ClassKey'."""
+        df = pd.DataFrame({
+            'Lipid': ['PC(d7)', 'PE(d5)'],
+            'ClassKey': ['PC', 'PE'],  # Explicitly named
+            'Sample1': [100.0, 200.0],
+        })
+        expected_cols = ['intensity[s1]']
+
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert 'ClassKey' in result.columns
+        assert result['ClassKey'].iloc[0] == 'PC'
+        # Should have 3 columns: LipidMolec, ClassKey, intensity[s1]
+        assert len(result.columns) == 3
+
+
+class TestMetabolomicsWorkbenchParsing:
+    """
+    Edge case tests for Metabolomics Workbench format parsing.
+
+    These tests verify correct handling of the MW format which is read as
+    text (not CSV) and has a special structure with markers.
+    """
+
+    def test_detect_mw_format_with_markers(self):
+        """Test detection of Metabolomics Workbench format by markers."""
+        from app.services.format_detection import FormatDetectionService, DataFormat
+
+        mw_text = """#METABOLOMICS WORKBENCH
+SUBJECT_TYPE
+MS_METABOLITE_DATA_START
+Samples	Sample1	Sample2	Sample3
+Factors	Control	Control	Treatment
+PC(16:0)	1000	1100	1200
+PE(18:0)	2000	2100	2200
+MS_METABOLITE_DATA_END
+"""
+        result = FormatDetectionService.detect_format(mw_text)
+        assert result == DataFormat.METABOLOMICS_WORKBENCH
+
+    def test_detect_mw_format_markers_in_wrong_order(self):
+        """Test that markers in wrong order are not detected as MW format."""
+        from app.services.format_detection import FormatDetectionService, DataFormat
+
+        bad_text = """MS_METABOLITE_DATA_END
+Some data
+MS_METABOLITE_DATA_START
+"""
+        result = FormatDetectionService.detect_format(bad_text)
+        assert result == DataFormat.UNKNOWN
+
+    def test_detect_mw_format_missing_start_marker(self):
+        """Test that missing start marker is not detected as MW format."""
+        from app.services.format_detection import FormatDetectionService, DataFormat
+
+        bad_text = """#METABOLOMICS WORKBENCH
+Samples	Sample1	Sample2
+PC(16:0)	1000	1100
+MS_METABOLITE_DATA_END
+"""
+        result = FormatDetectionService.detect_format(bad_text)
+        assert result == DataFormat.UNKNOWN
+
+    def test_detect_mw_format_missing_end_marker(self):
+        """Test that missing end marker is not detected as MW format."""
+        from app.services.format_detection import FormatDetectionService, DataFormat
+
+        bad_text = """MS_METABOLITE_DATA_START
+Samples	Sample1	Sample2
+PC(16:0)	1000	1100
+"""
+        result = FormatDetectionService.detect_format(bad_text)
+        assert result == DataFormat.UNKNOWN
+
+    def test_detect_mw_format_empty_string(self):
+        """Test that empty string is not detected as MW format."""
+        from app.services.format_detection import FormatDetectionService, DataFormat
+
+        result = FormatDetectionService.detect_format("")
+        assert result == DataFormat.UNKNOWN
+
+    def test_detect_mw_format_with_extra_content(self):
+        """Test MW detection with additional metadata before and after markers."""
+        from app.services.format_detection import FormatDetectionService, DataFormat
+
+        mw_text = """#METABOLOMICS WORKBENCH
+#STUDY_ID ST000001
+#ANALYSIS_TYPE MS
+#VERSION 1
+MS_METABOLITE_DATA_START
+Samples	S1	S2
+Factors	A	B
+Lipid1	100	200
+MS_METABOLITE_DATA_END
+#END
+"""
+        result = FormatDetectionService.detect_format(mw_text)
+        assert result == DataFormat.METABOLOMICS_WORKBENCH

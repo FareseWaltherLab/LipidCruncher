@@ -1574,3 +1574,289 @@ class TestMSDIALEdgeCases:
         # 'invalid' should be coerced to NaN, so only 90.0 remains
         result = DataCleaningService.clean_msdial(df, simple_experiment, config)
         assert len(result.cleaned_df) == 1
+
+
+# =============================================================================
+# Generic Format ClassKey Edge Cases (Bug Fix Tests)
+# =============================================================================
+
+class TestGenericCleanerClassKeyEdgeCases:
+    """
+    Edge case tests for ClassKey column handling in Generic format.
+
+    These tests verify that the ClassKey column is correctly identified and
+    NOT counted as an intensity column. This was a bug fixed in commit 4b728ac.
+    """
+
+    def test_classkey_preserved_as_metadata(self, simple_experiment):
+        """
+        Test that ClassKey column is preserved in output and not treated as intensity.
+
+        Bug context: ClassKey column was incorrectly counted as an intensity column
+        when it appeared between LipidMolec and intensity columns.
+        """
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+            'ClassKey': ['PC', 'PE'],
+            'intensity[s1]': [1000.0, 2000.0],
+            'intensity[s2]': [1100.0, 2100.0],
+            'intensity[s3]': [1200.0, 2200.0],
+            'intensity[s4]': [1300.0, 2300.0],
+        })
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+
+        # ClassKey should be preserved as metadata
+        assert 'ClassKey' in cleaned.columns
+        assert cleaned['ClassKey'].iloc[0] == 'PC'
+        assert cleaned['ClassKey'].iloc[1] == 'PE'
+
+        # Should have exactly 4 intensity columns, not 5
+        intensity_cols = [c for c in cleaned.columns if c.startswith('intensity[')]
+        assert len(intensity_cols) == 4
+
+    def test_classkey_case_insensitive(self, simple_experiment):
+        """Test that ClassKey is recognized regardless of case."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+            'classkey': ['PC', 'PE'],  # lowercase
+            'intensity[s1]': [1000.0, 2000.0],
+            'intensity[s2]': [1100.0, 2100.0],
+            'intensity[s3]': [1200.0, 2200.0],
+            'intensity[s4]': [1300.0, 2300.0],
+        })
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+
+        # Should be standardized to 'ClassKey'
+        assert 'ClassKey' in cleaned.columns
+        intensity_cols = [c for c in cleaned.columns if c.startswith('intensity[')]
+        assert len(intensity_cols) == 4
+
+    def test_classkey_uppercase(self, simple_experiment):
+        """Test that CLASSKEY (uppercase) is recognized."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+            'CLASSKEY': ['PC', 'PE'],  # uppercase
+            'intensity[s1]': [1000.0, 2000.0],
+            'intensity[s2]': [1100.0, 2100.0],
+            'intensity[s3]': [1200.0, 2200.0],
+            'intensity[s4]': [1300.0, 2300.0],
+        })
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+
+        assert 'ClassKey' in cleaned.columns
+        intensity_cols = [c for c in cleaned.columns if c.startswith('intensity[')]
+        assert len(intensity_cols) == 4
+
+    def test_classkey_with_short_class_names(self, simple_experiment):
+        """Test ClassKey with typical short class names like PC, PE, TG, DG."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)', 'DG(14:0)'],
+            'ClassKey': ['PC', 'PE', 'TG', 'DG'],  # 2-char names
+            'intensity[s1]': [1000.0, 2000.0, 3000.0, 4000.0],
+            'intensity[s2]': [1100.0, 2100.0, 3100.0, 4100.0],
+            'intensity[s3]': [1200.0, 2200.0, 3200.0, 4200.0],
+            'intensity[s4]': [1300.0, 2300.0, 3300.0, 4300.0],
+        })
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+
+        assert 'ClassKey' in cleaned.columns
+        assert set(cleaned['ClassKey'].unique()) == {'PC', 'PE', 'TG', 'DG'}
+
+    def test_classkey_with_longer_class_names(self, simple_experiment):
+        """Test ClassKey with longer class names like CerG1, SPH, SM."""
+        df = pd.DataFrame({
+            'LipidMolec': ['CerG1(18:1)', 'SPH(18:0)', 'SM(16:0)'],
+            'ClassKey': ['CerG1', 'SPH', 'SM'],  # Longer names
+            'intensity[s1]': [1000.0, 2000.0, 3000.0],
+            'intensity[s2]': [1100.0, 2100.0, 3100.0],
+            'intensity[s3]': [1200.0, 2200.0, 3200.0],
+            'intensity[s4]': [1300.0, 2300.0, 3300.0],
+        })
+        experiment = ExperimentConfig(
+            n_conditions=1,
+            conditions_list=['Control'],
+            number_of_samples_list=[4]
+        )
+        cleaned, _ = GenericCleaner.clean(df, experiment)
+
+        assert 'ClassKey' in cleaned.columns
+        assert set(cleaned['ClassKey'].unique()) == {'CerG1', 'SPH', 'SM'}
+
+    def test_classkey_not_confused_with_numeric_column(self, simple_experiment):
+        """Test that a numeric second column is NOT treated as ClassKey."""
+        # This tests the inverse case - if second column is numeric, it's intensity
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PE'],  # Non-numeric
+            'intensity[s1]': [1000.0, 2000.0],
+            'intensity[s2]': [1100.0, 2100.0],
+            'intensity[s3]': [1200.0, 2200.0],
+            'intensity[s4]': [1300.0, 2300.0],
+        })
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+
+        # ClassKey should NOT be treated as intensity
+        assert 'ClassKey' in cleaned.columns
+        assert cleaned['ClassKey'].dtype == object  # String type
+
+    def test_classkey_values_preserved_after_cleaning(self, simple_experiment):
+        """Test that ClassKey values are preserved through all cleaning steps."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(16:0)', 'PE(18:0)', ''],  # Includes duplicate and invalid
+            'ClassKey': ['PC', 'PC', 'PE', 'Unknown'],
+            'intensity[s1]': [1000.0, 2000.0, 3000.0, 0.0],
+            'intensity[s2]': [1100.0, 2100.0, 3100.0, 0.0],
+            'intensity[s3]': [1200.0, 2200.0, 3200.0, 0.0],
+            'intensity[s4]': [1300.0, 2300.0, 3300.0, 0.0],
+        })
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+
+        # After cleaning: duplicate removed, invalid row removed, but ClassKey preserved
+        assert 'ClassKey' in cleaned.columns
+        assert len(cleaned) == 2  # PC (deduplicated) + PE
+        assert set(cleaned['ClassKey'].unique()) == {'PC', 'PE'}
+
+
+class TestGenericCleanerColumnExtraction:
+    """Tests for column extraction logic in Generic format."""
+
+    def test_intensity_column_count_with_classkey(self, simple_experiment):
+        """Verify correct intensity column count when ClassKey is present."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'intensity[s1]': [1000.0],
+            'intensity[s2]': [1100.0],
+            'intensity[s3]': [1200.0],
+            'intensity[s4]': [1300.0],
+        })
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+
+        # Should have LipidMolec + ClassKey + 4 intensity columns = 6 total
+        assert len(cleaned.columns) == 6
+
+        # Exactly 4 intensity columns
+        intensity_cols = [c for c in cleaned.columns if c.startswith('intensity[')]
+        assert len(intensity_cols) == 4
+
+    def test_missing_intensity_column_raises_error(self, simple_experiment):
+        """Test that missing intensity column raises appropriate error."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'intensity[s1]': [1000.0],
+            'intensity[s2]': [1100.0],
+            # Missing s3 and s4
+        })
+        with pytest.raises(KeyError, match="intensity"):
+            GenericCleaner.clean(df, simple_experiment)
+
+    def test_extra_columns_ignored(self, simple_experiment):
+        """Test that extra columns are ignored in output."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'ExtraMetadata': ['some_value'],  # Extra column
+            'intensity[s1]': [1000.0],
+            'intensity[s2]': [1100.0],
+            'intensity[s3]': [1200.0],
+            'intensity[s4]': [1300.0],
+        })
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+
+        # ExtraMetadata should be ignored
+        assert 'ExtraMetadata' not in cleaned.columns
+        assert len(cleaned.columns) == 6  # LipidMolec + ClassKey + 4 intensity
+
+
+# =============================================================================
+# Sample Column Detection Pattern Tests
+# =============================================================================
+
+class TestSampleColumnDetection:
+    """
+    Tests for sample column detection using intensity[...] pattern.
+
+    After standardization, all formats use intensity[sample_name] columns.
+    Bug context: Sample detection was using wrong pattern after standardization.
+    """
+
+    def test_intensity_pattern_detection(self, simple_experiment):
+        """Test that intensity[...] columns are correctly identified."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'intensity[s1]': [1000.0],
+            'intensity[s2]': [1100.0],
+            'intensity[s3]': [1200.0],
+            'intensity[s4]': [1300.0],
+        })
+
+        # Get intensity columns using the standard pattern
+        intensity_cols = BaseDataCleaner.get_intensity_columns(df)
+
+        assert len(intensity_cols) == 4
+        assert all(col.startswith('intensity[') for col in intensity_cols)
+        assert 'intensity[s1]' in intensity_cols
+        assert 'intensity[s4]' in intensity_cols
+
+    def test_non_intensity_columns_excluded(self, simple_experiment):
+        """Test that non-intensity columns are not detected as samples."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'CalcMass': [760.5],  # Metadata column
+            'intensity[s1]': [1000.0],
+            'intensity[s2]': [1100.0],
+            'intensity[s3]': [1200.0],
+            'intensity[s4]': [1300.0],
+        })
+
+        intensity_cols = BaseDataCleaner.get_intensity_columns(df)
+
+        assert 'LipidMolec' not in intensity_cols
+        assert 'ClassKey' not in intensity_cols
+        assert 'CalcMass' not in intensity_cols
+        assert len(intensity_cols) == 4
+
+    def test_sample_names_with_special_characters(self):
+        """Test intensity columns with special characters in sample names."""
+        experiment = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[2, 2]
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'intensity[Sample_1]': [1000.0],
+            'intensity[Sample-2]': [1100.0],
+            'intensity[Sample.3]': [1200.0],
+            'intensity[Sample 4]': [1300.0],  # Space in name
+        })
+
+        intensity_cols = BaseDataCleaner.get_intensity_columns(df)
+
+        assert len(intensity_cols) == 4
+        assert 'intensity[Sample_1]' in intensity_cols
+        assert 'intensity[Sample 4]' in intensity_cols
+
+    def test_empty_dataframe_no_intensity_columns(self):
+        """Test that empty DataFrame returns no intensity columns."""
+        df = pd.DataFrame()
+
+        intensity_cols = BaseDataCleaner.get_intensity_columns(df)
+
+        assert len(intensity_cols) == 0
+
+    def test_dataframe_without_intensity_columns(self):
+        """Test DataFrame with no intensity columns."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'OtherColumn': [1000.0],
+        })
+
+        intensity_cols = BaseDataCleaner.get_intensity_columns(df)
+
+        assert len(intensity_cols) == 0

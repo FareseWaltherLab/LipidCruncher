@@ -43,14 +43,15 @@
 | Service | Status | Tests | Commit |
 |---------|--------|-------|--------|
 | FormatDetectionService | ✅ Done | 133 tests | `af1a42f` |
-| DataCleaningService | ✅ Done | 143 tests | `ef09322` |
+| DataCleaningService | ✅ Done | 158 tests | `ef09322` |
 | ZeroFilteringService | ✅ Done | 102 tests | `7c66478` |
 | NormalizationService | ✅ Done | 115 tests | `4ce8397` |
-| StandardsService | ✅ Done | 153 tests | `f8a6cbe` |
+| StandardsService | ✅ Done | 167 tests | `f8a6cbe` |
 
 **Created Files:**
 - `src/app/services/format_detection.py` — Auto-detect data format from column signatures
 - `tests/unit/test_format_detection.py` — 133 tests
+- `tests/unit/test_standards.py` — 167 tests (includes MW format edge cases)
 - `src/app/services/data_cleaning/` — Modular package for data cleaning:
   - `__init__.py` — Main DataCleaningService with format dispatching
   - `base.py` — Common methods (validation, conversion, row filtering)
@@ -58,7 +59,7 @@
   - `lipidsearch.py` — LipidSearch 5.0 cleaner (grade filtering, AUC selection)
   - `msdial.py` — MS-DIAL cleaner (quality filtering, deduplication)
   - `generic.py` — Generic/Metabolomics Workbench cleaner
-- `tests/unit/test_data_cleaning.py` — 143 tests
+- `tests/unit/test_data_cleaning.py` — 158 tests (includes ClassKey edge cases)
 - `src/app/services/zero_filtering.py` — Zero value filtering with configurable thresholds
   - `ZeroFilterConfig` — Configurable thresholds (detection, BQC, non-BQC)
   - `ZeroFilteringResult` — Result with filtered_df and removed species
@@ -379,10 +380,17 @@ LipidCruncher/
 
 All future tests MUST maintain the same level of depth and coverage as existing tests. Reference these examples:
 - `test_format_detection.py` — 133 tests
-- `test_data_cleaning.py` — 143 tests
-- `test_standards.py` — 153 tests
+- `test_data_cleaning.py` — 158 tests (includes bug fix regression tests)
+- `test_standards.py` — 167 tests (includes bug fix regression tests)
 - `test_data_ingestion_workflow.py` — 125 tests
 - `test_streamlit_adapter.py` — 75 tests
+
+**Bug Fix Regression Tests:**
+When fixing bugs, add targeted edge case tests to prevent regressions:
+- `TestGenericCleanerClassKeyEdgeCases` — 7 tests for ClassKey detection
+- `TestSampleColumnDetection` — 5 tests for intensity[...] pattern
+- `TestStandardsColumnStandardization` — 8 tests for column standardization
+- `TestMetabolomicsWorkbenchParsing` — 6 tests for MW format detection
 
 When writing new tests:
 - Create comprehensive fixtures covering all data formats (LipidSearch, MS-DIAL, Generic)
