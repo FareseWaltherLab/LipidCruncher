@@ -208,6 +208,10 @@ Workflows and UI implemented:
 1. ✅ **Sample grouping not applied** — Reordered DataFrame from manual regrouping now correctly passed to data processing workflow
 2. ✅ **MS-DIAL override sample detection** — Removing samples via override now updates both raw and normalized column counts
 
+**Bugs Fixed (`5e1cd8a`):**
+1. ✅ **Internal standards upload mode switching** — Switching between "Extract from dataset" and "Uploading complete standards data" now clears previously uploaded standards
+2. ✅ **Internal standards example naming** — Updated example lipid names to match LipidCruncher convention: `PC(15:0_18:1)+D7:(s)` instead of `PC(15:0-18:1(d7))`
+
 #### Module 2: Quality Check (NOT STARTED)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
 2. ⬜ Build Module 2 UI
