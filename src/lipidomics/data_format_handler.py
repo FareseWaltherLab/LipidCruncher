@@ -709,47 +709,103 @@ class DataFormatHandler:
         return df
     
     @staticmethod
+    def _is_classkey_column(df, col_idx):
+        """
+        Checks if a column looks like a ClassKey column.
+        ClassKey columns contain lipid class names (short alphabetic strings).
+        """
+        if col_idx >= len(df.columns):
+            return False
+
+        col_name = df.columns[col_idx]
+        col_values = df.iloc[:, col_idx]
+
+        # Check if column name is "ClassKey" (case-insensitive)
+        if str(col_name).lower().strip() == 'classkey':
+            return True
+
+        # Check if values look like lipid class names:
+        # - Mostly non-numeric (text)
+        # - Short strings (typically 2-6 characters like "PC", "LPC", "TG", "CL")
+        # - High proportion of alphabetic content
+        try:
+            # Try converting to numeric - if mostly fails, it's likely text
+            numeric_count = pd.to_numeric(col_values, errors='coerce').notna().sum()
+            total_count = len(col_values)
+
+            # If more than 50% are numeric, it's likely an intensity column
+            if numeric_count / total_count > 0.5:
+                return False
+
+            # Check if values look like class names (short alphabetic strings)
+            str_values = col_values.astype(str)
+            # Average length should be short (< 10 chars) and mostly alphabetic
+            avg_len = str_values.str.len().mean()
+            alpha_ratio = str_values.str.replace(r'[^A-Za-z]', '', regex=True).str.len().sum() / str_values.str.len().sum()
+
+            return avg_len < 15 and alpha_ratio > 0.7
+        except:
+            return False
+
+    @staticmethod
     def _standardize_generic(df):
         """
         Standardizes generic format:
         - First column becomes 'LipidMolec'
+        - Second column becomes 'ClassKey' if it looks like class names (optional)
         - All other columns become intensity[s1], intensity[s2], etc.
         Also stores the column name mapping in session state.
         """
         df = df.copy()
-        
+
         # Create mapping dictionary for column names
         original_cols = df.columns.tolist()
         standardized_cols = ['LipidMolec']  # First column becomes LipidMolec
-        
+
+        # Check if second column is a ClassKey column
+        has_classkey_col = len(original_cols) > 2 and DataFormatHandler._is_classkey_column(df, 1)
+
+        if has_classkey_col:
+            # Second column is ClassKey
+            standardized_cols.append('ClassKey')
+            intensity_start_idx = 2
+        else:
+            intensity_start_idx = 1
+
         # Generate standardized names for intensity columns
-        for i in range(1, len(original_cols)):
-            standardized_cols.append(f'intensity[s{i}]')
-        
+        intensity_num = 1
+        for i in range(intensity_start_idx, len(original_cols)):
+            standardized_cols.append(f'intensity[s{intensity_num}]')
+            intensity_num += 1
+
         # Create and store the mapping DataFrame
         # Put standardized_name first for better visibility in sidebar
         mapping_df = pd.DataFrame({
             'standardized_name': standardized_cols,
             'original_name': original_cols
         })
-        
+
         # Store in session state for display
         if 'column_mapping' not in st.session_state:
             st.session_state.column_mapping = mapping_df
-            
+
+        # Calculate the actual number of intensity columns
+        n_intensity_cols = len(original_cols) - intensity_start_idx
+
         # Store original number of intensity columns for later validation
         if 'n_intensity_cols' not in st.session_state:
-            st.session_state.n_intensity_cols = len(original_cols) - 1
-        
+            st.session_state.n_intensity_cols = n_intensity_cols
+
         # Rename columns
         df.columns = standardized_cols
-        
+
         # Standardize lipid names in LipidMolec column
         df['LipidMolec'] = df['LipidMolec'].apply(DataFormatHandler._standardize_lipid_name)
-        
-        # Infer ClassKey from standardized LipidMolec
-        df['ClassKey'] = df['LipidMolec'].apply(DataFormatHandler._infer_class_key)
-        
+
+        # Only infer ClassKey if we didn't already have one
+        if not has_classkey_col:
+            df['ClassKey'] = df['LipidMolec'].apply(DataFormatHandler._infer_class_key)
+
         return df
     
     @staticmethod
