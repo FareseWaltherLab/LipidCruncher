@@ -1136,6 +1136,8 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
             st.session_state.standards_source = "Automatic Detection"
         if 'custom_standards_df' not in st.session_state:
             st.session_state.custom_standards_df = None
+        if 'custom_standards_mode' not in st.session_state:
+            st.session_state.custom_standards_mode = None  # Track which upload mode was used
         if 'original_auto_intsta_df' not in st.session_state:
             st.session_state.original_auto_intsta_df = auto_detected_df
 
@@ -1155,6 +1157,7 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
             # Clear custom standards when switching to automatic
             if st.session_state.custom_standards_df is not None:
                 st.session_state.custom_standards_df = None
+                st.session_state.custom_standards_mode = None
 
             # Show auto-detected standards
             if auto_detected_df is not None and not auto_detected_df.empty:
@@ -1193,6 +1196,14 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
             )
 
             use_extract_mode = "Yes" in standards_location
+            current_mode = "extract" if use_extract_mode else "complete"
+
+            # Clear custom standards if user switched between upload modes
+            if (st.session_state.custom_standards_mode is not None and
+                st.session_state.custom_standards_mode != current_mode and
+                st.session_state.custom_standards_df is not None):
+                st.session_state.custom_standards_df = None
+                st.session_state.custom_standards_mode = None
 
             # Format guidance
             st.markdown("---")
@@ -1203,9 +1214,9 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
 Example:
 ```
 LipidMolec
-PC(15:0-18:1(d7))
-PE(15:0-18:1(d7))
-SM(18:1(d9))
+PC(15:0_18:1)+D7:(s)
+PE(15:0_18:1)+D7:(s)
+SM(18:1)+D9:(s)
 ```
                 """)
             else:
@@ -1215,8 +1226,8 @@ SM(18:1(d9))
 Example:
 ```
 LipidMolec,s1,s2,s3,s4
-PC(15:0-18:1(d7)),1000,1200,1100,1050
-PE(15:0-18:1(d7)),800,850,820,810
+PC(15:0_18:1)+D7:(s),1000,1200,1100,1050
+PE(15:0_18:1)+D7:(s),800,850,820,810
 ```
                 """)
 
@@ -1235,6 +1246,7 @@ PE(15:0-18:1(d7)),800,850,820,810
                 # Clear button
                 if st.button("Clear Custom Standards", key="clear_custom_standards"):
                     st.session_state.custom_standards_df = None
+                    st.session_state.custom_standards_mode = None
                     st.session_state.standards_source = "Automatic Detection"
                     safe_rerun()
 
@@ -1254,6 +1266,7 @@ PE(15:0-18:1(d7)),800,850,820,810
 
                     if result.standards_df is not None and not result.standards_df.empty:
                         st.session_state.custom_standards_df = result.standards_df
+                        st.session_state.custom_standards_mode = current_mode  # Track which mode was used
 
                         # For external standards, remove them from main dataset if present
                         if not use_extract_mode:
