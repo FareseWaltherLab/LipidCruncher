@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** February 3, 2026
+**Last Updated:** February 6, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -203,6 +203,10 @@ Workflows and UI implemented:
 **Bugs Fixed (`f65bb20`):**
 1. ✅ **MS-DIAL quality filtering summary** — Filter results now display inside the quality filtering expander (matching old app)
 2. ✅ **Final filtered data sorting** — Data sorted by ClassKey so all species of the same class are grouped together
+
+**Bugs Fixed (`d71dd1a`):**
+1. ✅ **Sample grouping not applied** — Reordered DataFrame from manual regrouping now correctly passed to data processing workflow
+2. ✅ **MS-DIAL override sample detection** — Removing samples via override now updates both raw and normalized column counts
 
 #### Module 2: Quality Check (NOT STARTED)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
