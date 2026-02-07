@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** February 6, 2026
+**Last Updated:** February 7, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -214,6 +214,13 @@ Workflows and UI implemented:
 
 **Bugs Fixed (`4b728ac`):**
 1. ✅ **Generic format ClassKey column detection** — When Generic format has an optional ClassKey column (2nd column between LipidMolec and intensity columns), it was incorrectly counted as an intensity column. Fix detects ClassKey by header name (case-insensitive) or by value pattern (short alphabetic strings like lipid class names) and preserves it as metadata.
+
+**Performance Improvement (`745dcc8`):**
+1. ✅ **Add st.cache_data caching to workflow calls** — Previously, every UI interaction (slider moved, checkbox clicked) caused full data reprocessing. Now cached results are returned instantly when inputs haven't changed.
+   - Added `StreamlitAdapter.run_ingestion()` — Cached wrapper for `DataIngestionWorkflow.run()`
+   - Added `StreamlitAdapter.run_normalization()` — Cached wrapper for `NormalizationWorkflow.run()`
+   - Updated `main_app.py` to use cached adapter methods instead of direct workflow calls
+   - Fixed multiselect default validation to handle data changes gracefully (prevents "default value must exist in options" error)
 
 #### Module 2: Quality Check (NOT STARTED)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
