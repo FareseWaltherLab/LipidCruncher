@@ -212,7 +212,7 @@ Workflows and UI implemented:
 1. ✅ **Internal standards upload mode switching** — Switching between "Extract from dataset" and "Uploading complete standards data" now clears previously uploaded standards
 2. ✅ **Internal standards example naming** — Updated example lipid names to match LipidCruncher convention: `PC(15:0_18:1)+D7:(s)` instead of `PC(15:0-18:1(d7))`
 
-**Bugs Fixed (pending commit):**
+**Bugs Fixed (`4b728ac`):**
 1. ✅ **Generic format ClassKey column detection** — When Generic format has an optional ClassKey column (2nd column between LipidMolec and intensity columns), it was incorrectly counted as an intensity column. Fix detects ClassKey by header name (case-insensitive) or by value pattern (short alphabetic strings like lipid class names) and preserves it as metadata.
 
 #### Module 2: Quality Check (NOT STARTED)
