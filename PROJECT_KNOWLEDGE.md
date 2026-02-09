@@ -1,7 +1,44 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** February 7, 2026
+**Last Updated:** February 9, 2026
 **Current Branch:** `refactor/v3.0`
+
+---
+
+## ✅ AI Handoff: Integration Tests Complete
+
+**Status:** Integration tests complete with **73 tests passing**.
+
+**Files Created:**
+- `tests/integration/test_module1_pipeline.py` - 73 integration tests for Module 1
+
+**Completed Work:**
+1. ✅ Fixed MS-DIAL sample column detection by creating custom loader for tests
+2. ✅ Added TestNormalizationNone (4 tests)
+3. ✅ Added TestNormalizationInternalStandard (6 tests)
+4. ✅ Added TestNormalizationProtein (4 tests)
+5. ✅ Added TestNormalizationBoth (3 tests)
+6. ✅ Added TestIngestionNormalizationIntegration (7 tests)
+7. ✅ Added TestEdgeCases (12 tests)
+8. ✅ Added TestErrorHandling (9 tests)
+
+**Test Summary:**
+- TestLipidSearchPipeline: 11 tests
+- TestMSDIALPipeline: 8 tests
+- TestGenericPipeline: 6 tests
+- TestMetabolomicsWorkbenchPipeline: 4 tests
+- TestNormalizationNone: 4 tests
+- TestNormalizationInternalStandard: 6 tests
+- TestNormalizationProtein: 4 tests
+- TestNormalizationBoth: 3 tests
+- TestIngestionNormalizationIntegration: 7 tests
+- TestEdgeCases: 12 tests
+- TestErrorHandling: 9 tests
+- **Total: 73 tests**
+
+**Ready for Next Phase:**
+- Module 2: Quality Check (QualityCheckWorkflow extraction)
+- Module 3: Visualize and Analyze (AnalysisWorkflow extraction)
 
 ---
 
@@ -222,6 +259,42 @@ Workflows and UI implemented:
    - Added `StreamlitAdapter.run_normalization()` — Cached wrapper for `NormalizationWorkflow.run()`
    - Updated `main_app.py` to use cached adapter methods instead of direct workflow calls
    - Fixed multiselect default validation to handle data changes gracefully (prevents "default value must exist in options" error)
+
+#### Integration Tests for Module 1 (COMPLETE ✅)
+
+**File:** `tests/integration/test_module1_pipeline.py`
+**Result:** 73 tests, all passing
+
+| # | Task | Tests | Status |
+|---|------|-------|--------|
+| 1 | Setup: imports, constants, helper functions | - | ✅ |
+| 2 | Fixtures: experiment configs for each format | - | ✅ |
+| 3 | Fixtures: sample dataset loaders (all 4 formats) | - | ✅ (Custom MS-DIAL loader) |
+| 4 | Fixtures: edge case DataFrames (empty, zeros, NaN, etc.) | - | ✅ |
+| 5 | Fixtures: internal standards and protein concentrations | - | ✅ |
+| 6 | `TestLipidSearchPipeline` - full pipeline for LipidSearch | 11 | ✅ |
+| 7 | `TestMSDIALPipeline` - full pipeline for MS-DIAL | 8 | ✅ |
+| 8 | `TestGenericPipeline` - full pipeline for Generic | 6 | ✅ |
+| 9 | `TestMetabolomicsWorkbenchPipeline` - full pipeline for MW | 4 | ✅ |
+| 10 | `TestNormalizationNone` - 'none' method tests | 4 | ✅ |
+| 11 | `TestNormalizationInternalStandard` - IS method tests | 6 | ✅ |
+| 12 | `TestNormalizationProtein` - protein method tests | 4 | ✅ |
+| 13 | `TestNormalizationBoth` - combined method tests | 3 | ✅ |
+| 14 | `TestIngestionNormalizationIntegration` - end-to-end flow | 7 | ✅ |
+| 19 | `TestEdgeCases` - programmatic edge cases | 12 | ✅ |
+| 20 | `TestErrorHandling` - error propagation tests | 9 | ✅ |
+
+**Existing Unit Test Coverage (for reference):**
+- Zero filtering: 102 tests in `test_zero_filtering.py`
+- Grade filtering (LipidSearch): 12+ tests in `test_data_cleaning.py`
+- Quality filtering (MS-DIAL): Tests in `test_data_cleaning.py`
+- External standards: 8+ tests in `test_data_ingestion_workflow.py`, `test_standards.py`
+- Protein concentrations: 20+ tests in `test_normalization.py`, `test_normalization_config.py`
+
+**Rationale:** Module 1 workflows are now pure Python with clean interfaces. Integration tests will:
+- Ensure the orchestration between services works correctly
+- Provide a safety net before building Modules 2 & 3 on top
+- Lock down expected behavior (Modules 2 & 3 are downstream consumers)
 
 #### Module 2: Quality Check (NOT STARTED)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
