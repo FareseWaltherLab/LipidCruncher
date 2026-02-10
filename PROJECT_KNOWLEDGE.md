@@ -88,7 +88,7 @@ src/app/ui/
 | Step | Status | Lines Removed |
 |------|--------|---------------|
 | Step 1: Extract content | ✅ Done | 171 (2002 → 1831) |
-| Step 2: Extract sidebar | ⬜ Not started | - |
+| Step 2: Extract sidebar | ✅ Done | 609 (1831 → 1222) |
 | Step 3: Extract main content | ⬜ Not started | - |
 | Step 4: Fix anti-patterns | ⬜ Not started | - |
 
@@ -98,6 +98,14 @@ src/app/ui/
 - `src/app/ui/content/processing_docs.py` — Pipeline docs per format
 - `src/app/ui/content/normalization_docs.py` — Method formulas table
 - `src/app/ui/content/standards_help.py` — CSV format examples
+
+**Step 2 Files Created:**
+- `src/app/ui/sidebar/__init__.py` — Package init with exports
+- `src/app/ui/sidebar/file_upload.py` — Format selection, sample data, file upload
+- `src/app/ui/sidebar/column_mapping.py` — Column standardization, MS-DIAL sample override
+- `src/app/ui/sidebar/experiment_config.py` — Experiment definition (conditions, samples)
+- `src/app/ui/sidebar/sample_grouping.py` — Sample grouping, manual regrouping
+- `src/app/ui/sidebar/confirm_inputs.py` — BQC specification, input confirmation
 
 ---
 
