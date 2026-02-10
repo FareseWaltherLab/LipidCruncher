@@ -1,0 +1,48 @@
+"""Sample dataset information for each supported format."""
+
+SAMPLE_DATA_INFO = {
+    'Generic Format': {
+        'file': 'generic_test_dataset.csv',
+        'description': """ADGAT-DKO case study (normalized): inguinal white adipose tissue, WT vs ADGAT-DKO.
+
+**Sample order:**
+1. WT (s1–s4, n=4)
+2. ADGAT-DKO (s5–s8, n=4)
+3. BQC (s9–s12, n=4)"""
+    },
+    'LipidSearch 5.0': {
+        'file': 'lipidsearch5_test_dataset.csv',
+        'description': """ADGAT-DKO case study (raw): inguinal white adipose tissue, WT vs ADGAT-DKO. Includes quality grades and retention times.
+
+**Sample order:**
+1. WT (s1–s4, n=4)
+2. ADGAT-DKO (s5–s8, n=4)
+3. BQC (s9–s12, n=4)"""
+    },
+    'MS-DIAL': {
+        'file': 'msdial_test_dataset.csv',
+        'description': """Mouse adrenal gland lipidomics: fads2 knockout vs wild-type.
+
+**Sample order:**
+1. Blank (n=1)
+2. fads2 KO (n=3)
+3. Wild-type (n=3)"""
+    },
+    'Metabolomics Workbench': {
+        'file': 'mw_test_dataset.csv',
+        'description': """Mouse serum HFD study: 2×2 factorial (Normal/HFD × Water/DCA).
+
+**Sample order:**
+1. Normal+Water (S1A–S11A, n=11)
+2. Normal+DCA (S1B–S11B, n=11)
+3. HFD+Water (S1C–S11C, n=11)
+4. HFD+DCA (S1D–S11D, n=11)
+5. Blank (n=2)
+6. TQC (n=12)"""
+    },
+}
+
+
+def get_sample_data_info(data_format: str) -> dict:
+    """Get sample dataset info including file path and description."""
+    return SAMPLE_DATA_INFO.get(data_format)

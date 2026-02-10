@@ -5,6 +5,102 @@
 
 ---
 
+## 🔄 Next Priority: Refactor main_app.py (2002 → <500 lines)
+
+**Problem:** `main_app.py` is bloated with inline content, large methods, and anti-patterns.
+
+**Current state:** 2002 lines | **Target:** <500 lines
+
+### Refactoring Plan
+
+#### Step 1: Extract Static Content to `src/app/ui/content/`
+Move inline markdown docs and data dictionaries out of main_app.py.
+
+| Extract From | To File | Content |
+|--------------|---------|---------|
+| `get_sample_data_info()` | `content/sample_data.py` | Sample dataset descriptions |
+| `display_data_processing_docs()` | `content/processing_docs.py` | Pipeline documentation (LipidSearch, MS-DIAL, etc.) |
+| Normalization docs | `content/normalization_docs.py` | Method formulas table, column renaming note |
+| Standards CSV help | `content/standards_help.py` | CSV format examples for standards upload |
+
+**Estimated reduction:** ~300 lines
+
+#### Step 2: Extract Sidebar Components to `src/app/ui/sidebar/`
+Break down sidebar functions into focused modules.
+
+| Function(s) | To File | Lines |
+|-------------|---------|-------|
+| `display_file_upload`, `load_sample_dataset` | `sidebar/file_upload.py` | ~100 |
+| `display_column_mapping` | `sidebar/column_mapping.py` | ~130 |
+| `display_experiment_definition` | `sidebar/experiment_config.py` | ~90 |
+| `display_group_samples`, `display_sample_grouping` | `sidebar/sample_grouping.py` | ~170 |
+| `display_bqc_section`, `display_confirm_inputs` | `sidebar/confirm_inputs.py` | ~70 |
+
+**Estimated reduction:** ~560 lines
+
+#### Step 3: Extract Main Content Components to `src/app/ui/main_content/`
+Move processing config and normalization UI.
+
+| Function(s) | To File | Lines |
+|-------------|---------|-------|
+| `display_grade_filtering_config`, `display_quality_filtering_config`, `display_msdial_data_type_selection` | `main_content/data_processing.py` | ~250 |
+| `display_manage_internal_standards` | `main_content/internal_standards.py` | ~240 |
+| `display_normalization_ui`, `_display_class_selection`, `_display_internal_standards_config`, `_display_protein_config`, `_run_normalization` | `main_content/normalization.py` | ~400 |
+
+**Estimated reduction:** ~890 lines
+
+#### Step 4: Fix Anti-Patterns
+- [ ] Move `SampleColumnTracker` class out of `display_group_samples()` → `src/app/ui/sidebar/sample_grouping.py`
+- [ ] Review remaining functions for further decomposition
+
+#### Final Target Structure
+After refactoring, `main_app.py` should only contain:
+- Imports
+- `safe_rerun()` helper
+- `display_app_page()` orchestration (~100 lines calling extracted modules)
+- `main()` entry point
+
+```
+src/app/ui/
+├── content/                    # Static markdown content
+│   ├── sample_data.py
+│   ├── processing_docs.py
+│   ├── normalization_docs.py
+│   └── standards_help.py
+├── sidebar/                    # Sidebar UI components
+│   ├── file_upload.py
+│   ├── column_mapping.py
+│   ├── experiment_config.py
+│   ├── sample_grouping.py
+│   └── confirm_inputs.py
+├── main_content/               # Main area UI components
+│   ├── data_processing.py
+│   ├── internal_standards.py
+│   └── normalization.py
+├── landing_page.py             # (existing)
+├── format_requirements.py      # (existing)
+├── zero_filtering.py           # (existing)
+└── standards_plots.py          # (existing)
+```
+
+### Progress
+
+| Step | Status | Lines Removed |
+|------|--------|---------------|
+| Step 1: Extract content | ✅ Done | 171 (2002 → 1831) |
+| Step 2: Extract sidebar | ⬜ Not started | - |
+| Step 3: Extract main content | ⬜ Not started | - |
+| Step 4: Fix anti-patterns | ⬜ Not started | - |
+
+**Step 1 Files Created:**
+- `src/app/ui/content/__init__.py`
+- `src/app/ui/content/sample_data.py` — Sample dataset info dict
+- `src/app/ui/content/processing_docs.py` — Pipeline docs per format
+- `src/app/ui/content/normalization_docs.py` — Method formulas table
+- `src/app/ui/content/standards_help.py` — CSV format examples
+
+---
+
 ## ✅ AI Handoff: Integration Tests Complete
 
 **Status:** Integration tests complete with **73 tests passing**.

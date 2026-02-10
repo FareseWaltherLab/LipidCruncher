@@ -46,6 +46,15 @@ from app.workflows.normalization import NormalizationWorkflow, NormalizationWork
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
+from app.ui.content import (
+    get_sample_data_info,
+    get_processing_docs,
+    ZERO_FILTERING_DOCS,
+    NORMALIZATION_METHODS_DOCS,
+    STANDARDS_EXTRACT_HELP,
+    STANDARDS_COMPLETE_HELP,
+    PROTEIN_CSV_HELP,
+)
 
 # Legacy modules for UI compatibility (GroupSamples, DataFormatHandler)
 from lipidomics.group_samples import GroupSamples
@@ -83,50 +92,6 @@ def display_format_selection() -> str:
     )
 
 
-def get_sample_data_info(data_format: str) -> dict:
-    """Get sample dataset info including file path and description."""
-    sample_info = {
-        'Generic Format': {
-            'file': 'generic_test_dataset.csv',
-            'description': """ADGAT-DKO case study (normalized): inguinal white adipose tissue, WT vs ADGAT-DKO.
-
-**Sample order:**
-1. WT (s1–s4, n=4)
-2. ADGAT-DKO (s5–s8, n=4)
-3. BQC (s9–s12, n=4)"""
-        },
-        'LipidSearch 5.0': {
-            'file': 'lipidsearch5_test_dataset.csv',
-            'description': """ADGAT-DKO case study (raw): inguinal white adipose tissue, WT vs ADGAT-DKO. Includes quality grades and retention times.
-
-**Sample order:**
-1. WT (s1–s4, n=4)
-2. ADGAT-DKO (s5–s8, n=4)
-3. BQC (s9–s12, n=4)"""
-        },
-        'MS-DIAL': {
-            'file': 'msdial_test_dataset.csv',
-            'description': """Mouse adrenal gland lipidomics: fads2 knockout vs wild-type.
-
-**Sample order:**
-1. Blank (n=1)
-2. fads2 KO (n=3)
-3. Wild-type (n=3)"""
-        },
-        'Metabolomics Workbench': {
-            'file': 'mw_test_dataset.csv',
-            'description': """Mouse serum HFD study: 2×2 factorial (Normal/HFD × Water/DCA).
-
-**Sample order:**
-1. Normal+Water (S1A–S11A, n=11)
-2. Normal+DCA (S1B–S11B, n=11)
-3. HFD+Water (S1C–S11C, n=11)
-4. HFD+DCA (S1D–S11D, n=11)
-5. Blank (n=2)
-6. TQC (n=12)"""
-        },
-    }
-    return sample_info.get(data_format)
 
 
 def load_sample_dataset(data_format: str) -> pd.DataFrame:
@@ -735,116 +700,10 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str):
 
 def display_data_processing_docs(data_format: str):
     """Display format-specific data processing documentation."""
-    cleaning_docs = {
-        'LipidSearch 5.0': """
-### 🔬 Data Cleaning Pipeline
-
-| Step | Action |
-|------|--------|
-| 1. Column Standardization | Extract LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, MeanArea columns |
-| 2. Data Type Conversion | Convert MeanArea to numeric (non-numeric → 0) |
-| 3. Lipid Name Standardization | Standardize to `Class(chains)` format |
-| 4. Grade Filtering | Filter by quality grade (**configurable below**) |
-| 5. Best Peak Selection | Keep entry with highest TotalSmpIDRate(%) per lipid |
-| 6. Missing FA Keys | Remove rows without FAKey (except Ch class, deuterated standards) |
-| 7. Duplicate Removal | Remove duplicates by LipidMolec |
-| 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
-
----
-
-#### ⚙️ Grade Filtering (Configurable)
-
-LipidSearch assigns quality grades to each identification:
-
-| Grade | Confidence | Default Action |
-|-------|------------|----------------|
-| A | Highest | ✓ Keep |
-| B | Good | ✓ Keep |
-| C | Lower | ✓ Keep for LPC/SM only |
-| D | Lowest | ✗ Remove |
-
-**→ Configure in "Configure Grade Filtering" section below.**
-        """,
-
-        'MS-DIAL': """
-### 🔬 Data Cleaning Pipeline
-
-| Step | Action |
-|------|--------|
-| 1. Header Detection | Auto-detect data start row (skip metadata rows) |
-| 2. Column Mapping | `Metabolite name` → LipidMolec, `Average Rt(min)` → BaseRt, `Average Mz` → CalcMass |
-| 3. ClassKey Inference | Extract class from lipid name (e.g., `Cer(18:1;2O_24:0)` → `Cer`) |
-| 4. Lipid Name Standardization | Standardize format, preserve hydroxyl notation (`;2O`, `;3O`) |
-| 5. Quality Filtering | Filter by Total Score and/or MS/MS validation (**configurable below**) |
-| 6. Data Type Selection | Choose raw or pre-normalized (if both available) |
-| 7. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
-| 8. Smart Deduplication | Keep entry with highest Total Score per lipid |
-| 9. Internal Standards | Auto-detect: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH` patterns |
-| 10. Duplicate Removal | Remove remaining duplicates by LipidMolec |
-| 11. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
-
----
-
-#### ⚙️ Quality Filtering (Configurable)
-
-MS-DIAL provides quality metrics for filtering:
-
-| Preset | Total Score | MS/MS Required | Use Case |
-|--------|-------------|----------------|----------|
-| Strict | ≥80 | Yes | Publication-ready |
-| Moderate | ≥60 | No | Exploratory analysis |
-| Permissive | ≥40 | No | Discovery |
-
-**→ Configure in "Configure Quality Filtering" section below.**
-        """,
-
-        'Metabolomics Workbench': """
-### 🔬 Data Cleaning Pipeline
-
-| Step | Action |
-|------|--------|
-| 1. Section Extraction | Extract data between `MS_METABOLITE_DATA_START` and `MS_METABOLITE_DATA_END` |
-| 2. Header Processing | Row 1 → sample names, Row 2 → conditions |
-| 3. Column Standardization | First column → LipidMolec, remaining → `intensity[s1]`, `intensity[s2]`, ... |
-| 4. Lipid Name Standardization | Standardize to `Class(chains)` format |
-| 5. ClassKey Extraction | Extract class from lipid name |
-| 6. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
-| 7. Conditions Storage | Store conditions for experiment setup suggestions |
-| 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
-        """,
-
-        'Generic Format': """
-### 🔬 Data Cleaning Pipeline
-
-| Step | Action |
-|------|--------|
-| 1. Column Standardization | First column → LipidMolec, remaining → `intensity[s1]`, `intensity[s2]`, ... |
-| 2. Lipid Name Standardization | Standardize to `Class(chains)` format, preserve hydroxyl notation |
-| 3. ClassKey Extraction | Extract class from lipid name (e.g., `PC(16:0_18:1)` → `PC`) |
-| 4. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
-| 5. Invalid Lipid Removal | Remove empty names, single special characters |
-| 6. Duplicate Removal | Remove duplicates by LipidMolec |
-| 7. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
-        """
-    }
-
     with st.expander("📖 About Data Standardization and Filtering", expanded=False):
-        st.markdown(cleaning_docs.get(data_format, cleaning_docs['Generic Format']))
-
-        # Zero filtering explanation (applies to all formats)
+        st.markdown(get_processing_docs(data_format))
         st.markdown("---")
-        st.markdown("""
-#### 🔧 Zero Filtering (Configurable)
-
-Removes lipid species with too many zero/below-detection values:
-
-| Condition Type | Default Threshold | Action |
-|----------------|-------------------|--------|
-| BQC (if present) | ≥50% zeros | Remove species |
-| All non-BQC conditions | ≥75% zeros each | Remove species |
-
-*Thresholds are adjustable in "Configure Zero Filtering" section below.*
-        """)
+        st.markdown(ZERO_FILTERING_DOCS)
 
 
 # =============================================================================
@@ -1208,28 +1067,9 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
             # Format guidance
             st.markdown("---")
             if use_extract_mode:
-                st.markdown("""
-**CSV format:** Single column with lipid names (must exist in your dataset).
-
-Example:
-```
-LipidMolec
-PC(15:0_18:1)+D7:(s)
-PE(15:0_18:1)+D7:(s)
-SM(18:1)+D9:(s)
-```
-                """)
+                st.markdown(STANDARDS_EXTRACT_HELP)
             else:
-                st.markdown("""
-**CSV format:** 1st column = lipid names, remaining columns = intensity values per sample.
-
-Example:
-```
-LipidMolec,s1,s2,s3,s4
-PC(15:0_18:1)+D7:(s),1000,1200,1100,1050
-PE(15:0_18:1)+D7:(s),800,850,820,810
-```
-                """)
+                st.markdown(STANDARDS_COMPLETE_HELP)
 
             # File uploader
             uploaded_file = st.file_uploader(
@@ -1528,7 +1368,7 @@ def _display_protein_config(experiment: ExperimentConfig) -> dict:
             return protein_concentrations
 
         else:  # Upload CSV File
-            st.markdown("**CSV format:** Single column named `Concentration` with one value per sample (in order).")
+            st.markdown(PROTEIN_CSV_HELP)
 
             preserved_protein_df = st.session_state.get('protein_df')
 
@@ -1643,18 +1483,7 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
     """Display normalization options and apply normalization automatically."""
     # About Normalization Methods (documentation)
     with st.expander("📖 About Normalization Methods", expanded=False):
-        st.markdown("""
-### Normalization Methods
-
-| Method | Formula | Use Case |
-|--------|---------|----------|
-| **None** | Raw values | Data already normalized externally |
-| **Internal Standards** | `(Intensity_lipid / Intensity_standard) × Conc_standard` | Correct for extraction/ionization variability |
-| **Protein-based** | `Intensity_lipid / Protein_conc` | Normalize to starting material (e.g., BCA assay) |
-| **Both** | `(Intensity_lipid / Intensity_standard) × (Conc_standard / Protein_conc)` | Combined correction |
-
-After normalization, `intensity[...]` columns become `concentration[...]` columns.
-        """)
+        st.markdown(NORMALIZATION_METHODS_DOCS)
 
     # Class selection
     st.markdown("##### 🎯 Select Lipid Classes")
