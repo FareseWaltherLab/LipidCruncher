@@ -155,11 +155,95 @@ def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes
 # Helper Functions - Protein Configuration
 # =============================================================================
 
+def _display_manual_protein_input(sample_names: list) -> dict:
+    """Display manual protein concentration input as a 3-column grid.
+
+    Returns protein_concentrations dict.
+    """
+    # Get preserved protein data for restoring values
+    preserved_protein_df = st.session_state.get('protein_df')
+    preserved_values = {}
+    if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
+        preserved_values = preserved_protein_df
+    elif preserved_protein_df is not None and hasattr(preserved_protein_df, 'columns'):
+        if 'Sample' in preserved_protein_df.columns and 'Concentration' in preserved_protein_df.columns:
+            preserved_values = dict(zip(preserved_protein_df['Sample'], preserved_protein_df['Concentration']))
+
+    # Initialize session state for all samples BEFORE widgets render
+    for sample in sample_names:
+        widget_key = f"protein_{sample}"
+        if widget_key not in st.session_state:
+            st.session_state[widget_key] = float(preserved_values.get(sample, 1.0))
+
+    # 3-column flat grid layout (matches old app)
+    protein_concentrations = {}
+    cols = st.columns(3)
+    for idx, sample in enumerate(sample_names):
+        with cols[idx % 3]:
+            concentration = st.number_input(
+                f'{sample}:',
+                min_value=0.0,
+                max_value=1000000.0,
+                step=0.1,
+                key=f"protein_{sample}"
+            )
+            protein_concentrations[sample] = concentration
+
+    st.session_state.protein_df = protein_concentrations.copy()
+    return protein_concentrations
+
+
+def _display_csv_protein_upload(sample_names: list) -> dict:
+    """Display CSV upload for protein concentrations.
+
+    Returns protein_concentrations dict or None.
+    """
+    st.markdown(PROTEIN_CSV_HELP)
+
+    preserved_protein_df = st.session_state.get('protein_df')
+
+    uploaded_file = st.file_uploader("Upload CSV", type="csv", key="protein_csv_upload")
+
+    if uploaded_file is not None:
+        try:
+            csv_df = pd.read_csv(uploaded_file)
+
+            if 'Concentration' not in csv_df.columns:
+                st.error(f"CSV must contain a column named 'Concentration'. Found: {list(csv_df.columns)}")
+                return None
+
+            if len(csv_df) != len(sample_names):
+                st.error(f"Row count ({len(csv_df)}) doesn't match sample count ({len(sample_names)})")
+                return None
+
+            csv_df['Concentration'] = pd.to_numeric(csv_df['Concentration'], errors='coerce')
+            if csv_df['Concentration'].isna().any():
+                st.error("Some concentration values couldn't be converted to numbers.")
+                return None
+
+            protein_concentrations = dict(zip(sample_names, csv_df['Concentration'].tolist()))
+            st.session_state.protein_df = protein_concentrations.copy()
+            st.success(f"✓ Loaded {len(protein_concentrations)} concentration values")
+            return protein_concentrations
+
+        except Exception as e:
+            st.error(f"Error reading CSV: {str(e)}")
+            return None
+
+    # No new file uploaded - check preserved data
+    if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
+        if len(preserved_protein_df) == len(sample_names):
+            st.success(f"✓ Using previously loaded {len(preserved_protein_df)} concentration values")
+            return preserved_protein_df
+
+    st.info("Please upload a CSV file with protein concentrations.")
+    return None
+
+
 def _display_protein_config(experiment: ExperimentConfig) -> dict:
     """Display protein concentration configuration UI. Returns protein_concentrations dict or None."""
 
     sample_names = experiment.full_samples_list
-    protein_concentrations = {}
 
     with st.expander("⚙️ Protein Concentration Data", expanded=True):
         # Initialize method selection key if not present
@@ -188,80 +272,9 @@ def _display_protein_config(experiment: ExperimentConfig) -> dict:
         st.session_state.protein_input_method_prev = method
 
         if method == "Manual Input":
-            # Get preserved protein data for restoring values
-            preserved_protein_df = st.session_state.get('protein_df')
-            preserved_values = {}
-            if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
-                preserved_values = preserved_protein_df
-            elif preserved_protein_df is not None and hasattr(preserved_protein_df, 'columns'):
-                if 'Sample' in preserved_protein_df.columns and 'Concentration' in preserved_protein_df.columns:
-                    preserved_values = dict(zip(preserved_protein_df['Sample'], preserved_protein_df['Concentration']))
-
-            # Initialize session state for all samples BEFORE widgets render
-            for sample in sample_names:
-                widget_key = f"protein_{sample}"
-                if widget_key not in st.session_state:
-                    st.session_state[widget_key] = float(preserved_values.get(sample, 1.0))
-
-            # 3-column flat grid layout (matches old app)
-            cols = st.columns(3)
-            for idx, sample in enumerate(sample_names):
-                with cols[idx % 3]:
-                    concentration = st.number_input(
-                        f'{sample}:',
-                        min_value=0.0,
-                        max_value=1000000.0,
-                        step=0.1,
-                        key=f"protein_{sample}"
-                    )
-                    protein_concentrations[sample] = concentration
-
-            # Preserve in session state
-            st.session_state.protein_df = protein_concentrations.copy()
-            return protein_concentrations
-
-        else:  # Upload CSV File
-            st.markdown(PROTEIN_CSV_HELP)
-
-            preserved_protein_df = st.session_state.get('protein_df')
-
-            uploaded_file = st.file_uploader("Upload CSV", type="csv", key="protein_csv_upload")
-
-            if uploaded_file is not None:
-                try:
-                    csv_df = pd.read_csv(uploaded_file)
-
-                    if 'Concentration' not in csv_df.columns:
-                        st.error(f"CSV must contain a column named 'Concentration'. Found: {list(csv_df.columns)}")
-                        return None
-
-                    if len(csv_df) != len(sample_names):
-                        st.error(f"Row count ({len(csv_df)}) doesn't match sample count ({len(sample_names)})")
-                        return None
-
-                    csv_df['Concentration'] = pd.to_numeric(csv_df['Concentration'], errors='coerce')
-                    if csv_df['Concentration'].isna().any():
-                        st.error("Some concentration values couldn't be converted to numbers.")
-                        return None
-
-                    # Convert to dict for NormalizationConfig compatibility
-                    protein_concentrations = dict(zip(sample_names, csv_df['Concentration'].tolist()))
-                    st.session_state.protein_df = protein_concentrations.copy()
-                    st.success(f"✓ Loaded {len(protein_concentrations)} concentration values")
-                    return protein_concentrations
-
-                except Exception as e:
-                    st.error(f"Error reading CSV: {str(e)}")
-                    return None
-
-            # No new file uploaded - check preserved data
-            if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
-                if len(preserved_protein_df) == len(sample_names):
-                    st.success(f"✓ Using previously loaded {len(preserved_protein_df)} concentration values")
-                    return preserved_protein_df
-
-            st.info("Please upload a CSV file with protein concentrations.")
-            return None
+            return _display_manual_protein_input(sample_names)
+        else:
+            return _display_csv_protein_upload(sample_names)
 
 
 # =============================================================================
