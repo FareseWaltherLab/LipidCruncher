@@ -6,11 +6,18 @@ This module contains:
 - display_grade_filtering_config: LipidSearch grade filtering configuration
 - display_msdial_data_type_selection: MS-DIAL data type selection (raw vs pre-normalized)
 - display_quality_filtering_config: MS-DIAL quality filtering configuration
+- build_filter_configs: Build format-specific filter config objects from UI widgets
+- run_ingestion_pipeline: Execute cached ingestion workflow and update session state
+- display_final_filtered_data: Display final filtered data table with download
 """
 
 import streamlit as st
 import pandas as pd
 
+from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.services.format_detection import DataFormat
+from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
+from app.workflows.data_ingestion import IngestionResult
 from app.ui.content import get_processing_docs, ZERO_FILTERING_DOCS
 
 
@@ -271,3 +278,160 @@ def display_quality_filtering_config() -> dict:
             return {'total_score_threshold': 0, 'require_msms': require_msms}
 
     return None
+
+
+# =============================================================================
+# Pipeline Orchestration
+# =============================================================================
+
+FORMAT_MAP = {
+    'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
+    'MS-DIAL': DataFormat.MSDIAL,
+    'Generic Format': DataFormat.GENERIC,
+    'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
+}
+
+
+def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):
+    """
+    Display format-specific filter configuration UI and build config objects.
+
+    Args:
+        data_format: The selected data format string
+        raw_df: Raw DataFrame (needed for LipidSearch grade filtering)
+
+    Returns:
+        Tuple of (grade_config, quality_config, quality_config_dict)
+    """
+    grade_config = None
+    quality_config = None
+    quality_config_dict = None
+
+    if data_format == 'LipidSearch 5.0':
+        grade_config_dict = display_grade_filtering_config(raw_df)
+        if grade_config_dict is not None:
+            grade_config = GradeFilterConfig(grade_config=grade_config_dict)
+
+    elif data_format == 'MS-DIAL':
+        display_msdial_data_type_selection()
+        quality_config_dict = display_quality_filtering_config()
+        if quality_config_dict is not None:
+            quality_config = QualityFilterConfig(
+                total_score_threshold=quality_config_dict.get('total_score_threshold', 0),
+                require_msms=quality_config_dict.get('require_msms', False)
+            )
+
+    return grade_config, quality_config, quality_config_dict
+
+
+def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
+                           grade_config, quality_config, quality_config_dict):
+    """
+    Execute the ingestion workflow and update session state.
+
+    Handles cached execution, session state updates, error/warning display,
+    and MS-DIAL quality config change detection.
+
+    Args:
+        df: Standardized DataFrame
+        experiment: ExperimentConfig
+        bqc_label: BQC label string or None
+        data_format: The selected data format string
+        grade_config: GradeFilterConfig or None
+        quality_config: QualityFilterConfig or None
+        quality_config_dict: Raw quality config dict or None
+
+    Returns:
+        IngestionResult if successful, None if error or invalid
+    """
+    # Prepare cache parameters
+    df_hash = StreamlitAdapter.compute_df_hash(df)
+    experiment_dict = StreamlitAdapter.experiment_to_dict(experiment)
+    format_enum = FORMAT_MAP.get(data_format)
+    format_type_value = format_enum.value if format_enum else None
+    grade_config_dict_for_cache = StreamlitAdapter.config_to_dict(grade_config)
+    quality_config_dict_for_cache = StreamlitAdapter.config_to_dict(quality_config)
+
+    # Capture previous config BEFORE running workflow (to detect config changes)
+    prev_quality_config = st.session_state.get('last_quality_config')
+
+    try:
+        (
+            cleaned_df, intsta_df, detected_format,
+            is_valid, validation_errors, validation_warnings, cleaning_messages,
+        ) = StreamlitAdapter.run_ingestion(
+            _df_hash=df_hash,
+            df=df,
+            experiment_dict=experiment_dict,
+            format_type=format_type_value,
+            bqc_label=bqc_label,
+            apply_zero_filter=False,
+            grade_config_dict=grade_config_dict_for_cache,
+            quality_config_dict=quality_config_dict_for_cache,
+        )
+
+        result = IngestionResult(
+            detected_format=DataFormat(detected_format),
+            cleaned_df=cleaned_df,
+            internal_standards_df=intsta_df,
+            is_valid=is_valid,
+            validation_errors=validation_errors,
+            validation_warnings=validation_warnings,
+            cleaning_messages=cleaning_messages,
+        )
+
+        st.session_state.ingestion_result = result
+        st.session_state.pre_filter_df = result.cleaned_df
+        if quality_config_dict is not None:
+            st.session_state.last_quality_config = quality_config_dict.copy()
+
+        if result.is_valid:
+            st.session_state.cleaned_df = result.cleaned_df
+            st.session_state.intsta_df = result.internal_standards_df
+            st.session_state.continuation_df = result.cleaned_df
+    except Exception as e:
+        st.error(f"Processing error: {e}")
+        return None
+
+    # Display validation results
+    if not result.is_valid:
+        for error in result.validation_errors:
+            st.error(error)
+        return None
+
+    for warning in result.validation_warnings:
+        st.warning(warning)
+
+    # MS-DIAL: rerun if quality config changed so expander shows updated results
+    if data_format == 'MS-DIAL' and quality_config_dict:
+        config_changed = not (
+            prev_quality_config
+            and prev_quality_config.get('total_score_threshold') == quality_config_dict.get('total_score_threshold')
+            and prev_quality_config.get('require_msms') == quality_config_dict.get('require_msms')
+        )
+        if config_changed:
+            st.rerun()
+
+    return result
+
+
+def display_final_filtered_data(cleaned_df: pd.DataFrame):
+    """Display the final filtered data table with download button.
+
+    Sorts by ClassKey if available and updates session state.
+    """
+    if 'ClassKey' in cleaned_df.columns:
+        cleaned_df = cleaned_df.sort_values('ClassKey').reset_index(drop=True)
+        st.session_state.cleaned_df = cleaned_df
+        st.session_state.continuation_df = cleaned_df
+
+    st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
+    st.dataframe(cleaned_df, use_container_width=True)
+    csv = cleaned_df.to_csv(index=False)
+    st.download_button(
+        label="Download Filtered Data",
+        data=csv,
+        file_name="final_filtered_data.csv",
+        mime="text/csv",
+        key="download_filtered_data"
+    )

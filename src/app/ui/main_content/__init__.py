@@ -12,6 +12,9 @@ from app.ui.main_content.data_processing import (
     display_grade_filtering_config,
     display_msdial_data_type_selection,
     display_quality_filtering_config,
+    build_filter_configs,
+    run_ingestion_pipeline,
+    display_final_filtered_data,
 )
 from app.ui.main_content.internal_standards import (
     display_manage_internal_standards,
@@ -26,6 +29,9 @@ __all__ = [
     'display_grade_filtering_config',
     'display_msdial_data_type_selection',
     'display_quality_filtering_config',
+    'build_filter_configs',
+    'run_ingestion_pipeline',
+    'display_final_filtered_data',
     # internal_standards
     'display_manage_internal_standards',
     # normalization
