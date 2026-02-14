@@ -13,13 +13,6 @@ import streamlit as st
 from PIL import Image
 
 
-def _safe_rerun():
-    """Rerun the app, compatible with both old and new Streamlit versions."""
-    if hasattr(st, 'rerun'):
-        st.rerun()
-    else:
-        st.experimental_rerun()
-
 try:
     from pdf2image import convert_from_path
     PDF2IMAGE_AVAILABLE = True
@@ -66,7 +59,7 @@ def load_module_image(filename: str, caption: str = None) -> bool:
             if images:
                 img_byte_arr = io.BytesIO()
                 images[0].save(img_byte_arr, format='PNG')
-                st.image(img_byte_arr.getvalue(), caption=caption, use_column_width=True)
+                st.image(img_byte_arr.getvalue(), caption=caption, use_container_width=True)
                 return True
     except Exception as e:
         st.warning(f"Could not load {filename}: {str(e)}")
@@ -83,9 +76,11 @@ def display_logo(centered: bool = False):
         logo_path = IMAGES_DIR / "new_logo.tif"
         if logo_path.exists():
             logo = Image.open(logo_path)
+            if logo.mode == 'CMYK':
+                logo = logo.convert('RGB')
             if centered:
                 # Fill full available width of container
-                st.image(logo, use_column_width=True)
+                st.image(logo, use_container_width=True)
             else:
                 st.image(logo, width=720)
         else:
@@ -164,7 +159,7 @@ def _display_call_to_action() -> None:
     with btn_col2:
         if st.button("🚀 Start Crunching", use_container_width=True, type="primary"):
             st.session_state.page = 'app'
-            _safe_rerun()
+            st.rerun()
 
     st.markdown("---")
 

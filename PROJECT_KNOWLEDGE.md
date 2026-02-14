@@ -1,15 +1,15 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** February 9, 2026
+**Last Updated:** February 12, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
 
-## 🔄 Next Priority: Refactor main_app.py (2002 → <500 lines)
+## ✅ Refactor main_app.py (2002 → 206 lines) — COMPLETE
 
 **Problem:** `main_app.py` is bloated with inline content, large methods, and anti-patterns.
 
-**Current state:** 2002 lines | **Target:** <500 lines
+**Current state:** 206 lines | **Target:** <500 lines ✅
 
 ### Refactoring Plan
 
@@ -49,14 +49,18 @@ Move processing config and normalization UI.
 
 **Estimated reduction:** ~890 lines
 
-#### Step 4: Fix Anti-Patterns
-- [ ] Move `SampleColumnTracker` class out of `display_group_samples()` → `src/app/ui/sidebar/sample_grouping.py`
-- [ ] Review remaining functions for further decomposition
+#### Step 4: Fix Anti-Patterns ✅
+- [x] `SampleColumnTracker` class — already removed during Step 2/3 extraction
+- [x] Decompose `display_app_page()` (~230 lines → ~115 lines) by extracting:
+  - `build_filter_configs()` — format-specific filter config building
+  - `run_ingestion_pipeline()` — cached ingestion execution + session state + error handling
+  - `display_final_filtered_data()` — data table with ClassKey sorting + download button
+- [x] Remove unused imports (`Path`, `BASE_DIR`, `load_sample_dataset`, `DataFormat`, `GradeFilterConfig`, `QualityFilterConfig`, `IngestionResult`)
 
 #### Final Target Structure
 After refactoring, `main_app.py` should only contain:
 - Imports
-- `safe_rerun()` helper
+- (safe_rerun removed after Streamlit upgrade)
 - `display_app_page()` orchestration (~100 lines calling extracted modules)
 - `main()` entry point
 
@@ -89,8 +93,8 @@ src/app/ui/
 |------|--------|---------------|
 | Step 1: Extract content | ✅ Done | 171 (2002 → 1831) |
 | Step 2: Extract sidebar | ✅ Done | 609 (1831 → 1222) |
-| Step 3: Extract main content | ⬜ Not started | - |
-| Step 4: Fix anti-patterns | ⬜ Not started | - |
+| Step 3: Extract main content | ✅ Done | 892 (1222 → 330) |
+| Step 4: Fix anti-patterns | ✅ Done | 124 (330 → 206) |
 
 **Step 1 Files Created:**
 - `src/app/ui/content/__init__.py`
@@ -106,6 +110,21 @@ src/app/ui/
 - `src/app/ui/sidebar/experiment_config.py` — Experiment definition (conditions, samples)
 - `src/app/ui/sidebar/sample_grouping.py` — Sample grouping, manual regrouping
 - `src/app/ui/sidebar/confirm_inputs.py` — BQC specification, input confirmation
+
+**Step 3 Files Created:**
+- `src/app/ui/main_content/__init__.py` — Package init with exports
+- `src/app/ui/main_content/data_processing.py` — Processing docs, grade filtering, MS-DIAL data type, quality filtering
+- `src/app/ui/main_content/internal_standards.py` — Standards management (auto-detect, upload, consistency plots)
+- `src/app/ui/main_content/normalization.py` — Class selection, IS config, protein config, normalization execution
+
+**Step 4 Changes:**
+- `src/app/ui/main_content/data_processing.py` — Added `build_filter_configs()`, `run_ingestion_pipeline()`, `display_final_filtered_data()`
+- `src/main_app.py` — Simplified from 330 → 206 lines; `display_app_page()` reduced from ~230 → ~115 lines
+
+**Step 5: Refactor long UI methods (`85832f9`):**
+- `display_manage_internal_standards()` (211→47 lines) — extracted `_display_auto_detected_standards()`, `_display_custom_upload()`, `_display_preserved_custom_standards()`, `_process_uploaded_standards()`
+- `display_column_mapping()` (126→40 lines) — extracted `_apply_msdial_sample_override()`
+- `_display_protein_config()` (107→25 lines) — extracted `_display_manual_protein_input()`, `_display_csv_protein_upload()`
 
 ---
 
@@ -399,6 +418,44 @@ Workflows and UI implemented:
 - Ensure the orchestration between services works correctly
 - Provide a safety net before building Modules 2 & 3 on top
 - Lock down expected behavior (Modules 2 & 3 are downstream consumers)
+
+#### Streamlit Upgrade + UI Tests (NOT STARTED)
+
+**Problem:** Streamlit 1.22.0 lacks `st.rerun()` and the `AppTest` testing framework. This forced `safe_rerun()` compatibility wrappers across 5 files and left the entire UI layer untested — the MS-DIAL override bug (`d9451cf`) wasn't caught by the 1390 existing tests.
+
+**Solution:** Upgrade to Streamlit 1.50.0 (latest supporting Python 3.9) and add UI tests.
+
+**Phase A: Upgrade Streamlit**
+
+| Step | Task | Files |
+|------|------|-------|
+| 1 | Update `requirements.txt`: `streamlit==1.22.0` → `streamlit==1.50.0` | `requirements.txt` |
+| 2 | Replace `safe_rerun()` / `_safe_rerun()` wrappers with direct `st.rerun()` calls | `src/main_app.py`, `src/app/ui/landing_page.py`, `src/app/ui/sidebar/file_upload.py`, `src/app/ui/main_content/internal_standards.py`, `src/app/ui/main_content/data_processing.py` |
+| 3 | Fix deprecated `st.image` parameter: `use_column_width=True` → `use_container_width=True` | `src/app/ui/landing_page.py` (lines 69, 88) |
+| 4 | Verify: `pytest tests/ -v` (all 1390 pass) + manual smoke test | - |
+
+**5 definitions to remove, 7 call sites to replace.** Leave `old_main_app.py` as-is.
+
+**Phase B: Add UI Tests**
+
+- New file: `tests/ui/test_module1_ui.py`
+- Use `AppTest.from_function()` (avoids `st.set_page_config` conflicts)
+- Pre-populate session state for data-dependent tests (`file_uploader` not supported by AppTest)
+
+| # | Test Group | Tests | Key Assertions |
+|---|-----------|-------|----------------|
+| 1 | Landing Page Navigation | 3 | Button renders, clicking sets `page='app'` |
+| 2 | Format Selection | 3 | 4 options, default is Generic, can switch |
+| 3 | Sample Data Loading | 4 | Load button works for each format, populates `raw_df` |
+| 4 | Experiment Definition | 4 | Default values, condition inputs, sample count validation |
+| 5 | Confirm Inputs / BQC | 4 | Checkbox default, BQC radio default, confirmation flow |
+| 6 | MS-DIAL Data Type Selection | 3 | Radio exists, default raw, can switch to pre-normalized |
+| 7 | **MS-DIAL Override Preservation** | 3 | Override saved in `_msdial_override_samples`, restored after data type switch, cleared on reset |
+| 8 | Back to Home | 2 | Button exists, clicking resets to landing |
+
+Test group 7 is the regression test for the MS-DIAL override bug (`d9451cf`).
+
+**Target:** ~26 new UI tests + all 1390 existing tests passing.
 
 #### Module 2: Quality Check (NOT STARTED)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection

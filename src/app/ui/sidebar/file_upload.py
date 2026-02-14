@@ -35,13 +35,6 @@ SAMPLE_DATA_DIR = _SRC_DIR.parent / "sample_datasets"
 # Helper Functions
 # =============================================================================
 
-def _safe_rerun():
-    """Rerun the app, compatible with both old and new Streamlit versions."""
-    if hasattr(st, 'rerun'):
-        st.rerun()
-    else:
-        st.experimental_rerun()
-
 
 # =============================================================================
 # UI Components
@@ -111,7 +104,7 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
             if sample_df is not None:
                 st.session_state.using_sample_data = True
                 st.session_state.raw_df = sample_df
-                _safe_rerun()
+                st.rerun()
 
     # Check if using sample data
     if st.session_state.get('using_sample_data') and st.session_state.get('raw_df') is not None:
@@ -121,7 +114,7 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
             st.session_state.using_sample_data = False
             st.session_state.sample_data_file = None
             StreamlitAdapter.reset_data_state()
-            _safe_rerun()
+            st.rerun()
         return st.session_state.raw_df
 
     # File upload

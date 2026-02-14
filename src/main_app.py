@@ -50,18 +50,6 @@ from app.ui.main_content import (
 
 
 # =============================================================================
-# Streamlit Compatibility
-# =============================================================================
-
-def safe_rerun():
-    """Rerun the app, compatible with both old and new Streamlit versions."""
-    if hasattr(st, 'rerun'):
-        st.rerun()
-    else:
-        st.experimental_rerun()
-
-
-# =============================================================================
 # Session State Initialization
 # =============================================================================
 
@@ -95,7 +83,7 @@ def display_app_page():
             # Back to landing button
             if st.button("← Back to Home"):
                 st.session_state.page = 'landing'
-                safe_rerun()
+                st.rerun()
         return
 
     # Standardize data if not already done
@@ -195,7 +183,7 @@ def display_app_page():
         if st.button("← Back to Home"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()
-            safe_rerun()
+            st.rerun()
 
 
 # =============================================================================

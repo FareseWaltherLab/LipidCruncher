@@ -18,14 +18,6 @@ from app.ui.content import STANDARDS_EXTRACT_HELP, STANDARDS_COMPLETE_HELP
 # Helper Functions
 # =============================================================================
 
-def _safe_rerun():
-    """Rerun the app, compatible with both old and new Streamlit versions."""
-    if hasattr(st, 'rerun'):
-        st.rerun()
-    else:
-        st.experimental_rerun()
-
-
 def _fallback_standards(auto_detected_df: pd.DataFrame) -> pd.DataFrame:
     """Return auto-detected standards or empty DataFrame as fallback."""
     return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
@@ -140,7 +132,7 @@ def _display_preserved_custom_standards() -> pd.DataFrame:
         st.session_state.custom_standards_df = None
         st.session_state.custom_standards_mode = None
         st.session_state.standards_source = "Automatic Detection"
-        _safe_rerun()
+        st.rerun()
 
     return st.session_state.custom_standards_df
 

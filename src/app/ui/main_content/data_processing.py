@@ -17,12 +17,6 @@ import pandas as pd
 from app.adapters.streamlit_adapter import StreamlitAdapter
 
 
-def _safe_rerun():
-    """Rerun the app, compatible with both old and new Streamlit versions."""
-    if hasattr(st, 'rerun'):
-        st.rerun()
-    else:
-        st.experimental_rerun()
 from app.services.format_detection import DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from app.workflows.data_ingestion import IngestionResult
@@ -418,7 +412,7 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
             and prev_quality_config.get('require_msms') == quality_config_dict.get('require_msms')
         )
         if config_changed:
-            _safe_rerun()
+            st.rerun()
 
     return result
 
