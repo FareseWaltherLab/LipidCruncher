@@ -104,6 +104,14 @@ def display_app_page():
         if standardized_df is None:
             return
         st.session_state.standardized_df = standardized_df
+
+        # For MS-DIAL: restore sample override widget after re-standardization
+        # (re-validation resets msdial_features, so we need to ensure the
+        # multiselect widget still has the overridden selection)
+        if data_format == 'MS-DIAL':
+            override_samples = st.session_state.get('_msdial_override_samples')
+            if override_samples:
+                st.session_state['manual_sample_override'] = override_samples
     else:
         standardized_df = st.session_state.standardized_df
 

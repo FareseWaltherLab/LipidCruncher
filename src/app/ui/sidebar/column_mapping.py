@@ -82,6 +82,9 @@ def _apply_msdial_sample_override(
         f's{i}': orig for i, orig in enumerate(manual_samples, 1)
     }
 
+    # Save override for preservation across re-standardization (e.g., data type changes)
+    st.session_state['_msdial_override_samples'] = list(manual_samples)
+
     return new_df
 
 
@@ -159,10 +162,11 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> tuple:
             detected_samples = features.get('raw_sample_columns', [])
             all_columns = features.get('actual_columns', [])
 
-            available_for_samples = [
+            # Deduplicate: raw and normalized columns share same names in MS-DIAL
+            available_for_samples = list(dict.fromkeys(
                 col for col in all_columns
                 if col not in DataFormatHandler.MSDIAL_METADATA_COLUMNS
-            ]
+            ))
 
             manual_samples = st.multiselect(
                 "Sample columns:",

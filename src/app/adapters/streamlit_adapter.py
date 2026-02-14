@@ -198,6 +198,7 @@ class StreamlitAdapter:
         st.session_state.original_auto_intsta_df = None
         st.session_state.using_sample_data = False
         st.session_state.ingestion_result = None
+        st.session_state.pop('_msdial_override_samples', None)
 
     @staticmethod
     def reset_normalization_state() -> None:
