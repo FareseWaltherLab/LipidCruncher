@@ -419,43 +419,383 @@ Workflows and UI implemented:
 - Provide a safety net before building Modules 2 & 3 on top
 - Lock down expected behavior (Modules 2 & 3 are downstream consumers)
 
-#### Streamlit Upgrade + UI Tests (NOT STARTED)
+#### Streamlit Upgrade + UI Tests
 
 **Problem:** Streamlit 1.22.0 lacks `st.rerun()` and the `AppTest` testing framework. This forced `safe_rerun()` compatibility wrappers across 5 files and left the entire UI layer untested — the MS-DIAL override bug (`d9451cf`) wasn't caught by the 1390 existing tests.
 
-**Solution:** Upgrade to Streamlit 1.50.0 (latest supporting Python 3.9) and add UI tests.
+**Phase A: Upgrade Streamlit ✅ (`0978340`)**
 
-**Phase A: Upgrade Streamlit**
+Upgraded to Streamlit 1.50.0, removed `safe_rerun()` wrappers, fixed deprecated `use_column_width` parameter.
 
-| Step | Task | Files |
-|------|------|-------|
-| 1 | Update `requirements.txt`: `streamlit==1.22.0` → `streamlit==1.50.0` | `requirements.txt` |
-| 2 | Replace `safe_rerun()` / `_safe_rerun()` wrappers with direct `st.rerun()` calls | `src/main_app.py`, `src/app/ui/landing_page.py`, `src/app/ui/sidebar/file_upload.py`, `src/app/ui/main_content/internal_standards.py`, `src/app/ui/main_content/data_processing.py` |
-| 3 | Fix deprecated `st.image` parameter: `use_column_width=True` → `use_container_width=True` | `src/app/ui/landing_page.py` (lines 69, 88) |
-| 4 | Verify: `pytest tests/ -v` (all 1390 pass) + manual smoke test | - |
+**Phase B: Add UI Tests (IN PROGRESS)**
 
-**5 definitions to remove, 7 call sites to replace.** Leave `old_main_app.py` as-is.
+**Approach:** `AppTest.from_function()` with focused wrapper functions that import UI components directly (never import `main_app.py` — it has `st.set_page_config()` at module level). Pre-populate session state for data-dependent tests.
 
-**Phase B: Add UI Tests**
+**Files to create:**
+- `tests/ui/__init__.py` — Package init (empty)
+- `tests/ui/conftest.py` — Wrapper functions + shared fixtures
+- `tests/ui/test_module1_ui.py` — 26 tests in 8 classes
 
-- New file: `tests/ui/test_module1_ui.py`
-- Use `AppTest.from_function()` (avoids `st.set_page_config` conflicts)
-- Pre-populate session state for data-dependent tests (`file_uploader` not supported by AppTest)
+**Key decisions:**
+- Set `PDF2IMAGE_AVAILABLE = False` in wrappers that render landing page (avoid PDF conversion timeouts)
+- Use `default_timeout=15` (default 3s too short for import-heavy scripts)
+- Access widgets by key where possible, by index otherwise
+- `st.file_uploader` is NOT supported by AppTest — use sample data loading instead
+- Widgets inside `st.expander()` ARE accessible by key (expanders are layout containers; the script runs top-to-bottom and registers all widgets)
+- `st.image()` renders without crashing but isn't inspectable
+- `st.rerun()` is handled automatically by AppTest's `.run()`
 
-| # | Test Group | Tests | Key Assertions |
-|---|-----------|-------|----------------|
-| 1 | Landing Page Navigation | 3 | Button renders, clicking sets `page='app'` |
-| 2 | Format Selection | 3 | 4 options, default is Generic, can switch |
-| 3 | Sample Data Loading | 4 | Load button works for each format, populates `raw_df` |
-| 4 | Experiment Definition | 4 | Default values, condition inputs, sample count validation |
-| 5 | Confirm Inputs / BQC | 4 | Checkbox default, BQC radio default, confirmation flow |
-| 6 | MS-DIAL Data Type Selection | 3 | Radio exists, default raw, can switch to pre-normalized |
-| 7 | **MS-DIAL Override Preservation** | 3 | Override saved in `_msdial_override_samples`, restored after data type switch, cleared on reset |
-| 8 | Back to Home | 2 | Button exists, clicking resets to landing |
+##### AppTest API Quick Reference (Streamlit 1.50.0)
 
-Test group 7 is the regression test for the MS-DIAL override bug (`d9451cf`).
+```python
+from streamlit.testing.v1 import AppTest
 
-**Target:** ~26 new UI tests + all 1390 existing tests passing.
+# Create and run
+at = AppTest.from_function(my_func, default_timeout=15)
+at.session_state['key'] = value  # Pre-populate BEFORE first run
+at.run()
+
+# Access widgets (main area)
+at.button[0]                        # By index
+at.button(key='my_key')             # By key
+at.radio(key='my_radio')            # Radio by key
+at.selectbox[0]                     # Selectbox by index
+
+# Access sidebar widgets
+at.sidebar.selectbox[0]             # Sidebar selectbox
+at.sidebar.button(key='load_sample') # Sidebar button by key
+at.sidebar.radio(key='bqc_radio')   # Sidebar radio by key
+at.sidebar.checkbox(key='confirm_checkbox')
+
+# Widget properties
+widget.value                        # Current value
+widget.label                        # Display label
+widget.options                      # Options list (selectbox, radio)
+
+# Interact (MUST call .run() after each interaction)
+at.button[0].click().run()
+at.selectbox[0].set_value('MS-DIAL').run()
+at.radio(key='bqc_radio').set_value('Yes').run()
+at.checkbox(key='confirm_checkbox').check().run()
+at.number_input[0].set_value(3).run()
+at.text_input(key='cond_name_0').set_value('WT').run()
+
+# Read session state after run
+at.session_state['page']            # Read value
+at.session_state['raw_df']          # Read DataFrame
+
+# Read rendered text elements
+at.text[0].value                    # st.text() output
+at.markdown[0].value                # st.markdown() output
+```
+
+##### Widget Keys Reference (from UI source files)
+
+| Widget | Source File | Key | Access Pattern |
+|--------|-----------|-----|----------------|
+| Format selectbox | `sidebar/file_upload.py:45` | None | `at.sidebar.selectbox[0]` |
+| Load Sample button | `sidebar/file_upload.py:102` | `load_sample` | `at.sidebar.button(key='load_sample')` |
+| Clear & Upload button | `sidebar/file_upload.py:113` | None | by index |
+| Conditions count | `sidebar/experiment_config.py:112` | None | `at.sidebar.number_input[0]` |
+| Condition name | `sidebar/experiment_config.py:126` | `cond_name_{i}` | `at.text_input(key='cond_name_0')` |
+| Sample count | `sidebar/experiment_config.py:133` | `n_samples_{i}` | `at.number_input(key='n_samples_0')` |
+| Grouping radio | `sidebar/sample_grouping.py:69` | `grouping_radio` | `at.sidebar.radio(key='grouping_radio')` |
+| BQC radio | `sidebar/confirm_inputs.py:30` | `bqc_radio` | `at.sidebar.radio(key='bqc_radio')` |
+| BQC label radio | `sidebar/confirm_inputs.py:47` | `bqc_label_radio` | `at.sidebar.radio(key='bqc_label_radio')` |
+| Confirm checkbox | `sidebar/confirm_inputs.py:91` | `confirm_checkbox` | `at.sidebar.checkbox(key='confirm_checkbox')` |
+| Start Crunching button | `ui/landing_page.py:160` | None | `at.button[0]` |
+| Back to Home button | `main_app.py:84,183` | None | filter by label |
+| MS-DIAL data type radio | `main_content/data_processing.py:160` | `msdial_data_type_radio` | `at.radio(key='msdial_data_type_radio')` |
+| Grade filter mode radio | `main_content/data_processing.py:76` | `grade_filter_mode_radio` | `at.radio(key='grade_filter_mode_radio')` |
+| Quality level radio | `main_content/data_processing.py:219` | `msdial_quality_level_radio` | `at.radio(key='msdial_quality_level_radio')` |
+| Standards source radio | `main_content/internal_standards.py` | `standards_source_radio` | `at.radio(key='standards_source_radio')` |
+
+##### Session State Keys (from `streamlit_adapter.py` SessionState dataclass)
+
+**Data states:**
+- `raw_df`: DataFrame or None — raw uploaded data
+- `standardized_df`: DataFrame or None — after column standardization
+- `cleaned_df`: DataFrame or None — after filtering
+- `intsta_df`: DataFrame or None — internal standards
+- `normalized_df`: DataFrame or None — after normalization
+- `continuation_df`: DataFrame or None — current working data
+
+**Experiment:**
+- `experiment`: ExperimentConfig or None
+- `format_type`: DataFormat or None
+- `bqc_label`: str or None
+
+**Flow control:**
+- `page`: str = `'landing'` — page routing (`'landing'` or `'app'`)
+- `confirmed`: bool = False — confirm checkbox state
+- `grouping_complete`: bool = True
+- `using_sample_data`: bool = False
+
+**MS-DIAL specific:**
+- `msdial_features`: dict = {} — format detection results (keys: `has_normalized_data`, `raw_sample_columns`, `normalized_sample_columns`, `has_quality_score`, `has_msms_matched`)
+- `msdial_use_normalized`: bool = False
+- `msdial_data_type_index`: int = 0
+- `_msdial_override_samples`: list or absent — saved sample override (set by `_apply_msdial_sample_override()`, popped by `reset_data_state()` at line 201)
+
+**Session state initialization:** `StreamlitAdapter.initialize_session_state()` only sets defaults if keys don't already exist. Pre-setting session state before `.run()` works correctly.
+
+##### main_app.py Structure (206 lines)
+
+```python
+# Module level (lines 20-56):
+st.set_page_config(...)              # CANNOT import this file in tests
+StreamlitAdapter.initialize_session_state()
+
+# display_app_page() orchestration (lines 63-186):
+#   1. display_format_selection()                   → sidebar selectbox
+#   2. display_file_upload(data_format)              → sidebar expander + file_uploader
+#   3. standardize_uploaded_data(raw_df, data_format) → column standardization
+#   4. display_column_mapping(standardized_df, data_format) → mapping table + MS-DIAL override
+#   5. display_sample_grouping(df, data_format)      → experiment + grouping + BQC + confirm
+#   6. build_filter_configs(data_format, raw_df)     → grade/quality filtering
+#   7. run_ingestion_pipeline(...)                   → cached ingestion workflow
+#   8. display_zero_filtering_config(...)            → zero filtering
+#   9. display_final_filtered_data(cleaned_df)       → data table
+#  10. display_manage_internal_standards(...)         → standards management
+#  11. display_normalization_ui(...)                  → normalization
+#  12. Back to Home button
+
+# main() (lines 193-198):
+#   if page == 'landing': display_landing_page()
+#   elif page == 'app': display_app_page()
+```
+
+**Critical:** When no data is loaded (`raw_df is None`), only the "Back to Home" button and an info message render. The MS-DIAL override restoration logic (lines 96-102) checks `_msdial_override_samples` in session state after re-standardization.
+
+##### Wrapper Functions (code patterns for `conftest.py`)
+
+Each wrapper must: (1) import inside the function, (2) call `StreamlitAdapter.initialize_session_state()`, (3) never call `st.set_page_config()`.
+
+**`landing_page_script`** — Groups 1:
+```python
+def landing_page_script():
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    import app.ui.landing_page as lp
+    lp.PDF2IMAGE_AVAILABLE = False  # Avoid PDF conversion timeouts
+    from app.ui.landing_page import display_landing_page
+    display_landing_page()
+```
+
+**`format_and_upload_script`** — Groups 2, 3:
+```python
+def format_and_upload_script():
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.sidebar.file_upload import display_format_selection, display_file_upload
+    from app.ui.sidebar.column_mapping import standardize_uploaded_data
+    data_format = display_format_selection()
+    raw_df = display_file_upload(data_format)
+    if raw_df is not None:
+        if st.session_state.get('standardized_df') is None:
+            std_df = standardize_uploaded_data(raw_df, data_format)
+            st.session_state.standardized_df = std_df
+        st.text(f"data_loaded:{raw_df.shape[0]}x{raw_df.shape[1]}")
+    else:
+        st.text("no_data")
+```
+
+**`full_sidebar_script`** — Groups 4, 5:
+```python
+def full_sidebar_script():
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.sidebar.file_upload import display_format_selection, display_file_upload
+    from app.ui.sidebar.column_mapping import standardize_uploaded_data, display_column_mapping
+    from app.ui.sidebar.sample_grouping import display_sample_grouping
+    data_format = display_format_selection()
+    raw_df = display_file_upload(data_format)
+    if raw_df is not None:
+        if st.session_state.get('standardized_df') is None:
+            std_df = standardize_uploaded_data(raw_df, data_format)
+            if std_df is not None:
+                st.session_state.standardized_df = std_df
+        std_df = st.session_state.get('standardized_df')
+        if std_df is not None:
+            mapping_valid, modified_df = display_column_mapping(std_df, data_format)
+            if mapping_valid:
+                if modified_df is not None:
+                    std_df = modified_df
+                    st.session_state.standardized_df = std_df
+                experiment, bqc_label = display_sample_grouping(std_df, data_format)
+                if experiment is not None:
+                    st.text(f"confirmed:{experiment.n_conditions}c")
+                else:
+                    st.text("not_confirmed")
+    else:
+        st.text("no_data")
+```
+
+**`app_page_script`** — Group 8:
+```python
+def app_page_script():
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    import app.ui.landing_page as lp
+    lp.PDF2IMAGE_AVAILABLE = False
+    from app.ui.landing_page import display_logo
+    from app.ui.format_requirements import display_format_requirements
+    from app.ui.sidebar import display_format_selection, display_file_upload
+    _, center, _ = st.columns([1, 3, 1])
+    data_format = display_format_selection()
+    with center:
+        display_logo(centered=True)
+        display_format_requirements(data_format)
+    raw_df = display_file_upload(data_format)
+    if raw_df is None:
+        with center:
+            st.info("Upload a dataset or load sample data to begin.")
+            if st.button("← Back to Home"):
+                st.session_state.page = 'landing'
+                st.rerun()
+```
+
+**`msdial_data_type_script`** — Group 6:
+```python
+def msdial_data_type_script():
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.main_content.data_processing import display_msdial_data_type_selection
+    display_msdial_data_type_selection()
+    use_norm = st.session_state.get('msdial_use_normalized', False)
+    st.text(f"use_normalized:{use_norm}")
+```
+
+**`override_preservation_script`** — Group 7 (test 2):
+```python
+def override_preservation_script():
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.main_content.data_processing import display_msdial_data_type_selection
+    display_msdial_data_type_selection()
+    override = st.session_state.get('_msdial_override_samples')
+    st.text(f"override:{override}")
+    st.text(f"std_df_cleared:{st.session_state.get('standardized_df') is None}")
+```
+
+**`override_reset_script`** — Group 7 (test 3):
+```python
+def override_reset_script():
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    override = st.session_state.get('_msdial_override_samples')
+    st.text(f"override:{override}")
+    if st.button("Reset", key='reset_btn'):
+        StreamlitAdapter.reset_data_state()
+        st.rerun()
+```
+
+##### Fixtures (for `conftest.py`)
+
+```python
+DEFAULT_TIMEOUT = 15
+
+@pytest.fixture
+def landing_app():
+    return AppTest.from_function(landing_page_script, default_timeout=DEFAULT_TIMEOUT).run()
+
+@pytest.fixture
+def format_upload_app():
+    return AppTest.from_function(format_and_upload_script, default_timeout=DEFAULT_TIMEOUT).run()
+
+@pytest.fixture
+def full_sidebar_app():
+    return AppTest.from_function(full_sidebar_script, default_timeout=DEFAULT_TIMEOUT).run()
+
+@pytest.fixture
+def generic_sidebar_app(full_sidebar_app):
+    """Generic data loaded + 3x4=12 experiment config matching 12-sample dataset."""
+    at = full_sidebar_app
+    at.sidebar.button(key='load_sample').click().run()
+    # Set 3 conditions x 4 samples = 12 (matches Generic dataset)
+    at.sidebar.number_input[0].set_value(3).run()
+    at.number_input(key='n_samples_0').set_value(4).run()
+    at.number_input(key='n_samples_1').set_value(4).run()
+    at.number_input(key='n_samples_2').set_value(4).run()
+    return at
+
+@pytest.fixture
+def msdial_features_dict():
+    return {
+        'has_normalized_data': True,
+        'raw_sample_columns': ['s1', 's2', 's3', 's4', 's5', 's6', 's7'],
+        'normalized_sample_columns': ['s1', 's2', 's3', 's4', 's5', 's6', 's7'],
+        'has_quality_score': True, 'has_msms_matched': False,
+    }
+
+@pytest.fixture
+def msdial_data_type_app(msdial_features_dict):
+    at = AppTest.from_function(msdial_data_type_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['msdial_features'] = msdial_features_dict
+    return at.run()
+```
+
+##### Test Groups — Detailed Assertions
+
+**Group 1: TestLandingPageNavigation (3 tests)** — Uses `landing_app`
+1. `test_start_crunching_button_renders`: `assert len(at.button) >= 1` and `"Start Crunching" in at.button[0].label`
+2. `test_start_crunching_sets_page_to_app`: `at.button[0].click().run()` → `assert at.session_state['page'] == 'app'`
+3. `test_landing_page_initial_state`: `assert at.session_state['page'] == 'landing'`
+
+**Group 2: TestFormatSelection (3 tests)** — Uses `format_upload_app`
+1. `test_format_selectbox_has_four_options`: `assert at.sidebar.selectbox[0].options == ['Generic Format', 'Metabolomics Workbench', 'LipidSearch 5.0', 'MS-DIAL']`
+2. `test_format_default_is_generic`: `assert at.sidebar.selectbox[0].value == 'Generic Format'`
+3. `test_format_can_switch_to_msdial`: `.set_value('MS-DIAL').run()` → `assert value == 'MS-DIAL'`
+
+**Group 3: TestSampleDataLoading (4 tests)** — Uses `format_upload_app`
+1. `test_load_generic_sample_data`: click `load_sample` → `assert at.session_state['raw_df'].shape[0] == 943` and `using_sample_data is True`
+2. `test_load_lipidsearch_sample_data`: switch to LipidSearch → click → `assert 'LipidMolec' in raw_df.columns`
+3. `test_load_msdial_sample_data`: switch to MS-DIAL → click → `assert at.session_state['msdial_features']['has_normalized_data'] is True`
+4. `test_load_metabolomics_workbench_sample_data`: switch to MW → click → `assert raw_df is not None`
+
+**Group 4: TestExperimentDefinition (4 tests)** — Uses `full_sidebar_app` + load sample
+1. `test_default_conditions_is_two`: load sample → `assert at.sidebar.number_input[0].value == 2`
+2. `test_condition_text_inputs_created`: load sample → `assert at.text_input(key='cond_name_0').value == 'Condition_1'`
+3. `test_sample_count_validation_blocks_progress`: default 2x3=6 ≠ 12 → no `grouping_radio` or `confirm_checkbox` rendered
+4. `test_correct_sample_count_enables_grouping`: set 3x4=12 → `grouping_radio` and `confirm_checkbox` exist
+
+**Group 5: TestConfirmInputsBQC (4 tests)** — Uses `generic_sidebar_app`
+1. `test_bqc_radio_default_is_no`: `assert at.sidebar.radio(key='bqc_radio').value == 'No'`
+2. `test_confirm_checkbox_default_unchecked`: `assert at.sidebar.checkbox(key='confirm_checkbox').value is False`
+3. `test_checking_confirm_enables_flow`: `.check().run()` → `assert "confirmed:3c" in at.text[0].value`
+4. `test_bqc_yes_shows_label_selector`: `.set_value('Yes').run()` → `at.sidebar.radio(key='bqc_label_radio')` exists
+
+**Group 6: TestMSDIALDataTypeSelection (3 tests)** — Uses `msdial_data_type_app`
+1. `test_data_type_radio_exists`: `at.radio(key='msdial_data_type_radio')` is not None
+2. `test_data_type_default_is_raw`: `"Raw" in radio.value` and text contains `"use_normalized:False"`
+3. `test_data_type_can_switch_to_normalized`: set to pre-normalized option → text contains `"use_normalized:True"`
+
+**Group 7: TestMSDIALOverridePreservation (3 tests)** — Regression for d9451cf
+1. `test_override_saved_to_session_state`: Pre-set `_msdial_override_samples = ['s1', 's2', 's3']` → persists after run
+2. `test_override_preserved_after_data_type_switch`: Pre-set override + switch data type radio → override still in session state, `standardized_df` is None (callback ran, cleared data but NOT override)
+3. `test_override_cleared_on_reset`: Pre-set override → click reset button → `_msdial_override_samples` removed from session state (verified: `reset_data_state()` calls `st.session_state.pop('_msdial_override_samples', None)` at `streamlit_adapter.py:201`)
+
+**Group 8: TestBackToHome (2 tests)** — Uses `app_page_script`
+1. `test_back_button_exists_when_no_data`: set `page='app'` → `any("Back to Home" in b.label for b in at.button)`
+2. `test_back_button_resets_to_landing`: click back button → `assert at.session_state['page'] == 'landing'`
+
+##### Sample Dataset Details
+
+| Format | File | Rows | Sample Cols | Experiment Config |
+|--------|------|------|-------------|-------------------|
+| Generic | `generic_test_dataset.csv` | 943 | 12 (`intensity[s1]`..`intensity[s12]`) | 3 cond x 4 samples |
+| LipidSearch | `lipidsearch5_test_dataset.csv` | ~943 | 12 | 3 cond x 4 samples |
+| MS-DIAL | `msdial_test_dataset.csv` | ~1247 | 7 raw + 7 normalized | 3 cond, varied |
+| Metabolomics Workbench | `mw_test_dataset.csv` | varies | 44 | 2x2 factorial (auto-detected) |
+
+**Target:** 26 new UI tests + all 1390 existing tests passing.
 
 #### Module 2: Quality Check (NOT STARTED)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
