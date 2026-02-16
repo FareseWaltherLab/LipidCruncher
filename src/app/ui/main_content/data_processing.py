@@ -277,7 +277,24 @@ def display_quality_filtering_config() -> dict:
                 value=False,
                 key="msdial_msms_only"
             )
-            return {'total_score_threshold': 0, 'require_msms': require_msms}
+            quality_config = {'total_score_threshold': 0, 'require_msms': require_msms}
+
+            # Summary
+            st.markdown("---")
+            st.markdown(f"**Current settings:** MS/MS required: {'Yes' if require_msms else 'No'}")
+
+            # Show filter results if they match the current config
+            last_config = st.session_state.get('last_quality_config')
+            if (last_config and
+                last_config.get('total_score_threshold') == 0 and
+                last_config.get('require_msms') == require_msms):
+                ingestion_result = st.session_state.get('ingestion_result')
+                if ingestion_result and ingestion_result.cleaning_messages:
+                    st.markdown("**Filter Results:**")
+                    for msg in ingestion_result.cleaning_messages:
+                        st.info(msg)
+
+            return quality_config
 
     return None
 
