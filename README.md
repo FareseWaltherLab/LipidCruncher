@@ -5,7 +5,7 @@
 Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/farese-walther) at Memorial Sloan Kettering Cancer Center.
 
 [![Live App](https://img.shields.io/badge/🚀_Try_It-lipidcruncher.org-blue)](https://lipidcruncher.org)
-[![Paper](https://img.shields.io/badge/📄_Paper-bioRxiv-green)](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1)
+[![Paper](https://img.shields.io/badge/📄_Paper-bioRxiv-green)](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v2.article-metrics)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -79,7 +79,7 @@ Questions, bugs, or feature requests? **abdih@mskcc.org**
 
 ## 📄 Citation
 
-If you use LipidCruncher in your research, please cite our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1).
+If you use LipidCruncher in your research, please cite our [paper](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v2.article-metrics).
 
 ---
 

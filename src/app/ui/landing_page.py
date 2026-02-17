@@ -255,7 +255,7 @@ def _display_footer() -> None:
     with res_col1:
         st.markdown("#### 📚 Resources")
         st.markdown("""
-        - 📄 [Read our paper on bioRxiv](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v1)
+        - 📄 [Read our paper on bioRxiv](https://www.biorxiv.org/content/10.1101/2025.04.28.650893v2.article-metrics)
         - 💻 [Source code on GitHub](https://github.com/FareseWaltherLab/LipidCruncher)
         """)
 
