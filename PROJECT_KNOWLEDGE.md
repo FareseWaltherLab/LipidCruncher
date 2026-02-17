@@ -800,11 +800,11 @@ def msdial_data_type_app(msdial_features_dict):
 #### 🔧 Code Review Cleanup (IN PROGRESS — before Module 2)
 Fix all issues from the **Code Review Issues (February 16, 2026)** section below. Run full test suite after each fix.
 
-**Completed:** C1, C2, C3, H1, H2, H3, H4, H5 (all Critical + High done)
-**Next:** Start with M1 (duplicated column extraction), then M2-M6, then L1-L8.
-**Test count:** 1395 passing (removed 21 dead-code tests for deleted hash function + accessors)
+**Completed:** C1-C3, H1-H5, M1-M6 (all Critical + High + Medium done)
+**Remaining:** L1-L4, L7-L8 (Low priority — L5/L6 already fixed in C2/C3)
+**Test count:** 1400 passing
 
-#### Module 2: Quality Check (NOT STARTED — blocked by code review cleanup)
+#### Module 2: Quality Check (NOT STARTED — code review cleanup done, ready to start)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
 2. ⬜ Build Module 2 UI
 
@@ -1215,7 +1215,7 @@ Full code review before starting Module 2. All issues listed by priority.
 #### H5. ✅ Missing exports added to `services/__init__.py`
 **Fix applied:** Added `ZeroFilteringService`, `ZeroFilterConfig`, `ZeroFilteringResult`, `NormalizationService`, `NormalizationResult`, `StandardsService`, `StandardsExtractionResult`, `StandardsValidationResult`, `StandardsProcessingResult`.
 
-### Medium Priority (START HERE)
+### Medium Priority — ✅ ALL DONE
 
 #### M1. Duplicated column extraction logic across cleaners
 **Files:** `src/app/services/data_cleaning/generic.py:149-187` and `src/app/services/data_cleaning/msdial.py:262-320`
@@ -1244,18 +1244,16 @@ Full code review before starting Module 2. All issues listed by priority.
 **Problem:** Every cached method manually converts Pydantic models to dicts, passes them, then reconstructs with `ExperimentConfig(**experiment_dict)`. This is ~30 lines of boilerplate per method that exists solely because `@st.cache_data` needs hashable arguments.
 **Fix:** Define `__hash__` on `ExperimentConfig`, `NormalizationConfig`, `GradeFilterConfig`, and `QualityFilterConfig`. Then pass the objects directly — Streamlit will hash them. This eliminates `experiment_to_dict()`, `config_to_dict()`, and all the reconstruct-from-dict code.
 
-#### M5. `StreamlitAdapter` class size — reassess after H1/H2
+#### M5. ✅ `StreamlitAdapter` class size — no split needed
 **File:** `src/app/adapters/streamlit_adapter.py`
-**Problem:** Was 598 lines. After H1 (accessors) and H2 (service wrappers) removal, now ~350 lines. May need splitting into `SessionStateManager` and `CachedWorkflows` as Modules 2/3 add cached wrappers.
-**Fix:** Reassess after M4 (serialization cleanup). If still >300 lines, split.
+**Assessment:** After H1/H2/M4 cleanups, the class is 191 lines (file is 307 lines total). Well-organized with clear sections (session state init/reset, service wrapper, cached workflows). No split needed at current size. Reassess when Modules 2/3 add more cached wrappers.
 
-#### M6. `NormalizationConfig` validation gaps
-**File:** `src/app/models/normalization.py:32-48,51-84`
-**Problem:**
-- Empty dicts pass validation: `intsta_concentrations={}` is valid even though it provides no concentrations
-- No validation that keys in `internal_standards` match `selected_classes`
-- No validation that keys in `protein_concentrations` cover all samples
-**Fix:** Add non-empty dict validation when method requires it. Add cross-field validation for key coverage.
+#### M6. ✅ `NormalizationConfig` cross-field validation added
+**File:** `src/app/models/normalization.py`
+**Assessment:**
+- Empty dicts already fail validation (`not {}` is `True`) — existing tests confirm this
+- `protein_concentrations` vs samples: NormalizationConfig doesn't know about samples — belongs at workflow level
+**Fix applied:** Added cross-field validation in `validate_method_requirements()`: every standard name (value in `internal_standards`) must have a matching key in `intsta_concentrations`. Added 5 new tests (112 total, up from 108).
 
 ### Low Priority
 

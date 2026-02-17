@@ -92,6 +92,16 @@ class NormalizationConfig(BaseModel):
                     "Combined normalization requires 'protein_concentrations'"
                 )
 
+        # Cross-field: every standard in internal_standards must have a concentration
+        if self.internal_standards and self.intsta_concentrations:
+            for lipid_class, standard_name in self.internal_standards.items():
+                if standard_name not in self.intsta_concentrations:
+                    raise ValueError(
+                        f"Missing concentration for internal standard '{standard_name}' "
+                        f"(assigned to class '{lipid_class}'). "
+                        f"Every standard must have an entry in 'intsta_concentrations'."
+                    )
+
         return self
 
     def requires_internal_standards(self) -> bool:

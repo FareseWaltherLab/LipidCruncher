@@ -165,6 +165,46 @@ class TestNormalizationConfigValidation:
                 protein_concentrations={'s1': 2.5, 's2': 0.0, 's3': 3.0}
             )
 
+    def test_standard_missing_concentration(self):
+        """Test that a standard referenced in internal_standards must have a concentration."""
+        with pytest.raises(ValueError, match="Missing concentration.*PC\\(15:0/18:1\\)"):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards={'PC': 'PC(15:0/18:1)'},
+                intsta_concentrations={'PE(17:0/17:0)': 1.0}  # wrong standard
+            )
+
+    def test_partial_standard_concentrations_missing(self):
+        """Test that all standards must have concentrations, not just some."""
+        with pytest.raises(ValueError, match="Missing concentration.*PE\\(17:0/17:0\\)"):
+            NormalizationConfig(
+                method='internal_standard',
+                internal_standards={'PC': 'PC(15:0/18:1)', 'PE': 'PE(17:0/17:0)'},
+                intsta_concentrations={'PC(15:0/18:1)': 1.0}  # PE standard missing
+            )
+
+    def test_standard_concentration_cross_validation_both_method(self):
+        """Test cross-field validation also applies for 'both' method."""
+        with pytest.raises(ValueError, match="Missing concentration"):
+            NormalizationConfig(
+                method='both',
+                internal_standards={'PC': 'PC(15:0/18:1)'},
+                intsta_concentrations={'WRONG_STANDARD': 1.0},
+                protein_concentrations={'s1': 2.5}
+            )
+
+    def test_extra_concentrations_allowed(self):
+        """Test that intsta_concentrations can have extra entries not in internal_standards."""
+        config = NormalizationConfig(
+            method='internal_standard',
+            internal_standards={'PC': 'PC(15:0/18:1)'},
+            intsta_concentrations={
+                'PC(15:0/18:1)': 1.0,
+                'PE(17:0/17:0)': 0.5,  # extra, not referenced
+            }
+        )
+        assert config.get_standard_concentration('PE(17:0/17:0)') == 0.5
+
 
 class TestNormalizationConfigHelperMethods:
     """Tests for helper methods."""
