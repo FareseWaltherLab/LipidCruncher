@@ -20,10 +20,14 @@ class ExperimentConfig(BaseModel):
         individual_samples_list: Samples grouped by condition
         extensive_conditions_list: Flat list replicating conditions for each sample
     """
+    model_config = {"frozen": True}
 
     n_conditions: int = Field(gt=0, description="Number of experimental conditions")
     conditions_list: List[str] = Field(description="Labels for each condition")
     number_of_samples_list: List[int] = Field(description="Number of samples per condition")
+
+    def __hash__(self) -> int:
+        return hash((self.n_conditions, tuple(self.conditions_list), tuple(self.number_of_samples_list)))
 
     @field_validator('conditions_list')
     @classmethod

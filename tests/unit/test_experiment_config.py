@@ -1,6 +1,7 @@
 """Unit tests for ExperimentConfig model."""
 import pytest
 import copy
+from pydantic import ValidationError
 from app.models.experiment import ExperimentConfig
 
 
@@ -857,8 +858,8 @@ class TestExperimentConfigComputedFieldsEdgeCases:
             conditions_list=['A', 'B'],
             number_of_samples_list=[2, 2]
         )
-        # Pydantic computed fields should be read-only
-        with pytest.raises(AttributeError):
+        # Frozen model prevents field assignment
+        with pytest.raises(ValidationError):
             config.full_samples_list = ['x1', 'x2']
 
     def test_computed_fields_update_on_model_copy_update(self):

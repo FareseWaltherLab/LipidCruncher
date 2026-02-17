@@ -17,7 +17,6 @@ from app.adapters.streamlit_adapter import SessionState, StreamlitAdapter
 from app.models.experiment import ExperimentConfig
 from app.services.format_detection import DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
-from app.services.zero_filtering import ZeroFilterConfig
 
 
 class MockSessionState(dict):
@@ -210,194 +209,82 @@ class TestSessionStateDataIntegrity:
 # StreamlitAdapter Utility Method Tests
 # =============================================================================
 
-class TestComputeDfHash:
-    """Tests for compute_df_hash utility method."""
 
-    def test_hash_simple_dataframe(self):
-        """Test hashing a simple DataFrame."""
-        df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
-        hash_val = StreamlitAdapter.compute_df_hash(df)
-        assert isinstance(hash_val, str)
-        assert len(hash_val) == 32  # MD5 hash length
+class TestConfigHashing:
+    """Tests for config object hashing (used by @st.cache_data)."""
 
-    def test_same_df_same_hash(self):
-        """Test that identical DataFrames produce same hash."""
-        df1 = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
-        df2 = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
-
-        hash1 = StreamlitAdapter.compute_df_hash(df1)
-        hash2 = StreamlitAdapter.compute_df_hash(df2)
-
-        assert hash1 == hash2
-
-    def test_different_df_different_hash(self):
-        """Test that different DataFrames produce different hashes."""
-        df1 = pd.DataFrame({'A': [1, 2, 3]})
-        df2 = pd.DataFrame({'A': [1, 2, 4]})  # Different value
-
-        hash1 = StreamlitAdapter.compute_df_hash(df1)
-        hash2 = StreamlitAdapter.compute_df_hash(df2)
-
-        assert hash1 != hash2
-
-    def test_different_columns_different_hash(self):
-        """Test that different column names produce different hashes."""
-        df1 = pd.DataFrame({'A': [1, 2, 3]})
-        df2 = pd.DataFrame({'B': [1, 2, 3]})  # Different column name
-
-        hash1 = StreamlitAdapter.compute_df_hash(df1)
-        hash2 = StreamlitAdapter.compute_df_hash(df2)
-
-        assert hash1 != hash2
-
-    def test_different_shape_different_hash(self):
-        """Test that different shapes produce different hashes."""
-        df1 = pd.DataFrame({'A': [1, 2, 3]})
-        df2 = pd.DataFrame({'A': [1, 2, 3, 4]})  # Different length
-
-        hash1 = StreamlitAdapter.compute_df_hash(df1)
-        hash2 = StreamlitAdapter.compute_df_hash(df2)
-
-        assert hash1 != hash2
-
-    def test_empty_dataframe_hash(self):
-        """Test hashing an empty DataFrame."""
-        df = pd.DataFrame()
-        hash_val = StreamlitAdapter.compute_df_hash(df)
-        assert isinstance(hash_val, str)
-
-    def test_single_row_hash(self):
-        """Test hashing a single-row DataFrame."""
-        df = pd.DataFrame({'A': [1]})
-        hash_val = StreamlitAdapter.compute_df_hash(df)
-        assert isinstance(hash_val, str)
-
-    def test_large_dataframe_hash(self):
-        """Test hashing a large DataFrame is efficient."""
-        df = pd.DataFrame({
-            'A': range(10000),
-            'B': range(10000),
-            'C': range(10000),
-        })
-        hash_val = StreamlitAdapter.compute_df_hash(df)
-        assert isinstance(hash_val, str)
-
-    def test_hash_with_nan_values(self):
-        """Test hashing DataFrame with NaN values."""
-        df = pd.DataFrame({'A': [1, np.nan, 3], 'B': [4, 5, np.nan]})
-        hash_val = StreamlitAdapter.compute_df_hash(df)
-        assert isinstance(hash_val, str)
-
-    def test_hash_with_mixed_types(self):
-        """Test hashing DataFrame with mixed types."""
-        df = pd.DataFrame({
-            'int_col': [1, 2, 3],
-            'float_col': [1.1, 2.2, 3.3],
-            'str_col': ['a', 'b', 'c'],
-        })
-        hash_val = StreamlitAdapter.compute_df_hash(df)
-        assert isinstance(hash_val, str)
-
-
-class TestExperimentToDict:
-    """Tests for experiment_to_dict utility method."""
-
-    def test_basic_experiment_to_dict(self):
-        """Test converting basic experiment to dict."""
-        experiment = ExperimentConfig(
+    def test_experiment_config_hashable(self):
+        """Test that ExperimentConfig is hashable."""
+        config = ExperimentConfig(
             n_conditions=2,
             conditions_list=['Control', 'Treatment'],
             number_of_samples_list=[3, 3]
         )
+        assert isinstance(hash(config), int)
 
-        result = StreamlitAdapter.experiment_to_dict(experiment)
-
-        assert isinstance(result, dict)
-        assert result['n_conditions'] == 2
-        assert result['conditions_list'] == ['Control', 'Treatment']
-        assert result['number_of_samples_list'] == [3, 3]
-
-    def test_single_condition_to_dict(self):
-        """Test converting single condition experiment to dict."""
-        experiment = ExperimentConfig(
-            n_conditions=1,
-            conditions_list=['Samples'],
-            number_of_samples_list=[5]
-        )
-
-        result = StreamlitAdapter.experiment_to_dict(experiment)
-
-        assert result['n_conditions'] == 1
-        assert len(result['conditions_list']) == 1
-
-    def test_many_conditions_to_dict(self):
-        """Test converting many conditions experiment to dict."""
-        experiment = ExperimentConfig(
-            n_conditions=5,
-            conditions_list=['A', 'B', 'C', 'D', 'E'],
-            number_of_samples_list=[1, 2, 3, 4, 5]
-        )
-
-        result = StreamlitAdapter.experiment_to_dict(experiment)
-
-        assert result['n_conditions'] == 5
-        assert len(result['conditions_list']) == 5
-        assert result['number_of_samples_list'] == [1, 2, 3, 4, 5]
-
-    def test_dict_can_recreate_experiment(self):
-        """Test that dict can be used to recreate ExperimentConfig."""
-        original = ExperimentConfig(
+    def test_equal_experiments_same_hash(self):
+        """Test that equal ExperimentConfigs produce the same hash."""
+        config1 = ExperimentConfig(
             n_conditions=2,
             conditions_list=['Control', 'Treatment'],
             number_of_samples_list=[3, 3]
         )
+        config2 = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[3, 3]
+        )
+        assert hash(config1) == hash(config2)
 
-        result_dict = StreamlitAdapter.experiment_to_dict(original)
-        recreated = ExperimentConfig(**result_dict)
+    def test_different_experiments_different_hash(self):
+        """Test that different ExperimentConfigs produce different hashes."""
+        config1 = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[3, 3]
+        )
+        config2 = ExperimentConfig(
+            n_conditions=3,
+            conditions_list=['A', 'B', 'C'],
+            number_of_samples_list=[2, 2, 2]
+        )
+        assert hash(config1) != hash(config2)
 
-        assert recreated.n_conditions == original.n_conditions
-        assert recreated.conditions_list == original.conditions_list
-        assert recreated.number_of_samples_list == original.number_of_samples_list
-
-
-class TestConfigToDict:
-    """Tests for config_to_dict utility method."""
-
-    def test_none_config(self):
-        """Test converting None config."""
-        result = StreamlitAdapter.config_to_dict(None)
-        assert result is None
-
-    def test_grade_config_to_dict(self):
-        """Test converting GradeFilterConfig to dict."""
+    def test_grade_config_hashable(self):
+        """Test that GradeFilterConfig is hashable."""
         config = GradeFilterConfig(grade_config={'PC': ['A', 'B']})
-        result = StreamlitAdapter.config_to_dict(config)
+        assert isinstance(hash(config), int)
 
-        assert isinstance(result, dict)
-        assert 'grade_config' in result
+    def test_grade_config_none_hashable(self):
+        """Test that GradeFilterConfig with None is hashable."""
+        config = GradeFilterConfig(grade_config=None)
+        assert isinstance(hash(config), int)
 
-    def test_quality_config_to_dict(self):
-        """Test converting QualityFilterConfig to dict."""
+    def test_equal_grade_configs_same_hash(self):
+        """Test that equal GradeFilterConfigs produce the same hash."""
+        config1 = GradeFilterConfig(grade_config={'PC': ['A', 'B']})
+        config2 = GradeFilterConfig(grade_config={'PC': ['A', 'B']})
+        assert hash(config1) == hash(config2)
+        assert config1 == config2
+
+    def test_quality_config_hashable(self):
+        """Test that QualityFilterConfig is hashable."""
         config = QualityFilterConfig(total_score_threshold=70, require_msms=True)
-        result = StreamlitAdapter.config_to_dict(config)
+        assert isinstance(hash(config), int)
 
-        assert isinstance(result, dict)
-        assert result['total_score_threshold'] == 70
-        assert result['require_msms'] is True
+    def test_equal_quality_configs_same_hash(self):
+        """Test that equal QualityFilterConfigs produce the same hash."""
+        config1 = QualityFilterConfig(total_score_threshold=70, require_msms=True)
+        config2 = QualityFilterConfig(total_score_threshold=70, require_msms=True)
+        assert hash(config1) == hash(config2)
+        assert config1 == config2
 
-    def test_zero_config_to_dict(self):
-        """Test converting ZeroFilterConfig to dict."""
-        config = ZeroFilterConfig(
-            detection_threshold=0.1,
-            bqc_threshold=0.3,
-            non_bqc_threshold=0.5
-        )
-        result = StreamlitAdapter.config_to_dict(config)
-
-        assert isinstance(result, dict)
-        assert result['detection_threshold'] == 0.1
-        assert result['bqc_threshold'] == 0.3
-        assert result['non_bqc_threshold'] == 0.5
+    def test_different_quality_configs_different_hash(self):
+        """Test that different QualityFilterConfigs produce different hashes."""
+        config1 = QualityFilterConfig(total_score_threshold=70, require_msms=True)
+        config2 = QualityFilterConfig(total_score_threshold=60, require_msms=False)
+        assert hash(config1) != hash(config2)
+        assert config1 != config2
 
 
 # =============================================================================
@@ -530,103 +417,6 @@ class TestSessionStateIntegration:
         assert mock_st.session_state['normalized_df'] is None
 
 
-class TestSessionStateAccessors:
-    """Tests for session state accessor methods."""
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_get_experiment(self, mock_st):
-        """Test getting experiment from session state."""
-        experiment = ExperimentConfig(
-            n_conditions=2,
-            conditions_list=['A', 'B'],
-            number_of_samples_list=[2, 2]
-        )
-        mock_st.session_state = MockSessionState({'experiment': experiment})
-
-        result = StreamlitAdapter.get_experiment()
-
-        assert result is experiment
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_get_experiment_none(self, mock_st):
-        """Test getting experiment when not set."""
-        mock_st.session_state = MockSessionState()
-
-        result = StreamlitAdapter.get_experiment()
-
-        assert result is None
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_set_experiment(self, mock_st):
-        """Test setting experiment in session state."""
-        mock_st.session_state = MockSessionState()
-        experiment = ExperimentConfig(
-            n_conditions=2,
-            conditions_list=['A', 'B'],
-            number_of_samples_list=[2, 2]
-        )
-
-        StreamlitAdapter.set_experiment(experiment)
-
-        assert mock_st.session_state['experiment'] is experiment
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_get_format_type(self, mock_st):
-        """Test getting format type."""
-        mock_st.session_state = MockSessionState({'format_type': DataFormat.LIPIDSEARCH})
-
-        result = StreamlitAdapter.get_format_type()
-
-        assert result == DataFormat.LIPIDSEARCH
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_set_format_type(self, mock_st):
-        """Test setting format type."""
-        mock_st.session_state = MockSessionState()
-
-        StreamlitAdapter.set_format_type(DataFormat.MSDIAL)
-
-        assert mock_st.session_state['format_type'] == DataFormat.MSDIAL
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_get_cleaned_df(self, mock_st):
-        """Test getting cleaned DataFrame."""
-        df = pd.DataFrame({'A': [1, 2, 3]})
-        mock_st.session_state = MockSessionState({'cleaned_df': df})
-
-        result = StreamlitAdapter.get_cleaned_df()
-
-        assert result is df
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_set_cleaned_df(self, mock_st):
-        """Test setting cleaned DataFrame."""
-        mock_st.session_state = MockSessionState()
-        df = pd.DataFrame({'A': [1, 2, 3]})
-
-        StreamlitAdapter.set_cleaned_df(df)
-
-        assert mock_st.session_state['cleaned_df'] is df
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_get_bqc_label(self, mock_st):
-        """Test getting BQC label."""
-        mock_st.session_state = MockSessionState({'bqc_label': 'BQC'})
-
-        result = StreamlitAdapter.get_bqc_label()
-
-        assert result == 'BQC'
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_set_bqc_label(self, mock_st):
-        """Test setting BQC label."""
-        mock_st.session_state = MockSessionState()
-
-        StreamlitAdapter.set_bqc_label('QC')
-
-        assert mock_st.session_state['bqc_label'] == 'QC'
-
-
 # =============================================================================
 # Edge Case Tests
 # =============================================================================
@@ -634,30 +424,14 @@ class TestSessionStateAccessors:
 class TestEdgeCases:
     """Edge case tests for StreamlitAdapter."""
 
-    def test_compute_hash_unicode_columns(self):
-        """Test hash computation with unicode column names."""
-        df = pd.DataFrame({'名前': [1, 2, 3], 'データ': [4, 5, 6]})
-        hash_val = StreamlitAdapter.compute_df_hash(df)
-        assert isinstance(hash_val, str)
-
-    def test_compute_hash_special_characters(self):
-        """Test hash computation with special characters in data."""
-        df = pd.DataFrame({
-            'A': ['test!@#$%', 'hello\nworld', 'tab\there'],
-        })
-        hash_val = StreamlitAdapter.compute_df_hash(df)
-        assert isinstance(hash_val, str)
-
-    def test_experiment_to_dict_with_empty_lists(self):
-        """Test experiment to dict edge case."""
-        # This would normally fail validation, but tests the method
+    def test_experiment_hash_single_condition(self):
+        """Test hashing experiment with single condition."""
         experiment = ExperimentConfig(
             n_conditions=1,
             conditions_list=['Single'],
             number_of_samples_list=[1]
         )
-        result = StreamlitAdapter.experiment_to_dict(experiment)
-        assert result['n_conditions'] == 1
+        assert isinstance(hash(experiment), int)
 
     def test_detect_format_empty_dataframe(self):
         """Test format detection with empty DataFrame."""

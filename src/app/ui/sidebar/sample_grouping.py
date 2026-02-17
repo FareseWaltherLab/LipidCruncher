@@ -169,7 +169,7 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str):
             conditions_list=conditions_list,
             number_of_samples_list=number_of_samples_list
         )
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         st.sidebar.error(f"Invalid experiment setup: {e}")
         return None, None
 

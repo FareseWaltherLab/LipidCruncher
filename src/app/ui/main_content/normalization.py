@@ -226,7 +226,7 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
             st.success(f"✓ Loaded {len(protein_concentrations)} concentration values")
             return protein_concentrations
 
-        except Exception as e:
+        except (ValueError, KeyError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
             st.error(f"Error reading CSV: {str(e)}")
             return None
 
@@ -301,12 +301,16 @@ def _run_normalization(
             'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
         }
 
-        # Use cached adapter method for performance
-        df_hash = StreamlitAdapter.compute_df_hash(cleaned_df)
-        experiment_dict = StreamlitAdapter.experiment_to_dict(experiment)
-        format_type_value = format_map.get(data_format, DataFormat.GENERIC).value
+        from app.models.normalization import NormalizationConfig
 
-        # Call cached normalization workflow
+        norm_config = NormalizationConfig(
+            method=config_method,
+            selected_classes=selected_classes,
+            internal_standards=internal_standards if internal_standards else None,
+            intsta_concentrations=intsta_concentrations if intsta_concentrations else None,
+            protein_concentrations=protein_concentrations if protein_concentrations else None,
+        )
+
         (
             normalized_df,
             success,
@@ -315,15 +319,10 @@ def _run_normalization(
             validation_errors,
             validation_warnings,
         ) = StreamlitAdapter.run_normalization(
-            _df_hash=df_hash,
             df=cleaned_df,
-            experiment_dict=experiment_dict,
-            method=config_method,
-            selected_classes=selected_classes,
-            format_type=format_type_value,
-            internal_standards=internal_standards if internal_standards else None,
-            intsta_concentrations=intsta_concentrations if intsta_concentrations else None,
-            protein_concentrations=protein_concentrations if protein_concentrations else None,
+            experiment=experiment,
+            normalization=norm_config,
+            data_format=format_map.get(data_format, DataFormat.GENERIC),
             intsta_df=intsta_df,
         )
 
@@ -344,7 +343,7 @@ def _run_normalization(
 
         return result
 
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         st.error(f"Normalization error: {e}")
         return None
 

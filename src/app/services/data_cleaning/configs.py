@@ -18,6 +18,16 @@ class GradeFilterConfig:
         """
         self.grade_config = grade_config
 
+    def __hash__(self) -> int:
+        if self.grade_config is None:
+            return hash(None)
+        return hash(tuple(sorted((k, tuple(v)) for k, v in self.grade_config.items())))
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, GradeFilterConfig):
+            return NotImplemented
+        return self.grade_config == other.grade_config
+
     @property
     def is_default(self) -> bool:
         """Check if using default filtering."""
@@ -41,6 +51,15 @@ class QualityFilterConfig:
         """
         self.total_score_threshold = total_score_threshold
         self.require_msms = require_msms
+
+    def __hash__(self) -> int:
+        return hash((self.total_score_threshold, self.require_msms))
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, QualityFilterConfig):
+            return NotImplemented
+        return (self.total_score_threshold == other.total_score_threshold and
+                self.require_msms == other.require_msms)
 
     @classmethod
     def strict(cls) -> "QualityFilterConfig":

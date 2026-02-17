@@ -99,38 +99,13 @@ class MSDIALCleaner(BaseDataCleaner):
         return df, messages
 
     @staticmethod
-    def _step_remove_invalid_rows(df: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[str]]:
-        """Remove invalid lipid rows step."""
-        pre_count = len(df)
-        df = MSDIALCleaner.remove_invalid_lipid_rows(df)
-
-        if df.empty:
-            raise ValueError(
-                "No valid lipid species found. All rows had invalid lipid names."
-            )
-
-        removed = pre_count - len(df)
-        msg = f"Removed {removed} rows with invalid lipid names" if removed > 0 else None
-        return df, msg
-
-    @staticmethod
     def _step_remove_duplicates(df: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[str]]:
-        """Remove duplicates step."""
+        """Remove duplicates step (keeps highest Total score)."""
         pre_count = len(df)
         df = MSDIALCleaner._remove_duplicates(df)
 
         removed = pre_count - len(df)
         msg = f"Removed {removed} duplicate entries" if removed > 0 else None
-        return df, msg
-
-    @staticmethod
-    def _step_remove_zero_rows(df: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[str]]:
-        """Remove all-zero rows step."""
-        pre_count = len(df)
-        df = MSDIALCleaner.remove_all_zero_rows(df)
-
-        removed = pre_count - len(df)
-        msg = f"Removed {removed} rows with all-zero intensities" if removed > 0 else None
         return df, msg
 
     # ==================== Quality Filtering ====================
@@ -259,23 +234,6 @@ class MSDIALCleaner(BaseDataCleaner):
         return result_df.rename(columns=rename_dict)
 
     @staticmethod
-    def _add_required_columns(
-        col_map: dict,
-        columns: List[str],
-        rename_dict: dict
-    ) -> Tuple[List[str], dict]:
-        """Add required columns (LipidMolec, ClassKey)."""
-        required = [('lipidmolec', 'LipidMolec'), ('classkey', 'ClassKey')]
-
-        for col_lower, col_standard in required:
-            if col_lower not in col_map:
-                raise KeyError(f"Missing required column: {col_standard}")
-            columns.append(col_map[col_lower])
-            rename_dict[col_map[col_lower]] = col_standard
-
-        return columns, rename_dict
-
-    @staticmethod
     def _add_optional_columns(
         col_map: dict,
         columns: List[str],
@@ -292,30 +250,6 @@ class MSDIALCleaner(BaseDataCleaner):
             if col_lower in col_map:
                 columns.append(col_map[col_lower])
                 rename_dict[col_map[col_lower]] = col_standard
-
-        return columns, rename_dict
-
-    @staticmethod
-    def _add_intensity_columns(
-        df: pd.DataFrame,
-        full_samples_list: List[str],
-        columns: List[str],
-        rename_dict: dict
-    ) -> Tuple[List[str], dict]:
-        """Add intensity columns."""
-        for sample in full_samples_list:
-            expected_col = f'intensity[{sample}]'.lower()
-            found = False
-
-            for actual_col in df.columns:
-                if actual_col.lower() == expected_col:
-                    columns.append(actual_col)
-                    rename_dict[actual_col] = f'intensity[{sample}]'
-                    found = True
-                    break
-
-            if not found:
-                raise KeyError(f"Missing intensity column: intensity[{sample}]")
 
         return columns, rename_dict
 

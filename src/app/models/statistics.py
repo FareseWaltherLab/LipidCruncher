@@ -1,7 +1,7 @@
 """
 Statistical testing configuration model.
 """
-from typing import List, Literal, Tuple
+from typing import List, Literal, Optional, Tuple
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -157,7 +157,7 @@ class StatisticalTestConfig(BaseModel):
         posthoc_correction: Literal['uncorrected', 'tukey', 'bonferroni'] = 'tukey',
         alpha: float = 0.05,
         auto_transform: bool = True,
-        conditions_to_compare: List[Tuple[str, str]] = None
+        conditions_to_compare: Optional[List[Tuple[str, str]]] = None
     ) -> 'StatisticalTestConfig':
         """
         Factory method to create a manual-mode configuration.

@@ -198,7 +198,7 @@ def _process_uploaded_standards(
     except ValueError as ve:
         st.error(str(ve))
         return _fallback_standards(auto_detected_df)
-    except Exception as e:
+    except (KeyError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
         st.error(f"Error reading file: {str(e)}")
         return _fallback_standards(auto_detected_df)
 

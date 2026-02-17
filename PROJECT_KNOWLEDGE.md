@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** February 12, 2026
+**Last Updated:** February 16, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -797,7 +797,14 @@ def msdial_data_type_app(msdial_features_dict):
 
 **Target:** 26 new UI tests + all 1390 existing tests passing.
 
-#### Module 2: Quality Check (NOT STARTED)
+#### 🔧 Code Review Cleanup (IN PROGRESS — before Module 2)
+Fix all issues from the **Code Review Issues (February 16, 2026)** section below. Run full test suite after each fix.
+
+**Completed:** C1, C2, C3, H1, H2, H3, H4, H5 (all Critical + High done)
+**Next:** Start with M1 (duplicated column extraction), then M2-M6, then L1-L8.
+**Test count:** 1395 passing (removed 21 dead-code tests for deleted hash function + accessors)
+
+#### Module 2: Quality Check (NOT STARTED — blocked by code review cleanup)
 1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
 2. ⬜ Build Module 2 UI
 
@@ -1174,6 +1181,116 @@ Check these for reusable code (in `refactor/v2.0` branch):
 | `sample_datasets/generic_sample_dataset.csv` | Generic |
 | `sample_datasets/metabolomic_workbench_sample_data.csv` | Metabolomics Workbench |
 | `sample_datasets/msdial_test_dataset.csv` | MS-DIAL |
+
+---
+
+## Code Review Issues (February 16, 2026)
+
+Full code review before starting Module 2. All issues listed by priority.
+
+### Critical — ✅ ALL DONE
+
+#### C1. ✅ DataFrame hash function removed
+**Fix applied:** Removed `compute_df_hash()` entirely. The `_df_hash` parameter was prefixed with `_` (excluded from Streamlit caching) and `df` was already hashed natively by `@st.cache_data`. Removed `_df_hash` param from `run_ingestion()`, `run_normalization()`, and both call sites in `data_processing.py` and `normalization.py`.
+
+#### C2. ✅ All session state keys added to SessionState dataclass
+**Fix applied:** Added ~26 missing keys to `SessionState` dataclass organized by category (normalization UI state, standards, zero filtering preservation, sidebar state). Also added `_PRESERVE_ON_RESET` and `_WIDGET_KEYS` module-level sets. Refactored `initialize_session_state()` to loop over `fields(SessionState)` instead of manual per-key code.
+
+#### C3. ✅ `reset_data_state()` now clears all state programmatically
+**Fix applied:** `reset_data_state()` now iterates `fields(SessionState)` and resets all except `page`/`module`. Also pops `_WIDGET_KEYS` (Streamlit widget keys) to prevent stale widget state. Also fixed `reset_normalization_state()` to clear the new normalization UI keys.
+
+### High Priority — ✅ ALL DONE
+
+#### H1. ✅ Unused typed accessors deleted
+**Fix applied:** Removed 12 getter/setter methods (60 lines) and their 9 tests.
+
+#### H2. ✅ Unused cached service wrappers deleted
+**Fix applied:** Removed `clean_data()`, `filter_zeros()`, `normalize_data()` (~115 lines). Also removed unused imports (`DataCleaningService`, `CleaningResult`, `ZeroFilteringService`, `ZeroFilterConfig`, `ZeroFilteringResult`, `NormalizationService`, `NormalizationResult`, `StandardsService`, `StandardsExtractionResult`, `StandardsValidationResult`).
+
+#### H3. ✅ Type hint bug fixed
+**Fix applied:** Changed to `Optional[List[Tuple[str, str]]] = None` and added `Optional` import.
+
+#### H4. ✅ `StatisticalTestConfig` added to `models/__init__.py`
+
+#### H5. ✅ Missing exports added to `services/__init__.py`
+**Fix applied:** Added `ZeroFilteringService`, `ZeroFilterConfig`, `ZeroFilteringResult`, `NormalizationService`, `NormalizationResult`, `StandardsService`, `StandardsExtractionResult`, `StandardsValidationResult`, `StandardsProcessingResult`.
+
+### Medium Priority (START HERE)
+
+#### M1. Duplicated column extraction logic across cleaners
+**Files:** `src/app/services/data_cleaning/generic.py:149-187` and `src/app/services/data_cleaning/msdial.py:262-320`
+**Problem:** `_add_required_columns()` and `_add_intensity_columns()` are nearly identical in both files. The only difference is MS-DIAL also has `_add_optional_columns()`. This violates DRY and means bug fixes must be applied in two places.
+**Fix:** Move `_add_required_columns()` and `_add_intensity_columns()` to `BaseDataCleaner` in `base.py`. MS-DIAL can call the base versions and add its own `_add_optional_columns()`.
+
+#### M2. Duplicated step methods across cleaners
+**Files:** `generic.py:84-117` and `msdial.py:102-134`
+**Problem:** `_step_remove_invalid_rows()`, `_step_remove_duplicates()`, `_step_remove_zero_rows()` are nearly identical in GenericCleaner and MSDIALCleaner. Only the error messages differ slightly.
+**Fix:** Move to `BaseDataCleaner` with configurable error messages, or extract a shared `_counting_step()` helper.
+
+#### M3. Broad `except Exception` catches in UI layer
+**Files:** 8 occurrences across UI files:
+- `landing_page.py:64,88`
+- `file_upload.py:150`
+- `normalization.py:229,347`
+- `internal_standards.py:201`
+- `data_processing.py:411`
+- `sample_grouping.py:172`
+
+**Problem:** Catching bare `Exception` swallows unexpected errors (`TypeError`, `AttributeError`, `KeyError`) that indicate real bugs, not user input errors. These become invisible and make debugging difficult.
+**Fix:** Replace with specific exception types. For file parsing, catch `ValueError`, `KeyError`, `pd.errors.ParserError`. For UI rendering, let unexpected exceptions propagate so they're visible in the Streamlit error display.
+
+#### M4. Serialization boilerplate in cached wrappers
+**File:** `src/app/adapters/streamlit_adapter.py:411-544`
+**Problem:** Every cached method manually converts Pydantic models to dicts, passes them, then reconstructs with `ExperimentConfig(**experiment_dict)`. This is ~30 lines of boilerplate per method that exists solely because `@st.cache_data` needs hashable arguments.
+**Fix:** Define `__hash__` on `ExperimentConfig`, `NormalizationConfig`, `GradeFilterConfig`, and `QualityFilterConfig`. Then pass the objects directly — Streamlit will hash them. This eliminates `experiment_to_dict()`, `config_to_dict()`, and all the reconstruct-from-dict code.
+
+#### M5. `StreamlitAdapter` class size — reassess after H1/H2
+**File:** `src/app/adapters/streamlit_adapter.py`
+**Problem:** Was 598 lines. After H1 (accessors) and H2 (service wrappers) removal, now ~350 lines. May need splitting into `SessionStateManager` and `CachedWorkflows` as Modules 2/3 add cached wrappers.
+**Fix:** Reassess after M4 (serialization cleanup). If still >300 lines, split.
+
+#### M6. `NormalizationConfig` validation gaps
+**File:** `src/app/models/normalization.py:32-48,51-84`
+**Problem:**
+- Empty dicts pass validation: `intsta_concentrations={}` is valid even though it provides no concentrations
+- No validation that keys in `internal_standards` match `selected_classes`
+- No validation that keys in `protein_concentrations` cover all samples
+**Fix:** Add non-empty dict validation when method requires it. Add cross-field validation for key coverage.
+
+### Low Priority
+
+#### L1. `ExperimentConfig.without_samples()` inconsistent return
+**File:** `src/app/models/experiment.py:109`
+**Problem:** Returns `self` (same instance) when `samples_to_remove` is empty, but creates a new instance otherwise. Callers may not expect identity semantics to vary.
+**Fix:** Always create a new instance for consistency.
+
+#### L2. `ExperimentConfig.without_samples()` silently ignores invalid samples
+**File:** `src/app/models/experiment.py:112-122`
+**Problem:** If `samples_to_remove` contains sample names not in the experiment, they are silently ignored. This could mask bugs in callers.
+**Fix:** Add a warning or raise when removing samples that don't exist.
+
+#### L3. `st.set_page_config()` at module level prevents testing
+**File:** `src/main_app.py:20-25`
+**Problem:** `st.set_page_config()` runs at import time, which prevents importing `main_app.py` in tests. The workaround (wrapper functions in `conftest.py`) means the actual `display_app_page()` orchestration is never tested via AppTest.
+**Fix:** Move `st.set_page_config()` inside `main()` with an `if not _called` guard, or accept this as a known limitation.
+
+#### L4. No UI tests for main content area
+**Problem:** The 26 UI tests cover landing page, sidebar, and MS-DIAL data type selection, but nothing in the main content area (data processing, zero filtering, internal standards, normalization). These are the most complex UI components.
+**Fix:** Add UI tests for main content components after Module 2, when the test patterns are well-established.
+
+#### L5. ✅ `using_sample_data` and `ingestion_result` added to `SessionState` (fixed in C2)
+
+#### L6. ✅ `_msdial_override_samples` now in `SessionState` with consistent reset (fixed in C2/C3)
+
+#### L7. Cached workflow wrappers return bare tuples
+**Files:** `streamlit_adapter.py:422-472` (7-element tuple), `streamlit_adapter.py:487-544` (6-element tuple)
+**Problem:** Return types are `Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], str, bool, List[str], List[str], List[str]]`. Callers must destructure by position — easy to misorder.
+**Fix:** Return `IngestionResult` and `NormalizationWorkflowResult` directly. If `@st.cache_data` can't hash them, define `__hash__` or use `@st.cache_resource`.
+
+#### L8. `NormalizationConfig` dict keys not documented in type hints
+**File:** `src/app/models/normalization.py:23`
+**Problem:** `internal_standards: Optional[Dict[str, str]]` — type doesn't convey that keys are lipid classes and values are standard names. Similarly for other dict fields.
+**Fix:** Add type aliases: `ClassToStandard = Dict[str, str]`, `SampleToConcentration = Dict[str, float]`, etc.
 
 ---
 

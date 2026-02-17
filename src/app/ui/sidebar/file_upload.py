@@ -147,7 +147,7 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
                 st.sidebar.success("File uploaded successfully!")
                 st.session_state.raw_df = df
                 return df
-        except Exception as e:
+        except (ValueError, KeyError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
             st.sidebar.error(f"Error reading file: {e}")
             return None
 

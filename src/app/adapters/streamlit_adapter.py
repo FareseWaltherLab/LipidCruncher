@@ -4,7 +4,7 @@ Streamlit adapter layer.
 Bridge between UI and services - handles session state management and caching.
 This module contains all Streamlit-specific code that wraps the pure business logic services.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -13,10 +13,7 @@ import streamlit as st
 from ..models.experiment import ExperimentConfig
 from ..models.normalization import NormalizationConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
-from ..services.data_cleaning import DataCleaningService, CleaningResult, GradeFilterConfig, QualityFilterConfig
-from ..services.zero_filtering import ZeroFilteringService, ZeroFilterConfig, ZeroFilteringResult
-from ..services.normalization import NormalizationService, NormalizationResult
-from ..services.standards import StandardsService, StandardsExtractionResult, StandardsValidationResult
+from ..services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from ..workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig, IngestionResult
 from ..workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
 
@@ -38,6 +35,8 @@ class SessionState:
     continuation_df: Optional[pd.DataFrame] = None
     original_column_order: Optional[List[str]] = None
     column_mapping: Optional[pd.DataFrame] = None
+    pre_filter_df: Optional[pd.DataFrame] = None
+    ingestion_result: Any = None
 
     # Experiment configuration
     experiment: Optional[ExperimentConfig] = None
@@ -49,6 +48,7 @@ class SessionState:
     module: str = "Data Cleaning, Filtering, & Normalization"
     confirmed: bool = False
     grouping_complete: bool = True
+    using_sample_data: bool = False
 
     # Normalization settings
     normalization_method: str = 'None'
@@ -56,21 +56,61 @@ class SessionState:
     selected_classes: List[str] = field(default_factory=list)
     create_norm_dataset: bool = False
 
+    # Normalization UI state
+    norm_method_selection: Optional[str] = None
+    normalization_result: Any = None
+    class_standard_map: Optional[Dict[str, str]] = None
+    standard_concentrations: Optional[Dict[str, float]] = None
+    protein_df: Optional[pd.DataFrame] = None
+    protein_input_method: Optional[str] = None
+    protein_input_method_prev: Optional[str] = None
+
     # Format-specific configurations
     grade_config: Optional[GradeFilterConfig] = None
     grade_filter_mode_saved: int = 0  # 0 = default, 1 = customize
     grade_selections_saved: Dict[str, List[str]] = field(default_factory=dict)
+    last_quality_config: Any = None
 
     msdial_quality_config: Optional[QualityFilterConfig] = None
     msdial_features: Dict[str, Any] = field(default_factory=dict)
     msdial_use_normalized: bool = False
     msdial_data_type_index: int = 0  # 0 = raw, 1 = pre-normalized
     msdial_quality_level_index: int = 1  # 0 = relaxed, 1 = moderate, 2 = strict
+    msdial_sample_names: Optional[List[str]] = None
+    _msdial_override_samples: Optional[List[str]] = None
 
     # Standards settings
     original_auto_intsta_df: Optional[pd.DataFrame] = None
     preserved_intsta_df: Optional[pd.DataFrame] = None
     preserved_standards_mode: Optional[str] = None
+    custom_standards_df: Optional[pd.DataFrame] = None
+    custom_standards_mode: Optional[str] = None
+    standards_source: Optional[str] = None
+
+    # Zero filtering preservation
+    _zero_filter_format: Optional[str] = None
+    _preserved_zero_filter_detection_threshold: Optional[float] = None
+    _preserved_non_bqc_zero_threshold: Optional[float] = None
+    _preserved_bqc_zero_threshold: Optional[float] = None
+
+    # Sidebar state (Metabolomics Workbench auto-detection, column info)
+    workbench_conditions: Optional[List[str]] = None
+    workbench_samples: Optional[Dict] = None
+    sample_data_file: Optional[str] = None
+    n_intensity_cols: Optional[int] = None
+
+
+# Keys that should NOT be reset when starting a fresh analysis
+# (they control app-level routing, not data-specific state)
+_PRESERVE_ON_RESET = {'page', 'module'}
+
+# Widget keys created by Streamlit widgets (not in SessionState dataclass).
+# Must be removed on reset to prevent stale widget state.
+_WIDGET_KEYS = {
+    'manual_sample_override', 'grade_filter_mode', 'grade_selections',
+    'msdial_quality_level', 'temp_selected_classes',
+    'zero_filter_detection_threshold',
+}
 
 
 class StreamlitAdapter:
@@ -95,110 +135,28 @@ class StreamlitAdapter:
 
         Call this at the beginning of main() to ensure all required
         session state keys exist before they are accessed.
+        Derives defaults from the SessionState dataclass.
         """
         defaults = SessionState()
-
-        # Data states
-        if 'raw_df' not in st.session_state:
-            st.session_state.raw_df = defaults.raw_df
-        if 'standardized_df' not in st.session_state:
-            st.session_state.standardized_df = defaults.standardized_df
-        if 'cleaned_df' not in st.session_state:
-            st.session_state.cleaned_df = defaults.cleaned_df
-        if 'intsta_df' not in st.session_state:
-            st.session_state.intsta_df = defaults.intsta_df
-        if 'normalized_df' not in st.session_state:
-            st.session_state.normalized_df = defaults.normalized_df
-        if 'continuation_df' not in st.session_state:
-            st.session_state.continuation_df = defaults.continuation_df
-        if 'original_column_order' not in st.session_state:
-            st.session_state.original_column_order = defaults.original_column_order
-        if 'column_mapping' not in st.session_state:
-            st.session_state.column_mapping = defaults.column_mapping
-
-        # Experiment configuration
-        if 'experiment' not in st.session_state:
-            st.session_state.experiment = defaults.experiment
-        if 'format_type' not in st.session_state:
-            st.session_state.format_type = defaults.format_type
-        if 'bqc_label' not in st.session_state:
-            st.session_state.bqc_label = defaults.bqc_label
-
-        # Process control
-        if 'page' not in st.session_state:
-            st.session_state.page = defaults.page
-        if 'module' not in st.session_state:
-            st.session_state.module = defaults.module
-        if 'confirmed' not in st.session_state:
-            st.session_state.confirmed = defaults.confirmed
-        if 'grouping_complete' not in st.session_state:
-            st.session_state.grouping_complete = defaults.grouping_complete
-
-        # Normalization settings
-        if 'normalization_method' not in st.session_state:
-            st.session_state.normalization_method = defaults.normalization_method
-        if 'normalization_inputs' not in st.session_state:
-            st.session_state.normalization_inputs = defaults.normalization_inputs
-        if 'selected_classes' not in st.session_state:
-            st.session_state.selected_classes = defaults.selected_classes
-        if 'create_norm_dataset' not in st.session_state:
-            st.session_state.create_norm_dataset = defaults.create_norm_dataset
-
-        # LipidSearch grade configuration
-        if 'grade_config' not in st.session_state:
-            st.session_state.grade_config = defaults.grade_config
-        if 'grade_filter_mode_saved' not in st.session_state:
-            st.session_state.grade_filter_mode_saved = defaults.grade_filter_mode_saved
-        if 'grade_selections_saved' not in st.session_state:
-            st.session_state.grade_selections_saved = defaults.grade_selections_saved
-
-        # MS-DIAL quality configuration
-        if 'msdial_quality_config' not in st.session_state:
-            st.session_state.msdial_quality_config = defaults.msdial_quality_config
-        if 'msdial_features' not in st.session_state:
-            st.session_state.msdial_features = defaults.msdial_features
-        if 'msdial_use_normalized' not in st.session_state:
-            st.session_state.msdial_use_normalized = defaults.msdial_use_normalized
-        if 'msdial_data_type_index' not in st.session_state:
-            st.session_state.msdial_data_type_index = defaults.msdial_data_type_index
-        if 'msdial_quality_level_index' not in st.session_state:
-            st.session_state.msdial_quality_level_index = defaults.msdial_quality_level_index
-
-        # Standards settings
-        if 'original_auto_intsta_df' not in st.session_state:
-            st.session_state.original_auto_intsta_df = defaults.original_auto_intsta_df
-        if 'preserved_intsta_df' not in st.session_state:
-            st.session_state.preserved_intsta_df = defaults.preserved_intsta_df
-        if 'preserved_standards_mode' not in st.session_state:
-            st.session_state.preserved_standards_mode = defaults.preserved_standards_mode
-
-        # UI-specific state (not in SessionState dataclass)
-        if 'using_sample_data' not in st.session_state:
-            st.session_state.using_sample_data = False
-        if 'ingestion_result' not in st.session_state:
-            st.session_state.ingestion_result = None
+        for f in fields(SessionState):
+            if f.name not in st.session_state:
+                st.session_state[f.name] = getattr(defaults, f.name)
 
     @staticmethod
     def reset_data_state() -> None:
-        """Reset all data-related session state for a fresh upload."""
-        st.session_state.raw_df = None
-        st.session_state.standardized_df = None
-        st.session_state.cleaned_df = None
-        st.session_state.intsta_df = None
-        st.session_state.normalized_df = None
-        st.session_state.continuation_df = None
-        st.session_state.column_mapping = None
-        st.session_state.original_column_order = None
-        st.session_state.experiment = None
-        st.session_state.confirmed = False
-        st.session_state.grouping_complete = True
-        st.session_state.grade_config = None
-        st.session_state.msdial_quality_config = None
-        st.session_state.msdial_features = {}
-        st.session_state.original_auto_intsta_df = None
-        st.session_state.using_sample_data = False
-        st.session_state.ingestion_result = None
-        st.session_state.pop('_msdial_override_samples', None)
+        """
+        Reset all data-related session state for a fresh upload.
+
+        Resets every SessionState field to its default except page/module
+        (app-level routing). Also removes Streamlit widget keys that may
+        hold stale state from the previous dataset.
+        """
+        defaults = SessionState()
+        for f in fields(SessionState):
+            if f.name not in _PRESERVE_ON_RESET:
+                st.session_state[f.name] = getattr(defaults, f.name)
+        for key in _WIDGET_KEYS:
+            st.session_state.pop(key, None)
 
     @staticmethod
     def reset_normalization_state() -> None:
@@ -208,68 +166,13 @@ class StreamlitAdapter:
         st.session_state.selected_classes = []
         st.session_state.create_norm_dataset = False
         st.session_state.normalized_df = None
-
-    # ==================== State Accessors ====================
-
-    @staticmethod
-    def get_experiment() -> Optional[ExperimentConfig]:
-        """Get current experiment configuration."""
-        return st.session_state.get('experiment')
-
-    @staticmethod
-    def set_experiment(experiment: ExperimentConfig) -> None:
-        """Set experiment configuration."""
-        st.session_state.experiment = experiment
-
-    @staticmethod
-    def get_format_type() -> Optional[DataFormat]:
-        """Get current data format type."""
-        return st.session_state.get('format_type')
-
-    @staticmethod
-    def set_format_type(format_type: DataFormat) -> None:
-        """Set data format type."""
-        st.session_state.format_type = format_type
-
-    @staticmethod
-    def get_cleaned_df() -> Optional[pd.DataFrame]:
-        """Get cleaned DataFrame."""
-        return st.session_state.get('cleaned_df')
-
-    @staticmethod
-    def set_cleaned_df(df: pd.DataFrame) -> None:
-        """Set cleaned DataFrame."""
-        st.session_state.cleaned_df = df
-
-    @staticmethod
-    def get_intsta_df() -> Optional[pd.DataFrame]:
-        """Get internal standards DataFrame."""
-        return st.session_state.get('intsta_df')
-
-    @staticmethod
-    def set_intsta_df(df: pd.DataFrame) -> None:
-        """Set internal standards DataFrame."""
-        st.session_state.intsta_df = df
-
-    @staticmethod
-    def get_continuation_df() -> Optional[pd.DataFrame]:
-        """Get continuation DataFrame (for downstream analysis)."""
-        return st.session_state.get('continuation_df')
-
-    @staticmethod
-    def set_continuation_df(df: pd.DataFrame) -> None:
-        """Set continuation DataFrame."""
-        st.session_state.continuation_df = df
-
-    @staticmethod
-    def get_bqc_label() -> Optional[str]:
-        """Get BQC condition label."""
-        return st.session_state.get('bqc_label')
-
-    @staticmethod
-    def set_bqc_label(label: str) -> None:
-        """Set BQC condition label."""
-        st.session_state.bqc_label = label
+        st.session_state.norm_method_selection = None
+        st.session_state.normalization_result = None
+        st.session_state.class_standard_map = None
+        st.session_state.standard_concentrations = None
+        st.session_state.protein_df = None
+        st.session_state.protein_input_method = None
+        st.session_state.protein_input_method_prev = None
 
     # ==================== Service Wrappers ====================
 
@@ -289,136 +192,21 @@ class StreamlitAdapter:
         """
         return FormatDetectionService.detect_format(df)
 
-    @staticmethod
-    @st.cache_data(show_spinner="Cleaning data...")
-    def clean_data(
-        _df_hash: str,
-        df: pd.DataFrame,
-        experiment_dict: Dict[str, Any],
-        format_type: str,
-        grade_config_dict: Optional[Dict[str, Any]] = None,
-        quality_config_dict: Optional[Dict[str, Any]] = None
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
-        """
-        Cached data cleaning wrapper.
-
-        Args:
-            _df_hash: Hash of DataFrame for cache invalidation
-            df: Raw DataFrame to clean
-            experiment_dict: Serialized ExperimentConfig
-            format_type: Format type string
-            grade_config_dict: Serialized GradeFilterConfig
-            quality_config_dict: Serialized QualityFilterConfig
-
-        Returns:
-            Tuple of (cleaned_df, internal_standards_df, messages)
-        """
-        # Reconstruct objects from dicts
-        experiment = ExperimentConfig(**experiment_dict)
-        data_format = DataFormat(format_type)
-
-        grade_config = GradeFilterConfig(**grade_config_dict) if grade_config_dict else None
-        quality_config = QualityFilterConfig(**quality_config_dict) if quality_config_dict else None
-
-        result = DataCleaningService.clean_data(
-            df=df,
-            experiment=experiment,
-            data_format=data_format,
-            grade_config=grade_config,
-            quality_config=quality_config
-        )
-
-        return result.cleaned_df, result.internal_standards_df, result.filter_messages
-
-    @staticmethod
-    @st.cache_data(show_spinner="Filtering zero values...")
-    def filter_zeros(
-        _df_hash: str,
-        df: pd.DataFrame,
-        experiment_dict: Dict[str, Any],
-        bqc_label: Optional[str],
-        detection_threshold: float = 0.0,
-        bqc_threshold: float = 0.5,
-        non_bqc_threshold: float = 0.75
-    ) -> Tuple[pd.DataFrame, List[str], int, int]:
-        """
-        Cached zero filtering wrapper.
-
-        Args:
-            _df_hash: Hash of DataFrame for cache invalidation
-            df: Cleaned DataFrame to filter
-            experiment_dict: Serialized ExperimentConfig
-            bqc_label: BQC condition label
-            detection_threshold: Value threshold for "zero"
-            bqc_threshold: BQC proportion threshold
-            non_bqc_threshold: Non-BQC proportion threshold
-
-        Returns:
-            Tuple of (filtered_df, removed_species, species_before, species_after)
-        """
-        experiment = ExperimentConfig(**experiment_dict)
-        config = ZeroFilterConfig(
-            detection_threshold=detection_threshold,
-            bqc_threshold=bqc_threshold,
-            non_bqc_threshold=non_bqc_threshold
-        )
-
-        result = ZeroFilteringService.filter(df, experiment, config, bqc_label)
-
-        return (
-            result.filtered_df,
-            result.removed_species,
-            result.species_before,
-            result.species_after
-        )
-
-    @staticmethod
-    @st.cache_data(show_spinner="Normalizing data...")
-    def normalize_data(
-        _df_hash: str,
-        df: pd.DataFrame,
-        config_dict: Dict[str, Any],
-        experiment_dict: Dict[str, Any],
-        intsta_df: Optional[pd.DataFrame] = None
-    ) -> Tuple[pd.DataFrame, List[str], str]:
-        """
-        Cached normalization wrapper.
-
-        Args:
-            _df_hash: Hash of DataFrame for cache invalidation
-            df: Cleaned DataFrame to normalize
-            config_dict: Serialized NormalizationConfig
-            experiment_dict: Serialized ExperimentConfig
-            intsta_df: Internal standards DataFrame
-
-        Returns:
-            Tuple of (normalized_df, removed_standards, method_applied)
-        """
-        config = NormalizationConfig(**config_dict)
-        experiment = ExperimentConfig(**experiment_dict)
-
-        result = NormalizationService.normalize(
-            df=df,
-            config=config,
-            experiment=experiment,
-            intsta_df=intsta_df
-        )
-
-        return result.normalized_df, result.removed_standards, result.method_applied
-
     # ==================== Cached Workflow Wrappers ====================
 
     @staticmethod
-    @st.cache_data(show_spinner="Processing data...")
+    @st.cache_data(
+        show_spinner="Processing data...",
+        hash_funcs={ExperimentConfig: hash, GradeFilterConfig: hash, QualityFilterConfig: hash},
+    )
     def run_ingestion(
-        _df_hash: str,
         df: pd.DataFrame,
-        experiment_dict: Dict[str, Any],
-        format_type: str,
+        experiment: ExperimentConfig,
+        data_format: Optional[DataFormat] = None,
         bqc_label: Optional[str] = None,
         apply_zero_filter: bool = False,
-        grade_config_dict: Optional[Dict[str, Any]] = None,
-        quality_config_dict: Optional[Dict[str, Any]] = None
+        grade_config: Optional[GradeFilterConfig] = None,
+        quality_config: Optional[QualityFilterConfig] = None
     ) -> Tuple[
         Optional[pd.DataFrame],  # cleaned_df
         Optional[pd.DataFrame],  # internal_standards_df
@@ -432,24 +220,17 @@ class StreamlitAdapter:
         Cached data ingestion workflow wrapper.
 
         Args:
-            _df_hash: Hash of DataFrame for cache invalidation
             df: Raw DataFrame to process
-            experiment_dict: Serialized ExperimentConfig
-            format_type: Format type string
+            experiment: Experiment configuration
+            data_format: Data format enum
             bqc_label: BQC condition label
             apply_zero_filter: Whether to apply zero filtering
-            grade_config_dict: Serialized GradeFilterConfig (LipidSearch only)
-            quality_config_dict: Serialized QualityFilterConfig (MS-DIAL only)
+            grade_config: Grade filter config (LipidSearch only)
+            quality_config: Quality filter config (MS-DIAL only)
 
         Returns:
             Tuple of (cleaned_df, intsta_df, format, is_valid, errors, warnings, messages)
         """
-        # Reconstruct objects from dicts
-        experiment = ExperimentConfig(**experiment_dict)
-        data_format = DataFormat(format_type) if format_type else None
-        grade_config = GradeFilterConfig(**grade_config_dict) if grade_config_dict else None
-        quality_config = QualityFilterConfig(**quality_config_dict) if quality_config_dict else None
-
         config = IngestionConfig(
             experiment=experiment,
             data_format=data_format,
@@ -472,17 +253,15 @@ class StreamlitAdapter:
         )
 
     @staticmethod
-    @st.cache_data(show_spinner="Normalizing data...")
+    @st.cache_data(
+        show_spinner="Normalizing data...",
+        hash_funcs={ExperimentConfig: hash, NormalizationConfig: hash},
+    )
     def run_normalization(
-        _df_hash: str,
         df: pd.DataFrame,
-        experiment_dict: Dict[str, Any],
-        method: str,
-        selected_classes: List[str],
-        format_type: str,
-        internal_standards: Optional[Dict[str, str]] = None,
-        intsta_concentrations: Optional[Dict[str, float]] = None,
-        protein_concentrations: Optional[Dict[str, float]] = None,
+        experiment: ExperimentConfig,
+        normalization: NormalizationConfig,
+        data_format: DataFormat = DataFormat.GENERIC,
         intsta_df: Optional[pd.DataFrame] = None
     ) -> Tuple[
         Optional[pd.DataFrame],  # normalized_df
@@ -496,35 +275,18 @@ class StreamlitAdapter:
         Cached normalization workflow wrapper.
 
         Args:
-            _df_hash: Hash of DataFrame for cache invalidation
             df: Cleaned DataFrame to normalize
-            experiment_dict: Serialized ExperimentConfig
-            method: Normalization method
-            selected_classes: Classes to normalize
-            format_type: Data format string
-            internal_standards: Class -> standard mapping
-            intsta_concentrations: Standard -> concentration mapping
-            protein_concentrations: Sample -> protein concentration mapping
+            experiment: Experiment configuration
+            normalization: Normalization configuration
+            data_format: Data format enum
             intsta_df: Internal standards DataFrame
 
         Returns:
             Tuple of (normalized_df, success, method_applied, removed_standards, errors, warnings)
         """
-        # Reconstruct objects from dicts
-        experiment = ExperimentConfig(**experiment_dict)
-        data_format = DataFormat(format_type) if format_type else DataFormat.GENERIC
-
-        norm_config = NormalizationConfig(
-            method=method,
-            selected_classes=selected_classes,
-            internal_standards=internal_standards,
-            intsta_concentrations=intsta_concentrations,
-            protein_concentrations=protein_concentrations
-        )
-
         workflow_config = NormalizationWorkflowConfig(
             experiment=experiment,
-            normalization=norm_config,
+            normalization=normalization,
             data_format=data_format
         )
 
@@ -542,57 +304,3 @@ class StreamlitAdapter:
             result.validation_errors,
             result.validation_warnings,
         )
-
-    # ==================== Utility Methods ====================
-
-    @staticmethod
-    def compute_df_hash(df: pd.DataFrame) -> str:
-        """
-        Compute a hash for a DataFrame for cache invalidation.
-
-        Args:
-            df: DataFrame to hash
-
-        Returns:
-            String hash of the DataFrame
-        """
-        import hashlib
-        # Use shape + column names + first/last values for quick hash
-        content = f"{df.shape}|{list(df.columns)}|{df.iloc[0].tolist() if len(df) > 0 else []}|{df.iloc[-1].tolist() if len(df) > 0 else []}"
-        return hashlib.md5(content.encode()).hexdigest()
-
-    @staticmethod
-    def experiment_to_dict(experiment: ExperimentConfig) -> Dict[str, Any]:
-        """
-        Convert ExperimentConfig to dict for caching.
-
-        Args:
-            experiment: ExperimentConfig instance
-
-        Returns:
-            Dict representation
-        """
-        return {
-            'n_conditions': experiment.n_conditions,
-            'conditions_list': experiment.conditions_list,
-            'number_of_samples_list': experiment.number_of_samples_list,
-        }
-
-    @staticmethod
-    def config_to_dict(config: Any) -> Optional[Dict[str, Any]]:
-        """
-        Convert a config object to dict for caching.
-
-        Args:
-            config: Config instance (dataclass or regular class) or None
-
-        Returns:
-            Dict representation or None
-        """
-        if config is None:
-            return None
-        from dataclasses import asdict, is_dataclass
-        if is_dataclass(config):
-            return asdict(config)
-        # For regular classes, use vars() to get instance attributes
-        return vars(config).copy()

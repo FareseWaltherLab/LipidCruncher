@@ -363,13 +363,7 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
     Returns:
         IngestionResult if successful, None if error or invalid
     """
-    # Prepare cache parameters
-    df_hash = StreamlitAdapter.compute_df_hash(df)
-    experiment_dict = StreamlitAdapter.experiment_to_dict(experiment)
     format_enum = FORMAT_MAP.get(data_format)
-    format_type_value = format_enum.value if format_enum else None
-    grade_config_dict_for_cache = StreamlitAdapter.config_to_dict(grade_config)
-    quality_config_dict_for_cache = StreamlitAdapter.config_to_dict(quality_config)
 
     # Capture previous config BEFORE running workflow (to detect config changes)
     prev_quality_config = st.session_state.get('last_quality_config')
@@ -379,14 +373,13 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
             cleaned_df, intsta_df, detected_format,
             is_valid, validation_errors, validation_warnings, cleaning_messages,
         ) = StreamlitAdapter.run_ingestion(
-            _df_hash=df_hash,
             df=df,
-            experiment_dict=experiment_dict,
-            format_type=format_type_value,
+            experiment=experiment,
+            data_format=format_enum,
             bqc_label=bqc_label,
             apply_zero_filter=False,
-            grade_config_dict=grade_config_dict_for_cache,
-            quality_config_dict=quality_config_dict_for_cache,
+            grade_config=grade_config,
+            quality_config=quality_config,
         )
 
         result = IngestionResult(
@@ -401,14 +394,14 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
 
         st.session_state.ingestion_result = result
         st.session_state.pre_filter_df = result.cleaned_df
-        if quality_config_dict is not None:
-            st.session_state.last_quality_config = quality_config_dict.copy()
+        if quality_config is not None:
+            st.session_state.last_quality_config = quality_config
 
         if result.is_valid:
             st.session_state.cleaned_df = result.cleaned_df
             st.session_state.intsta_df = result.internal_standards_df
             st.session_state.continuation_df = result.cleaned_df
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         st.error(f"Processing error: {e}")
         return None
 
@@ -422,12 +415,8 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
         st.warning(warning)
 
     # MS-DIAL: rerun if quality config changed so expander shows updated results
-    if data_format == 'MS-DIAL' and quality_config_dict:
-        config_changed = not (
-            prev_quality_config
-            and prev_quality_config.get('total_score_threshold') == quality_config_dict.get('total_score_threshold')
-            and prev_quality_config.get('require_msms') == quality_config_dict.get('require_msms')
-        )
+    if data_format == 'MS-DIAL' and quality_config is not None:
+        config_changed = (prev_quality_config != quality_config)
         if config_changed:
             st.rerun()
 

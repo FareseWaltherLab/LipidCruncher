@@ -61,7 +61,7 @@ def load_module_image(filename: str, caption: str = None) -> bool:
                 images[0].save(img_byte_arr, format='PNG')
                 st.image(img_byte_arr.getvalue(), caption=caption, use_container_width=True)
                 return True
-    except Exception as e:
+    except (OSError, ValueError) as e:
         st.warning(f"Could not load {filename}: {str(e)}")
     return False
 
@@ -85,7 +85,7 @@ def display_logo(centered: bool = False):
                 st.image(logo, width=720)
         else:
             st.header("LipidCruncher")
-    except Exception:
+    except (OSError, ValueError):
         st.header("LipidCruncher")
 
 

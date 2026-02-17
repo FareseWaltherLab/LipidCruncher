@@ -18,11 +18,22 @@ class NormalizationConfig(BaseModel):
         intsta_concentrations: Concentration of each internal standard (in µM or similar)
         protein_concentrations: Protein concentration for each sample (for BCA normalization)
     """
+    model_config = {"frozen": True}
+
     method: Literal['none', 'internal_standard', 'protein', 'both'] = 'none'
     selected_classes: List[str] = []
     internal_standards: Optional[Dict[str, str]] = None
     intsta_concentrations: Optional[Dict[str, float]] = None
     protein_concentrations: Optional[Dict[str, float]] = None
+
+    def __hash__(self) -> int:
+        return hash((
+            self.method,
+            tuple(self.selected_classes),
+            tuple(sorted(self.internal_standards.items())) if self.internal_standards else None,
+            tuple(sorted(self.intsta_concentrations.items())) if self.intsta_concentrations else None,
+            tuple(sorted(self.protein_concentrations.items())) if self.protein_concentrations else None,
+        ))
 
     @field_validator('intsta_concentrations')
     @classmethod
