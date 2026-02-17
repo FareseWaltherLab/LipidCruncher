@@ -229,7 +229,7 @@ def display_manage_internal_standards(
     """
     active_standards_df = pd.DataFrame()
 
-    with st.expander("Manage Internal Standards", expanded=False):
+    with st.expander("⚙️ Manage Internal Standards", expanded=False):
         st.markdown("""
 Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
 `ISTD`/`IS` markers in class names, and SPLASH LIPIDOMIX® patterns.
