@@ -914,6 +914,8 @@ Test classes (13 total):
 - `TestTypeCoercion` (3) — string numbers, int concentrations, mixed types
 - `TestImmutability` (6) — all methods preserve input data
 
+**Test depth assessment:** 123 workflow tests are comparable to Data Ingestion (137) and better than Normalization (98). The workflow is a thin delegation layer — deep computation is covered by the 189 QC Service tests. Multi-step pipeline and error handling gaps vs the service are expected (service tests the raw computation; workflow tests the orchestration). Remaining coverage gaps will be filled by integration tests in Step 7.
+
 **Step 4: Update `StreamlitAdapter` — Session State (NEXT)**
 **File:** `src/app/adapters/streamlit_adapter.py`
 
