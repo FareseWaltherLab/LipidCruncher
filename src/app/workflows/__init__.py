@@ -5,6 +5,10 @@ from .normalization import (
     NormalizationWorkflowConfig,
     NormalizationWorkflowResult
 )
+from .quality_check import (
+    QualityCheckWorkflow,
+    QualityCheckConfig,
+)
 
 __all__ = [
     'DataIngestionWorkflow',
@@ -13,4 +17,6 @@ __all__ = [
     'NormalizationWorkflow',
     'NormalizationWorkflowConfig',
     'NormalizationWorkflowResult',
+    'QualityCheckWorkflow',
+    'QualityCheckConfig',
 ]

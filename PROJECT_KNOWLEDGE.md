@@ -875,28 +875,46 @@ Test classes (14 total):
 - `TestTypeCoercion` (7) — string numbers, int/float/int64/float32/object dtypes across methods
 - `TestMultiStepPipelines` (6) — full QC pipeline (no BQC), full QC pipeline (with BQC), PCA→remove→PCA, BQC filter→remove→correlation, retention time in pipeline, box plot after removal
 
-**Step 3: Create `QualityCheckWorkflow` (NEXT)**
-**File:** `src/app/workflows/quality_check.py`
+**Step 3: ✅ Create `QualityCheckWorkflow` + Unit Tests**
+**Files:** `src/app/workflows/quality_check.py`, `tests/unit/test_quality_check_workflow.py`
+**Result:** 123 tests, all passing
 
-```python
-@dataclass
-class QualityCheckConfig:
-    bqc_label: Optional[str]
-    format_type: str
-    cov_threshold: int = 30
+Unlike DataIngestionWorkflow/NormalizationWorkflow, this workflow does NOT have a single `run()` method. Quality check is interactive — users make decisions between steps (BQC filtering, PCA sample removal). Each method is called individually from the UI layer.
 
-class QualityCheckWorkflow:
-    @staticmethod
-    def run_box_plots(df, experiment) -> BoxPlotResult
-    @staticmethod
-    def run_bqc_assessment(df, experiment, bqc_label, cov_threshold) -> Optional[BQCResult]
-    @staticmethod
-    def run_correlation(df, experiment, condition_index, sample_type) -> CorrelationResult
-    @staticmethod
-    def run_pca(df, experiment) -> PCAResult
-```
+**Config:**
+- `QualityCheckConfig` — `bqc_label`, `format_type` (DataFormat), `cov_threshold` (default 30.0)
 
-**Step 4: Update `StreamlitAdapter` — Session State**
+**Public Methods:**
+- `validate_inputs(df, experiment)` → List[str] (validation errors)
+- `run_box_plots(df, experiment)` → BoxPlotResult
+- `run_bqc_assessment(df, experiment, config)` → Optional[BQCPrepareResult] (None if no BQC)
+- `apply_bqc_filter(df, high_cov_lipids, lipids_to_keep)` → BQCFilterResult
+- `check_retention_time_availability(df, config)` → RetentionTimeDataResult (format-aware)
+- `get_eligible_correlation_conditions(experiment)` → List[str]
+- `run_correlation(df, experiment, condition, bqc_label)` → CorrelationResult
+- `run_all_correlations(df, experiment, bqc_label)` → Dict[str, CorrelationResult]
+- `run_pca(df, experiment)` → PCAResult
+- `remove_samples(df, experiment, samples_to_remove)` → SampleRemovalResult
+- `run_non_interactive(df, experiment, config)` → Dict (all QC steps without user interaction)
+
+Test classes (13 total):
+- `TestQualityCheckConfig` (3) — defaults, custom values, all format types
+- `TestValidateInputs` (12) — valid, None/empty df, missing columns, no matching samples, boundary
+- `TestRunBoxPlots` (9) — return type, shape, samples, missing values, zeros, errors, large dataset
+- `TestRunBQCAssessment` (11) — None when no BQC, valid result, samples, cov/mean columns, threshold, immutability
+- `TestApplyBQCFilter` (9) — remove/keep lipids, empty list, computed properties, sorted, index reset
+- `TestCheckRetentionTimeAvailability` (7) — Generic/MW unavailable, LS/MSDIAL with/without columns, class frequency
+- `TestGetEligibleCorrelationConditions` (4) — all eligible, none eligible, mixed, large
+- `TestRunCorrelation` (10) — return type, matrix shape, bio/tech thresholds, samples, diagonal, range, errors
+- `TestRunAllCorrelations` (6) — dict of results, skips single replicate, empty, bqc passthrough, three conditions
+- `TestRunPCA` (8) — return type, shape, columns, labels, samples, conditions, errors, large
+- `TestRemoveSamples` (9) — return type, single/multiple removal, updated experiment/df, errors, immutability
+- `TestRunNonInteractive` (12) — all keys, populated results, BQC with/without, RT formats, validation errors, large
+- `TestEdgeCases` (15) — single lipid, all zeros, NaN, special chars, min samples, identical, multi-step pipelines
+- `TestTypeCoercion` (3) — string numbers, int concentrations, mixed types
+- `TestImmutability` (6) — all methods preserve input data
+
+**Step 4: Update `StreamlitAdapter` — Session State (NEXT)**
 **File:** `src/app/adapters/streamlit_adapter.py`
 
 Add Module 2 session state keys to `SessionState` dataclass:
