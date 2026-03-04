@@ -855,24 +855,27 @@ All computation reimplemented inline (no legacy module imports) to avoid transit
 - `lp.PCAAnalysis.plot_pca()`
 - `lp.RetentionTime.plot_single_retention()`, `plot_multi_retention()`
 
-**Step 2: Write Unit Tests for QualityCheckService (NEXT)**
+**Step 2: ✅ Write Unit Tests for QualityCheckService (`3c1795b`)**
 **File:** `tests/unit/test_quality_check_service.py`
-**Target:** ~100+ tests
+**Result:** 189 tests, all passing
 
-Test classes:
-- `TestPrepareBoxPlotData` — mean area extraction, missing values %, edge cases
-- `TestCoVCalculation` — CoV formula, mean calculation, edge cases (zeros, single value, None)
-- `TestPrepareBQCData` — CoV/mean computation, high-CoV identification, reliability %
-- `TestFilterByBQC` — keep none, keep some, keep all, empty high-CoV list
-- `TestRetentionTimeAvailability` — columns present/absent, class listing
-- `TestCorrelationEligibleConditions` — multi-replicate filtering
-- `TestComputeCorrelation` — biological vs technical thresholds, invalid conditions
-- `TestComputePCA` — standard case, condition mapping, <2 samples error
-- `TestRemoveSamples` — remove one/multiple, column renaming, immutability, <2 remaining error
-- `TestValidation` — all private validation methods
-- `TestEdgeCases` — empty DataFrames, NaN data, all zeros
+Test classes (14 total):
+- `TestCoVCalculation` (13) — formula verification, boundary (single/empty/zeros/negative/mixed sign), input types (numpy, pandas, float)
+- `TestMeanCalculation` (9) — formula, zeros, input types, return type
+- `TestPrepareBoxPlotData` (13) — structure, missing values %, partial columns, errors, immutability
+- `TestPrepareBQCData` (27) — index/samples, CoV/mean/log10, reliability %, high-CoV identification, boundary (first condition, threshold boundary, many BQC samples), row/column preservation, errors
+- `TestFilterByBQC` (18) — keep none/some/all, computed properties, ClassKey sorting, index reset, edge cases (nonexistent lipid, no ClassKey, duplicates, keep list extras, all removed, order, data preservation)
+- `TestRetentionTimeAvailability` (8) — column presence/absence, class frequency sorting, no ClassKey
+- `TestCorrelationEligibleConditions` (8) — multi/single/mixed replicates, exactly-2 boundary, three conditions, many varied
+- `TestComputeCorrelation` (21) — matrix shape/symmetry/diagonal, bio vs tech thresholds, value range [-1,1], anticorrelation, three conditions, errors, immutability, zeros
+- `TestComputePCA` (15) — shape, columns, labels, variance explained, conditions mapping, partial samples, errors, boundary (2 samples)
+- `TestRemoveSamples` (19) — single/multiple removal, column renaming, experiment update, condition drop, errors, boundary (N-2), nonexistent samples, column count, three conditions, cross-condition renaming
+- `TestValidation` (14) — all 5 private validators (DataFrame, concentration columns, BQC label, condition, CoV threshold)
+- `TestEdgeCases` (14) — NaN, large dataset, identical samples, constant values, single lipid, special characters, pipeline flows
+- `TestTypeCoercion` (7) — string numbers, int/float/int64/float32/object dtypes across methods
+- `TestMultiStepPipelines` (6) — full QC pipeline (no BQC), full QC pipeline (with BQC), PCA→remove→PCA, BQC filter→remove→correlation, retention time in pipeline, box plot after removal
 
-**Step 3: Create `QualityCheckWorkflow`**
+**Step 3: Create `QualityCheckWorkflow` (NEXT)**
 **File:** `src/app/workflows/quality_check.py`
 
 ```python
