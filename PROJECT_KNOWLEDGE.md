@@ -427,7 +427,7 @@ Workflows and UI implemented:
 
 Upgraded to Streamlit 1.50.0, removed `safe_rerun()` wrappers, fixed deprecated `use_column_width` parameter.
 
-**Phase B: Add UI Tests (IN PROGRESS)**
+**Phase B: Add UI Tests ✅ (COMPLETE — 26/26 tests passing)**
 
 **Approach:** `AppTest.from_function()` with focused wrapper functions that import UI components directly (never import `main_app.py` — it has `st.set_page_config()` at module level). Pre-populate session state for data-dependent tests.
 
@@ -797,16 +797,162 @@ def msdial_data_type_app(msdial_features_dict):
 
 **Target:** 26 new UI tests + all 1390 existing tests passing.
 
-#### 🔧 Code Review Cleanup (IN PROGRESS — before Module 2)
-Fix all issues from the **Code Review Issues (February 16, 2026)** section below. Run full test suite after each fix.
-
-**Completed:** C1-C3, H1-H5, M1-M6 (all Critical + High + Medium done)
-**Remaining:** L1-L4, L7-L8 (Low priority — L5/L6 already fixed in C2/C3)
+#### ✅ Code Review Cleanup (COMPLETE — all Critical + High + Medium fixed)
+All issues from the **Code Review Issues (February 16, 2026)** section below are fixed except low-priority L1-L4, L7-L8 (deferred).
 **Test count:** 1400 passing
 
-#### Module 2: Quality Check (NOT STARTED — code review cleanup done, ready to start)
-1. ⬜ Extract `QualityCheckWorkflow` — box plots, BQC analysis, outlier detection
-2. ⬜ Build Module 2 UI
+#### Module 2: Quality Check (IN PROGRESS)
+
+**Reference:** Old app `old_main_app.py` lines 1619-2403 has the full working Module 2.
+
+**Scope — 5 sections (all in expanders):**
+1. **Box Plots** — Missing values distribution + concentration box plots (always shown)
+2. **BQC Quality Assessment** — CoV analysis with filtering (only if BQC samples exist)
+3. **Retention Time Plots** — Mass vs retention time (LipidSearch 5.0 AND MS-DIAL, if BaseRt+CalcMass columns exist)
+4. **Pairwise Correlation** — Correlation heatmaps per condition
+5. **PCA Analysis** — PCA plot with confidence ellipses + sample removal
+
+**NOT in scope:** Module 3 analysis features (bar/pie charts, volcano plots, heatmaps, etc.)
+
+##### Implementation Plan
+
+**Step 1: ✅ Create `QualityCheckService` — Pure Business Logic (NO Streamlit) (`05d751a`)**
+**File:** `src/app/services/quality_check.py`
+
+All computation reimplemented inline (no legacy module imports) to avoid transitive Streamlit imports.
+
+**Result Dataclasses:**
+- `BoxPlotResult` — `mean_area_df`, `missing_values_percent`, `available_samples`
+- `BQCPrepareResult` — `prepared_df` (with cov/mean cols), `bqc_sample_index`, `bqc_samples`, `reliable_data_percent`, `high_cov_lipids`, `high_cov_details`
+- `BQCFilterResult` — `filtered_df`, `removed_lipids`, `kept_despite_high_cov`, `lipids_before`, `lipids_after` + computed `removed_count`/`removed_percentage`
+- `RetentionTimeDataResult` — `available` (bool), `lipid_classes`
+- `CorrelationResult` — `condition`, `correlation_df`, `v_min`, `threshold`, `sample_type`, `condition_samples`
+- `PCAResult` — `pc_df` (PC1/PC2), `pc_labels`, `available_samples`, `conditions`
+- `SampleRemovalResult` — `updated_df`, `updated_experiment`, `removed_samples`, `samples_before`, `samples_after`
+
+**Public Methods:**
+- `prepare_box_plot_data(df, experiment)` → BoxPlotResult
+- `prepare_bqc_data(df, experiment, bqc_label, cov_threshold=30)` → BQCPrepareResult
+- `filter_by_bqc(df, high_cov_lipids, lipids_to_keep=None)` → BQCFilterResult
+- `check_retention_time_availability(df)` → RetentionTimeDataResult
+- `get_correlation_eligible_conditions(experiment)` → List[str]
+- `compute_correlation(df, experiment, condition, bqc_label=None)` → CorrelationResult
+- `compute_pca(df, experiment)` → PCAResult
+- `remove_samples(df, experiment, samples_to_remove)` → SampleRemovalResult
+
+**Also public (reusable computation):**
+- `calculate_coefficient_of_variation(numbers)` → Optional[float]
+- `calculate_mean_including_zeros(numbers)` → Optional[float]
+
+**Two-step interaction patterns:**
+- BQC: `prepare_bqc_data()` → UI shows scatter plot + multiselect → `filter_by_bqc()`
+- PCA: `compute_pca()` → UI shows plot + multiselect → `remove_samples()`
+
+**Plot rendering stays in legacy modules** — called directly from UI layer:
+- `lp.BoxPlot.plot_missing_values()`, `plot_box_plot()`
+- `lp.BQCQualityCheck.create_cov_scatter_plot_with_threshold()`
+- `lp.Correlation.render_correlation_plot()`
+- `lp.PCAAnalysis.plot_pca()`
+- `lp.RetentionTime.plot_single_retention()`, `plot_multi_retention()`
+
+**Step 2: Write Unit Tests for QualityCheckService (NEXT)**
+**File:** `tests/unit/test_quality_check_service.py`
+**Target:** ~100+ tests
+
+Test classes:
+- `TestPrepareBoxPlotData` — mean area extraction, missing values %, edge cases
+- `TestCoVCalculation` — CoV formula, mean calculation, edge cases (zeros, single value, None)
+- `TestPrepareBQCData` — CoV/mean computation, high-CoV identification, reliability %
+- `TestFilterByBQC` — keep none, keep some, keep all, empty high-CoV list
+- `TestRetentionTimeAvailability` — columns present/absent, class listing
+- `TestCorrelationEligibleConditions` — multi-replicate filtering
+- `TestComputeCorrelation` — biological vs technical thresholds, invalid conditions
+- `TestComputePCA` — standard case, condition mapping, <2 samples error
+- `TestRemoveSamples` — remove one/multiple, column renaming, immutability, <2 remaining error
+- `TestValidation` — all private validation methods
+- `TestEdgeCases` — empty DataFrames, NaN data, all zeros
+
+**Step 3: Create `QualityCheckWorkflow`**
+**File:** `src/app/workflows/quality_check.py`
+
+```python
+@dataclass
+class QualityCheckConfig:
+    bqc_label: Optional[str]
+    format_type: str
+    cov_threshold: int = 30
+
+class QualityCheckWorkflow:
+    @staticmethod
+    def run_box_plots(df, experiment) -> BoxPlotResult
+    @staticmethod
+    def run_bqc_assessment(df, experiment, bqc_label, cov_threshold) -> Optional[BQCResult]
+    @staticmethod
+    def run_correlation(df, experiment, condition_index, sample_type) -> CorrelationResult
+    @staticmethod
+    def run_pca(df, experiment) -> PCAResult
+```
+
+**Step 4: Update `StreamlitAdapter` — Session State**
+**File:** `src/app/adapters/streamlit_adapter.py`
+
+Add Module 2 session state keys to `SessionState` dataclass:
+- `qc_continuation_df`: DataFrame or None — QC working copy (may have samples removed)
+- `qc_bqc_plot`: figure or None
+- `qc_cov_threshold`: int = 30
+- `qc_correlation_plots`: Dict = {}
+- `qc_pca_plot`: figure or None
+- `qc_samples_removed`: List[str] = []
+
+**Step 5: Build Module 2 UI**
+**File:** `src/app/ui/main_content/quality_check.py`
+
+```python
+def display_quality_check_module(continuation_df, experiment, bqc_label, format_type):
+    st.subheader("Quality Check and Anomaly Detection Module")
+    display_box_plots(continuation_df, experiment)                    # Always
+    continuation_df = display_bqc_assessment(bqc_label, continuation_df, experiment)  # If BQC
+    if format_type == 'LipidSearch 5.0':
+        display_retention_time_plots(continuation_df)                # LipidSearch only
+    display_correlation_analysis(continuation_df, experiment)         # Always
+    continuation_df = display_pca_analysis(continuation_df, experiment)  # Always
+    return continuation_df
+```
+
+Each function: `st.expander()` → educational markdown → plots → download buttons (SVG + CSV).
+
+**Also create:** `src/app/ui/download_utils.py` for reusable `plotly_svg_download_button()` and `matplotlib_svg_download_button()`.
+
+**Step 6: Wire Module 2 into `main_app.py`**
+Add module transition: "Next: Quality Check & Analysis" button → route to `display_quality_check_module()`.
+
+**Step 7: Integration Tests**
+**File:** `tests/integration/test_module2_pipeline.py`
+**Target:** ~50+ tests — full QC pipeline for each format, BQC with/without, CoV filtering, PCA sample removal, edge cases.
+
+##### Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `src/app/services/quality_check.py` | CREATE |
+| `src/app/workflows/quality_check.py` | CREATE |
+| `src/app/ui/main_content/quality_check.py` | CREATE |
+| `src/app/ui/download_utils.py` | CREATE |
+| `src/app/adapters/streamlit_adapter.py` | MODIFY (add QC session state) |
+| `src/app/services/__init__.py` | MODIFY (add exports) |
+| `src/main_app.py` | MODIFY (add module routing) |
+| `tests/unit/test_quality_check_service.py` | CREATE |
+| `tests/integration/test_module2_pipeline.py` | CREATE |
+
+##### Legacy Modules to Reuse (NOT rewrite)
+
+| Module | Path | Used For |
+|--------|------|----------|
+| `BoxPlot` | `src/lipidomics/box_plot.py` | Missing values bar chart, box plots |
+| `BQCQualityCheck` | `src/lipidomics/bqc_check.py` | CoV calculations and scatter plots |
+| `Correlation` | `src/lipidomics/correlation_heatmap.py` | Correlation heatmaps |
+| `PCAAnalysis` | `src/lipidomics/pca.py` | PCA computation and plotting |
+| `RetentionTime` | `src/lipidomics/retention_time_plot.py` | Retention time plots (LipidSearch only) |
 
 #### Module 3: Visualize and Analyze (NOT STARTED)
 1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps
