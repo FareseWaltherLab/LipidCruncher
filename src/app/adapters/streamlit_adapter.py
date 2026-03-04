@@ -99,6 +99,14 @@ class SessionState:
     sample_data_file: Optional[str] = None
     n_intensity_cols: Optional[int] = None
 
+    # Quality Check (Module 2)
+    qc_continuation_df: Optional[pd.DataFrame] = None
+    qc_bqc_plot: Any = None
+    qc_cov_threshold: int = 30
+    qc_correlation_plots: Dict[str, Any] = field(default_factory=dict)
+    qc_pca_plot: Any = None
+    qc_samples_removed: List[str] = field(default_factory=list)
+
 
 # Keys that should NOT be reset when starting a fresh analysis
 # (they control app-level routing, not data-specific state)
