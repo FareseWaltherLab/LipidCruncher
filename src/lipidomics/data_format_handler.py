@@ -786,14 +786,14 @@ class DataFormatHandler:
         })
 
         # Store in session state for display
-        if 'column_mapping' not in st.session_state:
+        if st.session_state.get('column_mapping') is None:
             st.session_state.column_mapping = mapping_df
 
         # Calculate the actual number of intensity columns
         n_intensity_cols = len(original_cols) - intensity_start_idx
 
         # Store original number of intensity columns for later validation
-        if 'n_intensity_cols' not in st.session_state:
+        if st.session_state.get('n_intensity_cols') is None:
             st.session_state.n_intensity_cols = n_intensity_cols
 
         # Rename columns
