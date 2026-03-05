@@ -244,6 +244,9 @@ src/app/ui/
 | DataIngestionWorkflow | ✅ Done | 125 tests | `b077cb1` |
 | NormalizationWorkflow | ✅ Done | 98 tests | `341ba71` |
 | **Module 1 UI** | ✅ Done | - | `4a428fd` |
+| QualityCheckService | ✅ Done | 189 tests | `05d751a` |
+| QualityCheckWorkflow | ✅ Done | 123 tests | `7c24e30` |
+| **Module 2 UI** | ✅ Done | - | `9b111cd` |
 
 **Created Files:**
 - `src/app/adapters/streamlit_adapter.py` — Session state management and caching wrappers
@@ -801,7 +804,7 @@ def msdial_data_type_app(msdial_features_dict):
 All issues from the **Code Review Issues (February 16, 2026)** section below are fixed except low-priority L1-L4, L7-L8 (deferred).
 **Test count:** 1400 passing
 
-#### Module 2: Quality Check (IN PROGRESS)
+#### Module 2: Quality Check (UI COMPLETE — Integration Tests Next)
 
 **Reference:** Old app `old_main_app.py` lines 1619-2403 has the full working Module 2.
 
@@ -929,38 +932,39 @@ Added 6 QC session state keys to `SessionState` dataclass:
 
 Automatically handled by existing `initialize_session_state()` and `reset_data_state()` (both iterate `fields(SessionState)`).
 
-**Step 5: Build Module 2 UI + Wire into main_app.py (NEXT)**
+**Step 5: ✅ Build Module 2 UI + Wire into main_app.py (`9b111cd`)**
 
-Two files to create, three to modify. Step 6 (module routing) is merged into this step.
+Two files created, three modified. Step 6 (module routing) merged into this step.
 
-**File 1: `src/app/ui/download_utils.py`** (~50 lines)
-Reusable download helpers extracted from `old_main_app.py` lines 2990-3055:
-- `plotly_svg_download_button(fig, filename, key=None)` — Plotly figure → SVG download button
-- `matplotlib_svg_download_button(fig, filename, key=None)` — Matplotlib figure → SVG download button
-- `convert_df(df)` — DataFrame → CSV bytes
-- `csv_download_button(df, filename, key=None)` — DataFrame → CSV download button
-
-**File 2: `src/app/ui/main_content/quality_check.py`** (~400 lines)
-
-Entry point:
-```python
-def display_quality_check_module(continuation_df, experiment, bqc_label, format_type):
-    → returns (qc_df, updated_experiment)
-```
-
-5 private section functions:
+**Files Created:**
+- `src/app/ui/download_utils.py` (82 lines) — Reusable download helpers:
+  - `plotly_svg_download_button(fig, filename, key)` — Plotly figure → SVG download
+  - `matplotlib_svg_download_button(fig, filename, key)` — Matplotlib figure → SVG download
+  - `convert_df(df)` — DataFrame → CSV bytes
+  - `csv_download_button(df, filename, key)` — DataFrame → CSV download
+- `src/app/ui/main_content/quality_check.py` (596 lines) — Full QC UI with 5 expander sections:
 
 | Function | Expander Title | Modifies Data? | Plot Lib |
 |----------|---------------|----------------|----------|
 | `_display_box_plots(df, experiment)` | "View Distributions of AUC: Scan Data & Detect Atypical Patterns" | No | Plotly (lp.BoxPlot) |
 | `_display_bqc_assessment(df, experiment, bqc_label)` | "Quality Check Using BQC Samples" | Yes (filters lipids) | Plotly (lp.BQCQualityCheck) |
-| `_display_retention_time_plots(df, format_type)` | "Retention Time Analysis" | No | Plotly (lp.RetentionTime) |
+| `_display_retention_time_plots(df, config)` | "Retention Time Analysis" | No | Plotly (lp.RetentionTime) |
 | `_display_correlation_analysis(df, experiment, bqc_label)` | "Pairwise Correlation Analysis" | No | Matplotlib (lp.Correlation) |
 | `_display_pca_analysis(df, experiment)` | "Principal Component Analysis (PCA)" | Yes (removes samples) | Plotly (lp.PCAAnalysis) |
 
-Data flow: `continuation_df` → BQC may filter lipids → PCA may remove samples → final `qc_df` stored in session state.
+**Files Modified:**
+- `src/app/ui/main_content/__init__.py` — Added `display_quality_check_module` import and `__all__` entry
+- `src/app/adapters/streamlit_adapter.py` — Added 10 QC widget keys to `_WIDGET_KEYS`
+- `src/main_app.py` (206 → 269 lines) — Module routing with `_display_module1()`, `_display_module2()`, `_reset_qc_state()`
 
-**Legacy module calls (rendering — called directly from UI):**
+**Module routing in main_app.py:**
+- `_display_module1()` — existing Steps 1-7 + "Next: Quality Check & Analysis →" button (only visible after normalization)
+- `_display_module2()` — `display_quality_check_module()` + "Back to Data Processing" / "Back to Home" buttons
+- `_reset_qc_state()` — clears all 6 QC session state keys on navigation
+
+**Data flow:** `normalized_df` → box plots (read-only) → BQC (may filter lipids) → RT (read-only) → correlation (read-only) → PCA (may remove samples) → `qc_continuation_df`
+
+**Legacy module calls (rendering):**
 - `lp.BoxPlot.create_mean_area_df()`, `.calculate_missing_values_percentage()`, `.plot_missing_values()`, `.plot_box_plot()`
 - `lp.BQCQualityCheck.generate_and_display_cov_plot(df, experiment, bqc_sample_index, cov_threshold)`
 - `lp.RetentionTime.plot_single_retention(df)`, `.plot_multi_retention(df, classes)`
@@ -968,60 +972,65 @@ Data flow: `continuation_df` → BQC may filter lipids → PCA may remove sample
 - `lp.PCAAnalysis.plot_pca(df, full_samples_list, extensive_conditions_list)`
 
 **Workflow calls (business logic):**
-- `QualityCheckWorkflow.validate_inputs(df, experiment)`
-- `QualityCheckWorkflow.check_retention_time_availability(df, config)` — format-aware RT check
-- `QualityCheckWorkflow.get_eligible_correlation_conditions(experiment)` — conditions with >1 replicate
-- `QualityCheckWorkflow.apply_bqc_filter(df, high_cov_lipids, lipids_to_keep)` — BQC filtering
-- `QualityCheckWorkflow.remove_samples(df, experiment, samples_to_remove)` — PCA sample removal
+- `QualityCheckWorkflow.validate_inputs()`, `.check_retention_time_availability()`, `.get_eligible_correlation_conditions()`, `.apply_bqc_filter()`, `.remove_samples()`
 
-**Widget keys (match old app):**
-- `bqc_cov_threshold` — CoV threshold number_input
-- `bqc_filter_choice` — Radio: filter high-CoV lipids?
-- `bqc_lipids_to_keep` — Multiselect: keep despite high CoV
-- `rt_viewing_mode` — Radio: Comparison/Individual mode
-- `rt_class_selection` — Multiselect: lipid classes for comparison
-- `corr_condition` — Selectbox: condition for correlation
-- `pca_samples_remove` — Multiselect: samples to exclude
+**Widget keys:**
+- `bqc_cov_threshold`, `bqc_filter_choice`, `bqc_lipids_to_keep`, `bqc_csv_download`, `bqc_filtered_download`
+- `rt_viewing_mode`, `rt_class_selection`
+- `corr_condition`, `corr_csv_download`
+- `pca_samples_remove`, `pca_csv_download`
 
-**File 3: `src/app/ui/main_content/__init__.py`** (modify)
-Add import and `__all__` entry for `display_quality_check_module`.
-
-**File 4: `src/app/adapters/streamlit_adapter.py`** (modify line 117-121)
-Add QC widget keys to `_WIDGET_KEYS`:
-```python
-'bqc_filter_choice', 'bqc_lipids_to_keep', 'bqc_csv_download',
-'bqc_filtered_download', 'rt_viewing_mode', 'rt_class_selection',
-'corr_condition', 'corr_csv_download', 'pca_samples_remove', 'pca_csv_download',
-```
-
-**File 5: `src/main_app.py`** (modify)
-Add module routing. The `module` session state key already exists (default: `"Data Cleaning, Filtering, & Normalization"`). Wrap `with center:` main content in module conditional:
-- `module == "Data Cleaning, Filtering, & Normalization"`: existing Steps 1-7 + "Next: Quality Check & Analysis" button
-- `module == "Quality Check & Analysis"`: `display_quality_check_module()` + "Back" button (clears QC state)
-
-Sidebar (format, upload, mapping, grouping) stays outside conditional — always runs.
-
-"Back" button clears QC state: `qc_continuation_df = None`, `qc_bqc_plot = None`, `qc_correlation_plots = {}`, `qc_pca_plot = None`, `qc_samples_removed = []`.
-
-**Implementation order:** download_utils → quality_check.py → __init__.py → streamlit_adapter.py → main_app.py
-
-**Step 7: Integration Tests**
+**Step 6: Integration Tests (NEXT)**
 **File:** `tests/integration/test_module2_pipeline.py`
-**Target:** ~50+ tests — full QC pipeline for each format, BQC with/without, CoV filtering, PCA sample removal, edge cases.
+**Target:** ~65 tests in 11 classes
 
-##### Files to Create/Modify
+**Helper Functions:**
+- Reuse `load_lipidsearch_sample()`, `load_msdial_sample()`, `load_generic_sample()`, `load_mw_sample()` (copy from Module 1 tests — test files should be self-contained)
+- `run_module1_pipeline(raw_df, experiment, data_format) -> pd.DataFrame` — chains `DataIngestionWorkflow.run()` + `NormalizationWorkflow.run(method='none')` to produce normalized DataFrames with `concentration[]` columns for QC input
+- `make_qc_dataframe(lipids, classes, n_samples, values_fn)` — builds synthetic QC-ready DataFrames for edge cases
 
-| File | Action |
-|------|--------|
-| `src/app/services/quality_check.py` | CREATE |
-| `src/app/workflows/quality_check.py` | CREATE |
-| `src/app/ui/main_content/quality_check.py` | CREATE |
-| `src/app/ui/download_utils.py` | CREATE |
-| `src/app/adapters/streamlit_adapter.py` | MODIFY (add QC session state) |
-| `src/app/services/__init__.py` | MODIFY (add exports) |
-| `src/main_app.py` | MODIFY (add module routing) |
-| `tests/unit/test_quality_check_service.py` | CREATE |
-| `tests/integration/test_module2_pipeline.py` | CREATE |
+**Fixtures:**
+- Experiment configs: `lipidsearch_experiment` (3×4=12), `msdial_experiment` (1+3+3=7), `generic_experiment` (3×4=12), `mw_experiment` (2×22=44)
+- Normalized DataFrames (cached via `run_module1_pipeline`): `lipidsearch_normalized_df`, `msdial_normalized_df`, `generic_normalized_df`, `mw_normalized_df`
+- QC configs: `lipidsearch_qc_config` (LIPIDSEARCH, bqc='BQC'), `generic_qc_config` (GENERIC, bqc='BQC'), `no_bqc_config` (GENERIC, bqc=None)
+- Edge case DataFrames (synthetic): `single_lipid_df`, `two_sample_df`, `uniform_df`, `high_cov_all_df`
+
+**Test Classes:**
+
+| Class | Tests | Focus |
+|-------|-------|-------|
+| TestLipidSearchEndToEnd | 8 | Full QC pipeline with RT, BQC, all 12 samples |
+| TestMSDIALEndToEnd | 6 | 7 samples, Blank excluded from correlation, RT available |
+| TestGenericEndToEnd | 5 | No RT, bio vs tech replicate thresholds |
+| TestMWEndToEnd | 4 | 44-sample scale, large correlation matrices |
+| TestBQCCascadingEffects | 9 | BQC filter → downstream correlation/PCA/box plots |
+| TestPCASampleRemoval | 10 | Remove → re-run PCA/correlation, experiment update, renaming |
+| TestFormatSpecificBehavior | 5 | RT availability per format, column preservation |
+| TestDataIntegrity | 5 | Column preservation, sample count consistency, non-negative values |
+| TestEdgeCases | 6 | Single lipid, 2 samples, all removed, uniform data |
+| TestErrorHandling | 4 | Missing columns, invalid BQC label, single replicate |
+| TestNonInteractivePipeline | 3 | `run_non_interactive` consistency and completeness |
+
+**Key differentiation from unit tests:**
+- Multi-step chains: BQC assess → filter → correlate on filtered; PCA → remove → PCA again
+- Real sample data through full Module 1 pipeline first
+- Cascading state changes: experiment config updates after removal, column renaming propagation
+- Cross-method data shape validation: filtered lipid count carries through to PCA/correlation
+
+##### Files Created/Modified
+
+| File | Action | Status |
+|------|--------|--------|
+| `src/app/services/quality_check.py` | CREATE | ✅ Step 1 |
+| `tests/unit/test_quality_check_service.py` | CREATE | ✅ Step 2 |
+| `src/app/workflows/quality_check.py` | CREATE | ✅ Step 3 |
+| `tests/unit/test_quality_check_workflow.py` | CREATE | ✅ Step 3 |
+| `src/app/adapters/streamlit_adapter.py` | MODIFY (QC session state + widget keys) | ✅ Steps 4-5 |
+| `src/app/ui/download_utils.py` | CREATE | ✅ Step 5 |
+| `src/app/ui/main_content/quality_check.py` | CREATE | ✅ Step 5 |
+| `src/app/ui/main_content/__init__.py` | MODIFY (add export) | ✅ Step 5 |
+| `src/main_app.py` | MODIFY (module routing) | ✅ Step 5 |
+| `tests/integration/test_module2_pipeline.py` | CREATE | ⬜ Step 6 |
 
 ##### Legacy Modules to Reuse (NOT rewrite)
 
