@@ -46,6 +46,7 @@ from app.ui.main_content import (
     display_final_filtered_data,
     display_manage_internal_standards,
     display_normalization_ui,
+    display_quality_check_module,
 )
 
 
@@ -60,8 +61,18 @@ StreamlitAdapter.initialize_session_state()
 # Main App Page
 # =============================================================================
 
+def _reset_qc_state():
+    """Clear all Quality Check session state."""
+    st.session_state.qc_continuation_df = None
+    st.session_state.qc_bqc_plot = None
+    st.session_state.qc_cov_threshold = 30
+    st.session_state.qc_correlation_plots = {}
+    st.session_state.qc_pca_plot = None
+    st.session_state.qc_samples_removed = []
+
+
 def display_app_page():
-    """Display the main application page (Module 1) with centered layout matching landing page."""
+    """Display the main application page with module routing."""
     # Centered layout matching landing page width
     _, center, _ = st.columns([1, 3, 1])
 
@@ -129,57 +140,112 @@ def display_app_page():
     df = st.session_state.standardized_df
 
     # ==========================================================================
-    # Main area: Processing Module (Automatic Flow)
+    # Main area: Module routing
     # ==========================================================================
-    with center:
-        st.subheader("Data Standardization, Filtering, and Normalization")
+    current_module = st.session_state.get('module', 'Data Cleaning, Filtering, & Normalization')
 
-        # Step 1: Data processing documentation
-        display_data_processing_docs(data_format)
+    if current_module == "Data Cleaning, Filtering, & Normalization":
+        with center:
+            _display_module1(df, raw_df, experiment, bqc_label, data_format)
 
-        # Step 2: Format-specific filtering configuration
-        grade_config, quality_config, quality_config_dict = build_filter_configs(data_format, raw_df)
+    elif current_module == "Quality Check & Analysis":
+        with center:
+            _display_module2(experiment, bqc_label, data_format)
 
-        # Step 3: Run ingestion pipeline (cached)
-        result = run_ingestion_pipeline(
-            df, experiment, bqc_label, data_format,
-            grade_config, quality_config, quality_config_dict
+
+def _display_module1(df, raw_df, experiment, bqc_label, data_format):
+    """Display Module 1: Data Standardization, Filtering, and Normalization."""
+    st.subheader("Data Standardization, Filtering, and Normalization")
+
+    # Step 1: Data processing documentation
+    display_data_processing_docs(data_format)
+
+    # Step 2: Format-specific filtering configuration
+    grade_config, quality_config, quality_config_dict = build_filter_configs(data_format, raw_df)
+
+    # Step 3: Run ingestion pipeline (cached)
+    result = run_ingestion_pipeline(
+        df, experiment, bqc_label, data_format,
+        grade_config, quality_config, quality_config_dict
+    )
+    if result is None:
+        return
+
+    # Step 4: Zero Filtering Configuration (interactive)
+    pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
+    if pre_filter_df is not None and not pre_filter_df.empty:
+        filtered_df, removed_species, zero_config = display_zero_filtering_config(
+            pre_filter_df, experiment, bqc_label,
+            data_format=st.session_state.get('format_type')
         )
-        if result is None:
-            return
+        if filtered_df is not None:
+            st.session_state.cleaned_df = filtered_df
+            st.session_state.continuation_df = filtered_df
 
-        # Step 4: Zero Filtering Configuration (interactive)
-        pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
-        if pre_filter_df is not None and not pre_filter_df.empty:
-            filtered_df, removed_species, zero_config = display_zero_filtering_config(
-                pre_filter_df, experiment, bqc_label,
-                data_format=st.session_state.get('format_type')
-            )
-            if filtered_df is not None:
-                st.session_state.cleaned_df = filtered_df
-                st.session_state.continuation_df = filtered_df
+    # Step 5: Final filtered data
+    display_final_filtered_data(st.session_state.cleaned_df)
 
-        # Step 5: Final filtered data
-        display_final_filtered_data(st.session_state.cleaned_df)
+    # Step 6: Manage Internal Standards
+    auto_detected_intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
+    intsta_df = display_manage_internal_standards(
+        cleaned_df=st.session_state.cleaned_df,
+        auto_detected_df=auto_detected_intsta_df
+    )
+    st.session_state.intsta_df = intsta_df
 
-        # Step 6: Manage Internal Standards
-        auto_detected_intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
-        intsta_df = display_manage_internal_standards(
-            cleaned_df=st.session_state.cleaned_df,
-            auto_detected_df=auto_detected_intsta_df
-        )
-        st.session_state.intsta_df = intsta_df
+    # Step 7: Normalization
+    display_normalization_ui(
+        cleaned_df=st.session_state.cleaned_df,
+        intsta_df=intsta_df,
+        experiment=experiment,
+        data_format=data_format
+    )
 
-        # Step 7: Normalization
-        display_normalization_ui(
-            cleaned_df=st.session_state.cleaned_df,
-            intsta_df=intsta_df,
-            experiment=experiment,
-            data_format=data_format
-        )
+    # Navigation
+    st.markdown("---")
+    normalized_df = st.session_state.get('normalized_df')
+    if normalized_df is not None:
+        if st.button("Next: Quality Check & Analysis →"):
+            _reset_qc_state()
+            st.session_state.module = "Quality Check & Analysis"
+            st.rerun()
 
-        # Navigation
-        st.markdown("---")
+    if st.button("← Back to Home"):
+        st.session_state.page = 'landing'
+        StreamlitAdapter.reset_data_state()
+        st.rerun()
+
+
+def _display_module2(experiment, bqc_label, data_format):
+    """Display Module 2: Quality Check and Anomaly Detection."""
+    # Use normalized data as input for QC
+    continuation_df = st.session_state.get('normalized_df')
+    if continuation_df is None:
+        st.error("No normalized data available. Please complete Module 1 first.")
+        if st.button("← Back to Data Processing"):
+            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+            st.rerun()
+        return
+
+    qc_df, updated_experiment = display_quality_check_module(
+        continuation_df=continuation_df,
+        experiment=experiment,
+        bqc_label=bqc_label,
+        format_type=data_format,
+    )
+
+    # Store results for downstream use (Module 3)
+    st.session_state.qc_continuation_df = qc_df
+
+    # Navigation
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("← Back to Data Processing"):
+            _reset_qc_state()
+            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+            st.rerun()
+    with col2:
         if st.button("← Back to Home"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()

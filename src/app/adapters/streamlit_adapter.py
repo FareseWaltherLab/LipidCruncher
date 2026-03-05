@@ -118,6 +118,12 @@ _WIDGET_KEYS = {
     'manual_sample_override', 'grade_filter_mode', 'grade_selections',
     'msdial_quality_level', 'temp_selected_classes',
     'zero_filter_detection_threshold',
+    # Quality Check (Module 2)
+    'bqc_cov_threshold', 'bqc_filter_choice', 'bqc_lipids_to_keep',
+    'bqc_csv_download', 'bqc_filtered_download',
+    'rt_viewing_mode', 'rt_class_selection',
+    'corr_condition', 'corr_csv_download',
+    'pca_samples_remove', 'pca_csv_download',
 }
 
 

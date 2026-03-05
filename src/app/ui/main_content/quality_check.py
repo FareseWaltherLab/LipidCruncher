@@ -1,0 +1,596 @@
+"""
+Quality Check module UI (Module 2).
+
+Displays 5 QC sections in expanders:
+1. Box Plots — missing values + concentration distributions
+2. BQC Assessment — CoV analysis with filtering (if BQC samples exist)
+3. Retention Time — mass vs retention time (LipidSearch/MS-DIAL only)
+4. Pairwise Correlation — correlation heatmaps per condition
+5. PCA Analysis — PCA plot with sample removal
+
+Data flow:
+    continuation_df → box_plots (read-only) → bqc (may filter lipids) → qc_df
+    qc_df → rt (read-only) → correlation (read-only)
+          → pca (may remove samples) → final_df, updated_experiment
+"""
+import numpy as np
+import pandas as pd
+import streamlit as st
+import lipidomics as lp
+
+from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
+from app.services.format_detection import DataFormat
+from app.ui.download_utils import (
+    plotly_svg_download_button,
+    matplotlib_svg_download_button,
+    convert_df,
+)
+
+
+# =============================================================================
+# Entry Point
+# =============================================================================
+
+def display_quality_check_module(continuation_df, experiment, bqc_label, format_type):
+    """Display the full Quality Check module.
+
+    Args:
+        continuation_df: DataFrame with concentration[sample] columns.
+        experiment: ExperimentConfig.
+        bqc_label: BQC condition label or None.
+        format_type: DataFormat enum or format string.
+
+    Returns:
+        Tuple of (qc_df, updated_experiment).
+    """
+    st.subheader("Quality Check and Anomaly Detection Module")
+
+    # Resolve format_type to DataFormat enum
+    format_map = {
+        'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
+        'MS-DIAL': DataFormat.MSDIAL,
+        'Generic Format': DataFormat.GENERIC,
+        'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
+    }
+    if isinstance(format_type, str):
+        format_enum = format_map.get(format_type, DataFormat.GENERIC)
+    else:
+        format_enum = format_type
+
+    # Validate inputs
+    errors = QualityCheckWorkflow.validate_inputs(continuation_df, experiment)
+    if errors:
+        for error in errors:
+            st.error(error)
+        return continuation_df, experiment
+
+    # Working copy — start fresh from continuation_df each rerun
+    qc_df = continuation_df.copy()
+
+    # Section 1: Box Plots (read-only)
+    _display_box_plots(qc_df, experiment)
+
+    # Section 2: BQC Assessment (may filter lipids)
+    qc_df = _display_bqc_assessment(qc_df, experiment, bqc_label)
+
+    # Section 3: Retention Time (read-only)
+    config = QualityCheckConfig(
+        bqc_label=bqc_label,
+        format_type=format_enum,
+    )
+    _display_retention_time_plots(qc_df, config)
+
+    # Section 4: Correlation (read-only)
+    _display_correlation_analysis(qc_df, experiment, bqc_label)
+
+    # Section 5: PCA (may remove samples)
+    qc_df, experiment = _display_pca_analysis(qc_df, experiment)
+
+    # Store final state
+    st.session_state.qc_continuation_df = qc_df
+
+    return qc_df, experiment
+
+
+# =============================================================================
+# Section 1: Box Plots
+# =============================================================================
+
+def _display_box_plots(df, experiment):
+    """Display missing values distribution and concentration box plots."""
+    with st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns'):
+        st.markdown(
+            "Assess data quality and identify anomalies. "
+            "Two diagnostic visualizations help detect technical issues or outliers."
+        )
+        st.markdown(
+            "**What to look for:** Similar patterns across replicates indicate "
+            "good reproducibility. Large differences may signal quality issues."
+        )
+
+        # Get available samples
+        current_samples = [
+            s for s in experiment.full_samples_list
+            if f'concentration[{s}]' in df.columns
+        ]
+
+        if not current_samples:
+            st.warning("No concentration columns found for the current samples.")
+            return
+
+        # Prepare data using legacy module
+        mean_area_df = lp.BoxPlot.create_mean_area_df(df, current_samples)
+        zero_values_percent_list = lp.BoxPlot.calculate_missing_values_percentage(mean_area_df)
+
+        # --- Results ---
+        st.markdown("---")
+        st.markdown("##### 📈 Results")
+
+        # Missing Values Distribution
+        st.markdown("###### Missing Values Distribution")
+        st.markdown(
+            "Percentage of zero values per sample. "
+            "High percentages may indicate lower sensitivity or technical issues."
+        )
+
+        fig1 = lp.BoxPlot.plot_missing_values(
+            current_samples, zero_values_percent_list,
+            experiment.conditions_list, experiment.individual_samples_list
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+
+        # Download buttons
+        missing_values_df = pd.DataFrame({
+            "Sample": current_samples,
+            "Percentage Missing": zero_values_percent_list,
+        })
+        col1, col2 = st.columns(2)
+        with col1:
+            plotly_svg_download_button(fig1, "missing_values_distribution.svg",
+                                       key="qc_missing_values_svg")
+        with col2:
+            st.download_button(
+                label="Download CSV",
+                data=convert_df(missing_values_df),
+                file_name="missing_values_data.csv",
+                mime='text/csv',
+                key="qc_missing_values_csv"
+            )
+
+        st.markdown("---")
+
+        # Box Plot of Non-Zero Concentrations
+        st.markdown("###### Concentration Distribution")
+        st.markdown(
+            "Log10-transformed non-zero concentrations. "
+            "Box = IQR (25th-75th percentile), line = median, points = outliers."
+        )
+
+        fig2 = lp.BoxPlot.plot_box_plot(
+            mean_area_df, current_samples,
+            experiment.conditions_list, experiment.individual_samples_list
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # Download buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            plotly_svg_download_button(fig2, "box_plot.svg", key="qc_box_plot_svg")
+        with col2:
+            st.download_button(
+                label="Download CSV",
+                data=convert_df(mean_area_df),
+                file_name="box_plot_data.csv",
+                mime='text/csv',
+                key="qc_box_plot_csv"
+            )
+
+
+# =============================================================================
+# Section 2: BQC Quality Assessment
+# =============================================================================
+
+def _display_bqc_assessment(df, experiment, bqc_label):
+    """Display BQC quality assessment and optional filtering.
+
+    Returns the (potentially filtered) DataFrame.
+    """
+    if bqc_label is None or bqc_label not in experiment.conditions_list:
+        return df
+
+    with st.expander("Quality Check Using BQC Samples"):
+        st.markdown(
+            "Evaluate measurement reliability using Batch Quality Control (BQC) samples. "
+            "Lower CoV = more consistent measurements."
+        )
+        st.markdown("**Coefficient of Variation (CoV):**")
+        st.code("CoV = (Standard_Deviation / Mean) × 100%", language=None)
+        st.markdown("Blue points are below threshold (reliable), red points are above (variable).")
+
+        # --- Settings ---
+        st.markdown("---")
+        st.markdown("##### ⚙️ Settings")
+
+        cov_threshold = st.number_input(
+            'CoV Threshold (%)',
+            min_value=10,
+            max_value=1000,
+            value=st.session_state.get('qc_cov_threshold', 30),
+            step=1,
+            help="Points above threshold highlighted in red.",
+            key='bqc_cov_threshold'
+        )
+        st.session_state.qc_cov_threshold = cov_threshold
+
+        # --- Results ---
+        st.markdown("---")
+        st.markdown("##### 📈 Results")
+
+        bqc_sample_index = experiment.conditions_list.index(bqc_label)
+        scatter_plot, prepared_df, reliable_data_percent, _ = (
+            lp.BQCQualityCheck.generate_and_display_cov_plot(
+                df, experiment, bqc_sample_index, cov_threshold=cov_threshold
+            )
+        )
+
+        st.plotly_chart(scatter_plot, use_container_width=True)
+
+        # Reliability assessment
+        if reliable_data_percent >= 80:
+            st.success(f"{reliable_data_percent:.1f}% of datapoints are reliable (CoV < {cov_threshold}%).")
+        elif reliable_data_percent >= 50:
+            st.warning(f"{reliable_data_percent:.1f}% of datapoints are reliable (CoV < {cov_threshold}%).")
+        else:
+            st.error(f"Less than 50% of datapoints are reliable (CoV < {cov_threshold}%).")
+
+        # Download buttons
+        cov_data = prepared_df[['LipidMolec', 'cov', 'mean']].dropna()
+        col1, col2 = st.columns(2)
+        with col1:
+            plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg",
+                                       key="qc_bqc_svg")
+        with col2:
+            st.download_button(
+                "Download CSV",
+                data=convert_df(cov_data),
+                file_name="cov_plot_data.csv",
+                mime='text/csv',
+                key='bqc_csv_download'
+            )
+
+        # --- Filtering ---
+        if prepared_df is not None and not prepared_df.empty:
+            st.markdown("---")
+            st.markdown("##### 🔧 Data Filtering")
+
+            filter_cov = st.radio(
+                f"Filter lipids with CoV ≥ {cov_threshold}%?",
+                ("No", "Yes"),
+                index=0,
+                horizontal=True,
+                key='bqc_filter_choice'
+            )
+
+            # Identify high-CoV lipids
+            high_cov_mask = prepared_df['cov'] >= cov_threshold
+            high_cov_lipids = prepared_df.loc[high_cov_mask, 'LipidMolec'].tolist()
+
+            lipids_to_keep = []
+            if filter_cov == "Yes" and high_cov_lipids:
+                # Show high-CoV lipids table
+                cov_filtered_df = prepared_df.loc[
+                    high_cov_mask, ['LipidMolec', 'ClassKey', 'cov', 'mean']
+                ].copy()
+                cov_filtered_df['cov'] = cov_filtered_df['cov'].round(2)
+                cov_filtered_df['mean'] = cov_filtered_df['mean'].round(4)
+
+                st.markdown("###### Lipids Above Threshold")
+                st.dataframe(cov_filtered_df, use_container_width=True)
+
+                lipids_to_keep = st.multiselect(
+                    "Keep despite high CoV:",
+                    options=cov_filtered_df['LipidMolec'].tolist(),
+                    format_func=lambda x: (
+                        f"{x} (CoV: "
+                        f"{cov_filtered_df[cov_filtered_df['LipidMolec'] == x]['cov'].iloc[0]}%)"
+                    ),
+                    help="Select lipids to retain in the dataset.",
+                    key='bqc_lipids_to_keep'
+                )
+            elif filter_cov == "No":
+                # Keep all high-CoV lipids (no filtering)
+                lipids_to_keep = high_cov_lipids
+
+            # Apply BQC filter via workflow
+            result = QualityCheckWorkflow.apply_bqc_filter(
+                df=df,
+                high_cov_lipids=high_cov_lipids,
+                lipids_to_keep=lipids_to_keep,
+            )
+
+            # Summary
+            if result.removed_count > 0:
+                st.warning(
+                    f"Removed {result.removed_count} lipids "
+                    f"({result.removed_percentage:.1f}% of dataset)."
+                )
+            else:
+                st.success("No lipids removed.")
+
+            if filter_cov == "Yes" and lipids_to_keep:
+                st.info(f"Retained {len(lipids_to_keep)} lipids despite high CoV.")
+
+            # Show filtered dataset
+            st.markdown("###### Filtered Dataset")
+            st.dataframe(result.filtered_df, use_container_width=True)
+
+            st.download_button(
+                label="Download Filtered Data",
+                data=result.filtered_df.to_csv(index=False),
+                file_name='filtered_data.csv',
+                mime='text/csv',
+                key='bqc_filtered_download'
+            )
+
+            return result.filtered_df
+
+    return df
+
+
+# =============================================================================
+# Section 3: Retention Time Plots
+# =============================================================================
+
+def _display_retention_time_plots(df, config):
+    """Display retention time plots (LipidSearch/MS-DIAL only)."""
+    rt_result = QualityCheckWorkflow.check_retention_time_availability(df, config)
+    if not rt_result.available:
+        return
+
+    with st.expander('Retention Time Analysis'):
+        st.markdown(
+            "Verify lipid identification quality by plotting retention time vs. "
+            "calculated mass for each lipid class."
+        )
+        st.markdown(
+            "**What to look for:** Lipids within each class should cluster together, "
+            "and classes should follow expected elution order (e.g., TGs elute last "
+            "due to high hydrophobicity). Outliers may indicate misidentifications."
+        )
+
+        # --- Settings ---
+        st.markdown("---")
+        st.markdown("##### ⚙️ Settings")
+
+        mode = st.radio(
+            'Viewing Mode',
+            ['Comparison Mode', 'Individual Mode'],
+            horizontal=True,
+            key='rt_viewing_mode'
+        )
+
+        if mode == 'Individual Mode':
+            st.markdown("---")
+            st.markdown("##### 📈 Results")
+
+            plots = lp.RetentionTime.plot_single_retention(df)
+            for idx, (plot, retention_df) in enumerate(plots, 1):
+                st.plotly_chart(plot, use_container_width=True)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    plotly_svg_download_button(
+                        plot, f"retention_time_plot_{idx}.svg",
+                        key=f'qc_rt_svg_individual_{idx}'
+                    )
+                with col2:
+                    st.download_button(
+                        label="Download CSV",
+                        data=convert_df(retention_df),
+                        file_name=f'retention_plot_{idx}.csv',
+                        mime='text/csv',
+                        key=f'rt_csv_individual_{idx}'
+                    )
+                st.markdown("---")
+
+        elif mode == 'Comparison Mode':
+            # --- Data Selection ---
+            st.markdown("---")
+            st.markdown("##### 🎯 Data Selection")
+
+            all_classes = rt_result.lipid_classes
+            selected_classes = st.multiselect(
+                'Lipid Classes',
+                all_classes,
+                default=all_classes[:min(5, len(all_classes))],
+                key='rt_class_selection'
+            )
+
+            if not selected_classes:
+                st.warning("Please select at least one lipid class.")
+                return
+
+            # --- Results ---
+            st.markdown("---")
+            st.markdown("##### 📈 Results")
+
+            plot, retention_df = lp.RetentionTime.plot_multi_retention(df, selected_classes)
+            if plot:
+                st.plotly_chart(plot, use_container_width=True)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    plotly_svg_download_button(
+                        plot, "retention_time_comparison.svg",
+                        key='qc_rt_svg_comparison'
+                    )
+                with col2:
+                    st.download_button(
+                        label="Download CSV",
+                        data=convert_df(retention_df),
+                        file_name='retention_time_comparison.csv',
+                        mime='text/csv',
+                        key='rt_csv_comparison'
+                    )
+
+
+# =============================================================================
+# Section 4: Pairwise Correlation
+# =============================================================================
+
+def _display_correlation_analysis(df, experiment, bqc_label):
+    """Display pairwise correlation heatmaps."""
+    with st.expander('Pairwise Correlation Analysis'):
+        st.markdown(
+            "Assess reproducibility by calculating Pearson correlation "
+            "coefficients between sample replicates."
+        )
+        st.markdown(
+            "**Interpretation:** Values close to 1 = similar patterns (good). "
+            "Blue = higher correlation, Red = lower correlation."
+        )
+
+        # Get eligible conditions (>1 replicate)
+        eligible = QualityCheckWorkflow.get_eligible_correlation_conditions(experiment)
+        if not eligible:
+            st.error(
+                "No conditions with multiple replicates found. "
+                "Correlation analysis requires at least two replicates."
+            )
+            return
+
+        # --- Data Selection ---
+        st.markdown("---")
+        st.markdown("##### 🎯 Data Selection")
+
+        selected_condition = st.selectbox(
+            'Condition',
+            eligible,
+            key='corr_condition'
+        )
+
+        # Auto-detect sample type based on BQC presence
+        if bqc_label is not None:
+            sample_type = 'technical replicates'
+            st.info("**Sample type:** Technical replicates (BQC samples detected)")
+        else:
+            sample_type = 'biological replicates'
+            st.info("**Sample type:** Biological replicates (no BQC samples)")
+
+        # --- Results ---
+        st.markdown("---")
+        st.markdown("##### 📈 Results")
+
+        condition_index = experiment.conditions_list.index(selected_condition)
+        mean_area_df = lp.Correlation.prepare_data_for_correlation(
+            df, experiment.individual_samples_list, condition_index
+        )
+        correlation_df, v_min, thresh = lp.Correlation.compute_correlation(
+            mean_area_df, sample_type
+        )
+        fig = lp.Correlation.render_correlation_plot(
+            correlation_df, v_min, thresh,
+            experiment.conditions_list[condition_index]
+        )
+
+        st.pyplot(fig)
+
+        # Store for potential PDF generation
+        st.session_state.qc_correlation_plots[selected_condition] = fig
+
+        # Download buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            matplotlib_svg_download_button(
+                fig, f"correlation_plot_{selected_condition}.svg",
+                key='qc_corr_svg'
+            )
+        with col2:
+            st.download_button(
+                label="Download CSV",
+                data=convert_df(correlation_df),
+                file_name=f'correlation_matrix_{selected_condition}.csv',
+                mime='text/csv',
+                key='corr_csv_download'
+            )
+
+        # Correlation matrix table
+        st.markdown("###### Correlation Coefficients")
+        st.dataframe(correlation_df, use_container_width=True)
+
+
+# =============================================================================
+# Section 5: PCA Analysis
+# =============================================================================
+
+def _display_pca_analysis(df, experiment):
+    """Display PCA analysis with optional sample removal.
+
+    Returns (updated_df, updated_experiment).
+    """
+    with st.expander("Principal Component Analysis (PCA)"):
+        st.markdown(
+            "Visualize sample clustering based on lipid profiles. "
+            "Each point = one sample, ellipses = 95% confidence intervals."
+        )
+        st.markdown(
+            "**Interpretation:** Clustered points = similar profiles. "
+            "Separated clusters = distinct conditions. "
+            "Outliers fall outside ellipses."
+        )
+
+        # --- Settings ---
+        st.markdown("---")
+        st.markdown("##### ⚙️ Settings")
+
+        samples_to_remove = st.multiselect(
+            'Exclude Samples (optional)',
+            experiment.full_samples_list,
+            help="Exclude suspected outliers from analysis.",
+            key='pca_samples_remove'
+        )
+
+        if samples_to_remove:
+            remaining_count = len(experiment.full_samples_list) - len(samples_to_remove)
+            if remaining_count < 2:
+                st.error('At least two samples required for PCA.')
+                return df, experiment
+
+            # Apply removal via workflow
+            removal_result = QualityCheckWorkflow.remove_samples(
+                df, experiment, samples_to_remove
+            )
+            df = removal_result.updated_df
+            experiment = removal_result.updated_experiment
+            st.session_state.qc_samples_removed = samples_to_remove
+
+            st.warning(
+                f"⚠️ {len(samples_to_remove)} sample(s) excluded from "
+                f"**all downstream analyses**, not just PCA."
+            )
+            st.success(f"Proceeding with {remaining_count} samples.")
+
+        # --- Results ---
+        st.markdown("---")
+        st.markdown("##### 📈 Results")
+
+        pca_plot, pca_df = lp.PCAAnalysis.plot_pca(
+            df, experiment.full_samples_list, experiment.extensive_conditions_list
+        )
+        st.plotly_chart(pca_plot, use_container_width=True)
+        st.session_state.qc_pca_plot = pca_plot
+
+        # Download buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            plotly_svg_download_button(pca_plot, "pca_plot.svg", key="qc_pca_svg")
+        with col2:
+            st.download_button(
+                label="Download CSV",
+                data=convert_df(pca_df),
+                file_name="pca_data.csv",
+                mime="text/csv",
+                key='pca_csv_download'
+            )
+
+    return df, experiment

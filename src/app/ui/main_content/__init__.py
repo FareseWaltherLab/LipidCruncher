@@ -22,6 +22,9 @@ from app.ui.main_content.internal_standards import (
 from app.ui.main_content.normalization import (
     display_normalization_ui,
 )
+from app.ui.main_content.quality_check import (
+    display_quality_check_module,
+)
 
 __all__ = [
     # data_processing
@@ -36,4 +39,6 @@ __all__ = [
     'display_manage_internal_standards',
     # normalization
     'display_normalization_ui',
+    # quality_check
+    'display_quality_check_module',
 ]
