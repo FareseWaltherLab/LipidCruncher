@@ -44,9 +44,9 @@ def display_zero_filtering_config(
                 or st.session_state.get('_zero_filter_format') != data_format):
             st.session_state._preserved_zero_filter_detection_threshold = default_detection
             st.session_state._zero_filter_format = data_format
-        if '_preserved_non_bqc_zero_threshold' not in st.session_state:
+        if st.session_state.get('_preserved_non_bqc_zero_threshold') is None:
             st.session_state._preserved_non_bqc_zero_threshold = 75
-        if '_preserved_bqc_zero_threshold' not in st.session_state:
+        if st.session_state.get('_preserved_bqc_zero_threshold') is None:
             st.session_state._preserved_bqc_zero_threshold = 50
 
         col1, col2 = st.columns(2)

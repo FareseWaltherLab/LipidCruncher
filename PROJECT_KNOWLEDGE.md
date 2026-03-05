@@ -379,6 +379,9 @@ Workflows and UI implemented:
 **Bugs Fixed (`4b728ac`):**
 1. ✅ **Generic format ClassKey column detection** — When Generic format has an optional ClassKey column (2nd column between LipidMolec and intensity columns), it was incorrectly counted as an intensity column. Fix detects ClassKey by header name (case-insensitive) or by value pattern (short alphabetic strings like lipid class names) and preserves it as metadata.
 
+**Bugs Fixed (`caf00d2`):**
+1. ✅ **Generic format column mapping not displayed** — `SessionState` pre-populates `column_mapping=None`, so `_standardize_generic()` key-existence check (`'column_mapping' not in st.session_state`) always passed (key exists, value is `None`). Changed to value check (`st.session_state.get('column_mapping') is None`). Same fix for `n_intensity_cols`.
+
 **Performance Improvement (`745dcc8`):**
 1. ✅ **Add st.cache_data caching to workflow calls** — Previously, every UI interaction (slider moved, checkbox clicked) caused full data reprocessing. Now cached results are returned instantly when inputs haven't changed.
    - Added `StreamlitAdapter.run_ingestion()` — Cached wrapper for `DataIngestionWorkflow.run()`
