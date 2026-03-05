@@ -246,9 +246,13 @@ def _display_protein_config(experiment: ExperimentConfig) -> dict:
     sample_names = experiment.full_samples_list
 
     with st.expander("⚙️ Protein Concentration Data", expanded=True):
-        # Initialize method selection key if not present
+        # Restore method selection from preserved state (lost during module navigation)
         if st.session_state.get('protein_input_method') is None:
-            st.session_state.protein_input_method = "Manual Input"
+            preserved = st.session_state.get('protein_input_method_prev')
+            st.session_state.protein_input_method = (
+                preserved if preserved in ["Manual Input", "Upload CSV File"]
+                else "Manual Input"
+            )
 
         # Track previous method to detect changes
         prev_method = st.session_state.get('protein_input_method_prev')
@@ -382,14 +386,16 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
         normalization_options = ['None (pre-normalized data)', 'Protein-based']
         st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
 
-    # Initialize session state for normalization method
-    if 'norm_method_selection' not in st.session_state:
-        st.session_state['norm_method_selection'] = 'None (pre-normalized data)'
+    # Restore widget value from preserved session state (lost during module navigation)
+    widget_key = 'norm_method_selection'
+    persisted_value = st.session_state.get('_preserved_norm_method_selection', 'None (pre-normalized data)')
+    if persisted_value in normalization_options:
+        st.session_state[widget_key] = persisted_value
+    else:
+        st.session_state[widget_key] = 'None (pre-normalized data)'
 
-    # Handle case where saved method is no longer available (e.g., standards removed)
-    current_selection = st.session_state.get('norm_method_selection')
-    if current_selection not in normalization_options:
-        st.session_state['norm_method_selection'] = 'None (pre-normalized data)'
+    def on_norm_method_change():
+        st.session_state._preserved_norm_method_selection = st.session_state[widget_key]
 
     # Method selection
     st.markdown("##### ⚙️ Normalization Method")
@@ -397,8 +403,10 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
         "Method:",
         options=normalization_options,
         horizontal=True,
-        key='norm_method_selection'
+        key=widget_key,
+        on_change=on_norm_method_change
     )
+    st.session_state._preserved_norm_method_selection = method
 
     method_map = {
         'None (pre-normalized data)': 'none',

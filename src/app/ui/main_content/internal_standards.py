@@ -68,12 +68,21 @@ def _display_custom_upload(
     # Mode selection: standards in dataset or external
     st.markdown("**Are standards present in your main dataset?**")
 
+    # Restore widget value from preserved session state (lost during module navigation)
+    location_options = [
+        "Yes — Extract from dataset",
+        "No — Uploading complete standards data"
+    ]
+    if 'standards_location_radio' not in st.session_state:
+        preserved_mode = st.session_state.get('custom_standards_mode')
+        if preserved_mode == 'extract':
+            st.session_state.standards_location_radio = location_options[0]
+        elif preserved_mode == 'complete':
+            st.session_state.standards_location_radio = location_options[1]
+
     standards_location = st.radio(
         "Standards location:",
-        options=[
-            "Yes — Extract from dataset",
-            "No — Uploading complete standards data"
-        ],
+        options=location_options,
         key="standards_location_radio",
         horizontal=True,
         label_visibility="collapsed"
@@ -248,9 +257,16 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
         # Standards source selection
         st.markdown("##### 🏷️ Standards Source")
 
+        # Restore widget value from preserved session state (lost during module navigation)
+        standards_options = ["Automatic Detection", "Upload Custom Standards"]
+        if 'standards_source_radio' not in st.session_state:
+            preserved_source = st.session_state.get('standards_source')
+            if preserved_source in standards_options:
+                st.session_state.standards_source_radio = preserved_source
+
         standards_source = st.radio(
             "Standards source:",
-            ["Automatic Detection", "Upload Custom Standards"],
+            standards_options,
             horizontal=True,
             key="standards_source_radio",
             label_visibility="collapsed"

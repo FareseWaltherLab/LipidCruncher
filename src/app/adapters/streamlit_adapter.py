@@ -58,6 +58,7 @@ class SessionState:
 
     # Normalization UI state
     norm_method_selection: Optional[str] = None
+    _preserved_norm_method_selection: Optional[str] = None
     normalization_result: Any = None
     class_standard_map: Optional[Dict[str, str]] = None
     standard_concentrations: Optional[Dict[str, float]] = None
