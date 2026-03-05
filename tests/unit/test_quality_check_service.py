@@ -1995,6 +1995,114 @@ class TestTypeCoercion:
         assert isinstance(result, BQCPrepareResult)
         assert result.prepared_df['cov'].iloc[0] is not None
 
+    def test_remove_samples_with_int_concentrations(self):
+        """remove_samples works when concentration columns are integers."""
+        exp = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['A', 'B'],
+            number_of_samples_list=[2, 2],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PE'],
+            'concentration[s1]': [100, 200],
+            'concentration[s2]': [110, 210],
+            'concentration[s3]': [120, 220],
+            'concentration[s4]': [130, 230],
+        })
+        result = QualityCheckService.remove_samples(df, exp, ['s1'])
+        assert isinstance(result, SampleRemovalResult)
+        assert result.samples_after == 3
+
+    def test_filter_by_bqc_with_int_concentrations(self):
+        """filter_by_bqc works when concentration columns are integers."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'concentration[s1]': [100, 200, 300],
+            'concentration[s2]': [110, 210, 310],
+        })
+        result = QualityCheckService.filter_by_bqc(df, ['PE(18:0)'])
+        assert len(result.filtered_df) == 2
+        assert result.filtered_df['concentration[s1]'].dtype in (
+            np.int64, np.float64, int,
+        )
+
+    def test_box_plot_with_float32_columns(self, simple_experiment):
+        """Box plot handles float32 concentration columns."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PE'],
+            'concentration[s1]': pd.array([100.0, 200.0], dtype='float32'),
+            'concentration[s2]': pd.array([110.0, 210.0], dtype='float32'),
+        })
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        assert result.mean_area_df.shape == (2, 2)
+
+    def test_bqc_with_float32_columns(self):
+        """BQC works with float32 concentration columns."""
+        exp = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['A', 'BQC'],
+            number_of_samples_list=[2, 2],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': pd.array([100.0], dtype='float32'),
+            'concentration[s2]': pd.array([110.0], dtype='float32'),
+            'concentration[s3]': pd.array([100.0], dtype='float32'),
+            'concentration[s4]': pd.array([102.0], dtype='float32'),
+        })
+        result = QualityCheckService.prepare_bqc_data(df, exp, 'BQC')
+        assert isinstance(result, BQCPrepareResult)
+
+    def test_correlation_with_float32_columns(self):
+        """Correlation handles float32 concentration columns."""
+        exp = ExperimentConfig(
+            n_conditions=1,
+            conditions_list=['A'],
+            number_of_samples_list=[3],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['a', 'b', 'c'],
+            'concentration[s1]': pd.array([100.0, 200.0, 300.0], dtype='float32'),
+            'concentration[s2]': pd.array([110.0, 210.0, 310.0], dtype='float32'),
+            'concentration[s3]': pd.array([120.0, 220.0, 320.0], dtype='float32'),
+        })
+        result = QualityCheckService.compute_correlation(df, exp, 'A')
+        assert result.correlation_df.shape == (3, 3)
+
+    def test_pca_with_int64_columns(self):
+        """PCA handles int64 concentration columns."""
+        exp = ExperimentConfig(
+            n_conditions=1,
+            conditions_list=['A'],
+            number_of_samples_list=[3],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['a', 'b', 'c'],
+            'concentration[s1]': pd.array([100, 200, 300], dtype='int64'),
+            'concentration[s2]': pd.array([110, 210, 310], dtype='int64'),
+            'concentration[s3]': pd.array([120, 220, 320], dtype='int64'),
+        })
+        result = QualityCheckService.compute_pca(df, exp)
+        assert result.pc_df.shape == (3, 2)
+
+    def test_cov_with_int64_array(self):
+        """CoV handles int64 numpy array."""
+        arr = np.array([10, 20, 30], dtype='int64')
+        result = QualityCheckService.calculate_coefficient_of_variation(arr)
+        assert result is not None
+        assert isinstance(result, float)
+
+    def test_mean_with_float32_series(self):
+        """Mean handles float32 pandas Series."""
+        series = pd.Series([10.0, 20.0, 30.0], dtype='float32')
+        result = QualityCheckService.calculate_mean_including_zeros(series)
+        assert result == pytest.approx(20.0)
+        assert isinstance(result, float)
+
 
 # =============================================================================
 # TestMultiStepPipelines

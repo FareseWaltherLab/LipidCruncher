@@ -290,6 +290,43 @@ class TestQualityCheckConfig:
             config = QualityCheckConfig(format_type=fmt)
             assert config.format_type == fmt
 
+    def test_bqc_label_empty_string(self):
+        """Empty string BQC label is allowed (treated as a label)."""
+        config = QualityCheckConfig(bqc_label='')
+        assert config.bqc_label == ''
+
+    def test_bqc_label_whitespace(self):
+        """Whitespace BQC label is stored as-is."""
+        config = QualityCheckConfig(bqc_label='  BQC  ')
+        assert config.bqc_label == '  BQC  '
+
+    def test_cov_threshold_very_small(self):
+        """Very small CoV threshold is accepted."""
+        config = QualityCheckConfig(cov_threshold=0.01)
+        assert config.cov_threshold == 0.01
+
+    def test_cov_threshold_very_large(self):
+        """Very large CoV threshold is accepted."""
+        config = QualityCheckConfig(cov_threshold=999.0)
+        assert config.cov_threshold == 999.0
+
+    def test_cov_threshold_integer(self):
+        """Integer CoV threshold is accepted and stored."""
+        config = QualityCheckConfig(cov_threshold=50)
+        assert config.cov_threshold == 50
+
+    def test_config_equality(self):
+        """Two configs with same values are equal (dataclass equality)."""
+        c1 = QualityCheckConfig(bqc_label='BQC', cov_threshold=30.0)
+        c2 = QualityCheckConfig(bqc_label='BQC', cov_threshold=30.0)
+        assert c1 == c2
+
+    def test_config_inequality(self):
+        """Two configs with different values are not equal."""
+        c1 = QualityCheckConfig(bqc_label='BQC', cov_threshold=30.0)
+        c2 = QualityCheckConfig(bqc_label='QC', cov_threshold=30.0)
+        assert c1 != c2
+
 
 # =============================================================================
 # Validation Tests
@@ -1344,6 +1381,109 @@ class TestTypeCoercion:
         })
         result = QualityCheckWorkflow.run_pca(df, simple_experiment)
         assert isinstance(result, PCAResult)
+
+    def test_int64_concentrations_correlation(self, simple_experiment):
+        """Correlation handles int64 concentration columns."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'concentration[s1]': pd.array([100, 200, 300], dtype='int64'),
+            'concentration[s2]': pd.array([110, 210, 310], dtype='int64'),
+            'concentration[s3]': pd.array([120, 220, 320], dtype='int64'),
+            'concentration[s4]': pd.array([90, 190, 290], dtype='int64'),
+            'concentration[s5]': pd.array([95, 195, 295], dtype='int64'),
+            'concentration[s6]': pd.array([80, 180, 280], dtype='int64'),
+        })
+        result = QualityCheckWorkflow.run_correlation(
+            df, simple_experiment, 'Control'
+        )
+        assert isinstance(result, CorrelationResult)
+        assert result.correlation_df.shape == (3, 3)
+
+    def test_float32_concentrations_bqc(self):
+        """BQC assessment handles float32 columns."""
+        exp = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['A', 'BQC'],
+            number_of_samples_list=[2, 2],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PE'],
+            'concentration[s1]': pd.array([100.0, 200.0], dtype='float32'),
+            'concentration[s2]': pd.array([110.0, 210.0], dtype='float32'),
+            'concentration[s3]': pd.array([100.0, 200.0], dtype='float32'),
+            'concentration[s4]': pd.array([102.0, 198.0], dtype='float32'),
+        })
+        config = QualityCheckConfig(bqc_label='BQC')
+        result = QualityCheckWorkflow.run_bqc_assessment(df, exp, config)
+        assert isinstance(result, BQCPrepareResult)
+
+    def test_int_concentrations_remove_samples(self, simple_experiment):
+        """remove_samples handles integer concentration columns."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PE'],
+            'concentration[s1]': [100, 200],
+            'concentration[s2]': [110, 210],
+            'concentration[s3]': [120, 220],
+            'concentration[s4]': [130, 230],
+            'concentration[s5]': [140, 240],
+            'concentration[s6]': [150, 250],
+        })
+        result = QualityCheckWorkflow.remove_samples(
+            df, simple_experiment, ['s1']
+        )
+        assert isinstance(result, SampleRemovalResult)
+        assert result.samples_after == 5
+
+    def test_float32_concentrations_pca(self):
+        """PCA handles float32 concentration columns."""
+        exp = ExperimentConfig(
+            n_conditions=1,
+            conditions_list=['A'],
+            number_of_samples_list=[3],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['a', 'b', 'c'],
+            'concentration[s1]': pd.array([100.0, 200.0, 300.0], dtype='float32'),
+            'concentration[s2]': pd.array([110.0, 210.0, 310.0], dtype='float32'),
+            'concentration[s3]': pd.array([120.0, 220.0, 320.0], dtype='float32'),
+        })
+        result = QualityCheckWorkflow.run_pca(df, exp)
+        assert isinstance(result, PCAResult)
+        assert result.pc_df.shape == (3, 2)
+
+    def test_int_concentrations_filter_by_bqc(self):
+        """apply_bqc_filter handles integer concentration columns."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'concentration[s1]': [100, 200, 300],
+            'concentration[s2]': [110, 210, 310],
+        })
+        result = QualityCheckWorkflow.apply_bqc_filter(df, ['PE(18:0)'])
+        assert isinstance(result, BQCFilterResult)
+        assert len(result.filtered_df) == 2
+
+    def test_int_concentrations_non_interactive(self, simple_experiment):
+        """run_non_interactive handles integer concentration columns."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'concentration[s1]': [100, 200, 300],
+            'concentration[s2]': [110, 210, 310],
+            'concentration[s3]': [120, 220, 320],
+            'concentration[s4]': [130, 230, 330],
+            'concentration[s5]': [140, 240, 340],
+            'concentration[s6]': [150, 250, 350],
+        })
+        config = QualityCheckConfig()
+        result = QualityCheckWorkflow.run_non_interactive(
+            df, simple_experiment, config
+        )
+        assert result['validation_errors'] == []
+        assert result['box_plot'] is not None
 
 
 # =============================================================================
