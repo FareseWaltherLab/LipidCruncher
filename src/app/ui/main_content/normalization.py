@@ -247,7 +247,7 @@ def _display_protein_config(experiment: ExperimentConfig) -> dict:
 
     with st.expander("⚙️ Protein Concentration Data", expanded=True):
         # Initialize method selection key if not present
-        if 'protein_input_method' not in st.session_state:
+        if st.session_state.get('protein_input_method') is None:
             st.session_state.protein_input_method = "Manual Input"
 
         # Track previous method to detect changes
