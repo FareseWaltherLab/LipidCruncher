@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** February 16, 2026
+**Last Updated:** March 4, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -244,8 +244,8 @@ src/app/ui/
 | DataIngestionWorkflow | ✅ Done | 125 tests | `b077cb1` |
 | NormalizationWorkflow | ✅ Done | 98 tests | `341ba71` |
 | **Module 1 UI** | ✅ Done | - | `4a428fd` |
-| QualityCheckService | ✅ Done | 189 tests | `05d751a` |
-| QualityCheckWorkflow | ✅ Done | 123 tests | `7c24e30` |
+| QualityCheckService | ✅ Done | 197 tests | `05d751a`, `7cdbbdb` |
+| QualityCheckWorkflow | ✅ Done | 136 tests | `7c24e30`, `7cdbbdb` |
 | **Module 2 UI** | ✅ Done | - | `9b111cd` |
 
 **Created Files:**
@@ -802,9 +802,9 @@ def msdial_data_type_app(msdial_features_dict):
 
 #### ✅ Code Review Cleanup (COMPLETE — all Critical + High + Medium fixed)
 All issues from the **Code Review Issues (February 16, 2026)** section below are fixed except low-priority L1-L4, L7-L8 (deferred).
-**Test count:** 1400 passing
+**Test count:** 1772 passing
 
-#### Module 2: Quality Check (UI COMPLETE — Integration Tests Next)
+#### Module 2: Quality Check (COMPLETE)
 
 **Reference:** Old app `old_main_app.py` lines 1619-2403 has the full working Module 2.
 
@@ -858,9 +858,9 @@ All computation reimplemented inline (no legacy module imports) to avoid transit
 - `lp.PCAAnalysis.plot_pca()`
 - `lp.RetentionTime.plot_single_retention()`, `plot_multi_retention()`
 
-**Step 2: ✅ Write Unit Tests for QualityCheckService (`3c1795b`)**
+**Step 2: ✅ Write Unit Tests for QualityCheckService (`3c1795b`, `7cdbbdb`)**
 **File:** `tests/unit/test_quality_check_service.py`
-**Result:** 189 tests, all passing
+**Result:** 197 tests, all passing
 
 Test classes (14 total):
 - `TestCoVCalculation` (13) — formula verification, boundary (single/empty/zeros/negative/mixed sign), input types (numpy, pandas, float)
@@ -875,12 +875,12 @@ Test classes (14 total):
 - `TestRemoveSamples` (19) — single/multiple removal, column renaming, experiment update, condition drop, errors, boundary (N-2), nonexistent samples, column count, three conditions, cross-condition renaming
 - `TestValidation` (14) — all 5 private validators (DataFrame, concentration columns, BQC label, condition, CoV threshold)
 - `TestEdgeCases` (14) — NaN, large dataset, identical samples, constant values, single lipid, special characters, pipeline flows
-- `TestTypeCoercion` (7) — string numbers, int/float/int64/float32/object dtypes across methods
+- `TestTypeCoercion` (15) — string numbers, int/float/int64/float32/object dtypes across all methods (box plot, BQC, correlation, PCA, filter, remove_samples, CoV, mean)
 - `TestMultiStepPipelines` (6) — full QC pipeline (no BQC), full QC pipeline (with BQC), PCA→remove→PCA, BQC filter→remove→correlation, retention time in pipeline, box plot after removal
 
 **Step 3: ✅ Create `QualityCheckWorkflow` + Unit Tests**
 **Files:** `src/app/workflows/quality_check.py`, `tests/unit/test_quality_check_workflow.py`
-**Result:** 123 tests, all passing
+**Result:** 136 tests, all passing
 
 Unlike DataIngestionWorkflow/NormalizationWorkflow, this workflow does NOT have a single `run()` method. Quality check is interactive — users make decisions between steps (BQC filtering, PCA sample removal). Each method is called individually from the UI layer.
 
@@ -901,7 +901,7 @@ Unlike DataIngestionWorkflow/NormalizationWorkflow, this workflow does NOT have 
 - `run_non_interactive(df, experiment, config)` → Dict (all QC steps without user interaction)
 
 Test classes (13 total):
-- `TestQualityCheckConfig` (3) — defaults, custom values, all format types
+- `TestQualityCheckConfig` (10) — defaults, custom values, all format types, empty/whitespace BQC label, threshold boundaries (very small/large/integer), dataclass equality/inequality
 - `TestValidateInputs` (12) — valid, None/empty df, missing columns, no matching samples, boundary
 - `TestRunBoxPlots` (9) — return type, shape, samples, missing values, zeros, errors, large dataset
 - `TestRunBQCAssessment` (11) — None when no BQC, valid result, samples, cov/mean columns, threshold, immutability
@@ -914,10 +914,10 @@ Test classes (13 total):
 - `TestRemoveSamples` (9) — return type, single/multiple removal, updated experiment/df, errors, immutability
 - `TestRunNonInteractive` (12) — all keys, populated results, BQC with/without, RT formats, validation errors, large
 - `TestEdgeCases` (15) — single lipid, all zeros, NaN, special chars, min samples, identical, multi-step pipelines
-- `TestTypeCoercion` (3) — string numbers, int concentrations, mixed types
+- `TestTypeCoercion` (9) — string numbers, int/int64/float32 concentrations across correlation, BQC, PCA, remove_samples, filter, non-interactive
 - `TestImmutability` (6) — all methods preserve input data
 
-**Test depth assessment:** 123 workflow tests are comparable to Data Ingestion (137) and better than Normalization (98). The workflow is a thin delegation layer — deep computation is covered by the 189 QC Service tests. Multi-step pipeline and error handling gaps vs the service are expected (service tests the raw computation; workflow tests the orchestration). Remaining coverage gaps will be filled by integration tests in Step 7.
+**Test depth assessment:** 136 workflow tests are comparable to Data Ingestion (137) and better than Normalization (98). The workflow is a thin delegation layer — deep computation is covered by the 197 QC Service tests. Type coercion and config edge case coverage now matches Module 1 depth.
 
 **Step 4: ✅ Update `StreamlitAdapter` — Session State (`d062f2c`)**
 **File:** `src/app/adapters/streamlit_adapter.py`
@@ -980,9 +980,9 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 - `corr_condition`, `corr_csv_download`
 - `pca_samples_remove`, `pca_csv_download`
 
-**Step 6: Integration Tests (NEXT)**
+**Step 6: Integration Tests ✅**
 **File:** `tests/integration/test_module2_pipeline.py`
-**Target:** ~65 tests in 11 classes
+**Result:** 65 tests in 11 classes — all passing
 
 **Helper Functions:**
 - Reuse `load_lipidsearch_sample()`, `load_msdial_sample()`, `load_generic_sample()`, `load_mw_sample()` (copy from Module 1 tests — test files should be self-contained)
@@ -1030,7 +1030,7 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 | `src/app/ui/main_content/quality_check.py` | CREATE | ✅ Step 5 |
 | `src/app/ui/main_content/__init__.py` | MODIFY (add export) | ✅ Step 5 |
 | `src/main_app.py` | MODIFY (module routing) | ✅ Step 5 |
-| `tests/integration/test_module2_pipeline.py` | CREATE | ⬜ Step 6 |
+| `tests/integration/test_module2_pipeline.py` | CREATE | ✅ Step 6 |
 
 ##### Legacy Modules to Reuse (NOT rewrite)
 
