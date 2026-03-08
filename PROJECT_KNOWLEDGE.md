@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** March 4, 2026
+**Last Updated:** March 8, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -1101,13 +1101,17 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 - Updated `src/app/ui/standards_plots.py` — uses `StandardsPlotterService` instead of `from lipidomics import InternalStandardsPlotter`
 - Tests: 41 in `tests/unit/test_standards_plotter.py`
 
-**Step 2.4: Replace QC Plotting Classes** (all used in quality_check.py)
-- `BoxPlot` → `src/app/services/plotting/box_plot.py`
-- `BQCQualityCheck` → `src/app/services/plotting/bqc_plotter.py`
-- `RetentionTime` → `src/app/services/plotting/retention_time.py`
-- `Correlation` → `src/app/services/plotting/correlation.py`
-- `PCAAnalysis` → `src/app/services/plotting/pca.py`
-- All pure rendering — take data in, return figure out. No Streamlit, no session state.
+**Step 2.4: ✅ Replace QC Plotting Classes** (`4594ee1`)
+- Created `src/app/services/plotting/box_plot.py` — `BoxPlotService` with `create_mean_area_df()`, `calculate_missing_values_percentage()`, `plot_missing_values()`, `plot_box_plot()`
+- Created `src/app/services/plotting/bqc_plotter.py` — `BQCPlotterService` with `prepare_dataframe_for_plot()`, `generate_cov_plot_data()`, `generate_and_display_cov_plot()`, `create_cov_scatter_plot_with_threshold()`
+- Created `src/app/services/plotting/retention_time.py` — `RetentionTimePlotterService` with `plot_single_retention()`, `plot_multi_retention()`
+- Created `src/app/services/plotting/correlation.py` — `CorrelationPlotterService` with `prepare_data_for_correlation()`, `compute_correlation()`, `render_correlation_plot()`
+- Created `src/app/services/plotting/pca.py` — `PCAPlotterService` with `plot_pca()` (includes confidence ellipses)
+- Updated `src/app/ui/main_content/quality_check.py` — removed `import lipidomics as lp`, uses new plotting services directly
+- Updated `src/app/services/plotting/__init__.py` — exports all 6 plotting services
+- All pure Python (no Streamlit), take data in → return figure out
+- Tests: 170 across 5 files (`test_box_plot_service.py`: 47, `test_bqc_plotter_service.py`: 38, `test_retention_time_plotter.py`: 30, `test_correlation_plotter.py`: 24, `test_pca_plotter.py`: 31)
+- **Phase 2 complete:** Zero `import lipidomics` references remain in `src/app/`
 
 ##### Phase 3: DRY & Code Quality
 
@@ -1175,7 +1179,7 @@ Replace `col[col.find('[') + 1:col.find(']')]` in normalization service with reg
 |-------|-------|-----------------|
 | 1 | Phase 1 (Session State) | Foundational — everything else depends on clean state |
 | 2 | Phase 3.1 (Constants) ✅ | Quick win, unblocks Phase 2 |
-| 3 | Phase 2 (Legacy Elimination) 🔄 | Largest effort — one class at a time (Step 2.1 done) |
+| 3 | Phase 2 (Legacy Elimination) ✅ | All 8 legacy classes replaced (Steps 2.1-2.4) |
 | 4 | Phase 3.2-3.4 (DRY/Long Methods) | Improves maintainability |
 | 5 | Phase 4 (Testing/Caching) | Safety net improvements |
 | 6 | Phase 5 (Cleanup) | Final polish |
