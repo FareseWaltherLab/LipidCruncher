@@ -12,6 +12,7 @@ import pandas as pd
 from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_EXTRACT_HELP, STANDARDS_COMPLETE_HELP
+from app.ui.download_utils import csv_download_button
 
 
 # =============================================================================
@@ -41,14 +42,7 @@ def _display_auto_detected_standards(auto_detected_df: pd.DataFrame) -> pd.DataF
         st.success(f"✓ Found {len(auto_detected_df)} standards")
         st.dataframe(auto_detected_df, use_container_width=True)
 
-        csv = auto_detected_df.to_csv(index=False)
-        st.download_button(
-            label="Download Detected Standards",
-            data=csv,
-            file_name="detected_standards.csv",
-            mime="text/csv",
-            key="download_auto_standards"
-        )
+        csv_download_button(auto_detected_df, "detected_standards.csv", key="download_auto_standards")
         return auto_detected_df
     else:
         st.warning("No internal standards automatically detected in dataset.")
@@ -193,14 +187,7 @@ def _process_uploaded_standards(
         st.success(f"✓ Loaded {result.standards_count} custom standards (mode: {result.source_mode})")
         st.dataframe(result.standards_df, use_container_width=True)
 
-        csv = result.standards_df.to_csv(index=False)
-        st.download_button(
-            label="Download Custom Standards",
-            data=csv,
-            file_name="custom_standards.csv",
-            mime="text/csv",
-            key="download_custom_standards"
-        )
+        csv_download_button(result.standards_df, "custom_standards.csv", key="download_custom_standards")
 
         return result.standards_df
 

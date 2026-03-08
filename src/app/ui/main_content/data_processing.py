@@ -15,7 +15,7 @@ import streamlit as st
 import pandas as pd
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-
+from app.ui.download_utils import csv_download_button
 
 from app.constants import FORMAT_DISPLAY_TO_ENUM
 from app.services.format_detection import DataFormat
@@ -431,11 +431,4 @@ def display_final_filtered_data(cleaned_df: pd.DataFrame):
 
     st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
     st.dataframe(cleaned_df, use_container_width=True)
-    csv = cleaned_df.to_csv(index=False)
-    st.download_button(
-        label="Download Filtered Data",
-        data=csv,
-        file_name="final_filtered_data.csv",
-        mime="text/csv",
-        key="download_filtered_data"
-    )
+    csv_download_button(cleaned_df, "final_filtered_data.csv", key="download_filtered_data")

@@ -450,40 +450,36 @@ class NormalizationWorkflow:
         return result
 
     @staticmethod
-    def get_intensity_column_samples(df: pd.DataFrame) -> List[str]:
+    def get_column_samples(df: pd.DataFrame, prefix: str = 'intensity') -> List[str]:
         """
-        Extract sample names from intensity columns.
+        Extract sample names from columns with a given prefix.
+
+        Looks for columns matching ``prefix[sample_name]`` and returns the
+        sample names.
 
         Args:
-            df: DataFrame with intensity[...] columns
+            df: DataFrame with prefixed columns (e.g. intensity[s1], concentration[s1])
+            prefix: Column prefix to match (default: 'intensity')
 
         Returns:
             List of sample names (e.g., ['s1', 's2', 's3'])
         """
-        samples = []
-        for col in df.columns:
-            if col.startswith('intensity[') and col.endswith(']'):
-                sample = col[len('intensity['):-1]
-                samples.append(sample)
-        return samples
+        tag = f'{prefix}['
+        return [
+            col[len(tag):-1]
+            for col in df.columns
+            if col.startswith(tag) and col.endswith(']')
+        ]
+
+    @staticmethod
+    def get_intensity_column_samples(df: pd.DataFrame) -> List[str]:
+        """Extract sample names from intensity[...] columns."""
+        return NormalizationWorkflow.get_column_samples(df, 'intensity')
 
     @staticmethod
     def get_concentration_column_samples(df: pd.DataFrame) -> List[str]:
-        """
-        Extract sample names from concentration columns.
-
-        Args:
-            df: DataFrame with concentration[...] columns
-
-        Returns:
-            List of sample names (e.g., ['s1', 's2', 's3'])
-        """
-        samples = []
-        for col in df.columns:
-            if col.startswith('concentration[') and col.endswith(']'):
-                sample = col[len('concentration['):-1]
-                samples.append(sample)
-        return samples
+        """Extract sample names from concentration[...] columns."""
+        return NormalizationWorkflow.get_column_samples(df, 'concentration')
 
     @staticmethod
     def preview_normalization(

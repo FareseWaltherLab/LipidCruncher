@@ -28,7 +28,7 @@ from app.services.format_detection import DataFormat
 from app.ui.download_utils import (
     plotly_svg_download_button,
     matplotlib_svg_download_button,
-    convert_df,
+    csv_download_button,
 )
 
 
@@ -148,13 +148,8 @@ def _display_box_plots(df, experiment):
             plotly_svg_download_button(fig1, "missing_values_distribution.svg",
                                        key="qc_missing_values_svg")
         with col2:
-            st.download_button(
-                label="Download CSV",
-                data=convert_df(missing_values_df),
-                file_name="missing_values_data.csv",
-                mime='text/csv',
-                key="qc_missing_values_csv"
-            )
+            csv_download_button(missing_values_df, "missing_values_data.csv",
+                               key="qc_missing_values_csv")
 
         st.markdown("---")
 
@@ -176,13 +171,8 @@ def _display_box_plots(df, experiment):
         with col1:
             plotly_svg_download_button(fig2, "box_plot.svg", key="qc_box_plot_svg")
         with col2:
-            st.download_button(
-                label="Download CSV",
-                data=convert_df(mean_area_df),
-                file_name="box_plot_data.csv",
-                mime='text/csv',
-                key="qc_box_plot_csv"
-            )
+            csv_download_button(mean_area_df, "box_plot_data.csv",
+                               key="qc_box_plot_csv")
 
 
 # =============================================================================
@@ -265,13 +255,7 @@ def _render_bqc_scatter(df, experiment, bqc_label):
         plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg",
                                    key="qc_bqc_svg")
     with col2:
-        st.download_button(
-            "Download CSV",
-            data=convert_df(cov_data),
-            file_name="cov_plot_data.csv",
-            mime='text/csv',
-            key='bqc_csv_download'
-        )
+        csv_download_button(cov_data, "cov_plot_data.csv", key="bqc_csv_download")
 
     return cov_threshold, scatter_plot, prepared_df, reliable_data_percent
 
@@ -348,13 +332,7 @@ def _render_bqc_filtering(df, prepared_df, cov_threshold):
     st.markdown("###### Filtered Dataset")
     st.dataframe(result.filtered_df, use_container_width=True)
 
-    st.download_button(
-        label="Download Filtered Data",
-        data=result.filtered_df.to_csv(index=False),
-        file_name='filtered_data.csv',
-        mime='text/csv',
-        key='bqc_filtered_download'
-    )
+    csv_download_button(result.filtered_df, "filtered_data.csv", key="bqc_filtered_download")
 
     return result.filtered_df
 
@@ -406,13 +384,8 @@ def _display_retention_time_plots(df, config):
                         key=f'qc_rt_svg_individual_{idx}'
                     )
                 with col2:
-                    st.download_button(
-                        label="Download CSV",
-                        data=convert_df(retention_df),
-                        file_name=f'retention_plot_{idx}.csv',
-                        mime='text/csv',
-                        key=f'rt_csv_individual_{idx}'
-                    )
+                    csv_download_button(retention_df, f"retention_plot_{idx}.csv",
+                                       key=f"rt_csv_individual_{idx}")
                 st.markdown("---")
 
         elif mode == 'Comparison Mode':
@@ -447,13 +420,8 @@ def _display_retention_time_plots(df, config):
                         key='qc_rt_svg_comparison'
                     )
                 with col2:
-                    st.download_button(
-                        label="Download CSV",
-                        data=convert_df(retention_df),
-                        file_name='retention_time_comparison.csv',
-                        mime='text/csv',
-                        key='rt_csv_comparison'
-                    )
+                    csv_download_button(retention_df, "retention_time_comparison.csv",
+                                       key="rt_csv_comparison")
 
 
 # =============================================================================
@@ -528,13 +496,9 @@ def _display_correlation_analysis(df, experiment, bqc_label):
                 key='qc_corr_svg'
             )
         with col2:
-            st.download_button(
-                label="Download CSV",
-                data=convert_df(correlation_df),
-                file_name=f'correlation_matrix_{selected_condition}.csv',
-                mime='text/csv',
-                key='corr_csv_download'
-            )
+            csv_download_button(correlation_df,
+                               f"correlation_matrix_{selected_condition}.csv",
+                               key="corr_csv_download")
 
         # Correlation matrix table
         st.markdown("###### Correlation Coefficients")
@@ -607,12 +571,6 @@ def _display_pca_analysis(df, experiment):
         with col1:
             plotly_svg_download_button(pca_plot, "pca_plot.svg", key="qc_pca_svg")
         with col2:
-            st.download_button(
-                label="Download CSV",
-                data=convert_df(pca_df),
-                file_name="pca_data.csv",
-                mime="text/csv",
-                key='pca_csv_download'
-            )
+            csv_download_button(pca_df, "pca_data.csv", key="pca_csv_download")
 
     return df, experiment

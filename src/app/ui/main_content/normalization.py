@@ -18,6 +18,7 @@ from app.constants import FORMAT_DISPLAY_TO_ENUM
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
+from app.ui.download_utils import csv_download_button
 
 
 # =============================================================================
@@ -461,14 +462,7 @@ def _display_normalization_results(result):
         st.markdown("##### 📊 Final Normalized Data")
         if result.normalized_df is not None:
             st.dataframe(result.normalized_df, use_container_width=True)
-            csv = result.normalized_df.to_csv(index=False)
-            st.download_button(
-                label="Download Normalized Data",
-                data=csv,
-                file_name="normalized_data.csv",
-                mime="text/csv",
-                key="download_normalized_data"
-            )
+            csv_download_button(result.normalized_df, "normalized_data.csv", key="download_normalized_data")
     elif result:
         for error in result.validation_errors:
             st.error(error)

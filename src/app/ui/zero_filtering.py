@@ -11,6 +11,7 @@ from app.constants import (
 )
 from ..models.experiment import ExperimentConfig
 from ..services.zero_filtering import ZeroFilteringService, ZeroFilterConfig
+from ..ui.download_utils import csv_download_button
 
 
 def display_zero_filtering_config(
@@ -122,14 +123,7 @@ def display_zero_filtering_config(
                 removed_df = pd.DataFrame({'LipidMolec': filter_result.removed_species})
                 st.dataframe(removed_df, use_container_width=True, height=150)
 
-                csv = removed_df.to_csv(index=False)
-                st.download_button(
-                    label="Download Removed Species",
-                    data=csv,
-                    file_name="removed_species.csv",
-                    mime="text/csv",
-                    key="download_removed_species"
-                )
+                csv_download_button(removed_df, "removed_species.csv", key="download_removed_species")
             else:
                 st.success("**Result:** No species will be removed")
 
