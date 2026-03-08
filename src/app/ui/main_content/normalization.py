@@ -14,6 +14,7 @@ import pandas as pd
 
 from app.models.experiment import ExperimentConfig
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowResult
+from app.constants import FORMAT_DISPLAY_TO_ENUM
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
@@ -298,13 +299,6 @@ def _run_normalization(
 ) -> NormalizationWorkflowResult:
     """Run normalization workflow and return result (cached for performance)."""
     try:
-        format_map = {
-            'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
-            'MS-DIAL': DataFormat.MSDIAL,
-            'Generic Format': DataFormat.GENERIC,
-            'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
-        }
-
         from app.models.normalization import NormalizationConfig
 
         norm_config = NormalizationConfig(
@@ -326,7 +320,7 @@ def _run_normalization(
             df=cleaned_df,
             experiment=experiment,
             normalization=norm_config,
-            data_format=format_map.get(data_format, DataFormat.GENERIC),
+            data_format=FORMAT_DISPLAY_TO_ENUM.get(data_format, DataFormat.GENERIC),
             intsta_df=intsta_df,
         )
 

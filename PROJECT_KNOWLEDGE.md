@@ -1098,12 +1098,15 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 
 ##### Phase 3: DRY & Code Quality
 
-**Step 3.1: Extract Shared Constants**
-Create `src/app/constants.py`:
-- `FORMAT_DISPLAY_TO_ENUM` mapping (currently in 3 UI files)
-- `INTERNAL_STANDARD_PATTERNS` (currently in base.py + standards.py)
-- `MSDIAL_METADATA_COLUMNS`
-- Default thresholds: `COV_THRESHOLD_DEFAULT = 30`, `LIPIDSEARCH_DETECTION_THRESHOLD = 30000.0`, `ZERO_FILTER_DEFAULTS = {'non_bqc': 75, 'bqc': 50}`
+**Step 3.1: Extract Shared Constants ✅**
+Created `src/app/constants.py` with:
+- `FORMAT_DISPLAY_TO_ENUM` — replaced inline dicts in data_processing.py, quality_check.py, normalization.py
+- `FORMAT_DISPLAY_TO_INTERNAL` — replaced inline dict in column_mapping.py
+- `INTERNAL_STANDARD_LIPID_PATTERNS` / `INTERNAL_STANDARD_CLASS_PATTERN` — deduplicated from standards.py + base.py
+- `LIPIDSEARCH_DETECTION_THRESHOLD` (30000.0) — used by zero_filtering service + UI
+- `COV_THRESHOLD_DEFAULT` (30) — used by main_app.py, streamlit_adapter.py, quality_check workflow
+- `ZERO_FILTER_NON_BQC_DEFAULT` (75) / `ZERO_FILTER_BQC_DEFAULT` (50) — used by zero_filtering UI
+- Note: `MSDIAL_METADATA_COLUMNS` left in `format_detection.py` — only used there (no duplication in refactored code)
 
 **Step 3.2: Break Down Long Methods**
 - `_display_bqc_assessment()` (145 lines) → split into `_render_bqc_scatter()`, `_render_bqc_filter_ui()`, `_render_bqc_results()`
@@ -1158,7 +1161,7 @@ Replace `col[col.find('[') + 1:col.find(']')]` in normalization service with reg
 | Order | Phase | Estimated Scope |
 |-------|-------|-----------------|
 | 1 | Phase 1 (Session State) | Foundational — everything else depends on clean state |
-| 2 | Phase 3.1 (Constants) | Quick win, unblocks Phase 2 |
+| 2 | Phase 3.1 (Constants) ✅ | Quick win, unblocks Phase 2 |
 | 3 | Phase 2 (Legacy Elimination) | Largest effort — one class at a time |
 | 4 | Phase 3.2-3.4 (DRY/Long Methods) | Improves maintainability |
 | 5 | Phase 4 (Testing/Caching) | Safety net improvements |

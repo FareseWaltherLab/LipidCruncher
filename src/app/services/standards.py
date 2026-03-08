@@ -9,6 +9,11 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import pandas as pd
 
+from app.constants import (
+    INTERNAL_STANDARD_LIPID_PATTERNS,
+    INTERNAL_STANDARD_CLASS_PATTERN,
+)
+
 
 @dataclass
 class StandardsExtractionResult:
@@ -69,22 +74,9 @@ class StandardsService:
     Handles detection, extraction, validation, and processing of internal standards.
     """
 
-    # Internal standard patterns in lipid names (LipidMolec column)
-    INTERNAL_STANDARD_LIPID_PATTERNS: List[str] = [
-        r'\(d\d+\)',        # Deuterium labels: (d5), (d7), (d9)
-        r'[+-]D\d+',        # +D7, -D7 patterns
-        r'-d\d+[_\)\s]',    # Alternative deuterium: -d7_, -d9)
-        r'\[d\d+\]',        # Bracketed deuterium: [d7]
-        r'^Ch-D\d+',        # Cholesterol deuterated standards
-        r'ISTD',            # ISTD marker
-        r'SPLASH',          # SPLASH lipidomix standards
-        r':\(s\)',          # :(s) notation
-        r'\(IS\)',          # (IS) marker
-        r'_IS$',            # Suffix _IS
-    ]
-
-    # Internal standard patterns in ClassKey column
-    INTERNAL_STANDARD_CLASS_PATTERN: str = r'ISTD|Internal'
+    # Internal standard patterns (imported from app.constants)
+    INTERNAL_STANDARD_LIPID_PATTERNS: List[str] = INTERNAL_STANDARD_LIPID_PATTERNS
+    INTERNAL_STANDARD_CLASS_PATTERN: str = INTERNAL_STANDARD_CLASS_PATTERN
 
     # ==================== Detection Methods ====================
 

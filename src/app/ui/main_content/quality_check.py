@@ -18,6 +18,7 @@ import pandas as pd
 import streamlit as st
 import lipidomics as lp
 
+from app.constants import FORMAT_DISPLAY_TO_ENUM
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.services.format_detection import DataFormat
 from app.ui.download_utils import (
@@ -46,14 +47,8 @@ def display_quality_check_module(continuation_df, experiment, bqc_label, format_
     st.subheader("Quality Check and Anomaly Detection Module")
 
     # Resolve format_type to DataFormat enum
-    format_map = {
-        'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
-        'MS-DIAL': DataFormat.MSDIAL,
-        'Generic Format': DataFormat.GENERIC,
-        'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
-    }
     if isinstance(format_type, str):
-        format_enum = format_map.get(format_type, DataFormat.GENERIC)
+        format_enum = FORMAT_DISPLAY_TO_ENUM.get(format_type, DataFormat.GENERIC)
     else:
         format_enum = format_type
 

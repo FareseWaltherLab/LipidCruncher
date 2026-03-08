@@ -28,6 +28,7 @@ st.set_page_config(
 # Imports - Refactored Components
 # =============================================================================
 
+from app.constants import COV_THRESHOLD_DEFAULT
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
@@ -65,7 +66,7 @@ def _reset_qc_state():
     """Clear all Quality Check session state."""
     st.session_state.qc_continuation_df = None
     st.session_state.qc_bqc_plot = None
-    st.session_state.qc_cov_threshold = 30
+    st.session_state.qc_cov_threshold = COV_THRESHOLD_DEFAULT
     st.session_state.qc_correlation_plots = {}
     st.session_state.qc_pca_plot = None
     st.session_state.qc_samples_removed = []

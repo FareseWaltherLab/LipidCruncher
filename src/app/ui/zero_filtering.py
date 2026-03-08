@@ -4,6 +4,11 @@ Zero filtering UI component for configuring and applying zero value filtering.
 import pandas as pd
 import streamlit as st
 
+from app.constants import (
+    LIPIDSEARCH_DETECTION_THRESHOLD,
+    ZERO_FILTER_NON_BQC_DEFAULT,
+    ZERO_FILTER_BQC_DEFAULT,
+)
 from ..models.experiment import ExperimentConfig
 from ..services.zero_filtering import ZeroFilteringService, ZeroFilterConfig
 
@@ -29,8 +34,7 @@ def display_zero_filtering_config(
     has_bqc = bqc_label is not None and bqc_label in experiment.conditions_list
 
     # Determine default detection threshold based on format
-    # LipidSearch 5.0 has a noise floor around 30000
-    default_detection = 30000.0 if data_format == 'LipidSearch 5.0' else 0.0
+    default_detection = LIPIDSEARCH_DETECTION_THRESHOLD if data_format == 'LipidSearch 5.0' else 0.0
 
     with st.expander("⚙️ Configure Zero Filtering", expanded=False):
         if cleaned_df is None or cleaned_df.empty:
@@ -45,9 +49,9 @@ def display_zero_filtering_config(
             st.session_state._preserved_zero_filter_detection_threshold = default_detection
             st.session_state._zero_filter_format = data_format
         if st.session_state.get('_preserved_non_bqc_zero_threshold') is None:
-            st.session_state._preserved_non_bqc_zero_threshold = 75
+            st.session_state._preserved_non_bqc_zero_threshold = ZERO_FILTER_NON_BQC_DEFAULT
         if st.session_state.get('_preserved_bqc_zero_threshold') is None:
-            st.session_state._preserved_bqc_zero_threshold = 50
+            st.session_state._preserved_bqc_zero_threshold = ZERO_FILTER_BQC_DEFAULT
 
         col1, col2 = st.columns(2)
 

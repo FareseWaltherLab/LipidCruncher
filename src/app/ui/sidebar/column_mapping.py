@@ -9,6 +9,7 @@ This module contains:
 import streamlit as st
 import pandas as pd
 
+from app.constants import FORMAT_DISPLAY_TO_INTERNAL
 from lipidomics.data_format_handler import DataFormatHandler
 
 
@@ -109,12 +110,7 @@ def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> pd.DataFram
         st.session_state.format_type = data_format
         return df
 
-    format_map = {
-        'LipidSearch 5.0': 'lipidsearch',
-        'MS-DIAL': 'msdial',
-        'Generic Format': 'generic',
-    }
-    internal_format = format_map.get(data_format, 'generic')
+    internal_format = FORMAT_DISPLAY_TO_INTERNAL.get(data_format, 'generic')
 
     # Use DataFormatHandler to validate and standardize
     standardized_df, success, message = DataFormatHandler.validate_and_preprocess(

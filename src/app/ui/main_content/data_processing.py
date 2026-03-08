@@ -17,6 +17,7 @@ import pandas as pd
 from app.adapters.streamlit_adapter import StreamlitAdapter
 
 
+from app.constants import FORMAT_DISPLAY_TO_ENUM
 from app.services.format_detection import DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from app.workflows.data_ingestion import IngestionResult
@@ -303,12 +304,7 @@ def display_quality_filtering_config() -> dict:
 # Pipeline Orchestration
 # =============================================================================
 
-FORMAT_MAP = {
-    'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
-    'MS-DIAL': DataFormat.MSDIAL,
-    'Generic Format': DataFormat.GENERIC,
-    'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
-}
+FORMAT_MAP = FORMAT_DISPLAY_TO_ENUM
 
 
 def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):

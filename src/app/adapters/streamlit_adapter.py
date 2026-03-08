@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
+from app.constants import COV_THRESHOLD_DEFAULT
+
 from ..models.experiment import ExperimentConfig
 from ..models.normalization import NormalizationConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
@@ -128,7 +130,7 @@ class SessionState:
     # --- Quality Check (owner: quality_check.py) ---
     qc_continuation_df: Optional[pd.DataFrame] = None
     qc_bqc_plot: Any = None
-    qc_cov_threshold: int = 30
+    qc_cov_threshold: int = COV_THRESHOLD_DEFAULT
     qc_correlation_plots: Dict[str, Any] = field(default_factory=dict)
     qc_pca_plot: Any = None
     qc_samples_removed: List[str] = field(default_factory=list)

@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
+from app.constants import COV_THRESHOLD_DEFAULT
 from ..models.experiment import ExperimentConfig
 from ..services.format_detection import DataFormat
 from ..services.quality_check import (
@@ -41,7 +42,7 @@ class QualityCheckConfig:
     """
     bqc_label: Optional[str] = None
     format_type: DataFormat = DataFormat.GENERIC
-    cov_threshold: float = 30.0
+    cov_threshold: float = float(COV_THRESHOLD_DEFAULT)
 
 
 class QualityCheckWorkflow:

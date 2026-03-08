@@ -5,6 +5,7 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import List, Optional
 
+from app.constants import LIPIDSEARCH_DETECTION_THRESHOLD
 from ..models.experiment import ExperimentConfig
 
 
@@ -37,7 +38,7 @@ class ZeroFilterConfig:
     @classmethod
     def for_lipidsearch(cls) -> "ZeroFilterConfig":
         """Create config optimized for LipidSearch 5.0 data (higher noise floor)."""
-        return cls(detection_threshold=30000.0)
+        return cls(detection_threshold=LIPIDSEARCH_DETECTION_THRESHOLD)
 
     @classmethod
     def strict(cls) -> "ZeroFilterConfig":
