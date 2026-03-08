@@ -9,8 +9,9 @@ This module contains:
 import streamlit as st
 import pandas as pd
 
-from app.constants import FORMAT_DISPLAY_TO_INTERNAL
-from lipidomics.data_format_handler import DataFormatHandler
+from app.constants import FORMAT_DISPLAY_TO_ENUM
+from app.services.data_standardization import DataStandardizationService
+from app.services.format_detection import DataFormat, FormatDetectionService
 
 
 # =============================================================================
@@ -110,19 +111,33 @@ def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> pd.DataFram
         st.session_state.format_type = data_format
         return df
 
-    internal_format = FORMAT_DISPLAY_TO_INTERNAL.get(data_format, 'generic')
+    format_enum = FORMAT_DISPLAY_TO_ENUM.get(data_format, DataFormat.GENERIC)
+    use_normalized = st.session_state.get('msdial_data_type_index', 0) == 1
 
-    # Use DataFormatHandler to validate and standardize
-    standardized_df, success, message = DataFormatHandler.validate_and_preprocess(
-        df, internal_format
+    result = DataStandardizationService.validate_and_standardize(
+        df, format_enum, msdial_use_normalized=use_normalized
     )
 
-    if not success:
-        st.sidebar.error(message)
+    if not result.success:
+        st.sidebar.error(result.message)
         return None
 
     st.session_state.format_type = data_format
-    return standardized_df
+
+    # Store standardization outputs in session state
+    if result.column_mapping is not None:
+        if st.session_state.get('column_mapping') is None:
+            st.session_state.column_mapping = result.column_mapping
+    if st.session_state.get('n_intensity_cols') is None:
+        st.session_state.n_intensity_cols = result.n_intensity_cols
+
+    # MS-DIAL specific state
+    if result.msdial_features is not None:
+        st.session_state.msdial_features = result.msdial_features
+    if result.msdial_sample_names is not None:
+        st.session_state.msdial_sample_names = result.msdial_sample_names
+
+    return result.standardized_df
 
 
 def display_column_mapping(df: pd.DataFrame, data_format: str) -> tuple:
@@ -161,7 +176,7 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> tuple:
             # Deduplicate: raw and normalized columns share same names in MS-DIAL
             available_for_samples = list(dict.fromkeys(
                 col for col in all_columns
-                if col not in DataFormatHandler.MSDIAL_METADATA_COLUMNS
+                if col not in FormatDetectionService.MSDIAL_METADATA_COLUMNS
             ))
 
             manual_samples = st.multiselect(

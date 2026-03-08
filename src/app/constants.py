@@ -20,13 +20,6 @@ FORMAT_DISPLAY_TO_ENUM: Dict[str, DataFormat] = {
     'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
 }
 
-# Display string → internal format name (used by DataFormatHandler)
-FORMAT_DISPLAY_TO_INTERNAL: Dict[str, str] = {
-    'LipidSearch 5.0': 'lipidsearch',
-    'MS-DIAL': 'msdial',
-    'Generic Format': 'generic',
-}
-
 
 # =============================================================================
 # Internal Standard Patterns

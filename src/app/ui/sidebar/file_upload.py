@@ -13,8 +13,9 @@ import streamlit as st
 import pandas as pd
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.services.data_standardization import DataStandardizationService
+from app.services.format_detection import DataFormat
 from app.ui.content import get_sample_data_info
-from lipidomics.data_format_handler import DataFormatHandler
 
 
 # =============================================================================
@@ -67,16 +68,18 @@ def load_sample_dataset(data_format: str) -> pd.DataFrame:
                 # Metabolomics Workbench needs raw text for parsing special markers
                 with open(filepath, 'r', encoding='utf-8') as f:
                     text_content = f.read()
-                # Process through handler which returns standardized DataFrame
-                standardized_df, success, message = DataFormatHandler.validate_and_preprocess(
-                    text_content, 'Metabolomics Workbench'
+                result = DataStandardizationService.validate_and_standardize(
+                    text_content, DataFormat.METABOLOMICS_WORKBENCH
                 )
-                if success:
-                    # Store as already standardized
-                    st.session_state.standardized_df = standardized_df
-                    return standardized_df
+                if result.success:
+                    st.session_state.standardized_df = result.standardized_df
+                    if result.workbench_conditions:
+                        st.session_state.workbench_conditions = result.workbench_conditions
+                    if result.workbench_samples:
+                        st.session_state.workbench_samples = result.workbench_samples
+                    return result.standardized_df
                 else:
-                    st.sidebar.error(message)
+                    st.sidebar.error(result.message)
                     return None
             else:
                 return pd.read_csv(filepath)
@@ -130,17 +133,20 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
             if data_format == 'Metabolomics Workbench':
                 # Metabolomics Workbench needs raw text for parsing special markers
                 text_content = uploaded_file.getvalue().decode('utf-8')
-                # Process through handler which returns standardized DataFrame
-                standardized_df, success, message = DataFormatHandler.validate_and_preprocess(
-                    text_content, 'Metabolomics Workbench'
+                result = DataStandardizationService.validate_and_standardize(
+                    text_content, DataFormat.METABOLOMICS_WORKBENCH
                 )
-                if success:
+                if result.success:
                     st.sidebar.success("File uploaded and processed successfully!")
-                    st.session_state.raw_df = standardized_df
-                    st.session_state.standardized_df = standardized_df
-                    return standardized_df
+                    st.session_state.raw_df = result.standardized_df
+                    st.session_state.standardized_df = result.standardized_df
+                    if result.workbench_conditions:
+                        st.session_state.workbench_conditions = result.workbench_conditions
+                    if result.workbench_samples:
+                        st.session_state.workbench_samples = result.workbench_samples
+                    return result.standardized_df
                 else:
-                    st.sidebar.error(message)
+                    st.sidebar.error(result.message)
                     return None
             else:
                 df = pd.read_csv(uploaded_file)
