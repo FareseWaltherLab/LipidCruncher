@@ -206,134 +206,157 @@ def _display_bqc_assessment(df, experiment, bqc_label):
         st.code("CoV = (Standard_Deviation / Mean) × 100%", language=None)
         st.markdown("Blue points are below threshold (reliable), red points are above (variable).")
 
-        # --- Settings ---
-        st.markdown("---")
-        st.markdown("##### ⚙️ Settings")
-
-        cov_threshold = st.number_input(
-            'CoV Threshold (%)',
-            min_value=10,
-            max_value=1000,
-            value=st.session_state.get('qc_cov_threshold', 30),
-            step=1,
-            help="Points above threshold highlighted in red.",
-            key='bqc_cov_threshold'
-        )
-        st.session_state.qc_cov_threshold = cov_threshold
-
-        # --- Results ---
-        st.markdown("---")
-        st.markdown("##### 📈 Results")
-
-        bqc_sample_index = experiment.conditions_list.index(bqc_label)
-        scatter_plot, prepared_df, reliable_data_percent, _ = (
-            BQCPlotterService.generate_and_display_cov_plot(
-                df, experiment, bqc_sample_index, cov_threshold=cov_threshold
-            )
+        cov_threshold, scatter_plot, prepared_df, reliable_data_percent = (
+            _render_bqc_scatter(df, experiment, bqc_label)
         )
 
-        st.plotly_chart(scatter_plot, use_container_width=True)
-
-        # Reliability assessment
-        if reliable_data_percent >= 80:
-            st.success(f"{reliable_data_percent:.1f}% of datapoints are reliable (CoV < {cov_threshold}%).")
-        elif reliable_data_percent >= 50:
-            st.warning(f"{reliable_data_percent:.1f}% of datapoints are reliable (CoV < {cov_threshold}%).")
-        else:
-            st.error(f"Less than 50% of datapoints are reliable (CoV < {cov_threshold}%).")
-
-        # Download buttons
-        cov_data = prepared_df[['LipidMolec', 'cov', 'mean']].dropna()
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg",
-                                       key="qc_bqc_svg")
-        with col2:
-            st.download_button(
-                "Download CSV",
-                data=convert_df(cov_data),
-                file_name="cov_plot_data.csv",
-                mime='text/csv',
-                key='bqc_csv_download'
-            )
-
-        # --- Filtering ---
-        if prepared_df is not None and not prepared_df.empty:
-            st.markdown("---")
-            st.markdown("##### 🔧 Data Filtering")
-
-            filter_cov = st.radio(
-                f"Filter lipids with CoV ≥ {cov_threshold}%?",
-                ("No", "Yes"),
-                index=0,
-                horizontal=True,
-                key='bqc_filter_choice'
-            )
-
-            # Identify high-CoV lipids
-            high_cov_mask = prepared_df['cov'] >= cov_threshold
-            high_cov_lipids = prepared_df.loc[high_cov_mask, 'LipidMolec'].tolist()
-
-            lipids_to_keep = []
-            if filter_cov == "Yes" and high_cov_lipids:
-                # Show high-CoV lipids table
-                cov_filtered_df = prepared_df.loc[
-                    high_cov_mask, ['LipidMolec', 'ClassKey', 'cov', 'mean']
-                ].copy()
-                cov_filtered_df['cov'] = cov_filtered_df['cov'].round(2)
-                cov_filtered_df['mean'] = cov_filtered_df['mean'].round(4)
-
-                st.markdown("###### Lipids Above Threshold")
-                st.dataframe(cov_filtered_df, use_container_width=True)
-
-                lipids_to_keep = st.multiselect(
-                    "Keep despite high CoV:",
-                    options=cov_filtered_df['LipidMolec'].tolist(),
-                    format_func=lambda x: (
-                        f"{x} (CoV: "
-                        f"{cov_filtered_df[cov_filtered_df['LipidMolec'] == x]['cov'].iloc[0]}%)"
-                    ),
-                    help="Select lipids to retain in the dataset.",
-                    key='bqc_lipids_to_keep'
-                )
-            elif filter_cov == "No":
-                # Keep all high-CoV lipids (no filtering)
-                lipids_to_keep = high_cov_lipids
-
-            # Apply BQC filter via workflow
-            result = QualityCheckWorkflow.apply_bqc_filter(
-                df=df,
-                high_cov_lipids=high_cov_lipids,
-                lipids_to_keep=lipids_to_keep,
-            )
-
-            # Summary
-            if result.removed_count > 0:
-                st.warning(
-                    f"Removed {result.removed_count} lipids "
-                    f"({result.removed_percentage:.1f}% of dataset)."
-                )
-            else:
-                st.success("No lipids removed.")
-
-            if filter_cov == "Yes" and lipids_to_keep:
-                st.info(f"Retained {len(lipids_to_keep)} lipids despite high CoV.")
-
-            # Show filtered dataset
-            st.markdown("###### Filtered Dataset")
-            st.dataframe(result.filtered_df, use_container_width=True)
-
-            st.download_button(
-                label="Download Filtered Data",
-                data=result.filtered_df.to_csv(index=False),
-                file_name='filtered_data.csv',
-                mime='text/csv',
-                key='bqc_filtered_download'
-            )
-
-            return result.filtered_df
+        filtered_df = _render_bqc_filtering(df, prepared_df, cov_threshold)
+        if filtered_df is not None:
+            return filtered_df
 
     return df
+
+
+def _render_bqc_scatter(df, experiment, bqc_label):
+    """Render BQC settings, scatter plot, reliability assessment, and download buttons.
+
+    Returns (cov_threshold, scatter_plot, prepared_df, reliable_data_percent).
+    """
+    # --- Settings ---
+    st.markdown("---")
+    st.markdown("##### ⚙️ Settings")
+
+    cov_threshold = st.number_input(
+        'CoV Threshold (%)',
+        min_value=10,
+        max_value=1000,
+        value=st.session_state.get('qc_cov_threshold', 30),
+        step=1,
+        help="Points above threshold highlighted in red.",
+        key='bqc_cov_threshold'
+    )
+    st.session_state.qc_cov_threshold = cov_threshold
+
+    # --- Results ---
+    st.markdown("---")
+    st.markdown("##### 📈 Results")
+
+    bqc_sample_index = experiment.conditions_list.index(bqc_label)
+    scatter_plot, prepared_df, reliable_data_percent, _ = (
+        BQCPlotterService.generate_and_display_cov_plot(
+            df, experiment, bqc_sample_index, cov_threshold=cov_threshold
+        )
+    )
+
+    st.plotly_chart(scatter_plot, use_container_width=True)
+
+    # Reliability assessment
+    if reliable_data_percent >= 80:
+        st.success(f"{reliable_data_percent:.1f}% of datapoints are reliable (CoV < {cov_threshold}%).")
+    elif reliable_data_percent >= 50:
+        st.warning(f"{reliable_data_percent:.1f}% of datapoints are reliable (CoV < {cov_threshold}%).")
+    else:
+        st.error(f"Less than 50% of datapoints are reliable (CoV < {cov_threshold}%).")
+
+    # Download buttons
+    cov_data = prepared_df[['LipidMolec', 'cov', 'mean']].dropna()
+    col1, col2 = st.columns(2)
+    with col1:
+        plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg",
+                                   key="qc_bqc_svg")
+    with col2:
+        st.download_button(
+            "Download CSV",
+            data=convert_df(cov_data),
+            file_name="cov_plot_data.csv",
+            mime='text/csv',
+            key='bqc_csv_download'
+        )
+
+    return cov_threshold, scatter_plot, prepared_df, reliable_data_percent
+
+
+def _render_bqc_filtering(df, prepared_df, cov_threshold):
+    """Render BQC filtering UI: filter choice, high-CoV table, apply filter, results.
+
+    Returns filtered DataFrame if filtering was applied, None otherwise.
+    """
+    if prepared_df is None or prepared_df.empty:
+        return None
+
+    st.markdown("---")
+    st.markdown("##### 🔧 Data Filtering")
+
+    filter_cov = st.radio(
+        f"Filter lipids with CoV ≥ {cov_threshold}%?",
+        ("No", "Yes"),
+        index=0,
+        horizontal=True,
+        key='bqc_filter_choice'
+    )
+
+    # Identify high-CoV lipids
+    high_cov_mask = prepared_df['cov'] >= cov_threshold
+    high_cov_lipids = prepared_df.loc[high_cov_mask, 'LipidMolec'].tolist()
+
+    lipids_to_keep = []
+    if filter_cov == "Yes" and high_cov_lipids:
+        # Show high-CoV lipids table
+        cov_filtered_df = prepared_df.loc[
+            high_cov_mask, ['LipidMolec', 'ClassKey', 'cov', 'mean']
+        ].copy()
+        cov_filtered_df['cov'] = cov_filtered_df['cov'].round(2)
+        cov_filtered_df['mean'] = cov_filtered_df['mean'].round(4)
+
+        st.markdown("###### Lipids Above Threshold")
+        st.dataframe(cov_filtered_df, use_container_width=True)
+
+        lipids_to_keep = st.multiselect(
+            "Keep despite high CoV:",
+            options=cov_filtered_df['LipidMolec'].tolist(),
+            format_func=lambda x: (
+                f"{x} (CoV: "
+                f"{cov_filtered_df[cov_filtered_df['LipidMolec'] == x]['cov'].iloc[0]}%)"
+            ),
+            help="Select lipids to retain in the dataset.",
+            key='bqc_lipids_to_keep'
+        )
+    elif filter_cov == "No":
+        # Keep all high-CoV lipids (no filtering)
+        lipids_to_keep = high_cov_lipids
+
+    # Apply BQC filter via workflow
+    result = QualityCheckWorkflow.apply_bqc_filter(
+        df=df,
+        high_cov_lipids=high_cov_lipids,
+        lipids_to_keep=lipids_to_keep,
+    )
+
+    # Summary
+    if result.removed_count > 0:
+        st.warning(
+            f"Removed {result.removed_count} lipids "
+            f"({result.removed_percentage:.1f}% of dataset)."
+        )
+    else:
+        st.success("No lipids removed.")
+
+    if filter_cov == "Yes" and lipids_to_keep:
+        st.info(f"Retained {len(lipids_to_keep)} lipids despite high CoV.")
+
+    # Show filtered dataset
+    st.markdown("###### Filtered Dataset")
+    st.dataframe(result.filtered_df, use_container_width=True)
+
+    st.download_button(
+        label="Download Filtered Data",
+        data=result.filtered_df.to_csv(index=False),
+        file_name='filtered_data.csv',
+        mime='text/csv',
+        key='bqc_filtered_download'
+    )
+
+    return result.filtered_df
 
 
 # =============================================================================

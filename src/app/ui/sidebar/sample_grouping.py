@@ -58,59 +58,7 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
     grouping_correct = st.sidebar.radio('', ['Yes', 'No'], key='grouping_radio')
 
     if grouping_correct == 'No':
-        # Store original column order if not already stored
-        if st.session_state.get('original_column_order') is None:
-            st.session_state.original_column_order = df.columns.tolist()
-
-        st.session_state.grouping_complete = False
-        selections = {}
-        remaining_samples = group_df['sample name'].tolist()
-
-        # Keep track of expected samples per condition
-        expected_samples = dict(zip(experiment.conditions_list, experiment.number_of_samples_list))
-
-        # Process each condition
-        for condition in experiment.conditions_list:
-            st.sidebar.write(f"Select {expected_samples[condition]} samples for {condition}")
-
-            selected_samples = st.sidebar.multiselect(
-                f'Pick the samples that belong to condition {condition}',
-                remaining_samples,
-                key=f'select_{condition}'
-            )
-
-            selections[condition] = selected_samples
-
-            # Update remaining samples only if correct number selected
-            if len(selected_samples) == expected_samples[condition]:
-                remaining_samples = [s for s in remaining_samples if s not in selected_samples]
-
-        # Verify all conditions have correct number of samples
-        all_correct = all(
-            len(selections[condition]) == expected_samples[condition]
-            for condition in experiment.conditions_list
-        )
-
-        if all_correct:
-            try:
-                regroup_result = SampleGroupingService.regroup_samples(
-                    df, group_df, selections, experiment,
-                )
-
-                st.session_state.grouping_complete = True
-
-                st.sidebar.write("New sample order after regrouping:")
-                st.sidebar.dataframe(regroup_result.name_df, use_container_width=True)
-
-                return regroup_result.group_df, regroup_result.reordered_df
-
-            except ValueError as e:
-                st.sidebar.error(f"Error updating groups: {str(e)}")
-                st.session_state.grouping_complete = False
-                return group_df, df
-        else:
-            st.session_state.grouping_complete = False
-            return group_df, df
+        return _handle_manual_regrouping(df, group_df, experiment)
     else:
         st.session_state.grouping_complete = True
         # Restore original column order if it was stored
@@ -118,6 +66,57 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
             df = df.reindex(columns=st.session_state.original_column_order)
 
     return group_df, df
+
+
+def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experiment: ExperimentConfig) -> tuple:
+    """Handle manual sample regrouping UI and apply regrouping if valid.
+
+    Returns (group_df, updated_df).
+    """
+    if st.session_state.get('original_column_order') is None:
+        st.session_state.original_column_order = df.columns.tolist()
+
+    st.session_state.grouping_complete = False
+    selections = {}
+    remaining_samples = group_df['sample name'].tolist()
+    expected_samples = dict(zip(experiment.conditions_list, experiment.number_of_samples_list))
+
+    for condition in experiment.conditions_list:
+        st.sidebar.write(f"Select {expected_samples[condition]} samples for {condition}")
+
+        selected_samples = st.sidebar.multiselect(
+            f'Pick the samples that belong to condition {condition}',
+            remaining_samples,
+            key=f'select_{condition}'
+        )
+
+        selections[condition] = selected_samples
+
+        if len(selected_samples) == expected_samples[condition]:
+            remaining_samples = [s for s in remaining_samples if s not in selected_samples]
+
+    # Verify all conditions have correct number of samples
+    all_correct = all(
+        len(selections[condition]) == expected_samples[condition]
+        for condition in experiment.conditions_list
+    )
+
+    if not all_correct:
+        st.session_state.grouping_complete = False
+        return group_df, df
+
+    try:
+        regroup_result = SampleGroupingService.regroup_samples(
+            df, group_df, selections, experiment,
+        )
+        st.session_state.grouping_complete = True
+        st.sidebar.write("New sample order after regrouping:")
+        st.sidebar.dataframe(regroup_result.name_df, use_container_width=True)
+        return regroup_result.group_df, regroup_result.reordered_df
+    except ValueError as e:
+        st.sidebar.error(f"Error updating groups: {str(e)}")
+        st.session_state.grouping_complete = False
+        return group_df, df
 
 
 def display_sample_grouping(df: pd.DataFrame, data_format: str):

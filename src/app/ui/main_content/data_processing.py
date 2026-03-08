@@ -200,104 +200,104 @@ def display_quality_filtering_config() -> dict:
             st.session_state.msdial_quality_level = 'Moderate (Score ≥60)'
 
         if quality_filtering_available:
-            quality_options = {
-                'Strict (Score ≥80, MS/MS required)': {'total_score_threshold': 80, 'require_msms': True},
-                'Moderate (Score ≥60)': {'total_score_threshold': 60, 'require_msms': False},
-                'Permissive (Score ≥40)': {'total_score_threshold': 40, 'require_msms': False},
-                'No filtering': {'total_score_threshold': 0, 'require_msms': False}
-            }
-            quality_options_list = list(quality_options.keys())
-            widget_key = "msdial_quality_level_radio"
-
-            # Initialize widget key from persisted value BEFORE rendering
-            persisted_value = st.session_state.get('msdial_quality_level', 'Moderate (Score ≥60)')
-            if persisted_value in quality_options_list:
-                st.session_state[widget_key] = persisted_value
-
-            def on_quality_level_change():
-                st.session_state.msdial_quality_level = st.session_state[widget_key]
-
-            selected_option = st.radio(
-                "Quality filtering level:",
-                quality_options_list,
-                horizontal=True,
-                key=widget_key,
-                on_change=on_quality_level_change
-            )
-            st.session_state.msdial_quality_level = selected_option
-
-            quality_config = quality_options[selected_option].copy()
-
-            # MS/MS validation override (if available)
-            if msms_filtering_available:
-                col1, col2 = st.columns(2)
-                with col1:
-                    custom_msms = st.checkbox(
-                        "Require MS/MS validation",
-                        value=quality_config['require_msms'],
-                        key="msdial_custom_msms"
-                    )
-                    quality_config['require_msms'] = custom_msms
-
-            # Advanced: custom score threshold
-            show_custom = st.checkbox("Customize score threshold", value=False, key="msdial_show_custom_threshold")
-            if show_custom:
-                custom_score = st.slider(
-                    "Minimum Total Score:",
-                    min_value=0,
-                    max_value=100,
-                    value=quality_config['total_score_threshold'],
-                    step=5,
-                    key="msdial_custom_score"
-                )
-                quality_config['total_score_threshold'] = custom_score
-
-            # Summary
-            st.markdown("---")
-            st.markdown(f"**Current settings:** Score ≥ {quality_config['total_score_threshold']}, "
-                       f"MS/MS required: {'Yes' if quality_config['require_msms'] else 'No'}")
-
-            # Show filter results only if they match the current config
-            # (results are stored after workflow runs, so they reflect previous run with same config)
-            last_config = st.session_state.get('last_quality_config')
-            if (last_config and
-                last_config.get('total_score_threshold') == quality_config['total_score_threshold'] and
-                last_config.get('require_msms') == quality_config['require_msms']):
-                ingestion_result = st.session_state.get('ingestion_result')
-                if ingestion_result and ingestion_result.cleaning_messages:
-                    st.markdown("**Filter Results:**")
-                    for msg in ingestion_result.cleaning_messages:
-                        st.info(msg)
-
-            return quality_config
-
+            quality_config = _display_score_filtering(msms_filtering_available)
         elif msms_filtering_available:
-            # Only MS/MS filtering available
-            require_msms = st.checkbox(
-                "Require MS/MS validation",
-                value=False,
-                key="msdial_msms_only"
-            )
-            quality_config = {'total_score_threshold': 0, 'require_msms': require_msms}
+            quality_config = _display_msms_only_filtering()
+        else:
+            return None
 
-            # Summary
-            st.markdown("---")
-            st.markdown(f"**Current settings:** MS/MS required: {'Yes' if require_msms else 'No'}")
-
-            # Show filter results if they match the current config
-            last_config = st.session_state.get('last_quality_config')
-            if (last_config and
-                last_config.get('total_score_threshold') == 0 and
-                last_config.get('require_msms') == require_msms):
-                ingestion_result = st.session_state.get('ingestion_result')
-                if ingestion_result and ingestion_result.cleaning_messages:
-                    st.markdown("**Filter Results:**")
-                    for msg in ingestion_result.cleaning_messages:
-                        st.info(msg)
-
-            return quality_config
+        _display_quality_filter_summary(quality_config)
+        _display_cached_filter_results(quality_config)
+        return quality_config
 
     return None
+
+
+def _display_score_filtering(msms_filtering_available: bool) -> dict:
+    """Display quality score filtering with optional MS/MS and custom threshold."""
+    quality_options = {
+        'Strict (Score ≥80, MS/MS required)': {'total_score_threshold': 80, 'require_msms': True},
+        'Moderate (Score ≥60)': {'total_score_threshold': 60, 'require_msms': False},
+        'Permissive (Score ≥40)': {'total_score_threshold': 40, 'require_msms': False},
+        'No filtering': {'total_score_threshold': 0, 'require_msms': False}
+    }
+    quality_options_list = list(quality_options.keys())
+    widget_key = "msdial_quality_level_radio"
+
+    # Initialize widget key from persisted value BEFORE rendering
+    persisted_value = st.session_state.get('msdial_quality_level', 'Moderate (Score ≥60)')
+    if persisted_value in quality_options_list:
+        st.session_state[widget_key] = persisted_value
+
+    def on_quality_level_change():
+        st.session_state.msdial_quality_level = st.session_state[widget_key]
+
+    selected_option = st.radio(
+        "Quality filtering level:",
+        quality_options_list,
+        horizontal=True,
+        key=widget_key,
+        on_change=on_quality_level_change
+    )
+    st.session_state.msdial_quality_level = selected_option
+
+    quality_config = quality_options[selected_option].copy()
+
+    # MS/MS validation override (if available)
+    if msms_filtering_available:
+        col1, col2 = st.columns(2)
+        with col1:
+            custom_msms = st.checkbox(
+                "Require MS/MS validation",
+                value=quality_config['require_msms'],
+                key="msdial_custom_msms"
+            )
+            quality_config['require_msms'] = custom_msms
+
+    # Advanced: custom score threshold
+    show_custom = st.checkbox("Customize score threshold", value=False, key="msdial_show_custom_threshold")
+    if show_custom:
+        custom_score = st.slider(
+            "Minimum Total Score:",
+            min_value=0,
+            max_value=100,
+            value=quality_config['total_score_threshold'],
+            step=5,
+            key="msdial_custom_score"
+        )
+        quality_config['total_score_threshold'] = custom_score
+
+    return quality_config
+
+
+def _display_msms_only_filtering() -> dict:
+    """Display MS/MS-only filtering when no quality score column is available."""
+    require_msms = st.checkbox(
+        "Require MS/MS validation",
+        value=False,
+        key="msdial_msms_only"
+    )
+    return {'total_score_threshold': 0, 'require_msms': require_msms}
+
+
+def _display_quality_filter_summary(quality_config: dict):
+    """Display current quality filter settings summary."""
+    st.markdown("---")
+    st.markdown(f"**Current settings:** Score ≥ {quality_config['total_score_threshold']}, "
+               f"MS/MS required: {'Yes' if quality_config['require_msms'] else 'No'}")
+
+
+def _display_cached_filter_results(quality_config: dict):
+    """Display filter results from previous workflow run if config matches."""
+    last_config = st.session_state.get('last_quality_config')
+    if (last_config and
+        last_config.get('total_score_threshold') == quality_config['total_score_threshold'] and
+        last_config.get('require_msms') == quality_config['require_msms']):
+        ingestion_result = st.session_state.get('ingestion_result')
+        if ingestion_result and ingestion_result.cleaning_messages:
+            st.markdown("**Filter Results:**")
+            for msg in ingestion_result.cleaning_messages:
+                st.info(msg)
 
 
 # =============================================================================

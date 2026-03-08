@@ -174,22 +174,49 @@ class NormalizationService:
                 "Please provide intsta_df with standard intensity data."
             )
 
-        # Validate intsta_df structure
         NormalizationService._validate_intsta_dataframe(intsta_df)
 
-        # Filter to selected classes
         selected_classes = config.selected_classes or list(df['ClassKey'].unique())
         selected_df = df[df['ClassKey'].isin(selected_classes)].copy()
-
-        # Get standards to remove
         standards_to_remove = set(config.internal_standards.values())
-
-        # Remove standards from the dataset
         selected_df = selected_df[~selected_df['LipidMolec'].isin(standards_to_remove)]
 
-        # Process each lipid class
-        normalized_dfs = []
         full_samples_list = experiment.full_samples_list
+        normalized_dfs = NormalizationService._normalize_by_class(
+            selected_df, config, intsta_df, selected_classes, full_samples_list
+        )
+
+        # Combine all classes
+        if normalized_dfs:
+            result_df = pd.concat(normalized_dfs, axis=0, ignore_index=True)
+        else:
+            intensity_cols = [f"concentration[{s}]" for s in full_samples_list]
+            result_df = pd.DataFrame(columns=['LipidMolec', 'ClassKey'] + intensity_cols)
+
+        # Clean up and rename
+        result_df = result_df.fillna(0)
+        result_df = result_df.replace([np.inf, -np.inf], 0)
+        result_df = NormalizationService._rename_intensity_to_concentration(result_df)
+
+        return NormalizationResult(
+            normalized_df=result_df,
+            removed_standards=list(standards_to_remove),
+            method_applied="Internal standards normalization"
+        )
+
+    @staticmethod
+    def _normalize_by_class(
+        selected_df: pd.DataFrame,
+        config: NormalizationConfig,
+        intsta_df: pd.DataFrame,
+        selected_classes: List[str],
+        full_samples_list: List[str]
+    ) -> List[pd.DataFrame]:
+        """Normalize each lipid class using its mapped internal standard.
+
+        Returns list of normalized DataFrames, one per class.
+        """
+        normalized_dfs = []
 
         for lipid_class in selected_classes:
             standard_name = config.get_standard_for_class(lipid_class)
@@ -206,45 +233,17 @@ class NormalizationService:
                     f"Please provide concentration in intsta_concentrations."
                 )
 
-            # Get AUC values for this standard
             intsta_auc = NormalizationService._compute_intsta_auc(
-                intsta_df,
-                standard_name,
-                full_samples_list
+                intsta_df, standard_name, full_samples_list
             )
-
-            # Normalize this class
             class_df = NormalizationService._compute_normalized_auc(
-                selected_df,
-                full_samples_list,
-                lipid_class,
-                intsta_auc,
-                concentration
+                selected_df, full_samples_list, lipid_class, intsta_auc, concentration
             )
 
             if not class_df.empty:
                 normalized_dfs.append(class_df)
 
-        # Combine all classes
-        if normalized_dfs:
-            result_df = pd.concat(normalized_dfs, axis=0, ignore_index=True)
-        else:
-            # Return empty DataFrame with correct structure
-            intensity_cols = [f"concentration[{s}]" for s in full_samples_list]
-            result_df = pd.DataFrame(columns=['LipidMolec', 'ClassKey'] + intensity_cols)
-
-        # Clean up the data
-        result_df = result_df.fillna(0)
-        result_df = result_df.replace([np.inf, -np.inf], 0)
-
-        # Rename columns
-        result_df = NormalizationService._rename_intensity_to_concentration(result_df)
-
-        return NormalizationResult(
-            normalized_df=result_df,
-            removed_standards=list(standards_to_remove),
-            method_applied="Internal standards normalization"
-        )
+        return normalized_dfs
 
     @staticmethod
     def _apply_protein(

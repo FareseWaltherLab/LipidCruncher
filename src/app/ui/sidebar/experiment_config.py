@@ -74,41 +74,60 @@ def display_experiment_definition(df: pd.DataFrame, data_format: str, sample_col
 
     # Handle Metabolomics Workbench auto-detection
     if data_format == 'Metabolomics Workbench' and 'workbench_conditions' in st.session_state:
-        conditions_in_order = [
-            st.session_state.workbench_conditions[f's{i+1}']
-            for i in range(len(st.session_state.workbench_samples))
-        ]
+        result = _display_workbench_auto_detection()
+        if result is not None:
+            return result
 
-        # Get unique conditions in order of first appearance
-        unique_conditions = []
-        seen = set()
-        for condition in conditions_in_order:
-            if condition not in seen:
-                seen.add(condition)
-                unique_conditions.append(condition)
+    return _display_manual_experiment(sample_cols)
 
-        use_detected = st.sidebar.checkbox("Use detected experimental setup", value=True)
 
-        if use_detected:
-            n_conditions = len(unique_conditions)
-            conditions_list = unique_conditions
+def _display_workbench_auto_detection() -> tuple:
+    """Display auto-detected Metabolomics Workbench experiment setup.
 
-            # Count samples per condition
-            sample_counts = {}
-            for condition in conditions_list:
-                count = sum(1 for x in st.session_state.workbench_conditions.values() if x == condition)
-                sample_counts[condition] = count
+    Returns (n_conditions, conditions_list, number_of_samples_list) if user accepts,
+    or None if user opts for manual definition.
+    """
+    conditions_in_order = [
+        st.session_state.workbench_conditions[f's{i+1}']
+        for i in range(len(st.session_state.workbench_samples))
+    ]
 
-            number_of_samples_list = [sample_counts[condition] for condition in conditions_list]
+    # Get unique conditions in order of first appearance
+    unique_conditions = []
+    seen = set()
+    for condition in conditions_in_order:
+        if condition not in seen:
+            seen.add(condition)
+            unique_conditions.append(condition)
 
-            # Display the detected setup
-            st.sidebar.write("Using detected setup:")
-            for cond, count in zip(conditions_list, number_of_samples_list):
-                st.sidebar.text(f"• {cond}: {count} samples")
+    use_detected = st.sidebar.checkbox("Use detected experimental setup", value=True)
 
-            return n_conditions, conditions_list, number_of_samples_list
+    if not use_detected:
+        return None
 
-    # Manual experiment definition
+    n_conditions = len(unique_conditions)
+    conditions_list = unique_conditions
+
+    sample_counts = {}
+    for condition in conditions_list:
+        count = sum(1 for x in st.session_state.workbench_conditions.values() if x == condition)
+        sample_counts[condition] = count
+
+    number_of_samples_list = [sample_counts[condition] for condition in conditions_list]
+
+    st.sidebar.write("Using detected setup:")
+    for cond, count in zip(conditions_list, number_of_samples_list):
+        st.sidebar.text(f"• {cond}: {count} samples")
+
+    return n_conditions, conditions_list, number_of_samples_list
+
+
+def _display_manual_experiment(sample_cols: list) -> tuple:
+    """Display manual experiment definition UI with condition/sample inputs.
+
+    Returns (n_conditions, conditions_list, number_of_samples_list)
+    or (None, None, None) if validation fails.
+    """
     n_conditions = st.sidebar.number_input(
         'Number of conditions',
         min_value=1,
@@ -139,12 +158,10 @@ def display_experiment_definition(df: pd.DataFrame, data_format: str, sample_col
             )
             number_of_samples_list.append(n_samples)
 
-    # Validate all condition labels are non-empty
     if not all(cond and cond.strip() for cond in conditions_list):
         st.sidebar.error("All condition labels must be non-empty.")
         return None, None, None
 
-    # Validate total samples
     total_assigned = sum(number_of_samples_list)
     if total_assigned != len(sample_cols):
         st.sidebar.warning(

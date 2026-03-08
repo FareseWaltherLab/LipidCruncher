@@ -352,7 +352,6 @@ def _run_normalization(
 
 def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, experiment: ExperimentConfig, data_format: str):
     """Display normalization options and apply normalization automatically."""
-    # About Normalization Methods (documentation)
     with st.expander("📖 About Normalization Methods", expanded=False):
         st.markdown(NORMALIZATION_METHODS_DOCS)
 
@@ -363,44 +362,9 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
         st.warning("Please select at least one lipid class.")
         return None
 
-    # Check if we have standards available
-    has_standards = intsta_df is not None and not intsta_df.empty
-
-    # Check if using pre-normalized MS-DIAL data (IS normalization not applicable)
-    is_msdial_prenormalized = (data_format == 'MS-DIAL' and
-                               st.session_state.get('msdial_use_normalized', False))
-
-    # Determine available normalization options
-    if is_msdial_prenormalized:
-        normalization_options = ['None (pre-normalized data)', 'Protein-based']
-        st.markdown("*Internal standards options unavailable — using pre-normalized MS-DIAL data.*")
-    elif has_standards:
-        normalization_options = ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Both']
-    else:
-        normalization_options = ['None (pre-normalized data)', 'Protein-based']
-        st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
-
-    # Restore widget value from preserved session state (lost during module navigation)
-    widget_key = 'norm_method_selection'
-    persisted_value = st.session_state.get('_preserved_norm_method_selection', 'None (pre-normalized data)')
-    if persisted_value in normalization_options:
-        st.session_state[widget_key] = persisted_value
-    else:
-        st.session_state[widget_key] = 'None (pre-normalized data)'
-
-    def on_norm_method_change():
-        st.session_state._preserved_norm_method_selection = st.session_state[widget_key]
-
     # Method selection
-    st.markdown("##### ⚙️ Normalization Method")
-    method = st.radio(
-        "Method:",
-        options=normalization_options,
-        horizontal=True,
-        key=widget_key,
-        on_change=on_norm_method_change
-    )
-    st.session_state._preserved_norm_method_selection = method
+    normalization_options = _get_normalization_options(intsta_df, data_format)
+    method = _display_method_selection(normalization_options)
 
     method_map = {
         'None (pre-normalized data)': 'none',
@@ -411,6 +375,69 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
     config_method = method_map.get(method, 'none')
 
     # Collect configuration based on method
+    internal_standards, intsta_concentrations, protein_concentrations = (
+        _collect_method_config(method, intsta_df, selected_classes, experiment)
+    )
+    if internal_standards is None or protein_concentrations is None:
+        return None
+
+    # Apply normalization
+    result = _run_normalization(
+        cleaned_df, intsta_df, experiment, data_format,
+        config_method, selected_classes,
+        internal_standards, intsta_concentrations, protein_concentrations
+    )
+
+    _display_normalization_results(result)
+    return st.session_state.get('normalized_df')
+
+
+def _get_normalization_options(intsta_df, data_format: str) -> list:
+    """Determine available normalization options based on standards and data format."""
+    has_standards = intsta_df is not None and not intsta_df.empty
+    is_msdial_prenormalized = (data_format == 'MS-DIAL' and
+                               st.session_state.get('msdial_use_normalized', False))
+
+    if is_msdial_prenormalized:
+        st.markdown("*Internal standards options unavailable — using pre-normalized MS-DIAL data.*")
+        return ['None (pre-normalized data)', 'Protein-based']
+    elif has_standards:
+        return ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Both']
+    else:
+        st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
+        return ['None (pre-normalized data)', 'Protein-based']
+
+
+def _display_method_selection(normalization_options: list) -> str:
+    """Display normalization method radio and handle session state persistence."""
+    widget_key = 'norm_method_selection'
+    persisted_value = st.session_state.get('_preserved_norm_method_selection', 'None (pre-normalized data)')
+    if persisted_value in normalization_options:
+        st.session_state[widget_key] = persisted_value
+    else:
+        st.session_state[widget_key] = 'None (pre-normalized data)'
+
+    def on_norm_method_change():
+        st.session_state._preserved_norm_method_selection = st.session_state[widget_key]
+
+    st.markdown("##### ⚙️ Normalization Method")
+    method = st.radio(
+        "Method:",
+        options=normalization_options,
+        horizontal=True,
+        key=widget_key,
+        on_change=on_norm_method_change
+    )
+    st.session_state._preserved_norm_method_selection = method
+    return method
+
+
+def _collect_method_config(method: str, intsta_df, selected_classes: list, experiment) -> tuple:
+    """Collect IS and protein config based on selected method.
+
+    Returns (internal_standards, intsta_concentrations, protein_concentrations).
+    Returns None for internal_standards or protein_concentrations if config is incomplete.
+    """
     internal_standards = {}
     intsta_concentrations = {}
     protein_concentrations = {}
@@ -418,24 +445,20 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
     if method in ['Internal Standards', 'Both']:
         internal_standards, intsta_concentrations = _display_internal_standards_config(intsta_df, selected_classes)
         if internal_standards is None:
-            return None
+            return None, None, None
 
     if method in ['Protein-based', 'Both']:
         protein_concentrations = _display_protein_config(experiment)
         if protein_concentrations is None:
-            return None
+            return None, None, None
 
-    # Apply normalization automatically (no button needed)
-    result = _run_normalization(
-        cleaned_df, intsta_df, experiment, data_format,
-        config_method, selected_classes,
-        internal_standards, intsta_concentrations, protein_concentrations
-    )
+    return internal_standards, intsta_concentrations, protein_concentrations
 
-    # Display results
+
+def _display_normalization_results(result):
+    """Display normalization results or errors."""
     if result and result.success:
         st.markdown("##### 📊 Final Normalized Data")
-
         if result.normalized_df is not None:
             st.dataframe(result.normalized_df, use_container_width=True)
             csv = result.normalized_df.to_csv(index=False)
@@ -449,5 +472,3 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
     elif result:
         for error in result.validation_errors:
             st.error(error)
-
-    return st.session_state.get('normalized_df')
