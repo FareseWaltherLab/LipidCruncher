@@ -817,7 +817,7 @@ def msdial_data_type_app(msdial_features_dict):
 
 #### ✅ Code Review Cleanup (COMPLETE — all Critical + High + Medium fixed)
 All issues from the **Code Review Issues (February 16, 2026)** section below are fixed except low-priority L1-L4, L7-L8 (deferred).
-**Test count:** 1772 passing
+**Test count:** 1972 passing
 
 #### Module 2: Quality Check (COMPLETE)
 
@@ -1075,10 +1075,15 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 
 **8 legacy classes to replace across 5 files. Each replacement: rewrite as service/utility → update UI to call new code → add tests.**
 
-**Step 2.1: Replace `DataFormatHandler`** (used in file_upload.py, column_mapping.py)
-- Methods: `validate_and_preprocess()`, `MSDIAL_METADATA_COLUMNS` constant
-- Action: Create `src/app/services/format_handler.py` or add to existing `format_detection.py`
-- Move `MSDIAL_METADATA_COLUMNS` to shared constants
+**Step 2.1: ✅ Replace `DataFormatHandler`** (`e70e0b3`)
+- Created `src/app/services/data_standardization.py` — `DataStandardizationService` + `StandardizationResult` dataclass
+  - Pure Python (no Streamlit), returns all outputs via result dataclass
+  - Ported: `validate_and_preprocess()` → `validate_and_standardize()`, `_standardize_lipid_name()` → `standardize_lipid_name()`, `_infer_class_key()` → `infer_class_key()`
+  - Reuses `FormatDetectionService.MSDIAL_METADATA_COLUMNS` and `._detect_msdial_header_row()` (no duplication)
+- Updated `src/app/ui/sidebar/file_upload.py` — uses `DataStandardizationService` for Metabolomics Workbench parsing
+- Updated `src/app/ui/sidebar/column_mapping.py` — uses `DataStandardizationService` for all formats, `FormatDetectionService.MSDIAL_METADATA_COLUMNS` for override UI
+- Removed `FORMAT_DISPLAY_TO_INTERNAL` from `src/app/constants.py` (no longer needed)
+- Tests: 174 in `tests/unit/test_data_standardization.py`
 
 **Step 2.2: Replace `GroupSamples`** (used in sample_grouping.py)
 - Methods: `check_dataset_validity()`, `build_group_df()`, `group_samples()`, `reorder_intensity_columns()`, `update_sample_names()`
@@ -1162,7 +1167,7 @@ Replace `col[col.find('[') + 1:col.find(']')]` in normalization service with reg
 |-------|-------|-----------------|
 | 1 | Phase 1 (Session State) | Foundational — everything else depends on clean state |
 | 2 | Phase 3.1 (Constants) ✅ | Quick win, unblocks Phase 2 |
-| 3 | Phase 2 (Legacy Elimination) | Largest effort — one class at a time |
+| 3 | Phase 2 (Legacy Elimination) 🔄 | Largest effort — one class at a time (Step 2.1 done) |
 | 4 | Phase 3.2-3.4 (DRY/Long Methods) | Improves maintainability |
 | 5 | Phase 4 (Testing/Caching) | Safety net improvements |
 | 6 | Phase 5 (Cleanup) | Final polish |
