@@ -385,6 +385,15 @@ Workflows and UI implemented:
 2. ✅ **Zero filtering slider defaults not applied** (`9797440`) — Non-BQC (75%) and BQC (50%) thresholds defaulted to `None` instead of intended values.
 3. ✅ **Protein input method default not set** (`b271999`) — `protein_input_method` defaulted to `None` instead of "Manual Input", showing "Upload CSV File" first.
 
+**Bugs Fixed (`aeaa5df`) — Module navigation widget state loss:**
+When navigating from Module 1 to Module 2 and back, Streamlit removes widget keys for non-rendered widgets. `initialize_session_state()` re-creates them with defaults, losing user selections. Fix: restore widget keys from separate persistence keys before rendering.
+1. ✅ **`standards_source_radio`** — Restore from `standards_source` (guard: `not in st.session_state`)
+2. ✅ **`standards_location_radio`** — Restore from `custom_standards_mode` (guard: `not in st.session_state`)
+3. ✅ **`norm_method_selection`** — Added `_preserved_norm_method_selection` to `SessionState` + `on_change` callback (same pattern as grade filtering)
+4. ✅ **`protein_input_method`** — Restore from `protein_input_method_prev` instead of hardcoding "Manual Input"
+
+**Pattern:** Widgets with `on_change` callbacks (grade filtering, norm method) can set the widget key on every render since the callback updates the persistence key before the next rerun. Widgets without `on_change` (standards source/location) must guard with `not in st.session_state` to avoid overwriting user clicks.
+
 **Performance Improvement (`745dcc8`):**
 1. ✅ **Add st.cache_data caching to workflow calls** — Previously, every UI interaction (slider moved, checkbox clicked) caused full data reprocessing. Now cached results are returned instantly when inputs haven't changed.
    - Added `StreamlitAdapter.run_ingestion()` — Cached wrapper for `DataIngestionWorkflow.run()`
@@ -1048,7 +1057,114 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 | `PCAAnalysis` | `src/lipidomics/pca.py` | PCA computation and plotting |
 | `RetentionTime` | `src/lipidomics/retention_time_plot.py` | Retention time plots (LipidSearch only) |
 
-#### Module 3: Visualize and Analyze (NOT STARTED)
+#### Code Quality Sprint: A-Grade Before Module 3
+
+**Principle:** No legacy module (`src/lipidomics/`) imports in the new refactored code. Everything must go through the clean architecture (services → workflows → adapter → UI).
+
+##### Phase 1: Session State Overhaul ✅ (`6b6b7f4`)
+
+**Problem:** Dynamic widget keys leaked across resets, no ownership model for session state keys.
+
+**Changes to `src/app/adapters/streamlit_adapter.py`:**
+- **Step 1.1:** SessionState dataclass already had all 54 data/state keys — confirmed complete
+- **Step 1.2:** Added 16 missing static widget keys to `_WIDGET_KEYS` (sidebar radios, data processing, standards, normalization, QC download buttons). Added `_DYNAMIC_KEY_PREFIXES` tuple with 9 prefixes (`protein_`, `conc_`, `standard_selection_`, `grade_select_`, `cond_name_`, `n_samples_`, `select_`, `qc_rt_svg_individual_`, `rt_csv_individual_`). Updated `reset_data_state()` with pattern-based cleanup loop.
+- **Step 1.3:** Reorganized SessionState fields by owner file with `# --- Owner (owner: file.py) ---` section comments and docstring ownership reference
+- **Step 1.4:** All `_preserved_*` keys verified present in SessionState dataclass — pattern is consistent
+
+##### Phase 2: Eliminate Legacy Module Imports
+
+**8 legacy classes to replace across 5 files. Each replacement: rewrite as service/utility → update UI to call new code → add tests.**
+
+**Step 2.1: Replace `DataFormatHandler`** (used in file_upload.py, column_mapping.py)
+- Methods: `validate_and_preprocess()`, `MSDIAL_METADATA_COLUMNS` constant
+- Action: Create `src/app/services/format_handler.py` or add to existing `format_detection.py`
+- Move `MSDIAL_METADATA_COLUMNS` to shared constants
+
+**Step 2.2: Replace `GroupSamples`** (used in sample_grouping.py)
+- Methods: `check_dataset_validity()`, `build_group_df()`, `group_samples()`, `reorder_intensity_columns()`, `update_sample_names()`
+- Action: Create `src/app/services/sample_grouping.py` — pure business logic, no Streamlit
+
+**Step 2.3: Replace `InternalStandardsPlotter`** (used in standards_plots.py)
+- Method: `create_consistency_plots()`
+- Action: Create `src/app/services/plotting/standards_plotter.py`
+
+**Step 2.4: Replace QC Plotting Classes** (all used in quality_check.py)
+- `BoxPlot` → `src/app/services/plotting/box_plot.py`
+- `BQCQualityCheck` → `src/app/services/plotting/bqc_plotter.py`
+- `RetentionTime` → `src/app/services/plotting/retention_time.py`
+- `Correlation` → `src/app/services/plotting/correlation.py`
+- `PCAAnalysis` → `src/app/services/plotting/pca.py`
+- All pure rendering — take data in, return figure out. No Streamlit, no session state.
+
+##### Phase 3: DRY & Code Quality
+
+**Step 3.1: Extract Shared Constants**
+Create `src/app/constants.py`:
+- `FORMAT_DISPLAY_TO_ENUM` mapping (currently in 3 UI files)
+- `INTERNAL_STANDARD_PATTERNS` (currently in base.py + standards.py)
+- `MSDIAL_METADATA_COLUMNS`
+- Default thresholds: `COV_THRESHOLD_DEFAULT = 30`, `LIPIDSEARCH_DETECTION_THRESHOLD = 30000.0`, `ZERO_FILTER_DEFAULTS = {'non_bqc': 75, 'bqc': 50}`
+
+**Step 3.2: Break Down Long Methods**
+- `_display_bqc_assessment()` (145 lines) → split into `_render_bqc_scatter()`, `_render_bqc_filter_ui()`, `_render_bqc_results()`
+- `display_quality_filtering_config()` (120 lines) → split by filter type
+- `_apply_internal_standard()` (101 lines) → extract `_validate_standards()`, `_normalize_by_class()`
+- `display_normalization_ui()` (101 lines) → extract config collection
+- `display_group_samples()` (99 lines) → extract validation, regrouping
+- `display_experiment_definition()` (97 lines) → extract auto-detect vs manual
+
+**Step 3.3: Merge Duplicate Methods**
+- `get_intensity_column_samples()` / `get_concentration_column_samples()` in normalization workflow → single parameterized method
+- Download button pattern (15+ instances) → reusable helper in `download_utils.py`
+- Deduplication logic in cleaner modules → shared base method
+
+**Step 3.4: Move Business Logic Out of UI**
+- `_apply_msdial_sample_override()` (column_mapping.py:19-88) → service layer
+- Metabolomics Workbench CSV parsing (file_upload.py) → service layer
+
+##### Phase 4: Testing & Caching Improvements
+
+**Step 4.1: Shared Test Fixtures**
+Create `tests/conftest.py` with factory functions:
+- `make_experiment(n_conditions, samples_per_condition)`
+- `make_dataframe(lipids, classes, n_samples)`
+- Replace duplicated `simple_experiment` fixture across 7 files
+
+**Step 4.2: Cache `load_module_image()`**
+Add `@st.cache_data` to PDF→PNG conversion in `landing_page.py`
+
+**Step 4.3: Verify Hash Functions**
+Confirm `GradeFilterConfig` and `QualityFilterConfig` are hashable for `st.cache_data` in adapter
+
+**Step 4.4: Add Type Hints to UI Layer**
+Complete type annotations for all functions in: `main_app.py`, `quality_check.py`, `landing_page.py`, `file_upload.py`, `column_mapping.py`
+
+##### Phase 5: Cleanup
+
+**Step 5.1: Remove Dead Code**
+- Delete `src/lipidomics/standards_manager.py` (imported nowhere)
+- Remove unused import `fields` in `streamlit_adapter.py:8`
+- Remove unused export `load_module_image` in `src/app/ui/__init__.py`
+- Clean up `src/lipidomics/__init__.py` exports (only keep what old_main_app.py needs)
+
+**Step 5.2: Use `pd.api.types.is_numeric_dtype()`**
+Replace fragile `dtype in ['int64', 'float64']` in standards.py
+
+**Step 5.3: Fix Fragile String Parsing**
+Replace `col[col.find('[') + 1:col.find(']')]` in normalization service with regex or shared column parser
+
+##### Execution Order
+
+| Order | Phase | Estimated Scope |
+|-------|-------|-----------------|
+| 1 | Phase 1 (Session State) | Foundational — everything else depends on clean state |
+| 2 | Phase 3.1 (Constants) | Quick win, unblocks Phase 2 |
+| 3 | Phase 2 (Legacy Elimination) | Largest effort — one class at a time |
+| 4 | Phase 3.2-3.4 (DRY/Long Methods) | Improves maintainability |
+| 5 | Phase 4 (Testing/Caching) | Safety net improvements |
+| 6 | Phase 5 (Cleanup) | Final polish |
+
+#### Module 3: Visualize and Analyze (NOT STARTED — blocked on Code Quality Sprint)
 1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps
 2. ⬜ Build Module 3 UI
 
