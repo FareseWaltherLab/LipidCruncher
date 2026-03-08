@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from ..models.experiment import ExperimentConfig
+from ..services.plotting.standards_plotter import StandardsPlotterService
 
 
 def display_standards_consistency_plots(
@@ -22,8 +23,6 @@ def display_standards_consistency_plots(
         intsta_df: Internal standards DataFrame with LipidMolec, ClassKey, and intensity columns.
         experiment: Experiment configuration with conditions and sample mappings.
     """
-    from lipidomics import InternalStandardsPlotter
-
     if intsta_df is None or intsta_df.empty:
         return
 
@@ -62,7 +61,7 @@ def display_standards_consistency_plots(
         return
 
     # Generate and display plots
-    plots = InternalStandardsPlotter.create_consistency_plots(
+    plots = StandardsPlotterService.create_consistency_plots(
         intsta_df,
         selected_samples_ordered
     )

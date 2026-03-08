@@ -1094,9 +1094,12 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 - Updated `src/app/ui/sidebar/sample_grouping.py` — removed `TempExperiment` wrapper and `GroupSamples` import, uses `SampleGroupingService` directly
 - Tests: 63 in `tests/unit/test_sample_grouping_service.py`
 
-**Step 2.3: Replace `InternalStandardsPlotter`** (used in standards_plots.py)
-- Method: `create_consistency_plots()`
-- Action: Create `src/app/services/plotting/standards_plotter.py`
+**Step 2.3: ✅ Replace `InternalStandardsPlotter`** (used in standards_plots.py)
+- Created `src/app/services/plotting/standards_plotter.py` — `StandardsPlotterService` with `create_consistency_plots()`
+  - Pure Python (no Streamlit), extracted `_build_single_standard_plot()` and `_build_multi_standard_plot()` helpers
+  - Identical output to legacy `InternalStandardsPlotter`
+- Updated `src/app/ui/standards_plots.py` — uses `StandardsPlotterService` instead of `from lipidomics import InternalStandardsPlotter`
+- Tests: 41 in `tests/unit/test_standards_plotter.py`
 
 **Step 2.4: Replace QC Plotting Classes** (all used in quality_check.py)
 - `BoxPlot` → `src/app/services/plotting/box_plot.py`
