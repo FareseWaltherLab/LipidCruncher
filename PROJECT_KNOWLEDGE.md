@@ -1125,13 +1125,13 @@ Created `src/app/constants.py` with:
 - `ZERO_FILTER_NON_BQC_DEFAULT` (75) / `ZERO_FILTER_BQC_DEFAULT` (50) — used by zero_filtering UI
 - Note: `MSDIAL_METADATA_COLUMNS` left in `format_detection.py` — only used there (no duplication in refactored code)
 
-**Step 3.2: Break Down Long Methods**
-- `_display_bqc_assessment()` (145 lines) → split into `_render_bqc_scatter()`, `_render_bqc_filter_ui()`, `_render_bqc_results()`
-- `display_quality_filtering_config()` (120 lines) → split by filter type
-- `_apply_internal_standard()` (101 lines) → extract `_validate_standards()`, `_normalize_by_class()`
-- `display_normalization_ui()` (101 lines) → extract config collection
-- `display_group_samples()` (99 lines) → extract validation, regrouping
-- `display_experiment_definition()` (97 lines) → extract auto-detect vs manual
+**Step 3.2: Break Down Long Methods ✅ (`5a92b2b`)**
+- `_display_bqc_assessment()` (145→25 lines) → extracted `_render_bqc_scatter()`, `_render_bqc_filtering()`
+- `display_quality_filtering_config()` (119→20 lines) → extracted `_display_score_filtering()`, `_display_msms_only_filtering()`, `_display_quality_filter_summary()`, `_display_cached_filter_results()`
+- `_apply_internal_standard()` (100→55 lines) → extracted `_normalize_by_class()`
+- `display_normalization_ui()` (102→30 lines) → extracted `_get_normalization_options()`, `_display_method_selection()`, `_collect_method_config()`, `_display_normalization_results()`
+- `display_group_samples()` (99→45 lines) → extracted `_handle_manual_regrouping()`
+- `display_experiment_definition()` (98→20 lines) → extracted `_display_workbench_auto_detection()`, `_display_manual_experiment()`
 
 **Step 3.3: Merge Duplicate Methods**
 - `get_intensity_column_samples()` / `get_concentration_column_samples()` in normalization workflow → single parameterized method
