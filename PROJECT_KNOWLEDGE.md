@@ -1085,9 +1085,14 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 - Removed `FORMAT_DISPLAY_TO_INTERNAL` from `src/app/constants.py` (no longer needed)
 - Tests: 174 in `tests/unit/test_data_standardization.py`
 
-**Step 2.2: Replace `GroupSamples`** (used in sample_grouping.py)
-- Methods: `check_dataset_validity()`, `build_group_df()`, `group_samples()`, `reorder_intensity_columns()`, `update_sample_names()`
-- Action: Create `src/app/services/sample_grouping.py` — pure business logic, no Streamlit
+**Step 2.2: ✅ Replace `GroupSamples`** (used in sample_grouping.py)
+- Created `src/app/services/sample_grouping.py` — `SampleGroupingService` + 3 result dataclasses (`DatasetValidationResult`, `GroupingResult`, `RegroupingResult`)
+  - `validate_dataset()` — replaces `check_dataset_validity()` + `check_input_validity()`
+  - `extract_sample_names()` — replaces `extract_sample_names()`
+  - `build_group_df()` — replaces `build_group_df()` + `build_mean_area_col_list()`, accepts `workbench_conditions` param instead of reading `st.session_state`
+  - `regroup_samples()` — replaces `group_samples()` + `reorder_intensity_columns()` + `update_sample_names()` in a single call
+- Updated `src/app/ui/sidebar/sample_grouping.py` — removed `TempExperiment` wrapper and `GroupSamples` import, uses `SampleGroupingService` directly
+- Tests: 63 in `tests/unit/test_sample_grouping_service.py`
 
 **Step 2.3: Replace `InternalStandardsPlotter`** (used in standards_plots.py)
 - Method: `create_consistency_plots()`

@@ -10,24 +10,9 @@ import streamlit as st
 import pandas as pd
 
 from app.models.experiment import ExperimentConfig
+from app.services.sample_grouping import SampleGroupingService
 from app.ui.sidebar.experiment_config import detect_sample_columns, extract_sample_names, display_experiment_definition
 from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_inputs
-from lipidomics.group_samples import GroupSamples
-
-
-# =============================================================================
-# Helper Classes
-# =============================================================================
-
-class TempExperiment:
-    """Temporary experiment-like object for GroupSamples compatibility."""
-
-    def __init__(self, config: ExperimentConfig):
-        self.conditions_list = config.conditions_list
-        self.number_of_samples_list = config.number_of_samples_list
-        self.full_samples_list = config.full_samples_list
-        self.extensive_conditions_list = config.extensive_conditions_list
-        self.individual_samples_list = config.individual_samples_list
 
 
 # =============================================================================
@@ -48,19 +33,23 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
     """
     st.sidebar.subheader('Group Samples')
 
-    temp_exp = TempExperiment(experiment)
-    grouped_samples = GroupSamples(temp_exp, data_format)
-
-    # Check dataset validity
-    if not grouped_samples.check_dataset_validity(df):
-        st.sidebar.error("Invalid dataset format!")
+    # Validate dataset
+    validation = SampleGroupingService.validate_dataset(df, experiment, data_format)
+    if not validation.valid:
+        st.sidebar.error(validation.message)
         return None, df
 
-    # Build and display group_df
-    group_df = grouped_samples.build_group_df(df)
-    if group_df.empty:
-        st.sidebar.error("Error building sample groups!")
+    # Build group_df
+    workbench_conditions = st.session_state.get('workbench_conditions')
+    try:
+        result = SampleGroupingService.build_group_df(
+            df, experiment, data_format, workbench_conditions,
+        )
+    except ValueError as e:
+        st.sidebar.error(f"Error building sample groups: {e}")
         return None, df
+
+    group_df = result.group_df
 
     st.sidebar.dataframe(group_df, use_container_width=True)
 
@@ -104,20 +93,16 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
 
         if all_correct:
             try:
-                # Update the group_df and get column mapping
-                group_df, old_to_new = grouped_samples.group_samples(group_df, selections)
-
-                # Reorder and rename columns in the DataFrame
-                df_reordered = grouped_samples.reorder_intensity_columns(df, old_to_new)
+                regroup_result = SampleGroupingService.regroup_samples(
+                    df, group_df, selections, experiment,
+                )
 
                 st.session_state.grouping_complete = True
 
-                # Generate and display name_df to show the new sample order
-                name_df = grouped_samples.update_sample_names(group_df)
                 st.sidebar.write("New sample order after regrouping:")
-                st.sidebar.dataframe(name_df, use_container_width=True)
+                st.sidebar.dataframe(regroup_result.name_df, use_container_width=True)
 
-                return group_df, df_reordered
+                return regroup_result.group_df, regroup_result.reordered_df
 
             except ValueError as e:
                 st.sidebar.error(f"Error updating groups: {str(e)}")
