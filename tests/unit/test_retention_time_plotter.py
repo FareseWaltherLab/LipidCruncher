@@ -223,3 +223,132 @@ class TestEdgeCases:
         })
         result = RetentionTimePlotterService.plot_single_retention(df)
         assert len(result) == 1
+
+
+# =============================================================================
+# TestErrorHandling
+# =============================================================================
+
+class TestErrorHandling:
+    def test_missing_classkey_column_raises(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'BaseRt': [3.5],
+            'CalcMass': [733.5],
+        })
+        with pytest.raises(KeyError):
+            RetentionTimePlotterService.plot_single_retention(df)
+
+    def test_missing_basert_column_raises(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'CalcMass': [733.5],
+        })
+        with pytest.raises(KeyError):
+            RetentionTimePlotterService.plot_single_retention(df)
+
+    def test_missing_calcmass_column_raises(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'BaseRt': [3.5],
+        })
+        with pytest.raises(KeyError):
+            RetentionTimePlotterService.plot_single_retention(df)
+
+    def test_multi_retention_nonexistent_class_empty_rows(self, rt_df):
+        """Selecting a class not in data produces empty rows for that class."""
+        _, df = RetentionTimePlotterService.plot_multi_retention(rt_df, ['NonExistent'])
+        assert len(df) == 0
+
+    def test_empty_dataframe_single(self):
+        df = pd.DataFrame({
+            'LipidMolec': pd.Series(dtype=str),
+            'ClassKey': pd.Series(dtype=str),
+            'BaseRt': pd.Series(dtype=float),
+            'CalcMass': pd.Series(dtype=float),
+        })
+        result = RetentionTimePlotterService.plot_single_retention(df)
+        assert result == []
+
+
+# =============================================================================
+# TestTypeCoercion
+# =============================================================================
+
+class TestTypeCoercion:
+    def test_integer_retention_times(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:1)'],
+            'ClassKey': ['PC', 'PE'],
+            'BaseRt': [3, 5],          # int, not float
+            'CalcMass': [733, 717],     # int, not float
+        })
+        result = RetentionTimePlotterService.plot_single_retention(df)
+        assert len(result) == 2
+
+    def test_float32_values(self):
+        import numpy as np
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'BaseRt': np.array([3.5], dtype=np.float32),
+            'CalcMass': np.array([733.5], dtype=np.float32),
+        })
+        result = RetentionTimePlotterService.plot_single_retention(df)
+        assert len(result) == 1
+
+    def test_multi_retention_with_int_columns(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:1)'],
+            'ClassKey': ['PC', 'PE'],
+            'BaseRt': [3, 5],
+            'CalcMass': [733, 717],
+        })
+        fig, rdf = RetentionTimePlotterService.plot_multi_retention(df, ['PC'])
+        assert isinstance(fig, go.Figure)
+        assert len(rdf) == 1
+
+
+# =============================================================================
+# TestNaNHandling
+# =============================================================================
+
+class TestNaNHandling:
+    def test_nan_in_basert(self):
+        import numpy as np
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(18:1)'],
+            'ClassKey': ['PC', 'PC'],
+            'BaseRt': [3.5, np.nan],
+            'CalcMass': [733.5, 759.6],
+        })
+        result = RetentionTimePlotterService.plot_single_retention(df)
+        assert len(result) == 1
+        _, rdf = result[0]
+        # Both rows present; NaN rendered by Plotly without crashing
+        assert len(rdf) == 2
+
+    def test_nan_in_calcmass(self):
+        import numpy as np
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:1)'],
+            'ClassKey': ['PC', 'PE'],
+            'BaseRt': [3.5, 5.1],
+            'CalcMass': [np.nan, 717.5],
+        })
+        result = RetentionTimePlotterService.plot_single_retention(df)
+        assert len(result) == 2  # Two classes
+
+    def test_multi_retention_nan_values(self):
+        import numpy as np
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(18:1)'],
+            'ClassKey': ['PC', 'PC'],
+            'BaseRt': [3.5, np.nan],
+            'CalcMass': [733.5, np.nan],
+        })
+        fig, rdf = RetentionTimePlotterService.plot_multi_retention(df, ['PC'])
+        assert isinstance(fig, go.Figure)
+        assert len(rdf) == 2

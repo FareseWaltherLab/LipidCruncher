@@ -363,3 +363,187 @@ class TestEdgeCases:
             df, ['concentration[bqc1]', 'concentration[bqc2]']
         )
         assert result.iloc[0]['LipidMolec'] == 'PC(15:0_18:1)+D7:(s)'
+
+
+# =============================================================================
+# TestErrorHandling
+# =============================================================================
+
+class TestErrorHandling:
+    def test_missing_concentration_column_raises(self, bqc_df):
+        with pytest.raises(KeyError):
+            BQCPlotterService.prepare_dataframe_for_plot(
+                bqc_df, ['concentration[nonexistent]']
+            )
+
+    def test_generate_cov_plot_data_invalid_index(self, bqc_df):
+        ind_samples = [['bqc1', 'bqc2', 'bqc3']]
+        with pytest.raises(IndexError):
+            BQCPlotterService.generate_cov_plot_data(bqc_df, ind_samples, 5)
+
+    def test_generate_and_display_cov_plot_invalid_index(self, bqc_df, simple_experiment):
+        with pytest.raises(IndexError):
+            BQCPlotterService.generate_and_display_cov_plot(bqc_df, simple_experiment, 99)
+
+    def test_all_nan_arrays_produce_empty_plot(self):
+        fig, df = BQCPlotterService.create_cov_scatter_plot_with_threshold(
+            np.array([np.nan, np.nan]),
+            np.array([np.nan, np.nan]),
+            np.array(['A', 'B']),
+            cov_threshold=30,
+        )
+        assert isinstance(fig, go.Figure)
+        assert len(df) == 0
+
+
+# =============================================================================
+# TestTypeCoercion
+# =============================================================================
+
+class TestTypeCoercion:
+    def test_integer_concentrations(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:1)'],
+            'ClassKey': ['PC', 'PE'],
+            'concentration[bqc1]': [100, 200],
+            'concentration[bqc2]': [110, 190],
+        })
+        assert df['concentration[bqc1]'].dtype == np.int64
+        result = BQCPlotterService.prepare_dataframe_for_plot(
+            df, ['concentration[bqc1]', 'concentration[bqc2]']
+        )
+        assert result.iloc[0]['cov'] is not None
+
+    def test_float32_concentrations(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[bqc1]': np.array([100], dtype=np.float32),
+            'concentration[bqc2]': np.array([110], dtype=np.float32),
+            'concentration[bqc3]': np.array([105], dtype=np.float32),
+        })
+        result = BQCPlotterService.prepare_dataframe_for_plot(
+            df, ['concentration[bqc1]', 'concentration[bqc2]', 'concentration[bqc3]']
+        )
+        assert result.iloc[0]['cov'] is not None
+        assert result.iloc[0]['mean'] is not None
+
+    def test_mixed_int_float_columns(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[bqc1]': [100],          # int
+            'concentration[bqc2]': [110.5],         # float
+        })
+        result = BQCPlotterService.prepare_dataframe_for_plot(
+            df, ['concentration[bqc1]', 'concentration[bqc2]']
+        )
+        assert result.iloc[0]['cov'] is not None
+
+    def test_cov_with_list_input(self):
+        result = _calculate_coefficient_of_variation([100.0, 200.0, 300.0])
+        assert result == pytest.approx(50.0)
+
+    def test_cov_with_pandas_series(self):
+        result = _calculate_coefficient_of_variation(pd.Series([100.0, 200.0, 300.0]))
+        assert result == pytest.approx(50.0)
+
+    def test_mean_with_pandas_series(self):
+        result = _calculate_mean_including_zeros(pd.Series([100.0, 200.0, 300.0]))
+        assert result == pytest.approx(200.0)
+
+    def test_scatter_plot_with_list_inputs(self):
+        """Lists (not numpy arrays) should be converted internally."""
+        fig, df = BQCPlotterService.create_cov_scatter_plot_with_threshold(
+            [1.0, 2.0, 3.0],
+            [10.0, 50.0, 90.0],
+            ['A', 'B', 'C'],
+            cov_threshold=30,
+        )
+        assert isinstance(fig, go.Figure)
+        assert len(df) == 3
+
+
+# =============================================================================
+# TestNaNHandling
+# =============================================================================
+
+class TestNaNHandling:
+    def test_nan_in_concentration_columns(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[bqc1]': [np.nan],
+            'concentration[bqc2]': [110.0],
+            'concentration[bqc3]': [105.0],
+        })
+        result = BQCPlotterService.prepare_dataframe_for_plot(
+            df, ['concentration[bqc1]', 'concentration[bqc2]', 'concentration[bqc3]']
+        )
+        # Row still present even if CoV/mean may be NaN
+        assert len(result) == 1
+
+    def test_scatter_plot_filters_partial_nan(self):
+        """Only points where both mean and cov are valid should appear."""
+        fig, df = BQCPlotterService.create_cov_scatter_plot_with_threshold(
+            np.array([1.0, np.nan, 3.0]),
+            np.array([10.0, 20.0, np.nan]),
+            np.array(['A', 'B', 'C']),
+            cov_threshold=30,
+        )
+        assert len(df) == 1  # Only first point has both valid
+
+
+# =============================================================================
+# TestBoundary
+# =============================================================================
+
+class TestBoundary:
+    def test_cov_threshold_zero(self):
+        """Threshold of 0 means everything is above."""
+        fig, df = BQCPlotterService.create_cov_scatter_plot_with_threshold(
+            np.array([1.0, 2.0]),
+            np.array([10.0, 20.0]),
+            np.array(['A', 'B']),
+            cov_threshold=0,
+        )
+        scatter_traces = [t for t in fig.data if isinstance(t, go.Scatter)]
+        # All above threshold → only red trace
+        assert len(scatter_traces) == 1
+        assert scatter_traces[0].marker.color == 'red'
+
+    def test_cov_threshold_very_high(self):
+        """Very high threshold means everything is below."""
+        fig, _ = BQCPlotterService.create_cov_scatter_plot_with_threshold(
+            np.array([1.0, 2.0]),
+            np.array([10.0, 20.0]),
+            np.array(['A', 'B']),
+            cov_threshold=99999,
+        )
+        scatter_traces = [t for t in fig.data if isinstance(t, go.Scatter)]
+        assert len(scatter_traces) == 1
+        assert scatter_traces[0].marker.color == 'blue'
+
+    def test_cov_exactly_at_threshold(self):
+        """Value exactly at threshold should be <= (blue)."""
+        fig, _ = BQCPlotterService.create_cov_scatter_plot_with_threshold(
+            np.array([1.0]),
+            np.array([30.0]),
+            np.array(['A']),
+            cov_threshold=30,
+        )
+        scatter_traces = [t for t in fig.data if isinstance(t, go.Scatter)]
+        assert len(scatter_traces) == 1
+        assert scatter_traces[0].marker.color == 'blue'
+
+    def test_two_bqc_samples_minimum(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[bqc1]': [100.0],
+            'concentration[bqc2]': [200.0],
+        })
+        result = BQCPlotterService.prepare_dataframe_for_plot(
+            df, ['concentration[bqc1]', 'concentration[bqc2]']
+        )
+        assert result.iloc[0]['cov'] is not None

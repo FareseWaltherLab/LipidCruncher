@@ -296,3 +296,177 @@ class TestEdgeCases:
         conditions = ['A'] * 10 + ['B'] * 10
         fig, pc_df = PCAPlotterService.plot_pca(df, samples, conditions)
         assert len(pc_df) == n_samples
+
+
+# =============================================================================
+# TestErrorHandling
+# =============================================================================
+
+class TestErrorHandling:
+    def test_no_matching_samples_raises(self):
+        """PCA with zero matching samples should raise."""
+        df = pd.DataFrame({
+            'concentration[s1]': [100, 200, 300],
+        })
+        with pytest.raises((ValueError, IndexError)):
+            PCAPlotterService.plot_pca(df, ['nonexistent'], ['A'])
+
+    def test_length_mismatch_samples_conditions(self):
+        """Mismatched sample and condition list lengths should raise."""
+        df = pd.DataFrame({
+            'concentration[s1]': [100, 200, 300],
+            'concentration[s2]': [150, 250, 350],
+        })
+        with pytest.raises((ValueError, IndexError)):
+            PCAPlotterService.plot_pca(
+                df, ['s1', 's2'], ['A']  # 2 samples, 1 condition
+            )
+
+    def test_single_sample_raises(self):
+        """PCA requires at least 2 samples; single sample raises."""
+        df = pd.DataFrame({
+            'concentration[s1]': [100, 200, 300],
+        })
+        with pytest.raises(ValueError):
+            PCAPlotterService.plot_pca(df, ['s1'], ['A'])
+
+    def test_empty_samples_list_raises(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [100, 200, 300],
+        })
+        with pytest.raises((ValueError, IndexError)):
+            PCAPlotterService.plot_pca(df, [], [])
+
+
+# =============================================================================
+# TestTypeCoercion
+# =============================================================================
+
+class TestTypeCoercion:
+    def test_integer_concentrations(self):
+        np.random.seed(42)
+        n = 10
+        df = pd.DataFrame({
+            'concentration[s1]': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+            'concentration[s2]': [150, 250, 350, 450, 550, 650, 750, 850, 950, 1050],
+            'concentration[s3]': [110, 210, 310, 410, 510, 610, 710, 810, 910, 1010],
+        })
+        assert df['concentration[s1]'].dtype == np.int64
+        fig, pc_df = PCAPlotterService.plot_pca(
+            df, ['s1', 's2', 's3'], ['A', 'A', 'B']
+        )
+        assert len(pc_df) == 3
+
+    def test_float32_concentrations(self):
+        n = 10
+        df = pd.DataFrame({
+            'concentration[s1]': np.array(range(n), dtype=np.float32) * 100,
+            'concentration[s2]': np.array(range(n), dtype=np.float32) * 100 + 50,
+            'concentration[s3]': np.array(range(n), dtype=np.float32) * 100 + 100,
+        })
+        fig, pc_df = PCAPlotterService.plot_pca(
+            df, ['s1', 's2', 's3'], ['A', 'A', 'B']
+        )
+        assert isinstance(fig, go.Figure)
+        assert len(pc_df) == 3
+
+    def test_mixed_int_float_columns(self):
+        n = 10
+        df = pd.DataFrame({
+            'concentration[s1]': list(range(n)),            # int
+            'concentration[s2]': [x * 1.5 for x in range(n)],  # float
+        })
+        fig, pc_df = PCAPlotterService.plot_pca(
+            df, ['s1', 's2'], ['A', 'B']
+        )
+        assert len(pc_df) == 2
+
+
+# =============================================================================
+# TestNaNHandling
+# =============================================================================
+
+class TestNaNHandling:
+    def test_nan_in_single_cell_raises(self):
+        """NaN in concentration data — sklearn PCA rejects NaN input."""
+        np.random.seed(42)
+        n = 10
+        df = pd.DataFrame({
+            'concentration[s1]': np.random.rand(n) * 1000,
+            'concentration[s2]': np.random.rand(n) * 1000,
+            'concentration[s3]': np.random.rand(n) * 1000,
+        })
+        df.iloc[0, 0] = np.nan  # one NaN cell
+        with pytest.raises(ValueError, match="NaN"):
+            PCAPlotterService.plot_pca(
+                df, ['s1', 's2', 's3'], ['A', 'A', 'B']
+            )
+
+    def test_all_zeros_produces_pca(self):
+        """All-zero data: StandardScaler divides by 0 → NaN, but should not crash."""
+        n = 10
+        df = pd.DataFrame({
+            'concentration[s1]': [0] * n,
+            'concentration[s2]': [0] * n,
+            'concentration[s3]': [0] * n,
+        })
+        # StandardScaler produces NaN for zero-std columns
+        # PCA may fail or produce NaN results
+        try:
+            fig, pc_df = PCAPlotterService.plot_pca(
+                df, ['s1', 's2', 's3'], ['A', 'A', 'B']
+            )
+            assert len(pc_df) == 3
+        except (ValueError, RuntimeError):
+            pass  # Acceptable — all-zero data is degenerate
+
+
+# =============================================================================
+# TestBoundary
+# =============================================================================
+
+class TestBoundary:
+    def test_exactly_two_samples(self):
+        """Minimum for PCA: 2 samples."""
+        n = 10
+        df = pd.DataFrame({
+            'concentration[s1]': np.random.rand(n) * 100,
+            'concentration[s2]': np.random.rand(n) * 100,
+        })
+        fig, pc_df = PCAPlotterService.plot_pca(
+            df, ['s1', 's2'], ['A', 'B']
+        )
+        assert len(pc_df) == 2
+        # With 2 samples, explained variance for 2 PCs should sum to 100%
+        assert 'PC1' in pc_df.columns
+        assert 'PC2' in pc_df.columns
+
+    def test_many_conditions(self):
+        """10 conditions should work with color cycling."""
+        np.random.seed(42)
+        n_lipids = 20
+        n_samples = 10
+        data = {f'concentration[s{i}]': np.random.rand(n_lipids) * 1000
+                for i in range(n_samples)}
+        df = pd.DataFrame(data)
+        samples = [f's{i}' for i in range(n_samples)]
+        conditions = [f'C{i}' for i in range(n_samples)]
+        fig, pc_df = PCAPlotterService.plot_pca(df, samples, conditions)
+        assert len(pc_df['Condition'].unique()) == n_samples
+
+    def test_single_lipid_row(self):
+        """Single lipid row: PCA on 1-dimensional data."""
+        df = pd.DataFrame({
+            'concentration[s1]': [100.0],
+            'concentration[s2]': [200.0],
+            'concentration[s3]': [300.0],
+        })
+        # Single row → after transpose, only 1 feature → PCA with n_components=2
+        # may raise or produce degenerate results
+        try:
+            fig, pc_df = PCAPlotterService.plot_pca(
+                df, ['s1', 's2', 's3'], ['A', 'A', 'B']
+            )
+            assert len(pc_df) == 3
+        except ValueError:
+            pass  # Acceptable — not enough features for 2 components

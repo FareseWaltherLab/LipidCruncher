@@ -318,3 +318,112 @@ class TestEdgeCases:
         )
         # 6 sample traces + 3 legend traces
         assert len(fig.data) == 9
+
+
+# =============================================================================
+# TestErrorHandling
+# =============================================================================
+
+class TestErrorHandling:
+    def test_create_mean_area_df_empty_sample_list(self, simple_df):
+        result = BoxPlotService.create_mean_area_df(simple_df, [])
+        assert len(result.columns) == 0
+
+    def test_missing_values_empty_dataframe(self):
+        """Empty DataFrame (0 rows) causes ZeroDivisionError."""
+        df = pd.DataFrame({'concentration[s1]': pd.Series(dtype=float)})
+        with pytest.raises(ZeroDivisionError):
+            BoxPlotService.calculate_missing_values_percentage(df)
+
+    def test_plot_box_plot_empty_dataframe(self):
+        df = pd.DataFrame({'concentration[s1]': pd.Series(dtype=float)})
+        fig = BoxPlotService.plot_box_plot(df, ['s1'])
+        assert isinstance(fig, go.Figure)
+        # Empty data → empty box
+        assert len(fig.data[0].y) == 0
+
+    def test_create_mean_area_df_partial_missing_samples(self, simple_df):
+        """Mix of valid and invalid sample names raises KeyError."""
+        with pytest.raises(KeyError):
+            BoxPlotService.create_mean_area_df(simple_df, ['s1', 'nonexistent'])
+
+
+# =============================================================================
+# TestTypeCoercion
+# =============================================================================
+
+class TestTypeCoercion:
+    def test_integer_concentrations(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [100, 200, 0],
+            'concentration[s2]': [300, 0, 500],
+        })
+        assert df['concentration[s1]'].dtype == np.int64
+        result = BoxPlotService.calculate_missing_values_percentage(df)
+        assert result[0] == pytest.approx(33.333, abs=0.01)
+
+    def test_float32_concentrations(self):
+        df = pd.DataFrame({
+            'concentration[s1]': np.array([100, 200, 0], dtype=np.float32),
+            'concentration[s2]': np.array([300, 0, 500], dtype=np.float32),
+        })
+        result = BoxPlotService.calculate_missing_values_percentage(df)
+        assert result[0] == pytest.approx(33.333, abs=0.01)
+
+    def test_int32_concentrations_box_plot(self):
+        df = pd.DataFrame({
+            'concentration[s1]': np.array([100, 200, 300], dtype=np.int32),
+        })
+        fig = BoxPlotService.plot_box_plot(df, ['s1'])
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data[0].y) == 3
+
+    def test_mixed_int_float_columns(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [100, 200, 300],        # int
+            'concentration[s2]': [1.5, 2.5, 3.5],        # float
+        })
+        result = BoxPlotService.calculate_missing_values_percentage(df)
+        assert len(result) == 2
+        assert all(isinstance(v, float) for v in result)
+
+
+# =============================================================================
+# TestNaNHandling
+# =============================================================================
+
+class TestNaNHandling:
+    def test_nan_not_counted_as_zero(self):
+        """NaN is not == 0, so it should NOT be counted as missing."""
+        df = pd.DataFrame({
+            'concentration[s1]': [100, np.nan, 0],
+        })
+        result = BoxPlotService.calculate_missing_values_percentage(df)
+        # Only 1 zero out of 3 rows = 33.3%
+        assert result[0] == pytest.approx(33.333, abs=0.01)
+
+    def test_all_nan_column(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [np.nan, np.nan, np.nan],
+        })
+        result = BoxPlotService.calculate_missing_values_percentage(df)
+        assert result[0] == pytest.approx(0.0)
+
+    def test_box_plot_with_nan_values(self):
+        """NaN values should be filtered out by the > 0 condition in log10."""
+        df = pd.DataFrame({
+            'concentration[s1]': [100, np.nan, 300],
+        })
+        fig = BoxPlotService.plot_box_plot(df, ['s1'])
+        assert isinstance(fig, go.Figure)
+        # Only 100 and 300 pass > 0 check (NaN fails > 0)
+        assert len(fig.data[0].y) == 2
+
+    def test_negative_values_excluded_from_box_plot(self):
+        """Negative values fail > 0 check, so excluded from log10."""
+        df = pd.DataFrame({
+            'concentration[s1]': [-100, 200, 300],
+        })
+        fig = BoxPlotService.plot_box_plot(df, ['s1'])
+        # Only 200 and 300 included
+        assert len(fig.data[0].y) == 2

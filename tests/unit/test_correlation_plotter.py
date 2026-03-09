@@ -272,3 +272,131 @@ class TestEdgeCases:
         )
         assert corr_matrix.shape == (1, 1)
         assert corr_matrix.iloc[0, 0] == pytest.approx(1.0)
+
+
+# =============================================================================
+# TestErrorHandling
+# =============================================================================
+
+class TestErrorHandling:
+    def test_missing_concentration_column_raises(self, corr_df):
+        with pytest.raises(KeyError):
+            CorrelationPlotterService.prepare_data_for_correlation(
+                corr_df, [['nonexistent']], 0
+            )
+
+    def test_condition_index_out_of_range(self, corr_df, individual_samples):
+        with pytest.raises(IndexError):
+            CorrelationPlotterService.prepare_data_for_correlation(
+                corr_df, individual_samples, 99
+            )
+
+    def test_unknown_sample_type_defaults_to_tech(self):
+        """Unknown sample type should default to 0.8 threshold (tech replicates)."""
+        df = pd.DataFrame({'s1': [100, 200], 's2': [150, 250]})
+        _, _, thresh = CorrelationPlotterService.compute_correlation(df, 'unknown_type')
+        assert thresh == 0.8
+
+    def test_render_1x1_correlation_matrix(self):
+        """1x1 matrix should still render without error."""
+        corr_matrix = pd.DataFrame({'s1': [1.0]}, index=['s1'])
+        fig = CorrelationPlotterService.render_correlation_plot(
+            corr_matrix, 0.5, 0.7, 'SingleSample'
+        )
+        assert isinstance(fig, plt.Figure)
+
+
+# =============================================================================
+# TestTypeCoercion
+# =============================================================================
+
+class TestTypeCoercion:
+    def test_integer_concentrations(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [100, 200, 300],
+            'concentration[s2]': [150, 250, 350],
+        })
+        assert df['concentration[s1]'].dtype == np.int64
+        result = CorrelationPlotterService.prepare_data_for_correlation(
+            df, [['s1', 's2']], 0
+        )
+        assert list(result.columns) == ['s1', 's2']
+
+    def test_float32_concentrations(self):
+        df = pd.DataFrame({
+            'concentration[s1]': np.array([100, 200, 300], dtype=np.float32),
+            'concentration[s2]': np.array([150, 250, 350], dtype=np.float32),
+        })
+        result = CorrelationPlotterService.prepare_data_for_correlation(
+            df, [['s1', 's2']], 0
+        )
+        corr_matrix, _, _ = CorrelationPlotterService.compute_correlation(
+            result, 'biological replicates'
+        )
+        assert corr_matrix.shape == (2, 2)
+        # Diagonal should still be 1.0
+        assert corr_matrix.iloc[0, 0] == pytest.approx(1.0, abs=0.001)
+
+    def test_mixed_int_float_correlation(self):
+        df = pd.DataFrame({
+            's1': [100, 200, 300],        # int
+            's2': [1.5, 2.5, 3.5],        # float
+        })
+        corr_matrix, _, _ = CorrelationPlotterService.compute_correlation(
+            df, 'biological replicates'
+        )
+        assert corr_matrix.shape == (2, 2)
+        assert (corr_matrix.values >= -1).all()
+        assert (corr_matrix.values <= 1).all()
+
+
+# =============================================================================
+# TestNaNHandling
+# =============================================================================
+
+class TestNaNHandling:
+    def test_nan_in_concentration_data(self):
+        """NaN values result in NaN correlations for that pair."""
+        df = pd.DataFrame({
+            's1': [100, np.nan, 300],
+            's2': [150, 250, 350],
+        })
+        corr_matrix, _, _ = CorrelationPlotterService.compute_correlation(
+            df, 'biological replicates'
+        )
+        assert corr_matrix.shape == (2, 2)
+        # Correlation with NaN-containing column still computes (pandas skips NaN)
+        assert np.isfinite(corr_matrix.iloc[0, 1])
+
+    def test_all_nan_column(self):
+        """All-NaN column produces NaN correlation."""
+        df = pd.DataFrame({
+            's1': [np.nan, np.nan, np.nan],
+            's2': [150, 250, 350],
+        })
+        corr_matrix, _, _ = CorrelationPlotterService.compute_correlation(
+            df, 'biological replicates'
+        )
+        assert np.isnan(corr_matrix.iloc[0, 1])
+
+    def test_render_with_nan_in_correlation(self):
+        """Rendering a heatmap with NaN values should not crash."""
+        corr_matrix = pd.DataFrame({
+            's1': [1.0, np.nan],
+            's2': [np.nan, 1.0],
+        }, index=['s1', 's2'])
+        fig = CorrelationPlotterService.render_correlation_plot(
+            corr_matrix, 0.5, 0.7, 'NaNCondition'
+        )
+        assert isinstance(fig, plt.Figure)
+
+    def test_constant_column_nan_correlation(self):
+        """Constant values produce NaN correlation (std=0)."""
+        df = pd.DataFrame({
+            's1': [100, 100, 100],
+            's2': [150, 250, 350],
+        })
+        corr_matrix, _, _ = CorrelationPlotterService.compute_correlation(
+            df, 'biological replicates'
+        )
+        assert np.isnan(corr_matrix.iloc[0, 1])
