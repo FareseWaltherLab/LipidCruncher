@@ -8,6 +8,7 @@ from app.services.normalization import (
 )
 from app.models.normalization import NormalizationConfig
 from app.models.experiment import ExperimentConfig
+from tests.conftest import make_experiment
 
 
 # =============================================================================
@@ -17,21 +18,13 @@ from app.models.experiment import ExperimentConfig
 @pytest.fixture
 def simple_experiment():
     """Simple experiment with 2 conditions, 3 samples each."""
-    return ExperimentConfig(
-        n_conditions=2,
-        conditions_list=['Control', 'Treatment'],
-        number_of_samples_list=[3, 3]
-    )
+    return make_experiment(2, 3)
 
 
 @pytest.fixture
 def three_condition_experiment():
     """Experiment with 3 conditions."""
-    return ExperimentConfig(
-        n_conditions=3,
-        conditions_list=['Control', 'Treatment', 'Vehicle'],
-        number_of_samples_list=[2, 2, 2]
-    )
+    return make_experiment(3, 2)
 
 
 @pytest.fixture

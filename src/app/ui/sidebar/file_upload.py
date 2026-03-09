@@ -8,6 +8,7 @@ This module contains:
 """
 
 from pathlib import Path
+from typing import Optional
 
 import streamlit as st
 import pandas as pd
@@ -36,7 +37,7 @@ SAMPLE_DATA_DIR = _SRC_DIR.parent / "sample_datasets"
 # Helper Functions
 # =============================================================================
 
-def _store_workbench_result(result) -> pd.DataFrame:
+def _store_workbench_result(result) -> Optional[pd.DataFrame]:
     """Store Metabolomics Workbench standardization result in session state.
 
     Args:
@@ -69,7 +70,7 @@ def display_format_selection() -> str:
     )
 
 
-def load_sample_dataset(data_format: str) -> pd.DataFrame:
+def load_sample_dataset(data_format: str) -> Optional[pd.DataFrame]:
     """Load a sample dataset for the selected format.
 
     Args:
@@ -97,7 +98,7 @@ def load_sample_dataset(data_format: str) -> pd.DataFrame:
     return None
 
 
-def display_file_upload(data_format: str) -> pd.DataFrame:
+def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
     """Display file upload widget and sample data option.
 
     Args:

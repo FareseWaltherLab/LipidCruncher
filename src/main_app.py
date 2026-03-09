@@ -11,6 +11,9 @@ Refactored architecture:
 Reference: old_main_app.py contains the original monolithic implementation.
 """
 
+from typing import Optional
+
+import pandas as pd
 import streamlit as st
 
 # =============================================================================
@@ -62,7 +65,7 @@ StreamlitAdapter.initialize_session_state()
 # Main App Page
 # =============================================================================
 
-def _reset_qc_state():
+def _reset_qc_state() -> None:
     """Clear all Quality Check session state."""
     st.session_state.qc_continuation_df = None
     st.session_state.qc_bqc_plot = None
@@ -72,7 +75,7 @@ def _reset_qc_state():
     st.session_state.qc_samples_removed = []
 
 
-def display_app_page():
+def display_app_page() -> None:
     """Display the main application page with module routing."""
     # Centered layout matching landing page width
     _, center, _ = st.columns([1, 3, 1])
@@ -154,7 +157,13 @@ def display_app_page():
             _display_module2(experiment, bqc_label, data_format)
 
 
-def _display_module1(df, raw_df, experiment, bqc_label, data_format):
+def _display_module1(
+    df: pd.DataFrame,
+    raw_df: pd.DataFrame,
+    experiment: 'ExperimentConfig',
+    bqc_label: Optional[str],
+    data_format: str,
+) -> None:
     """Display Module 1: Data Standardization, Filtering, and Normalization."""
     st.subheader("Data Standardization, Filtering, and Normalization")
 
@@ -217,7 +226,11 @@ def _display_module1(df, raw_df, experiment, bqc_label, data_format):
         st.rerun()
 
 
-def _display_module2(experiment, bqc_label, data_format):
+def _display_module2(
+    experiment: 'ExperimentConfig',
+    bqc_label: Optional[str],
+    data_format: str,
+) -> None:
     """Display Module 2: Quality Check and Anomaly Detection."""
     # Use normalized data as input for QC
     continuation_df = st.session_state.get('normalized_df')
@@ -257,7 +270,7 @@ def _display_module2(experiment, bqc_label, data_format):
 # Main
 # =============================================================================
 
-def main():
+def main() -> None:
     """Main application entry point."""
     if st.session_state.page == 'landing':
         display_landing_page()

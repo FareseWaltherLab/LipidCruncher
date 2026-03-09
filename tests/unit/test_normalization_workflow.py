@@ -18,6 +18,7 @@ from app.workflows.normalization import (
 from app.models.experiment import ExperimentConfig
 from app.models.normalization import NormalizationConfig
 from app.services.format_detection import DataFormat
+from tests.conftest import make_experiment
 
 
 # =============================================================================
@@ -27,30 +28,22 @@ from app.services.format_detection import DataFormat
 @pytest.fixture
 def simple_experiment():
     """Simple 2x2 experiment."""
-    return ExperimentConfig(
-        n_conditions=2,
-        conditions_list=['Control', 'Treatment'],
-        number_of_samples_list=[2, 2]
-    )
+    return make_experiment(2, 2)
 
 
 @pytest.fixture
 def three_condition_experiment():
     """Three condition experiment."""
-    return ExperimentConfig(
-        n_conditions=3,
-        conditions_list=['Control', 'Treatment1', 'Treatment2'],
-        number_of_samples_list=[2, 2, 2]
-    )
+    return make_experiment(3, 2, conditions_list=['Control', 'Treatment1', 'Treatment2'])
 
 
 @pytest.fixture
 def single_condition_experiment():
     """Single condition experiment."""
-    return ExperimentConfig(
+    return make_experiment(
         n_conditions=1,
         conditions_list=['Samples'],
-        number_of_samples_list=[4]
+        number_of_samples_list=[4],
     )
 
 

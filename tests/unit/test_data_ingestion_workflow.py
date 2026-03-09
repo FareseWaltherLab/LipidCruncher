@@ -19,6 +19,7 @@ from app.models.experiment import ExperimentConfig
 from app.services.format_detection import DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from app.services.zero_filtering import ZeroFilterConfig
+from tests.conftest import make_experiment
 
 
 # =============================================================================
@@ -28,51 +29,39 @@ from app.services.zero_filtering import ZeroFilterConfig
 @pytest.fixture
 def basic_experiment():
     """Basic two-condition experiment."""
-    return ExperimentConfig(
-        n_conditions=2,
-        conditions_list=['Control', 'Treatment'],
-        number_of_samples_list=[3, 3]
-    )
+    return make_experiment(2, 3)
 
 
 @pytest.fixture
 def simple_experiment():
     """Simple 2x2 experiment matching other test files."""
-    return ExperimentConfig(
-        n_conditions=2,
-        conditions_list=['Control', 'Treatment'],
-        number_of_samples_list=[2, 2]
-    )
+    return make_experiment(2, 2)
 
 
 @pytest.fixture
 def experiment_with_bqc():
     """Experiment with BQC condition."""
-    return ExperimentConfig(
+    return make_experiment(
         n_conditions=3,
         conditions_list=['BQC', 'Control', 'Treatment'],
-        number_of_samples_list=[2, 3, 3]
+        number_of_samples_list=[2, 3, 3],
     )
 
 
 @pytest.fixture
 def single_condition_experiment():
     """Single condition experiment."""
-    return ExperimentConfig(
+    return make_experiment(
         n_conditions=1,
         conditions_list=['Samples'],
-        number_of_samples_list=[4]
+        number_of_samples_list=[4],
     )
 
 
 @pytest.fixture
 def many_conditions_experiment():
     """Many conditions experiment for stress testing."""
-    return ExperimentConfig(
-        n_conditions=5,
-        conditions_list=['Cond1', 'Cond2', 'Cond3', 'Cond4', 'Cond5'],
-        number_of_samples_list=[2, 2, 2, 2, 2]
-    )
+    return make_experiment(5, 2, conditions_list=['Cond1', 'Cond2', 'Cond3', 'Cond4', 'Cond5'])
 
 
 @pytest.fixture

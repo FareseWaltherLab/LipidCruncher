@@ -26,6 +26,7 @@ from app.services.quality_check import (
 )
 from app.services.format_detection import DataFormat
 from app.models.experiment import ExperimentConfig
+from tests.conftest import make_experiment
 
 
 # =============================================================================
@@ -35,21 +36,13 @@ from app.models.experiment import ExperimentConfig
 @pytest.fixture
 def simple_experiment():
     """2 conditions x 3 samples each = 6 samples (s1..s6)."""
-    return ExperimentConfig(
-        n_conditions=2,
-        conditions_list=['Control', 'Treatment'],
-        number_of_samples_list=[3, 3],
-    )
+    return make_experiment(2, 3)
 
 
 @pytest.fixture
 def three_condition_experiment():
     """3 conditions x 2 samples each = 6 samples (s1..s6)."""
-    return ExperimentConfig(
-        n_conditions=3,
-        conditions_list=['Control', 'Treatment', 'Vehicle'],
-        number_of_samples_list=[2, 2, 2],
-    )
+    return make_experiment(3, 2)
 
 
 @pytest.fixture

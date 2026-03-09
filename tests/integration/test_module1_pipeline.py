@@ -201,11 +201,8 @@ def get_sample_names_from_df(df: pd.DataFrame) -> list:
 @pytest.fixture
 def simple_experiment():
     """Simple 2x2 experiment for edge case tests."""
-    return ExperimentConfig(
-        n_conditions=2,
-        conditions_list=['Control', 'Treatment'],
-        number_of_samples_list=[2, 2]
-    )
+    from tests.conftest import make_experiment
+    return make_experiment(2, 2)
 
 
 @pytest.fixture

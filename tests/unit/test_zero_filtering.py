@@ -8,6 +8,7 @@ from app.services.zero_filtering import (
     ZeroFilteringResult,
 )
 from app.models.experiment import ExperimentConfig
+from tests.conftest import make_experiment
 
 
 # =============================================================================
@@ -17,11 +18,7 @@ from app.models.experiment import ExperimentConfig
 @pytest.fixture
 def simple_experiment():
     """Simple experiment with 2 conditions, 3 samples each."""
-    return ExperimentConfig(
-        n_conditions=2,
-        conditions_list=['Control', 'Treatment'],
-        number_of_samples_list=[3, 3]
-    )
+    return make_experiment(2, 3)
 
 
 @pytest.fixture

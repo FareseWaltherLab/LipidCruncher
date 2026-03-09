@@ -13,6 +13,8 @@ Data flow:
     qc_df → rt (read-only) → correlation (read-only)
           → pca (may remove samples) → final_df, updated_experiment
 """
+from typing import Optional, Tuple
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -36,7 +38,12 @@ from app.ui.download_utils import (
 # Entry Point
 # =============================================================================
 
-def display_quality_check_module(continuation_df, experiment, bqc_label, format_type):
+def display_quality_check_module(
+    continuation_df: pd.DataFrame,
+    experiment: 'ExperimentConfig',
+    bqc_label: Optional[str],
+    format_type,
+) -> Tuple[pd.DataFrame, 'ExperimentConfig']:
     """Display the full Quality Check module.
 
     Args:
@@ -95,7 +102,7 @@ def display_quality_check_module(continuation_df, experiment, bqc_label, format_
 # Section 1: Box Plots
 # =============================================================================
 
-def _display_box_plots(df, experiment):
+def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None:
     """Display missing values distribution and concentration box plots."""
     with st.expander('View Distributions of AUC: Scan Data & Detect Atypical Patterns'):
         st.markdown(
@@ -179,7 +186,11 @@ def _display_box_plots(df, experiment):
 # Section 2: BQC Quality Assessment
 # =============================================================================
 
-def _display_bqc_assessment(df, experiment, bqc_label):
+def _display_bqc_assessment(
+    df: pd.DataFrame,
+    experiment: 'ExperimentConfig',
+    bqc_label: Optional[str],
+) -> pd.DataFrame:
     """Display BQC quality assessment and optional filtering.
 
     Returns the (potentially filtered) DataFrame.
@@ -207,7 +218,11 @@ def _display_bqc_assessment(df, experiment, bqc_label):
     return df
 
 
-def _render_bqc_scatter(df, experiment, bqc_label):
+def _render_bqc_scatter(
+    df: pd.DataFrame,
+    experiment: 'ExperimentConfig',
+    bqc_label: str,
+) -> tuple:
     """Render BQC settings, scatter plot, reliability assessment, and download buttons.
 
     Returns (cov_threshold, scatter_plot, prepared_df, reliable_data_percent).
@@ -260,7 +275,11 @@ def _render_bqc_scatter(df, experiment, bqc_label):
     return cov_threshold, scatter_plot, prepared_df, reliable_data_percent
 
 
-def _render_bqc_filtering(df, prepared_df, cov_threshold):
+def _render_bqc_filtering(
+    df: pd.DataFrame,
+    prepared_df: pd.DataFrame,
+    cov_threshold: int,
+) -> Optional[pd.DataFrame]:
     """Render BQC filtering UI: filter choice, high-CoV table, apply filter, results.
 
     Returns filtered DataFrame if filtering was applied, None otherwise.
@@ -341,7 +360,7 @@ def _render_bqc_filtering(df, prepared_df, cov_threshold):
 # Section 3: Retention Time Plots
 # =============================================================================
 
-def _display_retention_time_plots(df, config):
+def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) -> None:
     """Display retention time plots (LipidSearch/MS-DIAL only)."""
     rt_result = QualityCheckWorkflow.check_retention_time_availability(df, config)
     if not rt_result.available:
@@ -428,7 +447,11 @@ def _display_retention_time_plots(df, config):
 # Section 4: Pairwise Correlation
 # =============================================================================
 
-def _display_correlation_analysis(df, experiment, bqc_label):
+def _display_correlation_analysis(
+    df: pd.DataFrame,
+    experiment: 'ExperimentConfig',
+    bqc_label: Optional[str],
+) -> None:
     """Display pairwise correlation heatmaps."""
     with st.expander('Pairwise Correlation Analysis'):
         st.markdown(
@@ -509,7 +532,10 @@ def _display_correlation_analysis(df, experiment, bqc_label):
 # Section 5: PCA Analysis
 # =============================================================================
 
-def _display_pca_analysis(df, experiment):
+def _display_pca_analysis(
+    df: pd.DataFrame,
+    experiment: 'ExperimentConfig',
+) -> Tuple[pd.DataFrame, 'ExperimentConfig']:
     """Display PCA analysis with optional sample removal.
 
     Returns (updated_df, updated_experiment).

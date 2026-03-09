@@ -6,6 +6,8 @@ This module contains:
 - display_column_mapping: Display column mapping table with MS-DIAL sample override
 """
 
+from typing import List, Optional, Tuple
+
 import streamlit as st
 import pandas as pd
 
@@ -58,7 +60,7 @@ def _apply_msdial_sample_override(
 # UI Components
 # =============================================================================
 
-def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> pd.DataFrame:
+def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> Optional[pd.DataFrame]:
     """
     Standardize uploaded data and create column mapping.
 
@@ -104,7 +106,7 @@ def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> pd.DataFram
     return result.standardized_df
 
 
-def display_column_mapping(df: pd.DataFrame, data_format: str) -> tuple:
+def display_column_mapping(df: pd.DataFrame, data_format: str) -> Tuple[bool, Optional[pd.DataFrame]]:
     """
     Display column mapping in the sidebar.
     For MS-DIAL, includes override sample detection expander.

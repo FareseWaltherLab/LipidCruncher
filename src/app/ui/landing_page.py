@@ -8,6 +8,7 @@ logo display, module images, and the main landing page layout.
 import io
 import os
 from pathlib import Path
+from typing import Optional
 
 import streamlit as st
 from PIL import Image
@@ -37,6 +38,27 @@ IMAGES_DIR = _SRC_DIR / "images"
 # Helper Functions
 # =============================================================================
 
+@st.cache_data(show_spinner=False)
+def _convert_pdf_to_png(pdf_path: str) -> Optional[bytes]:
+    """Convert a PDF file to PNG bytes (cached).
+
+    Args:
+        pdf_path: Absolute path to the PDF file.
+
+    Returns:
+        PNG image bytes, or None if conversion failed.
+    """
+    try:
+        images = convert_from_path(pdf_path, dpi=300)
+        if images:
+            buf = io.BytesIO()
+            images[0].save(buf, format='PNG')
+            return buf.getvalue()
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 def load_module_image(filename: str, caption: str = None) -> bool:
     """
     Load and display a module PDF as an image.
@@ -52,17 +74,16 @@ def load_module_image(filename: str, caption: str = None) -> bool:
         st.warning(f"pdf2image not installed. Cannot display {filename}")
         return False
 
-    try:
-        pdf_path = IMAGES_DIR / filename
-        if pdf_path.exists():
-            images = convert_from_path(str(pdf_path), dpi=300)
-            if images:
-                img_byte_arr = io.BytesIO()
-                images[0].save(img_byte_arr, format='PNG')
-                st.image(img_byte_arr.getvalue(), caption=caption, use_container_width=True)
-                return True
-    except (OSError, ValueError) as e:
-        st.warning(f"Could not load {filename}: {str(e)}")
+    pdf_path = IMAGES_DIR / filename
+    if not pdf_path.exists():
+        return False
+
+    png_bytes = _convert_pdf_to_png(str(pdf_path))
+    if png_bytes is not None:
+        st.image(png_bytes, caption=caption, use_container_width=True)
+        return True
+
+    st.warning(f"Could not load {filename}")
     return False
 
 

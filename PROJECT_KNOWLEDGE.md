@@ -1143,22 +1143,29 @@ Created `src/app/constants.py` with:
 - `_apply_msdial_sample_override()` → pure logic extracted to `DataStandardizationService.apply_msdial_sample_override()` with `MSDIALOverrideResult` dataclass; UI wrapper in `column_mapping.py` only handles session state updates. 17 new tests in `TestApplyMSDIALSampleOverride`.
 - Metabolomics Workbench session state handling → deduplicated via `_store_workbench_result()` helper in `file_upload.py` (eliminated duplicate session state code between `load_sample_dataset()` and `display_file_upload()`).
 
-##### Phase 4: Testing & Caching Improvements
+##### Phase 4: Testing & Caching Improvements ✅
 
-**Step 4.1: Shared Test Fixtures**
-Create `tests/conftest.py` with factory functions:
-- `make_experiment(n_conditions, samples_per_condition)`
-- `make_dataframe(lipids, classes, n_samples)`
-- Replace duplicated `simple_experiment` fixture across 7 files
+**Step 4.1: ✅ Shared Test Fixtures**
+Created `tests/conftest.py` with factory functions:
+- `make_experiment(n_conditions, samples_per_condition, conditions_list, number_of_samples_list)` — flexible experiment builder
+- `make_dataframe(n_lipids, n_samples, classes, lipids, with_classkey, prefix, value_fn)` — flexible DataFrame builder
+- Shared fixtures: `simple_experiment_2x3`, `simple_experiment_2x2`, `three_condition_experiment`
+- Updated 8 test files to use `make_experiment()`: `test_normalization.py`, `test_zero_filtering.py`, `test_quality_check_service.py`, `test_quality_check_workflow.py`, `test_data_cleaning.py`, `test_data_ingestion_workflow.py`, `test_normalization_workflow.py`, `test_sample_grouping_service.py`
+- Updated `test_module1_pipeline.py` integration test
+- Created `tests/__init__.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py` (fixes `from tests.conftest import` resolution)
 
-**Step 4.2: Cache `load_module_image()`**
-Add `@st.cache_data` to PDF→PNG conversion in `landing_page.py`
+**Step 4.2: ✅ Cache `load_module_image()`**
+Extracted `_convert_pdf_to_png(pdf_path)` with `@st.cache_data` — PDF→PNG conversion now cached, `load_module_image()` only calls `st.image()`.
 
-**Step 4.3: Verify Hash Functions**
-Confirm `GradeFilterConfig` and `QualityFilterConfig` are hashable for `st.cache_data` in adapter
+**Step 4.3: ✅ Verify Hash Functions**
+Both `GradeFilterConfig.__hash__()` and `QualityFilterConfig.__hash__()` confirmed present and used in `StreamlitAdapter.run_ingestion()` via `hash_funcs={}`.
 
-**Step 4.4: Add Type Hints to UI Layer**
-Complete type annotations for all functions in: `main_app.py`, `quality_check.py`, `landing_page.py`, `file_upload.py`, `column_mapping.py`
+**Step 4.4: ✅ Add Type Hints to UI Layer**
+Added `Optional`, `Tuple`, return types, and parameter types to:
+- `main_app.py` — `_reset_qc_state`, `display_app_page`, `_display_module1`, `_display_module2`, `main`
+- `quality_check.py` — all 9 functions (`display_quality_check_module`, `_display_box_plots`, `_display_bqc_assessment`, `_render_bqc_scatter`, `_render_bqc_filtering`, `_display_retention_time_plots`, `_display_correlation_analysis`, `_display_pca_analysis`)
+- `file_upload.py` — `_store_workbench_result`, `load_sample_dataset`, `display_file_upload` (→ `Optional[pd.DataFrame]`)
+- `column_mapping.py` — `standardize_uploaded_data` (→ `Optional[pd.DataFrame]`), `display_column_mapping` (→ `Tuple[bool, Optional[pd.DataFrame]]`)
 
 ##### Phase 5: Cleanup
 
@@ -1182,7 +1189,7 @@ Replace `col[col.find('[') + 1:col.find(']')]` in normalization service with reg
 | 2 | Phase 3.1 (Constants) ✅ | Quick win, unblocks Phase 2 |
 | 3 | Phase 2 (Legacy Elimination) ✅ | All 8 legacy classes replaced (Steps 2.1-2.4) |
 | 4 | Phase 3.2-3.4 (DRY/Long Methods) | Improves maintainability |
-| 5 | Phase 4 (Testing/Caching) | Safety net improvements |
+| 5 | Phase 4 (Testing/Caching) ✅ | Safety net improvements |
 | 6 | Phase 5 (Cleanup) | Final polish |
 
 #### Module 3: Visualize and Analyze (NOT STARTED — blocked on Code Quality Sprint)

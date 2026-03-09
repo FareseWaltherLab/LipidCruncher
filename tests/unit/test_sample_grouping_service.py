@@ -16,6 +16,7 @@ from app.services.sample_grouping import (
     RegroupingResult,
     SampleGroupingService,
 )
+from tests.conftest import make_experiment as _make_experiment, make_dataframe
 
 
 # =============================================================================
@@ -25,21 +26,20 @@ from app.services.sample_grouping import (
 
 def make_experiment(n_conditions=2, samples_per=3):
     """Build an ExperimentConfig with equal samples per condition."""
-    return ExperimentConfig(
+    return _make_experiment(
         n_conditions=n_conditions,
+        samples_per_condition=samples_per,
         conditions_list=[f'Cond_{i+1}' for i in range(n_conditions)],
-        number_of_samples_list=[samples_per] * n_conditions,
     )
 
 
 def make_df(n_samples=6, n_lipids=5, with_classkey=True):
     """Build a minimal standardized DataFrame."""
-    data = {'LipidMolec': [f'PC({i}:0)' for i in range(n_lipids)]}
-    if with_classkey:
-        data['ClassKey'] = ['PC'] * n_lipids
-    for i in range(1, n_samples + 1):
-        data[f'intensity[s{i}]'] = np.random.rand(n_lipids) * 1000
-    return pd.DataFrame(data)
+    return make_dataframe(
+        n_lipids=n_lipids,
+        n_samples=n_samples,
+        with_classkey=with_classkey,
+    )
 
 
 # =============================================================================
