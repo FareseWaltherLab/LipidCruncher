@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from app.services.data_standardization import (
     DataStandardizationService,
+    MSDIALOverrideResult,
     StandardizationResult,
 )
 from app.services.format_detection import DataFormat
@@ -1432,3 +1433,190 @@ class TestMSDIALStandardizationAdditional:
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
         assert pd.api.types.is_numeric_dtype(result.standardized_df['CalcMass'])
+
+
+# =============================================================================
+# MS-DIAL Sample Override Tests
+# =============================================================================
+
+
+def _make_override_inputs(n_samples=5, n_to_keep=3):
+    """Build inputs for apply_msdial_sample_override tests.
+
+    Returns (standardized_df, column_mapping, manual_samples, features).
+    """
+    original_samples = [f'sample_{i}' for i in range(1, n_samples + 1)]
+
+    # Build a standardized DataFrame (as produced by _process_msdial)
+    data = {
+        'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+        'ClassKey': ['PC', 'PE'],
+    }
+    for i in range(1, n_samples + 1):
+        data[f'intensity[s{i}]'] = [1000.0 * i, 2000.0 * i]
+    df = pd.DataFrame(data)
+
+    # Build column mapping
+    mapping_rows = [{'standardized_name': 'LipidMolec', 'original_name': 'Metabolite name'}]
+    for i, orig in enumerate(original_samples, 1):
+        mapping_rows.append({
+            'standardized_name': f'intensity[s{i}]',
+            'original_name': orig,
+        })
+    column_mapping = pd.DataFrame(mapping_rows)
+
+    # Features dict
+    features = {
+        'raw_sample_columns': original_samples,
+        'normalized_sample_columns': original_samples[:3],
+    }
+
+    manual_samples = original_samples[:n_to_keep]
+    return df, column_mapping, manual_samples, features
+
+
+class TestApplyMSDIALSampleOverride:
+    """Tests for DataStandardizationService.apply_msdial_sample_override."""
+
+    def test_returns_override_result(self):
+        df, mapping, manual, features = _make_override_inputs()
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert isinstance(result, MSDIALOverrideResult)
+
+    def test_df_has_correct_intensity_columns(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        intensity_cols = [c for c in result.standardized_df.columns if c.startswith('intensity[')]
+        assert intensity_cols == ['intensity[s1]', 'intensity[s2]', 'intensity[s3]']
+
+    def test_df_preserves_metadata_columns(self):
+        df, mapping, manual, features = _make_override_inputs()
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert 'LipidMolec' in result.standardized_df.columns
+        assert 'ClassKey' in result.standardized_df.columns
+
+    def test_n_intensity_cols_matches(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert result.n_intensity_cols == 3
+
+    def test_sample_names_mapping(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert result.sample_names == {
+            's1': 'sample_1', 's2': 'sample_2', 's3': 'sample_3'
+        }
+
+    def test_raw_sample_columns_updated(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert result.raw_sample_columns == ['sample_1', 'sample_2', 'sample_3']
+
+    def test_normalized_sample_columns_filtered(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        # features has normalized_sample_columns = ['sample_1', 'sample_2', 'sample_3']
+        # manual keeps first 3, so all normalized should be preserved
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert result.normalized_sample_columns == ['sample_1', 'sample_2', 'sample_3']
+
+    def test_normalized_columns_filtered_to_manual_subset(self):
+        """Only normalized samples that are in manual_samples are kept."""
+        df, mapping, _, features = _make_override_inputs(n_samples=5, n_to_keep=5)
+        features['normalized_sample_columns'] = ['sample_1', 'sample_3', 'sample_5']
+        manual = ['sample_1', 'sample_2']  # sample_3 and sample_5 excluded
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert result.normalized_sample_columns == ['sample_1']
+
+    def test_column_mapping_has_metadata_and_intensity_rows(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        # Should have 1 metadata row (LipidMolec) + 3 intensity rows
+        assert len(result.column_mapping) == 4
+        std_names = result.column_mapping['standardized_name'].tolist()
+        assert std_names[0] == 'LipidMolec'
+        assert std_names[1:] == ['intensity[s1]', 'intensity[s2]', 'intensity[s3]']
+
+    def test_column_mapping_original_names_correct(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        orig_names = result.column_mapping['original_name'].tolist()
+        assert orig_names == ['Metabolite name', 'sample_1', 'sample_2', 'sample_3']
+
+    def test_data_values_preserved(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=2)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        # intensity[s1] was originally intensity[s1] with values [1000, 2000]
+        assert result.standardized_df['intensity[s1]'].tolist() == [1000.0, 2000.0]
+        assert result.standardized_df['intensity[s2]'].tolist() == [2000.0, 4000.0]
+
+    def test_single_sample_override(self):
+        df, mapping, _, features = _make_override_inputs(n_samples=5, n_to_keep=5)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, ['sample_3'], features
+        )
+        assert result.n_intensity_cols == 1
+        assert result.sample_names == {'s1': 'sample_3'}
+        intensity_cols = [c for c in result.standardized_df.columns if c.startswith('intensity[')]
+        assert intensity_cols == ['intensity[s1]']
+
+    def test_all_samples_kept(self):
+        df, mapping, _, features = _make_override_inputs(n_samples=3, n_to_keep=3)
+        manual = ['sample_1', 'sample_2', 'sample_3']
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert result.n_intensity_cols == 3
+        assert len(result.standardized_df.columns) == len(df.columns)
+
+    def test_input_df_not_mutated(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        original_cols = df.columns.tolist()
+        DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert df.columns.tolist() == original_cols
+
+    def test_input_mapping_not_mutated(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=3)
+        original_len = len(mapping)
+        DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert len(mapping) == original_len
+
+    def test_empty_normalized_columns(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=3, n_to_keep=2)
+        features['normalized_sample_columns'] = []
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert result.normalized_sample_columns == []
+
+    def test_row_count_preserved(self):
+        df, mapping, manual, features = _make_override_inputs(n_samples=5, n_to_keep=2)
+        result = DataStandardizationService.apply_msdial_sample_override(
+            df, mapping, manual, features
+        )
+        assert len(result.standardized_df) == len(df)

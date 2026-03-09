@@ -49,6 +49,26 @@ class StandardizationResult:
     workbench_samples: Optional[Dict[str, str]] = None
 
 
+@dataclass
+class MSDIALOverrideResult:
+    """Result of applying MS-DIAL sample column override.
+
+    Attributes:
+        standardized_df: Rebuilt DataFrame with only selected intensity columns.
+        column_mapping: Updated column mapping DataFrame.
+        n_intensity_cols: Number of intensity columns after override.
+        sample_names: Updated s1->original_name mapping.
+        raw_sample_columns: Updated raw sample column list.
+        normalized_sample_columns: Updated normalized sample column list.
+    """
+    standardized_df: pd.DataFrame
+    column_mapping: pd.DataFrame
+    n_intensity_cols: int
+    sample_names: Dict[str, str]
+    raw_sample_columns: List[str]
+    normalized_sample_columns: List[str]
+
+
 # =============================================================================
 # Service
 # =============================================================================
@@ -104,6 +124,83 @@ class DataStandardizationService:
                 success=False,
                 message=f"Error during preprocessing: {e}",
             )
+
+    # ------------------------------------------------------------------
+    # MS-DIAL sample override
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def apply_msdial_sample_override(
+        df: pd.DataFrame,
+        column_mapping: pd.DataFrame,
+        manual_samples: List[str],
+        features: Dict,
+    ) -> MSDIALOverrideResult:
+        """Rebuild DataFrame and column mapping after manual MS-DIAL sample override.
+
+        Pure logic — no session state access.
+
+        Args:
+            df: Current standardized DataFrame with intensity[sN] columns.
+            column_mapping: Current column mapping DataFrame with
+                'standardized_name' and 'original_name' columns.
+            manual_samples: User-selected original sample column names.
+            features: MS-DIAL features dict (needs 'normalized_sample_columns').
+
+        Returns:
+            MSDIALOverrideResult with rebuilt DataFrame, mapping, and updated lists.
+        """
+        # Update feature lists
+        raw_sample_columns = list(manual_samples)
+        current_norm_samples = features.get('normalized_sample_columns', [])
+        normalized_sample_columns = [s for s in current_norm_samples if s in manual_samples]
+
+        # Build reverse lookup: standardized_name -> original_name
+        std_to_orig = dict(zip(
+            column_mapping['standardized_name'],
+            column_mapping['original_name'],
+        ))
+
+        # Identify which intensity columns to keep (by original name)
+        intensity_cols_to_keep = [
+            col for col in df.columns
+            if col.startswith('intensity[') and std_to_orig.get(col) in manual_samples
+        ]
+
+        # Build new DataFrame with metadata + selected intensity columns
+        non_intensity_cols = [col for col in df.columns if not col.startswith('intensity[')]
+        new_df = df[non_intensity_cols + intensity_cols_to_keep].copy()
+
+        # Build new column mapping (metadata rows + sequential intensity rows)
+        new_mapping_rows = [
+            {'standardized_name': row['standardized_name'], 'original_name': row['original_name']}
+            for _, row in column_mapping.iterrows()
+            if not row['standardized_name'].startswith('intensity[')
+        ]
+
+        rename_map = {}
+        for i, old_col in enumerate(intensity_cols_to_keep, 1):
+            new_col = f'intensity[s{i}]'
+            rename_map[old_col] = new_col
+            new_mapping_rows.append({
+                'standardized_name': new_col,
+                'original_name': std_to_orig.get(old_col, old_col),
+            })
+
+        new_df = new_df.rename(columns=rename_map)
+
+        sample_names = {
+            f's{i}': orig for i, orig in enumerate(manual_samples, 1)
+        }
+
+        return MSDIALOverrideResult(
+            standardized_df=new_df,
+            column_mapping=pd.DataFrame(new_mapping_rows),
+            n_intensity_cols=len(intensity_cols_to_keep),
+            sample_names=sample_names,
+            raw_sample_columns=raw_sample_columns,
+            normalized_sample_columns=normalized_sample_columns,
+        )
 
     # ------------------------------------------------------------------
     # Lipid name helpers (ported from DataFormatHandler)

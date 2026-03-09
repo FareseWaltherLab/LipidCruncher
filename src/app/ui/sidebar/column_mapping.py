@@ -23,9 +23,10 @@ def _apply_msdial_sample_override(
     manual_samples: list,
     features: dict
 ) -> pd.DataFrame:
-    """Rebuild DataFrame and column mapping after manual MS-DIAL sample override.
+    """Apply MS-DIAL sample override and update session state.
 
-    Updates session state with new column mapping, sample counts, and sample names.
+    Delegates pure logic to DataStandardizationService, then stores
+    results in session state.
 
     Args:
         df: Current standardized DataFrame
@@ -35,59 +36,22 @@ def _apply_msdial_sample_override(
     Returns:
         New DataFrame with only selected intensity columns, renamed sequentially.
     """
-    # Update feature lists for both raw and normalized sample columns
-    st.session_state.msdial_features['raw_sample_columns'] = manual_samples
+    result = DataStandardizationService.apply_msdial_sample_override(
+        df=df,
+        column_mapping=st.session_state.column_mapping,
+        manual_samples=manual_samples,
+        features=features,
+    )
 
-    current_norm_samples = features.get('normalized_sample_columns', [])
-    filtered_norm_samples = [s for s in current_norm_samples if s in manual_samples]
-    st.session_state.msdial_features['normalized_sample_columns'] = filtered_norm_samples
-
-    # Build reverse lookup: standardized_name -> original_name
-    current_mapping = st.session_state.column_mapping
-    std_to_orig = dict(zip(
-        current_mapping['standardized_name'],
-        current_mapping['original_name']
-    ))
-
-    # Identify which intensity columns to keep (by original name)
-    intensity_cols_to_keep = [
-        col for col in df.columns
-        if col.startswith('intensity[') and std_to_orig.get(col) in manual_samples
-    ]
-
-    # Build new DataFrame with metadata + selected intensity columns
-    non_intensity_cols = [col for col in df.columns if not col.startswith('intensity[')]
-    new_df = df[non_intensity_cols + intensity_cols_to_keep].copy()
-
-    # Build new column mapping (metadata rows + sequential intensity rows)
-    new_mapping_rows = [
-        {'standardized_name': row['standardized_name'], 'original_name': row['original_name']}
-        for _, row in current_mapping.iterrows()
-        if not row['standardized_name'].startswith('intensity[')
-    ]
-
-    rename_map = {}
-    for i, old_col in enumerate(intensity_cols_to_keep, 1):
-        new_col = f'intensity[s{i}]'
-        rename_map[old_col] = new_col
-        new_mapping_rows.append({
-            'standardized_name': new_col,
-            'original_name': std_to_orig.get(old_col, old_col)
-        })
-
-    new_df = new_df.rename(columns=rename_map)
-
-    # Update session state
-    st.session_state.n_intensity_cols = len(intensity_cols_to_keep)
-    st.session_state.column_mapping = pd.DataFrame(new_mapping_rows)
-    st.session_state.msdial_sample_names = {
-        f's{i}': orig for i, orig in enumerate(manual_samples, 1)
-    }
-
-    # Save override for preservation across re-standardization (e.g., data type changes)
+    # Update session state with results
+    st.session_state.msdial_features['raw_sample_columns'] = result.raw_sample_columns
+    st.session_state.msdial_features['normalized_sample_columns'] = result.normalized_sample_columns
+    st.session_state.n_intensity_cols = result.n_intensity_cols
+    st.session_state.column_mapping = result.column_mapping
+    st.session_state.msdial_sample_names = result.sample_names
     st.session_state['_msdial_override_samples'] = list(manual_samples)
 
-    return new_df
+    return result.standardized_df
 
 
 # =============================================================================

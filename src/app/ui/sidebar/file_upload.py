@@ -36,6 +36,26 @@ SAMPLE_DATA_DIR = _SRC_DIR.parent / "sample_datasets"
 # Helper Functions
 # =============================================================================
 
+def _store_workbench_result(result) -> pd.DataFrame:
+    """Store Metabolomics Workbench standardization result in session state.
+
+    Args:
+        result: StandardizationResult from DataStandardizationService.
+
+    Returns:
+        Standardized DataFrame, or None if standardization failed.
+    """
+    if result.success:
+        st.session_state.standardized_df = result.standardized_df
+        if result.workbench_conditions:
+            st.session_state.workbench_conditions = result.workbench_conditions
+        if result.workbench_samples:
+            st.session_state.workbench_samples = result.workbench_samples
+        return result.standardized_df
+    else:
+        st.sidebar.error(result.message)
+        return None
+
 
 # =============================================================================
 # UI Components
@@ -71,16 +91,7 @@ def load_sample_dataset(data_format: str) -> pd.DataFrame:
                 result = DataStandardizationService.validate_and_standardize(
                     text_content, DataFormat.METABOLOMICS_WORKBENCH
                 )
-                if result.success:
-                    st.session_state.standardized_df = result.standardized_df
-                    if result.workbench_conditions:
-                        st.session_state.workbench_conditions = result.workbench_conditions
-                    if result.workbench_samples:
-                        st.session_state.workbench_samples = result.workbench_samples
-                    return result.standardized_df
-                else:
-                    st.sidebar.error(result.message)
-                    return None
+                return _store_workbench_result(result)
             else:
                 return pd.read_csv(filepath)
     return None
@@ -136,18 +147,11 @@ def display_file_upload(data_format: str) -> pd.DataFrame:
                 result = DataStandardizationService.validate_and_standardize(
                     text_content, DataFormat.METABOLOMICS_WORKBENCH
                 )
-                if result.success:
+                df = _store_workbench_result(result)
+                if df is not None:
                     st.sidebar.success("File uploaded and processed successfully!")
-                    st.session_state.raw_df = result.standardized_df
-                    st.session_state.standardized_df = result.standardized_df
-                    if result.workbench_conditions:
-                        st.session_state.workbench_conditions = result.workbench_conditions
-                    if result.workbench_samples:
-                        st.session_state.workbench_samples = result.workbench_samples
-                    return result.standardized_df
-                else:
-                    st.sidebar.error(result.message)
-                    return None
+                    st.session_state.raw_df = df
+                return df
             else:
                 df = pd.read_csv(uploaded_file)
                 st.sidebar.success("File uploaded successfully!")

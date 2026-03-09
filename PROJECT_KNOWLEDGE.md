@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** March 8, 2026
+**Last Updated:** March 9, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -1133,14 +1133,15 @@ Created `src/app/constants.py` with:
 - `display_group_samples()` (99→45 lines) → extracted `_handle_manual_regrouping()`
 - `display_experiment_definition()` (98→20 lines) → extracted `_display_workbench_auto_detection()`, `_display_manual_experiment()`
 
-**Step 3.3: Merge Duplicate Methods**
-- `get_intensity_column_samples()` / `get_concentration_column_samples()` in normalization workflow → single parameterized method
-- Download button pattern (15+ instances) → reusable helper in `download_utils.py`
-- Deduplication logic in cleaner modules → shared base method
+**Step 3.3: Merge Duplicate Methods ✅ (`c2194ab`)**
+- `get_intensity_column_samples()` / `get_concentration_column_samples()` → `get_column_samples(df, prefix)` with backward-compatible wrappers
+- 14 inline CSV download patterns across 5 files → `csv_download_button()` from `download_utils.py`
+- `convert_df` no longer imported anywhere in app code (still exported from `download_utils.py`)
+- Deduplication logic in cleaners: skipped — fundamentally different strategies (AUC+Grade vs Total Score vs first-occurrence)
 
-**Step 3.4: Move Business Logic Out of UI**
-- `_apply_msdial_sample_override()` (column_mapping.py:19-88) → service layer
-- Metabolomics Workbench CSV parsing (file_upload.py) → service layer
+**Step 3.4: Move Business Logic Out of UI ✅**
+- `_apply_msdial_sample_override()` → pure logic extracted to `DataStandardizationService.apply_msdial_sample_override()` with `MSDIALOverrideResult` dataclass; UI wrapper in `column_mapping.py` only handles session state updates. 17 new tests in `TestApplyMSDIALSampleOverride`.
+- Metabolomics Workbench session state handling → deduplicated via `_store_workbench_result()` helper in `file_upload.py` (eliminated duplicate session state code between `load_sample_dataset()` and `display_file_upload()`).
 
 ##### Phase 4: Testing & Caching Improvements
 
