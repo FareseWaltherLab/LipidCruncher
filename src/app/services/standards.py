@@ -547,7 +547,7 @@ class StandardsService:
             # Check if second column is ClassKey (non-numeric) or intensity (numeric)
             second_col_values = df[cols[1]]
             is_numeric = (
-                second_col_values.dtype in ['int64', 'float64'] or
+                pd.api.types.is_numeric_dtype(second_col_values) or
                 pd.to_numeric(second_col_values, errors='coerce').notna().all()
             )
 

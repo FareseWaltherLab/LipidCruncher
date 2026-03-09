@@ -326,7 +326,7 @@ class DataStandardizationService:
         result_df = df.copy()
         rename_dict = {}
         for col in meanarea_cols:
-            sample = col[col.find('[') + 1:col.find(']')]
+            sample = col.split('[', 1)[1].rstrip(']')
             rename_dict[col] = f'intensity[{sample}]'
         result_df = result_df.rename(columns=rename_dict)
 

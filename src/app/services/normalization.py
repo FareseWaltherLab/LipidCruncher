@@ -297,7 +297,7 @@ class NormalizationService:
         # Apply normalization
         skipped_samples = []
         for col in cols_to_normalize:
-            sample_name = col[col.find('[') + 1:col.find(']')]
+            sample_name = col.split('[', 1)[1].rstrip(']')
 
             protein_conc = config.get_protein_concentration(sample_name)
             if protein_conc is None:

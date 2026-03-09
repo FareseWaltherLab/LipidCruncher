@@ -1167,32 +1167,34 @@ Added `Optional`, `Tuple`, return types, and parameter types to:
 - `file_upload.py` — `_store_workbench_result`, `load_sample_dataset`, `display_file_upload` (→ `Optional[pd.DataFrame]`)
 - `column_mapping.py` — `standardize_uploaded_data` (→ `Optional[pd.DataFrame]`), `display_column_mapping` (→ `Tuple[bool, Optional[pd.DataFrame]]`)
 
-##### Phase 5: Cleanup
+##### Phase 5: Cleanup ✅
 
-**Step 5.1: Remove Dead Code**
-- Delete `src/lipidomics/standards_manager.py` (imported nowhere)
-- Remove unused import `fields` in `streamlit_adapter.py:8`
-- Remove unused export `load_module_image` in `src/app/ui/__init__.py`
-- Clean up `src/lipidomics/__init__.py` exports (only keep what old_main_app.py needs)
+**Step 5.1: ✅ Remove Dead Code**
+- Deleted `src/lipidomics/standards_manager.py` (imported nowhere)
+- `fields` import in `streamlit_adapter.py:7` — actually used (lines 210, 224), no action needed
+- Removed unused export `load_module_image` from `src/app/ui/__init__.py`
+- `src/lipidomics/__init__.py` — all 20 exports used by `old_main_app.py`, kept as-is
 
-**Step 5.2: Use `pd.api.types.is_numeric_dtype()`**
-Replace fragile `dtype in ['int64', 'float64']` in standards.py
+**Step 5.2: ✅ Use `pd.api.types.is_numeric_dtype()`**
+Replaced `dtype in ['int64', 'float64']` with `pd.api.types.is_numeric_dtype()` in `standards.py:549`
 
-**Step 5.3: Fix Fragile String Parsing**
-Replace `col[col.find('[') + 1:col.find(']')]` in normalization service with regex or shared column parser
+**Step 5.3: ✅ Fix Fragile String Parsing**
+Replaced `col[col.find('[') + 1:col.find(']')]` with `col.split('[', 1)[1].rstrip(']')` in:
+- `normalization.py:300`
+- `data_standardization.py:329`
 
 ##### Execution Order
 
 | Order | Phase | Estimated Scope |
 |-------|-------|-----------------|
-| 1 | Phase 1 (Session State) | Foundational — everything else depends on clean state |
+| 1 | Phase 1 (Session State) ✅ | Foundational — everything else depends on clean state |
 | 2 | Phase 3.1 (Constants) ✅ | Quick win, unblocks Phase 2 |
 | 3 | Phase 2 (Legacy Elimination) ✅ | All 8 legacy classes replaced (Steps 2.1-2.4) |
-| 4 | Phase 3.2-3.4 (DRY/Long Methods) | Improves maintainability |
+| 4 | Phase 3.2-3.4 (DRY/Long Methods) ✅ | Improves maintainability |
 | 5 | Phase 4 (Testing/Caching) ✅ | Safety net improvements |
-| 6 | Phase 5 (Cleanup) | Final polish |
+| 6 | Phase 5 (Cleanup) ✅ | Final polish |
 
-#### Module 3: Visualize and Analyze (NOT STARTED — blocked on Code Quality Sprint)
+#### Module 3: Visualize and Analyze (NOT STARTED)
 1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps
 2. ⬜ Build Module 3 UI
 
