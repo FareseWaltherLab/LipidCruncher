@@ -154,10 +154,20 @@ _WIDGET_KEYS = {
     'msdial_custom_msms', 'msdial_show_custom_threshold', 'msdial_custom_score',
     # Zero filtering widgets (zero_filtering.py)
     'zero_filter_detection_threshold',
+    'non_bqc_zero_threshold', 'bqc_zero_threshold',
     # Standards widgets (internal_standards.py)
     'standards_source_radio', 'standards_location_radio', 'standards_conditions_select',
+    'standards_file_uploader',
     # Normalization widgets (normalization.py)
     'temp_selected_classes', 'protein_csv_upload',
+    'norm_method_selection', 'protein_input_method',
+    # Data processing widgets (continued)
+    'msdial_msms_only',
+    # Download/action button keys (various files)
+    'load_sample', 'clear_custom_standards',
+    'download_removed_species', 'download_auto_standards',
+    'download_custom_standards', 'download_filtered_data',
+    'download_normalized_data',
     # Quality Check widgets (quality_check.py)
     'bqc_cov_threshold', 'bqc_filter_choice', 'bqc_lipids_to_keep',
     'bqc_csv_download', 'bqc_filtered_download',
@@ -165,6 +175,9 @@ _WIDGET_KEYS = {
     'qc_rt_svg_comparison', 'rt_csv_comparison',
     'corr_condition', 'corr_csv_download', 'qc_corr_svg',
     'pca_samples_remove', 'pca_csv_download',
+    'qc_missing_values_svg', 'qc_missing_values_csv',
+    'qc_box_plot_svg', 'qc_box_plot_csv',
+    'qc_bqc_svg', 'qc_pca_svg',
 }
 
 # Prefixes for dynamic widget keys (created with f-strings like `protein_{sample}`).
