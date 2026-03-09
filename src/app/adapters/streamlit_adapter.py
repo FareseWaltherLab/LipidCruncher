@@ -37,10 +37,9 @@ class SessionState:
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
                              original_column_order
       data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
-                             pre_filter_df, grade_config, grade_filter_mode_saved,
-                             grade_selections_saved, last_quality_config,
+                             pre_filter_df, grade_config, last_quality_config,
                              msdial_quality_config, msdial_use_normalized,
-                             msdial_data_type_index, msdial_quality_level_index
+                             msdial_data_type_index
       internal_standards.py → original_auto_intsta_df, preserved_intsta_df,
                               preserved_standards_mode, custom_standards_df,
                               custom_standards_mode, standards_source
@@ -90,13 +89,10 @@ class SessionState:
     pre_filter_df: Optional[pd.DataFrame] = None
     ingestion_result: Any = None
     grade_config: Optional[GradeFilterConfig] = None
-    grade_filter_mode_saved: int = 0  # 0 = default, 1 = customize
-    grade_selections_saved: Dict[str, List[str]] = field(default_factory=dict)
     last_quality_config: Any = None
     msdial_quality_config: Optional[QualityFilterConfig] = None
     msdial_use_normalized: bool = False
     msdial_data_type_index: int = 0  # 0 = raw, 1 = pre-normalized
-    msdial_quality_level_index: int = 1  # 0 = relaxed, 1 = moderate, 2 = strict
 
     # --- Internal standards (owner: internal_standards.py) ---
     original_auto_intsta_df: Optional[pd.DataFrame] = None
@@ -247,22 +243,6 @@ class StreamlitAdapter:
         ]
         for key in dynamic_keys:
             st.session_state.pop(key, None)
-
-    @staticmethod
-    def reset_normalization_state() -> None:
-        """Reset normalization-related session state."""
-        st.session_state.normalization_method = 'None'
-        st.session_state.normalization_inputs = {}
-        st.session_state.selected_classes = []
-        st.session_state.create_norm_dataset = False
-        st.session_state.normalized_df = None
-        st.session_state.norm_method_selection = None
-        st.session_state.normalization_result = None
-        st.session_state.class_standard_map = None
-        st.session_state.standard_concentrations = None
-        st.session_state.protein_df = None
-        st.session_state.protein_input_method = None
-        st.session_state.protein_input_method_prev = None
 
     # ==================== Service Wrappers ====================
 

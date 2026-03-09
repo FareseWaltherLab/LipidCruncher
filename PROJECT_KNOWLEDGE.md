@@ -1194,6 +1194,83 @@ Replaced `col[col.find('[') + 1:col.find(']')]` with `col.split('[', 1)[1].rstri
 | 5 | Phase 4 (Testing/Caching) ✅ | Safety net improvements |
 | 6 | Phase 5 (Cleanup) ✅ | Final polish |
 
+#### Code Review Before Module 3 (March 9, 2026)
+
+Senior review of session state, test depth, and UI coverage. All issues must be resolved before starting Module 3.
+
+##### Issue 1: Missing Widget Keys in `_WIDGET_KEYS` ✅ (`62eb3ad`)
+
+Added 19 missing widget keys (6 stateful + 13 download/action buttons) to `_WIDGET_KEYS` so they are properly cleared by `reset_data_state()`.
+
+##### Issue 2+3: Dead SessionState Fields + Dead Method ✅
+
+Removed 3 dead fields (`grade_filter_mode_saved`, `grade_selections_saved`, `msdial_quality_level_index`) and dead method `reset_normalization_state()`.
+
+##### Issue 4: Plotter Tests Lack Error Handling + Type Coercion (HIGH)
+
+**Problem:** The 5 plotter test files collectively have **2 total `pytest.raises` calls**, **0 type coercion tests**, **0 boundary tests**, and **0 NaN-input tests** for correlation/PCA plotters. This is far below Module 1's standards (141 error paths).
+
+| Plotter Test File | Tests | `pytest.raises` | Type Coercion | NaN Tests |
+|-------------------|-------|-----------------|---------------|-----------|
+| `test_box_plot_service.py` | 47 | 2 | 0 | 0 |
+| `test_bqc_plotter_service.py` | 38 | 0 | 0 | 1 |
+| `test_retention_time_plotter.py` | 30 | 0 | 0 | 0 |
+| `test_correlation_plotter.py` | 24 | 0 | 0 | 0 |
+| `test_pca_plotter.py` | 31 | 0 | 0 | 0 |
+
+**Fix:** Add error handling tests (invalid input, missing columns, empty data), type coercion tests (string/int/float32/mixed), NaN-input tests, and boundary tests (0 samples, 1 sample PCA, empty class list) to each plotter test file. Target ~10-15 additional tests per file.
+
+##### Issue 5: Module 2 QC UI Has Zero Tests (HIGH)
+
+**Problem:** `quality_check.py` (601 lines, 5 interactive sections) has no UI tests. Module 2 consumes `normalized_df` and produces `qc_continuation_df` — if BQC filtering or PCA sample removal has bugs, Module 3 will receive corrupt data.
+
+**Required tests (~23):**
+
+| Section | Tests | Key Interactions |
+|---------|-------|------------------|
+| Entry point | 2 | Validation errors, format resolution |
+| Box plots | 3 | Render, empty warning, downloads |
+| BQC assessment | 7 | Skip when no BQC, threshold, filter yes/no, multiselect, messages |
+| Retention time | 4 | Hidden for Generic, modes, class selection, empty warning |
+| Correlation | 3 | Selectbox, no-eligible error, sample type |
+| PCA | 4 | Remove samples, min-2 error, session state |
+
+##### Issue 6: Module Navigation Untested (HIGH)
+
+**Problem:** No tests for:
+- "Next: Quality Check" button (main_app.py:218) sets `module` and calls `_reset_qc_state()`
+- "Back to Data Processing" button (main_app.py:258) resets module
+- "Back to Home" from Module 2 resets page and data state
+- `_reset_qc_state()` (main_app.py:68-75) clearing 6 QC keys
+- State preservation: `normalized_df` surviving Module 1 → Module 2 → back round-trip
+
+**Fix:** Add ~6 navigation tests.
+
+##### Issue 7: Module 1 Main Content UI Untested (MEDIUM)
+
+**Problem:** The most complex Module 1 UI components have zero UI tests:
+- Normalization UI (469 lines) — class selection, method radio, IS mapping, protein input
+- Zero filtering UI (139 lines) — sliders, detection threshold, live preview
+- Internal standards UI (279 lines) — auto-detect, custom upload, clear button
+- Grade/quality filtering (data_processing.py) — grade radio, per-class multiselects
+
+**UI test coverage is ~25%** of UI code paths (only sidebar + landing + MS-DIAL data type tested).
+
+**Fix:** Add ~25 tests across normalization (8), zero filtering (5), internal standards (5), grade/quality filtering (4), column mapping (3).
+
+##### Execution Plan
+
+| Order | Issue | Scope | Priority | Status |
+|-------|-------|-------|----------|--------|
+| 1 | Issue 1: Missing widget keys | Add to `_WIDGET_KEYS` | HIGH | ✅ `62eb3ad` |
+| 2 | Issue 2+3: Dead fields/method | Remove from `streamlit_adapter.py` | MEDIUM | ✅ |
+| 3 | Issue 4: Plotter test gaps | ~50-75 new tests across 5 files | HIGH | ⬜ |
+| 4 | Issue 5: Module 2 UI tests | ~23 new tests | HIGH | ⬜ |
+| 5 | Issue 6: Navigation tests | ~6 new tests | HIGH | ⬜ |
+| 6 | Issue 7: Module 1 main content tests | ~25 new tests (can defer some) | MEDIUM | ⬜ |
+
+**Minimum viable before Module 3:** Issues 1-2-3 (quick fixes) + Issue 4 (plotter tests) + Issue 5 (Module 2 UI) + Issue 6 (navigation).
+
 #### Module 3: Visualize and Analyze (NOT STARTED)
 1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps
 2. ⬜ Build Module 3 UI

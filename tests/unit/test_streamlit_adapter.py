@@ -84,8 +84,6 @@ class TestSessionStateDefaults:
         """Test default grade configuration."""
         state = SessionState()
         assert state.grade_config is None
-        assert state.grade_filter_mode_saved == 0
-        assert state.grade_selections_saved == {}
 
     def test_default_msdial_config(self):
         """Test default MS-DIAL configuration."""
@@ -94,7 +92,6 @@ class TestSessionStateDefaults:
         assert state.msdial_features == {}
         assert state.msdial_use_normalized is False
         assert state.msdial_data_type_index == 0
-        assert state.msdial_quality_level_index == 1
 
     def test_default_standards_settings(self):
         """Test default standards settings."""
@@ -398,23 +395,6 @@ class TestSessionStateIntegration:
         assert mock_st.session_state['cleaned_df'] is None
         assert mock_st.session_state['experiment'] is None
         assert mock_st.session_state['confirmed'] is False
-
-    @patch('app.adapters.streamlit_adapter.st')
-    def test_reset_normalization_state(self, mock_st):
-        """Test resetting normalization state."""
-        mock_st.session_state = MockSessionState({
-            'normalization_method': 'Log2',
-            'normalization_inputs': {'key': 'value'},
-            'selected_classes': ['PC', 'PE'],
-            'normalized_df': pd.DataFrame({'A': [1]}),
-        })
-
-        StreamlitAdapter.reset_normalization_state()
-
-        assert mock_st.session_state['normalization_method'] == 'None'
-        assert mock_st.session_state['normalization_inputs'] == {}
-        assert mock_st.session_state['selected_classes'] == []
-        assert mock_st.session_state['normalized_df'] is None
 
 
 # =============================================================================
