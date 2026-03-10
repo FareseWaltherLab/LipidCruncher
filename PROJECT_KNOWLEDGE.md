@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** March 9, 2026
+**Last Updated:** March 10, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -1239,16 +1239,18 @@ New test classes per file: `TestErrorHandling`, `TestTypeCoercion`, `TestNaNHand
 | TestCorrelation | 3 | Condition selectbox, bio vs tech replicate info |
 | TestPCA | 4 | Multiselect exists, plot stored, removal updates state, min-2 error |
 
-##### Issue 6: Module Navigation Untested (HIGH)
+##### Issue 6: Module Navigation Untested (HIGH) ✅ (`4228be8`)
 
-**Problem:** No tests for:
-- "Next: Quality Check" button (main_app.py:218) sets `module` and calls `_reset_qc_state()`
-- "Back to Data Processing" button (main_app.py:258) resets module
-- "Back to Home" from Module 2 resets page and data state
-- `_reset_qc_state()` (main_app.py:68-75) clearing 6 QC keys
-- State preservation: `normalized_df` surviving Module 1 → Module 2 → back round-trip
+**File:** `tests/ui/test_navigation.py` — 9 tests, all passing
 
-**Fix:** Add ~6 navigation tests.
+**Approach:** Two wrapper scripts (`module1_nav_script`, `module2_nav_script`) replicate `main_app.py` navigation logic without importing it. Pre-populated QC state verifies `_reset_qc_state()` clears all 6 keys.
+
+| Class | Tests | Coverage |
+|-------|-------|---------|
+| TestNextToQualityCheck | 3 | Sets module, resets all 6 QC keys, hidden without normalized_df |
+| TestBackToDataProcessing | 2 | Resets module to Module 1, clears all QC state |
+| TestBackToHomeFromModule2 | 2 | Sets page to landing, clears data state |
+| TestStatePreservation | 2 | normalized_df survives round-trip, Module 2 error gate |
 
 ##### Issue 7: Module 1 Main Content UI Untested (MEDIUM)
 
@@ -1270,10 +1272,50 @@ New test classes per file: `TestErrorHandling`, `TestTypeCoercion`, `TestNaNHand
 | 2 | Issue 2+3: Dead fields/method | Remove from `streamlit_adapter.py` | MEDIUM | ✅ |
 | 3 | Issue 4: Plotter test gaps | 76 new tests across 5 files | HIGH | ✅ `d1c22cb` |
 | 4 | Issue 5: Module 2 UI tests | 23 new tests | HIGH | ✅ |
-| 5 | Issue 6: Navigation tests | ~6 new tests | HIGH | ⬜ |
+| 5 | Issue 6: Navigation tests | 9 new tests | HIGH | ✅ `4228be8` |
 | 6 | Issue 7: Module 1 main content tests | ~25 new tests (can defer some) | MEDIUM | ⬜ |
 
-**Minimum viable before Module 3:** Issues 1-2-3 (quick fixes) + Issue 4 (plotter tests) + Issue 5 (Module 2 UI) + Issue 6 (navigation).
+**Minimum viable before Module 3:** Issues 1-5-6 all complete. ✅ Ready for Module 3 (Issue 7 deferred — medium priority).
+
+#### Senior Code Review (March 10, 2026) — Pre-Module 3 Fixes
+
+**9 issues resolved (`34d5984`).** All 2357 tests passing.
+
+| # | Issue | Severity | Location | Status |
+|---|-------|----------|----------|--------|
+| 1 | **Fix config comparison bug** — `run_ingestion_pipeline` compares dict `.get()` against `QualityFilterConfig` object attributes (type mismatch, runtime bug) | HIGH | `data_processing.py:293-295` | ✅ |
+| 2 | **Refactor `_process_msdial()`** — 180 lines → split into `_detect_msdial_structure()`, `_standardize_msdial_columns()`, `_build_msdial_mapping()` | HIGH | `data_standardization.py` | ✅ |
+| 3 | **Standardize widget preservation pattern** — Added `restore_widget_value()`/`save_widget_value()` to `StreamlitAdapter`. Applied to QC widgets (`bqc_filter_choice`, `rt_viewing_mode`, `pca_samples_remove`) with `_preserved_*` session state keys | HIGH | `streamlit_adapter.py`, `quality_check.py`, `main_app.py` | ✅ |
+| 4 | **Replace broad `except Exception`** — Replaced 6 occurrences with specific types (`ValueError`, `KeyError`, `IndexError`, `TypeError`, `AttributeError`, `ZeroDivisionError`) | MEDIUM | `data_standardization.py` | ✅ |
+| 5 | **Type `run_non_interactive()` return** — Created `QualityCheckNonInteractiveResult` dataclass with typed fields | MEDIUM | `workflows/quality_check.py` | ✅ |
+| 6 | **Extract shared validation utilities** — Created `src/app/services/validation.py` with `validate_dataframe_not_empty()`, `validate_concentration_columns()`, `get_matching_concentration_columns()`. Deduplicated QC service, QC workflow, and QC UI | MEDIUM | `validation.py`, `quality_check.py` (3 files) | ✅ |
+| 7 | **Convert `GradeFilterConfig`/`QualityFilterConfig`/`CleaningResult`** to `@dataclass` with custom `__hash__` | MEDIUM | `data_cleaning/configs.py` | ✅ |
+| 8 | **Adopt `@pytest.mark.parametrize`** — Invalid lipid rows (7→1 parametrized), filter presets (4→1), RT format availability (3→2 parametrized) | LOW | `test_data_cleaning.py`, `test_quality_check_workflow.py` | ✅ |
+| 9 | **Consolidate fixture definitions** — Moved `bqc_experiment` to shared `tests/conftest.py`, removed `three_condition_experiment` duplicates from 4 unit test files | LOW | `tests/conftest.py` + 4 test files | ✅ |
+
+**Files Created:**
+- `src/app/services/validation.py` — Shared DataFrame/concentration column validation utilities
+
+**Files Modified (source):**
+- `src/app/adapters/streamlit_adapter.py` — Added `restore_widget_value()`, `save_widget_value()`, 3 `_preserved_*` QC keys
+- `src/app/services/data_cleaning/configs.py` — Converted all 3 classes to `@dataclass`
+- `src/app/services/data_standardization.py` — Split `_process_msdial()` into 3 helpers, narrowed exception types
+- `src/app/services/quality_check.py` — Delegates to shared validation utilities
+- `src/app/ui/main_content/data_processing.py` — Fixed config comparison bug (`.get()` → attribute access)
+- `src/app/ui/main_content/quality_check.py` — Added widget preservation for 3 QC widgets
+- `src/app/workflows/quality_check.py` — Added `QualityCheckNonInteractiveResult` dataclass, uses shared validation
+- `src/main_app.py` — `_reset_qc_state()` clears 3 new `_preserved_*` keys
+
+**Files Modified (tests):**
+- `tests/conftest.py` — Added shared `bqc_experiment` fixture
+- `tests/ui/conftest.py` — Updated `_reset_qc_state()` with preserved keys
+- `tests/ui/test_navigation.py` — Verifies preserved keys cleared on navigation
+- `tests/unit/test_data_cleaning.py` — Parametrized invalid lipid rows + filter presets
+- `tests/unit/test_normalization.py` — Removed duplicate `three_condition_experiment`
+- `tests/unit/test_normalization_workflow.py` — Removed duplicate `three_condition_experiment`
+- `tests/unit/test_quality_check_service.py` — Removed duplicate `bqc_experiment` + `three_condition_experiment`
+- `tests/unit/test_quality_check_workflow.py` — Removed duplicates, parametrized RT tests, dict→attribute access
+- `tests/integration/test_module2_pipeline.py` — dict→attribute access for `run_non_interactive` results
 
 #### Module 3: Visualize and Analyze (NOT STARTED)
 1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps
