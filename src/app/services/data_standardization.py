@@ -119,7 +119,7 @@ class DataStandardizationService:
                     success=False,
                     message=f"Unsupported format: {data_format}",
                 )
-        except Exception as e:
+        except (ValueError, KeyError, IndexError, TypeError) as e:
             return StandardizationResult(
                 success=False,
                 message=f"Error during preprocessing: {e}",
@@ -271,7 +271,7 @@ class DataStandardizationService:
 
             return result
 
-        except Exception:
+        except (TypeError, AttributeError, ValueError, IndexError):
             return str(lipid_name) if lipid_name else "Unknown"
 
     @staticmethod
@@ -294,7 +294,7 @@ class DataStandardizationService:
             if match:
                 return match.group(1).strip()
             return "Unknown"
-        except Exception:
+        except (TypeError, AttributeError):
             return "Unknown"
 
     # ------------------------------------------------------------------
@@ -374,7 +374,7 @@ class DataStandardizationService:
                 / total_len
             )
             return avg_len < 15 and alpha_ratio > 0.7
-        except Exception:
+        except (ValueError, TypeError, ZeroDivisionError):
             return False
 
     @staticmethod
@@ -494,10 +494,182 @@ class DataStandardizationService:
                     else:
                         raw_cols.append(col)
                         raw_indices.append(idx)
-            except Exception:
+            except (ValueError, TypeError, IndexError):
                 continue
 
         return raw_cols, norm_cols, lipid_is_idx, raw_indices, norm_indices
+
+    @staticmethod
+    def _detect_msdial_structure(
+        df: pd.DataFrame,
+    ) -> Tuple[int, List[str], str, int, Dict[str, int], Dict]:
+        """Detect MS-DIAL file structure: header row, columns, and features.
+
+        Returns:
+            (header_row_idx, actual_columns, lipid_col, lipid_col_idx,
+             col_indices, features)
+
+        Raises:
+            ValueError: If no lipid column or sample columns are found.
+        """
+        header_row_idx = FormatDetectionService._detect_msdial_header_row(df)
+
+        if header_row_idx >= 0:
+            actual_columns = df.iloc[header_row_idx].tolist()
+        else:
+            actual_columns = df.columns.tolist()
+
+        # Find lipid name column
+        lipid_col = None
+        lipid_col_idx = None
+        for col_name in ['Metabolite name', 'Metabolite', 'Name', 'Lipid', 'LipidMolec']:
+            if col_name in actual_columns:
+                lipid_col = col_name
+                lipid_col_idx = actual_columns.index(col_name)
+                break
+
+        if lipid_col is None:
+            raise ValueError(
+                "No lipid name column found. Expected 'Metabolite name' column."
+            )
+
+        # Create temp df with correct headers for sample detection
+        if header_row_idx >= 0:
+            temp_df = df.iloc[header_row_idx + 1:].copy()
+            temp_df.columns = actual_columns
+        else:
+            temp_df = df
+
+        raw_samples, norm_samples, lipid_is_idx, raw_indices, norm_indices = (
+            DataStandardizationService._detect_msdial_sample_columns(
+                temp_df, actual_columns
+            )
+        )
+
+        if len(raw_samples) + len(norm_samples) < 1:
+            raise ValueError(
+                "No sample intensity columns detected. "
+                "Check that your export includes sample data."
+            )
+
+        # Build column index mapping (first occurrence only)
+        col_indices: Dict[str, int] = {}
+        for idx, col in enumerate(actual_columns):
+            if col not in col_indices:
+                col_indices[col] = idx
+
+        features = {
+            'has_ontology': 'Ontology' in actual_columns,
+            'has_quality_score': 'Total score' in actual_columns,
+            'has_msms_matched': 'MS/MS matched' in actual_columns,
+            'has_rt': 'Average Rt(min)' in actual_columns,
+            'has_mz': 'Average Mz' in actual_columns,
+            'has_normalized_data': len(norm_samples) > 0,
+            'lipid_column': lipid_col,
+            'lipid_column_index': lipid_col_idx,
+            'raw_sample_columns': raw_samples,
+            'raw_sample_indices': raw_indices,
+            'normalized_sample_columns': norm_samples,
+            'normalized_sample_indices': norm_indices,
+            'header_row_index': header_row_idx,
+            'actual_columns': actual_columns,
+            'column_indices': col_indices,
+        }
+
+        return header_row_idx, actual_columns, lipid_col, lipid_col_idx, col_indices, features
+
+    @staticmethod
+    def _standardize_msdial_columns(
+        df: pd.DataFrame,
+        header_row_idx: int,
+        lipid_col_idx: int,
+        col_indices: Dict[str, int],
+        features: Dict,
+        sample_cols: List[str],
+        sample_indices: List[int],
+    ) -> Tuple[pd.DataFrame, Dict[str, str]]:
+        """Standardize MS-DIAL columns into the common schema.
+
+        Returns:
+            (result_df, column_mapping_dict) where column_mapping_dict maps
+            original sample column names to intensity[sN] names.
+        """
+        if header_row_idx >= 0:
+            data_df = df.iloc[header_row_idx + 1:].copy()
+        else:
+            data_df = df.copy()
+        data_df = data_df.reset_index(drop=True)
+
+        standardized_data: Dict[str, pd.Series] = {}
+
+        # LipidMolec + ClassKey
+        standardized_data['LipidMolec'] = data_df.iloc[:, lipid_col_idx].apply(
+            DataStandardizationService.standardize_lipid_name
+        )
+        standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(
+            DataStandardizationService.infer_class_key
+        )
+
+        # Optional metadata columns
+        if features['has_rt'] and 'Average Rt(min)' in col_indices:
+            standardized_data['BaseRt'] = pd.to_numeric(
+                data_df.iloc[:, col_indices['Average Rt(min)']], errors='coerce'
+            )
+        if features['has_mz'] and 'Average Mz' in col_indices:
+            standardized_data['CalcMass'] = pd.to_numeric(
+                data_df.iloc[:, col_indices['Average Mz']], errors='coerce'
+            )
+
+        # Quality columns (preserved for filtering)
+        if features['has_quality_score'] and 'Total score' in col_indices:
+            standardized_data['Total score'] = pd.to_numeric(
+                data_df.iloc[:, col_indices['Total score']], errors='coerce'
+            )
+        if features['has_msms_matched'] and 'MS/MS matched' in col_indices:
+            standardized_data['MS/MS matched'] = data_df.iloc[
+                :, col_indices['MS/MS matched']
+            ]
+
+        # Sample intensity columns
+        column_mapping_dict: Dict[str, str] = {}
+        for i, (col_name, col_idx) in enumerate(
+            zip(sample_cols, sample_indices), 1
+        ):
+            new_col = f'intensity[s{i}]'
+            standardized_data[new_col] = pd.to_numeric(
+                data_df.iloc[:, col_idx], errors='coerce'
+            ).fillna(0)
+            column_mapping_dict[col_name] = new_col
+
+        return pd.DataFrame(standardized_data), column_mapping_dict
+
+    @staticmethod
+    def _build_msdial_mapping(
+        lipid_col: str,
+        col_indices: Dict[str, int],
+        features: Dict,
+        column_mapping_dict: Dict[str, str],
+    ) -> pd.DataFrame:
+        """Build the column mapping DataFrame for MS-DIAL."""
+        mapping_rows = [
+            {'original_name': lipid_col, 'standardized_name': 'LipidMolec'}
+        ]
+        if features['has_rt'] and 'Average Rt(min)' in col_indices:
+            mapping_rows.append({
+                'original_name': 'Average Rt(min)',
+                'standardized_name': 'BaseRt',
+            })
+        if features['has_mz'] and 'Average Mz' in col_indices:
+            mapping_rows.append({
+                'original_name': 'Average Mz',
+                'standardized_name': 'CalcMass',
+            })
+        for orig, std in column_mapping_dict.items():
+            mapping_rows.append({
+                'original_name': orig,
+                'standardized_name': std,
+            })
+        return pd.DataFrame(mapping_rows)[['standardized_name', 'original_name']]
 
     @staticmethod
     def _process_msdial(
@@ -508,176 +680,47 @@ class DataStandardizationService:
             return StandardizationResult(False, "Expected a DataFrame for MS-DIAL format")
 
         try:
-            # Detect header row
-            header_row_idx = FormatDetectionService._detect_msdial_header_row(df)
-
-            if header_row_idx >= 0:
-                actual_columns = df.iloc[header_row_idx].tolist()
-            else:
-                actual_columns = df.columns.tolist()
-
-            # Find lipid name column
-            lipid_col = None
-            lipid_col_idx = None
-            for col_name in ['Metabolite name', 'Metabolite', 'Name', 'Lipid', 'LipidMolec']:
-                if col_name in actual_columns:
-                    lipid_col = col_name
-                    lipid_col_idx = actual_columns.index(col_name)
-                    break
-
-            if lipid_col is None:
-                return StandardizationResult(
-                    False, "No lipid name column found. Expected 'Metabolite name' column."
-                )
-
-            # Create temp df with correct headers for sample detection
-            if header_row_idx >= 0:
-                temp_df = df.iloc[header_row_idx + 1:].copy()
-                temp_df.columns = actual_columns
-            else:
-                temp_df = df
-
-            raw_samples, norm_samples, lipid_is_idx, raw_indices, norm_indices = (
-                DataStandardizationService._detect_msdial_sample_columns(
-                    temp_df, actual_columns
-                )
+            header_row_idx, actual_columns, lipid_col, lipid_col_idx, col_indices, features = (
+                DataStandardizationService._detect_msdial_structure(df)
             )
-
-            total_samples = len(raw_samples) + len(norm_samples)
-            if total_samples < 1:
-                return StandardizationResult(
-                    False,
-                    "No sample intensity columns detected. Check that your export includes sample data.",
-                )
-
-            # Build column index mapping for metadata columns
-            col_indices: Dict[str, int] = {}
-            for idx, col in enumerate(actual_columns):
-                if col not in col_indices:
-                    col_indices[col] = idx
-
-            # Build features dict
-            features = {
-                'has_ontology': 'Ontology' in actual_columns,
-                'has_quality_score': 'Total score' in actual_columns,
-                'has_msms_matched': 'MS/MS matched' in actual_columns,
-                'has_rt': 'Average Rt(min)' in actual_columns,
-                'has_mz': 'Average Mz' in actual_columns,
-                'has_normalized_data': len(norm_samples) > 0,
-                'lipid_column': lipid_col,
-                'lipid_column_index': lipid_col_idx,
-                'raw_sample_columns': raw_samples,
-                'raw_sample_indices': raw_indices,
-                'normalized_sample_columns': norm_samples,
-                'normalized_sample_indices': norm_indices,
-                'header_row_index': header_row_idx,
-                'actual_columns': actual_columns,
-                'column_indices': col_indices,
-            }
-
-            # -- Standardize --
-
-            # Skip metadata rows
-            if header_row_idx >= 0:
-                data_df = df.iloc[header_row_idx + 1:].copy()
-            else:
-                data_df = df.copy()
-            data_df = data_df.reset_index(drop=True)
 
             # Choose raw vs normalized sample columns
+            norm_samples = features['normalized_sample_columns']
             if use_normalized and len(norm_samples) > 0:
-                sample_cols_to_use = norm_samples
-                sample_indices_to_use = norm_indices
+                sample_cols = norm_samples
+                sample_indices = features['normalized_sample_indices']
             else:
-                sample_cols_to_use = raw_samples
-                sample_indices_to_use = raw_indices
+                sample_cols = features['raw_sample_columns']
+                sample_indices = features['raw_sample_indices']
 
-            standardized_data: Dict[str, pd.Series] = {}
-
-            # LipidMolec
-            standardized_data['LipidMolec'] = data_df.iloc[:, lipid_col_idx].apply(
-                DataStandardizationService.standardize_lipid_name
+            result_df, column_mapping_dict = (
+                DataStandardizationService._standardize_msdial_columns(
+                    df, header_row_idx, lipid_col_idx,
+                    col_indices, features, sample_cols, sample_indices,
+                )
             )
 
-            # ClassKey — always inferred
-            standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(
-                DataStandardizationService.infer_class_key
+            mapping_df = DataStandardizationService._build_msdial_mapping(
+                lipid_col, col_indices, features, column_mapping_dict,
             )
 
-            # Optional metadata columns
-            if features['has_rt'] and 'Average Rt(min)' in col_indices:
-                rt_idx = col_indices['Average Rt(min)']
-                standardized_data['BaseRt'] = pd.to_numeric(
-                    data_df.iloc[:, rt_idx], errors='coerce'
-                )
-
-            if features['has_mz'] and 'Average Mz' in col_indices:
-                mz_idx = col_indices['Average Mz']
-                standardized_data['CalcMass'] = pd.to_numeric(
-                    data_df.iloc[:, mz_idx], errors='coerce'
-                )
-
-            # Quality columns (preserved for filtering)
-            if features['has_quality_score'] and 'Total score' in col_indices:
-                score_idx = col_indices['Total score']
-                standardized_data['Total score'] = pd.to_numeric(
-                    data_df.iloc[:, score_idx], errors='coerce'
-                )
-
-            if features['has_msms_matched'] and 'MS/MS matched' in col_indices:
-                msms_idx = col_indices['MS/MS matched']
-                standardized_data['MS/MS matched'] = data_df.iloc[:, msms_idx]
-
-            # Sample intensity columns
-            column_mapping_dict: Dict[str, str] = {}
-            for i, (col_name, col_idx) in enumerate(
-                zip(sample_cols_to_use, sample_indices_to_use), 1
-            ):
-                new_col = f'intensity[s{i}]'
-                standardized_data[new_col] = pd.to_numeric(
-                    data_df.iloc[:, col_idx], errors='coerce'
-                ).fillna(0)
-                column_mapping_dict[col_name] = new_col
-
-            result_df = pd.DataFrame(standardized_data)
-
-            # Build complete column mapping
-            mapping_rows = [
-                {'original_name': lipid_col, 'standardized_name': 'LipidMolec'}
-            ]
-            if features['has_rt'] and 'Average Rt(min)' in col_indices:
-                mapping_rows.append({
-                    'original_name': 'Average Rt(min)',
-                    'standardized_name': 'BaseRt',
-                })
-            if features['has_mz'] and 'Average Mz' in col_indices:
-                mapping_rows.append({
-                    'original_name': 'Average Mz',
-                    'standardized_name': 'CalcMass',
-                })
-            for orig, std in column_mapping_dict.items():
-                mapping_rows.append({
-                    'original_name': orig,
-                    'standardized_name': std,
-                })
-            mapping_df = pd.DataFrame(mapping_rows)[['standardized_name', 'original_name']]
-
-            # Sample names map
             sample_names = {
-                f's{i}': col for i, col in enumerate(sample_cols_to_use, 1)
+                f's{i}': col for i, col in enumerate(sample_cols, 1)
             }
 
             return StandardizationResult(
                 success=True,
-                message=f"Data successfully standardized",
+                message="Data successfully standardized",
                 standardized_df=result_df,
                 column_mapping=mapping_df,
-                n_intensity_cols=len(sample_cols_to_use),
+                n_intensity_cols=len(sample_cols),
                 msdial_features=features,
                 msdial_sample_names=sample_names,
             )
 
-        except Exception as e:
+        except ValueError as e:
+            return StandardizationResult(False, str(e))
+        except (KeyError, IndexError, TypeError) as e:
             return StandardizationResult(
                 False, f"MS-DIAL standardization error: {e}"
             )
@@ -773,7 +816,7 @@ class DataStandardizationService:
                 workbench_samples=wb_samples,
             )
 
-        except Exception as e:
+        except (ValueError, KeyError, IndexError, TypeError) as e:
             return StandardizationResult(
                 False, f"Error standardizing Metabolomics Workbench data: {e}"
             )

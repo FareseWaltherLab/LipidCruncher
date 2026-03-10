@@ -12,13 +12,15 @@ is called individually from the UI layer.
 All methods are pure logic (no Streamlit dependencies).
 """
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from dataclasses import field as dataclass_field
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
 from app.constants import COV_THRESHOLD_DEFAULT
 from ..models.experiment import ExperimentConfig
 from ..services.format_detection import DataFormat
+from ..services.validation import get_matching_concentration_columns
 from ..services.quality_check import (
     QualityCheckService,
     BoxPlotResult,
@@ -43,6 +45,26 @@ class QualityCheckConfig:
     bqc_label: Optional[str] = None
     format_type: DataFormat = DataFormat.GENERIC
     cov_threshold: float = float(COV_THRESHOLD_DEFAULT)
+
+
+@dataclass
+class QualityCheckNonInteractiveResult:
+    """Result of running all QC steps without user interaction.
+
+    Attributes:
+        box_plot: BoxPlotResult or None.
+        bqc: BQCPrepareResult or None (None if no BQC samples).
+        retention_time: RetentionTimeDataResult or None.
+        correlations: Dict mapping condition name to CorrelationResult.
+        pca: PCAResult or None.
+        validation_errors: List of validation error strings.
+    """
+    box_plot: Optional[BoxPlotResult] = None
+    bqc: Optional[BQCPrepareResult] = None
+    retention_time: Optional[RetentionTimeDataResult] = None
+    correlations: Dict[str, CorrelationResult] = dataclass_field(default_factory=dict)
+    pca: Optional[PCAResult] = None
+    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 class QualityCheckWorkflow:
@@ -97,10 +119,7 @@ class QualityCheckWorkflow:
             return errors
 
         # Check that at least some concentration columns match the experiment
-        matching = [
-            s for s in experiment.full_samples_list
-            if f'concentration[{s}]' in df.columns
-        ]
+        matching = get_matching_concentration_columns(df, experiment)
         if not matching:
             errors.append(
                 "No concentration columns match the experiment's sample labels. "
@@ -362,7 +381,7 @@ class QualityCheckWorkflow:
         df: pd.DataFrame,
         experiment: ExperimentConfig,
         config: QualityCheckConfig,
-    ) -> Dict[str, object]:
+    ) -> QualityCheckNonInteractiveResult:
         """Run all QC steps without user interaction.
 
         Useful for integration tests and batch processing. Runs each
@@ -377,45 +396,35 @@ class QualityCheckWorkflow:
             config: Quality check configuration.
 
         Returns:
-            Dictionary with keys: 'box_plot', 'bqc', 'retention_time',
-            'correlations', 'pca', 'validation_errors'.
+            QualityCheckNonInteractiveResult with all QC step results.
         """
-        results: Dict[str, object] = {
-            'box_plot': None,
-            'bqc': None,
-            'retention_time': None,
-            'correlations': {},
-            'pca': None,
-            'validation_errors': [],
-        }
+        result = QualityCheckNonInteractiveResult()
 
         # Validate
         errors = QualityCheckWorkflow.validate_inputs(df, experiment)
         if errors:
-            results['validation_errors'] = errors
-            return results
+            result.validation_errors = errors
+            return result
 
         # Box plots
-        results['box_plot'] = QualityCheckWorkflow.run_box_plots(
-            df, experiment
-        )
+        result.box_plot = QualityCheckWorkflow.run_box_plots(df, experiment)
 
         # BQC assessment
-        results['bqc'] = QualityCheckWorkflow.run_bqc_assessment(
+        result.bqc = QualityCheckWorkflow.run_bqc_assessment(
             df, experiment, config
         )
 
         # Retention time
-        results['retention_time'] = (
+        result.retention_time = (
             QualityCheckWorkflow.check_retention_time_availability(df, config)
         )
 
         # Correlations
-        results['correlations'] = QualityCheckWorkflow.run_all_correlations(
+        result.correlations = QualityCheckWorkflow.run_all_correlations(
             df, experiment, bqc_label=config.bqc_label
         )
 
         # PCA
-        results['pca'] = QualityCheckWorkflow.run_pca(df, experiment)
+        result.pca = QualityCheckWorkflow.run_pca(df, experiment)
 
-        return results
+        return result

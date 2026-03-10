@@ -73,6 +73,9 @@ def _reset_qc_state() -> None:
     st.session_state.qc_correlation_plots = {}
     st.session_state.qc_pca_plot = None
     st.session_state.qc_samples_removed = []
+    st.session_state._preserved_bqc_filter_choice = 'No'
+    st.session_state._preserved_rt_viewing_mode = 'Comparison Mode'
+    st.session_state._preserved_pca_samples_remove = []
 
 
 def display_app_page() -> None:

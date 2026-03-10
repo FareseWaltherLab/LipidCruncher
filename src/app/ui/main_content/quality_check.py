@@ -27,6 +27,8 @@ from app.services.plotting.pca import PCAPlotterService
 from app.services.plotting.retention_time import RetentionTimePlotterService
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.services.format_detection import DataFormat
+from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.services.validation import get_matching_concentration_columns
 from app.ui.download_utils import (
     plotly_svg_download_button,
     matplotlib_svg_download_button,
@@ -115,10 +117,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
         )
 
         # Get available samples
-        current_samples = [
-            s for s in experiment.full_samples_list
-            if f'concentration[{s}]' in df.columns
-        ]
+        current_samples = get_matching_concentration_columns(df, experiment)
 
         if not current_samples:
             st.warning("No concentration columns found for the current samples.")
@@ -290,13 +289,18 @@ def _render_bqc_filtering(
     st.markdown("---")
     st.markdown("##### 🔧 Data Filtering")
 
+    filter_options = ("No", "Yes")
+    restored_value = StreamlitAdapter.restore_widget_value(
+        'bqc_filter_choice', '_preserved_bqc_filter_choice', 'No'
+    )
     filter_cov = st.radio(
         f"Filter lipids with CoV ≥ {cov_threshold}%?",
-        ("No", "Yes"),
-        index=0,
+        filter_options,
+        index=filter_options.index(restored_value) if restored_value in filter_options else 0,
         horizontal=True,
         key='bqc_filter_choice'
     )
+    StreamlitAdapter.save_widget_value('bqc_filter_choice', '_preserved_bqc_filter_choice')
 
     # Identify high-CoV lipids
     high_cov_mask = prepared_df['cov'] >= cov_threshold
@@ -381,12 +385,18 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
         st.markdown("---")
         st.markdown("##### ⚙️ Settings")
 
+        rt_options = ['Comparison Mode', 'Individual Mode']
+        restored_mode = StreamlitAdapter.restore_widget_value(
+            'rt_viewing_mode', '_preserved_rt_viewing_mode', 'Comparison Mode'
+        )
         mode = st.radio(
             'Viewing Mode',
-            ['Comparison Mode', 'Individual Mode'],
+            rt_options,
+            index=rt_options.index(restored_mode) if restored_mode in rt_options else 0,
             horizontal=True,
             key='rt_viewing_mode'
         )
+        StreamlitAdapter.save_widget_value('rt_viewing_mode', '_preserved_rt_viewing_mode')
 
         if mode == 'Individual Mode':
             st.markdown("---")
@@ -555,12 +565,19 @@ def _display_pca_analysis(
         st.markdown("---")
         st.markdown("##### ⚙️ Settings")
 
+        restored_pca = StreamlitAdapter.restore_widget_value(
+            'pca_samples_remove', '_preserved_pca_samples_remove', []
+        )
+        # Filter preserved values to only include currently valid samples
+        valid_restored = [s for s in restored_pca if s in experiment.full_samples_list]
         samples_to_remove = st.multiselect(
             'Exclude Samples (optional)',
             experiment.full_samples_list,
+            default=valid_restored if valid_restored else [],
             help="Exclude suspected outliers from analysis.",
             key='pca_samples_remove'
         )
+        StreamlitAdapter.save_widget_value('pca_samples_remove', '_preserved_pca_samples_remove')
 
         if samples_to_remove:
             remaining_count = len(experiment.full_samples_list) - len(samples_to_remove)

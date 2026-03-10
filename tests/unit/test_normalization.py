@@ -22,12 +22,6 @@ def simple_experiment():
 
 
 @pytest.fixture
-def three_condition_experiment():
-    """Experiment with 3 conditions."""
-    return make_experiment(3, 2)
-
-
-@pytest.fixture
 def single_sample_experiment():
     """Experiment with single sample per condition."""
     return ExperimentConfig(

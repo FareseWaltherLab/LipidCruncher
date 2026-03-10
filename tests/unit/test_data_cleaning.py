@@ -154,29 +154,17 @@ class TestQualityFilterConfig:
         assert config.total_score_threshold == 75
         assert config.require_msms is True
 
-    def test_strict_preset(self):
-        """Test strict preset."""
-        config = QualityFilterConfig.strict()
-        assert config.total_score_threshold == 80
-        assert config.require_msms is True
-
-    def test_moderate_preset(self):
-        """Test moderate preset."""
-        config = QualityFilterConfig.moderate()
-        assert config.total_score_threshold == 60
-        assert config.require_msms is False
-
-    def test_permissive_preset(self):
-        """Test permissive preset."""
-        config = QualityFilterConfig.permissive()
-        assert config.total_score_threshold == 40
-        assert config.require_msms is False
-
-    def test_no_filtering_preset(self):
-        """Test no filtering preset."""
-        config = QualityFilterConfig.no_filtering()
-        assert config.total_score_threshold == 0
-        assert config.require_msms is False
+    @pytest.mark.parametrize("preset,expected_threshold,expected_msms", [
+        ("strict", 80, True),
+        ("moderate", 60, False),
+        ("permissive", 40, False),
+        ("no_filtering", 0, False),
+    ])
+    def test_quality_filter_presets(self, preset, expected_threshold, expected_msms):
+        """Test all QualityFilterConfig factory presets."""
+        config = getattr(QualityFilterConfig, preset)()
+        assert config.total_score_threshold == expected_threshold
+        assert config.require_msms is expected_msms
 
     def test_score_only_config(self):
         """Test config with only score threshold."""
@@ -423,63 +411,27 @@ class TestBaseDataCleanerNumericConversion:
 class TestBaseDataCleanerRowFiltering:
     """Tests for row filtering methods."""
 
-    def test_remove_invalid_lipid_rows_empty_string(self):
-        """Test removing rows with empty lipid names."""
+    @pytest.mark.parametrize("invalid_values,expected_valid", [
+        ([''], 2),                                               # empty string
+        (['   ', '\t\n'], 2),                                    # whitespace
+        (['#', '###', '@@@', '%%%'], 2),                         # special chars
+        (['Unknown', 'UNKNOWN', 'unknown'], 2),                  # unknown variants
+        (['nan', 'null', 'none', 'NaN', 'NULL', 'None'], 2),    # nan/null/none strings
+        (['12345', '999', '0'], 2),                              # numbers only
+    ])
+    def test_remove_invalid_lipid_rows(self, invalid_values, expected_valid):
+        """Test removing rows with various invalid lipid names."""
+        valid = ['PC(16:0)', 'PE(18:0)']
+        all_lipids = [valid[0]] + invalid_values + [valid[1]]
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', '', 'PE(18:0)'],
-            'Value': [1, 2, 3]
+            'LipidMolec': all_lipids,
+            'Value': range(len(all_lipids))
         })
         result = BaseDataCleaner.remove_invalid_lipid_rows(df)
-        assert len(result) == 2
-        assert '' not in result['LipidMolec'].values
-
-    def test_remove_invalid_lipid_rows_whitespace(self):
-        """Test removing rows with whitespace-only lipid names."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', '   ', '\t\n', 'PE(18:0)'],
-            'Value': [1, 2, 3, 4]
-        })
-        result = BaseDataCleaner.remove_invalid_lipid_rows(df)
-        assert len(result) == 2
-
-    def test_remove_invalid_lipid_rows_special_chars(self):
-        """Test removing rows with only special characters."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', '#', '###', '@@@', '%%%'],
-            'Value': [1, 2, 3, 4, 5]
-        })
-        result = BaseDataCleaner.remove_invalid_lipid_rows(df)
-        assert len(result) == 1
-
-    def test_remove_invalid_lipid_rows_unknown(self):
-        """Test removing 'Unknown' lipid names."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', 'Unknown', 'UNKNOWN', 'unknown', 'PE(18:0)'],
-            'Value': [1, 2, 3, 4, 5]
-        })
-        result = BaseDataCleaner.remove_invalid_lipid_rows(df)
-        assert len(result) == 2
-
-    def test_remove_invalid_lipid_rows_nan_null_none(self):
-        """Test removing nan, null, none lipid names."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', 'nan', 'null', 'none', 'NaN', 'NULL', 'None', 'PE(18:0)'],
-            'Value': [1, 2, 3, 4, 5, 6, 7, 8]
-        })
-        result = BaseDataCleaner.remove_invalid_lipid_rows(df)
-        assert len(result) == 2
-
-    def test_remove_invalid_lipid_rows_numbers_only(self):
-        """Test removing rows with only numbers as lipid names."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', '12345', '999', '0', 'PE(18:0)'],
-            'Value': [1, 2, 3, 4, 5]
-        })
-        result = BaseDataCleaner.remove_invalid_lipid_rows(df)
-        assert len(result) == 2
+        assert len(result) == expected_valid
 
     def test_remove_invalid_lipid_rows_actual_nan(self):
-        """Test removing actual NaN values."""
+        """Test removing actual NaN/None values (not strings)."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', np.nan, None, 'PE(18:0)'],
             'Value': [1, 2, 3, 4]

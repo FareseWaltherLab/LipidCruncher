@@ -14,6 +14,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA as SklearnPCA
 
 from ..models.experiment import ExperimentConfig
+from ..services.validation import (
+    validate_dataframe_not_empty,
+    validate_concentration_columns,
+)
 
 
 # ============================================================
@@ -642,39 +646,16 @@ class QualityCheckService:
 
     @staticmethod
     def _validate_dataframe(df: pd.DataFrame) -> None:
-        """Validate that the DataFrame is not None or empty.
-
-        Raises:
-            ValueError: If DataFrame is None or empty.
-        """
-        if df is None or df.empty:
-            raise ValueError(
-                "Input DataFrame is empty. Cannot perform quality check."
-            )
+        """Validate that the DataFrame is not None or empty."""
+        validate_dataframe_not_empty(df)
 
     @staticmethod
     def _validate_concentration_columns(
         df: pd.DataFrame,
         experiment: ExperimentConfig,
     ) -> List[str]:
-        """Validate that concentration columns exist and return available samples.
-
-        Returns:
-            List of sample labels with matching concentration columns.
-
-        Raises:
-            ValueError: If no concentration columns are found.
-        """
-        available = [
-            s for s in experiment.full_samples_list
-            if f'concentration[{s}]' in df.columns
-        ]
-        if not available:
-            raise ValueError(
-                "DataFrame has no concentration columns matching the experiment. "
-                "Expected columns like 'concentration[s1]', 'concentration[s2]', etc."
-            )
-        return available
+        """Validate that concentration columns exist and return available samples."""
+        return validate_concentration_columns(df, experiment)
 
     @staticmethod
     def _validate_bqc_label(

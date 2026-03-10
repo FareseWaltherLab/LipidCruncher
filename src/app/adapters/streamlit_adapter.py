@@ -50,7 +50,9 @@ class SessionState:
                              class_standard_map, standard_concentrations, protein_df,
                              protein_input_method, protein_input_method_prev
       quality_check.py     → qc_continuation_df, qc_bqc_plot, qc_cov_threshold,
-                             qc_correlation_plots, qc_pca_plot, qc_samples_removed
+                             qc_correlation_plots, qc_pca_plot, qc_samples_removed,
+                             _preserved_bqc_filter_choice, _preserved_rt_viewing_mode,
+                             _preserved_pca_samples_remove
       main_app.py          → page, module
     """
     # --- App-level routing (owner: main_app.py) ---
@@ -130,6 +132,9 @@ class SessionState:
     qc_correlation_plots: Dict[str, Any] = field(default_factory=dict)
     qc_pca_plot: Any = None
     qc_samples_removed: List[str] = field(default_factory=list)
+    _preserved_bqc_filter_choice: str = 'No'
+    _preserved_rt_viewing_mode: str = 'Comparison Mode'
+    _preserved_pca_samples_remove: List[str] = field(default_factory=list)
 
 
 # Keys that should NOT be reset when starting a fresh analysis
@@ -243,6 +248,47 @@ class StreamlitAdapter:
         ]
         for key in dynamic_keys:
             st.session_state.pop(key, None)
+
+    # ==================== Widget Preservation ====================
+
+    @staticmethod
+    def restore_widget_value(widget_key: str, preserved_key: str, default: Any) -> Any:
+        """Restore a widget's value from its preserved session state key.
+
+        When navigating between modules, Streamlit removes widget keys for
+        non-rendered widgets. This method restores the value from a preserved
+        key so the widget renders with the user's last selection.
+
+        Args:
+            widget_key: The Streamlit widget key (e.g., 'bqc_filter_choice').
+            preserved_key: The session state key storing the preserved value
+                          (e.g., '_preserved_bqc_filter_choice').
+            default: Default value if neither key exists.
+
+        Returns:
+            The value to use for the widget's initial value/index.
+        """
+        if widget_key in st.session_state:
+            return st.session_state[widget_key]
+        preserved = st.session_state.get(preserved_key)
+        if preserved is not None:
+            return preserved
+        return default
+
+    @staticmethod
+    def save_widget_value(widget_key: str, preserved_key: str) -> None:
+        """Save a widget's current value to its preserved session state key.
+
+        Call this after the widget renders (or in an on_change callback)
+        to persist the value across module navigation.
+
+        Args:
+            widget_key: The Streamlit widget key to read from.
+            preserved_key: The session state key to write to.
+        """
+        value = st.session_state.get(widget_key)
+        if value is not None:
+            st.session_state[preserved_key] = value
 
     # ==================== Service Wrappers ====================
 

@@ -332,6 +332,9 @@ def module1_nav_script():
         st.session_state.qc_correlation_plots = {}
         st.session_state.qc_pca_plot = None
         st.session_state.qc_samples_removed = []
+        st.session_state._preserved_bqc_filter_choice = 'No'
+        st.session_state._preserved_rt_viewing_mode = 'Comparison Mode'
+        st.session_state._preserved_pca_samples_remove = []
 
     current_module = st.session_state.get('module', 'Data Cleaning, Filtering, & Normalization')
     st.text(f"module:{current_module}")
@@ -371,6 +374,9 @@ def module2_nav_script():
         st.session_state.qc_correlation_plots = {}
         st.session_state.qc_pca_plot = None
         st.session_state.qc_samples_removed = []
+        st.session_state._preserved_bqc_filter_choice = 'No'
+        st.session_state._preserved_rt_viewing_mode = 'Comparison Mode'
+        st.session_state._preserved_pca_samples_remove = []
 
     continuation_df = st.session_state.get('normalized_df')
     if continuation_df is None:

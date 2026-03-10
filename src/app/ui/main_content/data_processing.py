@@ -291,8 +291,8 @@ def _display_cached_filter_results(quality_config: dict):
     """Display filter results from previous workflow run if config matches."""
     last_config = st.session_state.get('last_quality_config')
     if (last_config and
-        last_config.get('total_score_threshold') == quality_config['total_score_threshold'] and
-        last_config.get('require_msms') == quality_config['require_msms']):
+        last_config.total_score_threshold == quality_config['total_score_threshold'] and
+        last_config.require_msms == quality_config['require_msms']):
         ingestion_result = st.session_state.get('ingestion_result')
         if ingestion_result and ingestion_result.cleaning_messages:
             st.markdown("**Filter Results:**")

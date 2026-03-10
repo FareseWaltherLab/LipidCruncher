@@ -1,32 +1,26 @@
 """
 Configuration classes for data cleaning.
 """
-import pandas as pd
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+import pandas as pd
 
+
+@dataclass
 class GradeFilterConfig:
-    """Configuration for LipidSearch grade filtering."""
+    """Configuration for LipidSearch grade filtering.
 
-    def __init__(self, grade_config: Optional[Dict[str, List[str]]] = None):
-        """
-        Initialize grade filter configuration.
-
-        Args:
-            grade_config: Optional dict mapping ClassKey to list of acceptable grades.
-                         If None, uses default filtering (A/B/C for all classes).
-        """
-        self.grade_config = grade_config
+    Args:
+        grade_config: Optional dict mapping ClassKey to list of acceptable grades.
+                     If None, uses default filtering (A/B/C for all classes).
+    """
+    grade_config: Optional[Dict[str, List[str]]] = None
 
     def __hash__(self) -> int:
         if self.grade_config is None:
             return hash(None)
         return hash(tuple(sorted((k, tuple(v)) for k, v in self.grade_config.items())))
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, GradeFilterConfig):
-            return NotImplemented
-        return self.grade_config == other.grade_config
 
     @property
     def is_default(self) -> bool:
@@ -34,32 +28,19 @@ class GradeFilterConfig:
         return self.grade_config is None
 
 
+@dataclass
 class QualityFilterConfig:
-    """Configuration for MS-DIAL quality filtering."""
+    """Configuration for MS-DIAL quality filtering.
 
-    def __init__(
-        self,
-        total_score_threshold: int = 0,
-        require_msms: bool = False
-    ):
-        """
-        Initialize quality filter configuration.
-
-        Args:
-            total_score_threshold: Minimum Total Score (0-100). 0 means no filtering.
-            require_msms: Whether to require MS/MS matched = TRUE.
-        """
-        self.total_score_threshold = total_score_threshold
-        self.require_msms = require_msms
+    Args:
+        total_score_threshold: Minimum Total Score (0-100). 0 means no filtering.
+        require_msms: Whether to require MS/MS matched = TRUE.
+    """
+    total_score_threshold: int = 0
+    require_msms: bool = False
 
     def __hash__(self) -> int:
         return hash((self.total_score_threshold, self.require_msms))
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, QualityFilterConfig):
-            return NotImplemented
-        return (self.total_score_threshold == other.total_score_threshold and
-                self.require_msms == other.require_msms)
 
     @classmethod
     def strict(cls) -> "QualityFilterConfig":
@@ -82,23 +63,15 @@ class QualityFilterConfig:
         return cls(total_score_threshold=0, require_msms=False)
 
 
+@dataclass
 class CleaningResult:
-    """Result object containing cleaned data and metadata."""
+    """Result object containing cleaned data and metadata.
 
-    def __init__(
-        self,
-        cleaned_df: pd.DataFrame,
-        internal_standards_df: pd.DataFrame,
-        filter_messages: Optional[List[str]] = None
-    ):
-        """
-        Initialize cleaning result.
-
-        Args:
-            cleaned_df: Cleaned DataFrame without internal standards.
-            internal_standards_df: DataFrame containing only internal standards.
-            filter_messages: Optional list of filter messages (e.g., rows removed).
-        """
-        self.cleaned_df = cleaned_df
-        self.internal_standards_df = internal_standards_df
-        self.filter_messages = filter_messages or []
+    Args:
+        cleaned_df: Cleaned DataFrame without internal standards.
+        internal_standards_df: DataFrame containing only internal standards.
+        filter_messages: Optional list of filter messages (e.g., rows removed).
+    """
+    cleaned_df: pd.DataFrame = field(default_factory=pd.DataFrame)
+    internal_standards_df: pd.DataFrame = field(default_factory=pd.DataFrame)
+    filter_messages: List[str] = field(default_factory=list)

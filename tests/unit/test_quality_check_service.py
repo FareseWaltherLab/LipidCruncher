@@ -27,22 +27,6 @@ def simple_experiment():
 
 
 @pytest.fixture
-def three_condition_experiment():
-    """3 conditions x 2 samples each = 6 samples (s1..s6)."""
-    return make_experiment(3, 2)
-
-
-@pytest.fixture
-def bqc_experiment():
-    """3 conditions including BQC: Control(3), Treatment(3), BQC(2) = 8 samples."""
-    return ExperimentConfig(
-        n_conditions=3,
-        conditions_list=['Control', 'Treatment', 'BQC'],
-        number_of_samples_list=[3, 3, 2],
-    )
-
-
-@pytest.fixture
 def single_sample_experiment():
     """2 conditions x 1 sample each = 2 samples."""
     return ExperimentConfig(

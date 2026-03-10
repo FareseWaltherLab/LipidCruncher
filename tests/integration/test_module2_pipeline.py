@@ -1534,27 +1534,28 @@ class TestErrorHandling:
 class TestNonInteractivePipeline:
     """Tests the run_non_interactive method for batch execution."""
 
-    def test_non_interactive_returns_all_keys(
+    def test_non_interactive_returns_all_fields(
         self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
     ):
-        """run_non_interactive returns dict with all expected keys."""
+        """run_non_interactive returns dataclass with all expected fields."""
         result = QualityCheckWorkflow.run_non_interactive(
             lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
         )
 
-        expected_keys = {
-            'box_plot', 'bqc', 'retention_time',
-            'correlations', 'pca', 'validation_errors',
-        }
-        assert set(result.keys()) == expected_keys
-        assert result['validation_errors'] == []
+        assert hasattr(result, 'box_plot')
+        assert hasattr(result, 'bqc')
+        assert hasattr(result, 'retention_time')
+        assert hasattr(result, 'correlations')
+        assert hasattr(result, 'pca')
+        assert hasattr(result, 'validation_errors')
+        assert result.validation_errors == []
 
         # All results should be populated for LipidSearch with BQC
-        assert result['box_plot'] is not None
-        assert result['bqc'] is not None
-        assert result['retention_time'] is not None
-        assert len(result['correlations']) > 0
-        assert result['pca'] is not None
+        assert result.box_plot is not None
+        assert result.bqc is not None
+        assert result.retention_time is not None
+        assert len(result.correlations) > 0
+        assert result.pca is not None
 
     def test_non_interactive_consistent_with_individual_calls(
         self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
@@ -1569,7 +1570,7 @@ class TestNonInteractivePipeline:
             lipidsearch_normalized_df, lipidsearch_experiment
         )
         assert (
-            ni_result['box_plot'].available_samples
+            ni_result.box_plot.available_samples
             == box_individual.available_samples
         )
 
@@ -1577,13 +1578,13 @@ class TestNonInteractivePipeline:
         pca_individual = QualityCheckWorkflow.run_pca(
             lipidsearch_normalized_df, lipidsearch_experiment
         )
-        assert ni_result['pca'].pc_df.shape == pca_individual.pc_df.shape
+        assert ni_result.pca.pc_df.shape == pca_individual.pc_df.shape
 
         # Compare correlation count
         corr_individual = QualityCheckWorkflow.run_all_correlations(
             lipidsearch_normalized_df, lipidsearch_experiment, bqc_label='BQC'
         )
-        assert len(ni_result['correlations']) == len(corr_individual)
+        assert len(ni_result.correlations) == len(corr_individual)
 
     def test_non_interactive_lipidsearch_vs_generic(
         self,
@@ -1599,9 +1600,9 @@ class TestNonInteractivePipeline:
         )
 
         # RT availability differs
-        assert ls_result['retention_time'].available is True
-        assert gen_result['retention_time'].available is False
+        assert ls_result.retention_time.available is True
+        assert gen_result.retention_time.available is False
 
         # Both have BQC results
-        assert ls_result['bqc'] is not None
-        assert gen_result['bqc'] is not None
+        assert ls_result.bqc is not None
+        assert gen_result.bqc is not None

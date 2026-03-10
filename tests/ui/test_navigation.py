@@ -33,7 +33,7 @@ class TestNextToQualityCheck:
         assert at.session_state['module'] == 'Quality Check & Analysis'
 
     def test_next_button_resets_qc_state(self, module1_nav_app):
-        """Clicking 'Next' clears all 6 QC session state keys."""
+        """Clicking 'Next' clears all QC session state keys including preserved widget values."""
         at = module1_nav_app
         # Pre-populate QC state with non-default values
         at.session_state['qc_continuation_df'] = 'stale'
@@ -42,6 +42,9 @@ class TestNextToQualityCheck:
         at.session_state['qc_correlation_plots'] = {'x': 'stale'}
         at.session_state['qc_pca_plot'] = 'stale'
         at.session_state['qc_samples_removed'] = ['s1', 's2']
+        at.session_state['_preserved_bqc_filter_choice'] = 'Yes'
+        at.session_state['_preserved_rt_viewing_mode'] = 'Individual Mode'
+        at.session_state['_preserved_pca_samples_remove'] = ['s1']
 
         at.button(key='next_module').click().run()
 
@@ -51,6 +54,9 @@ class TestNextToQualityCheck:
         assert at.session_state['qc_correlation_plots'] == {}
         assert at.session_state['qc_pca_plot'] is None
         assert at.session_state['qc_samples_removed'] == []
+        assert at.session_state['_preserved_bqc_filter_choice'] == 'No'
+        assert at.session_state['_preserved_rt_viewing_mode'] == 'Comparison Mode'
+        assert at.session_state['_preserved_pca_samples_remove'] == []
 
     def test_next_button_hidden_without_normalized_df(self):
         """'Next' button is not rendered when normalized_df is None."""

@@ -40,22 +40,6 @@ def simple_experiment():
 
 
 @pytest.fixture
-def three_condition_experiment():
-    """3 conditions x 2 samples each = 6 samples (s1..s6)."""
-    return make_experiment(3, 2)
-
-
-@pytest.fixture
-def bqc_experiment():
-    """3 conditions including BQC: Control(3), Treatment(3), BQC(2) = 8 samples."""
-    return ExperimentConfig(
-        n_conditions=3,
-        conditions_list=['Control', 'Treatment', 'BQC'],
-        number_of_samples_list=[3, 3, 2],
-    )
-
-
-@pytest.fixture
 def single_replicate_experiment():
     """2 conditions x 1 sample each = 2 samples."""
     return ExperimentConfig(
@@ -646,21 +630,17 @@ class TestApplyBQCFilter:
 class TestCheckRetentionTimeAvailability:
     """Tests for QualityCheckWorkflow.check_retention_time_availability()."""
 
-    def test_generic_format_returns_unavailable(
-        self, basic_conc_df, default_config
-    ):
-        result = QualityCheckWorkflow.check_retention_time_availability(
-            basic_conc_df, default_config
-        )
-        assert isinstance(result, RetentionTimeDataResult)
-        assert result.available is False
-        assert result.lipid_classes == []
-
-    def test_metabolomics_workbench_returns_unavailable(self, basic_conc_df):
-        config = QualityCheckConfig(format_type=DataFormat.METABOLOMICS_WORKBENCH)
+    @pytest.mark.parametrize("format_type", [
+        DataFormat.GENERIC,
+        DataFormat.METABOLOMICS_WORKBENCH,
+    ])
+    def test_non_rt_formats_return_unavailable(self, basic_conc_df, format_type):
+        """Generic and MW formats always return unavailable for retention time."""
+        config = QualityCheckConfig(format_type=format_type)
         result = QualityCheckWorkflow.check_retention_time_availability(
             basic_conc_df, config
         )
+        assert isinstance(result, RetentionTimeDataResult)
         assert result.available is False
 
     def test_lipidsearch_with_rt_columns(
@@ -672,10 +652,15 @@ class TestCheckRetentionTimeAvailability:
         assert result.available is True
         assert len(result.lipid_classes) > 0
 
-    def test_lipidsearch_without_rt_columns(self, basic_conc_df, lipidsearch_config):
-        """LipidSearch format but missing BaseRt/CalcMass columns."""
+    @pytest.mark.parametrize("format_type", [
+        DataFormat.LIPIDSEARCH,
+        DataFormat.MSDIAL,
+    ])
+    def test_rt_formats_without_columns_return_unavailable(self, basic_conc_df, format_type):
+        """LipidSearch/MS-DIAL without BaseRt/CalcMass return unavailable."""
+        config = QualityCheckConfig(format_type=format_type)
         result = QualityCheckWorkflow.check_retention_time_availability(
-            basic_conc_df, lipidsearch_config
+            basic_conc_df, config
         )
         assert result.available is False
 
@@ -685,12 +670,6 @@ class TestCheckRetentionTimeAvailability:
             lipidsearch_conc_df, msdial_config
         )
         assert result.available is True
-
-    def test_msdial_without_rt_columns(self, basic_conc_df, msdial_config):
-        result = QualityCheckWorkflow.check_retention_time_availability(
-            basic_conc_df, msdial_config
-        )
-        assert result.available is False
 
     def test_lipid_classes_sorted_by_frequency(self, lipidsearch_config):
         """Classes should be sorted by frequency (most common first)."""
@@ -1002,18 +981,18 @@ class TestRemoveSamples:
 class TestRunNonInteractive:
     """Tests for QualityCheckWorkflow.run_non_interactive()."""
 
-    def test_returns_all_expected_keys(
+    def test_returns_all_expected_fields(
         self, basic_conc_df, simple_experiment, default_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
             basic_conc_df, simple_experiment, default_config
         )
-        assert 'box_plot' in results
-        assert 'bqc' in results
-        assert 'retention_time' in results
-        assert 'correlations' in results
-        assert 'pca' in results
-        assert 'validation_errors' in results
+        assert hasattr(results, 'box_plot')
+        assert hasattr(results, 'bqc')
+        assert hasattr(results, 'retention_time')
+        assert hasattr(results, 'correlations')
+        assert hasattr(results, 'pca')
+        assert hasattr(results, 'validation_errors')
 
     def test_box_plot_populated(
         self, basic_conc_df, simple_experiment, default_config
@@ -1021,7 +1000,7 @@ class TestRunNonInteractive:
         results = QualityCheckWorkflow.run_non_interactive(
             basic_conc_df, simple_experiment, default_config
         )
-        assert isinstance(results['box_plot'], BoxPlotResult)
+        assert isinstance(results.box_plot, BoxPlotResult)
 
     def test_bqc_none_without_label(
         self, basic_conc_df, simple_experiment, default_config
@@ -1029,7 +1008,7 @@ class TestRunNonInteractive:
         results = QualityCheckWorkflow.run_non_interactive(
             basic_conc_df, simple_experiment, default_config
         )
-        assert results['bqc'] is None
+        assert results.bqc is None
 
     def test_bqc_populated_with_label(
         self, bqc_conc_df, bqc_experiment, bqc_config
@@ -1037,7 +1016,7 @@ class TestRunNonInteractive:
         results = QualityCheckWorkflow.run_non_interactive(
             bqc_conc_df, bqc_experiment, bqc_config
         )
-        assert isinstance(results['bqc'], BQCPrepareResult)
+        assert isinstance(results.bqc, BQCPrepareResult)
 
     def test_retention_time_generic_format(
         self, basic_conc_df, simple_experiment, default_config
@@ -1045,7 +1024,7 @@ class TestRunNonInteractive:
         results = QualityCheckWorkflow.run_non_interactive(
             basic_conc_df, simple_experiment, default_config
         )
-        assert results['retention_time'].available is False
+        assert results.retention_time.available is False
 
     def test_retention_time_lipidsearch(
         self, lipidsearch_conc_df, simple_experiment, lipidsearch_config
@@ -1053,7 +1032,7 @@ class TestRunNonInteractive:
         results = QualityCheckWorkflow.run_non_interactive(
             lipidsearch_conc_df, simple_experiment, lipidsearch_config
         )
-        assert results['retention_time'].available is True
+        assert results.retention_time.available is True
 
     def test_correlations_dict(
         self, basic_conc_df, simple_experiment, default_config
@@ -1061,8 +1040,8 @@ class TestRunNonInteractive:
         results = QualityCheckWorkflow.run_non_interactive(
             basic_conc_df, simple_experiment, default_config
         )
-        assert isinstance(results['correlations'], dict)
-        assert len(results['correlations']) == 2
+        assert isinstance(results.correlations, dict)
+        assert len(results.correlations) == 2
 
     def test_pca_populated(
         self, basic_conc_df, simple_experiment, default_config
@@ -1070,7 +1049,7 @@ class TestRunNonInteractive:
         results = QualityCheckWorkflow.run_non_interactive(
             basic_conc_df, simple_experiment, default_config
         )
-        assert isinstance(results['pca'], PCAResult)
+        assert isinstance(results.pca, PCAResult)
 
     def test_no_validation_errors_on_valid_input(
         self, basic_conc_df, simple_experiment, default_config
@@ -1078,30 +1057,30 @@ class TestRunNonInteractive:
         results = QualityCheckWorkflow.run_non_interactive(
             basic_conc_df, simple_experiment, default_config
         )
-        assert results['validation_errors'] == []
+        assert results.validation_errors == []
 
     def test_validation_errors_on_invalid_input(self, simple_experiment, default_config):
         results = QualityCheckWorkflow.run_non_interactive(
             pd.DataFrame(), simple_experiment, default_config
         )
-        assert len(results['validation_errors']) > 0
-        assert results['box_plot'] is None
-        assert results['pca'] is None
+        assert len(results.validation_errors) > 0
+        assert results.box_plot is None
+        assert results.pca is None
 
     def test_none_df_returns_errors(self, simple_experiment, default_config):
         results = QualityCheckWorkflow.run_non_interactive(
             None, simple_experiment, default_config
         )
-        assert len(results['validation_errors']) > 0
+        assert len(results.validation_errors) > 0
 
     def test_large_dataset(self, large_conc_df, large_experiment, default_config):
         results = QualityCheckWorkflow.run_non_interactive(
             large_conc_df, large_experiment, default_config
         )
-        assert results['validation_errors'] == []
-        assert results['box_plot'] is not None
-        assert results['pca'] is not None
-        assert len(results['correlations']) == 4
+        assert results.validation_errors == []
+        assert results.box_plot is not None
+        assert results.pca is not None
+        assert len(results.correlations) == 4
 
 
 # =============================================================================
@@ -1257,7 +1236,7 @@ class TestEdgeCases:
         results = QualityCheckWorkflow.run_non_interactive(
             basic_conc_df, simple_experiment, default_config
         )
-        assert results['validation_errors'] == []
+        assert results.validation_errors == []
 
     def test_no_classkey_column(self, simple_experiment):
         """DataFrame without ClassKey column."""
@@ -1314,10 +1293,10 @@ class TestEdgeCases:
         results = QualityCheckWorkflow.run_non_interactive(
             bqc_conc_df, bqc_experiment, bqc_config
         )
-        assert results['validation_errors'] == []
-        assert results['box_plot'] is not None
-        assert results['bqc'] is not None
-        assert results['pca'] is not None
+        assert results.validation_errors == []
+        assert results.box_plot is not None
+        assert results.bqc is not None
+        assert results.pca is not None
 
 
 # =============================================================================
@@ -1475,8 +1454,8 @@ class TestTypeCoercion:
         result = QualityCheckWorkflow.run_non_interactive(
             df, simple_experiment, config
         )
-        assert result['validation_errors'] == []
-        assert result['box_plot'] is not None
+        assert result.validation_errors == []
+        assert result.box_plot is not None
 
 
 # =============================================================================

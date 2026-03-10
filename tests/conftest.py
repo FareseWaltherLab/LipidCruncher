@@ -101,3 +101,13 @@ def simple_experiment_2x2():
 def three_condition_experiment():
     """3 conditions x 2 samples each = 6 total."""
     return make_experiment(3, 2)
+
+
+@pytest.fixture
+def bqc_experiment():
+    """3 conditions (Control, Treatment, BQC) with 3+3+2=8 samples."""
+    return make_experiment(
+        3,
+        conditions_list=['Control', 'Treatment', 'BQC'],
+        number_of_samples_list=[3, 3, 2],
+    )

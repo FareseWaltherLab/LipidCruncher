@@ -32,12 +32,6 @@ def simple_experiment():
 
 
 @pytest.fixture
-def three_condition_experiment():
-    """Three condition experiment."""
-    return make_experiment(3, 2, conditions_list=['Control', 'Treatment1', 'Treatment2'])
-
-
-@pytest.fixture
 def single_condition_experiment():
     """Single condition experiment."""
     return make_experiment(
