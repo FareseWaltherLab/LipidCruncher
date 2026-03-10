@@ -5,20 +5,23 @@ Centralizes constants that were previously duplicated across multiple files.
 """
 from typing import Dict, List
 
-from app.services.format_detection import DataFormat
-
 
 # =============================================================================
 # Format Mappings
 # =============================================================================
 
-# Display string → DataFormat enum (used by UI layers to resolve user selection)
-FORMAT_DISPLAY_TO_ENUM: Dict[str, DataFormat] = {
-    'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
-    'MS-DIAL': DataFormat.MSDIAL,
-    'Generic Format': DataFormat.GENERIC,
-    'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
-}
+def get_format_display_to_enum() -> Dict:
+    """Return display string → DataFormat enum mapping.
+
+    Lazy import to avoid circular dependency between constants and services.
+    """
+    from app.services.format_detection import DataFormat
+    return {
+        'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
+        'MS-DIAL': DataFormat.MSDIAL,
+        'Generic Format': DataFormat.GENERIC,
+        'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
+    }
 
 
 # =============================================================================

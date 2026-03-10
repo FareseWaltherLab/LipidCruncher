@@ -14,7 +14,7 @@ import pandas as pd
 
 from app.models.experiment import ExperimentConfig
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowResult
-from app.constants import FORMAT_DISPLAY_TO_ENUM
+from app.constants import get_format_display_to_enum
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
@@ -321,7 +321,7 @@ def _run_normalization(
             df=cleaned_df,
             experiment=experiment,
             normalization=norm_config,
-            data_format=FORMAT_DISPLAY_TO_ENUM.get(data_format, DataFormat.GENERIC),
+            data_format=get_format_display_to_enum().get(data_format, DataFormat.GENERIC),
             intsta_df=intsta_df,
         )
 

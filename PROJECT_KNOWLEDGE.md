@@ -1117,7 +1117,7 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 
 **Step 3.1: Extract Shared Constants ✅**
 Created `src/app/constants.py` with:
-- `FORMAT_DISPLAY_TO_ENUM` — replaced inline dicts in data_processing.py, quality_check.py, normalization.py
+- `get_format_display_to_enum()` — lazy function (avoids circular import), replaced inline dicts in data_processing.py, quality_check.py, normalization.py
 - `FORMAT_DISPLAY_TO_INTERNAL` — replaced inline dict in column_mapping.py
 - `INTERNAL_STANDARD_LIPID_PATTERNS` / `INTERNAL_STANDARD_CLASS_PATTERN` — deduplicated from standards.py + base.py
 - `LIPIDSEARCH_DETECTION_THRESHOLD` (30000.0) — used by zero_filtering service + UI
@@ -1228,7 +1228,7 @@ New test classes per file: `TestErrorHandling`, `TestTypeCoercion`, `TestNaNHand
 
 **Fixtures:** `qc_generic_app` (2×3, Generic, no BQC), `qc_bqc_app` (3+3+2, BQC with 3 high-CoV lipids), `qc_lipidsearch_app` (2×3, LipidSearch with RT), `qc_small_app` (2×2, for PCA min-2 test).
 
-**Fix:** Added `import app.services.format_detection` + `import app.constants` to `tests/ui/conftest.py` to pre-load modules and avoid circular import in AppTest context (`app.constants` → `app.services` → `data_cleaning.base` → `app.constants`).
+**Fix:** Added `import app.services.format_detection` + `import app.constants` to `tests/ui/conftest.py` to pre-load modules. Note: the root circular import (`app.constants` → `app.services` → `data_cleaning.base` → `app.constants`) was later fixed by converting `FORMAT_DISPLAY_TO_ENUM` to a lazy function `get_format_display_to_enum()` in `constants.py`.
 
 | Class | Tests | Section |
 |-------|-------|---------|
@@ -1316,6 +1316,12 @@ New test classes per file: `TestErrorHandling`, `TestTypeCoercion`, `TestNaNHand
 - `tests/unit/test_quality_check_service.py` — Removed duplicate `bqc_experiment` + `three_condition_experiment`
 - `tests/unit/test_quality_check_workflow.py` — Removed duplicates, parametrized RT tests, dict→attribute access
 - `tests/integration/test_module2_pipeline.py` — dict→attribute access for `run_non_interactive` results
+
+#### Fix Circular Import in `constants.py` (March 10, 2026)
+
+**Problem:** `constants.py` imported `DataFormat` at module level from `app.services.format_detection`, which triggered `services/__init__.py` → `data_cleaning` → `data_cleaning/base.py` → `app.constants` (still loading) → `ImportError`.
+
+**Fix:** Converted `FORMAT_DISPLAY_TO_ENUM` dict constant to `get_format_display_to_enum()` lazy function with deferred import. Updated 4 consumers: `normalization.py`, `quality_check.py`, `data_processing.py`, `column_mapping.py`. All 2357 tests passing.
 
 #### Module 3: Visualize and Analyze (NOT STARTED)
 1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps

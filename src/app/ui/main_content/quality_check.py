@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from app.constants import FORMAT_DISPLAY_TO_ENUM
+from app.constants import get_format_display_to_enum
 from app.services.plotting.box_plot import BoxPlotService
 from app.services.plotting.bqc_plotter import BQCPlotterService
 from app.services.plotting.correlation import CorrelationPlotterService
@@ -61,7 +61,7 @@ def display_quality_check_module(
 
     # Resolve format_type to DataFormat enum
     if isinstance(format_type, str):
-        format_enum = FORMAT_DISPLAY_TO_ENUM.get(format_type, DataFormat.GENERIC)
+        format_enum = get_format_display_to_enum().get(format_type, DataFormat.GENERIC)
     else:
         format_enum = format_type
 

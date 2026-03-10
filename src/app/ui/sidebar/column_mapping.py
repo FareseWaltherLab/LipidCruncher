@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 import streamlit as st
 import pandas as pd
 
-from app.constants import FORMAT_DISPLAY_TO_ENUM
+from app.constants import get_format_display_to_enum
 from app.services.data_standardization import DataStandardizationService
 from app.services.format_detection import DataFormat, FormatDetectionService
 
@@ -77,7 +77,7 @@ def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> Optional[pd
         st.session_state.format_type = data_format
         return df
 
-    format_enum = FORMAT_DISPLAY_TO_ENUM.get(data_format, DataFormat.GENERIC)
+    format_enum = get_format_display_to_enum().get(data_format, DataFormat.GENERIC)
     use_normalized = st.session_state.get('msdial_data_type_index', 0) == 1
 
     result = DataStandardizationService.validate_and_standardize(

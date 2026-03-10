@@ -17,7 +17,7 @@ import pandas as pd
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button
 
-from app.constants import FORMAT_DISPLAY_TO_ENUM
+from app.constants import get_format_display_to_enum
 from app.services.format_detection import DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from app.workflows.data_ingestion import IngestionResult
@@ -304,7 +304,14 @@ def _display_cached_filter_results(quality_config: dict):
 # Pipeline Orchestration
 # =============================================================================
 
-FORMAT_MAP = FORMAT_DISPLAY_TO_ENUM
+FORMAT_MAP = None  # Lazy-loaded below
+
+
+def _get_format_map():
+    global FORMAT_MAP
+    if FORMAT_MAP is None:
+        FORMAT_MAP = get_format_display_to_enum()
+    return FORMAT_MAP
 
 
 def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):
@@ -359,7 +366,7 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
     Returns:
         IngestionResult if successful, None if error or invalid
     """
-    format_enum = FORMAT_MAP.get(data_format)
+    format_enum = _get_format_map().get(data_format)
 
     # Capture previous config BEFORE running workflow (to detect config changes)
     prev_quality_config = st.session_state.get('last_quality_config')
