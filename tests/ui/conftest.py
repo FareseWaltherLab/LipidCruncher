@@ -306,6 +306,148 @@ def make_qc_bqc_dataframe(n_lipids=20, high_cov_count=3):
 # Module 2: Quality Check — Fixtures
 # =============================================================================
 
+# =============================================================================
+# Module Navigation — Wrapper Functions
+# =============================================================================
+
+def module1_nav_script():
+    """Module 1 with navigation buttons (Next + Back to Home).
+
+    Renders navigation buttons that appear when normalized_df is in session state.
+    Replicates main_app.py lines 214-226 navigation logic.
+
+    Expects session state keys:
+        normalized_df: DataFrame (optional — controls Next button visibility)
+        module: str (default 'Data Cleaning, Filtering, & Normalization')
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.constants import COV_THRESHOLD_DEFAULT
+    StreamlitAdapter.initialize_session_state()
+
+    def _reset_qc_state():
+        st.session_state.qc_continuation_df = None
+        st.session_state.qc_bqc_plot = None
+        st.session_state.qc_cov_threshold = COV_THRESHOLD_DEFAULT
+        st.session_state.qc_correlation_plots = {}
+        st.session_state.qc_pca_plot = None
+        st.session_state.qc_samples_removed = []
+
+    current_module = st.session_state.get('module', 'Data Cleaning, Filtering, & Normalization')
+    st.text(f"module:{current_module}")
+
+    normalized_df = st.session_state.get('normalized_df')
+    if normalized_df is not None:
+        st.text(f"normalized_rows:{normalized_df.shape[0]}")
+        if st.button("Next: Quality Check & Analysis →", key='next_module'):
+            _reset_qc_state()
+            st.session_state.module = "Quality Check & Analysis"
+            st.rerun()
+
+    if st.button("← Back to Home", key='back_home_m1'):
+        st.session_state.page = 'landing'
+        StreamlitAdapter.reset_data_state()
+        st.rerun()
+
+
+def module2_nav_script():
+    """Module 2 with navigation buttons (Back to Data Processing + Back to Home).
+
+    Replicates main_app.py lines 236-266 navigation logic (without QC rendering).
+
+    Expects session state keys:
+        normalized_df: DataFrame (required — Module 2 entry gate)
+        module: str = 'Quality Check & Analysis'
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.constants import COV_THRESHOLD_DEFAULT
+    StreamlitAdapter.initialize_session_state()
+
+    def _reset_qc_state():
+        st.session_state.qc_continuation_df = None
+        st.session_state.qc_bqc_plot = None
+        st.session_state.qc_cov_threshold = COV_THRESHOLD_DEFAULT
+        st.session_state.qc_correlation_plots = {}
+        st.session_state.qc_pca_plot = None
+        st.session_state.qc_samples_removed = []
+
+    continuation_df = st.session_state.get('normalized_df')
+    if continuation_df is None:
+        st.error("No normalized data available. Please complete Module 1 first.")
+        if st.button("← Back to Data Processing", key='back_m1_error'):
+            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+            st.rerun()
+        return
+
+    current_module = st.session_state.get('module', 'unknown')
+    st.text(f"module:{current_module}")
+    st.text(f"normalized_rows:{continuation_df.shape[0]}")
+
+    # Only store QC result when actually in Module 2 (not after navigating away)
+    if current_module == 'Quality Check & Analysis':
+        st.session_state.qc_continuation_df = continuation_df
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("← Back to Data Processing", key='back_m1'):
+            _reset_qc_state()
+            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+            st.rerun()
+    with col2:
+        if st.button("← Back to Home", key='back_home_m2'):
+            st.session_state.page = 'landing'
+            StreamlitAdapter.reset_data_state()
+            st.rerun()
+
+
+# =============================================================================
+# Module Navigation — Fixtures
+# =============================================================================
+
+@pytest.fixture
+def module1_nav_app():
+    """Module 1 navigation with normalized_df pre-populated."""
+    import numpy as np
+    import pandas as pd
+
+    at = AppTest.from_function(module1_nav_script, default_timeout=DEFAULT_TIMEOUT)
+    # Minimal normalized DataFrame
+    df = pd.DataFrame({
+        'LipidMolec': ['PC(16:0)', 'PE(18:1)'],
+        'ClassKey': ['PC', 'PE'],
+        'concentration[s1]': [100.0, 200.0],
+        'concentration[s2]': [150.0, 250.0],
+    })
+    at.session_state['normalized_df'] = df
+    return at.run()
+
+
+@pytest.fixture
+def module2_nav_app():
+    """Module 2 navigation with normalized_df and QC state pre-populated."""
+    import numpy as np
+    import pandas as pd
+
+    at = AppTest.from_function(module2_nav_script, default_timeout=DEFAULT_TIMEOUT)
+    df = pd.DataFrame({
+        'LipidMolec': ['PC(16:0)', 'PE(18:1)'],
+        'ClassKey': ['PC', 'PE'],
+        'concentration[s1]': [100.0, 200.0],
+        'concentration[s2]': [150.0, 250.0],
+    })
+    at.session_state['normalized_df'] = df
+    at.session_state['module'] = 'Quality Check & Analysis'
+    # Pre-populate QC state to verify it gets cleared
+    at.session_state['qc_continuation_df'] = df.copy()
+    at.session_state['qc_bqc_plot'] = 'fake_plot'
+    at.session_state['qc_cov_threshold'] = 50
+    at.session_state['qc_correlation_plots'] = {'Control': 'fake_corr'}
+    at.session_state['qc_pca_plot'] = 'fake_pca'
+    at.session_state['qc_samples_removed'] = ['s1']
+    return at.run()
+
+
 @pytest.fixture
 def qc_generic_app():
     """QC module: Generic format, no BQC, 2x3=6 samples, 20 lipids."""
