@@ -8,6 +8,13 @@ without importing main_app.py (which has st.set_page_config() at module level).
 import pytest
 from streamlit.testing.v1 import AppTest
 
+# Pre-load app modules to avoid circular import when AppTest runs scripts.
+# Without this, the first AppTest.from_function().run() can trigger a circular
+# import between app.constants and app.services.data_cleaning.base.
+# Import format_detection first (no dependencies on constants), then constants.
+import app.services.format_detection  # noqa: F401
+import app.constants  # noqa: F401
+
 
 DEFAULT_TIMEOUT = 15
 
@@ -187,4 +194,183 @@ def msdial_data_type_app(msdial_features_dict):
     """MS-DIAL data type selection with pre-populated features."""
     at = AppTest.from_function(msdial_data_type_script, default_timeout=DEFAULT_TIMEOUT)
     at.session_state['msdial_features'] = msdial_features_dict
+    return at.run()
+
+
+# =============================================================================
+# Module 2: Quality Check — Wrapper Functions
+# =============================================================================
+
+def qc_module_script():
+    """Run QC module with test data from session state.
+
+    Expects session state keys:
+        _test_df: DataFrame with concentration[s] columns
+        _test_experiment: ExperimentConfig
+        _test_bqc_label: Optional BQC label string
+        _test_format_type: Format string (default 'Generic Format')
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.main_content.quality_check import display_quality_check_module
+
+    df = st.session_state['_test_df']
+    experiment = st.session_state['_test_experiment']
+    bqc_label = st.session_state.get('_test_bqc_label')
+    format_type = st.session_state.get('_test_format_type', 'Generic Format')
+
+    qc_df, updated_exp = display_quality_check_module(
+        continuation_df=df,
+        experiment=experiment,
+        bqc_label=bqc_label,
+        format_type=format_type,
+    )
+    st.text(f"qc_rows:{qc_df.shape[0]}")
+    st.text(f"qc_samples:{len(updated_exp.full_samples_list)}")
+
+
+# =============================================================================
+# Module 2: Quality Check — Data Builders
+# =============================================================================
+
+def make_qc_dataframe(n_lipids=20, n_samples=6, with_rt=False):
+    """Build a QC-ready DataFrame with concentration columns.
+
+    Args:
+        n_lipids: Number of lipid rows.
+        n_samples: Number of sample columns (concentration[s1]..concentration[sN]).
+        with_rt: Whether to include BaseRt and CalcMass columns (for RT tests).
+
+    Returns:
+        DataFrame with LipidMolec, ClassKey, and concentration columns.
+    """
+    import numpy as np
+    import pandas as pd
+
+    np.random.seed(42)
+    half = n_lipids // 2
+    classes = ['PC'] * half + ['PE'] * (n_lipids - half)
+    lipids = [f'{cls}({i}:0)' for i, cls in enumerate(classes)]
+
+    data = {
+        'LipidMolec': lipids,
+        'ClassKey': classes,
+    }
+    if with_rt:
+        data['BaseRt'] = np.random.uniform(1, 30, n_lipids).tolist()
+        data['CalcMass'] = np.random.uniform(500, 1000, n_lipids).tolist()
+
+    for i in range(1, n_samples + 1):
+        data[f'concentration[s{i}]'] = np.random.uniform(500, 5000, n_lipids).tolist()
+
+    return pd.DataFrame(data)
+
+
+def make_qc_bqc_dataframe(n_lipids=20, high_cov_count=3):
+    """Build a QC DataFrame with BQC condition and some high-CoV lipids.
+
+    Experiment layout: Control(s1-s3), Treatment(s4-s6), BQC(s7-s8).
+    First `high_cov_count` lipids have extreme values in BQC samples
+    to guarantee CoV > 30%.
+
+    Returns:
+        DataFrame with 8 sample columns.
+    """
+    import numpy as np
+    import pandas as pd
+
+    np.random.seed(42)
+    half = n_lipids // 2
+    classes = ['PC'] * half + ['PE'] * (n_lipids - half)
+    lipids = [f'{cls}({i}:0)' for i, cls in enumerate(classes)]
+
+    data = {
+        'LipidMolec': lipids,
+        'ClassKey': classes,
+    }
+    for i in range(1, 9):
+        data[f'concentration[s{i}]'] = np.random.uniform(500, 5000, n_lipids).tolist()
+
+    df = pd.DataFrame(data)
+
+    # Make first `high_cov_count` lipids have very high CoV in BQC samples (s7, s8)
+    for j in range(high_cov_count):
+        df.loc[j, 'concentration[s7]'] = 10.0
+        df.loc[j, 'concentration[s8]'] = 50000.0
+
+    return df
+
+
+# =============================================================================
+# Module 2: Quality Check — Fixtures
+# =============================================================================
+
+@pytest.fixture
+def qc_generic_app():
+    """QC module: Generic format, no BQC, 2x3=6 samples, 20 lipids."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(qc_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_qc_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_format_type'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def qc_bqc_app():
+    """QC module: Generic format, with BQC, Control(3)+Treatment(3)+BQC(2)=8."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(qc_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_qc_bqc_dataframe(n_lipids=20, high_cov_count=3)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=3,
+        conditions_list=['Control', 'Treatment', 'BQC'],
+        number_of_samples_list=[3, 3, 2],
+    )
+    at.session_state['_test_bqc_label'] = 'BQC'
+    at.session_state['_test_format_type'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def qc_lipidsearch_app():
+    """QC module: LipidSearch format, no BQC, 2x3=6 samples, with RT columns."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(qc_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_qc_dataframe(
+        n_lipids=20, n_samples=6, with_rt=True
+    )
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_format_type'] = 'LipidSearch 5.0'
+    return at.run()
+
+
+@pytest.fixture
+def qc_small_app():
+    """QC module: Generic format, no BQC, 2x2=4 samples (for PCA removal tests)."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(qc_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_qc_dataframe(n_lipids=10, n_samples=4)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[2, 2],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_format_type'] = 'Generic Format'
     return at.run()
