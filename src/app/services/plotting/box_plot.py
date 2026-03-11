@@ -194,40 +194,39 @@ class BoxPlotService:
         conditions_list: Optional[List[str]] = None,
         individual_samples_list: Optional[List[List[str]]] = None,
     ) -> go.Figure:
-        """Create box plot of log10-transformed non-zero concentrations.
-
-        Boxes are colored by condition when condition info is provided.
-
-        Args:
-            mean_area_df: DataFrame with concentration columns only.
-            full_samples_list: Sample names.
-            conditions_list: Condition names (optional).
-            individual_samples_list: Samples grouped by condition (optional).
-
-        Returns:
-            Plotly Figure.
-        """
+        """Create box plot of log10-transformed non-zero concentrations."""
         log_transformed_data = [
             list(np.log10(mean_area_df[col][mean_area_df[col] > 0]))
             for col in mean_area_df.columns
         ]
 
         fig = go.Figure()
+        BoxPlotService._add_box_traces(
+            fig, log_transformed_data, full_samples_list,
+            conditions_list, individual_samples_list
+        )
+        BoxPlotService._apply_box_plot_layout(fig, bool(conditions_list))
+        return fig
 
+    @staticmethod
+    def _add_box_traces(
+        fig: go.Figure,
+        data: List[list],
+        samples: List[str],
+        conditions_list: Optional[List[str]],
+        individual_samples_list: Optional[List[List[str]]],
+    ) -> None:
+        """Add box traces, colored by condition if available."""
         if conditions_list and individual_samples_list:
             colors, _, condition_to_color = _get_sample_colors(
-                full_samples_list, conditions_list, individual_samples_list
+                samples, conditions_list, individual_samples_list
             )
-
-            for i, data in enumerate(log_transformed_data):
+            for i, d in enumerate(data):
                 fig.add_trace(go.Box(
-                    y=data, name=full_samples_list[i],
-                    boxpoints='outliers',
+                    y=d, name=samples[i], boxpoints='outliers',
                     marker_color=colors[i], line_color=colors[i],
                     showlegend=False,
                 ))
-
-            # Legend traces
             for condition in conditions_list:
                 fig.add_trace(go.Box(
                     y=[None], name=condition,
@@ -236,44 +235,30 @@ class BoxPlotService:
                     showlegend=True,
                 ))
         else:
-            for i, data in enumerate(log_transformed_data):
+            for i, d in enumerate(data):
                 fig.add_trace(go.Box(
-                    y=data, name=full_samples_list[i],
-                    boxpoints='outliers',
+                    y=d, name=samples[i], boxpoints='outliers',
                     marker_color='lightblue', line_color='darkblue',
                     showlegend=False,
                 ))
 
+    @staticmethod
+    def _apply_box_plot_layout(fig: go.Figure, show_legend: bool) -> None:
+        """Apply standard box plot layout."""
         fig.update_layout(
             title=dict(
                 text='Box Plot of Non-Zero Concentrations',
                 font=dict(size=20, color='black'),
                 y=0.99, x=0.5, xanchor='center', yanchor='top',
             ),
-            xaxis_title=dict(
-                text='Sample',
-                font=dict(size=14, color='black'), standoff=15,
-            ),
-            yaxis_title=dict(
-                text='log10(Concentration)',
-                font=dict(size=14, color='black'), standoff=15,
-            ),
-            xaxis=dict(
-                tickangle=45,
-                tickfont=dict(size=12, color='black'),
-                title_standoff=30,
-            ),
+            xaxis_title=dict(text='Sample', font=dict(size=14, color='black'), standoff=15),
+            yaxis_title=dict(text='log10(Concentration)', font=dict(size=14, color='black'), standoff=15),
+            xaxis=dict(tickangle=45, tickfont=dict(size=12, color='black'), title_standoff=30),
             yaxis=dict(tickfont=dict(size=12, color='black')),
             margin=dict(l=100, r=100, t=60, b=120),
-            showlegend=bool(conditions_list),
-            legend=dict(
-                orientation='h', yanchor='top', y=-0.25,
-                xanchor='center', x=0.5,
-            ),
+            showlegend=show_legend,
+            legend=dict(orientation='h', yanchor='top', y=-0.25, xanchor='center', x=0.5),
             height=700, width=900,
             plot_bgcolor='white',
         )
-
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-
-        return fig

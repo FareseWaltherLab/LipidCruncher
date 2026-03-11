@@ -252,22 +252,9 @@ class NormalizationService:
         experiment: ExperimentConfig,
         preserve_prefix: bool = False
     ) -> NormalizationResult:
-        """
-        Apply protein concentration normalization (BCA assay).
+        """Apply protein concentration normalization (BCA assay).
 
         Formula: Intensity_lipid / Protein_conc
-
-        Args:
-            df: DataFrame with lipid data
-            config: Normalization configuration with protein_concentrations
-            experiment: Experiment configuration with sample list
-            preserve_prefix: If True, keep current column prefix (for chaining)
-
-        Returns:
-            NormalizationResult with normalized data
-
-        Raises:
-            ValueError: If protein_concentrations is missing
         """
         if not config.protein_concentrations:
             raise ValueError(
@@ -275,17 +262,12 @@ class NormalizationService:
                 "Please provide protein_concentrations mapping sample -> concentration."
             )
 
-        # Filter to selected classes if specified
         result_df = df.copy()
         if config.selected_classes:
             result_df = result_df[result_df['ClassKey'].isin(config.selected_classes)]
 
-        # Find columns to normalize - can be either intensity[] or concentration[]
-        # (concentration[] appears when chaining with internal standards normalization)
         intensity_cols = [col for col in result_df.columns if col.startswith('intensity[')]
         concentration_cols = [col for col in result_df.columns if col.startswith('concentration[')]
-
-        # Use whichever column type is present
         cols_to_normalize = intensity_cols if intensity_cols else concentration_cols
 
         if not cols_to_normalize:
@@ -294,24 +276,10 @@ class NormalizationService:
                 "Cannot apply protein normalization."
             )
 
-        # Apply normalization
-        skipped_samples = []
-        for col in cols_to_normalize:
-            sample_name = col.split('[', 1)[1].rstrip(']')
+        result_df, skipped_samples = NormalizationService._normalize_by_protein(
+            result_df, cols_to_normalize, config
+        )
 
-            protein_conc = config.get_protein_concentration(sample_name)
-            if protein_conc is None:
-                skipped_samples.append(sample_name)
-                continue
-
-            if protein_conc <= 0:
-                # Skip this sample - don't normalize with zero/negative
-                skipped_samples.append(sample_name)
-                continue
-
-            result_df[col] = result_df[col] / protein_conc
-
-        # Rename columns unless preserving prefix
         if not preserve_prefix and intensity_cols:
             result_df = NormalizationService._rename_intensity_to_concentration(result_df)
 
@@ -324,6 +292,25 @@ class NormalizationService:
             removed_standards=[],
             method_applied=method_desc
         )
+
+    @staticmethod
+    def _normalize_by_protein(
+        result_df: pd.DataFrame,
+        cols_to_normalize: List[str],
+        config: NormalizationConfig,
+    ) -> tuple:
+        """Divide each sample column by its protein concentration."""
+        skipped_samples = []
+        for col in cols_to_normalize:
+            sample_name = col.split('[', 1)[1].rstrip(']')
+            protein_conc = config.get_protein_concentration(sample_name)
+
+            if protein_conc is None or protein_conc <= 0:
+                skipped_samples.append(sample_name)
+                continue
+
+            result_df[col] = result_df[col] / protein_conc
+        return result_df, skipped_samples
 
     @staticmethod
     def _apply_both(
@@ -540,73 +527,80 @@ class NormalizationService:
         experiment: ExperimentConfig,
         intsta_df: Optional[pd.DataFrame] = None
     ) -> List[str]:
-        """
-        Validate that all requirements are met for the specified normalization method.
-
-        Args:
-            df: DataFrame with lipid data
-            config: Normalization configuration
-            experiment: Experiment configuration
-            intsta_df: Internal standards DataFrame (optional)
-
-        Returns:
-            List of validation errors (empty if all valid)
-        """
+        """Validate that all requirements are met for the specified normalization method."""
         errors = []
 
-        # Basic DataFrame validation
         if df is None or df.empty:
             errors.append("Input DataFrame is empty")
             return errors
 
         if 'ClassKey' not in df.columns:
             errors.append("Input DataFrame missing 'ClassKey' column")
-
         if 'LipidMolec' not in df.columns:
             errors.append("Input DataFrame missing 'LipidMolec' column")
-
-        intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
-        if not intensity_cols:
+        if not any(col.startswith('intensity[') for col in df.columns):
             errors.append("Input DataFrame has no intensity columns")
 
-        # Method-specific validation
         if config.method in ('internal_standard', 'both'):
-            if intsta_df is None or intsta_df.empty:
-                errors.append("Internal standards DataFrame is required but not provided")
-            elif 'LipidMolec' not in intsta_df.columns:
-                errors.append("Internal standards DataFrame missing 'LipidMolec' column")
-            else:
-                # Check that all mapped standards exist
-                if config.internal_standards:
-                    available = set(intsta_df['LipidMolec'].unique())
-                    for lipid_class, standard in config.internal_standards.items():
-                        if standard not in available:
-                            errors.append(
-                                f"Standard '{standard}' for class '{lipid_class}' "
-                                f"not found in standards DataFrame"
-                            )
-
-            # Check sample columns match
-            if intsta_df is not None and not intsta_df.empty:
-                expected_cols = [f"intensity[{s}]" for s in experiment.full_samples_list]
-                missing = [c for c in expected_cols if c not in intsta_df.columns]
-                if missing:
-                    errors.append(
-                        f"Internal standards DataFrame missing sample columns: {', '.join(missing)}"
-                    )
+            errors.extend(NormalizationService._validate_internal_standards_setup(
+                config, experiment, intsta_df
+            ))
 
         if config.method in ('protein', 'both'):
-            if not config.protein_concentrations:
-                errors.append("Protein concentrations not provided")
-            else:
-                # Check that all samples have protein concentrations
-                missing_samples = [
-                    s for s in experiment.full_samples_list
-                    if s not in config.protein_concentrations
-                ]
-                if missing_samples:
+            errors.extend(NormalizationService._validate_protein_setup(
+                config, experiment
+            ))
+
+        return errors
+
+    @staticmethod
+    def _validate_internal_standards_setup(
+        config: NormalizationConfig,
+        experiment: ExperimentConfig,
+        intsta_df: Optional[pd.DataFrame],
+    ) -> List[str]:
+        """Validate internal standards requirements."""
+        errors = []
+        if intsta_df is None or intsta_df.empty:
+            errors.append("Internal standards DataFrame is required but not provided")
+            return errors
+
+        if 'LipidMolec' not in intsta_df.columns:
+            errors.append("Internal standards DataFrame missing 'LipidMolec' column")
+        elif config.internal_standards:
+            available = set(intsta_df['LipidMolec'].unique())
+            for lipid_class, standard in config.internal_standards.items():
+                if standard not in available:
                     errors.append(
-                        f"Missing protein concentrations for samples: {', '.join(missing_samples)}"
+                        f"Standard '{standard}' for class '{lipid_class}' "
+                        f"not found in standards DataFrame"
                     )
 
+        expected_cols = [f"intensity[{s}]" for s in experiment.full_samples_list]
+        missing = [c for c in expected_cols if c not in intsta_df.columns]
+        if missing:
+            errors.append(
+                f"Internal standards DataFrame missing sample columns: {', '.join(missing)}"
+            )
+        return errors
+
+    @staticmethod
+    def _validate_protein_setup(
+        config: NormalizationConfig,
+        experiment: ExperimentConfig,
+    ) -> List[str]:
+        """Validate protein concentration requirements."""
+        errors = []
+        if not config.protein_concentrations:
+            errors.append("Protein concentrations not provided")
+            return errors
+
+        missing_samples = [
+            s for s in experiment.full_samples_list
+            if s not in config.protein_concentrations
+        ]
+        if missing_samples:
+            errors.append(
+                f"Missing protein concentrations for samples: {', '.join(missing_samples)}"
+            )
         return errors

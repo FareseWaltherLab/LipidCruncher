@@ -300,48 +300,47 @@ class StandardsService:
         cleaned_df: Optional[pd.DataFrame] = None,
         check_existence: bool = False
     ) -> StandardsValidationResult:
-        """
-        Validate a standards DataFrame.
-
-        Args:
-            standards_df: DataFrame to validate
-            cleaned_df: Optional main dataset (for checking if standards exist in data)
-            check_existence: Whether to check if standards exist in cleaned_df
-
-        Returns:
-            StandardsValidationResult with validation status and messages
-        """
+        """Validate a standards DataFrame."""
         errors = []
         warnings = []
-        valid_count = 0
 
-        # Check if DataFrame exists and is not empty
+        # Early returns for structural issues
         if standards_df is None:
             errors.append("Standards DataFrame is None.")
-            return StandardsValidationResult(
-                is_valid=False, errors=errors, warnings=warnings
-            )
-
+            return StandardsValidationResult(is_valid=False, errors=errors, warnings=warnings)
         if standards_df.empty:
             errors.append("Standards DataFrame is empty.")
-            return StandardsValidationResult(
-                is_valid=False, errors=errors, warnings=warnings
-            )
-
-        # Check for required LipidMolec column
+            return StandardsValidationResult(is_valid=False, errors=errors, warnings=warnings)
         if 'LipidMolec' not in standards_df.columns:
             errors.append("Standards DataFrame must have 'LipidMolec' column.")
-            return StandardsValidationResult(
-                is_valid=False, errors=errors, warnings=warnings
-            )
+            return StandardsValidationResult(is_valid=False, errors=errors, warnings=warnings)
 
-        # Check for empty LipidMolec values
+        valid_count = StandardsService._validate_standards_content(
+            standards_df, errors, warnings
+        )
+
+        if check_existence and cleaned_df is not None:
+            StandardsService._check_standards_existence(standards_df, cleaned_df, errors)
+
+        return StandardsValidationResult(
+            is_valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings,
+            valid_standards_count=valid_count
+        )
+
+    @staticmethod
+    def _validate_standards_content(
+        standards_df: pd.DataFrame,
+        errors: List[str],
+        warnings: List[str],
+    ) -> int:
+        """Check lipid names, duplicates, ClassKey, and intensity columns. Returns valid count."""
         empty_lipids = standards_df['LipidMolec'].isna().sum()
         empty_lipids += (standards_df['LipidMolec'].astype(str).str.strip() == '').sum()
         if empty_lipids > 0:
             warnings.append(f"{empty_lipids} standard(s) have empty or null names.")
 
-        # Check for duplicates
         duplicate_count = standards_df['LipidMolec'].duplicated().sum()
         if duplicate_count > 0:
             warnings.append(
@@ -349,12 +348,10 @@ class StandardsService:
                 "Only the first occurrence will be used."
             )
 
-        # Count valid standards (non-empty, unique)
         valid_standards = standards_df['LipidMolec'].dropna()
         valid_standards = valid_standards[valid_standards.astype(str).str.strip() != '']
         valid_count = valid_standards.nunique()
 
-        # Check ClassKey if present
         if 'ClassKey' in standards_df.columns:
             missing_class = standards_df['ClassKey'].isna().sum()
             if missing_class > 0:
@@ -363,37 +360,32 @@ class StandardsService:
                     "ClassKey will be inferred from lipid name."
                 )
 
-        # Check intensity columns
-        intensity_cols = [
-            col for col in standards_df.columns
-            if col.startswith('intensity[')
-        ]
+        intensity_cols = [col for col in standards_df.columns if col.startswith('intensity[')]
         if not intensity_cols:
             warnings.append(
                 "No intensity columns found in standards DataFrame. "
                 "Standards may need intensity data for normalization."
             )
 
-        # Check existence in cleaned data if requested
-        if check_existence and cleaned_df is not None:
-            if 'LipidMolec' in cleaned_df.columns:
-                available_lipids = set(cleaned_df['LipidMolec'].unique())
-                standard_lipids = set(standards_df['LipidMolec'].unique())
-                missing = standard_lipids - available_lipids
+        return valid_count
 
-                if missing:
-                    preview = list(missing)[:5]
-                    msg = f"Standards not found in dataset: {', '.join(preview)}"
-                    if len(missing) > 5:
-                        msg += f" and {len(missing) - 5} more"
-                    errors.append(msg)
-
-        return StandardsValidationResult(
-            is_valid=len(errors) == 0,
-            errors=errors,
-            warnings=warnings,
-            valid_standards_count=valid_count
-        )
+    @staticmethod
+    def _check_standards_existence(
+        standards_df: pd.DataFrame,
+        cleaned_df: pd.DataFrame,
+        errors: List[str],
+    ) -> None:
+        """Check if standards exist in the cleaned dataset."""
+        if 'LipidMolec' not in cleaned_df.columns:
+            return
+        available_lipids = set(cleaned_df['LipidMolec'].unique())
+        missing = set(standards_df['LipidMolec'].unique()) - available_lipids
+        if missing:
+            preview = list(missing)[:5]
+            msg = f"Standards not found in dataset: {', '.join(preview)}"
+            if len(missing) > 5:
+                msg += f" and {len(missing) - 5} more"
+            errors.append(msg)
 
     @staticmethod
     def validate_intensity_columns(

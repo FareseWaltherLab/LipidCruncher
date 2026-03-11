@@ -119,38 +119,39 @@ class BQCPlotterService:
         lipid_species: np.ndarray,
         cov_threshold: float,
     ) -> Tuple[go.Figure, pd.DataFrame]:
-        """Create CoV scatter plot with threshold coloring.
+        """Create CoV scatter plot with threshold coloring."""
+        cov_df = BQCPlotterService._prepare_cov_data(
+            mean_concentrations, coefficients_of_variation, lipid_species
+        )
 
-        Points below threshold are blue, above are red.
-        A horizontal line marks the threshold.
+        fig = go.Figure()
+        BQCPlotterService._add_cov_scatter_traces(fig, cov_df, cov_threshold)
+        BQCPlotterService._apply_cov_layout(fig, cov_threshold)
+        return fig, cov_df
 
-        Args:
-            mean_concentrations: Log10 mean concentration values.
-            coefficients_of_variation: CoV percentage values.
-            lipid_species: Lipid species names.
-            cov_threshold: Threshold for coloring.
-
-        Returns:
-            Tuple of (Plotly Figure, DataFrame used for plot).
-        """
+    @staticmethod
+    def _prepare_cov_data(
+        mean_concentrations: np.ndarray,
+        coefficients_of_variation: np.ndarray,
+        lipid_species: np.ndarray,
+    ) -> pd.DataFrame:
+        """Filter NaN values and build CoV DataFrame."""
         mean_concentrations = np.array(mean_concentrations)
         coefficients_of_variation = np.array(coefficients_of_variation)
         lipid_species = np.array(lipid_species)
 
-        # Filter NaN values
         valid = ~(np.isnan(mean_concentrations) | np.isnan(coefficients_of_variation))
-        mean_concentrations = mean_concentrations[valid]
-        coefficients_of_variation = coefficients_of_variation[valid]
-        lipid_species = lipid_species[valid]
-
-        cov_df = pd.DataFrame({
-            'Mean_concentration': mean_concentrations,
-            'CoV': coefficients_of_variation,
-            'Species': lipid_species,
+        return pd.DataFrame({
+            'Mean_concentration': mean_concentrations[valid],
+            'CoV': coefficients_of_variation[valid],
+            'Species': lipid_species[valid],
         })
 
-        fig = go.Figure()
-
+    @staticmethod
+    def _add_cov_scatter_traces(
+        fig: go.Figure, cov_df: pd.DataFrame, cov_threshold: float
+    ) -> None:
+        """Add below/above threshold scatter traces and threshold line."""
         hover_tpl = (
             '<b>Species:</b> %{text}<br>'
             '<b>Mean concentration:</b> %{x:.4f}<br>'
@@ -167,7 +168,6 @@ class BQCPlotterService:
                 mode='markers', marker=dict(size=5, color='blue'),
                 text=below['Species'], hovertemplate=hover_tpl,
             ))
-
         if len(above) > 0:
             fig.add_trace(go.Scatter(
                 x=above['Mean_concentration'], y=above['CoV'],
@@ -183,32 +183,28 @@ class BQCPlotterService:
             annotation_font=dict(size=14, color='black'),
         )
 
+    @staticmethod
+    def _apply_cov_layout(fig: go.Figure, cov_threshold: float) -> None:
+        """Apply CoV scatter plot layout."""
+        axis_style = dict(
+            title_font=dict(size=18, color='black'),
+            tickfont=dict(size=14, color='black'),
+            tickcolor='black', showline=True, linewidth=2,
+            linecolor='black', mirror=True, ticks='outside',
+        )
         fig.update_layout(
             title=dict(text='CoV - All lipid Species', font=dict(size=24, color='black')),
             xaxis_title='Log10 of Mean BQC Concentration',
             yaxis_title='CoV(%)',
-            xaxis=dict(
-                title_font=dict(size=18, color='black'),
-                tickfont=dict(size=14, color='black'),
-                tickcolor='black', showline=True, linewidth=2,
-                linecolor='black', mirror=True, ticks='outside',
-            ),
-            yaxis=dict(
-                title_font=dict(size=18, color='black'),
-                tickfont=dict(size=14, color='black'),
-                tickcolor='black', showline=True, linewidth=2,
-                linecolor='black', mirror=True, ticks='outside',
-            ),
+            xaxis=axis_style,
+            yaxis=axis_style,
             plot_bgcolor='white', paper_bgcolor='white',
             showlegend=False,
             margin=dict(t=50, r=50, b=50, l=50),
             font=dict(color='black'),
         )
-
         fig.update_xaxes(zeroline=False)
         fig.update_yaxes(zeroline=False)
-
-        return fig, cov_df
 
 
 def _calculate_coefficient_of_variation(numbers) -> Optional[float]:

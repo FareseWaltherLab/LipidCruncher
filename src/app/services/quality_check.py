@@ -268,18 +268,6 @@ class QualityCheckService:
 
         Identifies BQC samples, calculates CoV and mean per lipid,
         determines reliability percentage.
-
-        Args:
-            df: DataFrame with LipidMolec, ClassKey, and concentration columns.
-            experiment: Experiment configuration.
-            bqc_label: Label of the BQC condition (must exist in conditions_list).
-            cov_threshold: CoV threshold percentage (default 30).
-
-        Returns:
-            BQCPrepareResult with prepared data and high-CoV lipid information.
-
-        Raises:
-            ValueError: If bqc_label not found, DataFrame empty, or threshold invalid.
         """
         QualityCheckService._validate_dataframe(df)
         QualityCheckService._validate_cov_threshold(cov_threshold)
@@ -294,36 +282,10 @@ class QualityCheckService:
                 f"BQC concentration columns not found in DataFrame: {missing}"
             )
 
-        work_df = df.copy()
-
-        work_df['cov'] = work_df[auc_columns].apply(
-            QualityCheckService.calculate_coefficient_of_variation, axis=1
+        work_df = QualityCheckService._compute_cov_and_mean(df, auc_columns)
+        reliable_pct, high_cov_lipids, high_cov_details = (
+            QualityCheckService._identify_high_cov_lipids(work_df, cov_threshold)
         )
-        work_df['mean'] = work_df[auc_columns].apply(
-            QualityCheckService.calculate_mean_including_zeros, axis=1
-        )
-
-        valid_mask = work_df['mean'].notnull() & (work_df['mean'] > 0)
-        work_df.loc[valid_mask, 'mean'] = np.log10(
-            work_df.loc[valid_mask, 'mean']
-        )
-
-        valid_cov = work_df['cov'].dropna()
-        if len(valid_cov) == 0:
-            reliable_pct = 0.0
-        else:
-            reliable_pct = round(
-                (valid_cov < cov_threshold).sum() / len(work_df) * 100, 1
-            )
-
-        high_cov_mask = (
-            work_df['cov'].notnull() & (work_df['cov'] >= cov_threshold)
-        )
-        high_cov_lipids = work_df.loc[high_cov_mask, 'LipidMolec'].tolist()
-
-        detail_cols = ['LipidMolec', 'ClassKey', 'cov', 'mean']
-        available_detail_cols = [c for c in detail_cols if c in work_df.columns]
-        high_cov_details = work_df.loc[high_cov_mask, available_detail_cols].copy()
 
         return BQCPrepareResult(
             prepared_df=work_df,
@@ -333,6 +295,42 @@ class QualityCheckService:
             high_cov_lipids=high_cov_lipids,
             high_cov_details=high_cov_details,
         )
+
+    @staticmethod
+    def _compute_cov_and_mean(df: pd.DataFrame, auc_columns: List[str]) -> pd.DataFrame:
+        """Calculate CoV and log10 mean for BQC samples."""
+        work_df = df.copy()
+        work_df['cov'] = work_df[auc_columns].apply(
+            QualityCheckService.calculate_coefficient_of_variation, axis=1
+        )
+        work_df['mean'] = work_df[auc_columns].apply(
+            QualityCheckService.calculate_mean_including_zeros, axis=1
+        )
+        valid_mask = work_df['mean'].notnull() & (work_df['mean'] > 0)
+        work_df.loc[valid_mask, 'mean'] = np.log10(work_df.loc[valid_mask, 'mean'])
+        return work_df
+
+    @staticmethod
+    def _identify_high_cov_lipids(
+        work_df: pd.DataFrame, cov_threshold: float
+    ) -> tuple:
+        """Identify lipids above CoV threshold. Returns (reliable_pct, lipid_list, details_df)."""
+        valid_cov = work_df['cov'].dropna()
+        if len(valid_cov) == 0:
+            reliable_pct = 0.0
+        else:
+            reliable_pct = round(
+                (valid_cov < cov_threshold).sum() / len(work_df) * 100, 1
+            )
+
+        high_cov_mask = work_df['cov'].notnull() & (work_df['cov'] >= cov_threshold)
+        high_cov_lipids = work_df.loc[high_cov_mask, 'LipidMolec'].tolist()
+
+        detail_cols = ['LipidMolec', 'ClassKey', 'cov', 'mean']
+        available_detail_cols = [c for c in detail_cols if c in work_df.columns]
+        high_cov_details = work_df.loc[high_cov_mask, available_detail_cols].copy()
+
+        return reliable_pct, high_cov_lipids, high_cov_details
 
     @staticmethod
     def filter_by_bqc(
@@ -572,23 +570,7 @@ class QualityCheckService:
         experiment: ExperimentConfig,
         samples_to_remove: List[str],
     ) -> SampleRemovalResult:
-        """Remove samples from DataFrame and create updated ExperimentConfig.
-
-        Drops concentration columns for removed samples and renames remaining
-        columns to match the new ExperimentConfig's sequential sample labels.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Current experiment configuration.
-            samples_to_remove: Sample labels to remove (e.g., ['s2', 's5']).
-
-        Returns:
-            SampleRemovalResult with updated df, experiment, and metadata.
-
-        Raises:
-            ValueError: If samples_to_remove is empty, would leave <2 samples,
-                or would remove all conditions.
-        """
+        """Remove samples from DataFrame and create updated ExperimentConfig."""
         if not samples_to_remove:
             raise ValueError(
                 "samples_to_remove cannot be empty. "
@@ -596,8 +578,7 @@ class QualityCheckService:
             )
 
         actual_to_remove = [
-            s for s in samples_to_remove
-            if s in experiment.full_samples_list
+            s for s in samples_to_remove if s in experiment.full_samples_list
         ]
         total_samples = len(experiment.full_samples_list)
         remaining = total_samples - len(actual_to_remove)
@@ -609,36 +590,41 @@ class QualityCheckService:
             )
 
         new_experiment = experiment.without_samples(actual_to_remove)
-
-        updated_df = df.copy()
-        for sample in actual_to_remove:
-            col = f'concentration[{sample}]'
-            if col in updated_df.columns:
-                updated_df = updated_df.drop(columns=[col])
-
-        old_surviving = [
-            s for s in experiment.full_samples_list
-            if s not in actual_to_remove
-        ]
-        new_labels = new_experiment.full_samples_list
-
-        rename_map = {}
-        for old_label, new_label in zip(old_surviving, new_labels):
-            old_col = f'concentration[{old_label}]'
-            new_col = f'concentration[{new_label}]'
-            if old_col in updated_df.columns and old_label != new_label:
-                rename_map[old_col] = new_col
-
-        if rename_map:
-            updated_df = updated_df.rename(columns=rename_map)
+        updated_df = QualityCheckService._drop_and_rename_columns(
+            df, experiment, new_experiment, actual_to_remove
+        )
 
         return SampleRemovalResult(
             updated_df=updated_df,
             updated_experiment=new_experiment,
             removed_samples=actual_to_remove,
             samples_before=total_samples,
-            samples_after=len(new_labels),
+            samples_after=len(new_experiment.full_samples_list),
         )
+
+    @staticmethod
+    def _drop_and_rename_columns(
+        df: pd.DataFrame,
+        old_experiment: ExperimentConfig,
+        new_experiment: ExperimentConfig,
+        removed: List[str],
+    ) -> pd.DataFrame:
+        """Drop removed sample columns and rename survivors to new labels."""
+        updated_df = df.copy()
+        for sample in removed:
+            col = f'concentration[{sample}]'
+            if col in updated_df.columns:
+                updated_df = updated_df.drop(columns=[col])
+
+        old_surviving = [s for s in old_experiment.full_samples_list if s not in removed]
+        rename_map = {
+            f'concentration[{old}]': f'concentration[{new}]'
+            for old, new in zip(old_surviving, new_experiment.full_samples_list)
+            if old != new and f'concentration[{old}]' in updated_df.columns
+        }
+        if rename_map:
+            updated_df = updated_df.rename(columns=rename_map)
+        return updated_df
 
     # ============================================================
     # Private Validation Methods
