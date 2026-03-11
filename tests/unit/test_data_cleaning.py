@@ -922,6 +922,30 @@ class TestLipidSearchAUCSelection:
         result = LipidSearchCleaner._select_best_auc(df, simple_experiment)
         assert len(result) == 2
 
+    def test_select_best_row_nan_grade_deprioritized(self):
+        """Test that NaN TotalGrade is deprioritized over any valid grade."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(16:0)'],
+            'TotalGrade': [float('nan'), 'D'],
+            'TotalSmpIDRate(%)': [100.0, 100.0],
+            'intensity[s1]': [1000, 2000],
+        })
+        result = LipidSearchCleaner._select_best_row(df)
+
+        assert result['intensity[s1]'] == 2000  # Grade D selected, not NaN
+
+    def test_select_best_row_all_nan_grades(self):
+        """Test that all-NaN grades still selects a row without error."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(16:0)'],
+            'TotalGrade': [float('nan'), float('nan')],
+            'TotalSmpIDRate(%)': [100.0, 100.0],
+            'intensity[s1]': [1000, 2000],
+        })
+        result = LipidSearchCleaner._select_best_row(df)
+
+        assert result['LipidMolec'] == 'PC(16:0)'  # Returns a valid row
+
 
 # =============================================================================
 # MSDIALCleaner Tests

@@ -1334,6 +1334,79 @@ New test classes per file: `TestErrorHandling`, `TestTypeCoercion`, `TestNaNHand
 
 **Fix:** Converted `FORMAT_DISPLAY_TO_ENUM` dict constant to `get_format_display_to_enum()` lazy function with deferred import. Updated 4 consumers: `normalization.py`, `quality_check.py`, `data_processing.py`, `column_mapping.py`. All 2357 tests passing.
 
+#### Senior Code Review (March 11, 2026) — Pre-Module 3 Fixes
+
+Broad review of all ~30 source files, ~23 UI files, ~29 test files (2,460+ tests, 31K lines of test code). Many initial findings were false positives after verification. 8 issues to fix before Module 3.
+
+##### Issue 1: LipidSearch NaN grade priority (BUG)
+**File:** `src/app/services/data_cleaning/lipidsearch.py:357`
+**Problem:** `TotalGrade.map(grade_priority)` produces NaN for rows where TotalGrade is NaN. `sort_values('grade_priority')` places NaN first, potentially selecting a gradeless row as "best."
+**Fix:** Map NaN to lowest priority (e.g., 99) before sort.
+
+##### Issue 2: Duplicate button labels without unique keys (BUG)
+**File:** `src/main_app.py:102, 226, 266`
+**Problem:** Three `st.button("← Back to Home")` calls with no explicit `key=`. Widget ID collision risk.
+**Fix:** Add unique keys: `key="back_home_no_data"`, `key="back_home_module1"`, `key="back_home_module2"`.
+
+##### Issue 3: Long methods in services (CODE QUALITY)
+7 methods >70 lines that set the pattern Module 3 will follow:
+- `normalization.py`: `_apply_protein()` (78), `validate_normalization_setup()` (75)
+- `standards.py`: `validate_standards()` (99)
+- `quality_check.py`: `prepare_bqc_data()` (73), `remove_samples()` (71)
+- `plotting/box_plot.py`: `plot_box_plot()` (89)
+- `plotting/bqc_plotter.py`: `create_cov_scatter_plot_with_threshold()` (95)
+**Fix:** Extract helpers to bring each under 50 lines.
+
+##### Issue 4: Inconsistent session state access in UI (CODE QUALITY)
+**Problem:** UI files mix three patterns: (a) direct `st.session_state['key']`, (b) `StreamlitAdapter.save/restore_widget_value()`, (c) `st.session_state.get('key')`.
+**Fix:** Add docstring in `streamlit_adapter.py` defining valid patterns and when to use each. Prevents Module 3 from amplifying inconsistency.
+
+##### Issue 5: Missing type hints on UI functions (CODE QUALITY)
+**Problem:** ~30 UI functions lack return type annotations.
+**Files:** `normalization.py`, `internal_standards.py`, `experiment_config.py`, `sample_grouping.py`, `confirm_inputs.py`, `standards_plots.py`, `zero_filtering.py`
+**Fix:** Add return type annotations to all public UI functions.
+
+##### Issue 6: Complex tuple return in `_detect_msdial_structure()` (CODE SMELL)
+**File:** `src/app/services/data_standardization.py:505`
+**Problem:** Returns 6-element tuple with bare `Dict` type. Hard to understand, error-prone.
+**Fix:** Create `MSDIALStructure` dataclass to replace the tuple.
+
+##### Issue 7: Test fixture duplication (TEST QUALITY)
+**Problem:** Multiple test files redefine fixtures from `conftest.py` (e.g., local `simple_experiment`, local `three_condition_experiment`).
+**Fix:** Replace local fixtures with shared conftest fixtures.
+
+##### Issue 8: `pytest.raises` without `match=` (TEST QUALITY)
+**Problem:** ~40 uses of `pytest.raises(ValueError)` without checking error messages in model tests.
+**Fix:** Add `match="..."` to critical validation tests.
+
+##### Execution Order
+
+| Order | Issue | Scope |
+|-------|-------|-------|
+| 1 | Issue 1: LipidSearch NaN bug | 1 file, ~5 lines + 1-2 new tests |
+| 2 | Issue 2: Button key collision | 1 file, 3 lines |
+| 3 | Issue 6: Tuple → dataclass | 1 file, ~30 lines + update callers |
+| 4 | Issue 3: Long methods | 5 files, extract helpers |
+| 5 | Issue 5: Type hints | 7 UI files |
+| 6 | Issue 4: Session state pattern docs | 1 file, docstring |
+| 7 | Issue 7: Fixture dedup | ~5 test files |
+| 8 | Issue 8: pytest.raises match | 3 test files |
+
+##### Out of Scope (deferred to Phase 5: Polish)
+- Session state architecture overhaul (too risky pre-Module 3)
+- Business logic refactoring in UI orchestration (works correctly)
+- Test assertion count reduction (cosmetic)
+- Mock-based testing adoption (current approach valid)
+- Widget key enum/registry (nice-to-have)
+- Plotting library inconsistency (matplotlib vs plotly — legacy artifact)
+
+##### Verified False Positives (NOT bugs)
+- `standards.py:633-634` `.iloc[0]` on Series — guard clause prevents error
+- `normalization.py:430` reshape without bounds check — prior validation makes it safe
+- `bqc_plotter.py:141-143` NaN filter array lengths — filtered consistently
+- `quality_check.py:69-73` error flow continues — actually returns early
+- `zero_filtering.py:100-171` filter_zeros 72 lines — well-structured, appropriate size
+
 #### Module 3: Visualize and Analyze (NOT STARTED)
 1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps
 2. ⬜ Build Module 3 UI

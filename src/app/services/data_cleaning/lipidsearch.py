@@ -354,7 +354,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         best_quality_df = lipid_df[lipid_df['TotalSmpIDRate(%)'] == max_quality].copy()
 
         grade_priority = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
-        best_quality_df['grade_priority'] = best_quality_df['TotalGrade'].map(grade_priority)
+        best_quality_df['grade_priority'] = best_quality_df['TotalGrade'].map(grade_priority).fillna(99)
 
         return best_quality_df.sort_values('grade_priority').iloc[0]
 
