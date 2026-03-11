@@ -1462,17 +1462,26 @@ Deduplicated statistical testing logic from AbundanceBarChart, SaturationPlot, a
 
 **Step 2: Create Analysis Plotting Services**
 
-**Step 2.1: `BarChartPlotterService`**
-**File:** `src/app/services/plotting/abundance_bar_chart.py`
+**Step 2.1: `BarChartPlotterService`** ✅
+**File:** `src/app/services/plotting/abundance_bar_chart.py` (250 lines) | **Tests:** `tests/unit/test_abundance_bar_chart_plotter.py` (47 tests)
 
-**Methods:**
+Pure-logic service for abundance bar charts. Sums species per class per sample, computes linear + log10 mean/std, renders horizontal grouped Plotly bars with error bars and significance annotations (*/**/***). **Test count: 2541.**
+
+**Result Dataclass:**
+- `BarChartData` — `abundance_df` (DataFrame with ClassKey + mean/std columns), `conditions`, `classes`
+
+**Public Methods:**
 - `create_mean_std_data(df, experiment, selected_conditions, selected_classes) → BarChartData` — Computes mean/std per class per condition (linear and log10 scale)
 - `create_bar_chart(bar_data, mode, stat_results=None) → go.Figure` — Plotly grouped bar with error bars and significance annotations
 - `generate_color_mapping(conditions) → Dict[str, str]` — Consistent condition colors
 
-**Result:** `BarChartData` dataclass with `abundance_df`, `conditions`, `classes`
+**Private Helpers:**
+- `_compute_log10_stats(totals) → Tuple[float, float]` — Log10 mean/std with zero replacement (min_positive/10)
+- `_get_mode_columns(condition, mode) → Tuple[str, str]` — Column name mapping for linear vs log10
+- `_add_significance_annotations(fig, abundance_df, stat_results)` — Adds *, **, *** annotations
+- `_p_value_to_marker(p_value) → str` — p-value to significance marker
 
-**Tests:** `tests/unit/test_abundance_bar_chart_plotter.py` — ~40 tests
+**Tests:** 47 tests covering data preparation (mean/std, multi-species summing, class ordering), edge cases (empty inputs, missing classes/conditions, all zeros, single sample), chart rendering (traces, orientation, scales, error bars, layout), significance annotations (3 star levels, adjusted vs raw p-values), color mapping
 
 **Step 2.2: `PieChartPlotterService`**
 **File:** `src/app/services/plotting/abundance_pie_chart.py`
@@ -1716,8 +1725,8 @@ Target: ~25 tests
 
 | Order | Step | Scope | Depends On |
 |-------|------|-------|------------|
-| 1 | Step 1: StatisticalTestingService | 1 service file + ~120 tests | Nothing (foundation) |
-| 2 | Step 2.1-2.2: Bar Chart + Pie Chart plotters | 2 plotting files + ~65 tests | Step 1 (bar chart uses stats) |
+| 1 | Step 1: StatisticalTestingService ✅ | 1 service file + 106 tests | Nothing (foundation) |
+| 2 | Step 2.1: Bar Chart plotter ✅ + Step 2.2: Pie Chart plotter | 1 done (47 tests) + 1 plotting file + ~25 tests | Step 1 (bar chart uses stats) |
 | 3 | Step 2.6: Volcano plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
 | 4 | Step 2.3: Saturation plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
 | 5 | Step 2.4-2.5: FACH + Pathway plotters | 2 plotting files + ~65 tests | Nothing (no stats) |
