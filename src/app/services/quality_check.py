@@ -223,7 +223,7 @@ class QualityCheckService:
     # ============================================================
 
     @staticmethod
-    def calculate_coefficient_of_variation(numbers) -> Optional[float]:
+    def calculate_coefficient_of_variation(numbers: "np.typing.ArrayLike") -> Optional[float]:
         """Calculate coefficient of variation (CoV) for an array of numbers.
 
         Includes zero values. Uses sample standard deviation (ddof=1).
@@ -243,7 +243,7 @@ class QualityCheckService:
         return float(np.std(arr, ddof=1) / mean_val * 100)
 
     @staticmethod
-    def calculate_mean_including_zeros(numbers) -> Optional[float]:
+    def calculate_mean_including_zeros(numbers: "np.typing.ArrayLike") -> Optional[float]:
         """Calculate mean of numbers, including zeros.
 
         Args:

@@ -28,15 +28,6 @@ def single_sample_experiment():
     )
 
 
-@pytest.fixture
-def large_experiment():
-    """4 conditions x 5 samples each = 20 samples."""
-    return ExperimentConfig(
-        n_conditions=4,
-        conditions_list=['A', 'B', 'C', 'D'],
-        number_of_samples_list=[5, 5, 5, 5],
-    )
-
 
 @pytest.fixture
 def basic_conc_df(simple_experiment_2x3):

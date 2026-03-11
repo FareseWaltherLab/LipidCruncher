@@ -23,15 +23,6 @@ def single_sample_experiment():
     )
 
 
-@pytest.fixture
-def large_experiment():
-    """Experiment with many samples."""
-    return ExperimentConfig(
-        n_conditions=4,
-        conditions_list=['A', 'B', 'C', 'D'],
-        number_of_samples_list=[5, 5, 5, 5]
-    )
-
 
 @pytest.fixture
 def basic_lipid_df(simple_experiment_2x3):

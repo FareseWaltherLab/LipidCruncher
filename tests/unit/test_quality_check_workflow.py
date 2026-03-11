@@ -51,15 +51,6 @@ def mixed_replicate_experiment():
     )
 
 
-@pytest.fixture
-def large_experiment():
-    """4 conditions x 5 samples each = 20 samples."""
-    return ExperimentConfig(
-        n_conditions=4,
-        conditions_list=['A', 'B', 'C', 'D'],
-        number_of_samples_list=[5, 5, 5, 5],
-    )
-
 
 # =============================================================================
 # DataFrame Fixtures

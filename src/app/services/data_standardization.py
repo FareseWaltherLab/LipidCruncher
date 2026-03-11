@@ -227,7 +227,7 @@ class DataStandardizationService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def standardize_lipid_name(lipid_name) -> str:
+    def standardize_lipid_name(lipid_name: object) -> str:
         """Standardize a lipid name to Class(chain_details)(modifications).
 
         Examples:
@@ -241,50 +241,15 @@ class DataStandardizationService:
                 return "Unknown"
 
             lipid_name = str(lipid_name).strip()
-
-            # Extract deuteration modifications like (d7), (d9) at the END
-            modification = ""
-            mod_match = re.search(r'\(d\d+\)$', lipid_name)
-            if mod_match:
-                modification = mod_match.group()
-                lipid_name = lipid_name[:mod_match.start()].strip()
+            lipid_name, modification = DataStandardizationService._extract_modification(lipid_name)
 
             first_paren = lipid_name.find('(')
             first_colon = lipid_name.find(':')
 
             if first_paren > 0 and (first_colon < 0 or first_paren < first_colon):
-                # Already has parentheses around chain info
-                class_name = lipid_name[:first_paren]
-                paren_depth = 0
-                chain_end = first_paren
-                for i in range(first_paren, len(lipid_name)):
-                    if lipid_name[i] == '(':
-                        paren_depth += 1
-                    elif lipid_name[i] == ')':
-                        paren_depth -= 1
-                        if paren_depth == 0:
-                            chain_end = i
-                            break
-                chain_info = lipid_name[first_paren + 1:chain_end]
-                trailing = lipid_name[chain_end + 1:].strip()
-                chain_info = chain_info.replace('/', '_')
-                result = f"{class_name}({chain_info})"
-                if trailing:
-                    result = f"{result}{trailing}"
+                result = DataStandardizationService._parse_parenthesized_name(lipid_name, first_paren)
             else:
-                first_space = lipid_name.find(' ')
-                if first_space > 0:
-                    class_name = lipid_name[:first_space]
-                    chain_info = lipid_name[first_space + 1:].replace('/', '_')
-                    result = f"{class_name}({chain_info})"
-                else:
-                    match = re.match(r'^([A-Za-z][A-Za-z0-9]*)[- ]?(.*)', lipid_name)
-                    if match:
-                        class_name, chain_info = match.groups()
-                        chain_info = chain_info.replace('/', '_')
-                        result = f"{class_name}({chain_info})" if chain_info else class_name
-                    else:
-                        result = lipid_name
+                result = DataStandardizationService._parse_bare_name(lipid_name)
 
             if modification:
                 result = f"{result}{modification}"
@@ -293,6 +258,51 @@ class DataStandardizationService:
 
         except (TypeError, AttributeError, ValueError, IndexError):
             return str(lipid_name) if lipid_name else "Unknown"
+
+    @staticmethod
+    def _extract_modification(lipid_name: str) -> Tuple[str, str]:
+        """Extract trailing deuteration modifications like (d7), (d9)."""
+        mod_match = re.search(r'\(d\d+\)$', lipid_name)
+        if mod_match:
+            return lipid_name[:mod_match.start()].strip(), mod_match.group()
+        return lipid_name, ""
+
+    @staticmethod
+    def _parse_parenthesized_name(lipid_name: str, first_paren: int) -> str:
+        """Parse a lipid name that already has parentheses around chain info."""
+        class_name = lipid_name[:first_paren]
+        paren_depth = 0
+        chain_end = first_paren
+        for i in range(first_paren, len(lipid_name)):
+            if lipid_name[i] == '(':
+                paren_depth += 1
+            elif lipid_name[i] == ')':
+                paren_depth -= 1
+                if paren_depth == 0:
+                    chain_end = i
+                    break
+        chain_info = lipid_name[first_paren + 1:chain_end].replace('/', '_')
+        trailing = lipid_name[chain_end + 1:].strip()
+        result = f"{class_name}({chain_info})"
+        if trailing:
+            result = f"{result}{trailing}"
+        return result
+
+    @staticmethod
+    def _parse_bare_name(lipid_name: str) -> str:
+        """Parse a lipid name without parentheses (space-separated or compact)."""
+        first_space = lipid_name.find(' ')
+        if first_space > 0:
+            class_name = lipid_name[:first_space]
+            chain_info = lipid_name[first_space + 1:].replace('/', '_')
+            return f"{class_name}({chain_info})"
+
+        match = re.match(r'^([A-Za-z][A-Za-z0-9]*)[- ]?(.*)', lipid_name)
+        if match:
+            class_name, chain_info = match.groups()
+            chain_info = chain_info.replace('/', '_')
+            return f"{class_name}({chain_info})" if chain_info else class_name
+        return lipid_name
 
     @staticmethod
     def infer_class_key(lipid_molec) -> str:
@@ -414,41 +424,20 @@ class DataStandardizationService:
                 False, "First column doesn't appear to contain lipid names (no letters found)."
             )
 
-        result_df = df.copy()
-        original_cols = df.columns.tolist()
-        standardized_cols = ['LipidMolec']
-
-        has_classkey = (
-            len(original_cols) > 2
-            and DataStandardizationService._is_classkey_column(df, 1)
+        standardized_cols, has_classkey, n_intensity = (
+            DataStandardizationService._build_generic_column_map(df)
         )
 
-        if has_classkey:
-            standardized_cols.append('ClassKey')
-            intensity_start = 2
-        else:
-            intensity_start = 1
-
-        for i in range(intensity_start, len(original_cols)):
-            standardized_cols.append(f'intensity[s{i - intensity_start + 1}]')
-
-        n_intensity = len(original_cols) - intensity_start
-
-        # Column mapping
+        result_df = df.copy()
         mapping_df = pd.DataFrame({
             'standardized_name': standardized_cols,
-            'original_name': original_cols,
+            'original_name': df.columns.tolist(),
         })
-
-        # Rename columns
         result_df.columns = standardized_cols
 
-        # Standardize lipid names
         result_df['LipidMolec'] = result_df['LipidMolec'].apply(
             DataStandardizationService.standardize_lipid_name
         )
-
-        # Infer ClassKey if not present
         if not has_classkey:
             result_df['ClassKey'] = result_df['LipidMolec'].apply(
                 DataStandardizationService.infer_class_key
@@ -461,6 +450,30 @@ class DataStandardizationService:
             column_mapping=mapping_df,
             n_intensity_cols=n_intensity,
         )
+
+    @staticmethod
+    def _build_generic_column_map(df: pd.DataFrame) -> Tuple[List[str], bool, int]:
+        """Build standardized column names for Generic format.
+
+        Returns:
+            Tuple of (standardized_cols, has_classkey, n_intensity_cols).
+        """
+        original_cols = df.columns.tolist()
+        standardized_cols = ['LipidMolec']
+
+        has_classkey = (
+            len(original_cols) > 2
+            and DataStandardizationService._is_classkey_column(df, 1)
+        )
+
+        intensity_start = 2 if has_classkey else 1
+        if has_classkey:
+            standardized_cols.append('ClassKey')
+
+        for i in range(intensity_start, len(original_cols)):
+            standardized_cols.append(f'intensity[s{i - intensity_start + 1}]')
+
+        return standardized_cols, has_classkey, len(original_cols) - intensity_start
 
     # ------------------------------------------------------------------
     # MS-DIAL

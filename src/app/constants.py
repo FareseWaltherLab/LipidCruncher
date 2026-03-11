@@ -59,3 +59,34 @@ COV_THRESHOLD_DEFAULT: int = 30
 # Zero filtering defaults (displayed as percentages in UI)
 ZERO_FILTER_NON_BQC_DEFAULT: int = 75   # 75% → 0.75 proportion
 ZERO_FILTER_BQC_DEFAULT: int = 50       # 50% → 0.50 proportion
+
+
+# =============================================================================
+# LipidSearch Grade Filtering
+# =============================================================================
+
+# All possible grade values for LipidSearch 5.0
+LIPIDSEARCH_GRADE_OPTIONS: List[str] = ['A', 'B', 'C', 'D']
+
+# Default grades per class (classes not listed default to LIPIDSEARCH_DEFAULT_GRADES)
+LIPIDSEARCH_DEFAULT_GRADES: List[str] = ['A', 'B']
+
+# Classes that accept an additional grade (C) by default
+LIPIDSEARCH_RELAXED_GRADE_CLASSES: List[str] = ['LPC', 'SM']
+LIPIDSEARCH_RELAXED_GRADES: List[str] = ['A', 'B', 'C']
+
+
+# =============================================================================
+# MS-DIAL Quality Filtering
+# =============================================================================
+
+# Quality filtering presets: display label → config dict
+MSDIAL_QUALITY_PRESETS: Dict[str, Dict] = {
+    'Strict (Score ≥80, MS/MS required)': {'total_score_threshold': 80, 'require_msms': True},
+    'Moderate (Score ≥60)': {'total_score_threshold': 60, 'require_msms': False},
+    'Permissive (Score ≥40)': {'total_score_threshold': 40, 'require_msms': False},
+    'No filtering': {'total_score_threshold': 0, 'require_msms': False},
+}
+
+# Default quality level selection
+MSDIAL_DEFAULT_QUALITY_LEVEL: str = 'Moderate (Score ≥60)'

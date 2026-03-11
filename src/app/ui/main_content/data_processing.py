@@ -17,7 +17,15 @@ import pandas as pd
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button
 
-from app.constants import get_format_display_to_enum
+from app.constants import (
+    get_format_display_to_enum,
+    LIPIDSEARCH_GRADE_OPTIONS,
+    LIPIDSEARCH_DEFAULT_GRADES,
+    LIPIDSEARCH_RELAXED_GRADE_CLASSES,
+    LIPIDSEARCH_RELAXED_GRADES,
+    MSDIAL_QUALITY_PRESETS,
+    MSDIAL_DEFAULT_QUALITY_LEVEL,
+)
 from app.services.format_detection import DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from app.workflows.data_ingestion import IngestionResult
@@ -97,14 +105,14 @@ def display_grade_filtering_config(df: pd.DataFrame) -> dict:
                 # Get saved or default grades
                 if lipid_class in st.session_state.grade_selections:
                     default_grades = st.session_state.grade_selections[lipid_class]
-                elif lipid_class in ['LPC', 'SM']:
-                    default_grades = ['A', 'B', 'C']
+                elif lipid_class in LIPIDSEARCH_RELAXED_GRADE_CLASSES:
+                    default_grades = LIPIDSEARCH_RELAXED_GRADES
                 else:
-                    default_grades = ['A', 'B']
+                    default_grades = LIPIDSEARCH_DEFAULT_GRADES
 
                 selected_grades = st.multiselect(
                     f"**{lipid_class}**",
-                    options=['A', 'B', 'C', 'D'],
+                    options=LIPIDSEARCH_GRADE_OPTIONS,
                     default=default_grades,
                     key=f"grade_select_{lipid_class}"
                 )
@@ -197,7 +205,7 @@ def display_quality_filtering_config() -> dict:
     with st.expander("⚙️ Configure Quality Filtering", expanded=False):
         # Initialize session state
         if 'msdial_quality_level' not in st.session_state:
-            st.session_state.msdial_quality_level = 'Moderate (Score ≥60)'
+            st.session_state.msdial_quality_level = MSDIAL_DEFAULT_QUALITY_LEVEL
 
         if quality_filtering_available:
             quality_config = _display_score_filtering(msms_filtering_available)
@@ -215,17 +223,11 @@ def display_quality_filtering_config() -> dict:
 
 def _display_score_filtering(msms_filtering_available: bool) -> dict:
     """Display quality score filtering with optional MS/MS and custom threshold."""
-    quality_options = {
-        'Strict (Score ≥80, MS/MS required)': {'total_score_threshold': 80, 'require_msms': True},
-        'Moderate (Score ≥60)': {'total_score_threshold': 60, 'require_msms': False},
-        'Permissive (Score ≥40)': {'total_score_threshold': 40, 'require_msms': False},
-        'No filtering': {'total_score_threshold': 0, 'require_msms': False}
-    }
-    quality_options_list = list(quality_options.keys())
+    quality_options_list = list(MSDIAL_QUALITY_PRESETS.keys())
     widget_key = "msdial_quality_level_radio"
 
     # Initialize widget key from persisted value BEFORE rendering
-    persisted_value = st.session_state.get('msdial_quality_level', 'Moderate (Score ≥60)')
+    persisted_value = st.session_state.get('msdial_quality_level', MSDIAL_DEFAULT_QUALITY_LEVEL)
     if persisted_value in quality_options_list:
         st.session_state[widget_key] = persisted_value
 
@@ -241,7 +243,7 @@ def _display_score_filtering(msms_filtering_available: bool) -> dict:
     )
     st.session_state.msdial_quality_level = selected_option
 
-    quality_config = quality_options[selected_option].copy()
+    quality_config = MSDIAL_QUALITY_PRESETS[selected_option].copy()
 
     # MS/MS validation override (if available)
     if msms_filtering_available:

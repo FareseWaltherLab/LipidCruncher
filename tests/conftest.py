@@ -111,3 +111,13 @@ def bqc_experiment():
         conditions_list=['Control', 'Treatment', 'BQC'],
         number_of_samples_list=[3, 3, 2],
     )
+
+
+@pytest.fixture
+def large_experiment():
+    """4 conditions x 5 samples each = 20 samples."""
+    return make_experiment(
+        4,
+        conditions_list=['A', 'B', 'C', 'D'],
+        number_of_samples_list=[5, 5, 5, 5],
+    )
