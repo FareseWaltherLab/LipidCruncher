@@ -1336,26 +1336,23 @@ New test classes per file: `TestErrorHandling`, `TestTypeCoercion`, `TestNaNHand
 
 #### Senior Code Review (March 11, 2026) — Pre-Module 3 Fixes
 
-Broad review of all ~30 source files, ~23 UI files, ~29 test files (2,460+ tests, 31K lines of test code). Many initial findings were false positives after verification. 8 issues to fix before Module 3.
+Broad review of all ~30 source files, ~23 UI files, ~29 test files (2,460+ tests, 31K lines of test code). Many initial findings were false positives after verification. 8 issues to fix before Module 3. **Test count: 2388.**
 
-##### Issue 1: LipidSearch NaN grade priority (BUG)
+##### Issue 1: LipidSearch NaN grade priority (BUG) ✅ (`f37670d`)
 **File:** `src/app/services/data_cleaning/lipidsearch.py:357`
-**Problem:** `TotalGrade.map(grade_priority)` produces NaN for rows where TotalGrade is NaN. `sort_values('grade_priority')` places NaN first, potentially selecting a gradeless row as "best."
-**Fix:** Map NaN to lowest priority (e.g., 99) before sort.
+**Fix:** Added `.fillna(99)` after `.map(grade_priority)` so NaN grades get lowest priority. Added 2 tests for NaN vs valid grade and all-NaN scenarios.
 
-##### Issue 2: Duplicate button labels without unique keys (BUG)
-**File:** `src/main_app.py:102, 226, 266`
-**Problem:** Three `st.button("← Back to Home")` calls with no explicit `key=`. Widget ID collision risk.
-**Fix:** Add unique keys: `key="back_home_no_data"`, `key="back_home_module1"`, `key="back_home_module2"`.
+##### Issue 2: Duplicate button labels without unique keys (BUG) ✅ (`8bdde51`)
+**File:** `src/main_app.py`
+**Fix:** Added unique keys to all 5 duplicate buttons: `back_home_no_data`, `back_home_module1`, `back_home_module2`, `back_processing_error`, `back_processing_module2`.
 
-##### Issue 3: Long methods in services (CODE QUALITY)
-7 methods >70 lines that set the pattern Module 3 will follow:
-- `normalization.py`: `_apply_protein()` (78), `validate_normalization_setup()` (75)
-- `standards.py`: `validate_standards()` (99)
-- `quality_check.py`: `prepare_bqc_data()` (73), `remove_samples()` (71)
-- `plotting/box_plot.py`: `plot_box_plot()` (89)
-- `plotting/bqc_plotter.py`: `create_cov_scatter_plot_with_threshold()` (95)
-**Fix:** Extract helpers to bring each under 50 lines.
+##### Issue 3: Long methods in services (CODE QUALITY) ✅ (`c4fad23`)
+Extracted 14 helpers across 5 files, all methods now under 50 lines:
+- `normalization.py`: `_apply_protein` (78→44) → `_normalize_by_protein`; `validate_normalization_setup` (76→30) → `_validate_internal_standards_setup`, `_validate_protein_setup`
+- `standards.py`: `validate_standards` (99→30) → `_validate_standards_content`, `_check_standards_existence`
+- `quality_check.py`: `prepare_bqc_data` (75→37) → `_compute_cov_and_mean`, `_identify_high_cov_lipids`; `remove_samples` (72→33) → `_drop_and_rename_columns`
+- `box_plot.py`: `plot_box_plot` (89→20) → `_add_box_traces`, `_apply_box_plot_layout`
+- `bqc_plotter.py`: `create_cov_scatter_plot` (96→13) → `_prepare_cov_data`, `_add_cov_scatter_traces`, `_apply_cov_layout`
 
 ##### Issue 4: Inconsistent session state access in UI (CODE QUALITY)
 **Problem:** UI files mix three patterns: (a) direct `st.session_state['key']`, (b) `StreamlitAdapter.save/restore_widget_value()`, (c) `st.session_state.get('key')`.
@@ -1381,16 +1378,16 @@ Broad review of all ~30 source files, ~23 UI files, ~29 test files (2,460+ tests
 
 ##### Execution Order
 
-| Order | Issue | Scope |
-|-------|-------|-------|
-| 1 | Issue 1: LipidSearch NaN bug | 1 file, ~5 lines + 1-2 new tests |
-| 2 | Issue 2: Button key collision | 1 file, 3 lines |
-| 3 | Issue 6: Tuple → dataclass | 1 file, ~30 lines + update callers |
-| 4 | Issue 3: Long methods | 5 files, extract helpers |
-| 5 | Issue 5: Type hints | 7 UI files |
-| 6 | Issue 4: Session state pattern docs | 1 file, docstring |
-| 7 | Issue 7: Fixture dedup | ~5 test files |
-| 8 | Issue 8: pytest.raises match | 3 test files |
+| Order | Issue | Scope | Status |
+|-------|-------|-------|--------|
+| 1 | Issue 1: LipidSearch NaN bug | 1 file, 2 new tests | ✅ `f37670d` |
+| 2 | Issue 2: Button key collision | 1 file, 5 keys | ✅ `8bdde51` |
+| 3 | Issue 3: Long methods | 5 files, 14 helpers extracted | ✅ `c4fad23` |
+| 4 | Issue 6: Tuple → dataclass | 1 file, ~30 lines + update callers | |
+| 5 | Issue 5: Type hints | 7 UI files | |
+| 6 | Issue 4: Session state pattern docs | 1 file, docstring | |
+| 7 | Issue 7: Fixture dedup | ~5 test files | |
+| 8 | Issue 8: pytest.raises match | 3 test files | |
 
 ##### Out of Scope (deferred to Phase 5: Polish)
 - Session state architecture overhaul (too risky pre-Module 3)
