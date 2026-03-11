@@ -99,7 +99,7 @@ def display_app_page() -> None:
             st.info("Upload a dataset or load sample data to begin.")
 
             # Back to landing button
-            if st.button("← Back to Home"):
+            if st.button("← Back to Home", key="back_home_no_data"):
                 st.session_state.page = 'landing'
                 st.rerun()
         return
@@ -223,7 +223,7 @@ def _display_module1(
             st.session_state.module = "Quality Check & Analysis"
             st.rerun()
 
-    if st.button("← Back to Home"):
+    if st.button("← Back to Home", key="back_home_module1"):
         st.session_state.page = 'landing'
         StreamlitAdapter.reset_data_state()
         st.rerun()
@@ -239,7 +239,7 @@ def _display_module2(
     continuation_df = st.session_state.get('normalized_df')
     if continuation_df is None:
         st.error("No normalized data available. Please complete Module 1 first.")
-        if st.button("← Back to Data Processing"):
+        if st.button("← Back to Data Processing", key="back_processing_error"):
             st.session_state.module = "Data Cleaning, Filtering, & Normalization"
             st.rerun()
         return
@@ -258,12 +258,12 @@ def _display_module2(
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Back to Data Processing"):
+        if st.button("← Back to Data Processing", key="back_processing_module2"):
             _reset_qc_state()
             st.session_state.module = "Data Cleaning, Filtering, & Normalization"
             st.rerun()
     with col2:
-        if st.button("← Back to Home"):
+        if st.button("← Back to Home", key="back_home_module2"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()
             st.rerun()
