@@ -1402,9 +1402,396 @@ Extracted 14 helpers across 5 files, all methods now under 50 lines:
 - `quality_check.py:69-73` error flow continues — actually returns early
 - `zero_filtering.py:100-171` filter_zeros 72 lines — well-structured, appropriate size
 
-#### Module 3: Visualize and Analyze (NOT STARTED)
-1. ⬜ Extract `AnalysisWorkflow` — statistical tests, volcano plots, heatmaps
-2. ⬜ Build Module 3 UI
+#### Module 3: Visualize and Analyze (IN PROGRESS)
+
+**Reference:** Old app `old_main_app.py` lines 2589-5500+ has the full working Module 3.
+
+**Input data:** `qc_continuation_df` (or `normalized_df` if QC made no changes) — DataFrame with `concentration[sample]` columns, `LipidMolec`, `ClassKey`.
+
+**Scope — 7 analysis features (radio selector) + PDF report:**
+
+| # | Feature | Level | Stats? | Plot Lib | Legacy Module | Legacy Lines |
+|---|---------|-------|--------|----------|---------------|-------------|
+| 1 | Abundance Bar Chart | Class | Full 2-level | Plotly | `AbundanceBarChart` | ~580 |
+| 2 | Abundance Pie Charts | Class | None | Plotly | `AbundancePieChart` | ~130 |
+| 3 | Saturation Plots | Class | Full 2-level | Plotly | `SaturationPlot` | ~780 |
+| 4 | FACH Heatmaps | Class | None | Plotly | `FACH` | ~310 |
+| 5 | Pathway Visualization | Class | None | Matplotlib | `PathwayViz` | ~440 |
+| 6 | Volcano Plot | Species | Species-level | Plotly+Matplotlib | `VolcanoPlot` | ~730 |
+| 7 | Lipidomic Heatmap | Species | None | Plotly | `LipidomicHeatmap` | ~200 |
+| 8 | PDF Report | All | N/A | ReportLab | N/A | ~400 |
+
+##### Implementation Plan
+
+**Step 1: Create `StatisticalTestingService` — Shared Stats Engine** ✅
+**File:** `src/app/services/statistical_testing.py` (420 lines) | **Tests:** `tests/unit/test_statistical_testing.py` (106 tests)
+
+Deduplicated statistical testing logic from AbundanceBarChart, SaturationPlot, and VolcanoPlot into a unified service. Implements: `test_two_groups()` (Welch's t / Mann-Whitney U), `test_multiple_groups()` (Welch's ANOVA / Kruskal-Wallis), `apply_correction()` (FDR/Bonferroni), `run_posthoc()` (Tukey's HSD / Bonferroni pairwise), plus three orchestration methods (`run_class_level_tests`, `run_saturation_tests`, `run_species_level_tests`) and `apply_auto_mode()`. Result dataclasses: `StatisticalTestResult`, `PostHocResult`, `StatisticalTestSummary`. **Test count: 2494.**
+
+**Result Dataclasses:**
+- `StatisticalTestResult` — `test_name`, `statistic`, `p_value`, `adjusted_p_value`, `significant`, `effect_size`, `group_key` (class name or lipid name)
+- `PostHocResult` — `group1`, `group2`, `p_value`, `adjusted_p_value`, `significant`, `test_name`
+- `StatisticalTestSummary` — `results` (Dict[str, StatisticalTestResult]), `posthoc_results` (Dict[str, List[PostHocResult]]), `test_info` (metadata: test type, corrections, alpha, transform), `parameters` (n_conditions, n_groups_tested)
+
+**Public Methods:**
+- `test_two_groups(group1_values, group2_values, test_type, auto_transform) → StatisticalTestResult` — Welch's t-test or Mann-Whitney U
+- `test_multiple_groups(groups_dict, test_type, auto_transform) → StatisticalTestResult` — Welch's ANOVA (`alexandergovern`) or Kruskal-Wallis
+- `apply_correction(p_values, method) → np.ndarray` — FDR (Benjamini-Hochberg) or Bonferroni via `multipletests`
+- `run_posthoc(groups_dict, correction, alpha, auto_transform) → List[PostHocResult]` — Tukey's HSD or Bonferroni pairwise
+- `run_class_level_tests(df, experiment, selected_conditions, selected_classes, config: StatisticalTestConfig) → StatisticalTestSummary` — Orchestrates per-class testing (used by bar chart)
+- `run_saturation_tests(df, experiment, selected_conditions, selected_classes, fa_data, config) → StatisticalTestSummary` — Per-(class, FA type) testing (used by saturation)
+- `run_species_level_tests(df, control_samples, experimental_samples, config) → StatisticalTestSummary` — Per-lipid testing (used by volcano)
+- `apply_auto_mode(n_classes, n_conditions) → Dict` — Smart defaults for correction methods
+
+**Private Helpers:**
+- `_prepare_group_data(values, auto_transform) → np.ndarray` — Zero replacement (min_positive/10) + optional log10
+- `_extract_class_totals(df, samples, lipid_class) → np.ndarray` — Sum species per class per sample
+
+**Dependencies:** `scipy.stats` (ttest_ind, mannwhitneyu, alexandergovern, kruskal), `statsmodels.stats.multicomp` (pairwise_tukeyhsd), `statsmodels.stats.multitest` (multipletests)
+
+**Tests:** `tests/unit/test_statistical_testing.py` — Target ~120 tests covering:
+- Two-group tests (parametric/non-parametric, equal/unequal variance, ties)
+- Multi-group tests (3+, all equal, one group different)
+- Correction methods (FDR, Bonferroni, uncorrected, edge cases)
+- Post-hoc tests (Tukey, Bonferroni pairwise, 3+ groups)
+- Auto mode logic (1 class, 2+ classes, 2 conditions, 3+ conditions)
+- Zero handling and log10 transformation
+- Class-level, saturation-level, and species-level orchestration
+- Edge cases (single sample, identical values, all zeros, NaN)
+- Type coercion (int, float, string numbers)
+
+**Step 2: Create Analysis Plotting Services**
+
+**Step 2.1: `BarChartPlotterService`**
+**File:** `src/app/services/plotting/abundance_bar_chart.py`
+
+**Methods:**
+- `create_mean_std_data(df, experiment, selected_conditions, selected_classes) → BarChartData` — Computes mean/std per class per condition (linear and log10 scale)
+- `create_bar_chart(bar_data, mode, stat_results=None) → go.Figure` — Plotly grouped bar with error bars and significance annotations
+- `generate_color_mapping(conditions) → Dict[str, str]` — Consistent condition colors
+
+**Result:** `BarChartData` dataclass with `abundance_df`, `conditions`, `classes`
+
+**Tests:** `tests/unit/test_abundance_bar_chart_plotter.py` — ~40 tests
+
+**Step 2.2: `PieChartPlotterService`**
+**File:** `src/app/services/plotting/abundance_pie_chart.py`
+
+**Methods:**
+- `calculate_total_abundance(df, samples) → pd.DataFrame` — GroupBy ClassKey, sum concentrations
+- `filter_by_classes(abundance_df, selected_classes) → pd.DataFrame`
+- `create_pie_chart(abundance_df, condition, samples, color_mapping) → Tuple[go.Figure, pd.DataFrame]`
+- `generate_color_mapping(labels) → Dict[str, str]` — Consistent colors across conditions
+
+**Tests:** `tests/unit/test_abundance_pie_chart_plotter.py` — ~25 tests
+
+**Step 2.3: `SaturationPlotterService`**
+**File:** `src/app/services/plotting/saturation_plot.py`
+
+**Methods:**
+- `calculate_fa_ratios(lipid_name) → Tuple[float, float, float]` — Parse SFA/MUFA/PUFA chain ratios
+- `calculate_sfa_mufa_pufa(df, experiment, selected_conditions, selected_classes) → SaturationData` — Per-sample weighted totals
+- `identify_consolidated_lipids(df, selected_classes) → Dict[str, List[str]]` — Detect consolidated format lipids
+- `create_concentration_plot(sat_data, lipid_class, stat_results, show_significance) → go.Figure` — Grouped bar (SFA/MUFA/PUFA)
+- `create_percentage_plot(sat_data, lipid_class) → go.Figure` — Stacked 100% bar
+
+**Result:** `SaturationData` dataclass with per-class, per-condition, per-FA-type means/stds/values
+
+**Tests:** `tests/unit/test_saturation_plotter.py` — ~45 tests (includes FA parsing edge cases)
+
+**Step 2.4: `FACHPlotterService`**
+**File:** `src/app/services/plotting/fach.py`
+
+**Methods:**
+- `parse_carbon_db(lipid_name) → Tuple[Optional[int], Optional[int]]` — Extract total carbons and double bonds (handles ether lipids, sphingoid bases, oxidized lipids)
+- `prepare_fach_data(df, experiment, selected_class, selected_conditions) → Dict[str, pd.DataFrame]` — Aggregated proportional abundance per (Carbon, DB) per condition
+- `create_fach_heatmap(data_dict) → Optional[go.Figure]` — Side-by-side heatmaps with weighted average lines
+
+**Tests:** `tests/unit/test_fach_plotter.py` — ~30 tests (includes lipid name parsing edge cases)
+
+**Step 2.5: `PathwayVizPlotterService`**
+**File:** `src/app/services/plotting/pathway_viz.py`
+
+**Methods:**
+- `calculate_class_saturation_ratio(df) → pd.DataFrame` — Sat/unsat chain counts per class
+- `calculate_class_fold_change(df, experiment, control, experimental) → pd.DataFrame` — Mean(exp)/Mean(ctrl) per class
+- `create_pathway_viz(fold_change_df, saturation_df, control, experimental) → Tuple[plt.Figure, Dict]` — Matplotlib pathway diagram with 18 fixed lipid class positions
+- `create_pathway_dictionary(fold_change_df, saturation_df, control, experimental) → Dict` — Data for CSV export
+
+**Tests:** `tests/unit/test_pathway_viz_plotter.py` — ~35 tests
+
+**Step 2.6: `VolcanoPlotterService`**
+**File:** `src/app/services/plotting/volcano_plot.py`
+
+**Methods:**
+- `prepare_volcano_data(df, stat_results, control_samples, experimental_samples) → VolcanoData` — Computes fold change, log2FC, -log10(p), flags excluded lipids
+- `create_volcano_plot(volcano_data, color_mapping, p_threshold, fc_threshold, hide_non_sig, top_n_labels, custom_label_positions) → go.Figure` — Plotly scatter with thresholds and smart label placement
+- `create_concentration_vs_fc_plot(volcano_data, color_mapping, p_threshold, hide_non_sig) → Tuple[go.Figure, pd.DataFrame]`
+- `create_distribution_plot(volcano_df, selected_lipids, selected_conditions, experiment) → plt.Figure` — Seaborn boxplot per lipid
+- `generate_color_mapping(volcano_df) → Dict[str, str]` — ClassKey-to-color
+
+**Result:** `VolcanoData` dataclass with `volcano_df` (log2FC, -log10p, class, significance), `removed_lipids_df`, `stat_results`
+
+**Tests:** `tests/unit/test_volcano_plotter.py` — ~45 tests (includes label placement, excluded lipids)
+
+**Step 2.7: `LipidomicHeatmapPlotterService`**
+**File:** `src/app/services/plotting/lipidomic_heatmap.py`
+
+**Methods:**
+- `filter_data(df, selected_conditions, selected_classes, experiment) → Tuple[pd.DataFrame, List[str]]`
+- `compute_z_scores(filtered_df) → pd.DataFrame` — Row-wise Z-score normalization
+- `perform_clustering(z_scores_df, n_clusters) → ClusteringResult` — Ward linkage, Euclidean distance
+- `generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters) → go.Figure` — Plotly heatmap reordered by dendrogram
+- `generate_regular_heatmap(z_scores_df, selected_samples) → go.Figure`
+- `get_cluster_composition(z_scores_df, n_clusters, mode) → pd.DataFrame` — Species count or concentration % per cluster
+
+**Result:** `ClusteringResult` dataclass with `linkage_matrix`, `cluster_labels`, `dendrogram_order`
+
+**Tests:** `tests/unit/test_lipidomic_heatmap_plotter.py` — ~35 tests
+
+**Step 3: Create `AnalysisWorkflow`**
+**File:** `src/app/workflows/analysis.py`
+
+Like QualityCheckWorkflow, this is **interactive** — no single `run()` method. Each analysis type is triggered by user radio selection, and some (bar chart, saturation, volcano) require multi-step interaction (configure stats → select data → view results).
+
+**Config:**
+- `AnalysisConfig` — `format_type` (DataFormat), `bqc_label` (Optional[str])
+
+**Public Methods:**
+- `validate_inputs(df, experiment) → List[str]` — Check DataFrame has concentration columns, experiment matches
+- `get_available_classes(df) → List[str]` — Extract unique ClassKey values
+- `get_eligible_conditions(experiment) → List[str]` — Conditions with >1 sample (for stats)
+- `get_all_conditions(experiment) → List[str]` — All conditions
+- `run_bar_chart(df, experiment, selected_conditions, selected_classes, config: StatisticalTestConfig, scale: str) → BarChartResult`
+- `run_pie_charts(df, experiment, selected_conditions, selected_classes) → Dict[str, PieChartResult]`
+- `run_saturation(df, experiment, selected_conditions, selected_classes, config: StatisticalTestConfig, excluded_lipids) → SaturationResult`
+- `run_fach(df, experiment, selected_class, selected_conditions) → FACHResult`
+- `run_pathway(df, experiment, control, experimental) → PathwayResult`
+- `run_volcano(df, experiment, control, experimental, selected_classes, config: StatisticalTestConfig, p_threshold, fc_threshold) → VolcanoResult`
+- `run_heatmap(df, experiment, selected_conditions, selected_classes, heatmap_type, n_clusters) → HeatmapResult`
+
+**Result Dataclasses:**
+- `BarChartResult` — `figure`, `abundance_df`, `stat_summary`
+- `PieChartResult` — `figure`, `data_df`, `condition`
+- `SaturationResult` — `plots` (Dict per class), `stat_summary`, `consolidated_lipids`
+- `FACHResult` — `figure`, `data_dict`
+- `PathwayResult` — `figure`, `pathway_dict`, `fold_change_df`, `saturation_df`
+- `VolcanoResult` — `figure`, `volcano_data`, `concentration_plot`, `stat_summary`
+- `HeatmapResult` — `figure`, `z_scores_df`, `cluster_composition` (Optional)
+
+**Tests:** `tests/unit/test_analysis_workflow.py` — Target ~100 tests
+
+**Step 4: Update `StreamlitAdapter` — Session State**
+**File:** `src/app/adapters/streamlit_adapter.py`
+
+Add Module 3 session state keys to `SessionState` dataclass:
+
+**Analysis state keys (owner: `analysis.py`):**
+- `analysis_selection`: str = None — Current radio selection (which analysis feature)
+- `analysis_bar_chart_fig`: figure or None
+- `analysis_pie_chart_figs`: Dict = {}
+- `analysis_saturation_figs`: Dict = {}
+- `analysis_fach_fig`: figure or None
+- `analysis_pathway_fig`: figure or None
+- `analysis_volcano_fig`: figure or None
+- `analysis_volcano_data`: VolcanoData or None — For sub-plots and label management
+- `analysis_heatmap_fig`: figure or None
+- `analysis_heatmap_clusters`: pd.DataFrame or None
+- `analysis_all_plots`: Dict = {} — Collected plots for PDF report
+
+**Widget keys to register in `_WIDGET_KEYS`:**
+- `analysis_radio`, `bar_conditions`, `bar_classes`, `bar_scale_radio`, `bar_stats_mode`, `bar_detailed_stats`
+- `pie_classes`
+- `sat_conditions`, `sat_classes`, `sat_plot_type`, `sat_show_significance`, `sat_detailed_stats`, `sat_stats_mode`
+- `fach_class`, `fach_conditions`
+- `pathway_control`, `pathway_experimental`
+- `volcano_control`, `volcano_experimental`, `volcano_classes`, `volcano_p_threshold`, `volcano_fc_threshold`, `volcano_hide_nonsig`, `volcano_top_n`, `volcano_additional_labels`, `volcano_stats_mode`, `volcano_detailed_stats`
+- `heatmap_conditions`, `heatmap_classes`, `heatmap_type`, `heatmap_n_clusters`, `heatmap_cluster_view`
+
+**Dynamic key prefixes to add to `_DYNAMIC_KEY_PREFIXES`:**
+- `volcano_label_x_`, `volcano_label_y_` (per-lipid label position adjustments)
+- `analysis_svg_`, `analysis_csv_` (download button keys)
+
+Add `_reset_analysis_state()` to clear all `analysis_*` keys on module navigation.
+
+**Step 5: Build Module 3 UI**
+**File:** `src/app/ui/main_content/analysis.py`
+
+**Entry point:** `display_analysis_module(df, experiment, bqc_label, format_type) → None`
+
+**Structure:**
+```python
+def display_analysis_module(df, experiment, bqc_label, format_type):
+    errors = AnalysisWorkflow.validate_inputs(df, experiment)
+    if errors:
+        st.error(errors[0])
+        return
+
+    analysis_type = st.radio("Select Analysis", [...], key='analysis_radio')
+
+    if analysis_type == "Abundance Bar Chart":
+        _display_bar_chart(df, experiment)
+    elif analysis_type == "Abundance Pie Charts":
+        _display_pie_charts(df, experiment)
+    # ... etc
+```
+
+**Private functions (one per feature):**
+- `_display_bar_chart(df, experiment)` — Stats options panel + conditions/classes multiselect + scale radio + call workflow + display plot + downloads
+- `_display_pie_charts(df, experiment)` — Classes multiselect + per-condition pie charts + downloads
+- `_display_saturation_plots(df, experiment)` — Stats options + consolidated lipid handling + conditions/classes multiselect + plot type radio + significance checkbox + per-class plots + downloads
+- `_display_fach_heatmaps(df, experiment)` — Class selectbox + conditions multiselect + heatmap + downloads
+- `_display_pathway_viz(df, experiment)` — Control/experimental selectbox + consolidated handling + pathway diagram + data table + downloads
+- `_display_volcano_plot(df, experiment)` — Stats options + control/experimental + classes + thresholds + label management + volcano plot + concentration scatter + distribution boxplot + excluded lipids table + downloads
+- `_display_lipidomic_heatmap(df, experiment)` — Conditions/classes multiselect + type radio + cluster slider + heatmap + cluster composition + downloads
+
+**Shared UI helpers:**
+- `_display_statistical_options(key_prefix, n_classes, n_conditions) → StatisticalTestConfig` — Reusable stats panel (Auto/Manual mode, test type, corrections). Used by bar chart, saturation, volcano.
+- `_display_condition_class_selectors(experiment, df, key_prefix) → Tuple[List[str], List[str]]` — Reusable multiselects for conditions and classes
+- `_display_detailed_statistics(stat_summary, key_prefix)` — Reusable statistics table display
+
+**Step 6: Wire Module 3 into `main_app.py`**
+**File:** `src/main_app.py`
+
+**Changes:**
+- Add `_display_module3()` function — calls `display_analysis_module()` + navigation buttons
+- Add `_reset_analysis_state()` — clears all `analysis_*` session state keys
+- Update `_display_module2()` — add "Next: Visualize & Analyze →" button (only after QC complete)
+- Add module routing for Module 3 string
+- "Back to Quality Check" button in Module 3 resets analysis state
+- "Back to Home" button in Module 3 resets all state
+
+**Module flow:** Module 1 → Module 2 → Module 3
+- Module 2 "Next" button sets `st.session_state.module` to Module 3 string, calls `_reset_analysis_state()`
+- Data handoff: `qc_continuation_df` (or `normalized_df`) → Module 3 input
+
+**Step 7: PDF Report Generation**
+**File:** `src/app/services/report_generator.py`
+
+**Methods:**
+- `generate_pdf_report(plots_dict, metadata) → bytes` — Collects all stored plots, renders to PDF via `reportlab`
+- `_render_cover_page(canvas, metadata)` — Date, format, experiment design
+- `_render_plot_page(canvas, figure, title)` — Single plot per page (converts Plotly → image, Matplotlib → image)
+
+**Dependencies:** `reportlab`, `kaleido` (for Plotly → static image export)
+
+**Tests:** `tests/unit/test_report_generator.py` — ~15 tests (PDF structure, metadata, error handling)
+
+**Step 8: Integration Tests**
+**File:** `tests/integration/test_module3_pipeline.py`
+
+**Helper:** `run_module2_pipeline(normalized_df, experiment, config) → pd.DataFrame` — Runs QC pipeline to produce continuation_df
+
+**Test Classes:**
+- `TestBarChartEndToEnd` — Full pipeline per format, stat results match expectations
+- `TestPieChartEndToEnd` — Per-condition charts, color consistency
+- `TestSaturationEndToEnd` — FA parsing on real data, consolidated detection
+- `TestFACHEndToEnd` — Carbon/DB grid on real data
+- `TestPathwayEndToEnd` — Fold change/saturation on real data
+- `TestVolcanoEndToEnd` — Per-species stats, fold change, label placement
+- `TestHeatmapEndToEnd` — Z-scores, clustering, cluster composition
+- `TestCrossAnalysis` — Data consistency across analysis types (same input → consistent class totals)
+- `TestEdgeCases` — Single class, single condition, all zeros, minimal samples
+- `TestErrorHandling` — Missing columns, invalid conditions
+
+Target: ~60 tests
+
+**Step 9: UI Tests**
+**File:** `tests/ui/test_module3_ui.py`
+
+Following Module 2 UI test pattern (wrapper scripts, pre-populated session state).
+
+**Test Classes:**
+- `TestAnalysisRadioSelection` — Radio renders all 7 options, switching works
+- `TestBarChartUI` — Stats panel, multiselects, scale radio, plot renders
+- `TestPieChartUI` — Class multiselect, per-condition display
+- `TestSaturationUI` — Consolidated warning, stats panel, plot type radio
+- `TestVolcanoUI` — Condition selectors, threshold inputs, label management
+- `TestHeatmapUI` — Type radio, cluster slider, composition display
+- `TestAnalysisNavigation` — Module routing, state reset on navigation
+
+Target: ~25 tests
+
+##### Execution Order
+
+| Order | Step | Scope | Depends On |
+|-------|------|-------|------------|
+| 1 | Step 1: StatisticalTestingService | 1 service file + ~120 tests | Nothing (foundation) |
+| 2 | Step 2.1-2.2: Bar Chart + Pie Chart plotters | 2 plotting files + ~65 tests | Step 1 (bar chart uses stats) |
+| 3 | Step 2.6: Volcano plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
+| 4 | Step 2.3: Saturation plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
+| 5 | Step 2.4-2.5: FACH + Pathway plotters | 2 plotting files + ~65 tests | Nothing (no stats) |
+| 6 | Step 2.7: Lipidomic Heatmap plotter | 1 plotting file + ~35 tests | Nothing (no stats) |
+| 7 | Step 3: AnalysisWorkflow | 1 workflow file + ~100 tests | Steps 1-6 |
+| 8 | Step 4: StreamlitAdapter update | 1 file modification | Step 3 (needs key list) |
+| 9 | Step 5: Module 3 UI | 1 large UI file | Steps 3-4 |
+| 10 | Step 6: main_app.py wiring | 1 file modification | Steps 4-5 |
+| 11 | Step 8: Integration tests | 1 test file, ~60 tests | Steps 1-6 |
+| 12 | Step 9: UI tests | 1 test file, ~25 tests | Steps 5-6 |
+| 13 | Step 7: PDF Report | 1 service + ~15 tests | Steps 5-6 (needs stored plots) |
+
+##### Files to Create
+
+| File | Type | Est. Lines |
+|------|------|-----------|
+| `src/app/services/statistical_testing.py` | Service | ~350 |
+| `src/app/services/plotting/abundance_bar_chart.py` | Plotter | ~250 |
+| `src/app/services/plotting/abundance_pie_chart.py` | Plotter | ~120 |
+| `src/app/services/plotting/saturation_plot.py` | Plotter | ~350 |
+| `src/app/services/plotting/fach.py` | Plotter | ~200 |
+| `src/app/services/plotting/pathway_viz.py` | Plotter | ~250 |
+| `src/app/services/plotting/volcano_plot.py` | Plotter | ~350 |
+| `src/app/services/plotting/lipidomic_heatmap.py` | Plotter | ~200 |
+| `src/app/workflows/analysis.py` | Workflow | ~250 |
+| `src/app/services/report_generator.py` | Service | ~150 |
+| `src/app/ui/main_content/analysis.py` | UI | ~700 |
+| `tests/unit/test_statistical_testing.py` | Tests | ~800 |
+| `tests/unit/test_abundance_bar_chart_plotter.py` | Tests | ~300 |
+| `tests/unit/test_abundance_pie_chart_plotter.py` | Tests | ~200 |
+| `tests/unit/test_saturation_plotter.py` | Tests | ~350 |
+| `tests/unit/test_fach_plotter.py` | Tests | ~250 |
+| `tests/unit/test_pathway_viz_plotter.py` | Tests | ~250 |
+| `tests/unit/test_volcano_plotter.py` | Tests | ~350 |
+| `tests/unit/test_lipidomic_heatmap_plotter.py` | Tests | ~250 |
+| `tests/unit/test_analysis_workflow.py` | Tests | ~600 |
+| `tests/unit/test_report_generator.py` | Tests | ~100 |
+| `tests/integration/test_module3_pipeline.py` | Tests | ~500 |
+| `tests/ui/test_module3_ui.py` | Tests | ~300 |
+
+##### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/app/adapters/streamlit_adapter.py` | Add ~15 analysis session state keys, ~30 widget keys, ~2 dynamic prefixes |
+| `src/app/ui/main_content/__init__.py` | Add `display_analysis_module` export |
+| `src/app/services/plotting/__init__.py` | Add 7 new plotter exports |
+| `src/main_app.py` | Add `_display_module3()`, `_reset_analysis_state()`, update routing |
+
+##### Key Design Decisions
+
+1. **Shared statistical testing service** — The biggest win. Three legacy modules each have ~200 lines of near-identical stats code. One service replaces all three with a clean API and `StatisticalTestConfig` model integration.
+
+2. **Interactive workflow (no single `run()`)** — Like QualityCheckWorkflow, analysis is interactive. Each feature is triggered independently by user selection. The workflow provides individual `run_*` methods.
+
+3. **Plotting services separate from computation** — Following the Module 2 pattern, plot rendering is in `services/plotting/`, business logic stays in the main service/workflow layer.
+
+4. **PDF report as separate service** — Not coupled to any analysis feature. Collects stored figures from session state and renders them. Done last since it depends on all other features.
+
+5. **Single UI file** — All 7 analysis features in one `analysis.py` file (like `quality_check.py` for Module 2). Each feature is a private `_display_*` function. Shared UI helpers for stats panel and condition/class selectors avoid duplication.
+
+6. **`StatisticalTestConfig` model reuse** — The existing Pydantic model in `src/app/models/statistics.py` already covers mode, test_type, correction_method, posthoc_correction, alpha, auto_transform. No model changes needed.
+
+##### Legacy Modules to Replace
+
+| Legacy Module | New Service | New Plotter |
+|---------------|-----------|-------------|
+| `AbundanceBarChart` | `StatisticalTestingService` (stats) | `BarChartPlotterService` (data prep + plot) |
+| `AbundancePieChart` | — | `PieChartPlotterService` |
+| `SaturationPlot` | `StatisticalTestingService` (stats) | `SaturationPlotterService` (FA parsing + plot) |
+| `FACH` | — | `FACHPlotterService` |
+| `PathwayViz` | — | `PathwayVizPlotterService` |
+| `VolcanoPlot` | `StatisticalTestingService` (stats) | `VolcanoPlotterService` (data prep + plot) |
+| `LipidomicHeatmap` | — | `LipidomicHeatmapPlotterService` |
 
 ---
 
