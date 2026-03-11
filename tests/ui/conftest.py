@@ -454,6 +454,417 @@ def module2_nav_app():
     return at.run()
 
 
+# =============================================================================
+# Module 1: Main Content — Wrapper Functions
+# =============================================================================
+
+def zero_filtering_script():
+    """Zero filtering UI with test data from session state.
+
+    Expects session state keys:
+        _test_cleaned_df: DataFrame with intensity[s] columns
+        _test_experiment: ExperimentConfig
+        _test_bqc_label: Optional BQC label string
+        _test_data_format: Format string (default 'Generic Format')
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.zero_filtering import display_zero_filtering_config
+
+    df = st.session_state['_test_cleaned_df']
+    experiment = st.session_state['_test_experiment']
+    bqc_label = st.session_state.get('_test_bqc_label')
+    data_format = st.session_state.get('_test_data_format', 'Generic Format')
+
+    result = display_zero_filtering_config(df, experiment, bqc_label, data_format)
+    if result and result[0] is not None:
+        st.text(f"filtered_rows:{result[0].shape[0]}")
+        st.text(f"removed:{len(result[1])}")
+    else:
+        st.text("no_result")
+
+
+def internal_standards_script():
+    """Internal standards management UI with test data from session state.
+
+    Expects session state keys:
+        _test_cleaned_df: DataFrame with intensity[s] columns
+        _test_auto_detected_df: Optional auto-detected standards DataFrame
+        _test_experiment: Optional ExperimentConfig (for consistency plots)
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.main_content.internal_standards import display_manage_internal_standards
+
+    cleaned_df = st.session_state['_test_cleaned_df']
+    auto_detected_df = st.session_state.get('_test_auto_detected_df')
+
+    # Set experiment in session state for consistency plots
+    if '_test_experiment' in st.session_state:
+        st.session_state.experiment = st.session_state['_test_experiment']
+
+    result = display_manage_internal_standards(cleaned_df, auto_detected_df)
+    if result is not None and not result.empty:
+        st.text(f"standards_count:{len(result)}")
+    else:
+        st.text("no_standards")
+
+
+def normalization_script():
+    """Normalization UI with test data from session state.
+
+    Expects session state keys:
+        _test_cleaned_df: DataFrame with intensity[s] columns and ClassKey
+        _test_intsta_df: Optional internal standards DataFrame
+        _test_experiment: ExperimentConfig
+        _test_data_format: Format string (default 'Generic Format')
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.main_content.normalization import display_normalization_ui
+
+    cleaned_df = st.session_state['_test_cleaned_df']
+    intsta_df = st.session_state.get('_test_intsta_df')
+    experiment = st.session_state['_test_experiment']
+    data_format = st.session_state.get('_test_data_format', 'Generic Format')
+
+    result = display_normalization_ui(cleaned_df, intsta_df, experiment, data_format)
+    if result is not None:
+        st.text(f"normalized_rows:{result.shape[0]}")
+    else:
+        st.text("not_normalized")
+
+
+def grade_filtering_script():
+    """Grade filtering UI with test data from session state.
+
+    Expects session state keys:
+        _test_df: DataFrame with ClassKey and TotalGrade columns
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.main_content.data_processing import display_grade_filtering_config
+
+    df = st.session_state['_test_df']
+    config = display_grade_filtering_config(df)
+    if config is not None:
+        st.text(f"custom_config:{len(config)}")
+    else:
+        st.text("default_config")
+
+
+def quality_filtering_script():
+    """Quality filtering UI with MS-DIAL features in session state.
+
+    Expects session state keys:
+        msdial_features: dict with 'has_quality_score' and 'has_msms_matched'
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.main_content.data_processing import display_quality_filtering_config
+
+    config = display_quality_filtering_config()
+    if config is not None:
+        st.text(f"threshold:{config['total_score_threshold']}")
+        st.text(f"msms:{config['require_msms']}")
+    else:
+        st.text("no_quality_config")
+
+
+def column_mapping_script():
+    """Column mapping display with test data from session state.
+
+    Expects session state keys:
+        _test_df: Standardized DataFrame
+        _test_data_format: Format string
+        column_mapping: DataFrame with Original/Standardized columns
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.ui.sidebar.column_mapping import display_column_mapping
+
+    df = st.session_state['_test_df']
+    data_format = st.session_state.get('_test_data_format', 'Generic Format')
+
+    success, modified_df = display_column_mapping(df, data_format)
+    st.text(f"mapping_success:{success}")
+    if modified_df is not None:
+        st.text(f"modified_cols:{modified_df.shape[1]}")
+
+
+# =============================================================================
+# Module 1: Main Content — Data Builders
+# =============================================================================
+
+def make_cleaned_dataframe(n_lipids=20, n_samples=6, classes=None):
+    """Build a cleaned DataFrame with intensity columns for Module 1 tests.
+
+    Args:
+        n_lipids: Number of lipid rows.
+        n_samples: Number of sample columns (intensity[s1]..intensity[sN]).
+        classes: Optional list of class names (length n_lipids). Default: half PC, half PE.
+
+    Returns:
+        DataFrame with LipidMolec, ClassKey, and intensity columns.
+    """
+    import numpy as np
+    import pandas as pd
+
+    np.random.seed(42)
+    if classes is None:
+        half = n_lipids // 2
+        classes = ['PC'] * half + ['PE'] * (n_lipids - half)
+    lipids = [f'{cls}({i}:0)' for i, cls in enumerate(classes)]
+
+    data = {
+        'LipidMolec': lipids,
+        'ClassKey': classes,
+    }
+    for i in range(1, n_samples + 1):
+        data[f'intensity[s{i}]'] = np.random.uniform(500, 5000, n_lipids).tolist()
+
+    return pd.DataFrame(data)
+
+
+def make_intsta_dataframe(standards=None):
+    """Build an internal standards DataFrame.
+
+    Args:
+        standards: Optional list of (lipid_name, class_name) tuples.
+            Default: [('PC(15:0_18:1)+D7:(s)', 'PC'), ('PE(15:0_18:1)+D7:(s)', 'PE')]
+
+    Returns:
+        DataFrame with LipidMolec, ClassKey, and intensity columns.
+    """
+    import numpy as np
+    import pandas as pd
+
+    np.random.seed(99)
+    if standards is None:
+        standards = [
+            ('PC(15:0_18:1)+D7:(s)', 'PC'),
+            ('PE(15:0_18:1)+D7:(s)', 'PE'),
+        ]
+
+    data = {
+        'LipidMolec': [s[0] for s in standards],
+        'ClassKey': [s[1] for s in standards],
+    }
+    for i in range(1, 7):
+        data[f'intensity[s{i}]'] = np.random.uniform(100, 1000, len(standards)).tolist()
+
+    return pd.DataFrame(data)
+
+
+def make_grade_dataframe(n_lipids=15, classes=None):
+    """Build a DataFrame with ClassKey and TotalGrade columns for grade filtering tests.
+
+    Returns:
+        DataFrame with LipidMolec, ClassKey, TotalGrade, and intensity columns.
+    """
+    import numpy as np
+    import pandas as pd
+
+    np.random.seed(42)
+    if classes is None:
+        classes = ['PC'] * 5 + ['PE'] * 5 + ['LPC'] * 3 + ['SM'] * 2
+        n_lipids = len(classes)
+    grades = ['A', 'B', 'C', 'D', 'A'] * (n_lipids // 5 + 1)
+    grades = grades[:n_lipids]
+    lipids = [f'{cls}({i}:0)' for i, cls in enumerate(classes)]
+
+    data = {
+        'LipidMolec': lipids,
+        'ClassKey': classes,
+        'TotalGrade': grades,
+    }
+    for i in range(1, 7):
+        data[f'intensity[s{i}]'] = np.random.uniform(500, 5000, n_lipids).tolist()
+
+    return pd.DataFrame(data)
+
+
+# =============================================================================
+# Module 1: Main Content — Fixtures
+# =============================================================================
+
+@pytest.fixture
+def zero_filter_generic_app():
+    """Zero filtering: Generic format, 2x3=6 samples, no BQC."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(zero_filtering_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_data_format'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def zero_filter_bqc_app():
+    """Zero filtering: Generic format, with BQC, Control(3)+Treatment(3)+BQC(2)=8."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(zero_filtering_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=8)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=3,
+        conditions_list=['Control', 'Treatment', 'BQC'],
+        number_of_samples_list=[3, 3, 2],
+    )
+    at.session_state['_test_bqc_label'] = 'BQC'
+    at.session_state['_test_data_format'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def zero_filter_lipidsearch_app():
+    """Zero filtering: LipidSearch format, 2x3=6 samples, no BQC."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(zero_filtering_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_data_format'] = 'LipidSearch 5.0'
+    return at.run()
+
+
+@pytest.fixture
+def intsta_with_standards_app():
+    """Internal standards management: auto-detected standards present."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(internal_standards_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_auto_detected_df'] = make_intsta_dataframe()
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    return at.run()
+
+
+@pytest.fixture
+def intsta_no_standards_app():
+    """Internal standards management: no auto-detected standards."""
+    at = AppTest.from_function(internal_standards_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_auto_detected_df'] = None
+    return at.run()
+
+
+@pytest.fixture
+def norm_with_standards_app():
+    """Normalization: with internal standards, Generic format, 2x3=6 samples."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(normalization_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_intsta_df'] = make_intsta_dataframe()
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_data_format'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def norm_no_standards_app():
+    """Normalization: no internal standards, Generic format, 2x3=6 samples."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(normalization_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_intsta_df'] = None
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_data_format'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def grade_filtering_app():
+    """Grade filtering: LipidSearch data with ClassKey and TotalGrade."""
+    at = AppTest.from_function(grade_filtering_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_grade_dataframe()
+    return at.run()
+
+
+@pytest.fixture
+def quality_filtering_app():
+    """Quality filtering: MS-DIAL with quality score available."""
+    at = AppTest.from_function(quality_filtering_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['msdial_features'] = {
+        'has_quality_score': True,
+        'has_msms_matched': True,
+        'raw_sample_columns': ['s1', 's2', 's3'],
+        'normalized_sample_columns': [],
+    }
+    return at.run()
+
+
+@pytest.fixture
+def column_mapping_generic_app():
+    """Column mapping: Generic format with mapping DataFrame."""
+    import pandas as pd
+
+    at = AppTest.from_function(column_mapping_script, default_timeout=DEFAULT_TIMEOUT)
+    cleaned_df = make_cleaned_dataframe(n_lipids=10, n_samples=4)
+    at.session_state['_test_df'] = cleaned_df
+    at.session_state['_test_data_format'] = 'Generic Format'
+    at.session_state['column_mapping'] = pd.DataFrame({
+        'Original': ['LipidMolec', 'col1', 'col2', 'col3', 'col4'],
+        'Standardized': ['LipidMolec', 'intensity[s1]', 'intensity[s2]', 'intensity[s3]', 'intensity[s4]'],
+    })
+    return at.run()
+
+
+@pytest.fixture
+def column_mapping_msdial_app():
+    """Column mapping: MS-DIAL format with override available."""
+    import pandas as pd
+
+    at = AppTest.from_function(column_mapping_script, default_timeout=DEFAULT_TIMEOUT)
+    cleaned_df = make_cleaned_dataframe(n_lipids=10, n_samples=4)
+    at.session_state['_test_df'] = cleaned_df
+    at.session_state['_test_data_format'] = 'MS-DIAL'
+    at.session_state['column_mapping'] = pd.DataFrame({
+        'Original': ['Metabolite name', 's1', 's2', 's3', 's4'],
+        'Standardized': ['LipidMolec', 'intensity[s1]', 'intensity[s2]', 'intensity[s3]', 'intensity[s4]'],
+    })
+    at.session_state['msdial_features'] = {
+        'has_normalized_data': False,
+        'raw_sample_columns': ['s1', 's2', 's3', 's4'],
+        'normalized_sample_columns': [],
+        'has_quality_score': True,
+        'has_msms_matched': False,
+        'actual_columns': ['Metabolite name', 'Total score', 's1', 's2', 's3', 's4'],
+    }
+    return at.run()
+
+
 @pytest.fixture
 def qc_generic_app():
     """QC module: Generic format, no BQC, 2x3=6 samples, 20 lipids."""

@@ -1252,17 +1252,28 @@ New test classes per file: `TestErrorHandling`, `TestTypeCoercion`, `TestNaNHand
 | TestBackToHomeFromModule2 | 2 | Sets page to landing, clears data state |
 | TestStatePreservation | 2 | normalized_df survives round-trip, Module 2 error gate |
 
-##### Issue 7: Module 1 Main Content UI Untested (MEDIUM)
+##### Issue 7: Module 1 Main Content UI Untested (MEDIUM) ✅
 
-**Problem:** The most complex Module 1 UI components have zero UI tests:
+**Problem:** The most complex Module 1 UI components had zero UI tests:
 - Normalization UI (469 lines) — class selection, method radio, IS mapping, protein input
 - Zero filtering UI (139 lines) — sliders, detection threshold, live preview
 - Internal standards UI (279 lines) — auto-detect, custom upload, clear button
 - Grade/quality filtering (data_processing.py) — grade radio, per-class multiselects
 
-**UI test coverage is ~25%** of UI code paths (only sidebar + landing + MS-DIAL data type tested).
+**Fix:** Added 29 tests in `tests/ui/test_module1_main_content.py`:
 
-**Fix:** Add ~25 tests across normalization (8), zero filtering (5), internal standards (5), grade/quality filtering (4), column mapping (3).
+| Class | Tests | Coverage |
+|-------|-------|----------|
+| TestZeroFiltering | 5 | Slider defaults, BQC presence/absence, detection threshold per format |
+| TestInternalStandards | 5 | Source radio, auto-detect display, no-standards warning, custom upload switch |
+| TestNormalization | 8 | Class multiselect, method radio (with/without standards), protein config, normalization execution |
+| TestGradeFiltering | 4 | Default/custom modes, per-class multiselects, default grade values (A/B vs A/B/C) |
+| TestQualityFiltering | 4 | Preset options, default moderate, MS/MS checkbox |
+| TestColumnMapping | 3 | Generic mapping display, MS-DIAL override multiselect, no override for Generic |
+
+**Wrapper scripts added to `tests/ui/conftest.py`:** `zero_filtering_script`, `internal_standards_script`, `normalization_script`, `grade_filtering_script`, `quality_filtering_script`, `column_mapping_script`.
+
+**Data builders added:** `make_cleaned_dataframe()`, `make_intsta_dataframe()`, `make_grade_dataframe()`.
 
 ##### Execution Plan
 
@@ -1273,9 +1284,9 @@ New test classes per file: `TestErrorHandling`, `TestTypeCoercion`, `TestNaNHand
 | 3 | Issue 4: Plotter test gaps | 76 new tests across 5 files | HIGH | ✅ `d1c22cb` |
 | 4 | Issue 5: Module 2 UI tests | 23 new tests | HIGH | ✅ |
 | 5 | Issue 6: Navigation tests | 9 new tests | HIGH | ✅ `4228be8` |
-| 6 | Issue 7: Module 1 main content tests | ~25 new tests (can defer some) | MEDIUM | ⬜ |
+| 6 | Issue 7: Module 1 main content tests | 29 new tests | MEDIUM | ✅ |
 
-**Minimum viable before Module 3:** Issues 1-5-6 all complete. ✅ Ready for Module 3 (Issue 7 deferred — medium priority).
+**All 6 issues complete.** ✅ Ready for Module 3. Total test count: 2386.
 
 #### Senior Code Review (March 10, 2026) — Pre-Module 3 Fixes
 
