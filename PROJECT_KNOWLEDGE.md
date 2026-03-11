@@ -1354,27 +1354,23 @@ Extracted 14 helpers across 5 files, all methods now under 50 lines:
 - `box_plot.py`: `plot_box_plot` (89→20) → `_add_box_traces`, `_apply_box_plot_layout`
 - `bqc_plotter.py`: `create_cov_scatter_plot` (96→13) → `_prepare_cov_data`, `_add_cov_scatter_traces`, `_apply_cov_layout`
 
-##### Issue 4: Inconsistent session state access in UI (CODE QUALITY)
+##### Issue 4: Inconsistent session state access in UI (CODE QUALITY) ✅ (`b2aecd7`)
 **Problem:** UI files mix three patterns: (a) direct `st.session_state['key']`, (b) `StreamlitAdapter.save/restore_widget_value()`, (c) `st.session_state.get('key')`.
-**Fix:** Add docstring in `streamlit_adapter.py` defining valid patterns and when to use each. Prevents Module 3 from amplifying inconsistency.
+**Fix:** Added docstring in `streamlit_adapter.py` defining 3 valid patterns and when to use each.
 
-##### Issue 5: Missing type hints on UI functions (CODE QUALITY)
-**Problem:** ~30 UI functions lack return type annotations.
-**Files:** `normalization.py`, `internal_standards.py`, `experiment_config.py`, `sample_grouping.py`, `confirm_inputs.py`, `standards_plots.py`, `zero_filtering.py`
-**Fix:** Add return type annotations to all public UI functions.
+##### Issue 5: Missing type hints on UI functions (CODE QUALITY) ✅ (`b2aecd7`)
+**Problem:** UI functions missing return type annotations.
+**Fix:** Added return types to `display_normalization_ui()` → `Optional[pd.DataFrame]`, `_display_normalization_results()` → `None`, `display_sample_grouping()` → `Tuple[Optional[ExperimentConfig], Optional[str]]`. (Only 3 functions were actually missing annotations — the rest already had them.)
 
-##### Issue 6: Complex tuple return in `_detect_msdial_structure()` (CODE SMELL)
-**File:** `src/app/services/data_standardization.py:505`
-**Problem:** Returns 6-element tuple with bare `Dict` type. Hard to understand, error-prone.
-**Fix:** Create `MSDIALStructure` dataclass to replace the tuple.
+##### Issue 6: Complex tuple return in `_detect_msdial_structure()` (CODE SMELL) ✅ (`b2aecd7`)
+**File:** `src/app/services/data_standardization.py`
+**Fix:** Created `MSDIALStructure` dataclass with 6 named fields. Updated `_detect_msdial_structure()` return type and `_process_msdial()` caller to use `structure.field` instead of tuple unpacking.
 
-##### Issue 7: Test fixture duplication (TEST QUALITY)
-**Problem:** Multiple test files redefine fixtures from `conftest.py` (e.g., local `simple_experiment`, local `three_condition_experiment`).
-**Fix:** Replace local fixtures with shared conftest fixtures.
+##### Issue 7: Test fixture duplication (TEST QUALITY) ✅ (`b2aecd7`)
+**Fix:** Removed 8 local `simple_experiment` fixtures across test files. Replaced with shared `simple_experiment_2x2` or `simple_experiment_2x3` from `tests/conftest.py`. Skipped `test_bqc_plotter_service.py` (custom mock object, not a real ExperimentConfig).
 
-##### Issue 8: `pytest.raises` without `match=` (TEST QUALITY)
-**Problem:** ~40 uses of `pytest.raises(ValueError)` without checking error messages in model tests.
-**Fix:** Add `match="..."` to critical validation tests.
+##### Issue 8: `pytest.raises` without `match=` (TEST QUALITY) ✅ (`b2aecd7`)
+**Fix:** Added `match=` to 19 `pytest.raises` calls across 3 model test files (`test_experiment_config.py`, `test_normalization_config.py`, `test_statistics_config.py`). Used partial regex patterns (e.g., `"greater than 0"`, `"must match n_conditions"`) to avoid brittleness.
 
 ##### Execution Order
 
@@ -1383,11 +1379,13 @@ Extracted 14 helpers across 5 files, all methods now under 50 lines:
 | 1 | Issue 1: LipidSearch NaN bug | 1 file, 2 new tests | ✅ `f37670d` |
 | 2 | Issue 2: Button key collision | 1 file, 5 keys | ✅ `8bdde51` |
 | 3 | Issue 3: Long methods | 5 files, 14 helpers extracted | ✅ `c4fad23` |
-| 4 | Issue 6: Tuple → dataclass | 1 file, ~30 lines + update callers | |
-| 5 | Issue 5: Type hints | 7 UI files | |
-| 6 | Issue 4: Session state pattern docs | 1 file, docstring | |
-| 7 | Issue 7: Fixture dedup | ~5 test files | |
-| 8 | Issue 8: pytest.raises match | 3 test files | |
+| 4 | Issue 6: Tuple → dataclass | 1 file, MSDIALStructure dataclass | ✅ `b2aecd7` |
+| 5 | Issue 5: Type hints | 3 UI functions | ✅ `b2aecd7` |
+| 6 | Issue 4: Session state pattern docs | 1 file, docstring | ✅ `b2aecd7` |
+| 7 | Issue 7: Fixture dedup | 8 test files | ✅ `b2aecd7` |
+| 8 | Issue 8: pytest.raises match | 3 test files, 19 additions | ✅ `b2aecd7` |
+
+**All 8 issues complete.** ✅ Ready for Module 3. Total test count: 2388.
 
 ##### Out of Scope (deferred to Phase 5: Polish)
 - Session state architecture overhaul (too risky pre-Module 3)
