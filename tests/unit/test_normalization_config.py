@@ -63,7 +63,7 @@ class TestNormalizationConfigValidation:
 
     def test_invalid_method(self):
         """Test that invalid method raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="none.*internal_standard.*protein.*both"):
             NormalizationConfig(method='invalid')
 
     def test_internal_standard_missing_standards(self):
@@ -761,7 +761,7 @@ class TestNormalizationConfigTypeHandling:
 
     def test_string_method_literal_required(self):
         """Test that method must be a valid string literal."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="none.*internal_standard.*protein.*both"):
             NormalizationConfig(method='NONE')  # wrong case
 
     def test_integer_method_raises_error(self):

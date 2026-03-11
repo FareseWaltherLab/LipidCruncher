@@ -26,12 +26,6 @@ from tests.conftest import make_experiment
 # =============================================================================
 
 @pytest.fixture
-def simple_experiment():
-    """Simple 2x2 experiment."""
-    return make_experiment(2, 2)
-
-
-@pytest.fixture
 def single_condition_experiment():
     """Single condition experiment."""
     return make_experiment(
@@ -66,7 +60,7 @@ def large_experiment():
 # =============================================================================
 
 @pytest.fixture
-def basic_df(simple_experiment):
+def basic_df(simple_experiment_2x2):
     """Basic DataFrame with intensity columns."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)', 'SM(d18:1_16:0)'],
@@ -79,7 +73,7 @@ def basic_df(simple_experiment):
 
 
 @pytest.fixture
-def lipidsearch_df(simple_experiment):
+def lipidsearch_df(simple_experiment_2x2):
     """LipidSearch format DataFrame with essential columns."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)', 'SM(d18:1_16:0)'],
@@ -390,20 +384,20 @@ def both_config(protein_concentrations):
 # =============================================================================
 
 @pytest.fixture
-def basic_workflow_config(simple_experiment, none_config):
+def basic_workflow_config(simple_experiment_2x2, none_config):
     """Basic workflow config with no normalization."""
     return NormalizationWorkflowConfig(
-        experiment=simple_experiment,
+        experiment=simple_experiment_2x2,
         normalization=none_config,
         data_format=DataFormat.GENERIC
     )
 
 
 @pytest.fixture
-def lipidsearch_workflow_config(simple_experiment, none_config):
+def lipidsearch_workflow_config(simple_experiment_2x2, none_config):
     """LipidSearch workflow config."""
     return NormalizationWorkflowConfig(
-        experiment=simple_experiment,
+        experiment=simple_experiment_2x2,
         normalization=none_config,
         data_format=DataFormat.LIPIDSEARCH
     )
@@ -455,31 +449,31 @@ class TestNormalizationWorkflowResult:
 class TestNormalizationWorkflowConfig:
     """Tests for NormalizationWorkflowConfig dataclass."""
 
-    def test_basic_creation(self, simple_experiment, none_config):
+    def test_basic_creation(self, simple_experiment_2x2, none_config):
         """Test basic config creation."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
-        assert config.experiment == simple_experiment
+        assert config.experiment == simple_experiment_2x2
         assert config.normalization == none_config
         assert config.data_format == DataFormat.GENERIC
         assert config.essential_columns is None
 
-    def test_with_data_format(self, simple_experiment, none_config):
+    def test_with_data_format(self, simple_experiment_2x2, none_config):
         """Test config with specific data format."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config,
             data_format=DataFormat.LIPIDSEARCH
         )
         assert config.data_format == DataFormat.LIPIDSEARCH
 
-    def test_with_essential_columns(self, simple_experiment, none_config):
+    def test_with_essential_columns(self, simple_experiment_2x2, none_config):
         """Test config with essential columns."""
         essential = {'CalcMass': pd.Series([760.5, 768.5])}
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config,
             essential_columns=essential
         )
@@ -490,98 +484,98 @@ class TestNormalizationWorkflowConfig:
 class TestValidateConfig:
     """Tests for validate_config method."""
 
-    def test_valid_basic_config(self, basic_df, simple_experiment, none_config):
+    def test_valid_basic_config(self, basic_df, simple_experiment_2x2, none_config):
         """Test validation of valid basic config."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         errors = NormalizationWorkflow.validate_config(basic_df, config)
         assert errors == []
 
-    def test_empty_dataframe(self, empty_df, simple_experiment, none_config):
+    def test_empty_dataframe(self, empty_df, simple_experiment_2x2, none_config):
         """Test validation with empty DataFrame."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         errors = NormalizationWorkflow.validate_config(empty_df, config)
         assert len(errors) > 0
         assert any('empty' in e.lower() for e in errors)
 
-    def test_none_dataframe(self, simple_experiment, none_config):
+    def test_none_dataframe(self, simple_experiment_2x2, none_config):
         """Test validation with None DataFrame."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         errors = NormalizationWorkflow.validate_config(None, config)
         assert len(errors) > 0
         assert any('empty' in e.lower() for e in errors)
 
-    def test_missing_lipidmolec(self, df_missing_lipidmolec, simple_experiment, none_config):
+    def test_missing_lipidmolec(self, df_missing_lipidmolec, simple_experiment_2x2, none_config):
         """Test validation with missing LipidMolec column."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         errors = NormalizationWorkflow.validate_config(df_missing_lipidmolec, config)
         assert any('LipidMolec' in e for e in errors)
 
-    def test_missing_classkey(self, df_missing_classkey, simple_experiment, none_config):
+    def test_missing_classkey(self, df_missing_classkey, simple_experiment_2x2, none_config):
         """Test validation with missing ClassKey column."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         errors = NormalizationWorkflow.validate_config(df_missing_classkey, config)
         assert any('ClassKey' in e for e in errors)
 
-    def test_no_intensity_columns(self, df_no_intensity_columns, simple_experiment, none_config):
+    def test_no_intensity_columns(self, df_no_intensity_columns, simple_experiment_2x2, none_config):
         """Test validation with no intensity columns."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         errors = NormalizationWorkflow.validate_config(df_no_intensity_columns, config)
         assert any('intensity' in e.lower() for e in errors)
 
-    def test_invalid_selected_classes(self, basic_df, simple_experiment):
+    def test_invalid_selected_classes(self, basic_df, simple_experiment_2x2):
         """Test validation with invalid selected classes."""
         norm_config = NormalizationConfig(
             method='none',
             selected_classes=['PC', 'INVALID_CLASS']
         )
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=norm_config
         )
         errors = NormalizationWorkflow.validate_config(basic_df, config)
         assert any('INVALID_CLASS' in e for e in errors)
 
     def test_internal_standard_without_intsta_df(
-        self, basic_df, simple_experiment, internal_standard_config
+        self, basic_df, simple_experiment_2x2, internal_standard_config
     ):
         """Test validation for IS normalization without standards DataFrame."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=internal_standard_config
         )
         errors = NormalizationWorkflow.validate_config(basic_df, config, intsta_df=None)
         assert any('standards' in e.lower() for e in errors)
 
-    def test_protein_without_concentrations(self, basic_df, simple_experiment):
+    def test_protein_without_concentrations(self, basic_df, simple_experiment_2x2):
         """Test validation for protein normalization without concentrations."""
         # This should raise during NormalizationConfig creation
         with pytest.raises(ValueError):
             NormalizationConfig(method='protein')
 
     def test_valid_internal_standard_config(
-        self, basic_df, simple_experiment, internal_standard_config, basic_intsta_df
+        self, basic_df, simple_experiment_2x2, internal_standard_config, basic_intsta_df
     ):
         """Test validation with valid IS config."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=internal_standard_config
         )
         errors = NormalizationWorkflow.validate_config(basic_df, config, basic_intsta_df)
@@ -897,10 +891,10 @@ class TestStoreAndRestoreEssentialColumns:
 class TestPreviewNormalization:
     """Tests for preview_normalization method."""
 
-    def test_preview_none_method(self, basic_df, simple_experiment, none_config):
+    def test_preview_none_method(self, basic_df, simple_experiment_2x2, none_config):
         """Test preview for none method."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         preview = NormalizationWorkflow.preview_normalization(basic_df, config)
@@ -910,14 +904,14 @@ class TestPreviewNormalization:
         assert set(preview['classes_to_process']) == {'PC', 'PE', 'TG', 'SM'}
         assert preview['samples_to_normalize'] == 4
 
-    def test_preview_with_class_filter(self, basic_df, simple_experiment):
+    def test_preview_with_class_filter(self, basic_df, simple_experiment_2x2):
         """Test preview with class filter."""
         norm_config = NormalizationConfig(
             method='none',
             selected_classes=['PC', 'PE']
         )
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=norm_config
         )
         preview = NormalizationWorkflow.preview_normalization(basic_df, config)
@@ -925,11 +919,11 @@ class TestPreviewNormalization:
         assert preview['classes_to_process'] == ['PC', 'PE']
 
     def test_preview_with_standards_removal(
-        self, basic_df, simple_experiment, internal_standard_config, basic_intsta_df
+        self, basic_df, simple_experiment_2x2, internal_standard_config, basic_intsta_df
     ):
         """Test preview shows standards to be removed."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=internal_standard_config
         )
         preview = NormalizationWorkflow.preview_normalization(
@@ -938,10 +932,10 @@ class TestPreviewNormalization:
 
         assert len(preview['standards_to_remove']) > 0
 
-    def test_preview_with_validation_errors(self, empty_df, simple_experiment, none_config):
+    def test_preview_with_validation_errors(self, empty_df, simple_experiment_2x2, none_config):
         """Test preview with validation errors."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         preview = NormalizationWorkflow.preview_normalization(empty_df, config)
@@ -953,10 +947,10 @@ class TestPreviewNormalization:
 class TestRunWorkflowNoneMethod:
     """Tests for run method with 'none' normalization."""
 
-    def test_run_none_basic(self, basic_df, simple_experiment, none_config):
+    def test_run_none_basic(self, basic_df, simple_experiment_2x2, none_config):
         """Test basic run with no normalization."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
@@ -966,10 +960,10 @@ class TestRunWorkflowNoneMethod:
         assert result.method_applied == "None (raw data with concentration column naming)"
         assert len(result.normalized_df) == 4
 
-    def test_run_none_renames_columns(self, basic_df, simple_experiment, none_config):
+    def test_run_none_renames_columns(self, basic_df, simple_experiment_2x2, none_config):
         """Test that intensity columns are renamed to concentration."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
@@ -980,10 +974,10 @@ class TestRunWorkflowNoneMethod:
         assert len(concentration_cols) == 4
         assert len(intensity_cols) == 0
 
-    def test_run_none_with_class_filter(self, basic_df, simple_experiment, none_config_filtered):
+    def test_run_none_with_class_filter(self, basic_df, simple_experiment_2x2, none_config_filtered):
         """Test run with class filter."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config_filtered
         )
         result = NormalizationWorkflow.run(basic_df, config)
@@ -993,10 +987,10 @@ class TestRunWorkflowNoneMethod:
         assert set(result.normalized_df['ClassKey'].unique()) == {'PC', 'PE'}
         assert len(result.normalized_df) == 2
 
-    def test_run_none_preserves_lipidsearch_columns(self, lipidsearch_df, simple_experiment, none_config):
+    def test_run_none_preserves_lipidsearch_columns(self, lipidsearch_df, simple_experiment_2x2, none_config):
         """Test that LipidSearch essential columns are preserved."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config,
             data_format=DataFormat.LIPIDSEARCH
         )
@@ -1005,10 +999,10 @@ class TestRunWorkflowNoneMethod:
         assert 'CalcMass' in result.normalized_df.columns
         assert 'BaseRt' in result.normalized_df.columns
 
-    def test_run_none_single_row(self, single_row_df, simple_experiment, none_config):
+    def test_run_none_single_row(self, single_row_df, simple_experiment_2x2, none_config):
         """Test run with single row DataFrame."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(single_row_df, config)
@@ -1020,10 +1014,10 @@ class TestRunWorkflowNoneMethod:
 class TestRunWorkflowProteinMethod:
     """Tests for run method with 'protein' normalization."""
 
-    def test_run_protein_basic(self, basic_df, simple_experiment, protein_config):
+    def test_run_protein_basic(self, basic_df, simple_experiment_2x2, protein_config):
         """Test basic protein normalization."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=protein_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
@@ -1032,7 +1026,7 @@ class TestRunWorkflowProteinMethod:
         assert result.normalized_df is not None
         assert 'Protein' in result.method_applied
 
-    def test_run_protein_divides_by_concentration(self, basic_df, simple_experiment):
+    def test_run_protein_divides_by_concentration(self, basic_df, simple_experiment_2x2):
         """Test that protein normalization divides by concentration."""
         protein_conc = {'s1': 10.0, 's2': 10.0, 's3': 10.0, 's4': 10.0}
         norm_config = NormalizationConfig(
@@ -1040,7 +1034,7 @@ class TestRunWorkflowProteinMethod:
             protein_concentrations=protein_conc
         )
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=norm_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
@@ -1048,10 +1042,10 @@ class TestRunWorkflowProteinMethod:
         # Original intensity was 1e6, divided by 10 = 1e5
         assert result.normalized_df['concentration[s1]'].iloc[0] == pytest.approx(1e5, rel=0.01)
 
-    def test_run_protein_with_class_filter(self, basic_df, simple_experiment, protein_config_filtered):
+    def test_run_protein_with_class_filter(self, basic_df, simple_experiment_2x2, protein_config_filtered):
         """Test protein normalization with class filter."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=protein_config_filtered
         )
         result = NormalizationWorkflow.run(basic_df, config)
@@ -1063,10 +1057,10 @@ class TestRunWorkflowProteinMethod:
 class TestRunWorkflowInternalStandardMethod:
     """Tests for run method with 'internal_standard' normalization."""
 
-    def test_run_is_basic(self, basic_df, simple_experiment, internal_standard_config, basic_intsta_df):
+    def test_run_is_basic(self, basic_df, simple_experiment_2x2, internal_standard_config, basic_intsta_df):
         """Test basic internal standard normalization."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=internal_standard_config
         )
         result = NormalizationWorkflow.run(basic_df, config, basic_intsta_df)
@@ -1075,20 +1069,20 @@ class TestRunWorkflowInternalStandardMethod:
         assert result.normalized_df is not None
         assert 'Internal standards' in result.method_applied
 
-    def test_run_is_removes_standards(self, basic_df, simple_experiment, internal_standard_config, basic_intsta_df):
+    def test_run_is_removes_standards(self, basic_df, simple_experiment_2x2, internal_standard_config, basic_intsta_df):
         """Test that standards are removed from result."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=internal_standard_config
         )
         result = NormalizationWorkflow.run(basic_df, config, basic_intsta_df)
 
         assert len(result.removed_standards) > 0
 
-    def test_run_is_without_intsta_df_fails(self, basic_df, simple_experiment, internal_standard_config):
+    def test_run_is_without_intsta_df_fails(self, basic_df, simple_experiment_2x2, internal_standard_config):
         """Test that IS normalization fails without standards DataFrame."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=internal_standard_config
         )
         result = NormalizationWorkflow.run(basic_df, config, intsta_df=None)
@@ -1097,11 +1091,11 @@ class TestRunWorkflowInternalStandardMethod:
         assert len(result.validation_errors) > 0
 
     def test_run_is_with_class_filter(
-        self, basic_df, simple_experiment, internal_standard_config_filtered, basic_intsta_df
+        self, basic_df, simple_experiment_2x2, internal_standard_config_filtered, basic_intsta_df
     ):
         """Test IS normalization with class filter."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=internal_standard_config_filtered
         )
         result = NormalizationWorkflow.run(basic_df, config, basic_intsta_df)
@@ -1113,10 +1107,10 @@ class TestRunWorkflowInternalStandardMethod:
 class TestRunWorkflowBothMethod:
     """Tests for run method with 'both' normalization."""
 
-    def test_run_both_basic(self, basic_df, simple_experiment, both_config, basic_intsta_df):
+    def test_run_both_basic(self, basic_df, simple_experiment_2x2, both_config, basic_intsta_df):
         """Test combined normalization."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=both_config
         )
         result = NormalizationWorkflow.run(basic_df, config, basic_intsta_df)
@@ -1125,10 +1119,10 @@ class TestRunWorkflowBothMethod:
         assert result.normalized_df is not None
         assert 'Combined' in result.method_applied
 
-    def test_run_both_removes_standards(self, basic_df, simple_experiment, both_config, basic_intsta_df):
+    def test_run_both_removes_standards(self, basic_df, simple_experiment_2x2, both_config, basic_intsta_df):
         """Test that combined normalization removes standards."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=both_config
         )
         result = NormalizationWorkflow.run(basic_df, config, basic_intsta_df)
@@ -1139,10 +1133,10 @@ class TestRunWorkflowBothMethod:
 class TestRunWorkflowEdgeCases:
     """Tests for run method edge cases."""
 
-    def test_run_empty_dataframe(self, empty_df, simple_experiment, none_config):
+    def test_run_empty_dataframe(self, empty_df, simple_experiment_2x2, none_config):
         """Test run with empty DataFrame."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(empty_df, config)
@@ -1150,10 +1144,10 @@ class TestRunWorkflowEdgeCases:
         assert result.success is False
         assert len(result.validation_errors) > 0
 
-    def test_run_none_dataframe(self, simple_experiment, none_config):
+    def test_run_none_dataframe(self, simple_experiment_2x2, none_config):
         """Test run with None DataFrame."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(None, config)
@@ -1161,10 +1155,10 @@ class TestRunWorkflowEdgeCases:
         assert result.success is False
         assert len(result.validation_errors) > 0
 
-    def test_run_df_with_nan(self, df_with_nan, simple_experiment, none_config):
+    def test_run_df_with_nan(self, df_with_nan, simple_experiment_2x2, none_config):
         """Test run with DataFrame containing NaN values."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(df_with_nan, config)
@@ -1173,10 +1167,10 @@ class TestRunWorkflowEdgeCases:
         # NaN values should still be present
         assert result.normalized_df['concentration[s1]'].isna().any()
 
-    def test_run_df_with_zeros(self, df_with_zeros, simple_experiment, none_config):
+    def test_run_df_with_zeros(self, df_with_zeros, simple_experiment_2x2, none_config):
         """Test run with DataFrame containing zero values."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(df_with_zeros, config)
@@ -1184,10 +1178,10 @@ class TestRunWorkflowEdgeCases:
         assert result.success is True
         assert (result.normalized_df['concentration[s1]'] == 0).any()
 
-    def test_run_single_class(self, single_class_df, simple_experiment, none_config):
+    def test_run_single_class(self, single_class_df, simple_experiment_2x2, none_config):
         """Test run with single class DataFrame."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(single_class_df, config)
@@ -1195,10 +1189,10 @@ class TestRunWorkflowEdgeCases:
         assert result.success is True
         assert result.classes_normalized == ['PC']
 
-    def test_run_many_classes(self, many_classes_df, simple_experiment, none_config):
+    def test_run_many_classes(self, many_classes_df, simple_experiment_2x2, none_config):
         """Test run with many classes."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(many_classes_df, config)
@@ -1206,10 +1200,10 @@ class TestRunWorkflowEdgeCases:
         assert result.success is True
         assert len(result.classes_normalized) == 10
 
-    def test_run_with_special_chars(self, df_with_special_chars, simple_experiment, none_config):
+    def test_run_with_special_chars(self, df_with_special_chars, simple_experiment_2x2, none_config):
         """Test run with special characters in names."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(df_with_special_chars, config)
@@ -1221,10 +1215,10 @@ class TestRunWorkflowEdgeCases:
 class TestRunWorkflowStatistics:
     """Tests for run method statistics tracking."""
 
-    def test_tracks_lipids_before_after(self, basic_df, simple_experiment, none_config):
+    def test_tracks_lipids_before_after(self, basic_df, simple_experiment_2x2, none_config):
         """Test that lipid counts are tracked."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
@@ -1232,30 +1226,30 @@ class TestRunWorkflowStatistics:
         assert result.lipids_before == 4
         assert result.lipids_after == 4
 
-    def test_tracks_classes_in_input(self, basic_df, simple_experiment, none_config):
+    def test_tracks_classes_in_input(self, basic_df, simple_experiment_2x2, none_config):
         """Test that input classes are tracked."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
 
         assert set(result.classes_in_input) == {'PC', 'PE', 'TG', 'SM'}
 
-    def test_tracks_classes_normalized(self, basic_df, simple_experiment, none_config_filtered):
+    def test_tracks_classes_normalized(self, basic_df, simple_experiment_2x2, none_config_filtered):
         """Test that normalized classes are tracked."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config_filtered
         )
         result = NormalizationWorkflow.run(basic_df, config)
 
         assert set(result.classes_normalized) == {'PC', 'PE'}
 
-    def test_tracks_samples_processed(self, basic_df, simple_experiment, none_config):
+    def test_tracks_samples_processed(self, basic_df, simple_experiment_2x2, none_config):
         """Test that sample count is tracked."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
@@ -1266,10 +1260,10 @@ class TestRunWorkflowStatistics:
 class TestRunWorkflowDataFormats:
     """Tests for run method with different data formats."""
 
-    def test_lipidsearch_format_preserves_columns(self, lipidsearch_df, simple_experiment, none_config):
+    def test_lipidsearch_format_preserves_columns(self, lipidsearch_df, simple_experiment_2x2, none_config):
         """Test LipidSearch format preserves CalcMass and BaseRt."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config,
             data_format=DataFormat.LIPIDSEARCH
         )
@@ -1278,10 +1272,10 @@ class TestRunWorkflowDataFormats:
         assert 'CalcMass' in result.normalized_df.columns
         assert 'BaseRt' in result.normalized_df.columns
 
-    def test_msdial_format(self, basic_df, simple_experiment, none_config):
+    def test_msdial_format(self, basic_df, simple_experiment_2x2, none_config):
         """Test MS-DIAL format."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config,
             data_format=DataFormat.MSDIAL
         )
@@ -1289,10 +1283,10 @@ class TestRunWorkflowDataFormats:
 
         assert result.success is True
 
-    def test_generic_format(self, basic_df, simple_experiment, none_config):
+    def test_generic_format(self, basic_df, simple_experiment_2x2, none_config):
         """Test Generic format."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config,
             data_format=DataFormat.GENERIC
         )
@@ -1304,7 +1298,7 @@ class TestRunWorkflowDataFormats:
 class TestRunWorkflowIntegration:
     """Integration tests for complete workflow scenarios."""
 
-    def test_full_is_normalization_workflow(self, simple_experiment, basic_intsta_df):
+    def test_full_is_normalization_workflow(self, simple_experiment_2x2, basic_intsta_df):
         """Test complete internal standard normalization workflow."""
         # Create data with standards present
         df = pd.DataFrame({
@@ -1333,7 +1327,7 @@ class TestRunWorkflowIntegration:
         )
 
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=norm_config
         )
 
@@ -1345,7 +1339,7 @@ class TestRunWorkflowIntegration:
         # Only non-standard lipids should remain
         assert 'PC(15:0_18:1-d7)' not in result.normalized_df['LipidMolec'].values
 
-    def test_full_protein_normalization_workflow(self, basic_df, simple_experiment):
+    def test_full_protein_normalization_workflow(self, basic_df, simple_experiment_2x2):
         """Test complete protein normalization workflow."""
         protein_conc = {'s1': 10.0, 's2': 20.0, 's3': 15.0, 's4': 25.0}
         norm_config = NormalizationConfig(
@@ -1354,7 +1348,7 @@ class TestRunWorkflowIntegration:
         )
 
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=norm_config
         )
 
@@ -1369,7 +1363,7 @@ class TestRunWorkflowIntegration:
         assert s1_val == pytest.approx(1e5, rel=0.01)
         assert s2_val == pytest.approx(5.5e4, rel=0.01)
 
-    def test_full_combined_normalization_workflow(self, simple_experiment, basic_intsta_df):
+    def test_full_combined_normalization_workflow(self, simple_experiment_2x2, basic_intsta_df):
         """Test complete combined normalization workflow."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
@@ -1395,7 +1389,7 @@ class TestRunWorkflowIntegration:
         )
 
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=norm_config
         )
 
@@ -1404,7 +1398,7 @@ class TestRunWorkflowIntegration:
         assert result.success is True
         assert 'Combined' in result.method_applied
 
-    def test_workflow_with_lipidsearch_format(self, simple_experiment, basic_intsta_df):
+    def test_workflow_with_lipidsearch_format(self, simple_experiment_2x2, basic_intsta_df):
         """Test complete workflow with LipidSearch format."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
@@ -1431,7 +1425,7 @@ class TestRunWorkflowIntegration:
         )
 
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=norm_config,
             data_format=DataFormat.LIPIDSEARCH
         )
@@ -1447,7 +1441,7 @@ class TestRunWorkflowIntegration:
 class TestWorkflowErrorHandling:
     """Tests for workflow error handling."""
 
-    def test_graceful_handling_of_service_error(self, basic_df, simple_experiment):
+    def test_graceful_handling_of_service_error(self, basic_df, simple_experiment_2x2):
         """Test graceful handling when service throws error."""
         # Create config that will cause service to fail
         norm_config = NormalizationConfig(
@@ -1458,7 +1452,7 @@ class TestWorkflowErrorHandling:
         )
 
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=norm_config
         )
 
@@ -1469,11 +1463,11 @@ class TestWorkflowErrorHandling:
         assert len(result.validation_errors) > 0
 
     def test_validation_errors_prevent_normalization(
-        self, df_missing_classkey, simple_experiment, none_config
+        self, df_missing_classkey, simple_experiment_2x2, none_config
     ):
         """Test that validation errors prevent normalization attempt."""
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
 
@@ -1519,7 +1513,7 @@ class TestWorkflowWithVariousExperiments:
         assert result.success is True
         assert result.samples_processed == 6
 
-    def test_unequal_samples_experiment(self, simple_experiment, none_config):
+    def test_unequal_samples_experiment(self, simple_experiment_2x2, none_config):
         """Test workflow with unequal sample counts."""
         # Create matching DataFrame for unequal experiment
         df = pd.DataFrame({
@@ -1532,7 +1526,7 @@ class TestWorkflowWithVariousExperiments:
         })
 
         config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(df, config)

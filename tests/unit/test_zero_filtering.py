@@ -8,18 +8,10 @@ from app.services.zero_filtering import (
     ZeroFilteringResult,
 )
 from app.models.experiment import ExperimentConfig
-from tests.conftest import make_experiment
-
 
 # =============================================================================
 # Test Fixtures
 # =============================================================================
-
-@pytest.fixture
-def simple_experiment():
-    """Simple experiment with 2 conditions, 3 samples each."""
-    return make_experiment(2, 3)
-
 
 @pytest.fixture
 def experiment_with_bqc():
@@ -62,7 +54,7 @@ def unequal_samples_experiment():
 
 
 @pytest.fixture
-def clean_df(simple_experiment):
+def clean_df(simple_experiment_2x3):
     """DataFrame with no zeros - all lipids should pass."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)'],
@@ -77,7 +69,7 @@ def clean_df(simple_experiment):
 
 
 @pytest.fixture
-def df_with_some_zeros(simple_experiment):
+def df_with_some_zeros(simple_experiment_2x3):
     """DataFrame with some zeros in various patterns."""
     return pd.DataFrame({
         'LipidMolec': ['Lipid1', 'Lipid2', 'Lipid3', 'Lipid4'],
@@ -96,7 +88,7 @@ def df_with_some_zeros(simple_experiment):
 
 
 @pytest.fixture
-def df_all_zeros(simple_experiment):
+def df_all_zeros(simple_experiment_2x3):
     """DataFrame where all values are zero."""
     return pd.DataFrame({
         'LipidMolec': ['Lipid1', 'Lipid2'],
@@ -393,60 +385,60 @@ class TestZeroFilteringResultProperties:
 class TestFilterZerosBasic:
     """Basic tests for ZeroFilteringService.filter_zeros method."""
 
-    def test_empty_dataframe(self, simple_experiment):
+    def test_empty_dataframe(self, simple_experiment_2x3):
         """Test filtering empty DataFrame."""
         empty_df = pd.DataFrame(columns=['LipidMolec', 'intensity[s1]'])
-        result = ZeroFilteringService.filter_zeros(empty_df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(empty_df, simple_experiment_2x3)
 
         assert result.filtered_df.empty
         assert result.removed_species == []
         assert result.species_before == 0
         assert result.species_after == 0
 
-    def test_all_lipids_pass(self, simple_experiment, clean_df):
+    def test_all_lipids_pass(self, simple_experiment_2x3, clean_df):
         """Test when all lipids have no zeros."""
-        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment_2x3)
 
         assert len(result.filtered_df) == 3
         assert result.removed_species == []
         assert result.species_before == 3
         assert result.species_after == 3
 
-    def test_all_lipids_fail(self, simple_experiment, df_all_zeros):
+    def test_all_lipids_fail(self, simple_experiment_2x3, df_all_zeros):
         """Test when all lipids have 100% zeros."""
-        result = ZeroFilteringService.filter_zeros(df_all_zeros, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df_all_zeros, simple_experiment_2x3)
 
         assert len(result.filtered_df) == 0
         assert len(result.removed_species) == 2
         assert result.species_before == 2
         assert result.species_after == 0
 
-    def test_mixed_results(self, simple_experiment, df_with_some_zeros):
+    def test_mixed_results(self, simple_experiment_2x3, df_with_some_zeros):
         """Test with mixed pass/fail lipids."""
-        result = ZeroFilteringService.filter_zeros(df_with_some_zeros, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df_with_some_zeros, simple_experiment_2x3)
 
         assert len(result.filtered_df) == 2
         assert set(result.filtered_df['LipidMolec']) == {'Lipid1', 'Lipid2'}
         assert set(result.removed_species) == {'Lipid3', 'Lipid4'}
 
-    def test_returns_copy_not_view(self, simple_experiment, clean_df):
+    def test_returns_copy_not_view(self, simple_experiment_2x3, clean_df):
         """Test that filtered_df is a copy, not a view."""
-        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment_2x3)
         result.filtered_df.iloc[0, 0] = 'Modified'
         assert clean_df['LipidMolec'].iloc[0] != 'Modified'
 
-    def test_preserves_all_columns(self, simple_experiment, clean_df):
+    def test_preserves_all_columns(self, simple_experiment_2x3, clean_df):
         """Test that filtered DataFrame preserves all columns."""
-        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment_2x3)
         assert list(result.filtered_df.columns) == list(clean_df.columns)
 
-    def test_preserves_data_types(self, simple_experiment, clean_df):
+    def test_preserves_data_types(self, simple_experiment_2x3, clean_df):
         """Test that filtered DataFrame preserves data types."""
-        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment_2x3)
         for col in clean_df.columns:
             assert result.filtered_df[col].dtype == clean_df[col].dtype
 
-    def test_index_is_reset(self, simple_experiment):
+    def test_index_is_reset(self, simple_experiment_2x3):
         """Test that filtered DataFrame has reset index."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1', 'Lipid2', 'Lipid3'],
@@ -459,14 +451,14 @@ class TestFilterZerosBasic:
             'intensity[s6]': [100.0, 0.0, 100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert list(result.filtered_df.index) == [0, 1]
 
 
 class TestFilterZerosValidation:
     """Validation tests for ZeroFilteringService.filter_zeros."""
 
-    def test_missing_lipidmolec_column(self, simple_experiment):
+    def test_missing_lipidmolec_column(self, simple_experiment_2x3):
         """Test error when LipidMolec column is missing."""
         df = pd.DataFrame({
             'SomeOtherColumn': ['A', 'B'],
@@ -474,9 +466,9 @@ class TestFilterZerosValidation:
         })
 
         with pytest.raises(ValueError, match="LipidMolec"):
-            ZeroFilteringService.filter_zeros(df, simple_experiment)
+            ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
 
-    def test_lipidmolec_case_sensitive(self, simple_experiment):
+    def test_lipidmolec_case_sensitive(self, simple_experiment_2x3):
         """Test that LipidMolec column name is case sensitive."""
         df = pd.DataFrame({
             'lipidmolec': ['A', 'B'],  # lowercase
@@ -484,11 +476,11 @@ class TestFilterZerosValidation:
         })
 
         with pytest.raises(ValueError, match="LipidMolec"):
-            ZeroFilteringService.filter_zeros(df, simple_experiment)
+            ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
 
-    def test_default_config_used(self, simple_experiment, clean_df):
+    def test_default_config_used(self, simple_experiment_2x3, clean_df):
         """Test that default config is used when none provided."""
-        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment_2x3)
         assert result.species_after == 3
 
 
@@ -702,7 +694,7 @@ class TestBQCAndNonBQCInteraction:
 class TestDetectionThresholdBasic:
     """Basic detection threshold tests."""
 
-    def test_zero_threshold_counts_only_zeros(self, simple_experiment):
+    def test_zero_threshold_counts_only_zeros(self, simple_experiment_2x3):
         """Test that threshold=0 only counts exact zeros."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -715,10 +707,10 @@ class TestDetectionThresholdBasic:
             'intensity[s6]': [0.001],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 1
 
-    def test_high_threshold_counts_low_values(self, simple_experiment):
+    def test_high_threshold_counts_low_values(self, simple_experiment_2x3):
         """Test that high threshold counts values below it."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -732,10 +724,10 @@ class TestDetectionThresholdBasic:
         })
 
         config = ZeroFilterConfig(detection_threshold=1000.0)
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment, config=config)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert len(result.filtered_df) == 0
 
-    def test_threshold_is_inclusive(self, simple_experiment):
+    def test_threshold_is_inclusive(self, simple_experiment_2x3):
         """Test that values equal to threshold are counted as zeros."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -749,10 +741,10 @@ class TestDetectionThresholdBasic:
         })
 
         config = ZeroFilterConfig(detection_threshold=100.0)
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment, config=config)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert len(result.filtered_df) == 0
 
-    def test_threshold_just_below_value(self, simple_experiment):
+    def test_threshold_just_below_value(self, simple_experiment_2x3):
         """Test threshold just below the values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -766,14 +758,14 @@ class TestDetectionThresholdBasic:
         })
 
         config = ZeroFilterConfig(detection_threshold=99.9)
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment, config=config)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert len(result.filtered_df) == 1
 
 
 class TestDetectionThresholdPresets:
     """Tests for detection threshold presets."""
 
-    def test_lipidsearch_threshold_removes_low_values(self, simple_experiment):
+    def test_lipidsearch_threshold_removes_low_values(self, simple_experiment_2x3):
         """Test LipidSearch threshold removes low values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1', 'Lipid2'],
@@ -787,12 +779,12 @@ class TestDetectionThresholdPresets:
         })
 
         config = ZeroFilterConfig.for_lipidsearch()
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment, config=config)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
 
         assert len(result.filtered_df) == 1
         assert result.filtered_df['LipidMolec'].iloc[0] == 'Lipid2'
 
-    def test_lipidsearch_threshold_keeps_high_values(self, simple_experiment):
+    def test_lipidsearch_threshold_keeps_high_values(self, simple_experiment_2x3):
         """Test LipidSearch threshold keeps high values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -806,7 +798,7 @@ class TestDetectionThresholdPresets:
         })
 
         config = ZeroFilterConfig.for_lipidsearch()
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment, config=config)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert len(result.filtered_df) == 1
 
 
@@ -817,7 +809,7 @@ class TestDetectionThresholdPresets:
 class TestNaNHandling:
     """Tests for handling of NaN values."""
 
-    def test_nan_treated_as_zero(self, simple_experiment):
+    def test_nan_treated_as_zero(self, simple_experiment_2x3):
         """Test that NaN values are treated as zeros."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -830,10 +822,10 @@ class TestNaNHandling:
             'intensity[s6]': [np.nan],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 0
 
-    def test_mixed_nan_and_values(self, simple_experiment):
+    def test_mixed_nan_and_values(self, simple_experiment_2x3):
         """Test mixture of NaN and actual values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -846,10 +838,10 @@ class TestNaNHandling:
             'intensity[s6]': [100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 1
 
-    def test_nan_with_threshold(self, simple_experiment):
+    def test_nan_with_threshold(self, simple_experiment_2x3):
         """Test NaN handling with detection threshold."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -863,13 +855,13 @@ class TestNaNHandling:
         })
 
         config = ZeroFilterConfig(detection_threshold=150.0)
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment, config=config)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         # Control: NaN, 100 (<=150), 200 -> 2/3 = 67%
         # Treatment: NaN, 100 (<=150), 200 -> 2/3 = 67%
         # Both < 75% threshold -> passes
         assert len(result.filtered_df) == 1
 
-    def test_all_nan_one_condition(self, simple_experiment):
+    def test_all_nan_one_condition(self, simple_experiment_2x3):
         """Test all NaN in one condition."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -882,7 +874,7 @@ class TestNaNHandling:
             'intensity[s6]': [100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         # Treatment passes -> lipid kept
         assert len(result.filtered_df) == 1
 
@@ -894,7 +886,7 @@ class TestNaNHandling:
 class TestMissingColumns:
     """Tests for handling missing intensity columns."""
 
-    def test_missing_some_intensity_columns(self, simple_experiment):
+    def test_missing_some_intensity_columns(self, simple_experiment_2x3):
         """Test behavior when some intensity columns are missing."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -903,10 +895,10 @@ class TestMissingColumns:
             'intensity[s2]': [100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 1
 
-    def test_all_intensity_columns_missing(self, simple_experiment):
+    def test_all_intensity_columns_missing(self, simple_experiment_2x3):
         """Test when all intensity columns are missing.
 
         When no intensity columns are found, no zeros can be counted,
@@ -917,11 +909,11 @@ class TestMissingColumns:
             'ClassKey': ['PC'],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         # No columns means 0 zeros counted -> 0% zeros -> passes
         assert len(result.filtered_df) == 1
 
-    def test_one_condition_missing_all_columns(self, simple_experiment):
+    def test_one_condition_missing_all_columns(self, simple_experiment_2x3):
         """Test when one condition has all columns missing."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -932,7 +924,7 @@ class TestMissingColumns:
             'intensity[s6]': [100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         # Treatment passes -> kept
         assert len(result.filtered_df) == 1
 
@@ -944,7 +936,7 @@ class TestMissingColumns:
 class TestNonBQCThreshold:
     """Tests for non-BQC threshold behavior."""
 
-    def test_exactly_at_threshold_fails(self, simple_experiment):
+    def test_exactly_at_threshold_fails(self, simple_experiment_2x3):
         """Test that exactly at non-BQC threshold fails."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -964,7 +956,7 @@ class TestNonBQCThreshold:
         # Let me use 4 samples per condition
         pass
 
-    def test_all_conditions_above_threshold_fails(self, simple_experiment):
+    def test_all_conditions_above_threshold_fails(self, simple_experiment_2x3):
         """Test all conditions above threshold fails."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -979,10 +971,10 @@ class TestNonBQCThreshold:
             'intensity[s6]': [0.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 0
 
-    def test_one_condition_below_threshold_passes(self, simple_experiment):
+    def test_one_condition_below_threshold_passes(self, simple_experiment_2x3):
         """Test one condition below threshold passes."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -997,10 +989,10 @@ class TestNonBQCThreshold:
             'intensity[s6]': [100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 1
 
-    def test_strict_threshold(self, simple_experiment):
+    def test_strict_threshold(self, simple_experiment_2x3):
         """Test strict (0.5) non-BQC threshold."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1016,12 +1008,12 @@ class TestNonBQCThreshold:
         })
 
         # Default 75% threshold -> passes
-        result_default = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result_default = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result_default.filtered_df) == 1
 
         # Strict 50% threshold -> fails
         config = ZeroFilterConfig.strict()
-        result_strict = ZeroFilteringService.filter_zeros(df, simple_experiment, config=config)
+        result_strict = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert len(result_strict.filtered_df) == 0
 
 
@@ -1122,7 +1114,7 @@ class TestMultipleConditions:
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
-    def test_single_lipid(self, simple_experiment):
+    def test_single_lipid(self, simple_experiment_2x3):
         """Test with single lipid species."""
         df = pd.DataFrame({
             'LipidMolec': ['SingleLipid'],
@@ -1135,10 +1127,10 @@ class TestEdgeCases:
             'intensity[s6]': [100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 1
 
-    def test_many_lipids(self, simple_experiment):
+    def test_many_lipids(self, simple_experiment_2x3):
         """Test with many lipid species."""
         n_lipids = 100
         df = pd.DataFrame({
@@ -1152,10 +1144,10 @@ class TestEdgeCases:
             'intensity[s6]': [100.0] * n_lipids,
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == n_lipids
 
-    def test_duplicate_lipid_names(self, simple_experiment):
+    def test_duplicate_lipid_names(self, simple_experiment_2x3):
         """Test handling of duplicate lipid names."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1', 'Lipid1', 'Lipid2'],
@@ -1168,10 +1160,10 @@ class TestEdgeCases:
             'intensity[s6]': [100.0, 0.0, 100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 2
 
-    def test_negative_values(self, simple_experiment):
+    def test_negative_values(self, simple_experiment_2x3):
         """Test handling of negative values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1184,11 +1176,11 @@ class TestEdgeCases:
             'intensity[s6]': [-100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         # Negative values <= 0 threshold -> counted as zeros
         assert len(result.filtered_df) == 0
 
-    def test_very_large_values(self, simple_experiment):
+    def test_very_large_values(self, simple_experiment_2x3):
         """Test handling of very large values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1201,10 +1193,10 @@ class TestEdgeCases:
             'intensity[s6]': [1e15],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result.filtered_df) == 1
 
-    def test_very_small_positive_values(self, simple_experiment):
+    def test_very_small_positive_values(self, simple_experiment_2x3):
         """Test handling of very small positive values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1217,11 +1209,11 @@ class TestEdgeCases:
             'intensity[s6]': [1e-15],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         # Very small but > 0 -> not zeros
         assert len(result.filtered_df) == 1
 
-    def test_infinity_values(self, simple_experiment):
+    def test_infinity_values(self, simple_experiment_2x3):
         """Test handling of infinity values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1234,11 +1226,11 @@ class TestEdgeCases:
             'intensity[s6]': [np.inf],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         # Infinity > 0 -> not zeros
         assert len(result.filtered_df) == 1
 
-    def test_negative_infinity_values(self, simple_experiment):
+    def test_negative_infinity_values(self, simple_experiment_2x3):
         """Test handling of negative infinity values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1251,11 +1243,11 @@ class TestEdgeCases:
             'intensity[s6]': [-np.inf],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         # -Infinity < 0 -> zeros
         assert len(result.filtered_df) == 0
 
-    def test_mixed_special_values(self, simple_experiment):
+    def test_mixed_special_values(self, simple_experiment_2x3):
         """Test mixture of special values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1268,7 +1260,7 @@ class TestEdgeCases:
             'intensity[s6]': [-100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         # Control: NaN (zero), Inf (not zero), -Inf (zero) -> 2/3 = 67%
         # Treatment: 0 (zero), 100 (not zero), -100 (zero) -> 2/3 = 67%
         # Both < 75% -> passes
@@ -1282,38 +1274,38 @@ class TestEdgeCases:
 class TestGetZeroStatistics:
     """Tests for ZeroFilteringService.get_zero_statistics method."""
 
-    def test_returns_dataframe(self, simple_experiment, clean_df):
+    def test_returns_dataframe(self, simple_experiment_2x3, clean_df):
         """Test that method returns a DataFrame."""
-        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment)
+        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment_2x3)
         assert isinstance(stats, pd.DataFrame)
 
-    def test_has_required_columns(self, simple_experiment, clean_df):
+    def test_has_required_columns(self, simple_experiment_2x3, clean_df):
         """Test that result has required columns."""
-        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment)
+        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment_2x3)
         assert 'LipidMolec' in stats.columns
         assert 'total_zeros' in stats.columns
         assert 'total_samples' in stats.columns
         assert 'zero_percentage' in stats.columns
         assert 'zeros_per_condition' in stats.columns
 
-    def test_correct_row_count(self, simple_experiment, clean_df):
+    def test_correct_row_count(self, simple_experiment_2x3, clean_df):
         """Test that result has correct number of rows."""
-        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment)
+        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment_2x3)
         assert len(stats) == len(clean_df)
 
-    def test_statistics_values_no_zeros(self, simple_experiment, clean_df):
+    def test_statistics_values_no_zeros(self, simple_experiment_2x3, clean_df):
         """Test statistics with no zeros."""
-        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment)
+        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment_2x3)
         assert all(stats['total_zeros'] == 0)
         assert all(stats['zero_percentage'] == 0.0)
 
-    def test_statistics_values_all_zeros(self, simple_experiment, df_all_zeros):
+    def test_statistics_values_all_zeros(self, simple_experiment_2x3, df_all_zeros):
         """Test statistics with all zeros."""
-        stats = ZeroFilteringService.get_zero_statistics(df_all_zeros, simple_experiment)
+        stats = ZeroFilteringService.get_zero_statistics(df_all_zeros, simple_experiment_2x3)
         assert all(stats['total_zeros'] == 6)
         assert all(stats['zero_percentage'] == 100.0)
 
-    def test_statistics_values_mixed(self, simple_experiment):
+    def test_statistics_values_mixed(self, simple_experiment_2x3):
         """Test statistics with mixed values."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1326,12 +1318,12 @@ class TestGetZeroStatistics:
             'intensity[s6]': [100.0],
         })
 
-        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment)
+        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment_2x3)
         assert stats.iloc[0]['total_zeros'] == 4
         assert stats.iloc[0]['total_samples'] == 6
         assert stats.iloc[0]['zero_percentage'] == pytest.approx(66.67, rel=0.01)
 
-    def test_zeros_per_condition(self, simple_experiment):
+    def test_zeros_per_condition(self, simple_experiment_2x3):
         """Test zeros_per_condition dict."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1344,12 +1336,12 @@ class TestGetZeroStatistics:
             'intensity[s6]': [100.0],
         })
 
-        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment)
+        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment_2x3)
         zeros_per_cond = stats.iloc[0]['zeros_per_condition']
         assert zeros_per_cond['Control'] == 2
         assert zeros_per_cond['Treatment'] == 2
 
-    def test_statistics_with_threshold(self, simple_experiment):
+    def test_statistics_with_threshold(self, simple_experiment_2x3):
         """Test statistics with custom detection threshold."""
         df = pd.DataFrame({
             'LipidMolec': ['Lipid1'],
@@ -1363,20 +1355,20 @@ class TestGetZeroStatistics:
         })
 
         config = ZeroFilterConfig(detection_threshold=100.0)
-        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment, config)
+        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment_2x3, config)
         assert stats.iloc[0]['total_zeros'] == 4
 
-    def test_statistics_empty_df(self, simple_experiment):
+    def test_statistics_empty_df(self, simple_experiment_2x3):
         """Test statistics on empty DataFrame."""
         empty_df = pd.DataFrame(columns=['LipidMolec', 'intensity[s1]'])
-        stats = ZeroFilteringService.get_zero_statistics(empty_df, simple_experiment)
+        stats = ZeroFilteringService.get_zero_statistics(empty_df, simple_experiment_2x3)
         assert len(stats) == 0
 
-    def test_statistics_missing_lipidmolec(self, simple_experiment):
+    def test_statistics_missing_lipidmolec(self, simple_experiment_2x3):
         """Test error when LipidMolec missing."""
         df = pd.DataFrame({'SomeColumn': ['A']})
         with pytest.raises(ValueError, match="LipidMolec"):
-            ZeroFilteringService.get_zero_statistics(df, simple_experiment)
+            ZeroFilteringService.get_zero_statistics(df, simple_experiment_2x3)
 
 
 # =============================================================================
@@ -1414,7 +1406,7 @@ class TestIntegration:
         assert result.species_after == 1
         assert result.filtered_df['LipidMolec'].iloc[0] == 'PC(16:0_18:1)'
 
-    def test_workflow_with_lipidsearch_config(self, simple_experiment):
+    def test_workflow_with_lipidsearch_config(self, simple_experiment_2x3):
         """Test workflow with LipidSearch config preset."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
@@ -1428,10 +1420,10 @@ class TestIntegration:
         })
 
         config = ZeroFilterConfig.for_lipidsearch()
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment, config=config)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert result.species_after == 2
 
-    def test_workflow_preserves_order(self, simple_experiment):
+    def test_workflow_preserves_order(self, simple_experiment_2x3):
         """Test that filtering preserves lipid order."""
         df = pd.DataFrame({
             'LipidMolec': ['Z_Lipid', 'A_Lipid', 'M_Lipid'],
@@ -1444,12 +1436,12 @@ class TestIntegration:
             'intensity[s6]': [100.0, 100.0, 100.0],
         })
 
-        result = ZeroFilteringService.filter_zeros(df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert list(result.filtered_df['LipidMolec']) == ['Z_Lipid', 'A_Lipid', 'M_Lipid']
 
-    def test_result_usable_for_downstream(self, simple_experiment, clean_df):
+    def test_result_usable_for_downstream(self, simple_experiment_2x3, clean_df):
         """Test that result can be used for downstream processing."""
-        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment)
+        result = ZeroFilteringService.filter_zeros(clean_df, simple_experiment_2x3)
 
         # Should be able to perform common operations
         assert result.filtered_df['intensity[s1]'].sum() > 0

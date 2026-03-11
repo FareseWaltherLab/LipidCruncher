@@ -207,6 +207,33 @@ class StreamlitAdapter:
     4. Handle UI data conversion to service models
 
     All methods are static - no instance state is stored.
+
+    Session State Access Patterns
+    =============================
+    UI files should use exactly one of these three patterns per key:
+
+    1. **Direct access** — for simple reads/writes of data keys owned by the
+       current file. Use ``st.session_state['key']`` for reads that must exist
+       and ``st.session_state['key'] = value`` for writes.  Use
+       ``st.session_state.get('key')`` when the key may be ``None``.
+
+    2. **``restore_widget_value`` / ``save_widget_value``** — for widget keys
+       that must survive module navigation (Streamlit removes widget keys for
+       non-rendered widgets).  Call ``restore_widget_value`` *before* the widget
+       renders and ``save_widget_value`` in an ``on_change`` callback or
+       immediately after the widget.  Pair each widget key with a
+       ``_preserved_*`` session state key declared in ``SessionState``.
+
+    3. **Widget ``key=`` parameter** — Streamlit widgets automatically read/write
+       ``st.session_state[key]``.  Do *not* also write to the same key manually;
+       let the widget own it.  Guard ``st.session_state[key] = default`` with
+       ``if key not in st.session_state`` to avoid overwriting user selections.
+
+    When to use which:
+    - Data flowing between UI files → pattern 1 (direct access)
+    - Widget state surviving module switches → pattern 2 (preserve/restore)
+    - Widget with ``on_change`` callback → pattern 2 + pattern 3
+    - Widget default that only needs to survive within the same page → pattern 3
     """
 
     # ==================== Session State Initialization ====================

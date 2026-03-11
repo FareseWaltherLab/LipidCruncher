@@ -50,6 +50,26 @@ class StandardizationResult:
 
 
 @dataclass
+class MSDIALStructure:
+    """Detected structure of an MS-DIAL file.
+
+    Attributes:
+        header_row_idx: Row index where the actual header is found (-1 if none).
+        actual_columns: List of column names from the detected header row.
+        lipid_col: Name of the lipid name column (e.g., 'Metabolite name').
+        lipid_col_idx: Index of the lipid column in actual_columns.
+        col_indices: Mapping of column name to first-occurrence index.
+        features: Dict of MS-DIAL-specific feature flags and column lists.
+    """
+    header_row_idx: int
+    actual_columns: List[str]
+    lipid_col: str
+    lipid_col_idx: int
+    col_indices: Dict[str, int]
+    features: Dict
+
+
+@dataclass
 class MSDIALOverrideResult:
     """Result of applying MS-DIAL sample column override.
 
@@ -502,12 +522,11 @@ class DataStandardizationService:
     @staticmethod
     def _detect_msdial_structure(
         df: pd.DataFrame,
-    ) -> Tuple[int, List[str], str, int, Dict[str, int], Dict]:
+    ) -> MSDIALStructure:
         """Detect MS-DIAL file structure: header row, columns, and features.
 
         Returns:
-            (header_row_idx, actual_columns, lipid_col, lipid_col_idx,
-             col_indices, features)
+            MSDIALStructure with header info, column indices, and features.
 
         Raises:
             ValueError: If no lipid column or sample columns are found.
@@ -576,7 +595,14 @@ class DataStandardizationService:
             'column_indices': col_indices,
         }
 
-        return header_row_idx, actual_columns, lipid_col, lipid_col_idx, col_indices, features
+        return MSDIALStructure(
+            header_row_idx=header_row_idx,
+            actual_columns=actual_columns,
+            lipid_col=lipid_col,
+            lipid_col_idx=lipid_col_idx,
+            col_indices=col_indices,
+            features=features,
+        )
 
     @staticmethod
     def _standardize_msdial_columns(
@@ -680,28 +706,28 @@ class DataStandardizationService:
             return StandardizationResult(False, "Expected a DataFrame for MS-DIAL format")
 
         try:
-            header_row_idx, actual_columns, lipid_col, lipid_col_idx, col_indices, features = (
-                DataStandardizationService._detect_msdial_structure(df)
-            )
+            structure = DataStandardizationService._detect_msdial_structure(df)
 
             # Choose raw vs normalized sample columns
-            norm_samples = features['normalized_sample_columns']
+            norm_samples = structure.features['normalized_sample_columns']
             if use_normalized and len(norm_samples) > 0:
                 sample_cols = norm_samples
-                sample_indices = features['normalized_sample_indices']
+                sample_indices = structure.features['normalized_sample_indices']
             else:
-                sample_cols = features['raw_sample_columns']
-                sample_indices = features['raw_sample_indices']
+                sample_cols = structure.features['raw_sample_columns']
+                sample_indices = structure.features['raw_sample_indices']
 
             result_df, column_mapping_dict = (
                 DataStandardizationService._standardize_msdial_columns(
-                    df, header_row_idx, lipid_col_idx,
-                    col_indices, features, sample_cols, sample_indices,
+                    df, structure.header_row_idx, structure.lipid_col_idx,
+                    structure.col_indices, structure.features,
+                    sample_cols, sample_indices,
                 )
             )
 
             mapping_df = DataStandardizationService._build_msdial_mapping(
-                lipid_col, col_indices, features, column_mapping_dict,
+                structure.lipid_col, structure.col_indices,
+                structure.features, column_mapping_dict,
             )
 
             sample_names = {
@@ -714,7 +740,7 @@ class DataStandardizationService:
                 standardized_df=result_df,
                 column_mapping=mapping_df,
                 n_intensity_cols=len(sample_cols),
-                msdial_features=features,
+                msdial_features=structure.features,
                 msdial_sample_names=sample_names,
             )
 

@@ -26,18 +26,10 @@ from app.services.quality_check import (
 )
 from app.services.format_detection import DataFormat
 from app.models.experiment import ExperimentConfig
-from tests.conftest import make_experiment
-
 
 # =============================================================================
 # Experiment Configuration Fixtures
 # =============================================================================
-
-@pytest.fixture
-def simple_experiment():
-    """2 conditions x 3 samples each = 6 samples (s1..s6)."""
-    return make_experiment(2, 3)
-
 
 @pytest.fixture
 def single_replicate_experiment():
@@ -74,7 +66,7 @@ def large_experiment():
 # =============================================================================
 
 @pytest.fixture
-def basic_conc_df(simple_experiment):
+def basic_conc_df(simple_experiment_2x3):
     """Basic DataFrame with concentration columns for 6 samples."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)'],
@@ -89,7 +81,7 @@ def basic_conc_df(simple_experiment):
 
 
 @pytest.fixture
-def conc_df_with_zeros(simple_experiment):
+def conc_df_with_zeros(simple_experiment_2x3):
     """DataFrame with some zero values in concentration columns."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)', 'SM(d18:1_16:0)'],
@@ -140,7 +132,7 @@ def bqc_conc_df_high_cov(bqc_experiment):
 
 
 @pytest.fixture
-def lipidsearch_conc_df(simple_experiment):
+def lipidsearch_conc_df(simple_experiment_2x3):
     """LipidSearch-format DataFrame with BaseRt and CalcMass."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)'],
@@ -312,21 +304,21 @@ class TestQualityCheckConfig:
 class TestValidateInputs:
     """Tests for QualityCheckWorkflow.validate_inputs()."""
 
-    def test_valid_inputs(self, basic_conc_df, simple_experiment):
-        errors = QualityCheckWorkflow.validate_inputs(basic_conc_df, simple_experiment)
+    def test_valid_inputs(self, basic_conc_df, simple_experiment_2x3):
+        errors = QualityCheckWorkflow.validate_inputs(basic_conc_df, simple_experiment_2x3)
         assert errors == []
 
-    def test_none_dataframe(self, simple_experiment):
-        errors = QualityCheckWorkflow.validate_inputs(None, simple_experiment)
+    def test_none_dataframe(self, simple_experiment_2x3):
+        errors = QualityCheckWorkflow.validate_inputs(None, simple_experiment_2x3)
         assert len(errors) == 1
         assert 'empty' in errors[0].lower()
 
-    def test_empty_dataframe(self, simple_experiment):
-        errors = QualityCheckWorkflow.validate_inputs(pd.DataFrame(), simple_experiment)
+    def test_empty_dataframe(self, simple_experiment_2x3):
+        errors = QualityCheckWorkflow.validate_inputs(pd.DataFrame(), simple_experiment_2x3)
         assert len(errors) == 1
         assert 'empty' in errors[0].lower()
 
-    def test_missing_lipidmolec_column(self, simple_experiment):
+    def test_missing_lipidmolec_column(self, simple_experiment_2x3):
         df = pd.DataFrame({
             'ClassKey': ['PC'],
             'concentration[s1]': [100.0],
@@ -336,26 +328,26 @@ class TestValidateInputs:
             'concentration[s5]': [500.0],
             'concentration[s6]': [600.0],
         })
-        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment)
+        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment_2x3)
         assert any('LipidMolec' in e for e in errors)
 
-    def test_no_concentration_columns(self, simple_experiment):
+    def test_no_concentration_columns(self, simple_experiment_2x3):
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
             'ClassKey': ['PC'],
             'intensity[s1]': [100.0],
         })
-        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment)
+        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment_2x3)
         assert any('concentration' in e.lower() for e in errors)
 
-    def test_no_matching_samples(self, simple_experiment):
+    def test_no_matching_samples(self, simple_experiment_2x3):
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
             'ClassKey': ['PC'],
             'concentration[x1]': [100.0],
             'concentration[x2]': [200.0],
         })
-        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment)
+        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment_2x3)
         assert any('match' in e.lower() for e in errors)
 
     def test_only_one_matching_sample(self):
@@ -373,7 +365,7 @@ class TestValidateInputs:
         errors = QualityCheckWorkflow.validate_inputs(df, experiment)
         assert any('2 samples' in e.lower() or 'at least 2' in e.lower() for e in errors)
 
-    def test_partial_matching_samples_valid(self, simple_experiment):
+    def test_partial_matching_samples_valid(self, simple_experiment_2x3):
         """Some samples missing columns is OK if >=2 match."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -382,27 +374,27 @@ class TestValidateInputs:
             'concentration[s2]': [200.0],
             # s3-s6 missing — still OK because 2 >= 2
         })
-        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment)
+        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment_2x3)
         assert errors == []
 
-    def test_returns_early_on_empty_df(self, simple_experiment):
+    def test_returns_early_on_empty_df(self, simple_experiment_2x3):
         """Empty df should return immediately, not check other conditions."""
-        errors = QualityCheckWorkflow.validate_inputs(pd.DataFrame(), simple_experiment)
+        errors = QualityCheckWorkflow.validate_inputs(pd.DataFrame(), simple_experiment_2x3)
         assert len(errors) == 1
 
-    def test_returns_early_on_no_conc_columns(self, simple_experiment):
+    def test_returns_early_on_no_conc_columns(self, simple_experiment_2x3):
         """No concentration columns returns early before sample matching."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
             'other_col': [100.0],
         })
-        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment)
+        errors = QualityCheckWorkflow.validate_inputs(df, simple_experiment_2x3)
         assert any('concentration' in e.lower() for e in errors)
 
-    def test_valid_with_extra_columns(self, basic_conc_df, simple_experiment):
+    def test_valid_with_extra_columns(self, basic_conc_df, simple_experiment_2x3):
         """Extra non-concentration columns don't cause errors."""
         basic_conc_df['extra_col'] = 'test'
-        errors = QualityCheckWorkflow.validate_inputs(basic_conc_df, simple_experiment)
+        errors = QualityCheckWorkflow.validate_inputs(basic_conc_df, simple_experiment_2x3)
         assert errors == []
 
     def test_valid_large_dataset(self, large_conc_df, large_experiment):
@@ -417,37 +409,37 @@ class TestValidateInputs:
 class TestRunBoxPlots:
     """Tests for QualityCheckWorkflow.run_box_plots()."""
 
-    def test_returns_box_plot_result(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment)
+    def test_returns_box_plot_result(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment_2x3)
         assert isinstance(result, BoxPlotResult)
 
-    def test_mean_area_df_shape(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment)
+    def test_mean_area_df_shape(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment_2x3)
         assert result.mean_area_df.shape == (3, 6)
 
-    def test_available_samples(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment)
+    def test_available_samples(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment_2x3)
         assert result.available_samples == ['s1', 's2', 's3', 's4', 's5', 's6']
 
-    def test_missing_values_length(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment)
+    def test_missing_values_length(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment_2x3)
         assert len(result.missing_values_percent) == 6
 
-    def test_no_missing_values(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment)
+    def test_no_missing_values(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment_2x3)
         assert all(pct == 0.0 for pct in result.missing_values_percent)
 
-    def test_with_zeros(self, conc_df_with_zeros, simple_experiment):
-        result = QualityCheckWorkflow.run_box_plots(conc_df_with_zeros, simple_experiment)
+    def test_with_zeros(self, conc_df_with_zeros, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_box_plots(conc_df_with_zeros, simple_experiment_2x3)
         assert any(pct > 0.0 for pct in result.missing_values_percent)
 
-    def test_raises_on_empty_df(self, simple_experiment):
+    def test_raises_on_empty_df(self, simple_experiment_2x3):
         with pytest.raises(ValueError, match='empty'):
-            QualityCheckWorkflow.run_box_plots(pd.DataFrame(), simple_experiment)
+            QualityCheckWorkflow.run_box_plots(pd.DataFrame(), simple_experiment_2x3)
 
-    def test_raises_on_none_df(self, simple_experiment):
+    def test_raises_on_none_df(self, simple_experiment_2x3):
         with pytest.raises(ValueError):
-            QualityCheckWorkflow.run_box_plots(None, simple_experiment)
+            QualityCheckWorkflow.run_box_plots(None, simple_experiment_2x3)
 
     def test_with_large_dataset(self, large_conc_df, large_experiment):
         result = QualityCheckWorkflow.run_box_plots(large_conc_df, large_experiment)
@@ -462,18 +454,18 @@ class TestRunBoxPlots:
 class TestRunBQCAssessment:
     """Tests for QualityCheckWorkflow.run_bqc_assessment()."""
 
-    def test_returns_none_when_no_bqc_label(self, basic_conc_df, simple_experiment, default_config):
+    def test_returns_none_when_no_bqc_label(self, basic_conc_df, simple_experiment_2x3, default_config):
         result = QualityCheckWorkflow.run_bqc_assessment(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert result is None
 
     def test_returns_none_when_bqc_label_not_in_experiment(
-        self, basic_conc_df, simple_experiment
+        self, basic_conc_df, simple_experiment_2x3
     ):
         config = QualityCheckConfig(bqc_label='NonExistent')
         result = QualityCheckWorkflow.run_bqc_assessment(
-            basic_conc_df, simple_experiment, config
+            basic_conc_df, simple_experiment_2x3, config
         )
         assert result is None
 
@@ -694,9 +686,9 @@ class TestCheckRetentionTimeAvailability:
 class TestGetEligibleCorrelationConditions:
     """Tests for QualityCheckWorkflow.get_eligible_correlation_conditions()."""
 
-    def test_all_conditions_eligible(self, simple_experiment):
+    def test_all_conditions_eligible(self, simple_experiment_2x3):
         eligible = QualityCheckWorkflow.get_eligible_correlation_conditions(
-            simple_experiment
+            simple_experiment_2x3
         )
         assert eligible == ['Control', 'Treatment']
 
@@ -724,56 +716,56 @@ class TestGetEligibleCorrelationConditions:
 class TestRunCorrelation:
     """Tests for QualityCheckWorkflow.run_correlation()."""
 
-    def test_returns_correlation_result(self, basic_conc_df, simple_experiment):
+    def test_returns_correlation_result(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control'
+            basic_conc_df, simple_experiment_2x3, 'Control'
         )
         assert isinstance(result, CorrelationResult)
 
-    def test_correlation_matrix_shape(self, basic_conc_df, simple_experiment):
+    def test_correlation_matrix_shape(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control'
+            basic_conc_df, simple_experiment_2x3, 'Control'
         )
         assert result.correlation_df.shape == (3, 3)  # 3 samples per condition
 
-    def test_biological_replicates_threshold(self, basic_conc_df, simple_experiment):
+    def test_biological_replicates_threshold(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control'
+            basic_conc_df, simple_experiment_2x3, 'Control'
         )
         assert result.sample_type == 'biological replicates'
         assert result.threshold == 0.7
 
-    def test_technical_replicates_threshold(self, basic_conc_df, simple_experiment):
+    def test_technical_replicates_threshold(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control', bqc_label='BQC'
+            basic_conc_df, simple_experiment_2x3, 'Control', bqc_label='BQC'
         )
         assert result.sample_type == 'technical replicates'
         assert result.threshold == 0.8
 
-    def test_condition_samples_correct(self, basic_conc_df, simple_experiment):
+    def test_condition_samples_correct(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control'
+            basic_conc_df, simple_experiment_2x3, 'Control'
         )
         assert result.condition_samples == ['s1', 's2', 's3']
 
-    def test_diagonal_is_one(self, basic_conc_df, simple_experiment):
+    def test_diagonal_is_one(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control'
+            basic_conc_df, simple_experiment_2x3, 'Control'
         )
         for i in range(len(result.correlation_df)):
             assert abs(result.correlation_df.iloc[i, i] - 1.0) < 1e-10
 
-    def test_correlation_values_in_range(self, basic_conc_df, simple_experiment):
+    def test_correlation_values_in_range(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control'
+            basic_conc_df, simple_experiment_2x3, 'Control'
         )
         assert (result.correlation_df >= -1.0).all().all()
         assert (result.correlation_df <= 1.0).all().all()
 
-    def test_raises_on_invalid_condition(self, basic_conc_df, simple_experiment):
+    def test_raises_on_invalid_condition(self, basic_conc_df, simple_experiment_2x3):
         with pytest.raises(ValueError, match='not found'):
             QualityCheckWorkflow.run_correlation(
-                basic_conc_df, simple_experiment, 'NonExistent'
+                basic_conc_df, simple_experiment_2x3, 'NonExistent'
             )
 
     def test_raises_on_single_replicate(self, mixed_conc_df, mixed_replicate_experiment):
@@ -782,9 +774,9 @@ class TestRunCorrelation:
                 mixed_conc_df, mixed_replicate_experiment, 'Single'
             )
 
-    def test_v_min_is_half(self, basic_conc_df, simple_experiment):
+    def test_v_min_is_half(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control'
+            basic_conc_df, simple_experiment_2x3, 'Control'
         )
         assert result.v_min == 0.5
 
@@ -792,18 +784,18 @@ class TestRunCorrelation:
 class TestRunAllCorrelations:
     """Tests for QualityCheckWorkflow.run_all_correlations()."""
 
-    def test_returns_dict_of_results(self, basic_conc_df, simple_experiment):
+    def test_returns_dict_of_results(self, basic_conc_df, simple_experiment_2x3):
         results = QualityCheckWorkflow.run_all_correlations(
-            basic_conc_df, simple_experiment
+            basic_conc_df, simple_experiment_2x3
         )
         assert isinstance(results, dict)
         assert len(results) == 2
         assert 'Control' in results
         assert 'Treatment' in results
 
-    def test_each_result_is_correlation(self, basic_conc_df, simple_experiment):
+    def test_each_result_is_correlation(self, basic_conc_df, simple_experiment_2x3):
         results = QualityCheckWorkflow.run_all_correlations(
-            basic_conc_df, simple_experiment
+            basic_conc_df, simple_experiment_2x3
         )
         for cond, result in results.items():
             assert isinstance(result, CorrelationResult)
@@ -832,9 +824,9 @@ class TestRunAllCorrelations:
         )
         assert results == {}
 
-    def test_bqc_label_passed_through(self, basic_conc_df, simple_experiment):
+    def test_bqc_label_passed_through(self, basic_conc_df, simple_experiment_2x3):
         results = QualityCheckWorkflow.run_all_correlations(
-            basic_conc_df, simple_experiment, bqc_label='SomeBQC'
+            basic_conc_df, simple_experiment_2x3, bqc_label='SomeBQC'
         )
         for result in results.values():
             assert result.sample_type == 'technical replicates'
@@ -853,31 +845,31 @@ class TestRunAllCorrelations:
 class TestRunPCA:
     """Tests for QualityCheckWorkflow.run_pca()."""
 
-    def test_returns_pca_result(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment)
+    def test_returns_pca_result(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment_2x3)
         assert isinstance(result, PCAResult)
 
-    def test_pc_df_shape(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment)
+    def test_pc_df_shape(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment_2x3)
         assert result.pc_df.shape == (6, 2)  # 6 samples, 2 components
 
-    def test_pc_df_columns(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment)
+    def test_pc_df_columns(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment_2x3)
         assert list(result.pc_df.columns) == ['PC1', 'PC2']
 
-    def test_pc_labels_format(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment)
+    def test_pc_labels_format(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment_2x3)
         assert len(result.pc_labels) == 2
         assert 'PC1' in result.pc_labels[0]
         assert 'PC2' in result.pc_labels[1]
         assert '%' in result.pc_labels[0]
 
-    def test_available_samples(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment)
+    def test_available_samples(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment_2x3)
         assert result.available_samples == ['s1', 's2', 's3', 's4', 's5', 's6']
 
-    def test_conditions_mapping(self, basic_conc_df, simple_experiment):
-        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment)
+    def test_conditions_mapping(self, basic_conc_df, simple_experiment_2x3):
+        result = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment_2x3)
         assert result.conditions == [
             'Control', 'Control', 'Control',
             'Treatment', 'Treatment', 'Treatment',
@@ -910,68 +902,68 @@ class TestRunPCA:
 class TestRemoveSamples:
     """Tests for QualityCheckWorkflow.remove_samples()."""
 
-    def test_returns_sample_removal_result(self, basic_conc_df, simple_experiment):
+    def test_returns_sample_removal_result(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         assert isinstance(result, SampleRemovalResult)
 
-    def test_single_sample_removal(self, basic_conc_df, simple_experiment):
+    def test_single_sample_removal(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         assert result.samples_before == 6
         assert result.samples_after == 5
         assert len(result.removed_samples) == 1
 
-    def test_multiple_sample_removal(self, basic_conc_df, simple_experiment):
+    def test_multiple_sample_removal(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1', 's4']
+            basic_conc_df, simple_experiment_2x3, ['s1', 's4']
         )
         assert result.samples_before == 6
         assert result.samples_after == 4
 
-    def test_updated_experiment(self, basic_conc_df, simple_experiment):
+    def test_updated_experiment(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         assert result.updated_experiment.n_conditions == 2
         total_samples = sum(result.updated_experiment.number_of_samples_list)
         assert total_samples == 5
 
-    def test_updated_df_columns(self, basic_conc_df, simple_experiment):
+    def test_updated_df_columns(self, basic_conc_df, simple_experiment_2x3):
         result = QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         conc_cols = [c for c in result.updated_df.columns if c.startswith('concentration[')]
         assert len(conc_cols) == 5
 
-    def test_raises_on_empty_list(self, basic_conc_df, simple_experiment):
+    def test_raises_on_empty_list(self, basic_conc_df, simple_experiment_2x3):
         with pytest.raises(ValueError, match='empty'):
             QualityCheckWorkflow.remove_samples(
-                basic_conc_df, simple_experiment, []
+                basic_conc_df, simple_experiment_2x3, []
             )
 
-    def test_raises_if_too_few_remaining(self, basic_conc_df, simple_experiment):
+    def test_raises_if_too_few_remaining(self, basic_conc_df, simple_experiment_2x3):
         with pytest.raises(ValueError, match='at least 2'):
             QualityCheckWorkflow.remove_samples(
-                basic_conc_df, simple_experiment,
+                basic_conc_df, simple_experiment_2x3,
                 ['s1', 's2', 's3', 's4', 's5']
             )
 
-    def test_does_not_modify_original_df(self, basic_conc_df, simple_experiment):
+    def test_does_not_modify_original_df(self, basic_conc_df, simple_experiment_2x3):
         original_shape = basic_conc_df.shape
         QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         assert basic_conc_df.shape == original_shape
 
-    def test_does_not_modify_original_experiment(self, basic_conc_df, simple_experiment):
-        original_n = simple_experiment.n_conditions
+    def test_does_not_modify_original_experiment(self, basic_conc_df, simple_experiment_2x3):
+        original_n = simple_experiment_2x3.n_conditions
         QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
-        assert simple_experiment.n_conditions == original_n
+        assert simple_experiment_2x3.n_conditions == original_n
 
 
 # =============================================================================
@@ -982,10 +974,10 @@ class TestRunNonInteractive:
     """Tests for QualityCheckWorkflow.run_non_interactive()."""
 
     def test_returns_all_expected_fields(
-        self, basic_conc_df, simple_experiment, default_config
+        self, basic_conc_df, simple_experiment_2x3, default_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert hasattr(results, 'box_plot')
         assert hasattr(results, 'bqc')
@@ -995,18 +987,18 @@ class TestRunNonInteractive:
         assert hasattr(results, 'validation_errors')
 
     def test_box_plot_populated(
-        self, basic_conc_df, simple_experiment, default_config
+        self, basic_conc_df, simple_experiment_2x3, default_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert isinstance(results.box_plot, BoxPlotResult)
 
     def test_bqc_none_without_label(
-        self, basic_conc_df, simple_experiment, default_config
+        self, basic_conc_df, simple_experiment_2x3, default_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert results.bqc is None
 
@@ -1019,57 +1011,57 @@ class TestRunNonInteractive:
         assert isinstance(results.bqc, BQCPrepareResult)
 
     def test_retention_time_generic_format(
-        self, basic_conc_df, simple_experiment, default_config
+        self, basic_conc_df, simple_experiment_2x3, default_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert results.retention_time.available is False
 
     def test_retention_time_lipidsearch(
-        self, lipidsearch_conc_df, simple_experiment, lipidsearch_config
+        self, lipidsearch_conc_df, simple_experiment_2x3, lipidsearch_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
-            lipidsearch_conc_df, simple_experiment, lipidsearch_config
+            lipidsearch_conc_df, simple_experiment_2x3, lipidsearch_config
         )
         assert results.retention_time.available is True
 
     def test_correlations_dict(
-        self, basic_conc_df, simple_experiment, default_config
+        self, basic_conc_df, simple_experiment_2x3, default_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert isinstance(results.correlations, dict)
         assert len(results.correlations) == 2
 
     def test_pca_populated(
-        self, basic_conc_df, simple_experiment, default_config
+        self, basic_conc_df, simple_experiment_2x3, default_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert isinstance(results.pca, PCAResult)
 
     def test_no_validation_errors_on_valid_input(
-        self, basic_conc_df, simple_experiment, default_config
+        self, basic_conc_df, simple_experiment_2x3, default_config
     ):
         results = QualityCheckWorkflow.run_non_interactive(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert results.validation_errors == []
 
-    def test_validation_errors_on_invalid_input(self, simple_experiment, default_config):
+    def test_validation_errors_on_invalid_input(self, simple_experiment_2x3, default_config):
         results = QualityCheckWorkflow.run_non_interactive(
-            pd.DataFrame(), simple_experiment, default_config
+            pd.DataFrame(), simple_experiment_2x3, default_config
         )
         assert len(results.validation_errors) > 0
         assert results.box_plot is None
         assert results.pca is None
 
-    def test_none_df_returns_errors(self, simple_experiment, default_config):
+    def test_none_df_returns_errors(self, simple_experiment_2x3, default_config):
         results = QualityCheckWorkflow.run_non_interactive(
-            None, simple_experiment, default_config
+            None, simple_experiment_2x3, default_config
         )
         assert len(results.validation_errors) > 0
 
@@ -1090,7 +1082,7 @@ class TestRunNonInteractive:
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
-    def test_single_lipid_df(self, simple_experiment):
+    def test_single_lipid_df(self, simple_experiment_2x3):
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
             'ClassKey': ['PC'],
@@ -1101,10 +1093,10 @@ class TestEdgeCases:
             'concentration[s5]': [500.0],
             'concentration[s6]': [600.0],
         })
-        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment)
+        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment_2x3)
         assert result.mean_area_df.shape[0] == 1
 
-    def test_all_zeros_df(self, simple_experiment):
+    def test_all_zeros_df(self, simple_experiment_2x3):
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
             'ClassKey': ['PC', 'PE'],
@@ -1115,10 +1107,10 @@ class TestEdgeCases:
             'concentration[s5]': [0.0, 0.0],
             'concentration[s6]': [0.0, 0.0],
         })
-        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment)
+        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment_2x3)
         assert all(pct == 100.0 for pct in result.missing_values_percent)
 
-    def test_nan_values_in_concentrations(self, simple_experiment):
+    def test_nan_values_in_concentrations(self, simple_experiment_2x3):
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
             'ClassKey': ['PC', 'PE'],
@@ -1130,10 +1122,10 @@ class TestEdgeCases:
             'concentration[s6]': [600.0, 600.0],
         })
         # Should not raise — NaN is handled
-        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment)
+        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment_2x3)
         assert isinstance(result, BoxPlotResult)
 
-    def test_special_characters_in_lipid_names(self, simple_experiment):
+    def test_special_characters_in_lipid_names(self, simple_experiment_2x3):
         df = pd.DataFrame({
             'LipidMolec': ['PC(15:0_18:1)+D7:(s)', 'PE(p-18:0_20:4)'],
             'ClassKey': ['PC', 'PE'],
@@ -1144,7 +1136,7 @@ class TestEdgeCases:
             'concentration[s5]': [140.0, 240.0],
             'concentration[s6]': [150.0, 250.0],
         })
-        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment)
+        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment_2x3)
         assert result.mean_area_df.shape[0] == 2
 
     def test_two_samples_minimum_for_pca(self):
@@ -1162,7 +1154,7 @@ class TestEdgeCases:
         result = QualityCheckWorkflow.run_pca(df, experiment)
         assert result.pc_df.shape == (2, 2)
 
-    def test_identical_samples_pca(self, simple_experiment):
+    def test_identical_samples_pca(self, simple_experiment_2x3):
         """PCA with identical samples — should handle gracefully."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1175,7 +1167,7 @@ class TestEdgeCases:
             'concentration[s6]': [100.0, 200.0],
         })
         # Should not raise
-        result = QualityCheckWorkflow.run_pca(df, simple_experiment)
+        result = QualityCheckWorkflow.run_pca(df, simple_experiment_2x3)
         assert isinstance(result, PCAResult)
 
     def test_bqc_filter_then_pca(self, bqc_conc_df_high_cov, bqc_experiment, bqc_config):
@@ -1196,15 +1188,15 @@ class TestEdgeCases:
             result = QualityCheckWorkflow.run_pca(filtered_df, bqc_experiment)
             assert isinstance(result, PCAResult)
 
-    def test_pca_then_remove_then_pca(self, basic_conc_df, simple_experiment):
+    def test_pca_then_remove_then_pca(self, basic_conc_df, simple_experiment_2x3):
         """PCA → remove samples → re-run PCA pipeline."""
         # First PCA
-        pca1 = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment)
+        pca1 = QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment_2x3)
         assert pca1.pc_df.shape[0] == 6
 
         # Remove a sample
         removal = QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
 
         # Second PCA with updated data
@@ -1214,11 +1206,11 @@ class TestEdgeCases:
         assert pca2.pc_df.shape[0] == 5
 
     def test_correlation_after_sample_removal(
-        self, basic_conc_df, simple_experiment
+        self, basic_conc_df, simple_experiment_2x3
     ):
         """Correlation works after removing samples."""
         removal = QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         # Control now has 2 samples, Treatment still has 3
         result = QualityCheckWorkflow.run_correlation(
@@ -1226,19 +1218,19 @@ class TestEdgeCases:
         )
         assert result.correlation_df.shape == (2, 2)
 
-    def test_validate_then_run(self, basic_conc_df, simple_experiment, default_config):
+    def test_validate_then_run(self, basic_conc_df, simple_experiment_2x3, default_config):
         """Validate inputs before running pipeline."""
         errors = QualityCheckWorkflow.validate_inputs(
-            basic_conc_df, simple_experiment
+            basic_conc_df, simple_experiment_2x3
         )
         assert errors == []
 
         results = QualityCheckWorkflow.run_non_interactive(
-            basic_conc_df, simple_experiment, default_config
+            basic_conc_df, simple_experiment_2x3, default_config
         )
         assert results.validation_errors == []
 
-    def test_no_classkey_column(self, simple_experiment):
+    def test_no_classkey_column(self, simple_experiment_2x3):
         """DataFrame without ClassKey column."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1250,7 +1242,7 @@ class TestEdgeCases:
             'concentration[s6]': [150.0, 250.0],
         })
         # Box plots should work without ClassKey
-        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment)
+        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment_2x3)
         assert isinstance(result, BoxPlotResult)
 
     def test_partial_samples_box_plots(self):
@@ -1306,7 +1298,7 @@ class TestEdgeCases:
 class TestTypeCoercion:
     """Tests for handling various data types."""
 
-    def test_string_numbers_in_concentration(self, simple_experiment):
+    def test_string_numbers_in_concentration(self, simple_experiment_2x3):
         """String numbers in concentration columns (object dtype)."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1321,10 +1313,10 @@ class TestTypeCoercion:
         # Convert to numeric as would happen in real pipeline
         for col in [c for c in df.columns if c.startswith('concentration[')]:
             df[col] = pd.to_numeric(df[col])
-        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment)
+        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment_2x3)
         assert isinstance(result, BoxPlotResult)
 
-    def test_int_concentrations(self, simple_experiment):
+    def test_int_concentrations(self, simple_experiment_2x3):
         """Integer concentration values."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1336,10 +1328,10 @@ class TestTypeCoercion:
             'concentration[s5]': [140, 240],
             'concentration[s6]': [150, 250],
         })
-        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment)
+        result = QualityCheckWorkflow.run_box_plots(df, simple_experiment_2x3)
         assert isinstance(result, BoxPlotResult)
 
-    def test_mixed_numeric_types(self, simple_experiment):
+    def test_mixed_numeric_types(self, simple_experiment_2x3):
         """Mixed int and float concentrations."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1351,10 +1343,10 @@ class TestTypeCoercion:
             'concentration[s5]': [140, 240.5],
             'concentration[s6]': [150.5, 250],
         })
-        result = QualityCheckWorkflow.run_pca(df, simple_experiment)
+        result = QualityCheckWorkflow.run_pca(df, simple_experiment_2x3)
         assert isinstance(result, PCAResult)
 
-    def test_int64_concentrations_correlation(self, simple_experiment):
+    def test_int64_concentrations_correlation(self, simple_experiment_2x3):
         """Correlation handles int64 concentration columns."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
@@ -1367,7 +1359,7 @@ class TestTypeCoercion:
             'concentration[s6]': pd.array([80, 180, 280], dtype='int64'),
         })
         result = QualityCheckWorkflow.run_correlation(
-            df, simple_experiment, 'Control'
+            df, simple_experiment_2x3, 'Control'
         )
         assert isinstance(result, CorrelationResult)
         assert result.correlation_df.shape == (3, 3)
@@ -1391,7 +1383,7 @@ class TestTypeCoercion:
         result = QualityCheckWorkflow.run_bqc_assessment(df, exp, config)
         assert isinstance(result, BQCPrepareResult)
 
-    def test_int_concentrations_remove_samples(self, simple_experiment):
+    def test_int_concentrations_remove_samples(self, simple_experiment_2x3):
         """remove_samples handles integer concentration columns."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1404,7 +1396,7 @@ class TestTypeCoercion:
             'concentration[s6]': [150, 250],
         })
         result = QualityCheckWorkflow.remove_samples(
-            df, simple_experiment, ['s1']
+            df, simple_experiment_2x3, ['s1']
         )
         assert isinstance(result, SampleRemovalResult)
         assert result.samples_after == 5
@@ -1438,7 +1430,7 @@ class TestTypeCoercion:
         assert isinstance(result, BQCFilterResult)
         assert len(result.filtered_df) == 2
 
-    def test_int_concentrations_non_interactive(self, simple_experiment):
+    def test_int_concentrations_non_interactive(self, simple_experiment_2x3):
         """run_non_interactive handles integer concentration columns."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
@@ -1452,7 +1444,7 @@ class TestTypeCoercion:
         })
         config = QualityCheckConfig()
         result = QualityCheckWorkflow.run_non_interactive(
-            df, simple_experiment, config
+            df, simple_experiment_2x3, config
         )
         assert result.validation_errors == []
         assert result.box_plot is not None
@@ -1465,9 +1457,9 @@ class TestTypeCoercion:
 class TestImmutability:
     """Tests to ensure workflow methods don't modify input data."""
 
-    def test_box_plots_immutable(self, basic_conc_df, simple_experiment):
+    def test_box_plots_immutable(self, basic_conc_df, simple_experiment_2x3):
         original = basic_conc_df.copy()
-        QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment)
+        QualityCheckWorkflow.run_box_plots(basic_conc_df, simple_experiment_2x3)
         pd.testing.assert_frame_equal(basic_conc_df, original)
 
     def test_bqc_assessment_immutable(
@@ -1486,21 +1478,21 @@ class TestImmutability:
         )
         pd.testing.assert_frame_equal(basic_conc_df, original)
 
-    def test_correlation_immutable(self, basic_conc_df, simple_experiment):
+    def test_correlation_immutable(self, basic_conc_df, simple_experiment_2x3):
         original = basic_conc_df.copy()
         QualityCheckWorkflow.run_correlation(
-            basic_conc_df, simple_experiment, 'Control'
+            basic_conc_df, simple_experiment_2x3, 'Control'
         )
         pd.testing.assert_frame_equal(basic_conc_df, original)
 
-    def test_pca_immutable(self, basic_conc_df, simple_experiment):
+    def test_pca_immutable(self, basic_conc_df, simple_experiment_2x3):
         original = basic_conc_df.copy()
-        QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment)
+        QualityCheckWorkflow.run_pca(basic_conc_df, simple_experiment_2x3)
         pd.testing.assert_frame_equal(basic_conc_df, original)
 
-    def test_remove_samples_immutable(self, basic_conc_df, simple_experiment):
+    def test_remove_samples_immutable(self, basic_conc_df, simple_experiment_2x3):
         original = basic_conc_df.copy()
         QualityCheckWorkflow.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         pd.testing.assert_frame_equal(basic_conc_df, original)

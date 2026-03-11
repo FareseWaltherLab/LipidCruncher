@@ -13,18 +13,10 @@ from app.services.quality_check import (
     SampleRemovalResult,
 )
 from app.models.experiment import ExperimentConfig
-from tests.conftest import make_experiment
-
 
 # =============================================================================
 # Test Fixtures
 # =============================================================================
-
-@pytest.fixture
-def simple_experiment():
-    """2 conditions x 3 samples each = 6 samples (s1..s6)."""
-    return make_experiment(2, 3)
-
 
 @pytest.fixture
 def single_sample_experiment():
@@ -47,7 +39,7 @@ def large_experiment():
 
 
 @pytest.fixture
-def basic_conc_df(simple_experiment):
+def basic_conc_df(simple_experiment_2x3):
     """Basic DataFrame with concentration columns for 6 samples."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)'],
@@ -62,7 +54,7 @@ def basic_conc_df(simple_experiment):
 
 
 @pytest.fixture
-def conc_df_with_zeros(simple_experiment):
+def conc_df_with_zeros(simple_experiment_2x3):
     """DataFrame with some zero values in concentration columns."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)', 'SM(d18:1_16:0)'],
@@ -125,7 +117,7 @@ def rt_df():
 
 
 @pytest.fixture
-def multi_class_df(simple_experiment):
+def multi_class_df(simple_experiment_2x3):
     """DataFrame with multiple lipids per class for correlation/PCA."""
     return pd.DataFrame({
         'LipidMolec': [
@@ -288,48 +280,48 @@ class TestMeanCalculation:
 class TestPrepareBoxPlotData:
     """Tests for prepare_box_plot_data()."""
 
-    def test_basic_box_plot_data(self, basic_conc_df, simple_experiment):
+    def test_basic_box_plot_data(self, basic_conc_df, simple_experiment_2x3):
         """Basic preparation returns correct structure."""
-        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment_2x3)
         assert isinstance(result, BoxPlotResult)
         assert len(result.available_samples) == 6
         assert result.mean_area_df.shape == (3, 6)
 
-    def test_returns_concentration_columns_only(self, basic_conc_df, simple_experiment):
+    def test_returns_concentration_columns_only(self, basic_conc_df, simple_experiment_2x3):
         """mean_area_df contains only concentration columns."""
-        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment_2x3)
         for col in result.mean_area_df.columns:
             assert col.startswith('concentration[')
 
-    def test_no_metadata_columns(self, basic_conc_df, simple_experiment):
+    def test_no_metadata_columns(self, basic_conc_df, simple_experiment_2x3):
         """mean_area_df does not contain LipidMolec or ClassKey."""
-        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment_2x3)
         assert 'LipidMolec' not in result.mean_area_df.columns
         assert 'ClassKey' not in result.mean_area_df.columns
 
-    def test_missing_values_all_nonzero(self, basic_conc_df, simple_experiment):
+    def test_missing_values_all_nonzero(self, basic_conc_df, simple_experiment_2x3):
         """No zeros → all missing_values_percent should be 0."""
-        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment_2x3)
         assert all(pct == 0.0 for pct in result.missing_values_percent)
 
-    def test_missing_values_with_zeros(self, conc_df_with_zeros, simple_experiment):
+    def test_missing_values_with_zeros(self, conc_df_with_zeros, simple_experiment_2x3):
         """Correct missing value percentages when zeros exist."""
-        result = QualityCheckService.prepare_box_plot_data(conc_df_with_zeros, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(conc_df_with_zeros, simple_experiment_2x3)
         n_rows = len(conc_df_with_zeros)
         # s1: [1000, 0, 3000, 0] → 2 zeros out of 4 = 50%
         assert result.missing_values_percent[0] == pytest.approx(50.0)
 
-    def test_missing_values_length_matches_samples(self, basic_conc_df, simple_experiment):
+    def test_missing_values_length_matches_samples(self, basic_conc_df, simple_experiment_2x3):
         """missing_values_percent has same length as available_samples."""
-        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment_2x3)
         assert len(result.missing_values_percent) == len(result.available_samples)
 
-    def test_available_samples_order(self, basic_conc_df, simple_experiment):
+    def test_available_samples_order(self, basic_conc_df, simple_experiment_2x3):
         """available_samples follows experiment's full_samples_list order."""
-        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment_2x3)
         assert result.available_samples == ['s1', 's2', 's3', 's4', 's5', 's6']
 
-    def test_partial_columns_available(self, simple_experiment):
+    def test_partial_columns_available(self, simple_experiment_2x3):
         """Only samples with concentration columns are returned."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -338,17 +330,17 @@ class TestPrepareBoxPlotData:
             'concentration[s2]': [200.0],
             # s3-s6 missing
         })
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         assert result.available_samples == ['s1', 's2']
         assert result.mean_area_df.shape[1] == 2
 
-    def test_empty_dataframe_raises(self, simple_experiment):
+    def test_empty_dataframe_raises(self, simple_experiment_2x3):
         """Empty DataFrame raises ValueError."""
         df = pd.DataFrame()
         with pytest.raises(ValueError, match="empty"):
-            QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+            QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
 
-    def test_no_concentration_columns_raises(self, simple_experiment):
+    def test_no_concentration_columns_raises(self, simple_experiment_2x3):
         """DataFrame without concentration columns raises ValueError."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -356,15 +348,15 @@ class TestPrepareBoxPlotData:
             'intensity[s1]': [100.0],
         })
         with pytest.raises(ValueError, match="no concentration columns"):
-            QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+            QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
 
-    def test_does_not_modify_original(self, basic_conc_df, simple_experiment):
+    def test_does_not_modify_original(self, basic_conc_df, simple_experiment_2x3):
         """Original DataFrame is not modified."""
         original_cols = list(basic_conc_df.columns)
-        QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment)
+        QualityCheckService.prepare_box_plot_data(basic_conc_df, simple_experiment_2x3)
         assert list(basic_conc_df.columns) == original_cols
 
-    def test_all_zeros_100_percent_missing(self, simple_experiment):
+    def test_all_zeros_100_percent_missing(self, simple_experiment_2x3):
         """All-zero column should be 100% missing."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -372,12 +364,12 @@ class TestPrepareBoxPlotData:
             'concentration[s1]': [0.0, 0.0],
             'concentration[s2]': [100.0, 200.0],
         })
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         # s1 is all zeros
         s1_idx = result.available_samples.index('s1')
         assert result.missing_values_percent[s1_idx] == pytest.approx(100.0)
 
-    def test_single_row_dataframe(self, simple_experiment):
+    def test_single_row_dataframe(self, simple_experiment_2x3):
         """Single-row DataFrame works correctly."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -385,7 +377,7 @@ class TestPrepareBoxPlotData:
             'concentration[s1]': [100.0],
             'concentration[s2]': [0.0],
         })
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         s1_idx = result.available_samples.index('s1')
         s2_idx = result.available_samples.index('s2')
         assert result.missing_values_percent[s1_idx] == pytest.approx(0.0)
@@ -931,9 +923,9 @@ class TestRetentionTimeAvailability:
 class TestCorrelationEligibleConditions:
     """Tests for get_correlation_eligible_conditions()."""
 
-    def test_all_multi_replicate(self, simple_experiment):
+    def test_all_multi_replicate(self, simple_experiment_2x3):
         """All conditions eligible when all have >1 replicate."""
-        result = QualityCheckService.get_correlation_eligible_conditions(simple_experiment)
+        result = QualityCheckService.get_correlation_eligible_conditions(simple_experiment_2x3)
         assert result == ['Control', 'Treatment']
 
     def test_mixed_replicates(self):
@@ -1003,83 +995,83 @@ class TestCorrelationEligibleConditions:
 class TestComputeCorrelation:
     """Tests for compute_correlation()."""
 
-    def test_basic_correlation(self, multi_class_df, simple_experiment):
+    def test_basic_correlation(self, multi_class_df, simple_experiment_2x3):
         """Basic correlation returns correct structure."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         assert isinstance(result, CorrelationResult)
         assert result.condition == 'Control'
 
-    def test_correlation_matrix_shape(self, multi_class_df, simple_experiment):
+    def test_correlation_matrix_shape(self, multi_class_df, simple_experiment_2x3):
         """Correlation matrix is square with n_samples dimensions."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         # Control has 3 samples (s1, s2, s3)
         assert result.correlation_df.shape == (3, 3)
 
-    def test_correlation_diagonal_is_one(self, multi_class_df, simple_experiment):
+    def test_correlation_diagonal_is_one(self, multi_class_df, simple_experiment_2x3):
         """Diagonal of correlation matrix should be 1.0."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         for i in range(len(result.correlation_df)):
             assert result.correlation_df.iloc[i, i] == pytest.approx(1.0)
 
-    def test_correlation_symmetry(self, multi_class_df, simple_experiment):
+    def test_correlation_symmetry(self, multi_class_df, simple_experiment_2x3):
         """Correlation matrix should be symmetric."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         corr = result.correlation_df
         for i in range(len(corr)):
             for j in range(len(corr)):
                 assert corr.iloc[i, j] == pytest.approx(corr.iloc[j, i])
 
-    def test_biological_threshold(self, multi_class_df, simple_experiment):
+    def test_biological_threshold(self, multi_class_df, simple_experiment_2x3):
         """Without bqc_label → biological replicates (threshold=0.7)."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         assert result.threshold == 0.7
         assert result.sample_type == 'biological replicates'
 
-    def test_technical_threshold(self, multi_class_df, simple_experiment):
+    def test_technical_threshold(self, multi_class_df, simple_experiment_2x3):
         """With bqc_label → technical replicates (threshold=0.8)."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control', bqc_label='BQC'
+            multi_class_df, simple_experiment_2x3, 'Control', bqc_label='BQC'
         )
         assert result.threshold == 0.8
         assert result.sample_type == 'technical replicates'
 
-    def test_vmin_always_half(self, multi_class_df, simple_experiment):
+    def test_vmin_always_half(self, multi_class_df, simple_experiment_2x3):
         """v_min is always 0.5."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         assert result.v_min == 0.5
 
-    def test_condition_samples_correct(self, multi_class_df, simple_experiment):
+    def test_condition_samples_correct(self, multi_class_df, simple_experiment_2x3):
         """condition_samples lists the right samples."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         assert result.condition_samples == ['s1', 's2', 's3']
 
-    def test_treatment_condition(self, multi_class_df, simple_experiment):
+    def test_treatment_condition(self, multi_class_df, simple_experiment_2x3):
         """Correlation works for second condition."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Treatment'
+            multi_class_df, simple_experiment_2x3, 'Treatment'
         )
         assert result.condition == 'Treatment'
         assert result.condition_samples == ['s4', 's5', 's6']
 
-    def test_invalid_condition_raises(self, multi_class_df, simple_experiment):
+    def test_invalid_condition_raises(self, multi_class_df, simple_experiment_2x3):
         """Non-existent condition raises ValueError."""
         with pytest.raises(ValueError, match="not found"):
             QualityCheckService.compute_correlation(
-                multi_class_df, simple_experiment, 'NonExistent'
+                multi_class_df, simple_experiment_2x3, 'NonExistent'
             )
 
     def test_single_sample_condition_raises(self):
@@ -1099,14 +1091,14 @@ class TestComputeCorrelation:
         with pytest.raises(ValueError, match="at least 2 replicates"):
             QualityCheckService.compute_correlation(df, exp, 'A')
 
-    def test_empty_dataframe_raises(self, simple_experiment):
+    def test_empty_dataframe_raises(self, simple_experiment_2x3):
         """Empty DataFrame raises ValueError."""
         with pytest.raises(ValueError, match="empty"):
             QualityCheckService.compute_correlation(
-                pd.DataFrame(), simple_experiment, 'Control'
+                pd.DataFrame(), simple_experiment_2x3, 'Control'
             )
 
-    def test_missing_concentration_columns_raises(self, simple_experiment):
+    def test_missing_concentration_columns_raises(self, simple_experiment_2x3):
         """Missing concentration columns raises ValueError."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1114,12 +1106,12 @@ class TestComputeCorrelation:
             # s2, s3 missing
         })
         with pytest.raises(ValueError, match="Missing concentration columns"):
-            QualityCheckService.compute_correlation(df, simple_experiment, 'Control')
+            QualityCheckService.compute_correlation(df, simple_experiment_2x3, 'Control')
 
-    def test_column_names_are_sample_labels(self, multi_class_df, simple_experiment):
+    def test_column_names_are_sample_labels(self, multi_class_df, simple_experiment_2x3):
         """Correlation DataFrame columns/index are sample labels, not concentration[...]."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         assert list(result.correlation_df.columns) == ['s1', 's2', 's3']
         assert list(result.correlation_df.index) == ['s1', 's2', 's3']
@@ -1139,10 +1131,10 @@ class TestComputeCorrelation:
         result = QualityCheckService.compute_correlation(df, exp, 'A')
         assert result.correlation_df.iloc[0, 1] == pytest.approx(1.0)
 
-    def test_correlation_values_between_minus1_and_1(self, multi_class_df, simple_experiment):
+    def test_correlation_values_between_minus1_and_1(self, multi_class_df, simple_experiment_2x3):
         """All correlation values should be between -1 and 1."""
         result = QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         for i in range(len(result.correlation_df)):
             for j in range(len(result.correlation_df)):
@@ -1181,11 +1173,11 @@ class TestComputeCorrelation:
         assert result.condition_samples == ['s5', 's6']
         assert result.correlation_df.shape == (2, 2)
 
-    def test_correlation_does_not_modify_original(self, multi_class_df, simple_experiment):
+    def test_correlation_does_not_modify_original(self, multi_class_df, simple_experiment_2x3):
         """Original DataFrame is not modified by correlation."""
         original_cols = list(multi_class_df.columns)
         QualityCheckService.compute_correlation(
-            multi_class_df, simple_experiment, 'Control'
+            multi_class_df, simple_experiment_2x3, 'Control'
         )
         assert list(multi_class_df.columns) == original_cols
 
@@ -1213,46 +1205,46 @@ class TestComputeCorrelation:
 class TestComputePCA:
     """Tests for compute_pca()."""
 
-    def test_basic_pca(self, multi_class_df, simple_experiment):
+    def test_basic_pca(self, multi_class_df, simple_experiment_2x3):
         """Basic PCA returns correct structure."""
-        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         assert isinstance(result, PCAResult)
 
-    def test_pc_df_shape(self, multi_class_df, simple_experiment):
+    def test_pc_df_shape(self, multi_class_df, simple_experiment_2x3):
         """PC DataFrame has (n_samples, 2) shape."""
-        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         assert result.pc_df.shape == (6, 2)
 
-    def test_pc_df_columns(self, multi_class_df, simple_experiment):
+    def test_pc_df_columns(self, multi_class_df, simple_experiment_2x3):
         """PC DataFrame has PC1 and PC2 columns."""
-        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         assert list(result.pc_df.columns) == ['PC1', 'PC2']
 
-    def test_pc_labels_format(self, multi_class_df, simple_experiment):
+    def test_pc_labels_format(self, multi_class_df, simple_experiment_2x3):
         """PC labels contain variance explained percentages."""
-        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         assert len(result.pc_labels) == 2
         assert result.pc_labels[0].startswith('PC1')
         assert '%' in result.pc_labels[0]
         assert result.pc_labels[1].startswith('PC2')
         assert '%' in result.pc_labels[1]
 
-    def test_available_samples(self, multi_class_df, simple_experiment):
+    def test_available_samples(self, multi_class_df, simple_experiment_2x3):
         """available_samples lists all samples with concentration columns."""
-        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         assert result.available_samples == ['s1', 's2', 's3', 's4', 's5', 's6']
 
-    def test_conditions_mapped(self, multi_class_df, simple_experiment):
+    def test_conditions_mapped(self, multi_class_df, simple_experiment_2x3):
         """Conditions mapped correctly per sample."""
-        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         assert result.conditions == [
             'Control', 'Control', 'Control',
             'Treatment', 'Treatment', 'Treatment',
         ]
 
-    def test_variance_explained_sums_to_one_or_less(self, multi_class_df, simple_experiment):
+    def test_variance_explained_sums_to_one_or_less(self, multi_class_df, simple_experiment_2x3):
         """Variance explained by PC1+PC2 <= 100%."""
-        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         # Extract percentages from labels like 'PC1 (45%)'
         import re
         pcts = []
@@ -1262,9 +1254,9 @@ class TestComputePCA:
                 pcts.append(int(match.group(1)))
         assert sum(pcts) <= 100
 
-    def test_pc1_explains_more_than_pc2(self, multi_class_df, simple_experiment):
+    def test_pc1_explains_more_than_pc2(self, multi_class_df, simple_experiment_2x3):
         """PC1 should explain more variance than PC2."""
-        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        result = QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         import re
         pcts = []
         for label in result.pc_labels:
@@ -1288,21 +1280,21 @@ class TestComputePCA:
         with pytest.raises(ValueError, match="at least 2 samples"):
             QualityCheckService.compute_pca(df, exp)
 
-    def test_empty_dataframe_raises(self, simple_experiment):
+    def test_empty_dataframe_raises(self, simple_experiment_2x3):
         """Empty DataFrame raises ValueError."""
         with pytest.raises(ValueError, match="empty"):
-            QualityCheckService.compute_pca(pd.DataFrame(), simple_experiment)
+            QualityCheckService.compute_pca(pd.DataFrame(), simple_experiment_2x3)
 
-    def test_no_concentration_columns_raises(self, simple_experiment):
+    def test_no_concentration_columns_raises(self, simple_experiment_2x3):
         """No matching concentration columns raises ValueError."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
             'intensity[s1]': [100.0],
         })
         with pytest.raises(ValueError, match="no concentration columns"):
-            QualityCheckService.compute_pca(df, simple_experiment)
+            QualityCheckService.compute_pca(df, simple_experiment_2x3)
 
-    def test_partial_samples(self, simple_experiment):
+    def test_partial_samples(self, simple_experiment_2x3):
         """PCA works with partial sample columns."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
@@ -1311,14 +1303,14 @@ class TestComputePCA:
             'concentration[s3]': [120.0, 220.0, 320.0],
             # s4, s5, s6 missing
         })
-        result = QualityCheckService.compute_pca(df, simple_experiment)
+        result = QualityCheckService.compute_pca(df, simple_experiment_2x3)
         assert result.available_samples == ['s1', 's2', 's3']
         assert result.pc_df.shape == (3, 2)
 
-    def test_does_not_modify_original(self, multi_class_df, simple_experiment):
+    def test_does_not_modify_original(self, multi_class_df, simple_experiment_2x3):
         """Original DataFrame is not modified."""
         original_shape = multi_class_df.shape
-        QualityCheckService.compute_pca(multi_class_df, simple_experiment)
+        QualityCheckService.compute_pca(multi_class_df, simple_experiment_2x3)
         assert multi_class_df.shape == original_shape
 
     def test_pca_with_two_samples(self):
@@ -1362,54 +1354,54 @@ class TestComputePCA:
 class TestRemoveSamples:
     """Tests for remove_samples()."""
 
-    def test_remove_single_sample(self, basic_conc_df, simple_experiment):
+    def test_remove_single_sample(self, basic_conc_df, simple_experiment_2x3):
         """Remove one sample from a 6-sample experiment."""
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s3']
+            basic_conc_df, simple_experiment_2x3, ['s3']
         )
         assert isinstance(result, SampleRemovalResult)
         assert result.samples_before == 6
         assert result.samples_after == 5
         assert result.removed_samples == ['s3']
 
-    def test_remove_multiple_samples(self, basic_conc_df, simple_experiment):
+    def test_remove_multiple_samples(self, basic_conc_df, simple_experiment_2x3):
         """Remove two samples from different conditions."""
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s2', 's5']
+            basic_conc_df, simple_experiment_2x3, ['s2', 's5']
         )
         assert result.samples_before == 6
         assert result.samples_after == 4
         assert set(result.removed_samples) == {'s2', 's5'}
 
-    def test_columns_renamed_sequentially(self, basic_conc_df, simple_experiment):
+    def test_columns_renamed_sequentially(self, basic_conc_df, simple_experiment_2x3):
         """After removal, columns are renamed to match new sequential labels."""
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s2']
+            basic_conc_df, simple_experiment_2x3, ['s2']
         )
         new_exp = result.updated_experiment
         for s in new_exp.full_samples_list:
             assert f'concentration[{s}]' in result.updated_df.columns
 
-    def test_removed_column_not_in_result(self, basic_conc_df, simple_experiment):
+    def test_removed_column_not_in_result(self, basic_conc_df, simple_experiment_2x3):
         """Removed sample's concentration column is not in updated_df."""
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s3']
+            basic_conc_df, simple_experiment_2x3, ['s3']
         )
         # The old column concentration[s3] should not exist
         # (it may have been renamed to something else, but the data for s3 is gone)
         assert result.samples_after == 5
 
-    def test_updated_experiment_config(self, basic_conc_df, simple_experiment):
+    def test_updated_experiment_config(self, basic_conc_df, simple_experiment_2x3):
         """Updated experiment has correct sample counts."""
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s1', 's4']
+            basic_conc_df, simple_experiment_2x3, ['s1', 's4']
         )
         new_exp = result.updated_experiment
         # Control had 3 (s1,s2,s3) → now 2; Treatment had 3 (s4,s5,s6) → now 2
         assert new_exp.number_of_samples_list == [2, 2]
         assert sum(new_exp.number_of_samples_list) == 4
 
-    def test_condition_dropped_when_empty(self, simple_experiment):
+    def test_condition_dropped_when_empty(self, simple_experiment_2x3):
         """Condition is dropped when all its samples are removed."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1422,20 +1414,20 @@ class TestRemoveSamples:
             'concentration[s6]': [600.0],
         })
         result = QualityCheckService.remove_samples(
-            df, simple_experiment, ['s1', 's2', 's3']
+            df, simple_experiment_2x3, ['s1', 's2', 's3']
         )
         # Control condition entirely removed
         assert result.updated_experiment.n_conditions == 1
         assert result.updated_experiment.conditions_list == ['Treatment']
 
-    def test_empty_samples_to_remove_raises(self, basic_conc_df, simple_experiment):
+    def test_empty_samples_to_remove_raises(self, basic_conc_df, simple_experiment_2x3):
         """Empty samples_to_remove raises ValueError."""
         with pytest.raises(ValueError, match="cannot be empty"):
             QualityCheckService.remove_samples(
-                basic_conc_df, simple_experiment, []
+                basic_conc_df, simple_experiment_2x3, []
             )
 
-    def test_too_many_removals_raises(self, simple_experiment):
+    def test_too_many_removals_raises(self, simple_experiment_2x3):
         """Removing all but 1 sample raises ValueError."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1448,28 +1440,28 @@ class TestRemoveSamples:
         })
         with pytest.raises(ValueError, match="at least 2 are required"):
             QualityCheckService.remove_samples(
-                df, simple_experiment, ['s1', 's2', 's3', 's4', 's5']
+                df, simple_experiment_2x3, ['s1', 's2', 's3', 's4', 's5']
             )
 
-    def test_nonexistent_sample_silently_ignored(self, basic_conc_df, simple_experiment):
+    def test_nonexistent_sample_silently_ignored(self, basic_conc_df, simple_experiment_2x3):
         """Non-existent sample labels are silently filtered out."""
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s1', 'nonexistent']
+            basic_conc_df, simple_experiment_2x3, ['s1', 'nonexistent']
         )
         assert result.removed_samples == ['s1']
         assert result.samples_after == 5
 
-    def test_does_not_modify_original(self, basic_conc_df, simple_experiment):
+    def test_does_not_modify_original(self, basic_conc_df, simple_experiment_2x3):
         """Original DataFrame and experiment are not modified."""
         original_cols = list(basic_conc_df.columns)
         original_shape = basic_conc_df.shape
         QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         assert list(basic_conc_df.columns) == original_cols
         assert basic_conc_df.shape == original_shape
 
-    def test_data_integrity_after_removal(self, simple_experiment):
+    def test_data_integrity_after_removal(self, simple_experiment_2x3):
         """Data values are preserved (just columns renamed)."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1481,7 +1473,7 @@ class TestRemoveSamples:
             'concentration[s5]': [500.0],
             'concentration[s6]': [600.0],
         })
-        result = QualityCheckService.remove_samples(df, simple_experiment, ['s3'])
+        result = QualityCheckService.remove_samples(df, simple_experiment_2x3, ['s3'])
         # s1=100, s2=200 stay as s1,s2; s4=400,s5=500,s6=600 become s3,s4,s5
         new_df = result.updated_df
         assert new_df['concentration[s1]'].iloc[0] == 100.0
@@ -1489,15 +1481,15 @@ class TestRemoveSamples:
         # s4 → s3 in new labeling
         assert new_df['concentration[s3]'].iloc[0] == 400.0
 
-    def test_metadata_columns_preserved(self, basic_conc_df, simple_experiment):
+    def test_metadata_columns_preserved(self, basic_conc_df, simple_experiment_2x3):
         """Non-concentration columns (LipidMolec, ClassKey) preserved."""
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         assert 'LipidMolec' in result.updated_df.columns
         assert 'ClassKey' in result.updated_df.columns
 
-    def test_remove_all_samples_from_all_conditions_raises(self, simple_experiment):
+    def test_remove_all_samples_from_all_conditions_raises(self, simple_experiment_2x3):
         """Removing all samples raises ValueError."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1510,11 +1502,11 @@ class TestRemoveSamples:
         })
         with pytest.raises(ValueError):
             QualityCheckService.remove_samples(
-                df, simple_experiment,
+                df, simple_experiment_2x3,
                 ['s1', 's2', 's3', 's4', 's5', 's6']
             )
 
-    def test_remove_exactly_n_minus_2_boundary(self, simple_experiment):
+    def test_remove_exactly_n_minus_2_boundary(self, simple_experiment_2x3):
         """Removing N-2 samples leaves exactly 2 (minimum allowed)."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1526,26 +1518,26 @@ class TestRemoveSamples:
             'concentration[s6]': [600.0],
         })
         result = QualityCheckService.remove_samples(
-            df, simple_experiment, ['s1', 's2', 's3', 's4']
+            df, simple_experiment_2x3, ['s1', 's2', 's3', 's4']
         )
         assert result.samples_after == 2
 
-    def test_all_nonexistent_samples_still_raises(self, basic_conc_df, simple_experiment):
+    def test_all_nonexistent_samples_still_raises(self, basic_conc_df, simple_experiment_2x3):
         """All nonexistent samples → 0 actual removals → but still <2 check passes.
         Empty list after filtering → would leave all 6 → should not raise."""
         # Actually all are filtered out, remaining=6, so it won't raise for <2.
         # But actual_to_remove is empty which leaves remaining unchanged.
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['x1', 'x2']
+            basic_conc_df, simple_experiment_2x3, ['x1', 'x2']
         )
         assert result.removed_samples == []
         assert result.samples_after == 6
 
-    def test_column_count_after_removal(self, basic_conc_df, simple_experiment):
+    def test_column_count_after_removal(self, basic_conc_df, simple_experiment_2x3):
         """Number of concentration columns decreases by number removed."""
         original_conc_cols = [c for c in basic_conc_df.columns if c.startswith('concentration[')]
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s2', 's5']
+            basic_conc_df, simple_experiment_2x3, ['s2', 's5']
         )
         new_conc_cols = [c for c in result.updated_df.columns if c.startswith('concentration[')]
         assert len(new_conc_cols) == len(original_conc_cols) - 2
@@ -1569,7 +1561,7 @@ class TestRemoveSamples:
         assert 'Control' not in result.updated_experiment.conditions_list
         assert result.samples_after == 4
 
-    def test_remove_sample_renaming_across_conditions(self, simple_experiment):
+    def test_remove_sample_renaming_across_conditions(self, simple_experiment_2x3):
         """Verify exact rename mapping when removing from middle."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1582,7 +1574,7 @@ class TestRemoveSamples:
         })
         # Remove s2 (Control) and s4 (Treatment)
         result = QualityCheckService.remove_samples(
-            df, simple_experiment, ['s2', 's4']
+            df, simple_experiment_2x3, ['s2', 's4']
         )
         new_df = result.updated_df
         # Surviving: s1(10), s3(30), s5(50), s6(60) → renamed to s1, s2, s3, s4
@@ -1614,28 +1606,28 @@ class TestValidation:
         df = pd.DataFrame({'a': [1]})
         QualityCheckService._validate_dataframe(df)  # Should not raise
 
-    def test_validate_concentration_columns_found(self, simple_experiment):
+    def test_validate_concentration_columns_found(self, simple_experiment_2x3):
         """Returns available samples when columns exist."""
         df = pd.DataFrame({
             'concentration[s1]': [100.0],
             'concentration[s2]': [200.0],
         })
-        result = QualityCheckService._validate_concentration_columns(df, simple_experiment)
+        result = QualityCheckService._validate_concentration_columns(df, simple_experiment_2x3)
         assert result == ['s1', 's2']
 
-    def test_validate_concentration_columns_none_found(self, simple_experiment):
+    def test_validate_concentration_columns_none_found(self, simple_experiment_2x3):
         """Raises when no concentration columns match."""
         df = pd.DataFrame({'intensity[s1]': [100.0]})
         with pytest.raises(ValueError, match="no concentration columns"):
-            QualityCheckService._validate_concentration_columns(df, simple_experiment)
+            QualityCheckService._validate_concentration_columns(df, simple_experiment_2x3)
 
-    def test_validate_concentration_columns_partial(self, simple_experiment):
+    def test_validate_concentration_columns_partial(self, simple_experiment_2x3):
         """Returns only available samples when some are missing."""
         df = pd.DataFrame({
             'concentration[s1]': [100.0],
             'concentration[s3]': [300.0],
         })
-        result = QualityCheckService._validate_concentration_columns(df, simple_experiment)
+        result = QualityCheckService._validate_concentration_columns(df, simple_experiment_2x3)
         assert result == ['s1', 's3']
 
     def test_validate_bqc_label_found(self, bqc_experiment):
@@ -1648,15 +1640,15 @@ class TestValidation:
         with pytest.raises(ValueError, match="not found"):
             QualityCheckService._validate_bqc_label(bqc_experiment, 'NoSuchLabel')
 
-    def test_validate_condition_found(self, simple_experiment):
+    def test_validate_condition_found(self, simple_experiment_2x3):
         """Returns correct index for valid condition."""
-        idx = QualityCheckService._validate_condition(simple_experiment, 'Treatment')
+        idx = QualityCheckService._validate_condition(simple_experiment_2x3, 'Treatment')
         assert idx == 1
 
-    def test_validate_condition_not_found(self, simple_experiment):
+    def test_validate_condition_not_found(self, simple_experiment_2x3):
         """Raises for invalid condition."""
         with pytest.raises(ValueError, match="not found"):
-            QualityCheckService._validate_condition(simple_experiment, 'NoSuch')
+            QualityCheckService._validate_condition(simple_experiment_2x3, 'NoSuch')
 
     def test_validate_cov_threshold_positive(self):
         """Positive threshold passes validation."""
@@ -1684,7 +1676,7 @@ class TestValidation:
 class TestEdgeCases:
     """Edge case tests across multiple methods."""
 
-    def test_nan_values_in_concentration(self, simple_experiment):
+    def test_nan_values_in_concentration(self, simple_experiment_2x3):
         """NaN values in concentration columns are handled."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1692,11 +1684,11 @@ class TestEdgeCases:
             'concentration[s1]': [100.0, np.nan],
             'concentration[s2]': [np.nan, 200.0],
         })
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         # NaN is not zero, so missing percent based on zeros should be 0
         assert result.available_samples == ['s1', 's2']
 
-    def test_large_dataset_performance(self, simple_experiment):
+    def test_large_dataset_performance(self, simple_experiment_2x3):
         """Service handles large DataFrames (1000 lipids)."""
         n = 1000
         data = {
@@ -1706,7 +1698,7 @@ class TestEdgeCases:
         for s in ['s1', 's2', 's3', 's4', 's5', 's6']:
             data[f'concentration[{s}]'] = np.random.rand(n) * 1000
         df = pd.DataFrame(data)
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         assert len(result.available_samples) == 6
         assert result.mean_area_df.shape == (n, 6)
 
@@ -1783,7 +1775,7 @@ class TestEdgeCases:
         assert len(result.available_samples) == 20
         assert result.mean_area_df.shape == (1, 20)
 
-    def test_special_characters_in_lipid_names(self, simple_experiment):
+    def test_special_characters_in_lipid_names(self, simple_experiment_2x3):
         """Lipid names with special characters handled correctly."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(15:0_18:1)+D7:(s)', 'PE O-18:0/20:4', 'TG 16:0;2'],
@@ -1791,17 +1783,17 @@ class TestEdgeCases:
             'concentration[s1]': [100.0, 200.0, 300.0],
             'concentration[s2]': [110.0, 210.0, 310.0],
         })
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         assert len(result.available_samples) == 2
 
-    def test_remove_samples_preserves_row_count(self, basic_conc_df, simple_experiment):
+    def test_remove_samples_preserves_row_count(self, basic_conc_df, simple_experiment_2x3):
         """Removing samples doesn't change row count (lipids)."""
         result = QualityCheckService.remove_samples(
-            basic_conc_df, simple_experiment, ['s1']
+            basic_conc_df, simple_experiment_2x3, ['s1']
         )
         assert len(result.updated_df) == len(basic_conc_df)
 
-    def test_filter_then_pca_pipeline(self, simple_experiment):
+    def test_filter_then_pca_pipeline(self, simple_experiment_2x3):
         """Simulates BQC filter → PCA flow."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)', 'SM(d18:1)'],
@@ -1817,11 +1809,11 @@ class TestEdgeCases:
         filter_result = QualityCheckService.filter_by_bqc(df, ['PC(16:0)'])
         # PCA on filtered data
         pca_result = QualityCheckService.compute_pca(
-            filter_result.filtered_df, simple_experiment
+            filter_result.filtered_df, simple_experiment_2x3
         )
         assert pca_result.pc_df.shape[0] == 6
 
-    def test_remove_then_pca_pipeline(self, simple_experiment):
+    def test_remove_then_pca_pipeline(self, simple_experiment_2x3):
         """Simulates sample removal → PCA flow."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1835,7 +1827,7 @@ class TestEdgeCases:
         })
         # Remove s3
         remove_result = QualityCheckService.remove_samples(
-            df, simple_experiment, ['s3']
+            df, simple_experiment_2x3, ['s3']
         )
         # PCA on updated data with updated experiment
         pca_result = QualityCheckService.compute_pca(
@@ -1867,7 +1859,7 @@ class TestEdgeCases:
         # Let's just check it doesn't crash
         assert result is None or isinstance(result, float)
 
-    def test_box_plot_with_mixed_types(self, simple_experiment):
+    def test_box_plot_with_mixed_types(self, simple_experiment_2x3):
         """Box plot handles integer and float concentration values."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1875,7 +1867,7 @@ class TestEdgeCases:
             'concentration[s1]': [100],   # int
             'concentration[s2]': [200.5], # float
         })
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         assert result.mean_area_df.shape == (1, 2)
 
 
@@ -1901,7 +1893,7 @@ class TestTypeCoercion:
         assert result == pytest.approx(20.0)
         assert isinstance(result, float)
 
-    def test_box_plot_object_dtype_column(self, simple_experiment):
+    def test_box_plot_object_dtype_column(self, simple_experiment_2x3):
         """Box plot handles object dtype columns that contain numeric values."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1912,7 +1904,7 @@ class TestTypeCoercion:
         # Convert to numeric (simulates real-world data cleaning)
         df['concentration[s1]'] = pd.to_numeric(df['concentration[s1]'])
         df['concentration[s2]'] = pd.to_numeric(df['concentration[s2]'])
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         assert result.mean_area_df.shape == (2, 2)
 
     def test_correlation_with_int64_columns(self):
@@ -2005,7 +1997,7 @@ class TestTypeCoercion:
             np.int64, np.float64, int,
         )
 
-    def test_box_plot_with_float32_columns(self, simple_experiment):
+    def test_box_plot_with_float32_columns(self, simple_experiment_2x3):
         """Box plot handles float32 concentration columns."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -2013,7 +2005,7 @@ class TestTypeCoercion:
             'concentration[s1]': pd.array([100.0, 200.0], dtype='float32'),
             'concentration[s2]': pd.array([110.0, 210.0], dtype='float32'),
         })
-        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         assert result.mean_area_df.shape == (2, 2)
 
     def test_bqc_with_float32_columns(self):
@@ -2088,7 +2080,7 @@ class TestTypeCoercion:
 class TestMultiStepPipelines:
     """Tests for realistic multi-step workflows."""
 
-    def test_full_qc_pipeline_no_bqc(self, simple_experiment):
+    def test_full_qc_pipeline_no_bqc(self, simple_experiment_2x3):
         """Full QC pipeline without BQC: box plot → correlation → PCA."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)', 'SM(d18:1)'],
@@ -2101,20 +2093,20 @@ class TestMultiStepPipelines:
             'concentration[s6]': [80, 180, 280, 380],
         })
         # Step 1: box plot
-        box_result = QualityCheckService.prepare_box_plot_data(df, simple_experiment)
+        box_result = QualityCheckService.prepare_box_plot_data(df, simple_experiment_2x3)
         assert box_result.mean_area_df.shape == (4, 6)
 
         # Step 2: correlation for each condition
-        eligible = QualityCheckService.get_correlation_eligible_conditions(simple_experiment)
+        eligible = QualityCheckService.get_correlation_eligible_conditions(simple_experiment_2x3)
         assert len(eligible) == 2
         for cond in eligible:
             corr_result = QualityCheckService.compute_correlation(
-                df, simple_experiment, cond
+                df, simple_experiment_2x3, cond
             )
             assert corr_result.correlation_df.shape == (3, 3)
 
         # Step 3: PCA
-        pca_result = QualityCheckService.compute_pca(df, simple_experiment)
+        pca_result = QualityCheckService.compute_pca(df, simple_experiment_2x3)
         assert pca_result.pc_df.shape == (6, 2)
 
     def test_full_qc_pipeline_with_bqc(self, bqc_experiment):
@@ -2161,7 +2153,7 @@ class TestMultiStepPipelines:
         )
         assert pca_result.pc_df.shape[0] == 8
 
-    def test_pca_then_remove_then_pca_again(self, simple_experiment):
+    def test_pca_then_remove_then_pca_again(self, simple_experiment_2x3):
         """PCA → identify outlier → remove → re-PCA."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
@@ -2174,12 +2166,12 @@ class TestMultiStepPipelines:
             'concentration[s6]': [80, 180, 280],
         })
         # First PCA
-        pca1 = QualityCheckService.compute_pca(df, simple_experiment)
+        pca1 = QualityCheckService.compute_pca(df, simple_experiment_2x3)
         assert pca1.pc_df.shape == (6, 2)
 
         # Remove outlier s4
         remove_result = QualityCheckService.remove_samples(
-            df, simple_experiment, ['s4']
+            df, simple_experiment_2x3, ['s4']
         )
         assert remove_result.samples_after == 5
 
@@ -2223,7 +2215,7 @@ class TestMultiStepPipelines:
             )
             assert isinstance(corr, CorrelationResult)
 
-    def test_retention_time_check_in_pipeline(self, simple_experiment):
+    def test_retention_time_check_in_pipeline(self, simple_experiment_2x3):
         """Retention time check integrates into pipeline correctly."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
@@ -2250,7 +2242,7 @@ class TestMultiStepPipelines:
         assert rt_after.available is True
         assert len(rt_after.lipid_classes) == 2  # PC removed
 
-    def test_box_plot_after_sample_removal(self, simple_experiment):
+    def test_box_plot_after_sample_removal(self, simple_experiment_2x3):
         """Box plot works correctly after sample removal."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -2264,7 +2256,7 @@ class TestMultiStepPipelines:
         })
         # Remove s3
         removed = QualityCheckService.remove_samples(
-            df, simple_experiment, ['s3']
+            df, simple_experiment_2x3, ['s3']
         )
         # Box plot on updated data
         box_result = QualityCheckService.prepare_box_plot_data(

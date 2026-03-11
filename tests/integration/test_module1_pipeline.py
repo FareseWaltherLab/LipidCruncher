@@ -199,13 +199,6 @@ def get_sample_names_from_df(df: pd.DataFrame) -> list:
 # =============================================================================
 
 @pytest.fixture
-def simple_experiment():
-    """Simple 2x2 experiment for edge case tests."""
-    from tests.conftest import make_experiment
-    return make_experiment(2, 2)
-
-
-@pytest.fixture
 def lipidsearch_experiment():
     """
     Experiment config matching lipidsearch5_test_dataset.csv.
@@ -1138,10 +1131,10 @@ class TestNormalizationInternalStandard:
             'PE(17:0_20:4)(d7)': 1.0
         }
 
-    def test_is_normalization_basic(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment):
+    def test_is_normalization_basic(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment_2x2):
         """Test basic internal standard normalization."""
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='internal_standard',
                 selected_classes=['PC', 'PE'],
@@ -1161,10 +1154,10 @@ class TestNormalizationInternalStandard:
         assert result.success
         assert 'internal' in result.method_applied.lower() or 'standard' in result.method_applied.lower()
 
-    def test_is_normalization_removes_standards_from_output(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment):
+    def test_is_normalization_removes_standards_from_output(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment_2x2):
         """Test that internal standards are removed from output."""
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='internal_standard',
                 selected_classes=['PC', 'PE'],
@@ -1187,10 +1180,10 @@ class TestNormalizationInternalStandard:
             output_names = set(result.normalized_df['LipidMolec'].tolist())
             assert len(standard_names & output_names) == 0
 
-    def test_is_normalization_class_specific_standards(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment):
+    def test_is_normalization_class_specific_standards(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment_2x2):
         """Test that each class uses its assigned standard."""
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='internal_standard',
                 selected_classes=['PC', 'PE'],
@@ -1212,7 +1205,7 @@ class TestNormalizationInternalStandard:
         conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
         assert len(conc_cols) > 0
 
-    def test_is_normalization_single_standard_all_classes(self, simple_experiment):
+    def test_is_normalization_single_standard_all_classes(self, simple_experiment_2x2):
         """Test using single standard for multiple classes."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(16:0_18:1)', 'PC(15:0_18:1)(d7)'],
@@ -1235,7 +1228,7 @@ class TestNormalizationInternalStandard:
         intsta_conc = {'PC(15:0_18:1)(d7)': 1.0}
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='internal_standard',
                 selected_classes=['PC', 'PE'],
@@ -1252,10 +1245,10 @@ class TestNormalizationInternalStandard:
 
         assert result.success
 
-    def test_is_normalization_output_units(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment):
+    def test_is_normalization_output_units(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment_2x2):
         """Test that output is properly normalized (relative to standard)."""
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='internal_standard',
                 selected_classes=['PC', 'PE'],
@@ -1368,7 +1361,7 @@ class TestNormalizationProtein:
         assert result.success
         assert 'protein' in result.method_applied.lower() or 'Protein' in result.method_applied
 
-    def test_protein_normalization_divides_by_concentration(self, simple_experiment):
+    def test_protein_normalization_divides_by_concentration(self, simple_experiment_2x2):
         """Test that protein normalization divides intensity by concentration."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(16:0_18:1)'],
@@ -1383,7 +1376,7 @@ class TestNormalizationProtein:
         protein_concs = {'s1': 10.0, 's2': 20.0, 's3': 10.0, 's4': 20.0}
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='protein',
                 selected_classes=['PC', 'PE'],
@@ -1402,7 +1395,7 @@ class TestNormalizationProtein:
                 assert abs(pc_row['concentration[s1]'].values[0] - 100.0) < 0.1
                 assert abs(pc_row['concentration[s2]'].values[0] - 50.0) < 0.1
 
-    def test_protein_normalization_varying_concentrations(self, simple_experiment):
+    def test_protein_normalization_varying_concentrations(self, simple_experiment_2x2):
         """Test protein normalization with varying concentrations."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
@@ -1417,7 +1410,7 @@ class TestNormalizationProtein:
         protein_concs = {'s1': 5.0, 's2': 10.0, 's3': 15.0, 's4': 20.0}
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='protein',
                 selected_classes=['PC'],
@@ -1433,7 +1426,7 @@ class TestNormalizationProtein:
         if result.normalized_df is not None:
             assert result.normalized_df['concentration[s1]'].values[0] > result.normalized_df['concentration[s4]'].values[0]
 
-    def test_protein_normalization_with_class_filter(self, simple_experiment):
+    def test_protein_normalization_with_class_filter(self, simple_experiment_2x2):
         """Test protein normalization with class filtering."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(16:0_18:1)', 'TG(16:0_18:1_18:2)'],
@@ -1447,7 +1440,7 @@ class TestNormalizationProtein:
         protein_concs = {'s1': 10.0, 's2': 10.0, 's3': 10.0, 's4': 10.0}
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='protein',
                 selected_classes=['PC', 'PE'],  # Exclude TG
@@ -1501,12 +1494,12 @@ class TestNormalizationBoth:
         """Internal standard concentrations for combined normalization."""
         return {'PC(15:0_18:1)(d7)': 1.0}
 
-    def test_both_normalization_basic(self, data_with_standards, standards_for_both, intsta_conc_for_both, simple_experiment):
+    def test_both_normalization_basic(self, data_with_standards, standards_for_both, intsta_conc_for_both, simple_experiment_2x2):
         """Test combined IS + protein normalization."""
         protein_concs = {'s1': 10.0, 's2': 10.0, 's3': 10.0, 's4': 10.0}
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='both',
                 selected_classes=['PC', 'PE'],
@@ -1528,12 +1521,12 @@ class TestNormalizationBoth:
         # method_applied returns 'Combined normalization (internal standards + protein)'
         assert 'combined' in result.method_applied.lower() or 'both' in result.method_applied.lower()
 
-    def test_both_normalization_removes_standards(self, data_with_standards, standards_for_both, intsta_conc_for_both, simple_experiment):
+    def test_both_normalization_removes_standards(self, data_with_standards, standards_for_both, intsta_conc_for_both, simple_experiment_2x2):
         """Test that combined method removes standards."""
         protein_concs = {'s1': 10.0, 's2': 10.0, 's3': 10.0, 's4': 10.0}
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='both',
                 selected_classes=['PC', 'PE'],
@@ -1555,12 +1548,12 @@ class TestNormalizationBoth:
         if result.normalized_df is not None:
             assert 'PC(15:0_18:1)(d7)' not in result.normalized_df['LipidMolec'].values
 
-    def test_both_normalization_output_structure(self, data_with_standards, standards_for_both, intsta_conc_for_both, simple_experiment):
+    def test_both_normalization_output_structure(self, data_with_standards, standards_for_both, intsta_conc_for_both, simple_experiment_2x2):
         """Test output structure of combined normalization."""
         protein_concs = {'s1': 10.0, 's2': 10.0, 's3': 10.0, 's4': 10.0}
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='both',
                 selected_classes=['PC', 'PE'],
@@ -1801,10 +1794,10 @@ class TestIngestionNormalizationIntegration:
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
-    def test_single_row_full_pipeline(self, single_row_df, simple_experiment):
+    def test_single_row_full_pipeline(self, single_row_df, simple_experiment_2x2):
         """Test pipeline with single row DataFrame."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -1814,10 +1807,10 @@ class TestEdgeCases:
         assert result.is_valid
         assert len(result.cleaned_df) == 1
 
-    def test_partial_zeros_filtering(self, partial_zeros_df, simple_experiment):
+    def test_partial_zeros_filtering(self, partial_zeros_df, simple_experiment_2x2):
         """Test that rows with all zeros are filtered out."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=True,
         )
@@ -1828,10 +1821,10 @@ class TestEdgeCases:
             # Rows with all zeros should be filtered
             assert result.species_removed_count >= 0
 
-    def test_nan_values_handling(self, nan_values_df, simple_experiment):
+    def test_nan_values_handling(self, nan_values_df, simple_experiment_2x2):
         """Test handling of NaN values in intensity columns."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -1841,10 +1834,10 @@ class TestEdgeCases:
         # Should handle NaN values gracefully
         assert result.is_valid or len(result.validation_errors) > 0
 
-    def test_duplicate_lipids_handling(self, duplicate_lipids_df, simple_experiment):
+    def test_duplicate_lipids_handling(self, duplicate_lipids_df, simple_experiment_2x2):
         """Test handling of duplicate lipid entries."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -1854,10 +1847,10 @@ class TestEdgeCases:
         # Should process without crashing
         assert result.is_valid or len(result.validation_errors) > 0
 
-    def test_standards_only_data(self, standards_only_df, simple_experiment):
+    def test_standards_only_data(self, standards_only_df, simple_experiment_2x2):
         """Test data containing only internal standards."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -1867,10 +1860,10 @@ class TestEdgeCases:
         # Should process and detect all as standards
         assert result.is_valid or len(result.validation_errors) > 0
 
-    def test_mixed_standards_data(self, mixed_standards_df, simple_experiment):
+    def test_mixed_standards_data(self, mixed_standards_df, simple_experiment_2x2):
         """Test data with mix of regular lipids and standards."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -1882,7 +1875,7 @@ class TestEdgeCases:
         if result.internal_standards_df is not None:
             assert len(result.internal_standards_df) >= 0
 
-    def test_very_large_intensity_values(self, simple_experiment):
+    def test_very_large_intensity_values(self, simple_experiment_2x2):
         """Test handling of very large intensity values."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
@@ -1894,7 +1887,7 @@ class TestEdgeCases:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -1903,7 +1896,7 @@ class TestEdgeCases:
 
         assert result.is_valid
 
-    def test_very_small_intensity_values(self, simple_experiment):
+    def test_very_small_intensity_values(self, simple_experiment_2x2):
         """Test handling of very small intensity values."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
@@ -1915,7 +1908,7 @@ class TestEdgeCases:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -2000,7 +1993,7 @@ class TestEdgeCases:
 
         assert result.is_valid
 
-    def test_many_lipid_classes(self, simple_experiment):
+    def test_many_lipid_classes(self, simple_experiment_2x2):
         """Test data with many lipid classes."""
         classes = ['PC', 'PE', 'TG', 'SM', 'CL', 'PI', 'PS', 'PG', 'PA', 'LPC', 'LPE', 'Cer', 'DG', 'MG']
         data = {
@@ -2015,7 +2008,7 @@ class TestEdgeCases:
         df = pd.DataFrame(data)
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -2033,10 +2026,10 @@ class TestEdgeCases:
 class TestErrorHandling:
     """Tests for error handling and validation."""
 
-    def test_empty_dataframe_handling(self, empty_df, simple_experiment):
+    def test_empty_dataframe_handling(self, empty_df, simple_experiment_2x2):
         """Test handling of empty DataFrame."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -2046,7 +2039,7 @@ class TestErrorHandling:
         # Should fail validation
         assert not result.is_valid or len(result.validation_errors) > 0
 
-    def test_missing_lipidmolec_column(self, simple_experiment):
+    def test_missing_lipidmolec_column(self, simple_experiment_2x2):
         """Test handling of missing LipidMolec column."""
         data = pd.DataFrame({
             'WrongColumn': ['PC(16:0_18:1)'],
@@ -2058,7 +2051,7 @@ class TestErrorHandling:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -2069,9 +2062,9 @@ class TestErrorHandling:
         # or it might fail - either is acceptable error handling
         assert result.is_valid or len(result.validation_errors) > 0
 
-    def test_sample_count_mismatch(self, simple_experiment):
+    def test_sample_count_mismatch(self, simple_experiment_2x2):
         """Test handling of sample count mismatch."""
-        # simple_experiment expects 4 samples but data has 3
+        # simple_experiment_2x2 expects 4 samples but data has 3
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
             'ClassKey': ['PC'],
@@ -2081,7 +2074,7 @@ class TestErrorHandling:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -2091,7 +2084,7 @@ class TestErrorHandling:
         # Should detect mismatch
         assert not result.is_valid or 'Missing' in str(result.validation_errors)
 
-    def test_normalization_without_required_data(self, simple_experiment):
+    def test_normalization_without_required_data(self, simple_experiment_2x2):
         """Test IS normalization without standards data."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
@@ -2103,7 +2096,7 @@ class TestErrorHandling:
         })
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='internal_standard',
                 selected_classes=['PC'],
@@ -2119,7 +2112,7 @@ class TestErrorHandling:
         # Should fail
         assert not result.success or len(result.validation_errors) > 0
 
-    def test_protein_normalization_without_concentrations(self, simple_experiment):
+    def test_protein_normalization_without_concentrations(self, simple_experiment_2x2):
         """Test protein normalization fails without concentrations."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
@@ -2133,7 +2126,7 @@ class TestErrorHandling:
         # This should raise validation error at config creation
         try:
             norm_config = NormalizationWorkflowConfig(
-                experiment=simple_experiment,
+                experiment=simple_experiment_2x2,
                 normalization=NormalizationConfig(
                     method='protein',
                     selected_classes=['PC'],
@@ -2148,7 +2141,7 @@ class TestErrorHandling:
             # Expected - validation error at config creation
             pass
 
-    def test_invalid_class_selection(self, simple_experiment):
+    def test_invalid_class_selection(self, simple_experiment_2x2):
         """Test normalization with invalid class selection."""
         data = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
@@ -2160,7 +2153,7 @@ class TestErrorHandling:
         })
 
         norm_config = NormalizationWorkflowConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             normalization=NormalizationConfig(
                 method='none',
                 selected_classes=['INVALID_CLASS']  # Not in data
@@ -2173,10 +2166,10 @@ class TestErrorHandling:
         # Should fail validation
         assert not result.success or 'not found' in str(result.validation_errors).lower()
 
-    def test_all_zeros_zero_filtering(self, all_zeros_df, simple_experiment):
+    def test_all_zeros_zero_filtering(self, all_zeros_df, simple_experiment_2x2):
         """Test zero filtering on data with all zeros."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=True,
         )
@@ -2188,13 +2181,13 @@ class TestErrorHandling:
             # Either empty result or all removed
             assert result.cleaned_df is None or len(result.cleaned_df) == 0 or result.species_removed_count == len(all_zeros_df)
 
-    def test_ingestion_error_prevents_normalization(self, simple_experiment):
+    def test_ingestion_error_prevents_normalization(self, simple_experiment_2x2):
         """Test that ingestion errors prevent subsequent normalization."""
         # Create invalid data
         data = pd.DataFrame()  # Empty
 
         ingestion_config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False,
         )
@@ -2207,7 +2200,7 @@ class TestErrorHandling:
         # If we try to normalize, it should also fail
         if ingestion_result.cleaned_df is not None:
             norm_config = NormalizationWorkflowConfig(
-                experiment=simple_experiment,
+                experiment=simple_experiment_2x2,
                 normalization=NormalizationConfig(
                     method='none',
                     selected_classes=[]

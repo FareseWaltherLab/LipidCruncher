@@ -86,42 +86,42 @@ class TestStatisticalTestConfigValidation:
 
     def test_invalid_mode(self):
         """Test that invalid mode raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="auto.*manual"):
             StatisticalTestConfig(mode='invalid')
 
     def test_invalid_test_type(self):
         """Test that invalid test_type raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="parametric.*non_parametric.*auto"):
             StatisticalTestConfig(test_type='invalid')
 
     def test_invalid_correction_method(self):
         """Test that invalid correction_method raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="uncorrected.*fdr_bh.*bonferroni.*auto"):
             StatisticalTestConfig(correction_method='invalid')
 
     def test_invalid_posthoc_correction(self):
         """Test that invalid posthoc_correction raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="uncorrected.*tukey.*bonferroni.*auto"):
             StatisticalTestConfig(posthoc_correction='invalid')
 
     def test_alpha_zero_invalid(self):
         """Test that alpha=0 raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="greater than 0"):
             StatisticalTestConfig(alpha=0)
 
     def test_alpha_one_invalid(self):
         """Test that alpha=1 raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="less than 1"):
             StatisticalTestConfig(alpha=1)
 
     def test_alpha_negative_invalid(self):
         """Test that negative alpha raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="greater than 0"):
             StatisticalTestConfig(alpha=-0.05)
 
     def test_alpha_greater_than_one_invalid(self):
         """Test that alpha > 1 raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="less than 1"):
             StatisticalTestConfig(alpha=1.5)
 
     def test_alpha_boundary_low(self):

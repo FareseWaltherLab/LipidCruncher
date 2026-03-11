@@ -6,6 +6,8 @@ This module contains:
 - display_sample_grouping: Complete sample grouping UI orchestration
 """
 
+from typing import Optional, Tuple
+
 import streamlit as st
 import pandas as pd
 
@@ -119,7 +121,7 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         return group_df, df
 
 
-def display_sample_grouping(df: pd.DataFrame, data_format: str):
+def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optional[ExperimentConfig], Optional[str]]:
     """
     Display complete sample grouping UI in sidebar.
     Includes: experiment definition, group samples, BQC, and confirmation.

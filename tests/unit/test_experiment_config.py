@@ -31,7 +31,7 @@ class TestExperimentConfigCreation:
 
     def test_invalid_n_conditions_zero(self):
         """Test that zero conditions raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="greater than 0"):
             ExperimentConfig(
                 n_conditions=0,
                 conditions_list=[],
@@ -40,7 +40,7 @@ class TestExperimentConfigCreation:
 
     def test_invalid_n_conditions_negative(self):
         """Test that negative conditions raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="greater than 0"):
             ExperimentConfig(
                 n_conditions=-1,
                 conditions_list=['WT'],
@@ -447,7 +447,7 @@ class TestExperimentConfigListLengthValidation:
 
     def test_conditions_list_length_mismatch_fewer(self):
         """Test that fewer conditions than n_conditions raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="conditions_list.*must match n_conditions"):
             ExperimentConfig(
                 n_conditions=3,
                 conditions_list=['A', 'B'],  # Only 2, expected 3
@@ -456,7 +456,7 @@ class TestExperimentConfigListLengthValidation:
 
     def test_conditions_list_length_mismatch_more(self):
         """Test that more conditions than n_conditions raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="conditions_list.*must match n_conditions"):
             ExperimentConfig(
                 n_conditions=2,
                 conditions_list=['A', 'B', 'C'],  # 3, expected 2
@@ -465,7 +465,7 @@ class TestExperimentConfigListLengthValidation:
 
     def test_samples_list_length_mismatch_fewer(self):
         """Test that fewer sample counts than n_conditions raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="number_of_samples_list.*must match n_conditions"):
             ExperimentConfig(
                 n_conditions=3,
                 conditions_list=['A', 'B', 'C'],
@@ -474,7 +474,7 @@ class TestExperimentConfigListLengthValidation:
 
     def test_samples_list_length_mismatch_more(self):
         """Test that more sample counts than n_conditions raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="number_of_samples_list.*must match n_conditions"):
             ExperimentConfig(
                 n_conditions=2,
                 conditions_list=['A', 'B'],
@@ -483,7 +483,7 @@ class TestExperimentConfigListLengthValidation:
 
     def test_both_lists_too_short(self):
         """Test both lists shorter than n_conditions."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="must match n_conditions"):
             ExperimentConfig(
                 n_conditions=5,
                 conditions_list=['A', 'B'],
@@ -748,7 +748,7 @@ class TestExperimentConfigFactoryMethod:
 
     def test_from_user_input_propagates_n_conditions_error(self):
         """Test factory method propagates n_conditions validation error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="greater than 0"):
             ExperimentConfig.from_user_input(
                 n_conditions=0,
                 conditions_list=[],
@@ -859,7 +859,7 @@ class TestExperimentConfigComputedFieldsEdgeCases:
             number_of_samples_list=[2, 2]
         )
         # Frozen model prevents field assignment
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError, match="frozen"):
             config.full_samples_list = ['x1', 'x2']
 
     def test_computed_fields_update_on_model_copy_update(self):

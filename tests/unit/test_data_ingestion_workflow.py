@@ -33,12 +33,6 @@ def basic_experiment():
 
 
 @pytest.fixture
-def simple_experiment():
-    """Simple 2x2 experiment matching other test files."""
-    return make_experiment(2, 2)
-
-
-@pytest.fixture
 def experiment_with_bqc():
     """Experiment with BQC condition."""
     return make_experiment(
@@ -79,7 +73,7 @@ def unequal_samples_experiment():
 # =============================================================================
 
 @pytest.fixture
-def lipidsearch_df(simple_experiment):
+def lipidsearch_df(simple_experiment_2x2):
     """Sample LipidSearch 5.0 format DataFrame (standardized column names)."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)', 'SM(d18:1_16:0)'],
@@ -134,7 +128,7 @@ def lipidsearch_all_grades_df():
 
 
 @pytest.fixture
-def lipidsearch_df_with_standards(simple_experiment):
+def lipidsearch_df_with_standards(simple_experiment_2x2):
     """LipidSearch DataFrame with internal standards."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PC(15:0_18:1-d7)', 'PE(18:0_20:4)', 'PE(17:0_20:4-d7)'],
@@ -197,7 +191,7 @@ def lipidsearch_df_only_standards():
 # =============================================================================
 
 @pytest.fixture
-def msdial_df(simple_experiment):
+def msdial_df(simple_experiment_2x2):
     """Sample MS-DIAL format DataFrame (standardized column names)."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)', 'SM(d18:1_16:0)'],
@@ -269,7 +263,7 @@ def msdial_low_quality_df():
 # =============================================================================
 
 @pytest.fixture
-def generic_df(simple_experiment):
+def generic_df(simple_experiment_2x2):
     """Sample Generic format DataFrame."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)', 'SM(d18:1_16:0)'],
@@ -321,7 +315,7 @@ def generic_df_no_class():
 # =============================================================================
 
 @pytest.fixture
-def df_with_zeros(simple_experiment):
+def df_with_zeros(simple_experiment_2x2):
     """DataFrame with some zero values for filtering tests."""
     return pd.DataFrame({
         'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)', 'SM(d18:1_16:0)'],
@@ -726,21 +720,21 @@ class TestIngestionResult:
 class TestIngestionConfig:
     """Tests for IngestionConfig dataclass."""
 
-    def test_minimal_config(self, simple_experiment):
+    def test_minimal_config(self, simple_experiment_2x2):
         """Test creating config with minimal required fields."""
-        config = IngestionConfig(experiment=simple_experiment)
-        assert config.experiment == simple_experiment
+        config = IngestionConfig(experiment=simple_experiment_2x2)
+        assert config.experiment == simple_experiment_2x2
         assert config.data_format is None
         assert config.apply_zero_filter is True
         assert config.use_external_standards is False
 
-    def test_full_config(self, simple_experiment):
+    def test_full_config(self, simple_experiment_2x2):
         """Test creating config with all fields."""
         grade_config = GradeFilterConfig()
         zero_config = ZeroFilterConfig()
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             grade_config=grade_config,
             apply_zero_filter=True,
@@ -752,24 +746,24 @@ class TestIngestionConfig:
         assert config.grade_config is not None
         assert config.bqc_label == 'BQC'
 
-    def test_config_with_all_formats(self, simple_experiment):
+    def test_config_with_all_formats(self, simple_experiment_2x2):
         """Test config with each data format."""
         for fmt in [DataFormat.LIPIDSEARCH, DataFormat.MSDIAL, DataFormat.GENERIC]:
             config = IngestionConfig(
-                experiment=simple_experiment,
+                experiment=simple_experiment_2x2,
                 data_format=fmt
             )
             assert config.data_format == fmt
 
-    def test_config_with_zero_filter_disabled(self, simple_experiment):
+    def test_config_with_zero_filter_disabled(self, simple_experiment_2x2):
         """Test config with zero filtering disabled."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
         assert config.apply_zero_filter is False
 
-    def test_config_with_custom_zero_filter(self, simple_experiment):
+    def test_config_with_custom_zero_filter(self, simple_experiment_2x2):
         """Test config with custom zero filter settings."""
         zero_config = ZeroFilterConfig(
             detection_threshold=0.1,
@@ -777,36 +771,36 @@ class TestIngestionConfig:
             non_bqc_threshold=0.6
         )
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             zero_filter_config=zero_config
         )
         assert config.zero_filter_config.detection_threshold == 0.1
         assert config.zero_filter_config.bqc_threshold == 0.3
 
-    def test_config_with_grade_config(self, simple_experiment):
+    def test_config_with_grade_config(self, simple_experiment_2x2):
         """Test config with grade filter configuration."""
         grade_config = GradeFilterConfig(grade_config={'PC': ['A'], 'PE': ['A', 'B']})
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             grade_config=grade_config
         )
         assert config.grade_config is not None
         assert 'PC' in config.grade_config.grade_config
 
-    def test_config_with_quality_config(self, simple_experiment):
+    def test_config_with_quality_config(self, simple_experiment_2x2):
         """Test config with MS-DIAL quality filter configuration."""
         quality_config = QualityFilterConfig(total_score_threshold=70, require_msms=True)
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             quality_config=quality_config
         )
         assert config.quality_config is not None
         assert config.quality_config.total_score_threshold == 70
 
-    def test_config_with_external_standards(self, simple_experiment, external_standards_simple):
+    def test_config_with_external_standards(self, simple_experiment_2x2, external_standards_simple):
         """Test config with external standards enabled."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             use_external_standards=True,
             external_standards_df=external_standards_simple
         )
@@ -830,10 +824,10 @@ class TestIngestionConfig:
         assert config1.experiment.n_conditions == 1
         assert config2.experiment.n_conditions == 5
 
-    def test_config_preserves_experiment_reference(self, simple_experiment):
+    def test_config_preserves_experiment_reference(self, simple_experiment_2x2):
         """Test that config preserves the experiment object reference."""
-        config = IngestionConfig(experiment=simple_experiment)
-        assert config.experiment is simple_experiment
+        config = IngestionConfig(experiment=simple_experiment_2x2)
+        assert config.experiment is simple_experiment_2x2
 
 
 # =============================================================================
@@ -1325,11 +1319,11 @@ class TestGetSampleColumns:
 class TestWorkflowRun:
     """Tests for the complete run() method."""
 
-    def test_basic_workflow_lipidsearch(self, lipidsearch_df, simple_experiment):
+    def test_basic_workflow_lipidsearch(self, lipidsearch_df, simple_experiment_2x2):
         """Test basic workflow with LipidSearch data."""
         # Explicitly specify format since fixture uses standardized column names
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False  # Skip for simplicity
         )
@@ -1341,10 +1335,10 @@ class TestWorkflowRun:
         assert result.cleaned_df is not None
         assert len(result.validation_errors) == 0
 
-    def test_basic_workflow_generic(self, generic_df, simple_experiment):
+    def test_basic_workflow_generic(self, generic_df, simple_experiment_2x2):
         """Test basic workflow with Generic data."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1354,10 +1348,10 @@ class TestWorkflowRun:
         assert result.detected_format == DataFormat.GENERIC
         assert result.cleaned_df is not None
 
-    def test_workflow_with_explicit_format(self, lipidsearch_df, simple_experiment):
+    def test_workflow_with_explicit_format(self, lipidsearch_df, simple_experiment_2x2):
         """Test workflow with explicitly specified format."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -1367,10 +1361,10 @@ class TestWorkflowRun:
         assert result.detected_format == DataFormat.LIPIDSEARCH
         assert result.is_valid is True
 
-    def test_workflow_extracts_standards(self, lipidsearch_df_with_standards, simple_experiment):
+    def test_workflow_extracts_standards(self, lipidsearch_df_with_standards, simple_experiment_2x2):
         """Test that workflow extracts internal standards."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1380,12 +1374,12 @@ class TestWorkflowRun:
         # Internal standards with (d7) should be extracted
         assert result.internal_standards_df is not None
 
-    def test_workflow_with_grade_config(self, lipidsearch_df, simple_experiment):
+    def test_workflow_with_grade_config(self, lipidsearch_df, simple_experiment_2x2):
         """Test workflow with grade filtering config."""
         # GradeFilterConfig takes a dict mapping class to allowed grades
         grade_config = GradeFilterConfig(grade_config={'PC': ['A'], 'PE': ['A', 'B']})
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             grade_config=grade_config,
             apply_zero_filter=False
@@ -1395,11 +1389,11 @@ class TestWorkflowRun:
 
         assert result.is_valid is True
 
-    def test_workflow_unknown_format_fails(self, simple_experiment):
+    def test_workflow_unknown_format_fails(self, simple_experiment_2x2):
         """Test that unknown format causes validation failure."""
         df = pd.DataFrame({'random_col': [1, 2, 3]})
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1409,10 +1403,10 @@ class TestWorkflowRun:
         assert DataFormat.UNKNOWN == result.detected_format
         assert len(result.validation_errors) > 0
 
-    def test_workflow_empty_df_fails(self, simple_experiment):
+    def test_workflow_empty_df_fails(self, simple_experiment_2x2):
         """Test that empty DataFrame causes failure."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1424,10 +1418,10 @@ class TestWorkflowRun:
 class TestWorkflowRunMSDIAL:
     """Tests for MS-DIAL specific workflow runs."""
 
-    def test_msdial_workflow(self, msdial_df, simple_experiment):
+    def test_msdial_workflow(self, msdial_df, simple_experiment_2x2):
         """Test workflow with MS-DIAL format data."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.MSDIAL,
             apply_zero_filter=False
         )
@@ -1437,11 +1431,11 @@ class TestWorkflowRunMSDIAL:
         assert result.is_valid is True
         assert result.detected_format == DataFormat.MSDIAL
 
-    def test_msdial_with_quality_config(self, msdial_df, simple_experiment):
+    def test_msdial_with_quality_config(self, msdial_df, simple_experiment_2x2):
         """Test MS-DIAL workflow with quality filter configuration."""
         quality_config = QualityFilterConfig(total_score_threshold=80, require_msms=True)
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.MSDIAL,
             quality_config=quality_config,
             apply_zero_filter=False
@@ -1451,10 +1445,10 @@ class TestWorkflowRunMSDIAL:
 
         assert result.is_valid is True
 
-    def test_msdial_with_standards(self, msdial_df_with_standards, simple_experiment):
+    def test_msdial_with_standards(self, msdial_df_with_standards, simple_experiment_2x2):
         """Test MS-DIAL workflow extracts internal standards."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.MSDIAL,
             apply_zero_filter=False
         )
@@ -1468,10 +1462,10 @@ class TestWorkflowRunMSDIAL:
 class TestWorkflowRunEdgeCases:
     """Edge case tests for workflow run."""
 
-    def test_workflow_single_row(self, df_single_row, simple_experiment):
+    def test_workflow_single_row(self, df_single_row, simple_experiment_2x2):
         """Test workflow with single row DataFrame."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -1481,10 +1475,10 @@ class TestWorkflowRunEdgeCases:
         assert result.is_valid is True
         assert len(result.cleaned_df) == 1
 
-    def test_workflow_large_dataset(self, df_large_dataset, simple_experiment):
+    def test_workflow_large_dataset(self, df_large_dataset, simple_experiment_2x2):
         """Test workflow with large dataset."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -1494,11 +1488,11 @@ class TestWorkflowRunEdgeCases:
         assert result.is_valid is True
         assert len(result.cleaned_df) > 0
 
-    def test_workflow_preserves_input(self, lipidsearch_df, simple_experiment):
+    def test_workflow_preserves_input(self, lipidsearch_df, simple_experiment_2x2):
         """Test that workflow doesn't modify input DataFrame."""
         original_df = lipidsearch_df.copy()
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -1507,10 +1501,10 @@ class TestWorkflowRunEdgeCases:
 
         pd.testing.assert_frame_equal(lipidsearch_df, original_df)
 
-    def test_workflow_with_special_characters(self, df_special_characters, simple_experiment):
+    def test_workflow_with_special_characters(self, df_special_characters, simple_experiment_2x2):
         """Test workflow with special characters in lipid names."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -1542,10 +1536,10 @@ class TestWorkflowRunEdgeCases:
 
         assert result.is_valid is True
 
-    def test_workflow_mixed_standards(self, lipidsearch_df_with_mixed_standards, simple_experiment):
+    def test_workflow_mixed_standards(self, lipidsearch_df_with_mixed_standards, simple_experiment_2x2):
         """Test workflow extracts multiple standard patterns."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1555,11 +1549,11 @@ class TestWorkflowRunEdgeCases:
         if result.internal_standards_df is not None:
             assert len(result.internal_standards_df) > 0
 
-    def test_workflow_returns_cleaning_messages(self, lipidsearch_df, simple_experiment):
+    def test_workflow_returns_cleaning_messages(self, lipidsearch_df, simple_experiment_2x2):
         """Test that workflow returns cleaning messages."""
         grade_config = GradeFilterConfig(grade_config={'PC': ['A']})
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             grade_config=grade_config,
             apply_zero_filter=False
@@ -1579,10 +1573,10 @@ class TestWorkflowRunEdgeCases:
 class TestWorkflowZeroFiltering:
     """Tests for zero filtering in the workflow."""
 
-    def test_zero_filtering_applied(self, df_with_zeros, simple_experiment):
+    def test_zero_filtering_applied(self, df_with_zeros, simple_experiment_2x2):
         """Test that zero filtering is applied."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True
         )
@@ -1592,10 +1586,10 @@ class TestWorkflowZeroFiltering:
         assert result.is_valid is True
         assert result.zero_filtered is True
 
-    def test_zero_filtering_skipped_when_disabled(self, lipidsearch_df, simple_experiment):
+    def test_zero_filtering_skipped_when_disabled(self, lipidsearch_df, simple_experiment_2x2):
         """Test that zero filtering is skipped when disabled."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1606,7 +1600,7 @@ class TestWorkflowZeroFiltering:
         assert result.species_before_filter == 0
         assert result.species_after_filter == 0
 
-    def test_zero_filtering_with_custom_config(self, df_with_zeros, simple_experiment):
+    def test_zero_filtering_with_custom_config(self, df_with_zeros, simple_experiment_2x2):
         """Test zero filtering with custom configuration."""
         zero_config = ZeroFilterConfig(
             detection_threshold=0,
@@ -1614,7 +1608,7 @@ class TestWorkflowZeroFiltering:
             non_bqc_threshold=0.5
         )
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True,
             zero_filter_config=zero_config
@@ -1628,7 +1622,7 @@ class TestWorkflowZeroFiltering:
 class TestWorkflowZeroFilteringThresholds:
     """Tests for zero filtering threshold boundaries."""
 
-    def test_strict_threshold_filters_more(self, df_with_zeros, simple_experiment):
+    def test_strict_threshold_filters_more(self, df_with_zeros, simple_experiment_2x2):
         """Test that strict threshold filters more species."""
         strict_config = ZeroFilterConfig(
             detection_threshold=0,
@@ -1642,13 +1636,13 @@ class TestWorkflowZeroFilteringThresholds:
         )
 
         strict_ingestion = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True,
             zero_filter_config=strict_config
         )
         lenient_ingestion = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True,
             zero_filter_config=lenient_config
@@ -1660,13 +1654,13 @@ class TestWorkflowZeroFilteringThresholds:
         # Strict should filter more (fewer species after)
         assert strict_result.species_after_filter <= lenient_result.species_after_filter
 
-    def test_detection_threshold_boundary(self, df_with_very_small_values, simple_experiment):
+    def test_detection_threshold_boundary(self, df_with_very_small_values, simple_experiment_2x2):
         """Test detection threshold at boundary values."""
         # Threshold that treats small values as zeros
         high_threshold = ZeroFilterConfig(detection_threshold=1e-4)
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True,
             zero_filter_config=high_threshold
@@ -1677,7 +1671,7 @@ class TestWorkflowZeroFilteringThresholds:
         assert result.is_valid is True
         assert result.zero_filtered is True
 
-    def test_zero_threshold_exact_zero(self, simple_experiment):
+    def test_zero_threshold_exact_zero(self, simple_experiment_2x2):
         """Test zero threshold only considers exact zeros."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
@@ -1696,7 +1690,7 @@ class TestWorkflowZeroFilteringThresholds:
         zero_threshold_config = ZeroFilterConfig(detection_threshold=0)
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True,
             zero_filter_config=zero_threshold_config
@@ -1707,7 +1701,7 @@ class TestWorkflowZeroFilteringThresholds:
         # With exact zero threshold, small values are not zeros
         assert result.is_valid is True
 
-    def test_fifty_percent_threshold(self, simple_experiment):
+    def test_fifty_percent_threshold(self, simple_experiment_2x2):
         """Test 50% non-zero threshold."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
@@ -1726,7 +1720,7 @@ class TestWorkflowZeroFilteringThresholds:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True,
             zero_filter_config=ZeroFilterConfig(non_bqc_threshold=0.5)
@@ -1756,10 +1750,10 @@ class TestWorkflowZeroFilteringBQC:
         assert result.is_valid is True
         assert result.zero_filtered is True
 
-    def test_no_bqc_label_uses_non_bqc_threshold(self, df_with_zeros, simple_experiment):
+    def test_no_bqc_label_uses_non_bqc_threshold(self, df_with_zeros, simple_experiment_2x2):
         """Test that without BQC label, non-BQC threshold is used."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True,
             bqc_label=None  # No BQC
@@ -1774,10 +1768,10 @@ class TestWorkflowZeroFilteringBQC:
 class TestWorkflowZeroFilteringEdgeCases:
     """Edge case tests for zero filtering."""
 
-    def test_all_zeros_dataframe(self, df_all_zeros, simple_experiment):
+    def test_all_zeros_dataframe(self, df_all_zeros, simple_experiment_2x2):
         """Test zero filtering with all-zeros DataFrame."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True
         )
@@ -1787,10 +1781,10 @@ class TestWorkflowZeroFilteringEdgeCases:
         # Should complete but may have warnings or all species removed
         assert result.zero_filtered is True
 
-    def test_no_zeros_dataframe(self, lipidsearch_df, simple_experiment):
+    def test_no_zeros_dataframe(self, lipidsearch_df, simple_experiment_2x2):
         """Test zero filtering when no zeros present."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True
         )
@@ -1802,10 +1796,10 @@ class TestWorkflowZeroFilteringEdgeCases:
         # No species should be removed when no zeros
         assert result.species_removed_count == 0
 
-    def test_filtering_reports_removed_species(self, df_with_zeros, simple_experiment):
+    def test_filtering_reports_removed_species(self, df_with_zeros, simple_experiment_2x2):
         """Test that filtering reports removed species names."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True
         )
@@ -1815,10 +1809,10 @@ class TestWorkflowZeroFilteringEdgeCases:
         if result.species_removed_count > 0:
             assert len(result.removed_species) == result.species_removed_count
 
-    def test_filtering_updates_cleaning_messages(self, df_with_zeros, simple_experiment):
+    def test_filtering_updates_cleaning_messages(self, df_with_zeros, simple_experiment_2x2):
         """Test that filtering adds message to cleaning_messages."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True
         )
@@ -1838,7 +1832,7 @@ class TestWorkflowZeroFilteringEdgeCases:
 class TestWorkflowExternalStandards:
     """Tests for external standards handling."""
 
-    def test_external_standards_used(self, lipidsearch_df, simple_experiment):
+    def test_external_standards_used(self, lipidsearch_df, simple_experiment_2x2):
         """Test that external standards are used when provided."""
         external_standards = pd.DataFrame({
             'LipidMolec': ['PC-IS(d7)'],
@@ -1850,7 +1844,7 @@ class TestWorkflowExternalStandards:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False,
             use_external_standards=True,
             external_standards_df=external_standards
@@ -1864,10 +1858,10 @@ class TestWorkflowExternalStandards:
         # Should have a message about external standards
         assert any('external' in msg.lower() for msg in result.cleaning_messages)
 
-    def test_external_standards_multiple(self, lipidsearch_df, simple_experiment, external_standards_multiple):
+    def test_external_standards_multiple(self, lipidsearch_df, simple_experiment_2x2, external_standards_multiple):
         """Test external standards with multiple standards."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False,
             use_external_standards=True,
             external_standards_df=external_standards_multiple
@@ -1879,10 +1873,10 @@ class TestWorkflowExternalStandards:
         assert result.internal_standards_df is not None
         assert len(result.internal_standards_df) == 4
 
-    def test_external_standards_replaces_auto_detected(self, lipidsearch_df_with_standards, simple_experiment, external_standards_simple):
+    def test_external_standards_replaces_auto_detected(self, lipidsearch_df_with_standards, simple_experiment_2x2, external_standards_simple):
         """Test external standards replace auto-detected standards."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False,
             use_external_standards=True,
             external_standards_df=external_standards_simple
@@ -1894,10 +1888,10 @@ class TestWorkflowExternalStandards:
         # External standards should replace auto-detected
         assert len(result.internal_standards_df) == len(external_standards_simple)
 
-    def test_external_standards_flag_without_df(self, lipidsearch_df, simple_experiment):
+    def test_external_standards_flag_without_df(self, lipidsearch_df, simple_experiment_2x2):
         """Test external standards flag set but no DataFrame provided."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False,
             use_external_standards=True,
             external_standards_df=None
@@ -1908,10 +1902,10 @@ class TestWorkflowExternalStandards:
         # Should still work, just use auto-detected
         assert result.is_valid is True
 
-    def test_external_standards_empty_df(self, lipidsearch_df, simple_experiment, external_standards_empty):
+    def test_external_standards_empty_df(self, lipidsearch_df, simple_experiment_2x2, external_standards_empty):
         """Test external standards with empty DataFrame."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False,
             use_external_standards=True,
             external_standards_df=external_standards_empty
@@ -1925,10 +1919,10 @@ class TestWorkflowExternalStandards:
 class TestWorkflowStandardsExtraction:
     """Tests for internal standards extraction in workflow."""
 
-    def test_deuterated_standards_extracted(self, lipidsearch_df_with_standards, simple_experiment):
+    def test_deuterated_standards_extracted(self, lipidsearch_df_with_standards, simple_experiment_2x2):
         """Test that deuterated standards (d7, d5, d9) are extracted."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1939,10 +1933,10 @@ class TestWorkflowStandardsExtraction:
             # Should extract standards with d7 pattern
             assert len(result.internal_standards_df) > 0
 
-    def test_no_standards_in_data(self, generic_df, simple_experiment):
+    def test_no_standards_in_data(self, generic_df, simple_experiment_2x2):
         """Test workflow when data has no internal standards."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1953,10 +1947,10 @@ class TestWorkflowStandardsExtraction:
         if result.internal_standards_df is not None:
             assert len(result.internal_standards_df) == 0
 
-    def test_only_standards_data(self, lipidsearch_df_only_standards, simple_experiment):
+    def test_only_standards_data(self, lipidsearch_df_only_standards, simple_experiment_2x2):
         """Test workflow when all data is standards."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1965,10 +1959,10 @@ class TestWorkflowStandardsExtraction:
         # Should handle gracefully
         assert result.is_valid is True
 
-    def test_mixed_standards_patterns(self, lipidsearch_df_with_mixed_standards, simple_experiment):
+    def test_mixed_standards_patterns(self, lipidsearch_df_with_mixed_standards, simple_experiment_2x2):
         """Test extraction of multiple standard patterns."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -1987,7 +1981,7 @@ class TestWorkflowStandardsExtraction:
 class TestWorkflowErrorHandling:
     """Tests for error handling in the workflow."""
 
-    def test_cleaning_error_captured(self, simple_experiment):
+    def test_cleaning_error_captured(self, simple_experiment_2x2):
         """Test that cleaning errors are captured in result."""
         # Create DataFrame that will fail cleaning (missing intensity columns)
         df = pd.DataFrame({
@@ -1997,7 +1991,7 @@ class TestWorkflowErrorHandling:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False
         )
@@ -2008,7 +2002,7 @@ class TestWorkflowErrorHandling:
         assert result.is_valid is False
         assert len(result.validation_errors) > 0
 
-    def test_invalid_zero_config_raises(self, simple_experiment):
+    def test_invalid_zero_config_raises(self, simple_experiment_2x2):
         """Test that invalid zero filter config raises ValueError."""
         with pytest.raises(ValueError, match="detection_threshold"):
             ZeroFilterConfig(detection_threshold=-1)
@@ -2023,11 +2017,11 @@ class TestWorkflowErrorHandling:
         with pytest.raises(ValueError):
             ZeroFilterConfig(non_bqc_threshold=1.5)
 
-    def test_unknown_format_error_message(self, simple_experiment):
+    def test_unknown_format_error_message(self, simple_experiment_2x2):
         """Test error message content for unknown format."""
         df = pd.DataFrame({'random': [1, 2, 3]})
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -2036,10 +2030,10 @@ class TestWorkflowErrorHandling:
         assert result.is_valid is False
         assert any('format' in err.lower() for err in result.validation_errors)
 
-    def test_empty_df_error_message(self, simple_experiment):
+    def test_empty_df_error_message(self, simple_experiment_2x2):
         """Test error message for empty DataFrame."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -2047,7 +2041,7 @@ class TestWorkflowErrorHandling:
 
         assert result.is_valid is False
 
-    def test_missing_required_columns_error(self, simple_experiment):
+    def test_missing_required_columns_error(self, simple_experiment_2x2):
         """Test error when required columns missing for specified format."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
@@ -2055,7 +2049,7 @@ class TestWorkflowErrorHandling:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,  # Requires more columns
             apply_zero_filter=False
         )
@@ -2069,10 +2063,10 @@ class TestWorkflowErrorHandling:
 class TestWorkflowErrorRecovery:
     """Tests for error recovery and graceful degradation."""
 
-    def test_workflow_continues_after_warning(self, lipidsearch_df, simple_experiment):
+    def test_workflow_continues_after_warning(self, lipidsearch_df, simple_experiment_2x2):
         """Test that workflow continues after non-fatal warnings."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -2082,10 +2076,10 @@ class TestWorkflowErrorRecovery:
         # Should succeed even with warnings
         assert result.is_valid is True
 
-    def test_standards_validation_warning_not_error(self, lipidsearch_df_with_standards, simple_experiment):
+    def test_standards_validation_warning_not_error(self, lipidsearch_df_with_standards, simple_experiment_2x2):
         """Test that standards validation issues are warnings, not errors."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -2094,11 +2088,11 @@ class TestWorkflowErrorRecovery:
         # Should be valid even if standards have warnings
         assert result.is_valid is True
 
-    def test_zero_filtering_warning_on_skip(self, lipidsearch_df, simple_experiment):
+    def test_zero_filtering_warning_on_skip(self, lipidsearch_df, simple_experiment_2x2):
         """Test warning message when zero filtering is skipped."""
         # This test checks that errors during zero filtering become warnings
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=True
         )
 
@@ -2111,11 +2105,11 @@ class TestWorkflowErrorRecovery:
 class TestWorkflowValidationErrors:
     """Tests for specific validation error scenarios."""
 
-    def test_format_mismatch_error(self, lipidsearch_df, simple_experiment):
+    def test_format_mismatch_error(self, lipidsearch_df, simple_experiment_2x2):
         """Test error when data doesn't match specified format."""
         # LipidSearch df specified as MS-DIAL
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.MSDIAL,
             apply_zero_filter=False
         )
@@ -2140,7 +2134,7 @@ class TestWorkflowValidationErrors:
         # Should handle gracefully
         assert isinstance(result.is_valid, bool)
 
-    def test_multiple_validation_errors(self, simple_experiment):
+    def test_multiple_validation_errors(self, simple_experiment_2x2):
         """Test that multiple validation errors are all reported."""
         df = pd.DataFrame({
             'WrongColumn': ['value'],
@@ -2148,7 +2142,7 @@ class TestWorkflowValidationErrors:
         })
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -2166,11 +2160,11 @@ class TestWorkflowValidationErrors:
 class TestWorkflowIntegration:
     """Integration tests for the complete workflow."""
 
-    def test_full_pipeline_lipidsearch(self, lipidsearch_df_with_standards, simple_experiment):
+    def test_full_pipeline_lipidsearch(self, lipidsearch_df_with_standards, simple_experiment_2x2):
         """Test complete pipeline with LipidSearch data."""
         # Use default grade config (None = all grades A, B, C allowed)
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             grade_config=GradeFilterConfig(),  # Default config
             apply_zero_filter=True
@@ -2183,10 +2177,10 @@ class TestWorkflowIntegration:
         assert result.cleaned_df is not None
         assert 'LipidMolec' in result.cleaned_df.columns
 
-    def test_result_df_usable_for_downstream(self, lipidsearch_df, simple_experiment):
+    def test_result_df_usable_for_downstream(self, lipidsearch_df, simple_experiment_2x2):
         """Test that result DataFrame is usable for downstream analysis."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=False
         )
 
@@ -2200,16 +2194,16 @@ class TestWorkflowIntegration:
             grouped = df.groupby('ClassKey').size()
             assert len(grouped) > 0
 
-    def test_multiple_runs_independent(self, lipidsearch_df, generic_df, simple_experiment):
+    def test_multiple_runs_independent(self, lipidsearch_df, generic_df, simple_experiment_2x2):
         """Test that multiple workflow runs are independent."""
         config1 = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
 
         config2 = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
             apply_zero_filter=False
         )
@@ -2227,10 +2221,10 @@ class TestWorkflowIntegration:
 class TestWorkflowIntegrationComplete:
     """Complete end-to-end integration tests."""
 
-    def test_full_pipeline_msdial(self, msdial_df, simple_experiment):
+    def test_full_pipeline_msdial(self, msdial_df, simple_experiment_2x2):
         """Test complete pipeline with MS-DIAL data."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.MSDIAL,
             apply_zero_filter=True
         )
@@ -2241,10 +2235,10 @@ class TestWorkflowIntegrationComplete:
         assert result.detected_format == DataFormat.MSDIAL
         assert result.cleaned_df is not None
 
-    def test_full_pipeline_generic(self, generic_df, simple_experiment):
+    def test_full_pipeline_generic(self, generic_df, simple_experiment_2x2):
         """Test complete pipeline with Generic data."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             apply_zero_filter=True
         )
 
@@ -2253,10 +2247,10 @@ class TestWorkflowIntegrationComplete:
         assert result.is_valid is True
         assert result.cleaned_df is not None
 
-    def test_pipeline_with_all_options(self, lipidsearch_df_with_standards, simple_experiment, external_standards_simple):
+    def test_pipeline_with_all_options(self, lipidsearch_df_with_standards, simple_experiment_2x2, external_standards_simple):
         """Test pipeline with all optional features enabled."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             grade_config=GradeFilterConfig(grade_config={'PC': ['A', 'B']}),
             apply_zero_filter=True,
@@ -2274,10 +2268,10 @@ class TestWorkflowIntegrationComplete:
         assert result.zero_filtered is True
         assert result.internal_standards_df is not None
 
-    def test_sequential_runs_same_config(self, lipidsearch_df, simple_experiment):
+    def test_sequential_runs_same_config(self, lipidsearch_df, simple_experiment_2x2):
         """Test multiple sequential runs with same config."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True
         )
@@ -2291,11 +2285,11 @@ class TestWorkflowIntegrationComplete:
         assert all(r.is_valid for r in results)
         assert all(r.detected_format == DataFormat.LIPIDSEARCH for r in results)
 
-    def test_pipeline_state_isolation(self, lipidsearch_df, msdial_df, simple_experiment):
+    def test_pipeline_state_isolation(self, lipidsearch_df, msdial_df, simple_experiment_2x2):
         """Test that pipeline runs are fully isolated."""
         # First run with LipidSearch
         config1 = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=True
         )
@@ -2303,7 +2297,7 @@ class TestWorkflowIntegrationComplete:
 
         # Second run with MS-DIAL
         config2 = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.MSDIAL,
             apply_zero_filter=False
         )
@@ -2319,13 +2313,13 @@ class TestWorkflowIntegrationComplete:
 class TestWorkflowIntegrationDataIntegrity:
     """Tests for data integrity through the workflow."""
 
-    def test_lipid_names_preserved(self, lipidsearch_df, simple_experiment):
+    def test_lipid_names_preserved(self, lipidsearch_df, simple_experiment_2x2):
         """Test that lipid names are preserved through workflow."""
         original_lipids = set(lipidsearch_df['LipidMolec'].tolist())
         original_classes = set(lipidsearch_df['ClassKey'].tolist())
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -2343,10 +2337,10 @@ class TestWorkflowIntegrationDataIntegrity:
             # (cleaning may standardize lipid names but shouldn't change classes)
             assert result_classes.issubset(original_classes)
 
-    def test_sample_columns_preserved(self, lipidsearch_df, simple_experiment):
+    def test_sample_columns_preserved(self, lipidsearch_df, simple_experiment_2x2):
         """Test that sample data columns are preserved."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -2358,12 +2352,12 @@ class TestWorkflowIntegrationDataIntegrity:
         intensity_cols = [c for c in result.cleaned_df.columns if 'intensity' in c.lower() or 's' in c]
         assert len(intensity_cols) > 0
 
-    def test_row_count_consistent(self, lipidsearch_df, simple_experiment):
+    def test_row_count_consistent(self, lipidsearch_df, simple_experiment_2x2):
         """Test row count is consistent (no unexpected duplication)."""
         original_rows = len(lipidsearch_df)
 
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )
@@ -2374,10 +2368,10 @@ class TestWorkflowIntegrationDataIntegrity:
         # Without filtering, row count should be same or less (if standards extracted)
         assert len(result.cleaned_df) <= original_rows
 
-    def test_numeric_values_preserved(self, lipidsearch_df, simple_experiment):
+    def test_numeric_values_preserved(self, lipidsearch_df, simple_experiment_2x2):
         """Test that numeric values are not corrupted."""
         config = IngestionConfig(
-            experiment=simple_experiment,
+            experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
             apply_zero_filter=False
         )

@@ -14,18 +14,10 @@ from app.services.data_cleaning import (
 )
 from app.services.format_detection import DataFormat
 from app.models.experiment import ExperimentConfig
-from tests.conftest import make_experiment
-
 
 # =============================================================================
 # Test Fixtures
 # =============================================================================
-
-@pytest.fixture
-def simple_experiment():
-    """Simple experiment with 2 conditions, 2 samples each."""
-    return make_experiment(2, 2)
-
 
 @pytest.fixture
 def single_condition_experiment():
@@ -309,7 +301,7 @@ class TestBaseDataCleanerValidation:
 class TestBaseDataCleanerNumericConversion:
     """Tests for numeric conversion methods."""
 
-    def test_convert_columns_to_numeric(self, simple_experiment):
+    def test_convert_columns_to_numeric(self, simple_experiment_2x2):
         """Test converting intensity columns to numeric."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -318,14 +310,14 @@ class TestBaseDataCleanerNumericConversion:
             'intensity[s3]': ['invalid'],
             'intensity[s4]': ['-100'],
         })
-        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment.full_samples_list)
+        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment_2x2.full_samples_list)
 
         assert result['intensity[s1]'].iloc[0] == 1000.0
         assert result['intensity[s2]'].iloc[0] == 2000.5
         assert result['intensity[s3]'].iloc[0] == 0.0  # invalid -> 0
         assert result['intensity[s4]'].iloc[0] == 0.0  # negative clipped to 0
 
-    def test_convert_handles_nan_values(self, simple_experiment):
+    def test_convert_handles_nan_values(self, simple_experiment_2x2):
         """Test NaN values are converted to 0."""
         df = pd.DataFrame({
             'intensity[s1]': [np.nan],
@@ -333,12 +325,12 @@ class TestBaseDataCleanerNumericConversion:
             'intensity[s3]': [1000],
             'intensity[s4]': [2000],
         })
-        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment.full_samples_list)
+        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment_2x2.full_samples_list)
 
         assert result['intensity[s1]'].iloc[0] == 0.0
         assert result['intensity[s2]'].iloc[0] == 0.0
 
-    def test_convert_preserves_non_intensity_columns(self, simple_experiment):
+    def test_convert_preserves_non_intensity_columns(self, simple_experiment_2x2):
         """Test that non-intensity columns are preserved."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -348,12 +340,12 @@ class TestBaseDataCleanerNumericConversion:
             'intensity[s3]': [3000],
             'intensity[s4]': [4000],
         })
-        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment.full_samples_list)
+        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment_2x2.full_samples_list)
 
         assert result['LipidMolec'].iloc[0] == 'PC(16:0)'
         assert result['ClassKey'].iloc[0] == 'PC'
 
-    def test_convert_handles_scientific_notation(self, simple_experiment):
+    def test_convert_handles_scientific_notation(self, simple_experiment_2x2):
         """Test scientific notation is handled."""
         df = pd.DataFrame({
             'intensity[s1]': ['1e6'],
@@ -361,12 +353,12 @@ class TestBaseDataCleanerNumericConversion:
             'intensity[s3]': [1000],
             'intensity[s4]': [2000],
         })
-        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment.full_samples_list)
+        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment_2x2.full_samples_list)
 
         assert result['intensity[s1]'].iloc[0] == 1000000.0
         assert result['intensity[s2]'].iloc[0] == 2500.0
 
-    def test_convert_handles_whitespace(self, simple_experiment):
+    def test_convert_handles_whitespace(self, simple_experiment_2x2):
         """Test whitespace in numeric strings."""
         df = pd.DataFrame({
             'intensity[s1]': [' 1000 '],
@@ -374,12 +366,12 @@ class TestBaseDataCleanerNumericConversion:
             'intensity[s3]': [1000],
             'intensity[s4]': [2000],
         })
-        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment.full_samples_list)
+        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment_2x2.full_samples_list)
 
         assert result['intensity[s1]'].iloc[0] == 1000.0
         assert result['intensity[s2]'].iloc[0] == 2000.0
 
-    def test_convert_empty_string_to_zero(self, simple_experiment):
+    def test_convert_empty_string_to_zero(self, simple_experiment_2x2):
         """Test empty strings become zero."""
         df = pd.DataFrame({
             'intensity[s1]': [''],
@@ -387,12 +379,12 @@ class TestBaseDataCleanerNumericConversion:
             'intensity[s3]': [1000],
             'intensity[s4]': [2000],
         })
-        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment.full_samples_list)
+        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment_2x2.full_samples_list)
 
         assert result['intensity[s1]'].iloc[0] == 0.0
         assert result['intensity[s2]'].iloc[0] == 0.0
 
-    def test_convert_handles_missing_columns(self, simple_experiment):
+    def test_convert_handles_missing_columns(self, simple_experiment_2x2):
         """Test handling when some intensity columns are missing."""
         df = pd.DataFrame({
             'intensity[s1]': [1000],
@@ -400,7 +392,7 @@ class TestBaseDataCleanerNumericConversion:
             # s3 and s4 missing
         })
         # Should not raise, just convert existing columns
-        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment.full_samples_list)
+        result = BaseDataCleaner.convert_columns_to_numeric(df, simple_experiment_2x2.full_samples_list)
         assert 'intensity[s1]' in result.columns
 
 
@@ -664,28 +656,28 @@ class TestBaseDataCleanerInternalStandards:
 class TestLipidSearchCleanerBasic:
     """Basic tests for LipidSearchCleaner."""
 
-    def test_clean_valid_data(self, lipidsearch_df, simple_experiment):
+    def test_clean_valid_data(self, lipidsearch_df, simple_experiment_2x2):
         """Test cleaning valid LipidSearch data."""
-        cleaned, messages = LipidSearchCleaner.clean(lipidsearch_df, simple_experiment)
+        cleaned, messages = LipidSearchCleaner.clean(lipidsearch_df, simple_experiment_2x2)
 
         assert not cleaned.empty
         assert 'LipidMolec' in cleaned.columns
         assert 'ClassKey' in cleaned.columns
         assert 'TotalSmpIDRate(%)' not in cleaned.columns  # Should be removed
 
-    def test_clean_raises_on_empty_df(self, simple_experiment):
+    def test_clean_raises_on_empty_df(self, simple_experiment_2x2):
         """Test error on empty DataFrame."""
         with pytest.raises(ValueError, match="empty"):
-            LipidSearchCleaner.clean(pd.DataFrame(), simple_experiment)
+            LipidSearchCleaner.clean(pd.DataFrame(), simple_experiment_2x2)
 
-    def test_clean_returns_messages(self, lipidsearch_df, simple_experiment):
+    def test_clean_returns_messages(self, lipidsearch_df, simple_experiment_2x2):
         """Test that cleaning returns messages."""
-        cleaned, messages = LipidSearchCleaner.clean(lipidsearch_df, simple_experiment)
+        cleaned, messages = LipidSearchCleaner.clean(lipidsearch_df, simple_experiment_2x2)
         assert isinstance(messages, list)
 
-    def test_clean_preserves_required_columns(self, lipidsearch_df, simple_experiment):
+    def test_clean_preserves_required_columns(self, lipidsearch_df, simple_experiment_2x2):
         """Test that required columns are preserved."""
-        cleaned, _ = LipidSearchCleaner.clean(lipidsearch_df, simple_experiment)
+        cleaned, _ = LipidSearchCleaner.clean(lipidsearch_df, simple_experiment_2x2)
         assert 'LipidMolec' in cleaned.columns
         assert 'ClassKey' in cleaned.columns
         assert 'CalcMass' in cleaned.columns
@@ -867,7 +859,7 @@ class TestLipidSearchNameStandardization:
 class TestLipidSearchAUCSelection:
     """Tests for AUC selection in LipidSearch."""
 
-    def test_select_best_auc_by_quality(self, simple_experiment):
+    def test_select_best_auc_by_quality(self, simple_experiment_2x2):
         """Test selecting best entry by quality rate."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(16:0)'],
@@ -881,12 +873,12 @@ class TestLipidSearchAUCSelection:
             'intensity[s3]': [1000, 2000],
             'intensity[s4]': [1000, 2000],
         })
-        result = LipidSearchCleaner._select_best_auc(df, simple_experiment)
+        result = LipidSearchCleaner._select_best_auc(df, simple_experiment_2x2)
 
         assert len(result) == 1
         assert result['intensity[s1]'].iloc[0] == 2000
 
-    def test_select_best_auc_by_grade(self, simple_experiment):
+    def test_select_best_auc_by_grade(self, simple_experiment_2x2):
         """Test selecting best entry by grade when quality is equal."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(16:0)'],
@@ -900,12 +892,12 @@ class TestLipidSearchAUCSelection:
             'intensity[s3]': [1000, 2000],
             'intensity[s4]': [1000, 2000],
         })
-        result = LipidSearchCleaner._select_best_auc(df, simple_experiment)
+        result = LipidSearchCleaner._select_best_auc(df, simple_experiment_2x2)
 
         assert len(result) == 1
         assert result['intensity[s1]'].iloc[0] == 2000  # Grade A entry
 
-    def test_select_multiple_unique_lipids(self, simple_experiment):
+    def test_select_multiple_unique_lipids(self, simple_experiment_2x2):
         """Test selecting from multiple unique lipids."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -919,7 +911,7 @@ class TestLipidSearchAUCSelection:
             'intensity[s3]': [1000, 2000],
             'intensity[s4]': [1000, 2000],
         })
-        result = LipidSearchCleaner._select_best_auc(df, simple_experiment)
+        result = LipidSearchCleaner._select_best_auc(df, simple_experiment_2x2)
         assert len(result) == 2
 
     def test_select_best_row_nan_grade_deprioritized(self):
@@ -954,23 +946,23 @@ class TestLipidSearchAUCSelection:
 class TestMSDIALCleanerBasic:
     """Basic tests for MSDIALCleaner."""
 
-    def test_clean_valid_data(self, msdial_df, simple_experiment):
+    def test_clean_valid_data(self, msdial_df, simple_experiment_2x2):
         """Test cleaning valid MS-DIAL data."""
-        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment)
+        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2)
 
         assert not cleaned.empty
         assert 'LipidMolec' in cleaned.columns
         assert 'ClassKey' in cleaned.columns
         assert 'Total score' not in cleaned.columns
 
-    def test_clean_raises_on_empty_df(self, simple_experiment):
+    def test_clean_raises_on_empty_df(self, simple_experiment_2x2):
         """Test error on empty DataFrame."""
         with pytest.raises(ValueError, match="empty"):
-            MSDIALCleaner.clean(pd.DataFrame(), simple_experiment)
+            MSDIALCleaner.clean(pd.DataFrame(), simple_experiment_2x2)
 
-    def test_clean_preserves_required_columns(self, msdial_df, simple_experiment):
+    def test_clean_preserves_required_columns(self, msdial_df, simple_experiment_2x2):
         """Test required columns are preserved."""
-        cleaned, _ = MSDIALCleaner.clean(msdial_df, simple_experiment)
+        cleaned, _ = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2)
         assert 'LipidMolec' in cleaned.columns
         assert 'ClassKey' in cleaned.columns
 
@@ -978,31 +970,31 @@ class TestMSDIALCleanerBasic:
 class TestMSDIALQualityFiltering:
     """Tests for MS-DIAL quality filtering."""
 
-    def test_score_filter_removes_low_scores(self, msdial_df, simple_experiment):
+    def test_score_filter_removes_low_scores(self, msdial_df, simple_experiment_2x2):
         """Test that low scores are filtered out."""
         config = QualityFilterConfig(total_score_threshold=80)
-        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment, config)
+        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 2  # 85 and 90
 
-    def test_msms_filter_requires_match(self, msdial_df, simple_experiment):
+    def test_msms_filter_requires_match(self, msdial_df, simple_experiment_2x2):
         """Test MS/MS filter removes entries without match."""
         config = QualityFilterConfig(require_msms=True)
-        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment, config)
+        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 2
 
-    def test_combined_filters(self, msdial_df, simple_experiment):
+    def test_combined_filters(self, msdial_df, simple_experiment_2x2):
         """Test combined score and MS/MS filtering."""
         config = QualityFilterConfig.strict()
-        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment, config)
+        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 2
 
-    def test_no_filtering(self, msdial_df, simple_experiment):
+    def test_no_filtering(self, msdial_df, simple_experiment_2x2):
         """Test with no quality filtering."""
         config = QualityFilterConfig.no_filtering()
-        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment, config)
+        cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 3
 
-    def test_score_filter_message(self, simple_experiment):
+    def test_score_filter_message(self, simple_experiment_2x2):
         """Test that score filtering generates message."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1014,10 +1006,10 @@ class TestMSDIALQualityFiltering:
             'intensity[s4]': [1300, 2300],
         })
         config = QualityFilterConfig(total_score_threshold=80)
-        _, messages = MSDIALCleaner.clean(df, simple_experiment, config)
+        _, messages = MSDIALCleaner.clean(df, simple_experiment_2x2, config)
         assert any('Quality filter' in msg for msg in messages)
 
-    def test_msms_filter_message(self, simple_experiment):
+    def test_msms_filter_message(self, simple_experiment_2x2):
         """Test that MS/MS filtering generates message."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1029,10 +1021,10 @@ class TestMSDIALQualityFiltering:
             'intensity[s4]': [1300, 2300],
         })
         config = QualityFilterConfig(require_msms=True)
-        _, messages = MSDIALCleaner.clean(df, simple_experiment, config)
+        _, messages = MSDIALCleaner.clean(df, simple_experiment_2x2, config)
         assert any('MS/MS' in msg for msg in messages)
 
-    def test_msms_accepts_various_true_values(self, simple_experiment):
+    def test_msms_accepts_various_true_values(self, simple_experiment_2x2):
         """Test MS/MS filter accepts TRUE, 1, YES."""
         df = pd.DataFrame({
             'LipidMolec': ['PC1', 'PC2', 'PC3', 'PC4'],
@@ -1044,14 +1036,14 @@ class TestMSDIALQualityFiltering:
             'intensity[s4]': [1300, 2300, 3300, 4300],
         })
         config = QualityFilterConfig(require_msms=True)
-        cleaned, _ = MSDIALCleaner.clean(df, simple_experiment, config)
+        cleaned, _ = MSDIALCleaner.clean(df, simple_experiment_2x2, config)
         assert len(cleaned) == 4
 
 
 class TestMSDIALDuplicateRemoval:
     """Tests for MS-DIAL duplicate removal."""
 
-    def test_keeps_highest_score_duplicate(self, simple_experiment):
+    def test_keeps_highest_score_duplicate(self, simple_experiment_2x2):
         """Test that duplicate with highest score is kept."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(16:0)'],
@@ -1062,12 +1054,12 @@ class TestMSDIALDuplicateRemoval:
             'intensity[s3]': [1000, 2000],
             'intensity[s4]': [1000, 2000],
         })
-        cleaned, messages = MSDIALCleaner.clean(df, simple_experiment)
+        cleaned, messages = MSDIALCleaner.clean(df, simple_experiment_2x2)
 
         assert len(cleaned) == 1
         assert cleaned['intensity[s1]'].iloc[0] == 2000
 
-    def test_removes_multiple_duplicates(self, simple_experiment):
+    def test_removes_multiple_duplicates(self, simple_experiment_2x2):
         """Test removing multiple duplicates."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(16:0)', 'PC(16:0)'],
@@ -1078,7 +1070,7 @@ class TestMSDIALDuplicateRemoval:
             'intensity[s3]': [1000, 2000, 1500],
             'intensity[s4]': [1000, 2000, 1500],
         })
-        cleaned, _ = MSDIALCleaner.clean(df, simple_experiment)
+        cleaned, _ = MSDIALCleaner.clean(df, simple_experiment_2x2)
         assert len(cleaned) == 1
         assert cleaned['intensity[s1]'].iloc[0] == 2000
 
@@ -1086,7 +1078,7 @@ class TestMSDIALDuplicateRemoval:
 class TestMSDIALColumnExtraction:
     """Tests for MS-DIAL column extraction."""
 
-    def test_extracts_required_columns(self, simple_experiment):
+    def test_extracts_required_columns(self, simple_experiment_2x2):
         """Test extracting required columns."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1097,12 +1089,12 @@ class TestMSDIALColumnExtraction:
             'intensity[s3]': [3000],
             'intensity[s4]': [4000],
         })
-        result = MSDIALCleaner._extract_columns(df, simple_experiment.full_samples_list)
+        result = MSDIALCleaner._extract_columns(df, simple_experiment_2x2.full_samples_list)
         assert 'LipidMolec' in result.columns
         assert 'ClassKey' in result.columns
         assert 'ExtraCol' not in result.columns
 
-    def test_extracts_optional_columns(self, simple_experiment):
+    def test_extracts_optional_columns(self, simple_experiment_2x2):
         """Test extracting optional columns."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1114,11 +1106,11 @@ class TestMSDIALColumnExtraction:
             'intensity[s3]': [3000],
             'intensity[s4]': [4000],
         })
-        result = MSDIALCleaner._extract_columns(df, simple_experiment.full_samples_list)
+        result = MSDIALCleaner._extract_columns(df, simple_experiment_2x2.full_samples_list)
         assert 'BaseRt' in result.columns
         assert 'CalcMass' in result.columns
 
-    def test_raises_on_missing_lipidmolec(self, simple_experiment):
+    def test_raises_on_missing_lipidmolec(self, simple_experiment_2x2):
         """Test error when LipidMolec is missing."""
         df = pd.DataFrame({
             'ClassKey': ['PC'],
@@ -1128,7 +1120,7 @@ class TestMSDIALColumnExtraction:
             'intensity[s4]': [4000],
         })
         with pytest.raises(KeyError, match="LipidMolec"):
-            MSDIALCleaner._extract_columns(df, simple_experiment.full_samples_list)
+            MSDIALCleaner._extract_columns(df, simple_experiment_2x2.full_samples_list)
 
 
 # =============================================================================
@@ -1138,21 +1130,21 @@ class TestMSDIALColumnExtraction:
 class TestGenericCleanerBasic:
     """Basic tests for GenericCleaner."""
 
-    def test_clean_valid_data(self, generic_df, simple_experiment):
+    def test_clean_valid_data(self, generic_df, simple_experiment_2x2):
         """Test cleaning valid Generic data."""
-        cleaned, messages = GenericCleaner.clean(generic_df, simple_experiment)
+        cleaned, messages = GenericCleaner.clean(generic_df, simple_experiment_2x2)
 
         assert not cleaned.empty
         assert 'LipidMolec' in cleaned.columns
         assert 'ClassKey' in cleaned.columns
         assert len(cleaned) == 3
 
-    def test_clean_raises_on_empty_df(self, simple_experiment):
+    def test_clean_raises_on_empty_df(self, simple_experiment_2x2):
         """Test error on empty DataFrame."""
         with pytest.raises(ValueError, match="empty"):
-            GenericCleaner.clean(pd.DataFrame(), simple_experiment)
+            GenericCleaner.clean(pd.DataFrame(), simple_experiment_2x2)
 
-    def test_removes_duplicates(self, simple_experiment):
+    def test_removes_duplicates(self, simple_experiment_2x2):
         """Test duplicate removal."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(16:0)', 'PE(18:0)'],
@@ -1162,12 +1154,12 @@ class TestGenericCleanerBasic:
             'intensity[s3]': [1000, 2000, 3000],
             'intensity[s4]': [1000, 2000, 3000],
         })
-        cleaned, messages = GenericCleaner.clean(df, simple_experiment)
+        cleaned, messages = GenericCleaner.clean(df, simple_experiment_2x2)
 
         assert len(cleaned) == 2
         assert any('duplicate' in msg.lower() for msg in messages)
 
-    def test_removes_invalid_rows(self, simple_experiment):
+    def test_removes_invalid_rows(self, simple_experiment_2x2):
         """Test invalid row removal."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', '', 'PE(18:0)'],
@@ -1177,10 +1169,10 @@ class TestGenericCleanerBasic:
             'intensity[s3]': [1000, 2000, 3000],
             'intensity[s4]': [1000, 2000, 3000],
         })
-        cleaned, messages = GenericCleaner.clean(df, simple_experiment)
+        cleaned, messages = GenericCleaner.clean(df, simple_experiment_2x2)
         assert len(cleaned) == 2
 
-    def test_removes_all_zero_rows(self, simple_experiment):
+    def test_removes_all_zero_rows(self, simple_experiment_2x2):
         """Test all-zero row removal."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1190,7 +1182,7 @@ class TestGenericCleanerBasic:
             'intensity[s3]': [1000, 0],
             'intensity[s4]': [1000, 0],
         })
-        cleaned, messages = GenericCleaner.clean(df, simple_experiment)
+        cleaned, messages = GenericCleaner.clean(df, simple_experiment_2x2)
         assert len(cleaned) == 1
 
 
@@ -1201,42 +1193,42 @@ class TestGenericCleanerBasic:
 class TestDataCleaningServiceDispatch:
     """Tests for DataCleaningService format dispatching."""
 
-    def test_dispatch_lipidsearch(self, lipidsearch_df, simple_experiment):
+    def test_dispatch_lipidsearch(self, lipidsearch_df, simple_experiment_2x2):
         """Test dispatching to LipidSearch cleaner."""
         result = DataCleaningService.clean_data(
-            lipidsearch_df, simple_experiment, DataFormat.LIPIDSEARCH
+            lipidsearch_df, simple_experiment_2x2, DataFormat.LIPIDSEARCH
         )
         assert isinstance(result, CleaningResult)
         assert not result.cleaned_df.empty
 
-    def test_dispatch_msdial(self, msdial_df, simple_experiment):
+    def test_dispatch_msdial(self, msdial_df, simple_experiment_2x2):
         """Test dispatching to MS-DIAL cleaner."""
         result = DataCleaningService.clean_data(
-            msdial_df, simple_experiment, DataFormat.MSDIAL
+            msdial_df, simple_experiment_2x2, DataFormat.MSDIAL
         )
         assert isinstance(result, CleaningResult)
         assert not result.cleaned_df.empty
 
-    def test_dispatch_generic(self, generic_df, simple_experiment):
+    def test_dispatch_generic(self, generic_df, simple_experiment_2x2):
         """Test dispatching to Generic cleaner."""
         result = DataCleaningService.clean_data(
-            generic_df, simple_experiment, DataFormat.GENERIC
+            generic_df, simple_experiment_2x2, DataFormat.GENERIC
         )
         assert isinstance(result, CleaningResult)
         assert not result.cleaned_df.empty
 
-    def test_dispatch_metabolomics_workbench(self, generic_df, simple_experiment):
+    def test_dispatch_metabolomics_workbench(self, generic_df, simple_experiment_2x2):
         """Test dispatching Metabolomics Workbench to Generic cleaner."""
         result = DataCleaningService.clean_data(
-            generic_df, simple_experiment, DataFormat.METABOLOMICS_WORKBENCH
+            generic_df, simple_experiment_2x2, DataFormat.METABOLOMICS_WORKBENCH
         )
         assert isinstance(result, CleaningResult)
         assert not result.cleaned_df.empty
 
-    def test_dispatch_unknown_uses_generic(self, generic_df, simple_experiment):
+    def test_dispatch_unknown_uses_generic(self, generic_df, simple_experiment_2x2):
         """Test that unknown format uses Generic cleaner."""
         result = DataCleaningService.clean_data(
-            generic_df, simple_experiment, DataFormat.UNKNOWN
+            generic_df, simple_experiment_2x2, DataFormat.UNKNOWN
         )
         assert isinstance(result, CleaningResult)
 
@@ -1244,38 +1236,38 @@ class TestDataCleaningServiceDispatch:
 class TestDataCleaningServiceConvenience:
     """Tests for convenience methods."""
 
-    def test_clean_lipidsearch_convenience(self, lipidsearch_df, simple_experiment):
+    def test_clean_lipidsearch_convenience(self, lipidsearch_df, simple_experiment_2x2):
         """Test clean_lipidsearch convenience method."""
-        result = DataCleaningService.clean_lipidsearch(lipidsearch_df, simple_experiment)
+        result = DataCleaningService.clean_lipidsearch(lipidsearch_df, simple_experiment_2x2)
         assert isinstance(result, CleaningResult)
 
-    def test_clean_msdial_convenience(self, msdial_df, simple_experiment):
+    def test_clean_msdial_convenience(self, msdial_df, simple_experiment_2x2):
         """Test clean_msdial convenience method."""
-        result = DataCleaningService.clean_msdial(msdial_df, simple_experiment)
+        result = DataCleaningService.clean_msdial(msdial_df, simple_experiment_2x2)
         assert isinstance(result, CleaningResult)
 
-    def test_clean_generic_convenience(self, generic_df, simple_experiment):
+    def test_clean_generic_convenience(self, generic_df, simple_experiment_2x2):
         """Test clean_generic convenience method."""
-        result = DataCleaningService.clean_generic(generic_df, simple_experiment)
+        result = DataCleaningService.clean_generic(generic_df, simple_experiment_2x2)
         assert isinstance(result, CleaningResult)
 
-    def test_clean_lipidsearch_with_grade_config(self, lipidsearch_df, simple_experiment):
+    def test_clean_lipidsearch_with_grade_config(self, lipidsearch_df, simple_experiment_2x2):
         """Test clean_lipidsearch with grade config."""
         config = GradeFilterConfig({'PC': ['A'], 'PE': ['A', 'B'], 'TG': ['A']})
-        result = DataCleaningService.clean_lipidsearch(lipidsearch_df, simple_experiment, config)
+        result = DataCleaningService.clean_lipidsearch(lipidsearch_df, simple_experiment_2x2, config)
         assert isinstance(result, CleaningResult)
 
-    def test_clean_msdial_with_quality_config(self, msdial_df, simple_experiment):
+    def test_clean_msdial_with_quality_config(self, msdial_df, simple_experiment_2x2):
         """Test clean_msdial with quality config."""
         config = QualityFilterConfig.moderate()
-        result = DataCleaningService.clean_msdial(msdial_df, simple_experiment, config)
+        result = DataCleaningService.clean_msdial(msdial_df, simple_experiment_2x2, config)
         assert isinstance(result, CleaningResult)
 
 
 class TestDataCleaningServiceInternalStandards:
     """Tests for internal standards extraction via service."""
 
-    def test_extracts_standards_from_lipidsearch(self, simple_experiment):
+    def test_extracts_standards_from_lipidsearch(self, simple_experiment_2x2):
         """Test that internal standards are extracted from LipidSearch data."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(d7)', 'PE(18:0)'],
@@ -1290,12 +1282,12 @@ class TestDataCleaningServiceInternalStandards:
             'intensity[s3]': [1200, 600, 2200],
             'intensity[s4]': [1300, 650, 2300],
         })
-        result = DataCleaningService.clean_lipidsearch(df, simple_experiment)
+        result = DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
 
         assert len(result.cleaned_df) == 2
         assert len(result.internal_standards_df) == 1
 
-    def test_extracts_standards_from_msdial(self, simple_experiment):
+    def test_extracts_standards_from_msdial(self, simple_experiment_2x2):
         """Test that internal standards are extracted from MS-DIAL data."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(d7)', 'PE(18:0)'],
@@ -1306,12 +1298,12 @@ class TestDataCleaningServiceInternalStandards:
             'intensity[s3]': [1200, 600, 2200],
             'intensity[s4]': [1300, 650, 2300],
         })
-        result = DataCleaningService.clean_msdial(df, simple_experiment)
+        result = DataCleaningService.clean_msdial(df, simple_experiment_2x2)
 
         assert len(result.cleaned_df) == 2
         assert len(result.internal_standards_df) == 1
 
-    def test_extracts_standards_from_generic(self, simple_experiment):
+    def test_extracts_standards_from_generic(self, simple_experiment_2x2):
         """Test that internal standards are extracted from Generic data."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(d7)', 'PE(18:0)'],
@@ -1321,7 +1313,7 @@ class TestDataCleaningServiceInternalStandards:
             'intensity[s3]': [1200, 600, 2200],
             'intensity[s4]': [1300, 650, 2300],
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment)
+        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
 
         assert len(result.cleaned_df) == 2
         assert len(result.internal_standards_df) == 1
@@ -1334,7 +1326,7 @@ class TestDataCleaningServiceInternalStandards:
 class TestEdgeCases:
     """Tests for edge cases."""
 
-    def test_single_row_data(self, simple_experiment):
+    def test_single_row_data(self, simple_experiment_2x2):
         """Test cleaning single row of data."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1344,10 +1336,10 @@ class TestEdgeCases:
             'intensity[s3]': [1200.0],
             'intensity[s4]': [1300.0],
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment)
+        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
         assert len(result.cleaned_df) == 1
 
-    def test_all_zero_data_raises(self, simple_experiment):
+    def test_all_zero_data_raises(self, simple_experiment_2x2):
         """Test that all-zero data raises error."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1358,9 +1350,9 @@ class TestEdgeCases:
             'intensity[s4]': [0.0],
         })
         with pytest.raises(ValueError, match="non-zero"):
-            DataCleaningService.clean_generic(df, simple_experiment)
+            DataCleaningService.clean_generic(df, simple_experiment_2x2)
 
-    def test_all_invalid_lipids_raises(self, simple_experiment):
+    def test_all_invalid_lipids_raises(self, simple_experiment_2x2):
         """Test that all invalid lipid names raises error."""
         df = pd.DataFrame({
             'LipidMolec': ['', 'nan', 'Unknown'],
@@ -1371,9 +1363,9 @@ class TestEdgeCases:
             'intensity[s4]': [1300.0, 2300.0, 3300.0],
         })
         with pytest.raises(ValueError, match="invalid"):
-            DataCleaningService.clean_generic(df, simple_experiment)
+            DataCleaningService.clean_generic(df, simple_experiment_2x2)
 
-    def test_missing_required_column_raises(self, simple_experiment):
+    def test_missing_required_column_raises(self, simple_experiment_2x2):
         """Test that missing required column raises error."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1384,9 +1376,9 @@ class TestEdgeCases:
             'intensity[s4]': [1300.0],
         })
         with pytest.raises(KeyError, match="ClassKey"):
-            DataCleaningService.clean_generic(df, simple_experiment)
+            DataCleaningService.clean_generic(df, simple_experiment_2x2)
 
-    def test_case_insensitive_columns(self, simple_experiment):
+    def test_case_insensitive_columns(self, simple_experiment_2x2):
         """Test that column names are matched case-insensitively."""
         df = pd.DataFrame({
             'LIPIDMOLEC': ['PC(16:0)'],
@@ -1396,10 +1388,10 @@ class TestEdgeCases:
             'Intensity[s3]': [1200.0],
             'intensity[s4]': [1300.0],
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment)
+        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
         assert len(result.cleaned_df) == 1
 
-    def test_large_dataset(self, simple_experiment):
+    def test_large_dataset(self, simple_experiment_2x2):
         """Test cleaning large dataset."""
         n_rows = 1000
         df = pd.DataFrame({
@@ -1410,10 +1402,10 @@ class TestEdgeCases:
             'intensity[s3]': np.random.rand(n_rows) * 10000,
             'intensity[s4]': np.random.rand(n_rows) * 10000,
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment)
+        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
         assert len(result.cleaned_df) == n_rows
 
-    def test_unicode_lipid_names(self, simple_experiment):
+    def test_unicode_lipid_names(self, simple_experiment_2x2):
         """Test handling unicode in lipid names."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(α-18:0)', 'PE(β-20:4)'],
@@ -1423,14 +1415,14 @@ class TestEdgeCases:
             'intensity[s3]': [1200, 2200, 3200],
             'intensity[s4]': [1300, 2300, 3300],
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment)
+        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
         assert len(result.cleaned_df) == 3
 
 
 class TestLipidSearchEdgeCases:
     """Edge cases specific to LipidSearch."""
 
-    def test_all_grade_d_raises(self, simple_experiment):
+    def test_all_grade_d_raises(self, simple_experiment_2x2):
         """Test that all grade D data raises error."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1446,9 +1438,9 @@ class TestLipidSearchEdgeCases:
             'intensity[s4]': [1300.0],
         })
         with pytest.raises(ValueError, match="grade"):
-            DataCleaningService.clean_lipidsearch(df, simple_experiment)
+            DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
 
-    def test_all_missing_fakey_raises(self, simple_experiment):
+    def test_all_missing_fakey_raises(self, simple_experiment_2x2):
         """Test that all missing FA keys raises error (non-Ch)."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1464,9 +1456,9 @@ class TestLipidSearchEdgeCases:
             'intensity[s4]': [1300.0, 2300.0],
         })
         with pytest.raises(ValueError, match="FA"):
-            DataCleaningService.clean_lipidsearch(df, simple_experiment)
+            DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
 
-    def test_only_cholesterol_data(self, simple_experiment):
+    def test_only_cholesterol_data(self, simple_experiment_2x2):
         """Test with only cholesterol data (no FA keys needed)."""
         df = pd.DataFrame({
             'LipidMolec': ['Ch()', 'Ch()'],
@@ -1481,14 +1473,14 @@ class TestLipidSearchEdgeCases:
             'intensity[s3]': [1200.0, 1300.0],
             'intensity[s4]': [1300.0, 1400.0],
         })
-        result = DataCleaningService.clean_lipidsearch(df, simple_experiment)
+        result = DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
         assert len(result.cleaned_df) == 1  # Deduplicated
 
 
 class TestMSDIALEdgeCases:
     """Edge cases specific to MS-DIAL."""
 
-    def test_all_filtered_by_quality_raises(self, simple_experiment):
+    def test_all_filtered_by_quality_raises(self, simple_experiment_2x2):
         """Test that filtering all data raises error."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1501,9 +1493,9 @@ class TestMSDIALEdgeCases:
         })
         config = QualityFilterConfig(total_score_threshold=80)
         with pytest.raises(ValueError, match="quality"):
-            DataCleaningService.clean_msdial(df, simple_experiment, config)
+            DataCleaningService.clean_msdial(df, simple_experiment_2x2, config)
 
-    def test_missing_total_score_column(self, simple_experiment):
+    def test_missing_total_score_column(self, simple_experiment_2x2):
         """Test cleaning without Total score column."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1513,10 +1505,10 @@ class TestMSDIALEdgeCases:
             'intensity[s3]': [1200.0, 2200.0],
             'intensity[s4]': [1300.0, 2300.0],
         })
-        result = DataCleaningService.clean_msdial(df, simple_experiment)
+        result = DataCleaningService.clean_msdial(df, simple_experiment_2x2)
         assert len(result.cleaned_df) == 2
 
-    def test_missing_msms_column(self, simple_experiment):
+    def test_missing_msms_column(self, simple_experiment_2x2):
         """Test cleaning without MS/MS matched column."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1529,10 +1521,10 @@ class TestMSDIALEdgeCases:
         })
         config = QualityFilterConfig(require_msms=True)
         # Should not raise, MS/MS filter just won't apply
-        result = DataCleaningService.clean_msdial(df, simple_experiment, config)
+        result = DataCleaningService.clean_msdial(df, simple_experiment_2x2, config)
         assert len(result.cleaned_df) == 2
 
-    def test_invalid_score_values(self, simple_experiment):
+    def test_invalid_score_values(self, simple_experiment_2x2):
         """Test handling invalid score values."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
@@ -1545,7 +1537,7 @@ class TestMSDIALEdgeCases:
         })
         config = QualityFilterConfig(total_score_threshold=80)
         # 'invalid' should be coerced to NaN, so only 90.0 remains
-        result = DataCleaningService.clean_msdial(df, simple_experiment, config)
+        result = DataCleaningService.clean_msdial(df, simple_experiment_2x2, config)
         assert len(result.cleaned_df) == 1
 
 
@@ -1561,7 +1553,7 @@ class TestGenericCleanerClassKeyEdgeCases:
     NOT counted as an intensity column. This was a bug fixed in commit 4b728ac.
     """
 
-    def test_classkey_preserved_as_metadata(self, simple_experiment):
+    def test_classkey_preserved_as_metadata(self, simple_experiment_2x2):
         """
         Test that ClassKey column is preserved in output and not treated as intensity.
 
@@ -1576,7 +1568,7 @@ class TestGenericCleanerClassKeyEdgeCases:
             'intensity[s3]': [1200.0, 2200.0],
             'intensity[s4]': [1300.0, 2300.0],
         })
-        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment_2x2)
 
         # ClassKey should be preserved as metadata
         assert 'ClassKey' in cleaned.columns
@@ -1587,7 +1579,7 @@ class TestGenericCleanerClassKeyEdgeCases:
         intensity_cols = [c for c in cleaned.columns if c.startswith('intensity[')]
         assert len(intensity_cols) == 4
 
-    def test_classkey_case_insensitive(self, simple_experiment):
+    def test_classkey_case_insensitive(self, simple_experiment_2x2):
         """Test that ClassKey is recognized regardless of case."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
@@ -1597,14 +1589,14 @@ class TestGenericCleanerClassKeyEdgeCases:
             'intensity[s3]': [1200.0, 2200.0],
             'intensity[s4]': [1300.0, 2300.0],
         })
-        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment_2x2)
 
         # Should be standardized to 'ClassKey'
         assert 'ClassKey' in cleaned.columns
         intensity_cols = [c for c in cleaned.columns if c.startswith('intensity[')]
         assert len(intensity_cols) == 4
 
-    def test_classkey_uppercase(self, simple_experiment):
+    def test_classkey_uppercase(self, simple_experiment_2x2):
         """Test that CLASSKEY (uppercase) is recognized."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
@@ -1614,13 +1606,13 @@ class TestGenericCleanerClassKeyEdgeCases:
             'intensity[s3]': [1200.0, 2200.0],
             'intensity[s4]': [1300.0, 2300.0],
         })
-        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment_2x2)
 
         assert 'ClassKey' in cleaned.columns
         intensity_cols = [c for c in cleaned.columns if c.startswith('intensity[')]
         assert len(intensity_cols) == 4
 
-    def test_classkey_with_short_class_names(self, simple_experiment):
+    def test_classkey_with_short_class_names(self, simple_experiment_2x2):
         """Test ClassKey with typical short class names like PC, PE, TG, DG."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)', 'DG(14:0)'],
@@ -1630,12 +1622,12 @@ class TestGenericCleanerClassKeyEdgeCases:
             'intensity[s3]': [1200.0, 2200.0, 3200.0, 4200.0],
             'intensity[s4]': [1300.0, 2300.0, 3300.0, 4300.0],
         })
-        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment_2x2)
 
         assert 'ClassKey' in cleaned.columns
         assert set(cleaned['ClassKey'].unique()) == {'PC', 'PE', 'TG', 'DG'}
 
-    def test_classkey_with_longer_class_names(self, simple_experiment):
+    def test_classkey_with_longer_class_names(self, simple_experiment_2x2):
         """Test ClassKey with longer class names like CerG1, SPH, SM."""
         df = pd.DataFrame({
             'LipidMolec': ['CerG1(18:1)', 'SPH(18:0)', 'SM(16:0)'],
@@ -1655,7 +1647,7 @@ class TestGenericCleanerClassKeyEdgeCases:
         assert 'ClassKey' in cleaned.columns
         assert set(cleaned['ClassKey'].unique()) == {'CerG1', 'SPH', 'SM'}
 
-    def test_classkey_not_confused_with_numeric_column(self, simple_experiment):
+    def test_classkey_not_confused_with_numeric_column(self, simple_experiment_2x2):
         """Test that a numeric second column is NOT treated as ClassKey."""
         # This tests the inverse case - if second column is numeric, it's intensity
         df = pd.DataFrame({
@@ -1666,13 +1658,13 @@ class TestGenericCleanerClassKeyEdgeCases:
             'intensity[s3]': [1200.0, 2200.0],
             'intensity[s4]': [1300.0, 2300.0],
         })
-        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment_2x2)
 
         # ClassKey should NOT be treated as intensity
         assert 'ClassKey' in cleaned.columns
         assert cleaned['ClassKey'].dtype == object  # String type
 
-    def test_classkey_values_preserved_after_cleaning(self, simple_experiment):
+    def test_classkey_values_preserved_after_cleaning(self, simple_experiment_2x2):
         """Test that ClassKey values are preserved through all cleaning steps."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)', 'PC(16:0)', 'PE(18:0)', ''],  # Includes duplicate and invalid
@@ -1682,7 +1674,7 @@ class TestGenericCleanerClassKeyEdgeCases:
             'intensity[s3]': [1200.0, 2200.0, 3200.0, 0.0],
             'intensity[s4]': [1300.0, 2300.0, 3300.0, 0.0],
         })
-        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment_2x2)
 
         # After cleaning: duplicate removed, invalid row removed, but ClassKey preserved
         assert 'ClassKey' in cleaned.columns
@@ -1693,7 +1685,7 @@ class TestGenericCleanerClassKeyEdgeCases:
 class TestGenericCleanerColumnExtraction:
     """Tests for column extraction logic in Generic format."""
 
-    def test_intensity_column_count_with_classkey(self, simple_experiment):
+    def test_intensity_column_count_with_classkey(self, simple_experiment_2x2):
         """Verify correct intensity column count when ClassKey is present."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1703,7 +1695,7 @@ class TestGenericCleanerColumnExtraction:
             'intensity[s3]': [1200.0],
             'intensity[s4]': [1300.0],
         })
-        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment_2x2)
 
         # Should have LipidMolec + ClassKey + 4 intensity columns = 6 total
         assert len(cleaned.columns) == 6
@@ -1712,7 +1704,7 @@ class TestGenericCleanerColumnExtraction:
         intensity_cols = [c for c in cleaned.columns if c.startswith('intensity[')]
         assert len(intensity_cols) == 4
 
-    def test_missing_intensity_column_raises_error(self, simple_experiment):
+    def test_missing_intensity_column_raises_error(self, simple_experiment_2x2):
         """Test that missing intensity column raises appropriate error."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1722,9 +1714,9 @@ class TestGenericCleanerColumnExtraction:
             # Missing s3 and s4
         })
         with pytest.raises(KeyError, match="intensity"):
-            GenericCleaner.clean(df, simple_experiment)
+            GenericCleaner.clean(df, simple_experiment_2x2)
 
-    def test_extra_columns_ignored(self, simple_experiment):
+    def test_extra_columns_ignored(self, simple_experiment_2x2):
         """Test that extra columns are ignored in output."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1735,7 +1727,7 @@ class TestGenericCleanerColumnExtraction:
             'intensity[s3]': [1200.0],
             'intensity[s4]': [1300.0],
         })
-        cleaned, _ = GenericCleaner.clean(df, simple_experiment)
+        cleaned, _ = GenericCleaner.clean(df, simple_experiment_2x2)
 
         # ExtraMetadata should be ignored
         assert 'ExtraMetadata' not in cleaned.columns
@@ -1754,7 +1746,7 @@ class TestSampleColumnDetection:
     Bug context: Sample detection was using wrong pattern after standardization.
     """
 
-    def test_intensity_pattern_detection(self, simple_experiment):
+    def test_intensity_pattern_detection(self, simple_experiment_2x2):
         """Test that intensity[...] columns are correctly identified."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],
@@ -1773,7 +1765,7 @@ class TestSampleColumnDetection:
         assert 'intensity[s1]' in intensity_cols
         assert 'intensity[s4]' in intensity_cols
 
-    def test_non_intensity_columns_excluded(self, simple_experiment):
+    def test_non_intensity_columns_excluded(self, simple_experiment_2x2):
         """Test that non-intensity columns are not detected as samples."""
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0)'],

@@ -9,6 +9,8 @@ This module contains:
 - _run_normalization: Cached normalization workflow execution
 """
 
+from typing import Optional
+
 import streamlit as st
 import pandas as pd
 
@@ -351,7 +353,7 @@ def _run_normalization(
 # UI Components - Normalization
 # =============================================================================
 
-def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, experiment: ExperimentConfig, data_format: str):
+def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, experiment: ExperimentConfig, data_format: str) -> Optional[pd.DataFrame]:
     """Display normalization options and apply normalization automatically."""
     with st.expander("📖 About Normalization Methods", expanded=False):
         st.markdown(NORMALIZATION_METHODS_DOCS)
@@ -456,7 +458,7 @@ def _collect_method_config(method: str, intsta_df, selected_classes: list, exper
     return internal_standards, intsta_concentrations, protein_concentrations
 
 
-def _display_normalization_results(result):
+def _display_normalization_results(result) -> None:
     """Display normalization results or errors."""
     if result and result.success:
         st.markdown("##### 📊 Final Normalized Data")
