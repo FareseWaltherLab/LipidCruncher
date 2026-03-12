@@ -1483,16 +1483,23 @@ Pure-logic service for abundance bar charts. Sums species per class per sample, 
 
 **Tests:** 47 tests covering data preparation (mean/std, multi-species summing, class ordering), edge cases (empty inputs, missing classes/conditions, all zeros, single sample), chart rendering (traces, orientation, scales, error bars, layout), significance annotations (3 star levels, adjusted vs raw p-values), color mapping
 
-**Step 2.2: `PieChartPlotterService`**
-**File:** `src/app/services/plotting/abundance_pie_chart.py`
+**Step 2.2: `PieChartPlotterService`** ✅
+**File:** `src/app/services/plotting/abundance_pie_chart.py` (195 lines) | **Tests:** `tests/unit/test_abundance_pie_chart_plotter.py` (49 tests)
 
-**Methods:**
-- `calculate_total_abundance(df, samples) → pd.DataFrame` — GroupBy ClassKey, sum concentrations
-- `filter_by_classes(abundance_df, selected_classes) → pd.DataFrame`
-- `create_pie_chart(abundance_df, condition, samples, color_mapping) → Tuple[go.Figure, pd.DataFrame]`
-- `generate_color_mapping(labels) → Dict[str, str]` — Consistent colors across conditions
+Pure-logic service for abundance pie charts. Sums species per class, creates per-condition Plotly pie charts sorted by abundance descending, with smart percentage formatting and consistent class color mapping. **Test count: 2590.**
 
-**Tests:** `tests/unit/test_abundance_pie_chart_plotter.py` — ~25 tests
+**Result Dataclass:**
+- `PieChartData` — `abundance_df` (DataFrame indexed by ClassKey with concentration columns), `classes`
+
+**Public Methods:**
+- `calculate_total_abundance(df, experiment, selected_classes) → PieChartData` — GroupBy ClassKey, sum concentrations across all samples
+- `create_pie_chart(pie_data, condition, samples, color_mapping) → Tuple[go.Figure, pd.DataFrame]` — Plotly pie chart for one condition + summary DataFrame with ClassKey, Total Abundance, Percentage
+- `generate_color_mapping(classes) → Dict[str, str]` — 20-color qualitative palette for lipid classes
+
+**Private Helpers:**
+- `_format_percentage(percentage) → str` — Smart decimal precision (1-4 decimals or scientific notation)
+
+**Tests:** 49 tests covering data preparation (species summing, class ordering, sample columns), chart rendering (trace type, labels, colors, dimensions, layout, legend), multi-condition (different totals, 3 conditions), color mapping (order, wrap-around, empty), percentage formatting (zero, small, scientific), edge cases (all zeros, single class/sample, dominant class, negative values, many classes, missing colors)
 
 **Step 2.3: `SaturationPlotterService`**
 **File:** `src/app/services/plotting/saturation_plot.py`
