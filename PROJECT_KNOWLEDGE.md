@@ -1611,7 +1611,9 @@ Pure-logic service for volcano plots. Builds per-lipid volcano-ready DataFrames 
 **Tests:** `tests/unit/test_lipidomic_heatmap_plotter.py` — 94 tests
 - 18 test classes: FilterData (8), FilterDataEdgeCases (5), ComputeZScores (7), ComputeZScoresEdgeCases (3), PerformClustering (9), PerformClusteringEdgeCases (5), GenerateClusteredHeatmap (10), ClusteredHeatmapLayout (6), ClusteredHeatmapEdgeCases (2), GenerateRegularHeatmap (8), RegularHeatmapEdgeCases (2), ClusterCompositionSpecies (5), ClusterCompositionConcentration (4), ClusterCompositionEdgeCases (3), ClusteringResultDataclass (2), TypeCoercion (3), Immutability (5), LargeDataset (4), PrivateHelpers (4)
 
-**Step 3: Create `AnalysisWorkflow`**
+**Step 3: Create `AnalysisWorkflow`** ✅
+
+**Commit:** `b8a3be1`
 **File:** `src/app/workflows/analysis.py`
 
 Like QualityCheckWorkflow, this is **interactive** — no single `run()` method. Each analysis type is triggered by user radio selection, and some (bar chart, saturation, volcano) require multi-step interaction (configure stats → select data → view results).
@@ -1641,7 +1643,8 @@ Like QualityCheckWorkflow, this is **interactive** — no single `run()` method.
 - `VolcanoResult` — `figure`, `volcano_data`, `concentration_plot`, `stat_summary`
 - `HeatmapResult` — `figure`, `z_scores_df`, `cluster_composition` (Optional)
 
-**Tests:** `tests/unit/test_analysis_workflow.py` — Target ~100 tests
+**Tests:** `tests/unit/test_analysis_workflow.py` — 126 tests
+- 20 test classes: AnalysisConfig (2), ResultDataclasses (11), ValidateInputs (8), GetAvailableClasses (4), GetEligibleConditions (3), GetAllConditions (2), GetSamplesForCondition (3), RunBarChart (8), RunBarChartEdgeCases (2), RunPieCharts (7), RunSaturation (9), RunFACH (6), RunPathway (7), RunVolcano (11), RunVolcanoEdgeCases (2), RunHeatmap (7), RunHeatmapEdgeCases (2), CrossAnalysis (2), EdgeCases (7), TypeCoercion (7), Immutability (7), ThreeConditions (5), StatisticalConfigVariations (6)
 
 **Step 4: Update `StreamlitAdapter` — Session State**
 **File:** `src/app/adapters/streamlit_adapter.py`
@@ -1784,7 +1787,7 @@ Target: ~25 tests
 | 4 | Step 2.3: Saturation plotter ✅ | 1 done (88 tests) | Step 1 (uses stats) |
 | 5 | Step 2.4: FACH plotter ✅ (97 tests) + Step 2.5: Pathway plotter ✅ (108 tests) | Both done | Nothing (no stats) |
 | 6 | Step 2.7: Lipidomic Heatmap plotter ✅ (94 tests) | 1 done | Nothing (no stats) |
-| 7 | Step 3: AnalysisWorkflow | 1 workflow file + ~100 tests | Steps 1-6 |
+| 7 | Step 3: AnalysisWorkflow ✅ (126 tests) | 1 done | Steps 1-6 |
 | 8 | Step 4: StreamlitAdapter update | 1 file modification | Step 3 (needs key list) |
 | 9 | Step 5: Module 3 UI | 1 large UI file | Steps 3-4 |
 | 10 | Step 6: main_app.py wiring | 1 file modification | Steps 4-5 |
