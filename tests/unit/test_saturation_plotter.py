@@ -849,3 +849,178 @@ class TestTypeCoercion:
             df, exp, ['Control', 'Treatment'], ['PC']
         )
         assert 'PC' in result.classes
+
+    def test_float32_concentrations(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': np.array([100.0], dtype=np.float32),
+            'concentration[s2]': np.array([200.0], dtype=np.float32),
+            'concentration[s3]': np.array([150.0], dtype=np.float32),
+            'concentration[s4]': np.array([120.0], dtype=np.float32),
+            'concentration[s5]': np.array([180.0], dtype=np.float32),
+            'concentration[s6]': np.array([160.0], dtype=np.float32),
+        })
+        exp = _make_experiment_2x3()
+        result = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC']
+        )
+        assert 'PC' in result.classes
+
+    def test_object_dtype_concentrations(self):
+        """String numbers stored as object dtype should be coerced."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': pd.array(['100.0'], dtype='object'),
+            'concentration[s2]': pd.array(['200.0'], dtype='object'),
+            'concentration[s3]': pd.array(['150.0'], dtype='object'),
+            'concentration[s4]': pd.array(['120.0'], dtype='object'),
+            'concentration[s5]': pd.array(['180.0'], dtype='object'),
+            'concentration[s6]': pd.array(['160.0'], dtype='object'),
+        })
+        exp = _make_experiment_2x3()
+        result = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC']
+        )
+        assert 'PC' in result.classes
+
+    def test_mixed_int_float_columns(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': [100],
+            'concentration[s2]': [200.5],
+            'concentration[s3]': [150],
+            'concentration[s4]': [120.5],
+            'concentration[s5]': [180],
+            'concentration[s6]': [160.5],
+        })
+        exp = _make_experiment_2x3()
+        result = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC']
+        )
+        assert 'PC' in result.classes
+
+
+# =============================================================================
+# TestImmutabilityExtended
+# =============================================================================
+
+
+class TestImmutabilityExtended:
+    """Extended immutability tests beyond the single test in TestEdgeCases."""
+
+    def test_concentration_plot_preserves_sat_data(self):
+        """Creating a concentration plot must not modify SaturationData."""
+        df = _make_df()
+        exp = _make_experiment_2x3()
+        sat_data = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC']
+        )
+        plot_copy = sat_data.plot_data['PC'].copy()
+        SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
+        pd.testing.assert_frame_equal(sat_data.plot_data['PC'], plot_copy)
+
+    def test_percentage_plot_preserves_sat_data(self):
+        df = _make_df()
+        exp = _make_experiment_2x3()
+        sat_data = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC']
+        )
+        plot_copy = sat_data.plot_data['PC'].copy()
+        SaturationPlotterService.create_percentage_plot(sat_data, 'PC')
+        pd.testing.assert_frame_equal(sat_data.plot_data['PC'], plot_copy)
+
+    def test_multi_class_preserves_input(self):
+        """Multiple classes in one call — input should not change."""
+        lipids = ['PC(16:0_18:1)', 'PE(18:0_18:2)']
+        classes = ['PC', 'PE']
+        df = _make_df(lipids=lipids, classes=classes)
+        df_copy = df.copy()
+        exp = _make_experiment_2x3()
+        SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC', 'PE']
+        )
+        pd.testing.assert_frame_equal(df, df_copy)
+
+    def test_significance_annotations_preserve_sat_data(self):
+        """Adding significance annotations must not modify SaturationData."""
+        df = _make_df()
+        exp = _make_experiment_2x3()
+        sat_data = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC']
+        )
+        plot_copy = sat_data.plot_data['PC'].copy()
+        stats = _make_stat_results('PC', significant_fa=['SFA', 'PUFA'])
+        SaturationPlotterService.create_concentration_plot(
+            sat_data, 'PC', stat_results=stats, show_significance=True
+        )
+        pd.testing.assert_frame_equal(sat_data.plot_data['PC'], plot_copy)
+
+
+# =============================================================================
+# TestLargeDataset
+# =============================================================================
+
+
+class TestLargeDataset:
+    """Stress tests with many lipids and classes."""
+
+    def test_100_lipids_single_class(self):
+        """100 lipid species in one class — should aggregate correctly."""
+        n = 100
+        rng = np.random.RandomState(42)
+        lipids = [f'PC(16:0_{i}:{i % 5})' for i in range(n)]
+        df = pd.DataFrame({
+            'LipidMolec': lipids,
+            'ClassKey': ['PC'] * n,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(10, 200, n)
+        exp = _make_experiment_2x3()
+        result = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC']
+        )
+        assert 'PC' in result.classes
+        # SFA+MUFA+PUFA totals per sample should reflect all 100 species
+        for fa in FA_TYPES:
+            values = result.fa_data['PC'][fa]['Control']
+            assert len(values) == 3
+
+    def test_20_classes(self):
+        """20 different lipid classes — all should appear in output."""
+        n = 20
+        rng = np.random.RandomState(42)
+        lipids = [f'Class{i}(16:0_18:1)' for i in range(n)]
+        classes = [f'Class{i}' for i in range(n)]
+        df = pd.DataFrame({
+            'LipidMolec': lipids,
+            'ClassKey': classes,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(50, 500, n)
+        exp = _make_experiment_2x3()
+        result = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], classes
+        )
+        assert len(result.classes) == n
+
+    def test_large_dataset_chart_renders(self):
+        """Chart should render without error with many species."""
+        n = 50
+        rng = np.random.RandomState(42)
+        lipids = [f'PC(16:0_{i}:{i % 5})' for i in range(n)]
+        df = pd.DataFrame({
+            'LipidMolec': lipids,
+            'ClassKey': ['PC'] * n,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(10, 200, n)
+        exp = _make_experiment_2x3()
+        sat_data = SaturationPlotterService.calculate_sfa_mufa_pufa(
+            df, exp, ['Control', 'Treatment'], ['PC']
+        )
+        fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 3

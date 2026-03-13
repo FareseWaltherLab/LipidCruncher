@@ -596,3 +596,224 @@ class TestFormatPercentage:
 
     def test_hundred_percent(self):
         assert _format_percentage(100.0) == "100.0"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Type coercion
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestTypeCoercion:
+    """Verify calculate_total_abundance handles various numeric dtypes."""
+
+    def test_integer_concentrations(self, experiment_2x3):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': [100],
+            'concentration[s2]': [110],
+            'concentration[s3]': [105],
+            'concentration[s4]': [500],
+            'concentration[s5]': [510],
+            'concentration[s6]': [505],
+        })
+        result = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC']
+        )
+        assert result.abundance_df.loc['PC', 'concentration[s1]'] == 100
+
+    def test_float32_concentrations(self, experiment_2x3):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': np.array([100.0], dtype=np.float32),
+            'concentration[s2]': np.array([110.0], dtype=np.float32),
+            'concentration[s3]': np.array([105.0], dtype=np.float32),
+            'concentration[s4]': np.array([500.0], dtype=np.float32),
+            'concentration[s5]': np.array([510.0], dtype=np.float32),
+            'concentration[s6]': np.array([505.0], dtype=np.float32),
+        })
+        result = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC']
+        )
+        assert isinstance(result, PieChartData)
+
+    def test_numpy_int64_concentrations(self, experiment_2x3):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': np.array([100], dtype=np.int64),
+            'concentration[s2]': np.array([110], dtype=np.int64),
+            'concentration[s3]': np.array([105], dtype=np.int64),
+            'concentration[s4]': np.array([500], dtype=np.int64),
+            'concentration[s5]': np.array([510], dtype=np.int64),
+            'concentration[s6]': np.array([505], dtype=np.int64),
+        })
+        result = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC']
+        )
+        assert isinstance(result, PieChartData)
+
+    def test_object_dtype_concentrations(self, experiment_2x3):
+        """String numbers stored as object dtype should be handled."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': pd.array(['100.0'], dtype='object'),
+            'concentration[s2]': pd.array(['110.0'], dtype='object'),
+            'concentration[s3]': pd.array(['105.0'], dtype='object'),
+            'concentration[s4]': pd.array(['500.0'], dtype='object'),
+            'concentration[s5]': pd.array(['510.0'], dtype='object'),
+            'concentration[s6]': pd.array(['505.0'], dtype='object'),
+        })
+        result = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC']
+        )
+        assert isinstance(result, PieChartData)
+
+    def test_mixed_int_float_columns(self, experiment_2x3):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': [100],
+            'concentration[s2]': [110.5],
+            'concentration[s3]': [105],
+            'concentration[s4]': [500.5],
+            'concentration[s5]': [510],
+            'concentration[s6]': [505.5],
+        })
+        result = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC']
+        )
+        assert isinstance(result, PieChartData)
+
+    def test_pie_chart_renders_with_int_data(self, experiment_2x3):
+        """Full pipeline: int data → calculate → pie chart."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PE'],
+            'concentration[s1]': [100, 200],
+            'concentration[s2]': [110, 210],
+            'concentration[s3]': [105, 205],
+            'concentration[s4]': [500, 600],
+            'concentration[s5]': [510, 610],
+            'concentration[s6]': [505, 605],
+        })
+        pie_data = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC', 'PE']
+        )
+        colors = PieChartPlotterService.generate_color_mapping(['PC', 'PE'])
+        fig, summary = PieChartPlotterService.create_pie_chart(
+            pie_data, 'Control', ['s1', 's2', 's3'], colors
+        )
+        assert isinstance(fig, go.Figure)
+        assert summary['Percentage'].sum() == pytest.approx(100.0)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Immutability
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestImmutability:
+    """Verify that input DataFrames are not modified by service methods."""
+
+    def test_calculate_total_abundance_preserves_input(self, simple_df, experiment_2x3):
+        df_copy = simple_df.copy()
+        PieChartPlotterService.calculate_total_abundance(
+            simple_df, experiment_2x3, ['PC', 'PE']
+        )
+        pd.testing.assert_frame_equal(simple_df, df_copy)
+
+    def test_multi_species_preserves_input(self, multi_species_df, experiment_2x3):
+        df_copy = multi_species_df.copy()
+        PieChartPlotterService.calculate_total_abundance(
+            multi_species_df, experiment_2x3, ['PC', 'PE']
+        )
+        pd.testing.assert_frame_equal(multi_species_df, df_copy)
+
+    def test_create_pie_chart_preserves_pie_data(self, simple_df, experiment_2x3):
+        pie_data = PieChartPlotterService.calculate_total_abundance(
+            simple_df, experiment_2x3, ['PC', 'PE']
+        )
+        abundance_copy = pie_data.abundance_df.copy()
+        colors = PieChartPlotterService.generate_color_mapping(['PC', 'PE'])
+        PieChartPlotterService.create_pie_chart(
+            pie_data, 'Control', ['s1', 's2', 's3'], colors
+        )
+        pd.testing.assert_frame_equal(pie_data.abundance_df, abundance_copy)
+
+    def test_subset_classes_preserves_input(self, experiment_2x3):
+        """Filtering to subset of classes must not modify input."""
+        df = _make_df(
+            classes=['PC', 'PE', 'SM'],
+            values_per_sample=[[100, 200, 50]] * 6,
+            n_samples=6,
+        )
+        df_copy = df.copy()
+        PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC']
+        )
+        pd.testing.assert_frame_equal(df, df_copy)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Large dataset
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestLargeDataset:
+    """Stress tests with many classes and lipids."""
+
+    def test_100_classes(self, experiment_2x3):
+        n = 100
+        classes = [f'Class{i}' for i in range(n)]
+        rng = np.random.RandomState(42)
+        df = pd.DataFrame({
+            'LipidMolec': [f'Lipid_{i}' for i in range(n)],
+            'ClassKey': classes,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(10, 1000, n)
+        result = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, classes
+        )
+        assert len(result.abundance_df) == n
+
+    def test_100_classes_pie_chart_renders(self, experiment_2x3):
+        n = 100
+        classes = [f'Class{i}' for i in range(n)]
+        rng = np.random.RandomState(42)
+        df = pd.DataFrame({
+            'LipidMolec': [f'Lipid_{i}' for i in range(n)],
+            'ClassKey': classes,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(10, 1000, n)
+        pie_data = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, classes
+        )
+        colors = PieChartPlotterService.generate_color_mapping(classes)
+        fig, summary = PieChartPlotterService.create_pie_chart(
+            pie_data, 'Control', ['s1', 's2', 's3'], colors
+        )
+        assert isinstance(fig, go.Figure)
+        assert len(summary) == n
+        assert summary['Percentage'].sum() == pytest.approx(100.0)
+
+    def test_many_species_per_class(self, experiment_2x3):
+        """50 species in one class — aggregation should work."""
+        n = 50
+        rng = np.random.RandomState(42)
+        df = pd.DataFrame({
+            'LipidMolec': [f'PC({i}:0)' for i in range(n)],
+            'ClassKey': ['PC'] * n,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(10, 200, n)
+        result = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC']
+        )
+        assert len(result.abundance_df) == 1
+        # Total should be sum of all 50 species
+        assert result.abundance_df.loc['PC', 'concentration[s1]'] > 100

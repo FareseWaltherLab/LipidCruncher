@@ -1085,3 +1085,265 @@ class TestLevel1Correction:
             results, 'fdr_bh', 0.05
         )
         assert results == {}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Type Coercion
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestTypeCoercion:
+    """Verify service handles various numeric dtypes correctly."""
+
+    def test_float32_concentrations_class_level(self, experiment_2x3, manual_parametric_config):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': np.array([100.0], dtype=np.float32),
+            'concentration[s2]': np.array([110.0], dtype=np.float32),
+            'concentration[s3]': np.array([105.0], dtype=np.float32),
+            'concentration[s4]': np.array([500.0], dtype=np.float32),
+            'concentration[s5]': np.array([510.0], dtype=np.float32),
+            'concentration[s6]': np.array([505.0], dtype=np.float32),
+        })
+        summary = StatisticalTestingService.run_class_level_tests(
+            df, experiment_2x3,
+            ['Control', 'Treatment'], ['PC'],
+            manual_parametric_config,
+        )
+        assert 'PC' in summary.results
+        assert summary.results['PC'].p_value < 0.05
+
+    def test_int64_concentrations_class_level(self, experiment_2x3, manual_parametric_config):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': np.array([100], dtype=np.int64),
+            'concentration[s2]': np.array([110], dtype=np.int64),
+            'concentration[s3]': np.array([105], dtype=np.int64),
+            'concentration[s4]': np.array([500], dtype=np.int64),
+            'concentration[s5]': np.array([510], dtype=np.int64),
+            'concentration[s6]': np.array([505], dtype=np.int64),
+        })
+        summary = StatisticalTestingService.run_class_level_tests(
+            df, experiment_2x3,
+            ['Control', 'Treatment'], ['PC'],
+            manual_parametric_config,
+        )
+        assert 'PC' in summary.results
+
+    def test_object_dtype_concentrations_species_level(self, manual_parametric_config):
+        """Object dtype columns (string numbers) in species-level tests."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': pd.array(['100.0'], dtype='object'),
+            'concentration[s2]': pd.array(['110.0'], dtype='object'),
+            'concentration[s3]': pd.array(['105.0'], dtype='object'),
+            'concentration[s4]': pd.array(['500.0'], dtype='object'),
+            'concentration[s5]': pd.array(['510.0'], dtype='object'),
+            'concentration[s6]': pd.array(['505.0'], dtype='object'),
+        })
+        summary = StatisticalTestingService.run_species_level_tests(
+            df, ['s1', 's2', 's3'], ['s4', 's5', 's6'],
+            manual_parametric_config,
+        )
+        assert 'PC(16:0)' in summary.results
+
+    def test_float32_two_groups(self):
+        g1 = np.array([100.0, 110.0, 105.0], dtype=np.float32)
+        g2 = np.array([500.0, 510.0, 505.0], dtype=np.float32)
+        result = StatisticalTestingService.test_two_groups(g1, g2, 'parametric')
+        assert result.p_value < 0.05
+
+    def test_integer_list_two_groups(self):
+        g1 = np.array([100, 110, 105])
+        g2 = np.array([500, 510, 505])
+        result = StatisticalTestingService.test_two_groups(g1, g2, 'parametric')
+        assert result.p_value < 0.05
+
+    def test_float32_saturation_data(self, experiment_2x3, manual_parametric_config):
+        """float32 values in saturation-level fa_data."""
+        fa_data = {
+            'PC': {
+                'SFA': {
+                    'Control': np.array([100.0, 110.0, 105.0], dtype=np.float32),
+                    'Treatment': np.array([500.0, 510.0, 505.0], dtype=np.float32),
+                },
+                'MUFA': {
+                    'Control': np.array([50.0, 55.0, 52.0], dtype=np.float32),
+                    'Treatment': np.array([50.0, 48.0, 51.0], dtype=np.float32),
+                },
+                'PUFA': {
+                    'Control': np.array([30.0, 35.0, 32.0], dtype=np.float32),
+                    'Treatment': np.array([30.0, 28.0, 31.0], dtype=np.float32),
+                },
+            },
+        }
+        summary = StatisticalTestingService.run_saturation_tests(
+            pd.DataFrame(), experiment_2x3,
+            ['Control', 'Treatment'], ['PC'],
+            fa_data, manual_parametric_config,
+        )
+        assert 'PC_SFA' in summary.results
+        assert summary.results['PC_SFA'].p_value < 0.05
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Immutability
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestImmutability:
+    """Verify that input DataFrames and arrays are not modified."""
+
+    def test_class_level_preserves_input(self, class_level_df, experiment_2x3, manual_parametric_config):
+        df_copy = class_level_df.copy()
+        StatisticalTestingService.run_class_level_tests(
+            class_level_df, experiment_2x3,
+            ['Control', 'Treatment'], ['PC', 'PE'],
+            manual_parametric_config,
+        )
+        pd.testing.assert_frame_equal(class_level_df, df_copy)
+
+    def test_species_level_preserves_input(self, species_level_df, manual_parametric_config):
+        df_copy = species_level_df.copy()
+        StatisticalTestingService.run_species_level_tests(
+            species_level_df,
+            ['s1', 's2', 's3'], ['s4', 's5', 's6'],
+            manual_parametric_config,
+        )
+        pd.testing.assert_frame_equal(species_level_df, df_copy)
+
+    def test_two_groups_preserves_arrays(self):
+        g1 = np.array([100.0, 110.0, 105.0])
+        g2 = np.array([500.0, 510.0, 505.0])
+        g1_copy = g1.copy()
+        g2_copy = g2.copy()
+        StatisticalTestingService.test_two_groups(g1, g2, 'parametric', True)
+        np.testing.assert_array_equal(g1, g1_copy)
+        np.testing.assert_array_equal(g2, g2_copy)
+
+    def test_multiple_groups_preserves_arrays(self, three_groups):
+        copies = {k: v.copy() for k, v in three_groups.items()}
+        StatisticalTestingService.test_multiple_groups(
+            three_groups, 'parametric', True
+        )
+        for k in three_groups:
+            np.testing.assert_array_equal(three_groups[k], copies[k])
+
+    def test_prepare_group_data_preserves_input(self):
+        arr = np.array([0.0, 10.0, np.nan, 20.0])
+        arr_copy = arr.copy()
+        StatisticalTestingService._prepare_group_data(arr, True)
+        np.testing.assert_array_equal(arr, arr_copy)
+
+    def test_saturation_level_preserves_fa_data(self, experiment_2x3, manual_parametric_config, rng):
+        fa_data = {
+            'PC': {
+                'SFA': {
+                    'Control': rng.normal(100, 10, 3),
+                    'Treatment': rng.normal(200, 10, 3),
+                },
+                'MUFA': {
+                    'Control': rng.normal(50, 5, 3),
+                    'Treatment': rng.normal(50, 5, 3),
+                },
+                'PUFA': {
+                    'Control': rng.normal(30, 3, 3),
+                    'Treatment': rng.normal(30, 3, 3),
+                },
+            },
+        }
+        # Deep copy for comparison
+        copies = {}
+        for cls in fa_data:
+            copies[cls] = {}
+            for fa in fa_data[cls]:
+                copies[cls][fa] = {}
+                for cond in fa_data[cls][fa]:
+                    copies[cls][fa][cond] = fa_data[cls][fa][cond].copy()
+
+        StatisticalTestingService.run_saturation_tests(
+            pd.DataFrame(), experiment_2x3,
+            ['Control', 'Treatment'], ['PC'],
+            fa_data, manual_parametric_config,
+        )
+        for cls in fa_data:
+            for fa in fa_data[cls]:
+                for cond in fa_data[cls][fa]:
+                    np.testing.assert_array_equal(
+                        fa_data[cls][fa][cond], copies[cls][fa][cond]
+                    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Large Dataset
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestLargeDataset:
+    """Stress tests with many lipids and classes."""
+
+    def test_100_lipids_species_level(self, manual_parametric_config):
+        n = 100
+        rng = np.random.default_rng(42)
+        df = pd.DataFrame({
+            'LipidMolec': [f'PC({i}:0)' for i in range(n)],
+            'ClassKey': ['PC'] * n,
+        })
+        for s in ['s1', 's2', 's3']:
+            df[f'concentration[{s}]'] = rng.normal(100, 10, n)
+        for s in ['s4', 's5', 's6']:
+            df[f'concentration[{s}]'] = rng.normal(200, 10, n)
+        summary = StatisticalTestingService.run_species_level_tests(
+            df, ['s1', 's2', 's3'], ['s4', 's5', 's6'],
+            manual_parametric_config,
+        )
+        assert len(summary.results) == n
+        # With clear separation, most should be significant
+        sig_count = sum(1 for r in summary.results.values() if r.significant)
+        assert sig_count > n * 0.5
+
+    def test_50_classes_class_level(self, experiment_2x3, manual_parametric_config):
+        n = 50
+        rng = np.random.default_rng(42)
+        classes = [f'Class{i}' for i in range(n)]
+        df = pd.DataFrame({
+            'LipidMolec': [f'Lipid_{i}' for i in range(n)],
+            'ClassKey': classes,
+        })
+        for s in ['s1', 's2', 's3']:
+            df[f'concentration[{s}]'] = rng.normal(100, 10, n)
+        for s in ['s4', 's5', 's6']:
+            df[f'concentration[{s}]'] = rng.normal(500, 10, n)
+        summary = StatisticalTestingService.run_class_level_tests(
+            df, experiment_2x3,
+            ['Control', 'Treatment'], classes,
+            manual_parametric_config,
+        )
+        assert len(summary.results) == n
+        assert summary.parameters['n_classes'] == n
+
+    def test_100_lipids_auto_mode_uses_fdr(self, auto_config):
+        """With 100 tests, auto mode should select FDR correction."""
+        n = 100
+        rng = np.random.default_rng(42)
+        df = pd.DataFrame({
+            'LipidMolec': [f'PC({i}:0)' for i in range(n)],
+            'ClassKey': ['PC'] * n,
+        })
+        for s in ['s1', 's2', 's3']:
+            df[f'concentration[{s}]'] = rng.normal(100, 10, n)
+        for s in ['s4', 's5', 's6']:
+            df[f'concentration[{s}]'] = rng.normal(200, 10, n)
+        summary = StatisticalTestingService.run_species_level_tests(
+            df, ['s1', 's2', 's3'], ['s4', 's5', 's6'],
+            auto_config,
+        )
+        assert summary.test_info['correction'] == 'fdr_bh'
+
+    def test_large_groups(self):
+        """1000 samples per group — tests should still work."""
+        rng = np.random.default_rng(42)
+        g1 = rng.normal(100, 10, 1000)
+        g2 = rng.normal(105, 10, 1000)
+        result = StatisticalTestingService.test_two_groups(g1, g2, 'parametric')
+        assert 0 <= result.p_value <= 1

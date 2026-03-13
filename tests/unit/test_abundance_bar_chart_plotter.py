@@ -576,3 +576,210 @@ class TestGetModeColumns:
         m, s = _get_mode_columns('Treatment', 'log10 scale')
         assert m == 'log10_mean_AUC_Treatment'
         assert s == 'log10_std_AUC_Treatment'
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Type coercion
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestTypeCoercion:
+    """Verify create_mean_std_data handles various numeric dtypes."""
+
+    def test_integer_concentrations(self, experiment_2x3):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': [100],
+            'concentration[s2]': [110],
+            'concentration[s3]': [105],
+            'concentration[s4]': [500],
+            'concentration[s5]': [510],
+            'concentration[s6]': [505],
+        })
+        result = BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control', 'Treatment'], ['PC']
+        )
+        assert result.abundance_df['mean_AUC_Control'].iloc[0] == pytest.approx(105.0)
+        assert result.abundance_df['mean_AUC_Treatment'].iloc[0] == pytest.approx(505.0)
+
+    def test_float32_concentrations(self, experiment_2x3):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': np.array([100.0], dtype=np.float32),
+            'concentration[s2]': np.array([110.0], dtype=np.float32),
+            'concentration[s3]': np.array([105.0], dtype=np.float32),
+            'concentration[s4]': np.array([500.0], dtype=np.float32),
+            'concentration[s5]': np.array([510.0], dtype=np.float32),
+            'concentration[s6]': np.array([505.0], dtype=np.float32),
+        })
+        result = BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control', 'Treatment'], ['PC']
+        )
+        assert result.abundance_df['mean_AUC_Control'].iloc[0] == pytest.approx(105.0, abs=0.1)
+
+    def test_numpy_int64_concentrations(self, experiment_2x3):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': np.array([100], dtype=np.int64),
+            'concentration[s2]': np.array([110], dtype=np.int64),
+            'concentration[s3]': np.array([105], dtype=np.int64),
+            'concentration[s4]': np.array([500], dtype=np.int64),
+            'concentration[s5]': np.array([510], dtype=np.int64),
+            'concentration[s6]': np.array([505], dtype=np.int64),
+        })
+        result = BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control', 'Treatment'], ['PC']
+        )
+        assert isinstance(result, BarChartData)
+
+    def test_object_dtype_rejects_gracefully(self, experiment_2x3):
+        """Object dtype columns cannot be aggregated — service should raise."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': pd.array([100.0], dtype='object'),
+            'concentration[s2]': pd.array([110.0], dtype='object'),
+            'concentration[s3]': pd.array([105.0], dtype='object'),
+            'concentration[s4]': pd.array([500.0], dtype='object'),
+            'concentration[s5]': pd.array([510.0], dtype='object'),
+            'concentration[s6]': pd.array([505.0], dtype='object'),
+        })
+        with pytest.raises(TypeError):
+            BarChartPlotterService.create_mean_std_data(
+                df, experiment_2x3, ['Control', 'Treatment'], ['PC']
+            )
+
+    def test_mixed_int_float_columns(self, experiment_2x3):
+        """Some columns int, others float — should not crash."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': [100],
+            'concentration[s2]': [110.5],
+            'concentration[s3]': [105],
+            'concentration[s4]': [500.5],
+            'concentration[s5]': [510],
+            'concentration[s6]': [505.5],
+        })
+        result = BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control', 'Treatment'], ['PC']
+        )
+        assert isinstance(result, BarChartData)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Immutability
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestImmutability:
+    """Verify that input DataFrames are not modified by service methods."""
+
+    def test_create_mean_std_data_preserves_input(self, experiment_2x3):
+        df = _make_df(
+            classes=['PC', 'PE'],
+            values_per_sample=[[100, 200]] * 6,
+            n_samples=6,
+        )
+        df_copy = df.copy()
+        BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control', 'Treatment'], ['PC', 'PE']
+        )
+        pd.testing.assert_frame_equal(df, df_copy)
+
+    def test_create_mean_std_data_with_zeros_preserves_input(self, experiment_2x3):
+        """Zero-replacement for log10 must not mutate input."""
+        df = _make_df(
+            classes=['PC'],
+            values_per_sample=[[0], [100], [100], [100], [100], [100]],
+            n_samples=6,
+        )
+        df_copy = df.copy()
+        BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control'], ['PC']
+        )
+        pd.testing.assert_frame_equal(df, df_copy)
+
+    def test_create_bar_chart_preserves_bar_data(self, simple_df, experiment_2x3):
+        bar_data = BarChartPlotterService.create_mean_std_data(
+            simple_df, experiment_2x3, ['Control', 'Treatment'], ['PC', 'PE']
+        )
+        abundance_copy = bar_data.abundance_df.copy()
+        BarChartPlotterService.create_bar_chart(bar_data, 'linear scale')
+        pd.testing.assert_frame_equal(bar_data.abundance_df, abundance_copy)
+
+    def test_create_bar_chart_log10_preserves_bar_data(self, simple_df, experiment_2x3):
+        bar_data = BarChartPlotterService.create_mean_std_data(
+            simple_df, experiment_2x3, ['Control', 'Treatment'], ['PC', 'PE']
+        )
+        abundance_copy = bar_data.abundance_df.copy()
+        BarChartPlotterService.create_bar_chart(bar_data, 'log10 scale')
+        pd.testing.assert_frame_equal(bar_data.abundance_df, abundance_copy)
+
+    def test_multi_species_preserves_input(self, multi_species_df, experiment_2x3):
+        df_copy = multi_species_df.copy()
+        BarChartPlotterService.create_mean_std_data(
+            multi_species_df, experiment_2x3, ['Control', 'Treatment'], ['PC', 'PE']
+        )
+        pd.testing.assert_frame_equal(multi_species_df, df_copy)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Large dataset
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestLargeDataset:
+    """Stress tests with many classes and lipids."""
+
+    def test_100_classes(self, experiment_2x3):
+        n = 100
+        classes = [f'Class{i}' for i in range(n)]
+        rng = np.random.RandomState(42)
+        df = pd.DataFrame({
+            'LipidMolec': [f'Lipid_{i}' for i in range(n)],
+            'ClassKey': classes,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(10, 1000, n)
+        result = BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control', 'Treatment'], classes
+        )
+        assert len(result.abundance_df) == n
+        assert len(result.classes) == n
+
+    def test_100_classes_chart_renders(self, experiment_2x3):
+        n = 100
+        classes = [f'Class{i}' for i in range(n)]
+        rng = np.random.RandomState(42)
+        df = pd.DataFrame({
+            'LipidMolec': [f'Lipid_{i}' for i in range(n)],
+            'ClassKey': classes,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(10, 1000, n)
+        bar_data = BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control', 'Treatment'], classes
+        )
+        fig = BarChartPlotterService.create_bar_chart(bar_data, 'linear scale')
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 2
+
+    def test_many_species_per_class(self, experiment_2x3):
+        """50 species in one class — aggregation should work."""
+        n = 50
+        rng = np.random.RandomState(42)
+        df = pd.DataFrame({
+            'LipidMolec': [f'PC({i}:0)' for i in range(n)],
+            'ClassKey': ['PC'] * n,
+        })
+        for s in range(1, 7):
+            df[f'concentration[s{s}]'] = rng.uniform(10, 200, n)
+        result = BarChartPlotterService.create_mean_std_data(
+            df, experiment_2x3, ['Control'], ['PC']
+        )
+        # Sum of 50 species means should be large
+        assert result.abundance_df['mean_AUC_Control'].iloc[0] > 100
