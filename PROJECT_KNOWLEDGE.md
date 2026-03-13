@@ -1545,16 +1545,25 @@ Pure-logic service for Fatty Acid Composition Heatmaps. Parses carbon chain leng
 
 **Tests:** 97 tests across 16 classes covering: lipid name parsing (standard 5, ether 3, sphingoid 4, oxidized 3, modifications 2, edge cases 9), data preparation (basic 10, edge cases 11), heatmap rendering (traces 10, layout 7), weighted average lines/annotations (5), get_weighted_averages (3), private helpers (4), three conditions (4), type coercion (int, float32, int64, object dtype, mixed, full pipeline — 6), immutability (5 tests verifying input DataFrames not modified), large dataset stress tests (100 lipids, heatmap rendering, wide Carbon/DB grid — 3), FACHData dataclass (2)
 
-**Step 2.5: `PathwayVizPlotterService`**
-**File:** `src/app/services/plotting/pathway_viz.py`
+**Step 2.5: `PathwayVizPlotterService`** ✅
+**File:** `src/app/services/plotting/pathway_viz.py` (270 lines) | **Tests:** `tests/unit/test_pathway_viz_plotter.py` (108 tests)
 
-**Methods:**
-- `calculate_class_saturation_ratio(df) → pd.DataFrame` — Sat/unsat chain counts per class
-- `calculate_class_fold_change(df, experiment, control, experimental) → pd.DataFrame` — Mean(exp)/Mean(ctrl) per class
-- `create_pathway_viz(fold_change_df, saturation_df, control, experimental) → Tuple[plt.Figure, Dict]` — Matplotlib pathway diagram with 18 fixed lipid class positions
-- `create_pathway_dictionary(fold_change_df, saturation_df, control, experimental) → Dict` — Data for CSV export
+Pure-logic service for lipid pathway visualization. Parses fatty acid chain saturation from lipid names, computes per-class saturation ratios and abundance fold changes, builds 18-class pathway dictionary, and renders Matplotlib pathway diagram with sized/colored scatter, grouping circles, unit circles, connector lines, text labels, and colorbar. **Test count: 2924.**
 
-**Tests:** `tests/unit/test_pathway_viz_plotter.py` — ~35 tests
+**Result Dataclass:**
+- `PathwayData` — `pathway_dict` (Dict with 'class', 'abundance ratio', 'saturated fatty acids ratio'), `fold_change_df`, `saturation_ratio_df`
+
+**Public Methods:**
+- `calculate_class_saturation_ratio(df) → pd.DataFrame` — Counts sat/unsat chains per lipid, sums per ClassKey, returns ratio
+- `calculate_class_fold_change(df, experiment, control, experimental) → pd.DataFrame` — Sums species per class, computes mean(exp)/mean(ctrl) fold change
+- `create_pathway_dictionary(fold_change_df, saturation_ratio_df) → Dict` — Maps 18 fixed pathway classes to fold change and saturation values (0 for missing)
+- `create_pathway_viz(fold_change_df, saturation_ratio_df) → Tuple[Optional[Figure], Dict]` — Full Matplotlib pathway diagram
+
+**Private Helpers:**
+- `_count_saturated_unsaturated(mol_structure)` — Chain-level sat/unsat counting with hydroxyl notation handling
+- `_initiate_plot()`, `_draw_grouping_circles()`, `_draw_unit_circles()`, `_draw_connecting_lines()`, `_add_text_labels()`, `_render_scatter()` — Figure construction
+
+**Tests:** 108 tests across 16 classes covering: chain parsing (standard 8, hydroxyl 3, edge cases 7), saturation ratio computation (13 tests: structure, ratio values, all-sat/all-unsat, multi-class, empty/None, errors, unparsable, single lipid), fold change computation (15 tests: structure, ratio correctness, FC<1, FC=1, species summing, zero ctrl, errors, 3 conditions), pathway dictionary (9 tests: keys, 18-class count, missing→zero, values, both-empty, partial, extras), visualization rendering (13 tests: figure type, empty→None, axes, title, colorbar, scatter 18pts, circles, lines, labels, sizes), PathwayData dataclass (2), constants (5), end-to-end (3: simple, multi-class, 3 conditions), edge cases (8: all zeros, NaN, single sample, large/small FC, negatives, special chars), type coercion (int, float32, int64, object dtype, mixed, full pipeline — 6), immutability (5 tests verifying input DataFrames not modified), large dataset stress tests (100 lipids, 18 classes, 500 lipids — 4), NaN handling (3), boundary conditions (5)
 
 **Step 2.6: `VolcanoPlotterService`**
 **File:** `src/app/services/plotting/volcano_plot.py`
@@ -1756,7 +1765,7 @@ Target: ~25 tests
 | 2 | Step 2.1: Bar Chart plotter ✅ + Step 2.2: Pie Chart plotter ✅ | 1 done (68 tests) + 1 done (63 tests) | Step 1 (bar chart uses stats) |
 | 3 | Step 2.6: Volcano plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
 | 4 | Step 2.3: Saturation plotter ✅ | 1 done (88 tests) | Step 1 (uses stats) |
-| 5 | Step 2.4: FACH plotter ✅ (97 tests) + Step 2.5: Pathway plotter | 1 done + 1 plotting file + ~35 tests | Nothing (no stats) |
+| 5 | Step 2.4: FACH plotter ✅ (97 tests) + Step 2.5: Pathway plotter ✅ (108 tests) | Both done | Nothing (no stats) |
 | 6 | Step 2.7: Lipidomic Heatmap plotter | 1 plotting file + ~35 tests | Nothing (no stats) |
 | 7 | Step 3: AnalysisWorkflow | 1 workflow file + ~100 tests | Steps 1-6 |
 | 8 | Step 4: StreamlitAdapter update | 1 file modification | Step 3 (needs key list) |
