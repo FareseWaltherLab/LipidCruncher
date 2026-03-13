@@ -1525,15 +1525,25 @@ Pure-logic service for saturation (SFA/MUFA/PUFA) analysis. Parses fatty acid ch
 
 **Tests:** 88 tests across 14 classes (FA ratio parsing, data preparation, consolidated detection, concentration/percentage plots, significance annotations, post-hoc annotations, edge cases, type coercion (int, float32, int64, string, object dtype, mixed), color mapping, private helpers, extended immutability (4 tests for concentration/percentage plots, multi-class, significance annotations), large dataset stress tests (100 lipids, 20 classes, chart rendering))
 
-**Step 2.4: `FACHPlotterService`**
-**File:** `src/app/services/plotting/fach.py`
+**Step 2.4: `FACHPlotterService`** ✅
+**File:** `src/app/services/plotting/fach.py` (280 lines) | **Tests:** `tests/unit/test_fach_plotter.py` (97 tests)
 
-**Methods:**
-- `parse_carbon_db(lipid_name) → Tuple[Optional[int], Optional[int]]` — Extract total carbons and double bonds (handles ether lipids, sphingoid bases, oxidized lipids)
-- `prepare_fach_data(df, experiment, selected_class, selected_conditions) → Dict[str, pd.DataFrame]` — Aggregated proportional abundance per (Carbon, DB) per condition
-- `create_fach_heatmap(data_dict) → Optional[go.Figure]` — Side-by-side heatmaps with weighted average lines
+Pure-logic service for Fatty Acid Composition Heatmaps. Parses carbon chain length and double bond count from lipid names (standard, ether, sphingoid, oxidized, modified formats), aggregates proportional abundance per (Carbon, DB) per condition, and renders side-by-side Plotly heatmaps with weighted average lines. **Test count: 2816.**
 
-**Tests:** `tests/unit/test_fach_plotter.py` — ~30 tests (includes lipid name parsing edge cases)
+**Result Dataclass:**
+- `FACHData` — `data_dict` (Dict[condition → DataFrame with Carbon, DB, Proportion]), `selected_class`, `unparsable_lipids`
+
+**Public Methods:**
+- `parse_carbon_db(lipid_name) → Tuple[Optional[int], Optional[int]]` — Extract total carbons and double bonds (handles ether lipids O-/P-, sphingoid bases d/t/m, oxidized +O/+2O/+3O, C-prefix, multi-chain, modifications)
+- `prepare_fach_data(df, experiment, selected_class, selected_conditions) → FACHData` — Per-condition proportional abundance aggregated by (Carbon, DB)
+- `create_fach_heatmap(fach_data) → Optional[go.Figure]` — Side-by-side heatmaps with custom YlOrRd colorscale, consistent axes/color range, weighted average DB/Carbon dashed lines with annotations
+- `get_weighted_averages(fach_data) → Dict[str, Tuple[float, float]]` — Per-condition weighted average (DB, Carbon) values
+
+**Private Helpers:**
+- `_compute_weighted_averages(cond_df) → Tuple[float, float]` — Proportion-weighted average DB and Carbon
+- `_add_average_lines(fig, col_idx, avg_db, avg_carbon, ...)` — Adds vline/hline + annotations to subplot
+
+**Tests:** 97 tests across 16 classes covering: lipid name parsing (standard 5, ether 3, sphingoid 4, oxidized 3, modifications 2, edge cases 9), data preparation (basic 10, edge cases 11), heatmap rendering (traces 10, layout 7), weighted average lines/annotations (5), get_weighted_averages (3), private helpers (4), three conditions (4), type coercion (int, float32, int64, object dtype, mixed, full pipeline — 6), immutability (5 tests verifying input DataFrames not modified), large dataset stress tests (100 lipids, heatmap rendering, wide Carbon/DB grid — 3), FACHData dataclass (2)
 
 **Step 2.5: `PathwayVizPlotterService`**
 **File:** `src/app/services/plotting/pathway_viz.py`
@@ -1746,7 +1756,7 @@ Target: ~25 tests
 | 2 | Step 2.1: Bar Chart plotter ✅ + Step 2.2: Pie Chart plotter ✅ | 1 done (68 tests) + 1 done (63 tests) | Step 1 (bar chart uses stats) |
 | 3 | Step 2.6: Volcano plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
 | 4 | Step 2.3: Saturation plotter ✅ | 1 done (88 tests) | Step 1 (uses stats) |
-| 5 | Step 2.4-2.5: FACH + Pathway plotters | 2 plotting files + ~65 tests | Nothing (no stats) |
+| 5 | Step 2.4: FACH plotter ✅ (97 tests) + Step 2.5: Pathway plotter | 1 done + 1 plotting file + ~35 tests | Nothing (no stats) |
 | 6 | Step 2.7: Lipidomic Heatmap plotter | 1 plotting file + ~35 tests | Nothing (no stats) |
 | 7 | Step 3: AnalysisWorkflow | 1 workflow file + ~100 tests | Steps 1-6 |
 | 8 | Step 4: StreamlitAdapter update | 1 file modification | Step 3 (needs key list) |
