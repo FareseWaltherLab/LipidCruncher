@@ -1593,20 +1593,23 @@ Pure-logic service for volcano plots. Builds per-lipid volcano-ready DataFrames 
 
 **Tests:** 130 tests across 16 classes covering: VolcanoData dataclass (2), data preparation (22 tests: columns, fold change, p-values, -log10, means, test metadata, significance, removed lipids, fallbacks), prep edge cases (8: empty/None df, missing columns, no matches, single lipid, NaN, many classes), volcano plot rendering (12: figure type, traces, markers, colors, title, axes, height, background, axes style), threshold lines (4: count, horizontal position, vertical positions, style), hide non-significant (2), top N labels (6: none, 1, 2, arrows, custom positions, exceeds count), plot edge cases (4: empty, single point, missing class, raw p-values), concentration vs FC (8: returns, columns, lipid count, title, axes, traces, empty, hide), distribution plot (9: figure type, title, axes, multiple lipids, empty lipids/conditions, nonexistent lipid/condition), color mapping (6: dict, count, consistency, empty, wrap-around, hex format), most abundant lipid (4), private helpers (16: numeric extraction, zero-adj means, exclusion reasons, filtering, overlap), type coercion (int, float32, int64, object, mixed, full pipeline — 6), immutability (5: prepare, zeros, volcano plot, conc vs FC, distribution), large dataset stress tests (100/500 lipids, chart rendering, labels, conc vs FC — 5), multi-condition (2), significance/FC parametrized (11)
 
-**Step 2.7: `LipidomicHeatmapPlotterService`**
+**Step 2.7: `LipidomicHeatmapPlotterService`** ✅
+
+**Commit:** `00b2716`
 **File:** `src/app/services/plotting/lipidomic_heatmap.py`
 
 **Methods:**
 - `filter_data(df, selected_conditions, selected_classes, experiment) → Tuple[pd.DataFrame, List[str]]`
 - `compute_z_scores(filtered_df) → pd.DataFrame` — Row-wise Z-score normalization
 - `perform_clustering(z_scores_df, n_clusters) → ClusteringResult` — Ward linkage, Euclidean distance
-- `generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters) → go.Figure` — Plotly heatmap reordered by dendrogram
+- `generate_clustered_heatmap(z_scores_df, selected_samples, n_clusters) → go.Figure` — Plotly heatmap reordered by dendrogram with cluster boundary lines
 - `generate_regular_heatmap(z_scores_df, selected_samples) → go.Figure`
-- `get_cluster_composition(z_scores_df, n_clusters, mode) → pd.DataFrame` — Species count or concentration % per cluster
+- `get_cluster_composition(z_scores_df, n_clusters, mode, filtered_df) → pd.DataFrame` — Species count or concentration % per cluster
 
 **Result:** `ClusteringResult` dataclass with `linkage_matrix`, `cluster_labels`, `dendrogram_order`
 
-**Tests:** `tests/unit/test_lipidomic_heatmap_plotter.py` — ~35 tests
+**Tests:** `tests/unit/test_lipidomic_heatmap_plotter.py` — 94 tests
+- 18 test classes: FilterData (8), FilterDataEdgeCases (5), ComputeZScores (7), ComputeZScoresEdgeCases (3), PerformClustering (9), PerformClusteringEdgeCases (5), GenerateClusteredHeatmap (10), ClusteredHeatmapLayout (6), ClusteredHeatmapEdgeCases (2), GenerateRegularHeatmap (8), RegularHeatmapEdgeCases (2), ClusterCompositionSpecies (5), ClusterCompositionConcentration (4), ClusterCompositionEdgeCases (3), ClusteringResultDataclass (2), TypeCoercion (3), Immutability (5), LargeDataset (4), PrivateHelpers (4)
 
 **Step 3: Create `AnalysisWorkflow`**
 **File:** `src/app/workflows/analysis.py`
@@ -1780,7 +1783,7 @@ Target: ~25 tests
 | 3 | Step 2.6: Volcano plotter ✅ | 1 done (130 tests) | Step 1 (uses stats) |
 | 4 | Step 2.3: Saturation plotter ✅ | 1 done (88 tests) | Step 1 (uses stats) |
 | 5 | Step 2.4: FACH plotter ✅ (97 tests) + Step 2.5: Pathway plotter ✅ (108 tests) | Both done | Nothing (no stats) |
-| 6 | Step 2.7: Lipidomic Heatmap plotter | 1 plotting file + ~35 tests | Nothing (no stats) |
+| 6 | Step 2.7: Lipidomic Heatmap plotter ✅ (94 tests) | 1 done | Nothing (no stats) |
 | 7 | Step 3: AnalysisWorkflow | 1 workflow file + ~100 tests | Steps 1-6 |
 | 8 | Step 4: StreamlitAdapter update | 1 file modification | Step 3 (needs key list) |
 | 9 | Step 5: Module 3 UI | 1 large UI file | Steps 3-4 |
