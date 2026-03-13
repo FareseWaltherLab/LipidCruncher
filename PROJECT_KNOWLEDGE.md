@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** March 10, 2026
+**Last Updated:** March 13, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -1565,19 +1565,33 @@ Pure-logic service for lipid pathway visualization. Parses fatty acid chain satu
 
 **Tests:** 108 tests across 16 classes covering: chain parsing (standard 8, hydroxyl 3, edge cases 7), saturation ratio computation (13 tests: structure, ratio values, all-sat/all-unsat, multi-class, empty/None, errors, unparsable, single lipid), fold change computation (15 tests: structure, ratio correctness, FC<1, FC=1, species summing, zero ctrl, errors, 3 conditions), pathway dictionary (9 tests: keys, 18-class count, missing→zero, values, both-empty, partial, extras), visualization rendering (13 tests: figure type, empty→None, axes, title, colorbar, scatter 18pts, circles, lines, labels, sizes), PathwayData dataclass (2), constants (5), end-to-end (3: simple, multi-class, 3 conditions), edge cases (8: all zeros, NaN, single sample, large/small FC, negatives, special chars), type coercion (int, float32, int64, object dtype, mixed, full pipeline — 6), immutability (5 tests verifying input DataFrames not modified), large dataset stress tests (100 lipids, 18 classes, 500 lipids — 4), NaN handling (3), boundary conditions (5)
 
-**Step 2.6: `VolcanoPlotterService`**
-**File:** `src/app/services/plotting/volcano_plot.py`
+**Step 2.6: `VolcanoPlotterService`** ✅
+**File:** `src/app/services/plotting/volcano_plot.py` (480 lines) | **Tests:** `tests/unit/test_volcano_plotter.py` (130 tests)
 
-**Methods:**
-- `prepare_volcano_data(df, stat_results, control_samples, experimental_samples) → VolcanoData` — Computes fold change, log2FC, -log10(p), flags excluded lipids
-- `create_volcano_plot(volcano_data, color_mapping, p_threshold, fc_threshold, hide_non_sig, top_n_labels, custom_label_positions) → go.Figure` — Plotly scatter with thresholds and smart label placement
-- `create_concentration_vs_fc_plot(volcano_data, color_mapping, p_threshold, hide_non_sig) → Tuple[go.Figure, pd.DataFrame]`
-- `create_distribution_plot(volcano_df, selected_lipids, selected_conditions, experiment) → plt.Figure` — Seaborn boxplot per lipid
-- `generate_color_mapping(volcano_df) → Dict[str, str]` — ClassKey-to-color
+Pure-logic service for volcano plots. Builds per-lipid volcano-ready DataFrames from StatisticalTestSummary results, creates Plotly volcano scatter with threshold lines and collision-aware label placement, concentration-vs-fold-change scatter, and Seaborn distribution box plots. **Test count: 3054.**
 
-**Result:** `VolcanoData` dataclass with `volcano_df` (log2FC, -log10p, class, significance), `removed_lipids_df`, `stat_results`
+**Result Dataclass:**
+- `VolcanoData` — `volcano_df` (DataFrame with LipidMolec, ClassKey, FoldChange (log2), pValue, adjusted_pValue, -log10(pValue), -log10(adjusted_pValue), Log10MeanControl, mean_control, mean_experimental, test_method, transformation, significant, correction_method), `removed_lipids_df` (LipidMolec, ClassKey, Reason), `stat_results`
 
-**Tests:** `tests/unit/test_volcano_plotter.py` — ~45 tests (includes label placement, excluded lipids)
+**Public Methods:**
+- `prepare_volcano_data(df, stat_results, control_samples, experimental_samples) → VolcanoData` — Builds volcano_df from stat results, flags excluded lipids with reasons
+- `create_volcano_plot(volcano_data, color_mapping, p_threshold, fc_threshold, hide_non_sig, use_adjusted_p, top_n_labels, custom_label_positions) → go.Figure` — Plotly scatter with threshold lines (horizontal p-value, vertical ±FC), collision-aware label placement with 8 candidate positions
+- `create_concentration_vs_fc_plot(volcano_data, color_mapping, p_threshold, hide_non_sig, use_adjusted_p) → Tuple[go.Figure, pd.DataFrame]` — Log10(Mean Control) vs Log2(FC) scatter
+- `create_distribution_plot(df, selected_lipids, selected_conditions, experiment) → plt.Figure` — Seaborn boxplot per lipid across conditions
+- `generate_color_mapping(classes) → Dict[str, str]` — Plotly qualitative palette cycling
+- `get_most_abundant_lipid(df, selected_class) → Optional[str]` — Highest total concentration lipid in class
+
+**Private Helpers:**
+- `_safe_numeric_values(row, cols)` — Type-coercing value extraction
+- `_compute_zero_adj_means(ctrl, exp)` — Zero-adjusted mean computation
+- `_determine_exclusion_reason(row, ctrl_cols, exp_cols)` — Categorizes why lipid was excluded
+- `_filter_significant(vdf, fc_threshold, q_threshold, p_col, hide_non_sig)` — Significance filtering
+- `_add_threshold_lines(fig, display_df, p_col, q_threshold, fc_threshold)` — Dashed red threshold lines
+- `_add_top_labels(fig, vdf, p_col, color_mapping, top_n, custom_positions)` — Collision-aware label placement
+- `_has_overlap(boxes, left, right, bottom, top)` — Bounding box collision detection
+- `_place_label(fig, text, label_x, label_y, point_x, point_y, color, align)` — Text + arrow annotation
+
+**Tests:** 130 tests across 16 classes covering: VolcanoData dataclass (2), data preparation (22 tests: columns, fold change, p-values, -log10, means, test metadata, significance, removed lipids, fallbacks), prep edge cases (8: empty/None df, missing columns, no matches, single lipid, NaN, many classes), volcano plot rendering (12: figure type, traces, markers, colors, title, axes, height, background, axes style), threshold lines (4: count, horizontal position, vertical positions, style), hide non-significant (2), top N labels (6: none, 1, 2, arrows, custom positions, exceeds count), plot edge cases (4: empty, single point, missing class, raw p-values), concentration vs FC (8: returns, columns, lipid count, title, axes, traces, empty, hide), distribution plot (9: figure type, title, axes, multiple lipids, empty lipids/conditions, nonexistent lipid/condition), color mapping (6: dict, count, consistency, empty, wrap-around, hex format), most abundant lipid (4), private helpers (16: numeric extraction, zero-adj means, exclusion reasons, filtering, overlap), type coercion (int, float32, int64, object, mixed, full pipeline — 6), immutability (5: prepare, zeros, volcano plot, conc vs FC, distribution), large dataset stress tests (100/500 lipids, chart rendering, labels, conc vs FC — 5), multi-condition (2), significance/FC parametrized (11)
 
 **Step 2.7: `LipidomicHeatmapPlotterService`**
 **File:** `src/app/services/plotting/lipidomic_heatmap.py`
@@ -1763,7 +1777,7 @@ Target: ~25 tests
 |-------|------|-------|------------|
 | 1 | Step 1: StatisticalTestingService ✅ | 1 service file + 123 tests | Nothing (foundation) |
 | 2 | Step 2.1: Bar Chart plotter ✅ + Step 2.2: Pie Chart plotter ✅ | 1 done (68 tests) + 1 done (63 tests) | Step 1 (bar chart uses stats) |
-| 3 | Step 2.6: Volcano plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
+| 3 | Step 2.6: Volcano plotter ✅ | 1 done (130 tests) | Step 1 (uses stats) |
 | 4 | Step 2.3: Saturation plotter ✅ | 1 done (88 tests) | Step 1 (uses stats) |
 | 5 | Step 2.4: FACH plotter ✅ (97 tests) + Step 2.5: Pathway plotter ✅ (108 tests) | Both done | Nothing (no stats) |
 | 6 | Step 2.7: Lipidomic Heatmap plotter | 1 plotting file + ~35 tests | Nothing (no stats) |
