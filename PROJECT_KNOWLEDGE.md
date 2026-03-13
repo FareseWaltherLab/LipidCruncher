@@ -1501,19 +1501,29 @@ Pure-logic service for abundance pie charts. Sums species per class, creates per
 
 **Tests:** 49 tests covering data preparation (species summing, class ordering, sample columns), chart rendering (trace type, labels, colors, dimensions, layout, legend), multi-condition (different totals, 3 conditions), color mapping (order, wrap-around, empty), percentage formatting (zero, small, scientific), edge cases (all zeros, single class/sample, dominant class, negative values, many classes, missing colors)
 
-**Step 2.3: `SaturationPlotterService`**
-**File:** `src/app/services/plotting/saturation_plot.py`
+**Step 2.3: `SaturationPlotterService`** ✅
+**File:** `src/app/services/plotting/saturation_plot.py` (400 lines) | **Tests:** `tests/unit/test_saturation_plotter.py` (77 tests)
 
-**Methods:**
-- `calculate_fa_ratios(lipid_name) → Tuple[float, float, float]` — Parse SFA/MUFA/PUFA chain ratios
-- `calculate_sfa_mufa_pufa(df, experiment, selected_conditions, selected_classes) → SaturationData` — Per-sample weighted totals
-- `identify_consolidated_lipids(df, selected_classes) → Dict[str, List[str]]` — Detect consolidated format lipids
-- `create_concentration_plot(sat_data, lipid_class, stat_results, show_significance) → go.Figure` — Grouped bar (SFA/MUFA/PUFA)
-- `create_percentage_plot(sat_data, lipid_class) → go.Figure` — Stacked 100% bar
+Pure-logic service for saturation (SFA/MUFA/PUFA) analysis. Parses fatty acid chain double bonds from lipid names, computes weighted SFA/MUFA/PUFA values per class per condition, detects consolidated format lipids, renders grouped Plotly concentration bars with error bars and significance annotations, and stacked 100% percentage distribution charts. **Test count: 2667.**
 
-**Result:** `SaturationData` dataclass with per-class, per-condition, per-FA-type means/stds/values
+**Result Dataclass:**
+- `SaturationData` — `fa_data` (nested dict: class → FA type → condition → sample values array), `plot_data` (dict: class → DataFrame with Condition, *_AUC, *_std), `conditions`, `classes`
 
-**Tests:** `tests/unit/test_saturation_plotter.py` — ~45 tests (includes FA parsing edge cases)
+**Public Methods:**
+- `calculate_fa_ratios(mol_structure) → Tuple[float, float, float]` — Parse SFA/MUFA/PUFA chain ratios from lipid name (handles hydroxyl notation, multi-chain)
+- `calculate_sfa_mufa_pufa(df, experiment, selected_conditions, selected_classes) → SaturationData` — Per-sample weighted FA totals with mean/std
+- `identify_consolidated_lipids(df, selected_classes) → Dict[str, List[str]]` — Detect consolidated format lipids (skips single-chain classes)
+- `create_concentration_plot(sat_data, lipid_class, stat_results, show_significance) → go.Figure` — Grouped bar chart with error bars and significance annotations
+- `create_percentage_plot(sat_data, lipid_class) → go.Figure` — Stacked 100% bar chart
+- `generate_color_mapping() → Dict[str, str]` — Fixed SFA/MUFA/PUFA color mapping
+
+**Private Helpers:**
+- `_compute_y_max(plot_df)` — Max y value across FA types
+- `_calculate_percentage_df(plot_df)` — Convert absolute to percentage
+- `_add_significance_annotations(fig, plot_df, stat_results, lipid_class)` — Two-condition lines + multi-condition post-hoc
+- `_p_value_to_marker(p_value)` — p-value to *, **, ***
+
+**Tests:** 77 tests across 10 classes (FA ratio parsing, data preparation, consolidated detection, concentration/percentage plots, significance annotations, post-hoc annotations, edge cases, type coercion, color mapping, private helpers)
 
 **Step 2.4: `FACHPlotterService`**
 **File:** `src/app/services/plotting/fach.py`
