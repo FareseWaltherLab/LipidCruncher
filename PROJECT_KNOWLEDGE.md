@@ -1424,9 +1424,9 @@ Extracted 14 helpers across 5 files, all methods now under 50 lines:
 ##### Implementation Plan
 
 **Step 1: Create `StatisticalTestingService` — Shared Stats Engine** ✅
-**File:** `src/app/services/statistical_testing.py` (420 lines) | **Tests:** `tests/unit/test_statistical_testing.py` (106 tests)
+**File:** `src/app/services/statistical_testing.py` (420 lines) | **Tests:** `tests/unit/test_statistical_testing.py` (123 tests)
 
-Deduplicated statistical testing logic from AbundanceBarChart, SaturationPlot, and VolcanoPlot into a unified service. Implements: `test_two_groups()` (Welch's t / Mann-Whitney U), `test_multiple_groups()` (Welch's ANOVA / Kruskal-Wallis), `apply_correction()` (FDR/Bonferroni), `run_posthoc()` (Tukey's HSD / Bonferroni pairwise), plus three orchestration methods (`run_class_level_tests`, `run_saturation_tests`, `run_species_level_tests`) and `apply_auto_mode()`. Result dataclasses: `StatisticalTestResult`, `PostHocResult`, `StatisticalTestSummary`. **Test count: 2494.**
+Deduplicated statistical testing logic from AbundanceBarChart, SaturationPlot, and VolcanoPlot into a unified service. Implements: `test_two_groups()` (Welch's t / Mann-Whitney U), `test_multiple_groups()` (Welch's ANOVA / Kruskal-Wallis), `apply_correction()` (FDR/Bonferroni), `run_posthoc()` (Tukey's HSD / Bonferroni pairwise), plus three orchestration methods (`run_class_level_tests`, `run_saturation_tests`, `run_species_level_tests`) and `apply_auto_mode()`. Result dataclasses: `StatisticalTestResult`, `PostHocResult`, `StatisticalTestSummary`. **Test count: 2719.**
 
 **Result Dataclasses:**
 - `StatisticalTestResult` — `test_name`, `statistic`, `p_value`, `adjusted_p_value`, `significant`, `effect_size`, `group_key` (class name or lipid name)
@@ -1463,9 +1463,9 @@ Deduplicated statistical testing logic from AbundanceBarChart, SaturationPlot, a
 **Step 2: Create Analysis Plotting Services**
 
 **Step 2.1: `BarChartPlotterService`** ✅
-**File:** `src/app/services/plotting/abundance_bar_chart.py` (250 lines) | **Tests:** `tests/unit/test_abundance_bar_chart_plotter.py` (47 tests)
+**File:** `src/app/services/plotting/abundance_bar_chart.py` (250 lines) | **Tests:** `tests/unit/test_abundance_bar_chart_plotter.py` (68 tests)
 
-Pure-logic service for abundance bar charts. Sums species per class per sample, computes linear + log10 mean/std, renders horizontal grouped Plotly bars with error bars and significance annotations (*/**/***). **Test count: 2541.**
+Pure-logic service for abundance bar charts. Sums species per class per sample, computes linear + log10 mean/std, renders horizontal grouped Plotly bars with error bars and significance annotations (*/**/***). **Test count: 2719.**
 
 **Result Dataclass:**
 - `BarChartData` — `abundance_df` (DataFrame with ClassKey + mean/std columns), `conditions`, `classes`
@@ -1481,12 +1481,12 @@ Pure-logic service for abundance bar charts. Sums species per class per sample, 
 - `_add_significance_annotations(fig, abundance_df, stat_results)` — Adds *, **, *** annotations
 - `_p_value_to_marker(p_value) → str` — p-value to significance marker
 
-**Tests:** 47 tests covering data preparation (mean/std, multi-species summing, class ordering), edge cases (empty inputs, missing classes/conditions, all zeros, single sample), chart rendering (traces, orientation, scales, error bars, layout), significance annotations (3 star levels, adjusted vs raw p-values), color mapping
+**Tests:** 68 tests covering data preparation (mean/std, multi-species summing, class ordering), edge cases (empty inputs, missing classes/conditions, all zeros, single sample), chart rendering (traces, orientation, scales, error bars, layout), significance annotations (3 star levels, adjusted vs raw p-values), color mapping, type coercion (int, float32, int64, object dtype, mixed), immutability (5 tests verifying input DataFrames not modified), large dataset stress tests (100 classes, 50 species per class)
 
 **Step 2.2: `PieChartPlotterService`** ✅
-**File:** `src/app/services/plotting/abundance_pie_chart.py` (195 lines) | **Tests:** `tests/unit/test_abundance_pie_chart_plotter.py` (49 tests)
+**File:** `src/app/services/plotting/abundance_pie_chart.py` (195 lines) | **Tests:** `tests/unit/test_abundance_pie_chart_plotter.py` (63 tests)
 
-Pure-logic service for abundance pie charts. Sums species per class, creates per-condition Plotly pie charts sorted by abundance descending, with smart percentage formatting and consistent class color mapping. **Test count: 2590.**
+Pure-logic service for abundance pie charts. Sums species per class, creates per-condition Plotly pie charts sorted by abundance descending, with smart percentage formatting and consistent class color mapping. **Test count: 2719.**
 
 **Result Dataclass:**
 - `PieChartData` — `abundance_df` (DataFrame indexed by ClassKey with concentration columns), `classes`
@@ -1499,12 +1499,12 @@ Pure-logic service for abundance pie charts. Sums species per class, creates per
 **Private Helpers:**
 - `_format_percentage(percentage) → str` — Smart decimal precision (1-4 decimals or scientific notation)
 
-**Tests:** 49 tests covering data preparation (species summing, class ordering, sample columns), chart rendering (trace type, labels, colors, dimensions, layout, legend), multi-condition (different totals, 3 conditions), color mapping (order, wrap-around, empty), percentage formatting (zero, small, scientific), edge cases (all zeros, single class/sample, dominant class, negative values, many classes, missing colors)
+**Tests:** 63 tests covering data preparation (species summing, class ordering, sample columns), chart rendering (trace type, labels, colors, dimensions, layout, legend), multi-condition (different totals, 3 conditions), color mapping (order, wrap-around, empty), percentage formatting (zero, small, scientific), edge cases (all zeros, single class/sample, dominant class, negative values, many classes, missing colors), type coercion (int, float32, int64, object dtype, mixed, full pipeline), immutability (4 tests verifying input DataFrames not modified), large dataset stress tests (100 classes, 50 species per class)
 
 **Step 2.3: `SaturationPlotterService`** ✅
-**File:** `src/app/services/plotting/saturation_plot.py` (400 lines) | **Tests:** `tests/unit/test_saturation_plotter.py` (77 tests)
+**File:** `src/app/services/plotting/saturation_plot.py` (400 lines) | **Tests:** `tests/unit/test_saturation_plotter.py` (88 tests)
 
-Pure-logic service for saturation (SFA/MUFA/PUFA) analysis. Parses fatty acid chain double bonds from lipid names, computes weighted SFA/MUFA/PUFA values per class per condition, detects consolidated format lipids, renders grouped Plotly concentration bars with error bars and significance annotations, and stacked 100% percentage distribution charts. **Test count: 2667.**
+Pure-logic service for saturation (SFA/MUFA/PUFA) analysis. Parses fatty acid chain double bonds from lipid names, computes weighted SFA/MUFA/PUFA values per class per condition, detects consolidated format lipids, renders grouped Plotly concentration bars with error bars and significance annotations, and stacked 100% percentage distribution charts. **Test count: 2719.**
 
 **Result Dataclass:**
 - `SaturationData` — `fa_data` (nested dict: class → FA type → condition → sample values array), `plot_data` (dict: class → DataFrame with Condition, *_AUC, *_std), `conditions`, `classes`
@@ -1523,7 +1523,7 @@ Pure-logic service for saturation (SFA/MUFA/PUFA) analysis. Parses fatty acid ch
 - `_add_significance_annotations(fig, plot_df, stat_results, lipid_class)` — Two-condition lines + multi-condition post-hoc
 - `_p_value_to_marker(p_value)` — p-value to *, **, ***
 
-**Tests:** 77 tests across 10 classes (FA ratio parsing, data preparation, consolidated detection, concentration/percentage plots, significance annotations, post-hoc annotations, edge cases, type coercion, color mapping, private helpers)
+**Tests:** 88 tests across 14 classes (FA ratio parsing, data preparation, consolidated detection, concentration/percentage plots, significance annotations, post-hoc annotations, edge cases, type coercion (int, float32, int64, string, object dtype, mixed), color mapping, private helpers, extended immutability (4 tests for concentration/percentage plots, multi-class, significance annotations), large dataset stress tests (100 lipids, 20 classes, chart rendering))
 
 **Step 2.4: `FACHPlotterService`**
 **File:** `src/app/services/plotting/fach.py`
@@ -1742,10 +1742,10 @@ Target: ~25 tests
 
 | Order | Step | Scope | Depends On |
 |-------|------|-------|------------|
-| 1 | Step 1: StatisticalTestingService ✅ | 1 service file + 106 tests | Nothing (foundation) |
-| 2 | Step 2.1: Bar Chart plotter ✅ + Step 2.2: Pie Chart plotter | 1 done (47 tests) + 1 plotting file + ~25 tests | Step 1 (bar chart uses stats) |
+| 1 | Step 1: StatisticalTestingService ✅ | 1 service file + 123 tests | Nothing (foundation) |
+| 2 | Step 2.1: Bar Chart plotter ✅ + Step 2.2: Pie Chart plotter ✅ | 1 done (68 tests) + 1 done (63 tests) | Step 1 (bar chart uses stats) |
 | 3 | Step 2.6: Volcano plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
-| 4 | Step 2.3: Saturation plotter | 1 plotting file + ~45 tests | Step 1 (uses stats) |
+| 4 | Step 2.3: Saturation plotter ✅ | 1 done (88 tests) | Step 1 (uses stats) |
 | 5 | Step 2.4-2.5: FACH + Pathway plotters | 2 plotting files + ~65 tests | Nothing (no stats) |
 | 6 | Step 2.7: Lipidomic Heatmap plotter | 1 plotting file + ~35 tests | Nothing (no stats) |
 | 7 | Step 3: AnalysisWorkflow | 1 workflow file + ~100 tests | Steps 1-6 |
