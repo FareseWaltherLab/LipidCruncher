@@ -9,6 +9,7 @@ from app.services.plotting.pca import PCAPlotterService
 from app.services.plotting.retention_time import RetentionTimePlotterService
 from app.services.plotting.saturation_plot import SaturationPlotterService
 from app.services.plotting.standards_plotter import StandardsPlotterService
+from app.services.plotting.volcano_plot import VolcanoPlotterService
 
 __all__ = [
     'BarChartPlotterService',
@@ -22,4 +23,5 @@ __all__ = [
     'RetentionTimePlotterService',
     'SaturationPlotterService',
     'StandardsPlotterService',
+    'VolcanoPlotterService',
 ]
