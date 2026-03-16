@@ -1682,58 +1682,50 @@ Added Module 3 session state keys to `SessionState` dataclass:
 **Tests:** `tests/unit/test_streamlit_adapter.py` — 75 → 100 tests (25 new)
 - 12 test classes: TestSessionStateDefaults (+3), TestSessionStateCreation (+5), TestSessionStateDataIntegrity (+5), TestWidgetKeysRegistry (12 new), TestDynamicKeyPrefixes (7 new), TestPreserveOnReset (3 new), TestSessionStateIntegration (+8), TestWidgetPreservation (5 new), TestSessionStateFieldCompleteness (7 new), TestEdgeCases (+5)
 
-**Total test count: 3338.** `_reset_analysis_state()` deferred to Step 6 (main_app.py wiring).
+**Total test count: 3338.**
 
-**Step 5: Build Module 3 UI**
-**File:** `src/app/ui/main_content/analysis.py`
+**Step 5: ✅ Build Module 3 UI (`5921a1d`)**
+**File:** `src/app/ui/main_content/analysis.py` (730 lines)
 
 **Entry point:** `display_analysis_module(df, experiment, bqc_label, format_type) → None`
 
-**Structure:**
-```python
-def display_analysis_module(df, experiment, bqc_label, format_type):
-    errors = AnalysisWorkflow.validate_inputs(df, experiment)
-    if errors:
-        st.error(errors[0])
-        return
-
-    analysis_type = st.radio("Select Analysis", [...], key='analysis_radio')
-
-    if analysis_type == "Abundance Bar Chart":
-        _display_bar_chart(df, experiment)
-    elif analysis_type == "Abundance Pie Charts":
-        _display_pie_charts(df, experiment)
-    # ... etc
-```
-
 **Private functions (one per feature):**
-- `_display_bar_chart(df, experiment)` — Stats options panel + conditions/classes multiselect + scale radio + call workflow + display plot + downloads
-- `_display_pie_charts(df, experiment)` — Classes multiselect + per-condition pie charts + downloads
-- `_display_saturation_plots(df, experiment)` — Stats options + consolidated lipid handling + conditions/classes multiselect + plot type radio + significance checkbox + per-class plots + downloads
-- `_display_fach_heatmaps(df, experiment)` — Class selectbox + conditions multiselect + heatmap + downloads
-- `_display_pathway_viz(df, experiment)` — Control/experimental selectbox + consolidated handling + pathway diagram + data table + downloads
-- `_display_volcano_plot(df, experiment)` — Stats options + control/experimental + classes + thresholds + label management + volcano plot + concentration scatter + distribution boxplot + excluded lipids table + downloads
-- `_display_lipidomic_heatmap(df, experiment)` — Conditions/classes multiselect + type radio + cluster slider + heatmap + cluster composition + downloads
+- `_display_bar_chart(df, experiment)` — Stats options + conditions/classes multiselect + scale radio (Log10/Linear) + workflow call + plot + downloads
+- `_display_pie_charts(df, experiment)` — Classes multiselect + per-condition pie charts + per-condition SVG/CSV downloads
+- `_display_saturation_plots(df, experiment)` — Stats options + consolidated lipid detection/exclusion + conditions/classes multiselect + plot type radio (Concentration/Percentage/Both) + significance checkbox + per-class plots + downloads
+- `_display_fach_heatmaps(df, experiment)` — Class selectbox (single) + conditions multiselect (default first 2) + heatmap + combined CSV download
+- `_display_pathway_viz(df, experiment)` — Control/experimental selectbox + pathway diagram (matplotlib) + summary table + downloads
+- `_display_volcano_plot(df, experiment)` — Manual stats options (no Auto mode) + control/experimental + classes + p-value/FC thresholds + labeling (top N, additional labels, position adjustment) + volcano plot + concentration scatter + individual lipid distribution + excluded lipids table + downloads
+- `_display_lipidomic_heatmap(df, experiment)` — Conditions/classes multiselect + type radio (Clustered/Regular) + cluster slider (2-10) + heatmap + cluster composition (Species Count/Total Concentration)
 
 **Shared UI helpers:**
-- `_display_statistical_options(key_prefix, n_classes, n_conditions) → StatisticalTestConfig` — Reusable stats panel (Auto/Manual mode, test type, corrections). Used by bar chart, saturation, volcano.
+- `_display_statistical_options(key_prefix, n_classes, n_conditions) → StatisticalTestConfig` — Auto/Manual mode, test type, corrections, auto-transform. Used by bar chart and saturation.
 - `_display_condition_class_selectors(experiment, df, key_prefix) → Tuple[List[str], List[str]]` — Reusable multiselects for conditions and classes
-- `_display_detailed_statistics(stat_summary, key_prefix)` — Reusable statistics table display
+- `_display_detailed_statistics(stat_summary, key_prefix)` — Checkbox toggle + omnibus results table + post-hoc comparisons table
+- `_check_fa_compatibility(df)` — Warns if lipid names lack detailed FA composition
+- `_display_consolidated_lipids(df, classes, key_prefix) → List[str]` — Detects consolidated lipids, shows summary table, exclusion multiselect
 
-**Step 6: Wire Module 3 into `main_app.py`**
-**File:** `src/main_app.py`
+**Additional volcano helpers:**
+- `_display_volcano_statistical_options() → StatisticalTestConfig` — Manual-only stats (test type + correction selectboxes)
+- `_render_volcano_results(...)` — Volcano plot + labeling + concentration scatter + individual lipid analysis + excluded lipids
+- `_collect_label_positions(top_n, additional_labels, enable_adjustment)` — Per-lipid X/Y offset number inputs
+- `_display_individual_lipid_analysis(df, experiment, result, control, experimental)` — Class/lipid selectors + distribution boxplot
+- `_display_excluded_lipids(result, control, experimental)` — Removed lipids table with reason summary
+- `_build_distribution_csv(df, lipids, experiment, conditions)` — CSV builder for distribution data
+
+**Step 6: ✅ Wire Module 3 into `main_app.py` (`5921a1d`)**
+**File:** `src/main_app.py` (286 → 353 lines)
 
 **Changes:**
-- Add `_display_module3()` function — calls `display_analysis_module()` + navigation buttons
-- Add `_reset_analysis_state()` — clears all `analysis_*` session state keys
-- Update `_display_module2()` — add "Next: Visualize & Analyze →" button (only after QC complete)
-- Add module routing for Module 3 string
-- "Back to Quality Check" button in Module 3 resets analysis state
-- "Back to Home" button in Module 3 resets all state
+- Added `_reset_analysis_state()` — clears all 11 `analysis_*` session state keys
+- Added `_display_module3(experiment, bqc_label, data_format)` — data handoff from QC → analysis + navigation buttons
+- Updated `_display_module2()` — added "Next: Visualize & Analyze →" button (visible after QC complete)
+- Added module routing: `"Visualize & Analyze"` case in `display_app_page()`
+- Navigation: "← Back to Quality Check" resets analysis state, "← Back to Home" resets all state
 
 **Module flow:** Module 1 → Module 2 → Module 3
-- Module 2 "Next" button sets `st.session_state.module` to Module 3 string, calls `_reset_analysis_state()`
-- Data handoff: `qc_continuation_df` (or `normalized_df`) → Module 3 input
+- Module 2 "Next" button sets `st.session_state.module = "Visualize & Analyze"`, calls `_reset_analysis_state()`
+- Data handoff: `qc_continuation_df` (or `normalized_df` fallback) → Module 3 input
 
 **Step 7: PDF Report Generation**
 **File:** `src/app/services/report_generator.py`
@@ -1794,11 +1786,10 @@ Target: ~25 tests
 | 6 | Step 2.7: Lipidomic Heatmap plotter ✅ (94 tests) | 1 done | Nothing (no stats) |
 | 7 | Step 3: AnalysisWorkflow ✅ (126 tests) | 1 done | Steps 1-6 |
 | 8 | Step 4: StreamlitAdapter update ✅ (100 tests) | 1 file + 25 new tests | Step 3 (needs key list) |
-| 9 | Step 5: Module 3 UI | 1 large UI file | Steps 3-4 |
-| 10 | Step 6: main_app.py wiring | 1 file modification | Steps 4-5 |
-| 11 | Step 8: Integration tests | 1 test file, ~60 tests | Steps 1-6 |
-| 12 | Step 9: UI tests | 1 test file, ~25 tests | Steps 5-6 |
-| 13 | Step 7: PDF Report | 1 service + ~15 tests | Steps 5-6 (needs stored plots) |
+| 9 | Step 5: Module 3 UI ✅ + Step 6: main_app.py wiring ✅ | 1 UI file (730 lines) + 1 modified (353 lines) | Steps 3-4 |
+| 10 | Step 8: Integration tests | 1 test file, ~60 tests | Steps 1-6 |
+| 11 | Step 9: UI tests | 1 test file, ~25 tests | Steps 5-6 |
+| 12 | Step 7: PDF Report | 1 service + ~15 tests | Steps 5-6 (needs stored plots) |
 
 ##### Files to Create
 
