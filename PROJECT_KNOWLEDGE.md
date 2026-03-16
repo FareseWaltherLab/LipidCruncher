@@ -1646,10 +1646,12 @@ Like QualityCheckWorkflow, this is **interactive** — no single `run()` method.
 **Tests:** `tests/unit/test_analysis_workflow.py` — 126 tests
 - 20 test classes: AnalysisConfig (2), ResultDataclasses (11), ValidateInputs (8), GetAvailableClasses (4), GetEligibleConditions (3), GetAllConditions (2), GetSamplesForCondition (3), RunBarChart (8), RunBarChartEdgeCases (2), RunPieCharts (7), RunSaturation (9), RunFACH (6), RunPathway (7), RunVolcano (11), RunVolcanoEdgeCases (2), RunHeatmap (7), RunHeatmapEdgeCases (2), CrossAnalysis (2), EdgeCases (7), TypeCoercion (7), Immutability (7), ThreeConditions (5), StatisticalConfigVariations (6)
 
-**Step 4: Update `StreamlitAdapter` — Session State**
+**Step 4: Update `StreamlitAdapter` — Session State** ✅
+
+**Commit:** `ab40ad3`
 **File:** `src/app/adapters/streamlit_adapter.py`
 
-Add Module 3 session state keys to `SessionState` dataclass:
+Added Module 3 session state keys to `SessionState` dataclass:
 
 **Analysis state keys (owner: `analysis.py`):**
 - `analysis_selection`: str = None — Current radio selection (which analysis feature)
@@ -1664,7 +1666,7 @@ Add Module 3 session state keys to `SessionState` dataclass:
 - `analysis_heatmap_clusters`: pd.DataFrame or None
 - `analysis_all_plots`: Dict = {} — Collected plots for PDF report
 
-**Widget keys to register in `_WIDGET_KEYS`:**
+**Widget keys registered in `_WIDGET_KEYS` (32 keys):**
 - `analysis_radio`, `bar_conditions`, `bar_classes`, `bar_scale_radio`, `bar_stats_mode`, `bar_detailed_stats`
 - `pie_classes`
 - `sat_conditions`, `sat_classes`, `sat_plot_type`, `sat_show_significance`, `sat_detailed_stats`, `sat_stats_mode`
@@ -1673,11 +1675,14 @@ Add Module 3 session state keys to `SessionState` dataclass:
 - `volcano_control`, `volcano_experimental`, `volcano_classes`, `volcano_p_threshold`, `volcano_fc_threshold`, `volcano_hide_nonsig`, `volcano_top_n`, `volcano_additional_labels`, `volcano_stats_mode`, `volcano_detailed_stats`
 - `heatmap_conditions`, `heatmap_classes`, `heatmap_type`, `heatmap_n_clusters`, `heatmap_cluster_view`
 
-**Dynamic key prefixes to add to `_DYNAMIC_KEY_PREFIXES`:**
+**Dynamic key prefixes added to `_DYNAMIC_KEY_PREFIXES` (4 prefixes):**
 - `volcano_label_x_`, `volcano_label_y_` (per-lipid label position adjustments)
 - `analysis_svg_`, `analysis_csv_` (download button keys)
 
-Add `_reset_analysis_state()` to clear all `analysis_*` keys on module navigation.
+**Tests:** `tests/unit/test_streamlit_adapter.py` — 75 → 100 tests (25 new)
+- 12 test classes: TestSessionStateDefaults (+3), TestSessionStateCreation (+5), TestSessionStateDataIntegrity (+5), TestWidgetKeysRegistry (12 new), TestDynamicKeyPrefixes (7 new), TestPreserveOnReset (3 new), TestSessionStateIntegration (+8), TestWidgetPreservation (5 new), TestSessionStateFieldCompleteness (7 new), TestEdgeCases (+5)
+
+**Total test count: 3338.** `_reset_analysis_state()` deferred to Step 6 (main_app.py wiring).
 
 **Step 5: Build Module 3 UI**
 **File:** `src/app/ui/main_content/analysis.py`
@@ -1788,7 +1793,7 @@ Target: ~25 tests
 | 5 | Step 2.4: FACH plotter ✅ (97 tests) + Step 2.5: Pathway plotter ✅ (108 tests) | Both done | Nothing (no stats) |
 | 6 | Step 2.7: Lipidomic Heatmap plotter ✅ (94 tests) | 1 done | Nothing (no stats) |
 | 7 | Step 3: AnalysisWorkflow ✅ (126 tests) | 1 done | Steps 1-6 |
-| 8 | Step 4: StreamlitAdapter update | 1 file modification | Step 3 (needs key list) |
+| 8 | Step 4: StreamlitAdapter update ✅ (100 tests) | 1 file + 25 new tests | Step 3 (needs key list) |
 | 9 | Step 5: Module 3 UI | 1 large UI file | Steps 3-4 |
 | 10 | Step 6: main_app.py wiring | 1 file modification | Steps 4-5 |
 | 11 | Step 8: Integration tests | 1 test file, ~60 tests | Steps 1-6 |
