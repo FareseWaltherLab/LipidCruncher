@@ -1,0 +1,464 @@
+"""
+PDF report generator for LipidCruncher analysis results.
+
+Collects all generated plots (QC + analysis) and renders them into a
+multi-page PDF using ReportLab. Handles both Plotly and Matplotlib figures.
+"""
+import copy
+import io
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+import plotly.io as pio
+from reportlab.lib.pagesizes import landscape, letter
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
+
+
+@dataclass
+class ReportMetadata:
+    """Metadata for the PDF report cover page."""
+    format_type: Optional[str] = None
+    n_conditions: Optional[int] = None
+    total_samples: Optional[int] = None
+    conditions_detail: List[Tuple[str, int, List[str]]] = field(default_factory=list)
+
+
+# ── Plot Specification ──────────────────────────────────────────────────────
+# Each entry: (dict_key, title, orientation, is_matplotlib, special_handler)
+
+_ANALYSIS_PLOT_ORDER: List[Tuple[str, str, str, bool]] = [
+    ('bar_chart', 'Abundance Bar Chart', 'landscape', False),
+    # pie_* handled dynamically
+    # sat_*_* handled dynamically
+    ('fach', 'Fatty Acid Composition Heatmap', 'landscape', False),
+    ('pathway', 'Lipid Pathway Visualization', 'landscape', True),
+    ('volcano', 'Volcano Plot', 'landscape', False),
+    ('heatmap', 'Lipidomic Heatmap', 'portrait', False),
+]
+
+# ── Image Conversion ────────────────────────────────────────────────────────
+
+_PLOTLY_EXPORT_LANDSCAPE = dict(format='png', width=1000, height=700, scale=2)
+_PLOTLY_EXPORT_PORTRAIT = dict(format='png', width=800, height=600, scale=2)
+_PLOTLY_EXPORT_HEATMAP = dict(format='png', width=900, height=1200, scale=2)
+
+
+def _plotly_to_image(fig: Any, export_params: dict) -> bytes:
+    """Convert a Plotly figure to PNG bytes."""
+    return pio.to_image(fig, **export_params)
+
+
+def _matplotlib_to_image(fig: Any) -> bytes:
+    """Convert a Matplotlib figure to PNG bytes."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    buf.seek(0)
+    return buf.read()
+
+
+def _figure_to_image_reader(fig: Any, is_matplotlib: bool,
+                            export_params: dict) -> ImageReader:
+    """Convert any figure to a ReportLab ImageReader."""
+    if is_matplotlib:
+        img_bytes = _matplotlib_to_image(fig)
+    else:
+        img_bytes = _plotly_to_image(fig, export_params)
+    return ImageReader(io.BytesIO(img_bytes))
+
+
+# ── Page Rendering Helpers ──────────────────────────────────────────────────
+
+def _render_cover_page(pdf: canvas.Canvas, metadata: ReportMetadata,
+                       analyses: List[str]) -> None:
+    """Render the report cover page."""
+    page_width, page_height = letter
+
+    # Title
+    pdf.setFont("Helvetica-Bold", 24)
+    pdf.drawCentredString(page_width / 2, page_height - 100,
+                          "LipidCruncher Analysis Report")
+
+    # Subtitle
+    pdf.setFont("Helvetica", 14)
+    pdf.drawCentredString(page_width / 2, page_height - 130,
+                          "Quality Check & Lipidomic Analysis Summary")
+
+    # Horizontal line
+    pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
+    pdf.setLineWidth(1)
+    pdf.line(50, page_height - 150, page_width - 50, page_height - 150)
+
+    y = page_height - 190
+
+    # Report info
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(50, y, "Report Information")
+    y -= 25
+
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(70, y,
+                   f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+    y -= 20
+
+    if metadata.format_type:
+        pdf.drawString(70, y, f"Data Format: {metadata.format_type}")
+        y -= 20
+
+    # Experimental design
+    if metadata.n_conditions is not None:
+        y -= 15
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(50, y, "Experimental Design")
+        y -= 25
+
+        pdf.setFont("Helvetica", 11)
+        pdf.drawString(70, y,
+                       f"Number of Conditions: {metadata.n_conditions}")
+        y -= 20
+        if metadata.total_samples is not None:
+            pdf.drawString(70, y,
+                           f"Total Samples: {metadata.total_samples}")
+            y -= 25
+
+        # Conditions table
+        if metadata.conditions_detail:
+            y = _render_conditions_table(pdf, y, page_width,
+                                         metadata.conditions_detail)
+
+    # Analyses list
+    y -= 20
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(50, y, "Analyses Included in This Report")
+    y -= 25
+
+    pdf.setFont("Helvetica", 10)
+    for analysis in analyses:
+        if y < 80:
+            break
+        pdf.drawString(70, y, f"\u2022 {analysis}")
+        y -= 16
+
+    # Footer
+    pdf.setFont("Helvetica-Oblique", 9)
+    pdf.drawCentredString(page_width / 2, 50,
+                          "Generated by LipidCruncher - The Farese and Walther Lab")
+    pdf.drawCentredString(page_width / 2, 38,
+                          "https://github.com/FareseWaltherLab/LipidCruncher")
+
+
+def _render_conditions_table(pdf: canvas.Canvas, y: float,
+                             page_width: float,
+                             details: List[Tuple[str, int, List[str]]]) -> float:
+    """Render the conditions table on the cover page. Returns updated y."""
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(70, y, "Condition")
+    pdf.drawString(250, y, "Samples")
+    pdf.drawString(400, y, "Sample IDs")
+    y -= 5
+    pdf.line(70, y, page_width - 50, y)
+    y -= 15
+
+    pdf.setFont("Helvetica", 10)
+    for condition, n_samples, samples in details:
+        if y < 150:
+            break
+        pdf.drawString(70, y, str(condition)[:25])
+        pdf.drawString(250, y, str(n_samples))
+        samples_str = ", ".join(samples[:5])
+        if len(samples) > 5:
+            samples_str += f" ... (+{len(samples) - 5} more)"
+        pdf.drawString(400, y, samples_str[:35])
+        y -= 18
+    return y
+
+
+def _render_plot_page(pdf: canvas.Canvas, fig: Any, title: str,
+                      orientation: str, is_matplotlib: bool) -> None:
+    """Render a single plot on its own page."""
+    pdf.showPage()
+
+    if orientation == 'landscape':
+        pdf.setPageSize(landscape(letter))
+        page_width, page_height = landscape(letter)
+        export_params = _PLOTLY_EXPORT_LANDSCAPE
+        img_width, img_height = 700, 500
+        img_x, img_y = 50, 100
+        title_y = 80
+    else:
+        pdf.setPageSize(letter)
+        page_width, page_height = letter
+        export_params = _PLOTLY_EXPORT_PORTRAIT
+        img_width, img_height = 500, 400
+        img_x, img_y = 50, 100
+        title_y = 50
+
+    img = _figure_to_image_reader(fig, is_matplotlib, export_params)
+    pdf.drawImage(img, img_x, img_y, width=img_width, height=img_height,
+                  preserveAspectRatio=True)
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(img_x, title_y, title)
+
+
+def _render_heatmap_page(pdf: canvas.Canvas, fig: Any, title: str) -> None:
+    """Render a heatmap with optimized tall aspect ratio."""
+    pdf.showPage()
+    pdf.setPageSize(letter)
+    page_width, page_height = letter
+
+    fig_copy = copy.deepcopy(fig)
+    fig_copy.update_layout(
+        margin=dict(l=180, r=100, t=60, b=60),
+        yaxis=dict(tickfont=dict(size=11)),
+        xaxis=dict(tickfont=dict(size=10)),
+    )
+
+    img_bytes = _plotly_to_image(fig_copy, _PLOTLY_EXPORT_HEATMAP)
+    img = ImageReader(io.BytesIO(img_bytes))
+
+    available_width = page_width - 60
+    available_height = page_height - 90
+    img_aspect = 900 / 1200
+    page_aspect = available_width / available_height
+
+    if img_aspect > page_aspect:
+        w = available_width
+        h = available_width / img_aspect
+    else:
+        h = available_height
+        w = available_height * img_aspect
+
+    x = (page_width - w) / 2
+    y = 50 + (available_height - h) / 2
+
+    pdf.drawImage(img, x, y, width=w, height=h, preserveAspectRatio=True)
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(x, y - 20, title)
+
+
+# ── Analysis List Builder ───────────────────────────────────────────────────
+
+def _build_analyses_list(plots: Dict[str, Any],
+                         qc_plots: Dict[str, Any]) -> List[str]:
+    """Build the bullet-point list of included analyses for the cover page."""
+    items: List[str] = []
+
+    # QC analyses
+    if qc_plots.get('box_plot_fig1') or qc_plots.get('box_plot_fig2'):
+        items.append("Distribution Box Plots")
+    if qc_plots.get('bqc_plot') is not None:
+        items.append("BQC Quality Assessment")
+    if qc_plots.get('retention_time_plot') is not None:
+        items.append("Retention Time Analysis")
+    if qc_plots.get('pca_plot') is not None:
+        items.append("Principal Component Analysis (PCA)")
+    corr = qc_plots.get('correlation_plots', {})
+    if corr:
+        items.append(f"Pairwise Correlation ({len(corr)} condition(s))")
+
+    # Analysis plots
+    if 'bar_chart' in plots:
+        items.append("Class Concentration Bar Chart")
+    pie_count = sum(1 for k in plots if k.startswith('pie_'))
+    if pie_count:
+        items.append(f"Class Concentration Pie Charts ({pie_count} condition(s))")
+    sat_count = len({k.split('_', 2)[2] for k in plots
+                     if k.startswith('sat_')})
+    if sat_count:
+        items.append(f"Saturation Profiles ({sat_count} class(es))")
+    if 'fach' in plots:
+        items.append("Fatty Acid Composition Heatmap")
+    if 'pathway' in plots:
+        items.append("Lipid Pathway Visualization")
+    if 'volcano' in plots:
+        items.append("Volcano Plot Analysis")
+    if 'heatmap' in plots:
+        items.append("Lipidomic Heatmap")
+
+    return items
+
+
+# ── Public API ──────────────────────────────────────────────────────────────
+
+def generate_pdf_report(
+    analysis_plots: Dict[str, Any],
+    metadata: ReportMetadata,
+    qc_plots: Optional[Dict[str, Any]] = None,
+) -> Optional[io.BytesIO]:
+    """
+    Generate a PDF report containing all generated plots.
+
+    Args:
+        analysis_plots: Dict from ``analysis_all_plots`` session state.
+            Keys like ``bar_chart``, ``pie_<cond>``, ``sat_concentration_<cls>``,
+            ``sat_percentage_<cls>``, ``fach``, ``pathway``, ``volcano``,
+            ``heatmap``.
+        metadata: Report metadata for the cover page.
+        qc_plots: Optional dict of QC plots with keys:
+            ``box_plot_fig1``, ``box_plot_fig2``, ``bqc_plot``,
+            ``retention_time_plot``, ``pca_plot``,
+            ``correlation_plots`` (Dict[condition, matplotlib fig]).
+
+    Returns:
+        BytesIO buffer containing the PDF, or None on error.
+    """
+    if qc_plots is None:
+        qc_plots = {}
+
+    analyses = _build_analyses_list(analysis_plots, qc_plots)
+
+    pdf_buffer = io.BytesIO()
+
+    try:
+        pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
+
+        # Cover page
+        _render_cover_page(pdf, metadata, analyses)
+
+        # QC plots
+        _render_qc_plots(pdf, qc_plots)
+
+        # Analysis plots (ordered)
+        _render_analysis_plots(pdf, analysis_plots)
+
+        pdf.save()
+        pdf_buffer.seek(0)
+    except Exception:
+        return None
+
+    return pdf_buffer
+
+
+def _render_qc_plots(pdf: canvas.Canvas, qc_plots: Dict[str, Any]) -> None:
+    """Render all QC plots in order."""
+    # Box plots (two on one page)
+    fig1 = qc_plots.get('box_plot_fig1')
+    fig2 = qc_plots.get('box_plot_fig2')
+    if fig1 and fig2:
+        pdf.showPage()
+        pdf.setPageSize(letter)
+        img1 = _figure_to_image_reader(fig1, False, _PLOTLY_EXPORT_PORTRAIT)
+        pdf.drawImage(img1, 50, 400, width=500, height=300,
+                      preserveAspectRatio=True)
+        img2 = _figure_to_image_reader(fig2, False, _PLOTLY_EXPORT_PORTRAIT)
+        pdf.drawImage(img2, 50, 50, width=500, height=300,
+                      preserveAspectRatio=True)
+
+    # BQC
+    bqc = qc_plots.get('bqc_plot')
+    if bqc is not None:
+        _render_plot_page(pdf, bqc, "BQC Quality Assessment",
+                          'portrait', False)
+
+    # Retention time
+    rt = qc_plots.get('retention_time_plot')
+    if rt is not None:
+        _render_plot_page(pdf, rt, "Retention Time vs. Mass Plot",
+                          'landscape', False)
+
+    # PCA
+    pca = qc_plots.get('pca_plot')
+    if pca is not None:
+        _render_plot_page(pdf, pca, "Principal Component Analysis (PCA)",
+                          'landscape', False)
+
+    # Correlation plots (matplotlib)
+    for condition, corr_fig in qc_plots.get('correlation_plots', {}).items():
+        _render_plot_page(pdf, corr_fig,
+                          f"Correlation Plot for {condition}",
+                          'portrait', True)
+
+
+def _render_analysis_plots(pdf: canvas.Canvas,
+                           plots: Dict[str, Any]) -> None:
+    """Render all analysis plots in a consistent order."""
+    # Bar chart
+    if 'bar_chart' in plots:
+        _render_plot_page(pdf, plots['bar_chart'],
+                          "Abundance Bar Chart", 'landscape', False)
+
+    # Pie charts (sorted by condition name)
+    pie_keys = sorted(k for k in plots if k.startswith('pie_'))
+    for key in pie_keys:
+        condition = key[4:]  # strip 'pie_'
+        _render_plot_page(pdf, plots[key],
+                          f"Abundance Pie Chart for {condition}",
+                          'portrait', False)
+
+    # Saturation plots (grouped by class)
+    sat_classes = _get_saturation_classes(plots)
+    for cls in sat_classes:
+        conc_key = f'sat_concentration_{cls}'
+        pct_key = f'sat_percentage_{cls}'
+        if conc_key in plots:
+            _render_plot_page(pdf, plots[conc_key],
+                              f"Saturation Plot (Concentration) for {cls}",
+                              'landscape', False)
+        if pct_key in plots:
+            _render_plot_page(pdf, plots[pct_key],
+                              f"Saturation Plot (Percentage) for {cls}",
+                              'landscape', False)
+
+    # FACH
+    if 'fach' in plots:
+        _render_plot_page(pdf, plots['fach'],
+                          "Fatty Acid Composition Heatmap",
+                          'landscape', False)
+
+    # Pathway (matplotlib)
+    if 'pathway' in plots:
+        _render_plot_page(pdf, plots['pathway'],
+                          "Lipid Pathway Visualization",
+                          'landscape', True)
+
+    # Volcano
+    if 'volcano' in plots:
+        _render_plot_page(pdf, plots['volcano'],
+                          "Volcano Plot", 'landscape', False)
+
+    # Heatmap (special handler)
+    if 'heatmap' in plots:
+        _render_heatmap_page(pdf, plots['heatmap'],
+                             "Lipidomic Heatmap")
+
+
+def _get_saturation_classes(plots: Dict[str, Any]) -> List[str]:
+    """Extract unique saturation class names in sorted order."""
+    classes = set()
+    for key in plots:
+        if key.startswith('sat_'):
+            # sat_concentration_ClassName or sat_percentage_ClassName
+            parts = key.split('_', 2)
+            if len(parts) == 3:
+                classes.add(parts[2])
+    return sorted(classes)
+
+
+def build_metadata_from_experiment(
+    experiment: Any,
+    format_type: Optional[str] = None,
+) -> ReportMetadata:
+    """
+    Build ReportMetadata from an ExperimentConfig object.
+
+    Convenience function so callers don't need to manually construct
+    the conditions_detail list.
+    """
+    if experiment is None:
+        return ReportMetadata(format_type=format_type)
+
+    details = []
+    for condition, n_samples, samples in zip(
+        experiment.conditions_list,
+        experiment.number_of_samples_list,
+        experiment.individual_samples_list,
+    ):
+        details.append((condition, n_samples, list(samples)))
+
+    return ReportMetadata(
+        format_type=format_type,
+        n_conditions=experiment.n_conditions,
+        total_samples=len(experiment.full_samples_list),
+        conditions_detail=details,
+    )
