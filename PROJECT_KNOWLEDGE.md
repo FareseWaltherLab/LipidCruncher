@@ -1727,17 +1727,28 @@ Added Module 3 session state keys to `SessionState` dataclass:
 - Module 2 "Next" button sets `st.session_state.module = "Visualize & Analyze"`, calls `_reset_analysis_state()`
 - Data handoff: `qc_continuation_df` (or `normalized_df` fallback) → Module 3 input
 
-**Step 7: PDF Report Generation**
-**File:** `src/app/services/report_generator.py`
+**Step 7: ✅ PDF Report Generation (`9b8dcef`)**
+**File:** `src/app/services/report_generator.py` (310 lines) | **Tests:** `tests/unit/test_report_generator.py` (38 tests)
 
-**Methods:**
-- `generate_pdf_report(plots_dict, metadata) → bytes` — Collects all stored plots, renders to PDF via `reportlab`
-- `_render_cover_page(canvas, metadata)` — Date, format, experiment design
-- `_render_plot_page(canvas, figure, title)` — Single plot per page (converts Plotly → image, Matplotlib → image)
+**Dataclass:**
+- `ReportMetadata` — `format_type`, `n_conditions`, `total_samples`, `conditions_detail` (list of tuples)
+
+**Public Methods:**
+- `generate_pdf_report(analysis_plots, metadata, qc_plots) → Optional[BytesIO]` — Full PDF with cover page + all plots
+- `build_metadata_from_experiment(experiment, format_type) → ReportMetadata` — Convenience builder from ExperimentConfig
+
+**Plot handling:**
+- Plotly figures: `pio.to_image()` with landscape (1000×700) or portrait (800×600) export params
+- Matplotlib figures: `savefig()` with dpi=300, bbox_inches='tight'
+- Heatmaps: Special tall aspect ratio (900×1200) with optimized margins and aspect-ratio-preserving layout
+
+**Page order:** Cover → Box plots (2 per page) → BQC → Retention time → PCA → Correlation (per condition) → Bar chart → Pie charts (sorted by condition) → Saturation (concentration + percentage per class) → FACH → Pathway → Volcano → Heatmap
+
+**Input dict keys:** `analysis_plots` uses `analysis_all_plots` session state keys (`bar_chart`, `pie_<cond>`, `sat_concentration_<cls>`, `sat_percentage_<cls>`, `fach`, `pathway`, `volcano`, `heatmap`). `qc_plots` uses `box_plot_fig1`, `box_plot_fig2`, `bqc_plot`, `retention_time_plot`, `pca_plot`, `correlation_plots` (Dict[condition, matplotlib fig]).
 
 **Dependencies:** `reportlab`, `kaleido` (for Plotly → static image export)
 
-**Tests:** `tests/unit/test_report_generator.py` — ~15 tests (PDF structure, metadata, error handling)
+**Tests:** 38 tests across 8 classes (ReportMetadata 3, BuildMetadata 2, AnalysesList 6, SaturationClasses 4, GeneratePdf 10, CoverPageContent 6, ErrorHandling 3, PlotOrdering 2, ManyConditions 2). **Test count: 3376.**
 
 **Step 8: Integration Tests**
 **File:** `tests/integration/test_module3_pipeline.py`
@@ -1787,9 +1798,9 @@ Target: ~25 tests
 | 7 | Step 3: AnalysisWorkflow ✅ (126 tests) | 1 done | Steps 1-6 |
 | 8 | Step 4: StreamlitAdapter update ✅ (100 tests) | 1 file + 25 new tests | Step 3 (needs key list) |
 | 9 | Step 5: Module 3 UI ✅ + Step 6: main_app.py wiring ✅ | 1 UI file (730 lines) + 1 modified (353 lines) | Steps 3-4 |
-| 10 | Step 8: Integration tests | 1 test file, ~60 tests | Steps 1-6 |
-| 11 | Step 9: UI tests | 1 test file, ~25 tests | Steps 5-6 |
-| 12 | Step 7: PDF Report | 1 service + ~15 tests | Steps 5-6 (needs stored plots) |
+| 10 | Step 7: PDF Report Generator ✅ (38 tests) | 1 service (310 lines) + 38 tests | Steps 5-6 (needs stored plots) |
+| 11 | Step 8: Integration tests | 1 test file, ~60 tests | Steps 1-7 |
+| 12 | Step 9: UI tests | 1 test file, ~25 tests | Steps 5-6 |
 
 ##### Files to Create
 
@@ -1804,7 +1815,7 @@ Target: ~25 tests
 | `src/app/services/plotting/volcano_plot.py` | Plotter | ~350 |
 | `src/app/services/plotting/lipidomic_heatmap.py` | Plotter | ~200 |
 | `src/app/workflows/analysis.py` | Workflow | ~250 |
-| `src/app/services/report_generator.py` | Service | ~150 |
+| `src/app/services/report_generator.py` | Service | 310 |
 | `src/app/ui/main_content/analysis.py` | UI | ~700 |
 | `tests/unit/test_statistical_testing.py` | Tests | ~800 |
 | `tests/unit/test_abundance_bar_chart_plotter.py` | Tests | ~300 |
