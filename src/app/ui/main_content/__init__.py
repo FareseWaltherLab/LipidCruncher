@@ -25,6 +25,9 @@ from app.ui.main_content.normalization import (
 from app.ui.main_content.quality_check import (
     display_quality_check_module,
 )
+from app.ui.main_content.analysis import (
+    display_analysis_module,
+)
 
 __all__ = [
     # data_processing
@@ -41,4 +44,6 @@ __all__ = [
     'display_normalization_ui',
     # quality_check
     'display_quality_check_module',
+    # analysis
+    'display_analysis_module',
 ]

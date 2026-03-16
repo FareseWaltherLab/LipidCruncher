@@ -51,6 +51,7 @@ from app.ui.main_content import (
     display_manage_internal_standards,
     display_normalization_ui,
     display_quality_check_module,
+    display_analysis_module,
 )
 
 
@@ -76,6 +77,21 @@ def _reset_qc_state() -> None:
     st.session_state._preserved_bqc_filter_choice = 'No'
     st.session_state._preserved_rt_viewing_mode = 'Comparison Mode'
     st.session_state._preserved_pca_samples_remove = []
+
+
+def _reset_analysis_state() -> None:
+    """Clear all Module 3 analysis session state."""
+    st.session_state.analysis_selection = None
+    st.session_state.analysis_bar_chart_fig = None
+    st.session_state.analysis_pie_chart_figs = {}
+    st.session_state.analysis_saturation_figs = {}
+    st.session_state.analysis_fach_fig = None
+    st.session_state.analysis_pathway_fig = None
+    st.session_state.analysis_volcano_fig = None
+    st.session_state.analysis_volcano_data = None
+    st.session_state.analysis_heatmap_fig = None
+    st.session_state.analysis_heatmap_clusters = None
+    st.session_state.analysis_all_plots = {}
 
 
 def display_app_page() -> None:
@@ -158,6 +174,10 @@ def display_app_page() -> None:
     elif current_module == "Quality Check & Analysis":
         with center:
             _display_module2(experiment, bqc_label, data_format)
+
+    elif current_module == "Visualize & Analyze":
+        with center:
+            _display_module3(experiment, bqc_label, data_format)
 
 
 def _display_module1(
@@ -256,6 +276,14 @@ def _display_module2(
 
     # Navigation
     st.markdown("---")
+
+    # Forward navigation: proceed to Module 3
+    if qc_df is not None:
+        if st.button("Next: Visualize & Analyze →"):
+            _reset_analysis_state()
+            st.session_state.module = "Visualize & Analyze"
+            st.rerun()
+
     col1, col2 = st.columns(2)
     with col1:
         if st.button("← Back to Data Processing", key="back_processing_module2"):
@@ -264,6 +292,45 @@ def _display_module2(
             st.rerun()
     with col2:
         if st.button("← Back to Home", key="back_home_module2"):
+            st.session_state.page = 'landing'
+            StreamlitAdapter.reset_data_state()
+            st.rerun()
+
+
+def _display_module3(
+    experiment: 'ExperimentConfig',
+    bqc_label: Optional[str],
+    data_format: str,
+) -> None:
+    """Display Module 3: Visualize and Analyze."""
+    # Use QC continuation data, or normalized data if QC made no changes
+    analysis_df = st.session_state.get('qc_continuation_df')
+    if analysis_df is None:
+        analysis_df = st.session_state.get('normalized_df')
+    if analysis_df is None:
+        st.error("No data available. Please complete Modules 1 and 2 first.")
+        if st.button("← Back to Quality Check", key="back_qc_error"):
+            st.session_state.module = "Quality Check & Analysis"
+            st.rerun()
+        return
+
+    display_analysis_module(
+        df=analysis_df,
+        experiment=experiment,
+        bqc_label=bqc_label,
+        format_type=data_format,
+    )
+
+    # Navigation
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("← Back to Quality Check", key="back_qc_module3"):
+            _reset_analysis_state()
+            st.session_state.module = "Quality Check & Analysis"
+            st.rerun()
+    with col2:
+        if st.button("← Back to Home", key="back_home_module3"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()
             st.rerun()
