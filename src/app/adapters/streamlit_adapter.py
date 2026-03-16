@@ -53,6 +53,12 @@ class SessionState:
                              qc_correlation_plots, qc_pca_plot, qc_samples_removed,
                              _preserved_bqc_filter_choice, _preserved_rt_viewing_mode,
                              _preserved_pca_samples_remove
+      analysis.py          → analysis_selection, analysis_bar_chart_fig,
+                             analysis_pie_chart_figs, analysis_saturation_figs,
+                             analysis_fach_fig, analysis_pathway_fig,
+                             analysis_volcano_fig, analysis_volcano_data,
+                             analysis_heatmap_fig, analysis_heatmap_clusters,
+                             analysis_all_plots
       main_app.py          → page, module
     """
     # --- App-level routing (owner: main_app.py) ---
@@ -136,6 +142,19 @@ class SessionState:
     _preserved_rt_viewing_mode: str = 'Comparison Mode'
     _preserved_pca_samples_remove: List[str] = field(default_factory=list)
 
+    # --- Analysis (owner: analysis.py) ---
+    analysis_selection: Optional[str] = None
+    analysis_bar_chart_fig: Any = None
+    analysis_pie_chart_figs: Dict[str, Any] = field(default_factory=dict)
+    analysis_saturation_figs: Dict[str, Any] = field(default_factory=dict)
+    analysis_fach_fig: Any = None
+    analysis_pathway_fig: Any = None
+    analysis_volcano_fig: Any = None
+    analysis_volcano_data: Any = None
+    analysis_heatmap_fig: Any = None
+    analysis_heatmap_clusters: Optional[pd.DataFrame] = None
+    analysis_all_plots: Dict[str, Any] = field(default_factory=dict)
+
 
 # Keys that should NOT be reset when starting a fresh analysis
 # (they control app-level routing, not data-specific state)
@@ -179,6 +198,21 @@ _WIDGET_KEYS = {
     'qc_missing_values_svg', 'qc_missing_values_csv',
     'qc_box_plot_svg', 'qc_box_plot_csv',
     'qc_bqc_svg', 'qc_pca_svg',
+    # Analysis widgets (analysis.py)
+    'analysis_radio',
+    'bar_conditions', 'bar_classes', 'bar_scale_radio',
+    'bar_stats_mode', 'bar_detailed_stats',
+    'pie_classes',
+    'sat_conditions', 'sat_classes', 'sat_plot_type',
+    'sat_show_significance', 'sat_detailed_stats', 'sat_stats_mode',
+    'fach_class', 'fach_conditions',
+    'pathway_control', 'pathway_experimental',
+    'volcano_control', 'volcano_experimental', 'volcano_classes',
+    'volcano_p_threshold', 'volcano_fc_threshold',
+    'volcano_hide_nonsig', 'volcano_top_n',
+    'volcano_additional_labels', 'volcano_stats_mode', 'volcano_detailed_stats',
+    'heatmap_conditions', 'heatmap_classes', 'heatmap_type',
+    'heatmap_n_clusters', 'heatmap_cluster_view',
 }
 
 # Prefixes for dynamic widget keys (created with f-strings like `protein_{sample}`).
@@ -193,6 +227,10 @@ _DYNAMIC_KEY_PREFIXES = (
     'select_',          # multiselect for condition samples (sample_grouping.py)
     'qc_rt_svg_individual_',  # individual RT SVG downloads (quality_check.py)
     'rt_csv_individual_',     # individual RT CSV downloads (quality_check.py)
+    'volcano_label_x_',       # per-lipid label X position (analysis.py)
+    'volcano_label_y_',       # per-lipid label Y position (analysis.py)
+    'analysis_svg_',          # analysis SVG download buttons (analysis.py)
+    'analysis_csv_',          # analysis CSV download buttons (analysis.py)
 )
 
 
