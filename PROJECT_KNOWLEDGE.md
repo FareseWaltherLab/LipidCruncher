@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** March 13, 2026
+**Last Updated:** March 17, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -236,7 +236,7 @@ src/app/ui/
   - `StandardsService` — Static methods for detection, extraction, validation, and processing
 - `tests/unit/test_standards.py` — 153 tests
 
-### 🔄 Phase 4: Extract Workflows & UI (IN PROGRESS)
+### ✅ Phase 4: Extract Workflows & UI (COMPLETE)
 
 | Component | Status | Tests | Commit |
 |-----------|--------|-------|--------|
@@ -264,7 +264,14 @@ src/app/ui/
 - `tests/unit/test_streamlit_adapter.py` — 75 tests (SessionState, utility methods, mocked session state)
 - `tests/unit/test_normalization_workflow.py` — 98 tests (all methods, edge cases, integration scenarios)
 
-### ⬜ Phase 5: Polish (NOT STARTED)
+### ✅ Phase 5: Polish (COMPLETE)
+
+**Completed:**
+- ✅ `main_app.py` reduced to 352 lines (target was <500)
+- ✅ Statistical testing logic consolidated into `StatisticalTestingService`
+- ✅ Legacy code removed: `old_main_app.py` (5,799 lines) and `lipidomics/` module (7,341 lines) deleted
+- ✅ Integration tests migrated from legacy `DataFormatHandler` to new `DataStandardizationService`
+- ✅ All 3,511 tests passing with zero legacy dependencies
 
 ### Next Steps — Page-by-Page UI Build
 
@@ -1402,7 +1409,7 @@ Extracted 14 helpers across 5 files, all methods now under 50 lines:
 - `quality_check.py:69-73` error flow continues — actually returns early
 - `zero_filtering.py:100-171` filter_zeros 72 lines — well-structured, appropriate size
 
-#### Module 3: Visualize and Analyze (IN PROGRESS)
+#### Module 3: Visualize and Analyze (COMPLETE)
 
 **Reference:** Old app `old_main_app.py` lines 2589-5500+ has the full working Module 3.
 
@@ -1916,9 +1923,9 @@ Upload CSV → Format Detection → Data Cleaning → Zero Filtering → Normali
 | `refactor/v3.0` | **Active development** - combining best of both branches |
 
 ### Key Principle
-- **Check v2.0 first** for clean, well-structured implementations
-- **Use `old_main_app.py`** to understand full requirements and fill gaps where v2.0 is missing features
-- **Refactor incrementally** with unit tests for each extracted component
+- **Refactor is complete** — all legacy code (`old_main_app.py`, `lipidomics/`) has been deleted
+- **v2.0 branch** remains available as a reference for clean architecture patterns
+- **3,511 tests** ensure correctness across all modules
 
 ---
 
@@ -1973,27 +1980,24 @@ Upload CSV → Format Detection → Data Cleaning → Zero Filtering → Normali
 ```
 LipidCruncher/
 ├── src/
-│   ├── main_app.py                    # New refactored app (TARGET: <500 lines)
-│   ├── old_main_app.py                # Original monolithic app (reference)
-│   ├── app/                           # Refactored package
+│   ├── main_app.py                    # App entry point (352 lines)
+│   ├── app/                           # Application package
 │   │   ├── __init__.py
 │   │   ├── models/                    # Pydantic data models
-│   │   │   └── __init__.py
 │   │   ├── services/                  # Business logic (NO Streamlit)
-│   │   │   └── __init__.py
+│   │   │   └── plotting/             # Plotting services
 │   │   ├── adapters/                  # Streamlit adapter
-│   │   │   └── __init__.py
 │   │   ├── workflows/                 # Multi-step orchestration
-│   │   │   └── __init__.py
 │   │   └── ui/                        # UI components
-│   │       └── __init__.py
-│   └── lipidomics/                    # Legacy visualization modules (keep for now)
+│   │       ├── content/              # Static markdown content
+│   │       ├── sidebar/              # Sidebar UI components
+│   │       └── main_content/         # Main area UI components
+│   └── images/                        # App images
 ├── tests/
 │   ├── unit/
 │   ├── integration/
+│   ├── ui/
 │   └── fixtures/                      # Generated edge case datasets
-│       ├── edge_cases/
-│       └── generators/
 └── sample_datasets/
 ```
 
@@ -2165,10 +2169,11 @@ Priority order:
 - Extract UI components from main_app.py
 - Create StreamlitAdapter for session state management
 
-### Phase 5: Polish
-- Reduce main_app.py to <500 lines
-- Consolidate statistical testing logic
-- Ensure all edge cases pass
+### Phase 5: Polish ✅
+- ✅ main_app.py at 352 lines (<500 target)
+- ✅ Statistical testing consolidated into StatisticalTestingService
+- ✅ Legacy code deleted (old_main_app.py + lipidomics/), all tests migrated
+- ✅ 3,511 tests passing
 
 ---
 
@@ -2363,5 +2368,5 @@ Full code review before starting Module 2. All issues listed by priority.
 - Import Streamlit in services
 - Store state in service classes
 - Make large changes without commits
-- Use v2.0 code without checking if `old_main_app.py` has additional features needed
+- Reintroduce legacy patterns — the legacy code has been fully replaced and deleted
 - Add new UI functions to `main_app.py` — extract to `src/app/ui/` instead
