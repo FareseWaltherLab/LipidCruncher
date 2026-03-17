@@ -1799,7 +1799,7 @@ Target: ~25 tests
 | 9 | Step 5: Module 3 UI ✅ + Step 6: main_app.py wiring ✅ | 1 UI file (730 lines) + 1 modified (353 lines) | Steps 3-4 |
 | 10 | Step 7: PDF Report Generator ✅ (38 tests) | 1 service (310 lines) + 38 tests | Steps 5-6 (needs stored plots) |
 | 11 | Step 8: Integration tests ✅ (89 tests) | 1 test file (1300+ lines) | Steps 1-7 |
-| 12 | Step 9: UI tests | 1 test file, ~25 tests | Steps 5-6 |
+| 12 | Step 9: UI tests ✅ (25 tests) | 1 test file, 25 tests | Steps 5-6 |
 
 ##### Files to Create
 

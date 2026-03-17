@@ -933,3 +933,192 @@ def qc_small_app():
     at.session_state['_test_bqc_label'] = None
     at.session_state['_test_format_type'] = 'Generic Format'
     return at.run()
+
+
+# =============================================================================
+# Module 3: Analysis — Wrapper Functions
+# =============================================================================
+
+def analysis_module_script():
+    """Run Analysis module with test data from session state.
+
+    Expects session state keys:
+        _test_df: DataFrame with concentration[s] columns, LipidMolec, ClassKey
+        _test_experiment: ExperimentConfig
+        _test_bqc_label: Optional BQC label string
+        _test_format_type: Format string (default 'Generic Format')
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    # Initialize analysis_all_plots dict (normally done by main_app.py routing)
+    if not st.session_state.get('analysis_all_plots'):
+        st.session_state.analysis_all_plots = {}
+    from app.ui.main_content.analysis import display_analysis_module
+
+    df = st.session_state['_test_df']
+    experiment = st.session_state['_test_experiment']
+    bqc_label = st.session_state.get('_test_bqc_label')
+    format_type = st.session_state.get('_test_format_type', 'Generic Format')
+
+    display_analysis_module(
+        df=df,
+        experiment=experiment,
+        bqc_label=bqc_label,
+        format_type=format_type,
+    )
+    st.text("analysis_rendered:ok")
+
+
+def module3_nav_script():
+    """Module 3 with navigation buttons (Back to QC + Back to Home).
+
+    Replicates main_app.py _display_module3() navigation logic (without analysis rendering).
+
+    Expects session state keys:
+        qc_continuation_df: DataFrame (optional — analysis data source)
+        normalized_df: DataFrame (fallback data source)
+        module: str = 'Visualize & Analyze'
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    def _reset_analysis_state():
+        st.session_state.analysis_selection = None
+        st.session_state.analysis_bar_chart_fig = None
+        st.session_state.analysis_pie_chart_figs = {}
+        st.session_state.analysis_saturation_figs = {}
+        st.session_state.analysis_fach_fig = None
+        st.session_state.analysis_pathway_fig = None
+        st.session_state.analysis_volcano_fig = None
+        st.session_state.analysis_volcano_data = None
+        st.session_state.analysis_heatmap_fig = None
+        st.session_state.analysis_heatmap_clusters = None
+        st.session_state.analysis_all_plots = {}
+
+    analysis_df = st.session_state.get('qc_continuation_df')
+    if analysis_df is None:
+        analysis_df = st.session_state.get('normalized_df')
+    if analysis_df is None:
+        st.error("No data available. Please complete Modules 1 and 2 first.")
+        if st.button("← Back to Quality Check", key="back_qc_error"):
+            st.session_state.module = "Quality Check & Analysis"
+            st.rerun()
+        return
+
+    current_module = st.session_state.get('module', 'unknown')
+    st.text(f"module:{current_module}")
+    st.text(f"analysis_rows:{analysis_df.shape[0]}")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("← Back to Quality Check", key="back_qc_module3"):
+            _reset_analysis_state()
+            st.session_state.module = "Quality Check & Analysis"
+            st.rerun()
+    with col2:
+        if st.button("← Back to Home", key="back_home_module3"):
+            st.session_state.page = 'landing'
+            StreamlitAdapter.reset_data_state()
+            st.rerun()
+
+
+# =============================================================================
+# Module 3: Analysis — Data Builders
+# =============================================================================
+
+def make_analysis_dataframe(n_lipids=20, n_samples=6, detailed_fa=False):
+    """Build an analysis-ready DataFrame with concentration columns.
+
+    Args:
+        n_lipids: Number of lipid rows.
+        n_samples: Number of sample columns (concentration[s1]..concentration[sN]).
+        detailed_fa: Use detailed fatty acid names (e.g., PC(16:0_18:1)) instead
+                     of consolidated (e.g., PC(34:1)).
+
+    Returns:
+        DataFrame with LipidMolec, ClassKey, and concentration columns.
+    """
+    import numpy as np
+    import pandas as pd
+
+    np.random.seed(42)
+    half = n_lipids // 2
+    classes = ['PC'] * half + ['PE'] * (n_lipids - half)
+
+    if detailed_fa:
+        lipids = []
+        for i, cls in enumerate(classes):
+            c1 = 14 + (i % 6)  # chain1: 14-19
+            c2 = 16 + (i % 5)  # chain2: 16-20
+            d1 = i % 2          # double bonds: 0 or 1
+            d2 = (i + 1) % 3    # double bonds: 0, 1, or 2
+            lipids.append(f'{cls}({c1}:{d1}_{c2}:{d2})')
+    else:
+        lipids = [f'{cls}({30 + i}:{i % 3})' for i, cls in enumerate(classes)]
+
+    data = {
+        'LipidMolec': lipids,
+        'ClassKey': classes,
+    }
+
+    for i in range(1, n_samples + 1):
+        data[f'concentration[s{i}]'] = np.random.uniform(500, 5000, n_lipids).tolist()
+
+    return pd.DataFrame(data)
+
+
+# =============================================================================
+# Module 3: Analysis — Fixtures
+# =============================================================================
+
+@pytest.fixture
+def analysis_generic_app():
+    """Analysis module: Generic format, 2x3=6 samples, 20 lipids, consolidated names."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_analysis_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_format_type'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def analysis_detailed_fa_app():
+    """Analysis module: Generic format, 2x3=6 samples, 20 lipids, detailed FA names."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_analysis_dataframe(
+        n_lipids=20, n_samples=6, detailed_fa=True,
+    )
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_format_type'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def module3_nav_app():
+    """Module 3 navigation with analysis data pre-populated."""
+    at = AppTest.from_function(module3_nav_script, default_timeout=DEFAULT_TIMEOUT)
+    df = make_analysis_dataframe(n_lipids=10, n_samples=6)
+    at.session_state['qc_continuation_df'] = df
+    at.session_state['normalized_df'] = df.copy()
+    at.session_state['module'] = 'Visualize & Analyze'
+    # Pre-populate analysis state to verify it gets cleared
+    at.session_state['analysis_bar_chart_fig'] = 'fake_bar'
+    at.session_state['analysis_volcano_fig'] = 'fake_volcano'
+    at.session_state['analysis_all_plots'] = {'bar': 'fake'}
+    return at.run()
