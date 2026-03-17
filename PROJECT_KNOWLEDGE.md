@@ -1750,24 +1750,23 @@ Added Module 3 session state keys to `SessionState` dataclass:
 
 **Tests:** 38 tests across 8 classes (ReportMetadata 3, BuildMetadata 2, AnalysesList 6, SaturationClasses 4, GeneratePdf 10, CoverPageContent 6, ErrorHandling 3, PlotOrdering 2, ManyConditions 2). **Test count: 3376.**
 
-**Step 8: Integration Tests**
+**Step 8: ✅ Integration Tests**
 **File:** `tests/integration/test_module3_pipeline.py`
 
-**Helper:** `run_module2_pipeline(normalized_df, experiment, config) → pd.DataFrame` — Runs QC pipeline to produce continuation_df
+**Helpers:** `run_module1_pipeline(raw_df, experiment, data_format) → pd.DataFrame`, `make_analysis_dataframe(lipids, classes, n_samples, values_fn) → pd.DataFrame`
 
-**Test Classes:**
-- `TestBarChartEndToEnd` — Full pipeline per format, stat results match expectations
-- `TestPieChartEndToEnd` — Per-condition charts, color consistency
-- `TestSaturationEndToEnd` — FA parsing on real data, consolidated detection
-- `TestFACHEndToEnd` — Carbon/DB grid on real data
-- `TestPathwayEndToEnd` — Fold change/saturation on real data
-- `TestVolcanoEndToEnd` — Per-species stats, fold change, label placement
-- `TestHeatmapEndToEnd` — Z-scores, clustering, cluster composition
-- `TestCrossAnalysis` — Data consistency across analysis types (same input → consistent class totals)
-- `TestEdgeCases` — Single class, single condition, all zeros, minimal samples
-- `TestErrorHandling` — Missing columns, invalid conditions
-
-Target: ~60 tests
+**Test Classes (89 tests total):**
+- `TestBarChartEndToEnd` (11 tests) — Full pipeline per format (LipidSearch, Generic, MS-DIAL, MW), stats (auto/manual/posthoc), log10 scale, subset filtering, abundance positivity
+- `TestPieChartEndToEnd` (6 tests) — Per-condition charts, percentages sum to 100%, color consistency, subset classes, MW format
+- `TestSaturationEndToEnd` (7 tests) — Default/stats/percentage modes, consolidated lipid detection, per-class plots, MS-DIAL/MW formats
+- `TestFACHEndToEnd` (5 tests) — Carbon/DB grid, weighted averages, unparsable tracking, figure creation, MW format
+- `TestPathwayEndToEnd` (6 tests) — Fold change positive, saturation ratio bounded, figure creation, reversed conditions (reciprocal fold change), MW format
+- `TestVolcanoEndToEnd` (10 tests) — Data columns, fold change sign, p-values bounded, concentration plot, removed lipids tracking, subset classes, hide non-sig, top_n_labels, MW format
+- `TestHeatmapEndToEnd` (7 tests) — Regular/clustered modes, Z-score normalization, cluster count, subset conditions/classes, MW format (44 columns)
+- `TestCrossAnalysis` (5 tests) — Bar-pie class totals, bar-heatmap class agreement, volcano-bar direction consistency, saturation subset, all 7 analyses on same input
+- `TestEdgeCases` (12 tests) — Single lipid/class, single condition (no stats), uniform data, 14 classes, very large/small values, unparsable FACH names, 44-sample MW volcano
+- `TestErrorHandling` (14 tests) — Empty/missing columns validation, empty conditions/classes raises, same condition raises (pathway/volcano), invalid heatmap type
+- `TestHelperMethods` (6 tests) — get_available_classes, get_eligible_conditions, get_all_conditions, validate_inputs
 
 **Step 9: UI Tests**
 **File:** `tests/ui/test_module3_ui.py`
@@ -1799,7 +1798,7 @@ Target: ~25 tests
 | 8 | Step 4: StreamlitAdapter update ✅ (100 tests) | 1 file + 25 new tests | Step 3 (needs key list) |
 | 9 | Step 5: Module 3 UI ✅ + Step 6: main_app.py wiring ✅ | 1 UI file (730 lines) + 1 modified (353 lines) | Steps 3-4 |
 | 10 | Step 7: PDF Report Generator ✅ (38 tests) | 1 service (310 lines) + 38 tests | Steps 5-6 (needs stored plots) |
-| 11 | Step 8: Integration tests | 1 test file, ~60 tests | Steps 1-7 |
+| 11 | Step 8: Integration tests ✅ (89 tests) | 1 test file (1300+ lines) | Steps 1-7 |
 | 12 | Step 9: UI tests | 1 test file, ~25 tests | Steps 5-6 |
 
 ##### Files to Create
