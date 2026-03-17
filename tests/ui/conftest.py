@@ -1110,6 +1110,40 @@ def analysis_detailed_fa_app():
 
 
 @pytest.fixture
+def analysis_three_cond_app():
+    """Analysis module: 3 conditions x 3 samples = 9 samples, 20 lipids."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_analysis_dataframe(n_lipids=20, n_samples=9)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=3,
+        conditions_list=['Control', 'Treatment', 'Vehicle'],
+        number_of_samples_list=[3, 3, 3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_format_type'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def analysis_single_cond_app():
+    """Analysis module: single condition (no pairwise stats possible)."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_analysis_dataframe(n_lipids=20, n_samples=3)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=1,
+        conditions_list=['Control'],
+        number_of_samples_list=[3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_format_type'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
 def module3_nav_app():
     """Module 3 navigation with analysis data pre-populated."""
     at = AppTest.from_function(module3_nav_script, default_timeout=DEFAULT_TIMEOUT)

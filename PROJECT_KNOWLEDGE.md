@@ -1768,21 +1768,24 @@ Added Module 3 session state keys to `SessionState` dataclass:
 - `TestErrorHandling` (14 tests) — Empty/missing columns validation, empty conditions/classes raises, same condition raises (pathway/volcano), invalid heatmap type
 - `TestHelperMethods` (6 tests) — get_available_classes, get_eligible_conditions, get_all_conditions, validate_inputs
 
-**Step 9: UI Tests**
+**Step 9: UI Tests ✅ (46 tests)**
 **File:** `tests/ui/test_module3_ui.py`
 
 Following Module 2 UI test pattern (wrapper scripts, pre-populated session state).
 
-**Test Classes:**
-- `TestAnalysisRadioSelection` — Radio renders all 7 options, switching works
-- `TestBarChartUI` — Stats panel, multiselects, scale radio, plot renders
-- `TestPieChartUI` — Class multiselect, per-condition display
-- `TestSaturationUI` — Consolidated warning, stats panel, plot type radio
-- `TestVolcanoUI` — Condition selectors, threshold inputs, label management
-- `TestHeatmapUI` — Type radio, cluster slider, composition display
-- `TestAnalysisNavigation` — Module routing, state reset on navigation
+**Fixtures added to `tests/ui/conftest.py`:** `analysis_three_cond_app` (3×3=9 samples), `analysis_single_cond_app` (1×3=3 samples).
 
-Target: ~25 tests
+**Test Classes (10 groups):**
+- `TestAnalysisRadioSelection` (3) — Radio renders all 7 options, default is Bar Chart, switching works
+- `TestBarChartUI` (8) — Renders, condition/class multiselects, scale radio/switch, stats mode, figure stored, deselect all classes warning
+- `TestPieChartUI` (5) — Renders, class multiselect defaults, figures stored per condition, deselect class updates, deselect all warning
+- `TestSaturationUI` (5) — Renders, consolidated FA warning, plot type radio/switch to percentage, detailed FA no consolidated warning
+- `TestFACHUI` (3) — Renders, class selectbox, conditions multiselect defaults
+- `TestPathwayUI` (3) — Renders, control/experimental selectors, figure stored
+- `TestVolcanoUI` (6) — Renders, condition selectors, threshold defaults, figure stored, hide nonsig default, volcano data stored
+- `TestHeatmapUI` (7) — Renders, type radio/switch to regular, cluster slider, cluster view, figure stored, cluster composition stored
+- `TestAnalysisNavigation` (3) — Back to QC resets module/state, Back to Home resets page
+- `TestEdgeCases` (3) — Single-condition volcano/pathway warning, three-condition bar chart
 
 ##### Execution Order
 
@@ -1799,7 +1802,7 @@ Target: ~25 tests
 | 9 | Step 5: Module 3 UI ✅ + Step 6: main_app.py wiring ✅ | 1 UI file (730 lines) + 1 modified (353 lines) | Steps 3-4 |
 | 10 | Step 7: PDF Report Generator ✅ (38 tests) | 1 service (310 lines) + 38 tests | Steps 5-6 (needs stored plots) |
 | 11 | Step 8: Integration tests ✅ (89 tests) | 1 test file (1300+ lines) | Steps 1-7 |
-| 12 | Step 9: UI tests ✅ (25 tests) | 1 test file, 25 tests | Steps 5-6 |
+| 12 | Step 9: UI tests ✅ (46 tests) | 1 test file, 46 tests | Steps 5-6 |
 
 ##### Files to Create
 
