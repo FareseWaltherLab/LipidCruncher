@@ -8,7 +8,6 @@ Refactored architecture:
                 → Services (app/services/)
                     → Models (app/models/)
 
-Reference: old_main_app.py contains the original monolithic implementation.
 """
 
 from typing import Optional

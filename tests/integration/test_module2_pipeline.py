@@ -10,8 +10,6 @@ Multi-step chains validate cascading effects (BQC filter → correlation
 on filtered data, PCA → sample removal → re-run PCA) that unit tests
 do not cover.
 """
-import re
-
 import pytest
 import pandas as pd
 import numpy as np
@@ -51,8 +49,8 @@ from app.models.normalization import NormalizationConfig
 # Services
 from app.services.format_detection import DataFormat
 
-# Legacy module for format parsing
-from lipidomics.data_format_handler import DataFormatHandler
+# New architecture standardization service
+from app.services.data_standardization import DataStandardizationService
 
 
 # =============================================================================
@@ -70,118 +68,30 @@ def load_lipidsearch_sample() -> pd.DataFrame:
     """Load and preprocess LipidSearch 5.0 sample dataset."""
     path = SAMPLE_DATA_DIR / 'lipidsearch5_test_dataset.csv'
     df = pd.read_csv(path)
-    standardized_df, success, _ = DataFormatHandler.validate_and_preprocess(df, 'lipidsearch')
-    if not success:
+    result = DataStandardizationService.validate_and_standardize(df, DataFormat.LIPIDSEARCH)
+    if not result.success:
         raise ValueError("Failed to standardize LipidSearch dataset")
-    return standardized_df
+    return result.standardized_df
 
 
 def load_msdial_sample() -> pd.DataFrame:
-    """
-    Load and preprocess MS-DIAL sample dataset.
-
-    Note: This function directly parses the MS-DIAL file without relying on
-    DataFormatHandler, which uses st.session_state and doesn't work in tests.
-    """
+    """Load and preprocess MS-DIAL sample dataset."""
     path = SAMPLE_DATA_DIR / 'msdial_test_dataset.csv'
-    # MS-DIAL file has 9 metadata rows before the actual header
-    df = pd.read_csv(path, header=9)
-
-    # Known MS-DIAL metadata columns
-    MSDIAL_METADATA_COLUMNS = {
-        'Alignment ID', 'Average Rt(min)', 'Average Mz', 'Metabolite name',
-        'Adduct type', 'Post curation result', 'Fill %', 'MS/MS assigned',
-        'Reference RT', 'Reference m/z', 'Formula', 'Ontology', 'INCHIKEY',
-        'SMILES', 'Annotation tag', 'Annotation tag (VS1.0)', 'RT matched',
-        'm/z matched', 'MS/MS matched', 'Comment', 'Manually modified',
-        'Isotope tracking parent ID', 'Isotope tracking weight number',
-        'Total score', 'RT similarity', 'Dot product', 'Reverse dot product',
-        'Fragment presence %', 'S/N average', 'Spectrum reference file name',
-        'MS1 isotopic spectrum', 'MS/MS spectrum', 'Lipid IS'
-    }
-
-    # Find the 'Lipid IS' column which separates raw and normalized data
-    lipid_is_idx = None
-    for idx, col in enumerate(df.columns):
-        if col == 'Lipid IS':
-            lipid_is_idx = idx
-            break
-
-    # Detect raw sample columns (before 'Lipid IS')
-    raw_sample_cols = []
-    raw_sample_indices = []
-    for idx, col in enumerate(df.columns):
-        if col in MSDIAL_METADATA_COLUMNS or pd.isna(col):
-            continue
-        if lipid_is_idx is not None and idx >= lipid_is_idx:
-            break
-        # Check if column contains numeric data
-        try:
-            col_data = df.iloc[:, idx]
-            numeric_values = pd.to_numeric(col_data, errors='coerce')
-            if numeric_values.notna().sum() > len(col_data) * 0.5:
-                raw_sample_cols.append(col)
-                raw_sample_indices.append(idx)
-        except:
-            continue
-
-    # Helper function to infer ClassKey from lipid name
-    def infer_class_key(lipid_molec):
-        try:
-            match = re.match(r'^([A-Za-z][A-Za-z0-9]*)', str(lipid_molec))
-            if match:
-                return match.group(1).strip()
-            return "Unknown"
-        except:
-            return "Unknown"
-
-    # Build standardized dataframe
-    standardized_data = {}
-
-    # LipidMolec from 'Metabolite name' column
-    metabolite_idx = df.columns.tolist().index('Metabolite name')
-    standardized_data['LipidMolec'] = df.iloc[:, metabolite_idx].astype(str)
-
-    # ClassKey - infer from LipidMolec
-    standardized_data['ClassKey'] = standardized_data['LipidMolec'].apply(infer_class_key)
-
-    # Optional: BaseRt from 'Average Rt(min)'
-    if 'Average Rt(min)' in df.columns:
-        rt_idx = df.columns.tolist().index('Average Rt(min)')
-        standardized_data['BaseRt'] = pd.to_numeric(df.iloc[:, rt_idx], errors='coerce')
-
-    # Optional: CalcMass from 'Average Mz'
-    if 'Average Mz' in df.columns:
-        mz_idx = df.columns.tolist().index('Average Mz')
-        standardized_data['CalcMass'] = pd.to_numeric(df.iloc[:, mz_idx], errors='coerce')
-
-    # Quality columns for filtering
-    if 'Total score' in df.columns:
-        score_idx = df.columns.tolist().index('Total score')
-        standardized_data['Total score'] = pd.to_numeric(df.iloc[:, score_idx], errors='coerce')
-
-    if 'MS/MS matched' in df.columns:
-        msms_idx = df.columns.tolist().index('MS/MS matched')
-        standardized_data['MS/MS matched'] = df.iloc[:, msms_idx]
-
-    # Sample intensity columns
-    for i, (col_name, col_idx) in enumerate(zip(raw_sample_cols, raw_sample_indices), 1):
-        new_col_name = f'intensity[s{i}]'
-        standardized_data[new_col_name] = pd.to_numeric(
-            df.iloc[:, col_idx], errors='coerce'
-        ).fillna(0)
-
-    return pd.DataFrame(standardized_data)
+    df = pd.read_csv(path)
+    result = DataStandardizationService.validate_and_standardize(df, DataFormat.MSDIAL)
+    if not result.success:
+        raise ValueError("Failed to standardize MS-DIAL dataset")
+    return result.standardized_df
 
 
 def load_generic_sample() -> pd.DataFrame:
     """Load and preprocess Generic sample dataset."""
     path = SAMPLE_DATA_DIR / 'generic_test_dataset.csv'
     df = pd.read_csv(path)
-    standardized_df, success, _ = DataFormatHandler.validate_and_preprocess(df, 'generic')
-    if not success:
+    result = DataStandardizationService.validate_and_standardize(df, DataFormat.GENERIC)
+    if not result.success:
         raise ValueError("Failed to standardize Generic dataset")
-    return standardized_df
+    return result.standardized_df
 
 
 def load_mw_sample() -> pd.DataFrame:
@@ -189,12 +99,12 @@ def load_mw_sample() -> pd.DataFrame:
     path = SAMPLE_DATA_DIR / 'mw_test_dataset.csv'
     with open(path, 'r', encoding='utf-8') as f:
         text_content = f.read()
-    standardized_df, success, _ = DataFormatHandler.validate_and_preprocess(
-        text_content, 'Metabolomics Workbench'
+    result = DataStandardizationService.validate_and_standardize(
+        text_content, DataFormat.METABOLOMICS_WORKBENCH
     )
-    if not success:
+    if not result.success:
         raise ValueError("Failed to standardize Metabolomics Workbench dataset")
-    return standardized_df
+    return result.standardized_df
 
 
 def get_concentration_columns(df: pd.DataFrame) -> list:
