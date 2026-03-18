@@ -431,26 +431,26 @@ class TestHeatmapUI:
 # =============================================================================
 
 class TestAnalysisNavigation:
-    """Tests for Module 3 navigation buttons."""
+    """Tests for combined Module 2+3 navigation buttons."""
 
-    def test_back_to_qc_resets_module(self, module3_nav_app):
-        """Clicking 'Back to Quality Check' returns to Module 2."""
+    def test_back_to_data_processing_resets_module(self, module3_nav_app):
+        """Clicking 'Back to Data Processing' returns to Module 1."""
         at = module3_nav_app
-        at.button(key='back_qc_module3').click().run()
-        assert at.session_state['module'] == 'Quality Check & Analysis'
+        at.button(key='back_processing_module2').click().run()
+        assert at.session_state['module'] == 'Data Cleaning, Filtering, & Normalization'
 
-    def test_back_to_qc_resets_analysis_state(self, module3_nav_app):
-        """Clicking 'Back to Quality Check' clears all analysis session state."""
+    def test_back_to_data_processing_resets_analysis_state(self, module3_nav_app):
+        """Clicking 'Back to Data Processing' clears all analysis session state."""
         at = module3_nav_app
-        at.button(key='back_qc_module3').click().run()
+        at.button(key='back_processing_module2').click().run()
         assert at.session_state['analysis_bar_chart_fig'] is None
         assert at.session_state['analysis_volcano_fig'] is None
         assert at.session_state['analysis_all_plots'] == {}
 
     def test_back_to_home_resets_page(self, module3_nav_app):
-        """Clicking 'Back to Home' from Module 3 sets page to 'landing'."""
+        """Clicking 'Back to Home' from combined page sets page to 'landing'."""
         at = module3_nav_app
-        at.button(key='back_home_module3').click().run()
+        at.button(key='back_home_module2').click().run()
         assert at.session_state['page'] == 'landing'
 
 

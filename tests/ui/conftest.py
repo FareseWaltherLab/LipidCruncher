@@ -971,18 +971,23 @@ def analysis_module_script():
 
 
 def module3_nav_script():
-    """Module 3 with navigation buttons (Back to QC + Back to Home).
+    """Combined Module 2+3 navigation buttons (Back to Data Processing + Back to Home).
 
-    Replicates main_app.py _display_module3() navigation logic (without analysis rendering).
+    Replicates main_app.py _display_module2_and_3() navigation logic (without rendering).
 
     Expects session state keys:
         qc_continuation_df: DataFrame (optional — analysis data source)
         normalized_df: DataFrame (fallback data source)
-        module: str = 'Visualize & Analyze'
+        module: str = 'Quality Check & Analysis'
     """
     import streamlit as st
     from app.adapters.streamlit_adapter import StreamlitAdapter
     StreamlitAdapter.initialize_session_state()
+
+    def _reset_qc_state():
+        StreamlitAdapter.reset_module_state(
+            'qc_', '_preserved_bqc_', '_preserved_rt_', '_preserved_pca_',
+        )
 
     def _reset_analysis_state():
         st.session_state.analysis_selection = None
@@ -1001,9 +1006,9 @@ def module3_nav_script():
     if analysis_df is None:
         analysis_df = st.session_state.get('normalized_df')
     if analysis_df is None:
-        st.error("No data available. Please complete Modules 1 and 2 first.")
-        if st.button("← Back to Quality Check", key="back_qc_error"):
-            st.session_state.module = "Quality Check & Analysis"
+        st.error("No data available. Please complete Module 1 first.")
+        if st.button("← Back to Data Processing", key="back_processing_error"):
+            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
             st.rerun()
         return
 
@@ -1013,12 +1018,13 @@ def module3_nav_script():
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Back to Quality Check", key="back_qc_module3"):
+        if st.button("← Back to Data Processing", key="back_processing_module2"):
+            _reset_qc_state()
             _reset_analysis_state()
-            st.session_state.module = "Quality Check & Analysis"
+            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
             st.rerun()
     with col2:
-        if st.button("← Back to Home", key="back_home_module3"):
+        if st.button("← Back to Home", key="back_home_module2"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()
             st.rerun()
@@ -1150,7 +1156,7 @@ def module3_nav_app():
     df = make_analysis_dataframe(n_lipids=10, n_samples=6)
     at.session_state['qc_continuation_df'] = df
     at.session_state['normalized_df'] = df.copy()
-    at.session_state['module'] = 'Visualize & Analyze'
+    at.session_state['module'] = 'Quality Check & Analysis'
     # Pre-populate analysis state to verify it gets cleared
     at.session_state['analysis_bar_chart_fig'] = 'fake_bar'
     at.session_state['analysis_volcano_fig'] = 'fake_volcano'

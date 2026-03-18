@@ -1,6 +1,6 @@
 # LipidCruncher Project Knowledge
 
-**Last Updated:** March 17, 2026
+**Last Updated:** March 18, 2026
 **Current Branch:** `refactor/v3.0`
 
 ---
@@ -990,12 +990,13 @@ Two files created, three modified. Step 6 (module routing) merged into this step
 **Files Modified:**
 - `src/app/ui/main_content/__init__.py` — Added `display_quality_check_module` import and `__all__` entry
 - `src/app/adapters/streamlit_adapter.py` — Added 10 QC widget keys to `_WIDGET_KEYS`
-- `src/main_app.py` (206 → 269 lines) — Module routing with `_display_module1()`, `_display_module2()`, `_reset_qc_state()`
+- `src/main_app.py` (206 → 300 lines) — Module routing with `_display_module1()`, `_display_module2_and_3()`, `_reset_qc_state()`, `_reset_analysis_state()`
 
-**Module routing in main_app.py:**
-- `_display_module1()` — existing Steps 1-7 + "Next: Quality Check & Analysis →" button (only visible after normalization)
-- `_display_module2()` — `display_quality_check_module()` + "Back to Data Processing" / "Back to Home" buttons
-- `_reset_qc_state()` — clears all 6 QC session state keys on navigation
+**Module routing in main_app.py (2-page layout):**
+- `_display_module1()` — Steps 1-7 + "Next: Quality Check, Visualization & Analysis →" button (only visible after normalization)
+- `_display_module2_and_3()` — QC + Analysis on same page. QC output flows directly into analysis input. Navigation: "← Back to Data Processing" / "← Back to Home"
+- `_reset_qc_state()` — clears all QC session state keys on navigation
+- `_reset_analysis_state()` — clears all analysis session state keys on navigation
 
 **Data flow:** `normalized_df` → box plots (read-only) → BQC (may filter lipids) → RT (read-only) → correlation (read-only) → PCA (may remove samples) → `qc_continuation_df`
 
@@ -1733,19 +1734,13 @@ Added Module 3 session state keys to `SessionState` dataclass:
 - `_display_excluded_lipids(result, control, experimental)` — Removed lipids table with reason summary
 - `_build_distribution_csv(df, lipids, experiment, conditions)` — CSV builder for distribution data
 
-**Step 6: ✅ Wire Module 3 into `main_app.py` (`5921a1d`)**
-**File:** `src/main_app.py` (286 → 353 lines)
+**Step 6: ✅ Wire Module 3 into `main_app.py` — later merged into combined page**
+**Note:** Originally Module 3 was a separate page (`_display_module3`). Now merged with Module 2 into `_display_module2_and_3()` — see "Combine Module 2+3 onto single page" below.
 
-**Changes:**
-- Added `_reset_analysis_state()` — clears all 11 `analysis_*` session state keys
-- Added `_display_module3(experiment, bqc_label, data_format)` — data handoff from QC → analysis + navigation buttons
-- Updated `_display_module2()` — added "Next: Visualize & Analyze →" button (visible after QC complete)
-- Added module routing: `"Visualize & Analyze"` case in `display_app_page()`
-- Navigation: "← Back to Quality Check" resets analysis state, "← Back to Home" resets all state
-
-**Module flow:** Module 1 → Module 2 → Module 3
-- Module 2 "Next" button sets `st.session_state.module = "Visualize & Analyze"`, calls `_reset_analysis_state()`
-- Data handoff: `qc_continuation_df` (or `normalized_df` fallback) → Module 3 input
+**Module flow (current):** Module 1 → Combined Module 2+3 (QC + Analysis on same page)
+- Module 1 "Next" button sets `st.session_state.module = "Quality Check & Analysis"`, resets both QC and analysis state
+- QC output (`qc_df`) flows directly into analysis input on the same page — no intermediate navigation
+- Data handoff: `normalized_df` → QC → `qc_df` → Analysis (all in one render)
 
 **Step 7: ✅ PDF Report Generation (`9b8dcef`)**
 **File:** `src/app/services/report_generator.py` (310 lines) | **Tests:** `tests/unit/test_report_generator.py` (38 tests)
@@ -1823,6 +1818,23 @@ The `report_generator.py` service was fully implemented but never called from th
 
 **Test count: 3,511 (unchanged).**
 
+#### Combine Module 2+3 onto single page (COMPLETE)
+
+**Problem:** Module 2 (Quality Check) and Module 3 (Visualize & Analyze) were on separate pages requiring navigation between them.
+
+**Solution:** Merged into a single combined page. QC output flows directly into analysis input without page transition.
+
+**Changes:**
+- `src/main_app.py` (353 → 300 lines) — Replaced `_display_module2()` + `_display_module3()` with single `_display_module2_and_3()`. Removed `"Visualize & Analyze"` module routing case. Module 1 "Next" button now says "Next: Quality Check, Visualization & Analysis →" and resets both QC and analysis state.
+- `tests/ui/conftest.py` — Updated `module3_nav_script` to match new combined page navigation (button keys: `back_processing_module2`, `back_home_module2`)
+- `tests/ui/test_module3_ui.py` — Updated `TestAnalysisNavigation` tests: "Back to Data Processing" replaces "Back to Quality Check"
+
+**Navigation (2-page layout):**
+- Page 1: Module 1 (Data Processing) → "Next" button
+- Page 2: Module 2 (QC) + Module 3 (Analysis) on same page → "← Back to Data Processing" / "← Back to Home"
+
+**Test count: 3,511 (unchanged).**
+
 ##### Execution Order
 
 | Order | Step | Scope | Depends On |
@@ -1875,7 +1887,7 @@ The `report_generator.py` service was fully implemented but never called from th
 | `src/app/adapters/streamlit_adapter.py` | Add ~15 analysis session state keys, ~30 widget keys, ~2 dynamic prefixes |
 | `src/app/ui/main_content/__init__.py` | Add `display_analysis_module` export |
 | `src/app/services/plotting/__init__.py` | Add 7 new plotter exports |
-| `src/main_app.py` | Add `_display_module3()`, `_reset_analysis_state()`, update routing |
+| `src/main_app.py` | Combined `_display_module2_and_3()`, `_reset_analysis_state()`, 2-page routing |
 
 ##### Key Design Decisions
 

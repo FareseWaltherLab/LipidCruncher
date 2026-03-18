@@ -155,11 +155,7 @@ def display_app_page() -> None:
 
     elif current_module == "Quality Check & Analysis":
         with center:
-            _display_module2(experiment, bqc_label, data_format)
-
-    elif current_module == "Visualize & Analyze":
-        with center:
-            _display_module3(experiment, bqc_label, data_format)
+            _display_module2_and_3(experiment, bqc_label, data_format)
 
 
 def _display_module1(
@@ -220,8 +216,9 @@ def _display_module1(
     st.markdown("---")
     normalized_df = st.session_state.get('normalized_df')
     if normalized_df is not None:
-        if st.button("Next: Quality Check & Analysis →"):
+        if st.button("Next: Quality Check, Visualization & Analysis →"):
             _reset_qc_state()
+            _reset_analysis_state()
             st.session_state.module = "Quality Check & Analysis"
             st.rerun()
 
@@ -231,12 +228,12 @@ def _display_module1(
         st.rerun()
 
 
-def _display_module2(
+def _display_module2_and_3(
     experiment: 'ExperimentConfig',
     bqc_label: Optional[str],
     data_format: str,
 ) -> None:
-    """Display Module 2: Quality Check and Anomaly Detection."""
+    """Display Module 2 (Quality Check) and Module 3 (Visualize & Analyze) on the same page."""
     # Use normalized data as input for QC
     continuation_df = st.session_state.get('normalized_df')
     if continuation_df is None:
@@ -246,6 +243,7 @@ def _display_module2(
             st.rerun()
         return
 
+    # --- Module 2: Quality Check ---
     qc_df, updated_experiment = display_quality_check_module(
         continuation_df=continuation_df,
         experiment=experiment,
@@ -253,52 +251,18 @@ def _display_module2(
         format_type=data_format,
     )
 
-    # Store results for downstream use (Module 3)
+    # Store results for downstream use
     st.session_state.qc_continuation_df = qc_df
 
-    # Navigation
+    # --- Module 3: Visualize & Analyze ---
     st.markdown("---")
 
-    # Forward navigation: proceed to Module 3
-    if qc_df is not None:
-        if st.button("Next: Visualize & Analyze →"):
-            _reset_analysis_state()
-            st.session_state.module = "Visualize & Analyze"
-            st.rerun()
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("← Back to Data Processing", key="back_processing_module2"):
-            _reset_qc_state()
-            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
-            st.rerun()
-    with col2:
-        if st.button("← Back to Home", key="back_home_module2"):
-            st.session_state.page = 'landing'
-            StreamlitAdapter.reset_data_state()
-            st.rerun()
-
-
-def _display_module3(
-    experiment: 'ExperimentConfig',
-    bqc_label: Optional[str],
-    data_format: str,
-) -> None:
-    """Display Module 3: Visualize and Analyze."""
-    # Use QC continuation data, or normalized data if QC made no changes
-    analysis_df = st.session_state.get('qc_continuation_df')
-    if analysis_df is None:
-        analysis_df = st.session_state.get('normalized_df')
-    if analysis_df is None:
-        st.error("No data available. Please complete Modules 1 and 2 first.")
-        if st.button("← Back to Quality Check", key="back_qc_error"):
-            st.session_state.module = "Quality Check & Analysis"
-            st.rerun()
-        return
+    # Use QC output as analysis input
+    analysis_df = qc_df if qc_df is not None else continuation_df
 
     display_analysis_module(
         df=analysis_df,
-        experiment=experiment,
+        experiment=updated_experiment,
         bqc_label=bqc_label,
         format_type=data_format,
     )
@@ -307,12 +271,13 @@ def _display_module3(
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Back to Quality Check", key="back_qc_module3"):
+        if st.button("← Back to Data Processing", key="back_processing_module2"):
+            _reset_qc_state()
             _reset_analysis_state()
-            st.session_state.module = "Quality Check & Analysis"
+            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
             st.rerun()
     with col2:
-        if st.button("← Back to Home", key="back_home_module3"):
+        if st.button("← Back to Home", key="back_home_module2"):
             st.session_state.page = 'landing'
             StreamlitAdapter.reset_data_state()
             st.rerun()
