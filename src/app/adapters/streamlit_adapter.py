@@ -363,6 +363,26 @@ class StreamlitAdapter:
         if value is not None:
             st.session_state[preserved_key] = value
 
+    # ==================== Module State Reset ====================
+
+    @staticmethod
+    def reset_module_state(*prefixes: str) -> None:
+        """Reset all SessionState fields matching any of the given prefixes.
+
+        Iterates over the SessionState dataclass fields and resets each field
+        whose name starts with one of the provided prefixes to its default value.
+
+        Args:
+            *prefixes: One or more string prefixes to match against field names.
+        """
+        import dataclasses
+        for f in fields(SessionState):
+            if any(f.name.startswith(p) for p in prefixes):
+                if f.default is not dataclasses.MISSING:
+                    st.session_state[f.name] = f.default
+                elif f.default_factory is not dataclasses.MISSING:
+                    st.session_state[f.name] = f.default_factory()
+
     # ==================== Service Wrappers ====================
 
     @staticmethod
