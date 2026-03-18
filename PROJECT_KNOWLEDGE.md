@@ -1807,6 +1807,22 @@ Following Module 2 UI test pattern (wrapper scripts, pre-populated session state
 - `TestAnalysisNavigation` (3) — Back to QC resets module/state, Back to Home resets page
 - `TestEdgeCases` (3) — Single-condition volcano/pathway warning, three-condition bar chart
 
+**Step 10: ✅ Wire PDF Report into UI (`ad0493c`)**
+
+The `report_generator.py` service was fully implemented but never called from the UI. Three gaps fixed:
+
+1. **Store missing QC plots in session state** — `quality_check.py` now saves `qc_box_plot_fig1`, `qc_box_plot_fig2`, `qc_bqc_plot`, and `qc_retention_time_plot` to session state after rendering. (PCA and correlation were already stored.)
+2. **Add 3 new SessionState fields** — `qc_box_plot_fig1`, `qc_box_plot_fig2`, `qc_retention_time_plot` added to `streamlit_adapter.py` (auto-cleared by `reset_module_state('qc_')`).
+3. **Add PDF download UI** — `_entry.py` now has `_collect_qc_plots()` (gathers QC plots from session state) and `_display_pdf_report_section()` (Generate button → spinner → download button). Shown at the bottom of Module 3 whenever any plots exist.
+
+**Files Modified:**
+- `src/app/ui/main_content/quality_check.py` — Store 4 QC plots in session state
+- `src/app/ui/main_content/analysis/_entry.py` — Add PDF report section (2 new functions)
+- `src/app/adapters/streamlit_adapter.py` — Add 3 SessionState fields
+- `tests/unit/test_streamlit_adapter.py` — Update field count assertions (6→9 QC, 72→75 total)
+
+**Test count: 3,511 (unchanged).**
+
 ##### Execution Order
 
 | Order | Step | Scope | Depends On |
