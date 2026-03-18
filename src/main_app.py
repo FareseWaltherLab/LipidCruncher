@@ -1,7 +1,7 @@
 """
 LipidCruncher - Lipidomics Data Analysis Application
 
-Refactored architecture:
+Architecture:
     UI Layer (this file)
         → Workflows (app/workflows/)
             → Adapters (app/adapters/)
@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =============================================================================
-# Imports - Refactored Components
+# Imports
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter

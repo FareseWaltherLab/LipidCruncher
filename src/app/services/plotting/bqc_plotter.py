@@ -107,7 +107,7 @@ class BQCPlotterService:
         reliable_count = len(prepared_df[prepared_df['cov'] < cov_threshold])
         reliable_pct = round(reliable_count / len(prepared_df) * 100, 1)
 
-        # Empty filtered_lipids for backward compatibility
+        # Empty filtered_lipids (unused, kept for interface consistency)
         filtered_lipids = pd.DataFrame()
 
         return fig, prepared_df, reliable_pct, filtered_lipids

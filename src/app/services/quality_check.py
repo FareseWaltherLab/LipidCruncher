@@ -168,9 +168,6 @@ class QualityCheckService:
     """Service for quality check computations on lipidomic data.
 
     All methods are static - no instance state required.
-    Reimplements legacy module computations (BoxPlot, BQCQualityCheck,
-    Correlation, PCAAnalysis) to avoid transitive Streamlit imports.
-    Plot rendering stays in legacy modules, called from UI layer.
     """
 
     # ============================================================
@@ -396,7 +393,7 @@ class QualityCheckService:
         """Check whether the DataFrame has retention time and mass data.
 
         The service does NOT render retention time plots. The UI layer calls
-        legacy RetentionTime module directly for plotting.
+        RetentionTimePlotterService directly for plotting.
 
         Args:
             df: DataFrame to check for BaseRt and CalcMass columns.

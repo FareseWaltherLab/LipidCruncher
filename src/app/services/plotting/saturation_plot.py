@@ -20,7 +20,7 @@ from app.models.experiment import ExperimentConfig
 from app.services.statistical_testing import StatisticalTestSummary
 
 
-# Fixed FA type colors (matches legacy saturation plots)
+# Fixed FA type colors
 FA_COLORS = {'SFA': '#c9d9d3', 'MUFA': '#718dbf', 'PUFA': '#e84d60'}
 FA_TYPES = ['SFA', 'MUFA', 'PUFA']
 

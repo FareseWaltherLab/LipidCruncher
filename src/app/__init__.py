@@ -1,1 +1,1 @@
-# LipidCruncher refactored application package
+# LipidCruncher application package

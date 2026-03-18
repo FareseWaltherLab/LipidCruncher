@@ -223,7 +223,7 @@ class DataStandardizationService:
         )
 
     # ------------------------------------------------------------------
-    # Lipid name helpers (ported from DataFormatHandler)
+    # Lipid name helpers
     # ------------------------------------------------------------------
 
     @staticmethod
