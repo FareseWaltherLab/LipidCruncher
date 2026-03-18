@@ -14,8 +14,16 @@ from app.constants import COV_THRESHOLD_DEFAULT
 
 from ..models.experiment import ExperimentConfig
 from ..models.normalization import NormalizationConfig
+from ..models.statistics import StatisticalTestConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
 from ..services.data_cleaning import GradeFilterConfig, QualityFilterConfig
+from ..services.plotting.box_plot import BoxPlotService
+from ..services.plotting.bqc_plotter import BQCPlotterService
+from ..services.plotting.correlation import CorrelationPlotterService
+from ..services.plotting.pca import PCAPlotterService
+from ..services.plotting.retention_time import RetentionTimePlotterService
+from ..services.validation import get_matching_concentration_columns
+from ..workflows.analysis import AnalysisWorkflow
 from ..workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig, IngestionResult
 from ..workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
 
@@ -484,4 +492,273 @@ class StreamlitAdapter:
             result.removed_standards,
             result.validation_errors,
             result.validation_warnings,
+        )
+
+    # ==================== Cached QC Wrappers ====================
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Computing box plots...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_box_plots(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+    ) -> Tuple:
+        """Cached box plot computation.
+
+        Computes mean area DataFrame, missing values percentages,
+        and both box plot figures in a single cached call.
+
+        Returns:
+            Tuple of (missing_values_fig, box_plot_fig, mean_area_df,
+                      missing_pct_list, current_samples)
+        """
+        samples = get_matching_concentration_columns(df, experiment)
+        mean_area_df = BoxPlotService.create_mean_area_df(df, samples)
+        missing_pct = BoxPlotService.calculate_missing_values_percentage(
+            mean_area_df
+        )
+        fig1 = BoxPlotService.plot_missing_values(
+            samples, missing_pct,
+            experiment.conditions_list, experiment.individual_samples_list,
+        )
+        fig2 = BoxPlotService.plot_box_plot(
+            mean_area_df, samples,
+            experiment.conditions_list, experiment.individual_samples_list,
+        )
+        return fig1, fig2, mean_area_df, missing_pct, samples
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Computing BQC quality assessment...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_bqc_scatter(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        bqc_sample_index: int,
+        cov_threshold: int,
+    ) -> Tuple:
+        """Cached BQC scatter plot computation.
+
+        Returns:
+            Tuple of (scatter_plot, prepared_df, reliable_data_percent, high_cov_info)
+        """
+        return BQCPlotterService.generate_and_display_cov_plot(
+            df, experiment, bqc_sample_index, cov_threshold=cov_threshold,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Computing correlation matrix...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_correlation(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        condition_index: int,
+        sample_type: str,
+    ) -> Tuple:
+        """Cached pairwise correlation computation.
+
+        Returns:
+            Tuple of (matplotlib_fig, correlation_df)
+        """
+        mean_area_df = CorrelationPlotterService.prepare_data_for_correlation(
+            df, experiment.individual_samples_list, condition_index,
+        )
+        correlation_df, v_min, thresh = (
+            CorrelationPlotterService.compute_correlation(
+                mean_area_df, sample_type,
+            )
+        )
+        condition_name = experiment.conditions_list[condition_index]
+        fig = CorrelationPlotterService.render_correlation_plot(
+            correlation_df, v_min, thresh, condition_name,
+        )
+        return fig, correlation_df
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Computing PCA...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_pca(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+    ) -> Tuple:
+        """Cached PCA computation.
+
+        Returns:
+            Tuple of (pca_plot, pca_df)
+        """
+        return PCAPlotterService.plot_pca(
+            df, experiment.full_samples_list,
+            experiment.extensive_conditions_list,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Computing retention time plots...",
+    )
+    def run_retention_time_single(df: pd.DataFrame) -> list:
+        """Cached single-class retention time plot computation.
+
+        Returns:
+            List of (plot, retention_df) tuples, one per RT group.
+        """
+        return RetentionTimePlotterService.plot_single_retention(df)
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Computing retention time plots...",
+    )
+    def run_retention_time_multi(
+        df: pd.DataFrame,
+        selected_classes: List[str],
+    ) -> Tuple:
+        """Cached multi-class retention time comparison plot.
+
+        Returns:
+            Tuple of (plot, retention_df) or (None, None).
+        """
+        return RetentionTimePlotterService.plot_multi_retention(
+            df, selected_classes,
+        )
+
+    # ==================== Cached Analysis Wrappers ====================
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating bar chart...",
+        hash_funcs={ExperimentConfig: hash, StatisticalTestConfig: hash},
+    )
+    def run_bar_chart(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_classes: List[str],
+        stat_config: Optional[StatisticalTestConfig] = None,
+        scale: str = 'linear',
+    ):
+        """Cached bar chart analysis."""
+        return AnalysisWorkflow.run_bar_chart(
+            df, experiment, selected_conditions, selected_classes,
+            stat_config=stat_config, scale=scale,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating pie charts...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_pie_charts(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_classes: List[str],
+    ):
+        """Cached pie chart analysis."""
+        return AnalysisWorkflow.run_pie_charts(
+            df, experiment, selected_conditions, selected_classes,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating saturation plots...",
+        hash_funcs={ExperimentConfig: hash, StatisticalTestConfig: hash},
+    )
+    def run_saturation(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_classes: List[str],
+        stat_config: Optional[StatisticalTestConfig] = None,
+        plot_type: str = 'concentration',
+        show_significance: bool = False,
+    ):
+        """Cached saturation analysis."""
+        return AnalysisWorkflow.run_saturation(
+            df, experiment, selected_conditions, selected_classes,
+            stat_config=stat_config, plot_type=plot_type,
+            show_significance=show_significance,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating FACH heatmap...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_fach(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_class: str,
+        selected_conditions: List[str],
+    ):
+        """Cached FACH heatmap analysis."""
+        return AnalysisWorkflow.run_fach(
+            df, experiment, selected_class, selected_conditions,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating pathway visualization...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_pathway(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        control: str,
+        experimental: str,
+    ):
+        """Cached pathway visualization."""
+        return AnalysisWorkflow.run_pathway(
+            df, experiment, control, experimental,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Performing statistical analysis...",
+        hash_funcs={ExperimentConfig: hash, StatisticalTestConfig: hash},
+    )
+    def run_volcano(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        control: str,
+        experimental: str,
+        selected_classes: List[str],
+        stat_config: StatisticalTestConfig,
+        p_threshold: float = 0.05,
+        fc_threshold: float = 1.0,
+        hide_non_sig: bool = False,
+        top_n_labels: int = 0,
+        custom_label_positions: Optional[Dict] = None,
+    ):
+        """Cached volcano plot analysis."""
+        return AnalysisWorkflow.run_volcano(
+            df, experiment, control, experimental, selected_classes,
+            stat_config,
+            p_threshold=p_threshold, fc_threshold=fc_threshold,
+            hide_non_sig=hide_non_sig, top_n_labels=top_n_labels,
+            custom_label_positions=custom_label_positions,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating heatmap...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_heatmap(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_classes: List[str],
+        heatmap_type: str = 'regular',
+        n_clusters: int = 3,
+    ):
+        """Cached lipidomic heatmap analysis."""
+        return AnalysisWorkflow.run_heatmap(
+            df, experiment, selected_conditions, selected_classes,
+            heatmap_type=heatmap_type, n_clusters=n_clusters,
         )

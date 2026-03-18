@@ -2352,6 +2352,76 @@ Full code review before starting Module 2. All issues listed by priority.
 
 ---
 
+## Code Review Findings (March 17, 2026)
+
+**Reviewer:** Senior engineer code review covering architecture, scalability, readability, documentation, modularity, SRP, DRY, caching, session state management, and more.
+
+**Overall Score: 8.5/10** — Production-quality scientific application with excellent engineering discipline.
+
+### Scores
+
+| Category | Score | Notes |
+|---|---|---|
+| Architecture | 9/10 | Clean 5-layer separation (UI → Workflows → Adapters → Services → Models). Dependency direction strictly enforced. |
+| Modularity / SRP | 9/10 | Each service does one thing. 13 plotters, 3 cleaners, 4 workflows — all narrowly scoped. |
+| Readability | 9/10 | Consistent naming, excellent docstrings, clear section headers. |
+| DRY | 8/10 | Constants centralized, factory fixtures shared. Minor repetition in UI reset functions and analysis dispatch. |
+| Type Safety | 9/10 | Pydantic models with validators, frozen configs, ~95% type hint coverage. `Any` used sparingly in adapter. |
+| Testing | 9.5/10 | 3,511 tests (unit + integration + UI), factory fixtures, edge cases, input immutability checks. |
+| Session State Management | 9/10 | Ownership model documented per-key, `SessionState` dataclass, preserve/restore pattern. |
+| Caching | 9/10 | All workflows cached via `@st.cache_data`: ingestion, normalization, QC (box plots, BQC, correlation, PCA, RT), and all 7 analysis types. |
+| Error Handling | 8/10 | Structured validation with error/warning lists. Some broad exception catches. |
+| Documentation | 9/10 | Comprehensive docstrings, PROJECT_KNOWLEDGE.md, README, session state access patterns documented in-code. |
+| Scalability | 7.5/10 | Works well for typical datasets. Large datasets (10K+ lipids, 100+ samples) may hit Streamlit rerun overhead. |
+| Security | 8/10 | Input validation on models, numeric coercion with clip. 800MB upload limit — no file type validation beyond format detection. |
+| Deployment | 8/10 | Dockerfile, Procfile, ECS task-definition. Pinned dependencies. No CI/CD pipeline in repo. |
+
+### Areas for Improvement
+
+#### I1. ✅ Caching Gaps (Impact: Medium) — FIXED
+**Problem:** Only ingestion and normalization workflows were cached via `@st.cache_data` in `streamlit_adapter.py`. The QC workflow (box plots, PCA, correlation) and all 7 analysis visualizations recomputed on every Streamlit rerun.
+**Fix:** Added 13 cached wrappers to `StreamlitAdapter`:
+- **QC (6):** `run_box_plots`, `run_bqc_scatter`, `run_correlation`, `run_pca`, `run_retention_time_single`, `run_retention_time_multi`
+- **Analysis (7):** `run_bar_chart`, `run_pie_charts`, `run_saturation`, `run_fach`, `run_pathway`, `run_volcano`, `run_heatmap`
+- Made `StatisticalTestConfig` frozen + hashable (`model_config = {'frozen': True}`, custom `__hash__`)
+- Made `QualityCheckConfig` frozen (`@dataclass(frozen=True)`)
+- Updated `quality_check.py` and `analysis.py` UI to use cached adapter methods instead of direct workflow/service calls
+
+#### I2. `analysis.py` UI File Size (Impact: Low-Medium)
+**File:** `src/app/ui/main_content/analysis.py` (1,444 lines)
+**Problem:** Largest file in the codebase, handles 7 distinct analysis types. While each is a private `_display_*` function, the file breaks the otherwise excellent modularity pattern.
+**Fix:** Split into one file per analysis type under a `ui/main_content/analysis/` package (e.g., `bar_chart.py`, `volcano.py`, `heatmap.py`, etc.) with an `__init__.py` re-exporting `display_analysis_module`.
+
+#### I3. State Reset Duplication (Impact: Low)
+**File:** `src/main_app.py:68-93`
+**Problem:** `_reset_qc_state()` and `_reset_analysis_state()` manually enumerate session state keys to clear. If a new key is added to `SessionState` but not to the reset function, it becomes stale.
+**Fix:** Derive reset lists from `SessionState` field prefixes (e.g., all fields starting with `qc_` or `analysis_`), or add reset methods to `StreamlitAdapter` that iterate `SessionState` fields by prefix.
+
+#### I4. `Any` Type in SessionState (Impact: Low)
+**File:** `src/app/adapters/streamlit_adapter.py:98-156`
+**Problem:** Several fields use `Any` type: `ingestion_result`, `last_quality_config`, `qc_bqc_plot`, `analysis_*_fig`. This weakens the type safety guarantee that the rest of the codebase maintains.
+**Fix:** Replace with concrete types: `Optional[IngestionResult]`, `Optional[go.Figure]`, etc.
+
+#### I5. Analysis Dispatch Pattern (Impact: Low)
+**File:** `src/app/ui/main_content/analysis.py:84-97`
+**Problem:** The if/elif chain maps radio options to display functions by index — fragile if options are reordered.
+**Fix:** Use dict-based dispatch: `_DISPATCH = {ANALYSIS_OPTIONS[0]: _display_bar_chart, ...}` then `_DISPATCH[analysis_type](df, experiment)`.
+
+#### I6. No CI/CD Pipeline (Impact: Medium)
+**Problem:** With 3,511 tests and a Dockerfile, there is no visible GitHub Actions / CI configuration to guard against regressions on push.
+**Fix:** Add a minimal `.github/workflows/test.yml` running `pytest` on push/PR to `main` and `refactor/v3.0`.
+
+#### I7. RuntimeWarnings in Tests (Impact: Low)
+**Problem:** 479 warnings during test runs, mostly `RuntimeWarning: All-NaN slice encountered` and `invalid value encountered in sqrt/divide` from numpy/sklearn in edge-case tests.
+**Fix:** Add `np.errstate` context managers or explicit edge-case guards in the affected plotting services (`lipidomic_heatmap.py:273`, `pca.py:160`) to suppress expected warnings cleanly.
+
+#### I8. Dependency Versions (Impact: Low)
+**File:** `requirements.txt`
+**Problem:** `pandas==1.5.3` and `numpy==1.24.3` are several major versions behind current releases. While pinning is correct for stability, these versions are approaching end-of-support.
+**Fix:** Plan a dependency upgrade cycle, especially for security patches. Test with `pandas>=2.0` and `numpy>=1.26` in a separate branch.
+
+---
+
 ## Rules Summary
 
 **DO:**

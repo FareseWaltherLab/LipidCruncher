@@ -18,6 +18,8 @@ class StatisticalTestConfig(BaseModel):
         auto_transform: If True, applies log10 transformation to normalize data
         conditions_to_compare: List of condition pairs for pairwise comparison
     """
+    model_config = {'frozen': True}
+
     mode: Literal['auto', 'manual'] = 'manual'
     test_type: Literal['parametric', 'non_parametric', 'auto'] = 'parametric'
     correction_method: Literal['uncorrected', 'fdr_bh', 'bonferroni', 'auto'] = 'fdr_bh'
@@ -25,6 +27,13 @@ class StatisticalTestConfig(BaseModel):
     alpha: float = Field(default=0.05, gt=0, lt=1)
     auto_transform: bool = True
     conditions_to_compare: List[Tuple[str, str]] = Field(default_factory=list)
+
+    def __hash__(self) -> int:
+        return hash((
+            self.mode, self.test_type, self.correction_method,
+            self.posthoc_correction, self.alpha, self.auto_transform,
+            tuple(self.conditions_to_compare),
+        ))
 
     @model_validator(mode='after')
     def validate_auto_mode_settings(self):

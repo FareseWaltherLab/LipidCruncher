@@ -33,7 +33,7 @@ from ..services.quality_check import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class QualityCheckConfig:
     """Configuration for the quality check workflow.
 

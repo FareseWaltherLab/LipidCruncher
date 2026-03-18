@@ -15,20 +15,13 @@ Data flow:
 """
 from typing import Optional, Tuple
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
 from app.constants import get_format_display_to_enum
-from app.services.plotting.box_plot import BoxPlotService
-from app.services.plotting.bqc_plotter import BQCPlotterService
-from app.services.plotting.correlation import CorrelationPlotterService
-from app.services.plotting.pca import PCAPlotterService
-from app.services.plotting.retention_time import RetentionTimePlotterService
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.services.validation import get_matching_concentration_columns
 from app.ui.download_utils import (
     plotly_svg_download_button,
     matplotlib_svg_download_button,
@@ -116,16 +109,14 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             "good reproducibility. Large differences may signal quality issues."
         )
 
-        # Get available samples
-        current_samples = get_matching_concentration_columns(df, experiment)
+        # Compute box plots (cached)
+        fig1, fig2, mean_area_df, zero_values_percent_list, current_samples = (
+            StreamlitAdapter.run_box_plots(df, experiment)
+        )
 
         if not current_samples:
             st.warning("No concentration columns found for the current samples.")
             return
-
-        # Prepare data
-        mean_area_df = BoxPlotService.create_mean_area_df(df, current_samples)
-        zero_values_percent_list = BoxPlotService.calculate_missing_values_percentage(mean_area_df)
 
         # --- Results ---
         st.markdown("---")
@@ -138,10 +129,6 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             "High percentages may indicate lower sensitivity or technical issues."
         )
 
-        fig1 = BoxPlotService.plot_missing_values(
-            current_samples, zero_values_percent_list,
-            experiment.conditions_list, experiment.individual_samples_list
-        )
         st.plotly_chart(fig1, use_container_width=True)
 
         # Download buttons
@@ -166,10 +153,6 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             "Box = IQR (25th-75th percentile), line = median, points = outliers."
         )
 
-        fig2 = BoxPlotService.plot_box_plot(
-            mean_area_df, current_samples,
-            experiment.conditions_list, experiment.individual_samples_list
-        )
         st.plotly_chart(fig2, use_container_width=True)
 
         # Download buttons
@@ -247,8 +230,8 @@ def _render_bqc_scatter(
 
     bqc_sample_index = experiment.conditions_list.index(bqc_label)
     scatter_plot, prepared_df, reliable_data_percent, _ = (
-        BQCPlotterService.generate_and_display_cov_plot(
-            df, experiment, bqc_sample_index, cov_threshold=cov_threshold
+        StreamlitAdapter.run_bqc_scatter(
+            df, experiment, bqc_sample_index, cov_threshold,
         )
     )
 
@@ -402,7 +385,7 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
             st.markdown("---")
             st.markdown("##### 📈 Results")
 
-            plots = RetentionTimePlotterService.plot_single_retention(df)
+            plots = StreamlitAdapter.run_retention_time_single(df)
             for idx, (plot, retention_df) in enumerate(plots, 1):
                 st.plotly_chart(plot, use_container_width=True)
 
@@ -438,7 +421,7 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
             st.markdown("---")
             st.markdown("##### 📈 Results")
 
-            plot, retention_df = RetentionTimePlotterService.plot_multi_retention(df, selected_classes)
+            plot, retention_df = StreamlitAdapter.run_retention_time_multi(df, selected_classes)
             if plot:
                 st.plotly_chart(plot, use_container_width=True)
 
@@ -505,15 +488,8 @@ def _display_correlation_analysis(
         st.markdown("##### 📈 Results")
 
         condition_index = experiment.conditions_list.index(selected_condition)
-        mean_area_df = CorrelationPlotterService.prepare_data_for_correlation(
-            df, experiment.individual_samples_list, condition_index
-        )
-        correlation_df, v_min, thresh = CorrelationPlotterService.compute_correlation(
-            mean_area_df, sample_type
-        )
-        fig = CorrelationPlotterService.render_correlation_plot(
-            correlation_df, v_min, thresh,
-            experiment.conditions_list[condition_index]
+        fig, correlation_df = StreamlitAdapter.run_correlation(
+            df, experiment, condition_index, sample_type,
         )
 
         st.pyplot(fig)
@@ -603,9 +579,7 @@ def _display_pca_analysis(
         st.markdown("---")
         st.markdown("##### 📈 Results")
 
-        pca_plot, pca_df = PCAPlotterService.plot_pca(
-            df, experiment.full_samples_list, experiment.extensive_conditions_list
-        )
+        pca_plot, pca_df = StreamlitAdapter.run_pca(df, experiment)
         st.plotly_chart(pca_plot, use_container_width=True)
         st.session_state.qc_pca_plot = pca_plot
 

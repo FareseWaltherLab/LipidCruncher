@@ -25,6 +25,7 @@ from app.services.statistical_testing import StatisticalTestSummary
 from app.services.plotting.saturation_plot import SaturationPlotterService
 from app.services.plotting.volcano_plot import VolcanoPlotterService
 from app.services.plotting.lipidomic_heatmap import LipidomicHeatmapPlotterService
+from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import (
     plotly_svg_download_button,
@@ -323,11 +324,10 @@ def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
         )
         scale_value = 'log10' if scale == "Log10 Scale" else 'linear'
 
-        with st.spinner("Generating bar chart..."):
-            result = AnalysisWorkflow.run_bar_chart(
-                df, experiment, selected_conditions, selected_classes,
-                stat_config=stat_config, scale=scale_value,
-            )
+        result = StreamlitAdapter.run_bar_chart(
+            df, experiment, selected_conditions, selected_classes,
+            stat_config=stat_config, scale=scale_value,
+        )
 
         st.plotly_chart(result.figure, use_container_width=True)
         st.session_state.analysis_bar_chart_fig = result.figure
@@ -382,10 +382,9 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
         st.markdown("---")
         st.markdown("#### 📊 Results")
 
-        with st.spinner("Generating pie charts..."):
-            results = AnalysisWorkflow.run_pie_charts(
-                df, experiment, all_conditions, selected_classes,
-            )
+        results = StreamlitAdapter.run_pie_charts(
+            df, experiment, all_conditions, selected_classes,
+        )
 
         st.session_state.analysis_pie_chart_figs = {}
         for condition, pie_result in results.items():
@@ -495,13 +494,12 @@ def _render_saturation_results(
 
     stat_summary = None
     for ptype in types_to_render:
-        with st.spinner(f"Generating {ptype} plots..."):
-            result = AnalysisWorkflow.run_saturation(
-                df, experiment, selected_conditions, selected_classes,
-                stat_config=stat_config if ptype == 'concentration' else None,
-                plot_type=ptype,
-                show_significance=show_sig,
-            )
+        result = StreamlitAdapter.run_saturation(
+            df, experiment, selected_conditions, selected_classes,
+            stat_config=stat_config if ptype == 'concentration' else None,
+            plot_type=ptype,
+            show_significance=show_sig,
+        )
 
         if ptype == 'concentration':
             stat_summary = result.stat_summary
@@ -606,10 +604,9 @@ def _display_fach_heatmaps(
         st.markdown("---")
         st.markdown("#### 📊 Results")
 
-        with st.spinner("Generating FACH heatmap..."):
-            result = AnalysisWorkflow.run_fach(
-                df, experiment, selected_class, selected_conditions,
-            )
+        result = StreamlitAdapter.run_fach(
+            df, experiment, selected_class, selected_conditions,
+        )
 
         if result.figure is None:
             st.warning(
@@ -707,10 +704,9 @@ def _display_pathway_viz(
         st.markdown("---")
         st.markdown("#### 📊 Results")
 
-        with st.spinner("Generating pathway visualization..."):
-            result = AnalysisWorkflow.run_pathway(
-                df, experiment, control, experimental,
-            )
+        result = StreamlitAdapter.run_pathway(
+            df, experiment, control, experimental,
+        )
 
         if result.figure is None:
             st.warning("Could not generate pathway visualization.")
@@ -947,16 +943,15 @@ def _render_volcano_results(
     import math
     log2_fc = math.log2(fc_threshold) if fc_threshold > 0 else 1.0
 
-    with st.spinner("Performing statistical analysis..."):
-        result = AnalysisWorkflow.run_volcano(
-            df, experiment, control, experimental, selected_classes,
-            stat_config,
-            p_threshold=p_threshold,
-            fc_threshold=log2_fc,
-            hide_non_sig=hide_nonsig,
-            top_n_labels=top_n,
-            custom_label_positions=custom_positions if custom_positions else None,
-        )
+    result = StreamlitAdapter.run_volcano(
+        df, experiment, control, experimental, selected_classes,
+        stat_config,
+        p_threshold=p_threshold,
+        fc_threshold=log2_fc,
+        hide_non_sig=hide_nonsig,
+        top_n_labels=top_n,
+        custom_label_positions=custom_positions if custom_positions else None,
+    )
 
     if result.figure is None:
         st.warning("Could not generate volcano plot.")
@@ -1283,12 +1278,11 @@ def _display_lipidomic_heatmap(
         st.markdown("---")
         st.markdown("#### 📈 Results")
 
-        with st.spinner("Generating heatmap..."):
-            result = AnalysisWorkflow.run_heatmap(
-                df, experiment, selected_conditions, selected_classes,
-                heatmap_type=heatmap_type_value,
-                n_clusters=n_clusters,
-            )
+        result = StreamlitAdapter.run_heatmap(
+            df, experiment, selected_conditions, selected_classes,
+            heatmap_type=heatmap_type_value,
+            n_clusters=n_clusters,
+        )
 
         if result.figure is None:
             st.warning("Could not generate heatmap.")
