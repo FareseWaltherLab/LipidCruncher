@@ -80,7 +80,20 @@ src/app/ui/
 ├── main_content/               # Main area UI components
 │   ├── data_processing.py
 │   ├── internal_standards.py
-│   └── normalization.py
+│   ├── normalization.py
+│   ├── quality_check.py
+│   └── analysis/              # Analysis feature package
+│       ├── __init__.py
+│       ├── _entry.py          # Radio dispatcher
+│       ├── _shared.py         # Stats options, selectors
+│       ├── _utils.py          # FA compatibility, consolidated lipids
+│       ├── _bar_chart.py
+│       ├── _pie_charts.py
+│       ├── _saturation.py
+│       ├── _fach.py
+│       ├── _pathway.py
+│       ├── _volcano.py
+│       └── _heatmap.py
 ├── landing_page.py             # (existing)
 ├── format_requirements.py      # (existing)
 ├── zero_filtering.py           # (existing)
@@ -1992,6 +2005,7 @@ LipidCruncher/
 │   │       ├── content/              # Static markdown content
 │   │       ├── sidebar/              # Sidebar UI components
 │   │       └── main_content/         # Main area UI components
+│   │           └── analysis/        # Analysis feature package (1 file per feature)
 │   └── images/                        # App images
 ├── tests/
 │   ├── unit/
@@ -2387,15 +2401,20 @@ Full code review before starting Module 2. All issues listed by priority.
 - Made `QualityCheckConfig` frozen (`@dataclass(frozen=True)`)
 - Updated `quality_check.py` and `analysis.py` UI to use cached adapter methods instead of direct workflow/service calls
 
-#### I2. `analysis.py` UI File Size (Impact: Low-Medium)
-**File:** `src/app/ui/main_content/analysis.py` (1,444 lines)
-**Problem:** Largest file in the codebase, handles 7 distinct analysis types. While each is a private `_display_*` function, the file breaks the otherwise excellent modularity pattern.
-**Fix:** Split into one file per analysis type under a `ui/main_content/analysis/` package (e.g., `bar_chart.py`, `volcano.py`, `heatmap.py`, etc.) with an `__init__.py` re-exporting `display_analysis_module`.
+#### I2. ✅ `analysis.py` UI File Size (Impact: Low-Medium) — FIXED (`4dfbb08`)
+**Problem:** `src/app/ui/main_content/analysis.py` (1,439 lines) was the largest file in the codebase, handling 7 distinct analysis types.
+**Fix:** Replaced with `analysis/` package containing 10 focused files:
+- `__init__.py` — re-exports `display_analysis_module`
+- `_entry.py` — radio dispatcher + `ANALYSIS_OPTIONS`
+- `_shared.py` — stats options, condition/class selectors, detailed stats table
+- `_utils.py` — FA compatibility check, consolidated lipid detection
+- `_bar_chart.py`, `_pie_charts.py`, `_saturation.py`, `_fach.py`, `_pathway.py`, `_volcano.py`, `_heatmap.py` — one file per analysis feature
 
-#### I3. State Reset Duplication (Impact: Low)
-**File:** `src/main_app.py:68-93`
-**Problem:** `_reset_qc_state()` and `_reset_analysis_state()` manually enumerate session state keys to clear. If a new key is added to `SessionState` but not to the reset function, it becomes stale.
-**Fix:** Derive reset lists from `SessionState` field prefixes (e.g., all fields starting with `qc_` or `analysis_`), or add reset methods to `StreamlitAdapter` that iterate `SessionState` fields by prefix.
+#### I3. ✅ State Reset Duplication (Impact: Low) — FIXED (`4dfbb08`)
+**Problem:** `_reset_qc_state()` and `_reset_analysis_state()` in `main_app.py` manually enumerated session state keys to clear.
+**Fix:** Added `StreamlitAdapter.reset_module_state(*prefixes)` — iterates `SessionState` dataclass fields, resets any whose name matches the given prefixes to their declared defaults. `main_app.py` now calls:
+- `StreamlitAdapter.reset_module_state('qc_', '_preserved_bqc_', '_preserved_rt_', '_preserved_pca_')` (was 9 manual assignments)
+- `StreamlitAdapter.reset_module_state('analysis_')` (was 11 manual assignments)
 
 #### I4. `Any` Type in SessionState (Impact: Low)
 **File:** `src/app/adapters/streamlit_adapter.py:98-156`
