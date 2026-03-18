@@ -523,7 +523,7 @@ class StatisticalTestingService:
                 continue
 
             # Check for all-zero groups
-            if np.all(ctrl_clean == 0) and np.all(exp_clean == 0):
+            if np.all(ctrl_clean == 0) or np.all(exp_clean == 0):
                 continue
 
             try:

@@ -1461,7 +1461,7 @@ Deduplicated statistical testing logic from AbundanceBarChart, SaturationPlot, a
 - `run_posthoc(groups_dict, correction, alpha, auto_transform) → List[PostHocResult]` — Tukey's HSD or Bonferroni pairwise
 - `run_class_level_tests(df, experiment, selected_conditions, selected_classes, config: StatisticalTestConfig) → StatisticalTestSummary` — Orchestrates per-class testing (used by bar chart)
 - `run_saturation_tests(df, experiment, selected_conditions, selected_classes, fa_data, config) → StatisticalTestSummary` — Per-(class, FA type) testing (used by saturation)
-- `run_species_level_tests(df, control_samples, experimental_samples, config) → StatisticalTestSummary` — Per-lipid testing (used by volcano)
+- `run_species_level_tests(df, control_samples, experimental_samples, config) → StatisticalTestSummary` — Per-lipid testing (used by volcano). Skips lipids where either group is all zeros (matching legacy behavior) so they appear in the excluded lipids table.
 - `apply_auto_mode(n_classes, n_conditions) → Dict` — Smart defaults for correction methods
 
 **Private Helpers:**
