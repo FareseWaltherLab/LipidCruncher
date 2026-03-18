@@ -141,8 +141,11 @@ class SessionState:
 
     # --- Quality Check (owner: quality_check.py) ---
     qc_continuation_df: Optional[pd.DataFrame] = None
+    qc_box_plot_fig1: Any = None
+    qc_box_plot_fig2: Any = None
     qc_bqc_plot: Any = None
     qc_cov_threshold: int = COV_THRESHOLD_DEFAULT
+    qc_retention_time_plot: Any = None
     qc_correlation_plots: Dict[str, Any] = field(default_factory=dict)
     qc_pca_plot: Any = None
     qc_samples_removed: List[str] = field(default_factory=list)

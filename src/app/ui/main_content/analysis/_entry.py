@@ -11,12 +11,13 @@ Provides 7 analysis features accessed via radio selector:
 7. Lipidomic Heatmap (species level)
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 import streamlit as st
 
 from app.models.experiment import ExperimentConfig
+from app.services.report_generator import generate_pdf_report, build_metadata_from_experiment
 from app.workflows.analysis import AnalysisWorkflow
 
 from app.ui.main_content.analysis._bar_chart import _display_bar_chart
@@ -90,3 +91,84 @@ def display_analysis_module(
         _display_volcano_plot(df, experiment)
     elif analysis_type == ANALYSIS_OPTIONS[6]:
         _display_lipidomic_heatmap(df, experiment)
+
+    # PDF Report Download
+    _display_pdf_report_section(experiment, format_type)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# PDF Report
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _collect_qc_plots() -> Dict[str, Any]:
+    """Collect QC plots from session state for PDF report."""
+    qc_plots: Dict[str, Any] = {}
+
+    fig1 = st.session_state.get('qc_box_plot_fig1')
+    if fig1 is not None:
+        qc_plots['box_plot_fig1'] = fig1
+
+    fig2 = st.session_state.get('qc_box_plot_fig2')
+    if fig2 is not None:
+        qc_plots['box_plot_fig2'] = fig2
+
+    bqc = st.session_state.get('qc_bqc_plot')
+    if bqc is not None:
+        qc_plots['bqc_plot'] = bqc
+
+    rt = st.session_state.get('qc_retention_time_plot')
+    if rt is not None:
+        qc_plots['retention_time_plot'] = rt
+
+    pca = st.session_state.get('qc_pca_plot')
+    if pca is not None:
+        qc_plots['pca_plot'] = pca
+
+    corr = st.session_state.get('qc_correlation_plots', {})
+    if corr:
+        qc_plots['correlation_plots'] = corr
+
+    return qc_plots
+
+
+def _display_pdf_report_section(
+    experiment: ExperimentConfig,
+    format_type: str,
+) -> None:
+    """Display PDF report generation and download section."""
+    analysis_plots = st.session_state.get('analysis_all_plots', {})
+    qc_plots = _collect_qc_plots()
+
+    if not analysis_plots and not qc_plots:
+        return
+
+    st.markdown("---")
+    st.subheader("Download PDF Report")
+    st.markdown(
+        "Generate a PDF report containing all QC and analysis plots "
+        "created during this session."
+    )
+
+    if st.button("Generate PDF Report", key="generate_pdf_report"):
+        with st.spinner("Generating PDF report..."):
+            metadata = build_metadata_from_experiment(experiment, format_type)
+            pdf_buffer = generate_pdf_report(
+                analysis_plots=analysis_plots,
+                metadata=metadata,
+                qc_plots=qc_plots,
+            )
+
+        if pdf_buffer is not None:
+            st.download_button(
+                label="Download PDF Report",
+                data=pdf_buffer,
+                file_name="lipidcruncher_report.pdf",
+                mime="application/pdf",
+                key="download_pdf_report",
+            )
+        else:
+            st.error(
+                "Failed to generate PDF report. "
+                "Please ensure kaleido is installed for plot export."
+            )

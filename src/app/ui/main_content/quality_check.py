@@ -114,6 +114,10 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             StreamlitAdapter.run_box_plots(df, experiment)
         )
 
+        # Store for PDF report
+        st.session_state.qc_box_plot_fig1 = fig1
+        st.session_state.qc_box_plot_fig2 = fig2
+
         if not current_samples:
             st.warning("No concentration columns found for the current samples.")
             return
@@ -236,6 +240,9 @@ def _render_bqc_scatter(
     )
 
     st.plotly_chart(scatter_plot, use_container_width=True)
+
+    # Store for PDF report
+    st.session_state.qc_bqc_plot = scatter_plot
 
     # Reliability assessment
     if reliable_data_percent >= 80:
@@ -387,6 +394,9 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
 
             plots = StreamlitAdapter.run_retention_time_single(df)
             for idx, (plot, retention_df) in enumerate(plots, 1):
+                # Store first individual plot for PDF report (fallback)
+                if idx == 1:
+                    st.session_state.qc_retention_time_plot = plot
                 st.plotly_chart(plot, use_container_width=True)
 
                 col1, col2 = st.columns(2)
@@ -423,6 +433,8 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
 
             plot, retention_df = StreamlitAdapter.run_retention_time_multi(df, selected_classes)
             if plot:
+                # Store comparison plot for PDF report (preferred over individual)
+                st.session_state.qc_retention_time_plot = plot
                 st.plotly_chart(plot, use_container_width=True)
 
                 col1, col2 = st.columns(2)
