@@ -1,9 +1,18 @@
 # macOS system files
 .DS_Store
 
-# Python cache files
+# Python cache and packaging
 __pycache__/
 *.pyc
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+lipidcruncher_env/
+
+# Environment variables (secrets)
+.env
 
 # Temporary files and logs
 *.tmp
@@ -14,19 +23,19 @@ __pycache__/
 *.docx
 *.doc
 
-# Existing rules
-LipidCruncher/*.json
-lipidcruncher_env/
-
-# IDE/editor config files (optional, if you use these)
+# IDE/editor config
 .idea/
 .vscode/
 
-.DS_Store
-__pycache__/
-*.pyc
+# Testing
 .coverage
+htmlcov/
+.pytest_cache/
+
+# Project-specific
+LipidCruncher/*.json
 task-definition.json
 
 # Project development notes
 PROJECT_KNOWLEDGE.md
+CODEBASE.md
