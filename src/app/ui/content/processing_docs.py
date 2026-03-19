@@ -8,7 +8,7 @@ PROCESSING_DOCS = {
 |------|--------|
 | 1. Column Standardization | Extract LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, MeanArea columns |
 | 2. Data Type Conversion | Convert MeanArea to numeric (non-numeric → 0) |
-| 3. Lipid Name Standardization | Standardize to `Class(chains)` format |
+| 3. Lipid Name Standardization | Standardize to LIPID MAPS shorthand (`Class chains`) |
 | 4. Grade Filtering | Filter by quality grade (**configurable below**) |
 | 5. Best Peak Selection | Keep entry with highest TotalSmpIDRate(%) per lipid |
 | 6. Missing FA Keys | Remove rows without FAKey (except Ch class, deuterated standards) |
@@ -38,8 +38,8 @@ LipidSearch assigns quality grades to each identification:
 |------|--------|
 | 1. Header Detection | Auto-detect data start row (skip metadata rows) |
 | 2. Column Mapping | `Metabolite name` → LipidMolec, `Average Rt(min)` → BaseRt, `Average Mz` → CalcMass |
-| 3. ClassKey Inference | Extract class from lipid name (e.g., `Cer(18:1;2O_24:0)` → `Cer`) |
-| 4. Lipid Name Standardization | Standardize format, preserve hydroxyl notation (`;2O`, `;3O`) |
+| 3. ClassKey Inference | Extract class from lipid name (e.g., `Cer 18:1;O2/24:0` → `Cer`) |
+| 4. Lipid Name Standardization | Standardize to LIPID MAPS shorthand, normalize hydroxyl (`;2O` → `;O2`) |
 | 5. Quality Filtering | Filter by Total Score and/or MS/MS validation (**configurable below**) |
 | 6. Data Type Selection | Choose raw or pre-normalized (if both available) |
 | 7. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
@@ -71,7 +71,7 @@ MS-DIAL provides quality metrics for filtering:
 | 1. Section Extraction | Extract data between `MS_METABOLITE_DATA_START` and `MS_METABOLITE_DATA_END` |
 | 2. Header Processing | Row 1 → sample names, Row 2 → conditions |
 | 3. Column Standardization | First column → LipidMolec, remaining → `intensity[s1]`, `intensity[s2]`, ... |
-| 4. Lipid Name Standardization | Standardize to `Class(chains)` format |
+| 4. Lipid Name Standardization | Standardize to LIPID MAPS shorthand (`Class chains`) |
 | 5. ClassKey Extraction | Extract class from lipid name |
 | 6. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
 | 7. Conditions Storage | Store conditions for experiment setup suggestions |
@@ -84,8 +84,8 @@ MS-DIAL provides quality metrics for filtering:
 | Step | Action |
 |------|--------|
 | 1. Column Standardization | First column → LipidMolec, remaining → `intensity[s1]`, `intensity[s2]`, ... |
-| 2. Lipid Name Standardization | Standardize to `Class(chains)` format, preserve hydroxyl notation |
-| 3. ClassKey Extraction | Extract class from lipid name (e.g., `PC(16:0_18:1)` → `PC`) |
+| 2. Lipid Name Standardization | Standardize to LIPID MAPS shorthand (`Class chains`), normalize hydroxyl |
+| 3. ClassKey Extraction | Extract class from lipid name (e.g., `PC 16:0_18:1` → `PC`) |
 | 4. Data Type Conversion | Convert intensity to numeric (non-numeric → 0) |
 | 5. Invalid Lipid Removal | Remove empty names, single special characters |
 | 6. Duplicate Removal | Remove duplicates by LipidMolec |

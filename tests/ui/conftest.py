@@ -1060,9 +1060,9 @@ def make_analysis_dataframe(n_lipids=20, n_samples=6, detailed_fa=False):
             c2 = 16 + (i % 5)  # chain2: 16-20
             d1 = i % 2          # double bonds: 0 or 1
             d2 = (i + 1) % 3    # double bonds: 0, 1, or 2
-            lipids.append(f'{cls}({c1}:{d1}_{c2}:{d2})')
+            lipids.append(f'{cls} {c1}:{d1}_{c2}:{d2}')
     else:
-        lipids = [f'{cls}({30 + i}:{i % 3})' for i, cls in enumerate(classes)]
+        lipids = [f'{cls} {30 + i}:{i % 3}' for i, cls in enumerate(classes)]
 
     data = {
         'LipidMolec': lipids,

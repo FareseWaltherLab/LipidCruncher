@@ -790,32 +790,32 @@ class TestLipidSearchNameStandardization:
     def test_standardize_simple_name(self):
         """Test standardizing simple lipid name."""
         result = LipidSearchCleaner._standardize_single_name('PC', '16:0_18:1')
-        assert result == 'PC(16:0_18:1)'
+        assert result == 'PC 16:0_18:1'
 
     def test_standardize_sorts_fatty_acids(self):
         """Test that fatty acids are sorted."""
         result = LipidSearchCleaner._standardize_single_name('PC', '18:1_16:0')
-        assert result == 'PC(16:0_18:1)'
+        assert result == 'PC 16:0_18:1'
 
     def test_standardize_three_fatty_acids(self):
         """Test sorting three fatty acids."""
         result = LipidSearchCleaner._standardize_single_name('TG', '20:4_16:0_18:1')
-        assert result == 'TG(16:0_18:1_20:4)'
+        assert result == 'TG 16:0_18:1_20:4'
 
     def test_standardize_cholesterol(self):
         """Test standardizing cholesterol."""
         result = LipidSearchCleaner._standardize_single_name('Ch', '')
-        assert result == 'Ch()'
+        assert result == 'Ch'
 
     def test_standardize_cholesterol_d(self):
         """Test standardizing deuterated cholesterol."""
         result = LipidSearchCleaner._standardize_single_name('Ch', 'D7')
-        assert result == 'Ch-D7()'
+        assert result == 'Ch-D7'
 
     def test_standardize_cholesterol_d9(self):
         """Test standardizing D9 cholesterol."""
         result = LipidSearchCleaner._standardize_single_name('Ch', 'D9')
-        assert result == 'Ch-D9()'
+        assert result == 'Ch-D9'
 
     def test_standardize_with_internal_standard_suffix(self):
         """Test standardizing with +D suffix."""
@@ -826,22 +826,22 @@ class TestLipidSearchNameStandardization:
     def test_standardize_nan_fakey(self):
         """Test standardizing with NaN FA key."""
         result = LipidSearchCleaner._standardize_single_name('PC', np.nan)
-        assert result == 'PC()'
+        assert result == 'PC'
 
     def test_standardize_none_fakey(self):
         """Test standardizing with None FA key."""
         result = LipidSearchCleaner._standardize_single_name('PC', None)
-        assert result == 'PC()'
+        assert result == 'PC'
 
     def test_standardize_empty_fakey(self):
         """Test standardizing with empty FA key."""
         result = LipidSearchCleaner._standardize_single_name('PC', '')
-        assert result == 'PC()'
+        assert result == 'PC'
 
     def test_standardize_parentheses_only(self):
         """Test standardizing with () FA key."""
         result = LipidSearchCleaner._standardize_single_name('PC', '()')
-        assert result == 'PC()'
+        assert result == 'PC'
 
     def test_extract_internal_standard_suffix(self):
         """Test extracting internal standard suffix."""
@@ -1270,13 +1270,13 @@ class TestDataCleaningServiceInternalStandards:
     def test_extracts_standards_from_lipidsearch(self, simple_experiment_2x2):
         """Test that internal standards are extracted from LipidSearch data."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', 'PC(d7)', 'PE(18:0)'],
+            'LipidMolec': ['PC(16:0)', 'PC(15:0_18:1)+D7', 'PE(18:0)'],
             'ClassKey': ['PC', 'PC', 'PE'],
             'CalcMass': [760.5, 767.5, 768.5],
             'BaseRt': [10.5, 10.5, 12.3],
             'TotalGrade': ['A', 'A', 'A'],
             'TotalSmpIDRate(%)': [100.0, 100.0, 100.0],
-            'FAKey': ['16:0', 'd7', '18:0'],
+            'FAKey': ['16:0', '15:0_18:1+D7', '18:0'],
             'intensity[s1]': [1000, 500, 2000],
             'intensity[s2]': [1100, 550, 2100],
             'intensity[s3]': [1200, 600, 2200],

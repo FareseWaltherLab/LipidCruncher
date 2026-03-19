@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+from app.constants import HYDROXYL_PATTERN, SINGLE_CHAIN_CLASSES, parse_lipid_name
 from app.models.experiment import ExperimentConfig
 from app.services.statistical_testing import StatisticalTestSummary
 
@@ -30,17 +31,6 @@ BAR_WIDTH = 0.25
 Y_PADDING_FACTOR = 1.1
 ANNOTATION_INCREMENT_FACTOR = 0.15
 ANNOTATION_TEXT_OFFSET = 0.1
-
-# Lipid classes that have only one fatty acid chain
-SINGLE_CHAIN_CLASSES = frozenset({
-    'CE', 'ChE',                           # Cholesteryl esters
-    'LPC', 'LPE', 'LPG', 'LPI', 'LPS', 'LPA',  # Lysophospholipids
-    'MAG',                                  # Monoacylglycerols
-    'FFA',                                  # Free fatty acids
-})
-
-# Regex for hydroxyl notation in FA chains (e.g., ";2O", ";O3")
-_HYDROXYL_PATTERN = re.compile(r';[\dO()]+')
 
 
 @dataclass
@@ -72,20 +62,23 @@ class SaturationPlotterService:
         MUFA (1 double bond), PUFA (2+ double bonds).
 
         Args:
-            mol_structure: Lipid name, e.g. 'PC(16:0_18:1)'.
+            mol_structure: Lipid name, e.g. 'PC 16:0_18:1'.
 
         Returns:
             (sfa_ratio, mufa_ratio, pufa_ratio) normalized by total chains.
             Returns (0, 0, 0) if parsing fails.
         """
         try:
-            content = mol_structure.split('(')[1].rstrip(')')
-            parts = content.split('_')
+            _, chain_info, _ = parse_lipid_name(mol_structure)
+            if not chain_info:
+                return (0.0, 0.0, 0.0)
+
+            parts = re.split(r'[/_]', chain_info)
 
             # Extract double bond counts, stripping hydroxyl notation
             double_bonds = []
             for fa in parts:
-                cleaned = _HYDROXYL_PATTERN.sub('', fa.split(':')[-1])
+                cleaned = HYDROXYL_PATTERN.sub('', fa.split(':')[-1])
                 double_bonds.append(cleaned)
 
             sfa_count = double_bonds.count('0')
@@ -256,10 +249,9 @@ class SaturationPlotterService:
 
             for lipid in class_df['LipidMolec']:
                 lipid_str = str(lipid)
-                if '(' in lipid_str and ')' in lipid_str:
-                    content = lipid_str.split('(')[1].split(')')[0]
-                    if '_' not in content and ':' in content:
-                        consolidated.append(lipid_str)
+                _, chain_info, _ = parse_lipid_name(lipid_str)
+                if chain_info and '_' not in chain_info and '/' not in chain_info and ':' in chain_info:
+                    consolidated.append(lipid_str)
 
             if consolidated:
                 consolidated_lipids[lipid_class] = consolidated

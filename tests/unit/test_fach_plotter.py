@@ -70,7 +70,7 @@ def experiment_3x2():
 def simple_df():
     """2 PC lipids with detailed chain notation, 6 samples."""
     return _make_df(
-        lipids=['PC(16:0_18:1)', 'PC(16:0_18:2)'],
+        lipids=['PC 16:0_18:1', 'PC 16:0_18:2'],
         classes=['PC', 'PC'],
         sample_values=[
             [100.0, 100.0],  # s1
@@ -88,8 +88,8 @@ def multi_class_df():
     """PC and PE lipids with different chain compositions."""
     return _make_df(
         lipids=[
-            'PC(16:0_18:1)', 'PC(16:0_18:2)',
-            'PE(18:0_20:4)', 'PE(18:0_22:6)',
+            'PC 16:0_18:1', 'PC 16:0_18:2',
+            'PE 18:0_20:4', 'PE 18:0_22:6',
         ],
         classes=['PC', 'PC', 'PE', 'PE'],
         sample_values=[
@@ -108,9 +108,9 @@ def diverse_lipid_df():
     """Lipids with varied chain compositions for proportion testing."""
     return _make_df(
         lipids=[
-            'PC(16:0_18:1)',  # C=34, DB=1
-            'PC(16:0_18:2)',  # C=34, DB=2
-            'PC(18:0_20:4)',  # C=38, DB=4
+            'PC 16:0_18:1',  # C=34, DB=1
+            'PC 16:0_18:2',  # C=34, DB=2
+            'PC 18:0_20:4',  # C=38, DB=4
         ],
         classes=['PC', 'PC', 'PC'],
         sample_values=[
@@ -133,88 +133,88 @@ class TestParseCarbonDb:
     """Test lipid name parsing for carbon and double bond extraction."""
 
     def test_standard_consolidated(self):
-        """PC(34:1) → (34, 1)."""
-        assert FACHPlotterService.parse_carbon_db('PC(34:1)') == (34, 1)
+        """PC 34:1 → (34, 1)."""
+        assert FACHPlotterService.parse_carbon_db('PC 34:1') == (34, 1)
 
     def test_standard_two_chain(self):
-        """PC(16:0_18:1) → (34, 1)."""
-        assert FACHPlotterService.parse_carbon_db('PC(16:0_18:1)') == (34, 1)
+        """PC 16:0_18:1 → (34, 1)."""
+        assert FACHPlotterService.parse_carbon_db('PC 16:0_18:1') == (34, 1)
 
     def test_standard_three_chain(self):
-        """TAG(16:0_18:1_18:2) → (52, 3)."""
-        assert FACHPlotterService.parse_carbon_db('TAG(16:0_18:1_18:2)') == (52, 3)
+        """TAG 16:0_18:1_18:2 → (52, 3)."""
+        assert FACHPlotterService.parse_carbon_db('TAG 16:0_18:1_18:2') == (52, 3)
 
     def test_all_saturated(self):
-        """PC(16:0_18:0) → (34, 0)."""
-        assert FACHPlotterService.parse_carbon_db('PC(16:0_18:0)') == (34, 0)
+        """PC 16:0_18:0 → (34, 0)."""
+        assert FACHPlotterService.parse_carbon_db('PC 16:0_18:0') == (34, 0)
 
     def test_high_unsaturation(self):
-        """PE(20:4_22:6) → (42, 10)."""
-        assert FACHPlotterService.parse_carbon_db('PE(20:4_22:6)') == (42, 10)
+        """PE 20:4_22:6 → (42, 10)."""
+        assert FACHPlotterService.parse_carbon_db('PE 20:4_22:6') == (42, 10)
 
 
 class TestParseCarbonDbEtherLipids:
     """Test parsing of ether lipid formats."""
 
     def test_ether_o_prefix(self):
-        """PC(O-38:4) → (38, 4)."""
-        assert FACHPlotterService.parse_carbon_db('PC(O-38:4)') == (38, 4)
+        """PC O-38:4 → (38, 4)."""
+        assert FACHPlotterService.parse_carbon_db('PC O-38:4') == (38, 4)
 
     def test_plasmalogen_p_prefix(self):
-        """PE(P-36:2) → (36, 2)."""
-        assert FACHPlotterService.parse_carbon_db('PE(P-36:2)') == (36, 2)
+        """PE P-36:2 → (36, 2)."""
+        assert FACHPlotterService.parse_carbon_db('PE P-36:2') == (36, 2)
 
     def test_ether_two_chain(self):
-        """PC(O-16:0_18:1) → (34, 1)."""
-        assert FACHPlotterService.parse_carbon_db('PC(O-16:0_18:1)') == (34, 1)
+        """PC O-16:0_18:1 → (34, 1)."""
+        assert FACHPlotterService.parse_carbon_db('PC O-16:0_18:1') == (34, 1)
 
 
 class TestParseCarbonDbSphingoidBases:
     """Test parsing of sphingolipid formats."""
 
     def test_ceramide_d_prefix(self):
-        """Cer(d18:1_24:0) → (42, 1)."""
-        assert FACHPlotterService.parse_carbon_db('Cer(d18:1_24:0)') == (42, 1)
+        """Cer d18:1/24:0 → (42, 1)."""
+        assert FACHPlotterService.parse_carbon_db('Cer d18:1/24:0') == (42, 1)
 
     def test_sphingomyelin(self):
-        """SM(d18:1_16:0) → (34, 1)."""
-        assert FACHPlotterService.parse_carbon_db('SM(d18:1_16:0)') == (34, 1)
+        """SM d18:1/16:0 → (34, 1)."""
+        assert FACHPlotterService.parse_carbon_db('SM d18:1/16:0') == (34, 1)
 
     def test_t_prefix(self):
-        """Cer(t18:0_24:0) → (42, 0)."""
-        assert FACHPlotterService.parse_carbon_db('Cer(t18:0_24:0)') == (42, 0)
+        """Cer t18:0/24:0 → (42, 0)."""
+        assert FACHPlotterService.parse_carbon_db('Cer t18:0/24:0') == (42, 0)
 
     def test_m_prefix(self):
-        """Cer(m18:1_16:0) → (34, 1)."""
-        assert FACHPlotterService.parse_carbon_db('Cer(m18:1_16:0)') == (34, 1)
+        """Cer m18:1/16:0 → (34, 1)."""
+        assert FACHPlotterService.parse_carbon_db('Cer m18:1/16:0') == (34, 1)
 
 
 class TestParseCarbonDbOxidized:
     """Test parsing of oxidized lipid formats."""
 
     def test_single_oxidation(self):
-        """PC(16:0_18:1+O) → (34, 1)."""
-        assert FACHPlotterService.parse_carbon_db('PC(16:0_18:1+O)') == (34, 1)
+        """PC 16:0_18:1;O → (34, 1)."""
+        assert FACHPlotterService.parse_carbon_db('PC 16:0_18:1;O') == (34, 1)
 
     def test_double_oxidation(self):
-        """PE(18:0_20:4+2O) → (38, 4)."""
-        assert FACHPlotterService.parse_carbon_db('PE(18:0_20:4+2O)') == (38, 4)
+        """PE 18:0_20:4;O2 → (38, 4)."""
+        assert FACHPlotterService.parse_carbon_db('PE 18:0_20:4;O2') == (38, 4)
 
     def test_triple_oxidation(self):
-        """PC(18:0_20:4+3O) → (38, 4)."""
-        assert FACHPlotterService.parse_carbon_db('PC(18:0_20:4+3O)') == (38, 4)
+        """PC 18:0_20:4;O3 → (38, 4)."""
+        assert FACHPlotterService.parse_carbon_db('PC 18:0_20:4;O3') == (38, 4)
 
 
 class TestParseCarbonDbModifications:
     """Test parsing with modification tags."""
 
     def test_deuterated_modification(self):
-        """LPC(18:1)(d7) → (18, 1) — ignores second parentheses."""
-        assert FACHPlotterService.parse_carbon_db('LPC(18:1)(d7)') == (18, 1)
+        """LPC 18:1(d7) → (18, 1) — ignores parenthesized modification."""
+        assert FACHPlotterService.parse_carbon_db('LPC 18:1(d7)') == (18, 1)
 
     def test_c_prefix_chain(self):
-        """PC(C24:0) → (24, 0)."""
-        assert FACHPlotterService.parse_carbon_db('PC(C24:0)') == (24, 0)
+        """PC C24:0 → (24, 0)."""
+        assert FACHPlotterService.parse_carbon_db('PC C24:0') == (24, 0)
 
 
 class TestParseCarbonDbEdgeCases:
@@ -226,31 +226,26 @@ class TestParseCarbonDbEdgeCases:
     def test_empty_string_returns_none(self):
         assert FACHPlotterService.parse_carbon_db('') == (None, None)
 
-    def test_no_parentheses_returns_none(self):
+    def test_no_chain_info_returns_none(self):
         assert FACHPlotterService.parse_carbon_db('PC') == (None, None)
 
     def test_no_chain_pattern_returns_none(self):
-        assert FACHPlotterService.parse_carbon_db('Unknown(abc)') == (None, None)
+        assert FACHPlotterService.parse_carbon_db('Unknown abc') == (None, None)
 
     def test_integer_input_returns_none(self):
         assert FACHPlotterService.parse_carbon_db(123) == (None, None)
 
-    def test_empty_parentheses_returns_none(self):
-        """PC() → no match since regex requires content."""
-        # re.search(r'\(([^)]+)\)', 'PC()') → None because [^)]+ requires 1+ chars
-        assert FACHPlotterService.parse_carbon_db('PC()') == (None, None)
-
     def test_four_chains(self):
-        """CL(16:0_18:1_18:2_20:4) → (72, 7) — cardiolipin."""
-        assert FACHPlotterService.parse_carbon_db('CL(16:0_18:1_18:2_20:4)') == (72, 7)
+        """CL 16:0_18:1_18:2_20:4 → (72, 7) — cardiolipin."""
+        assert FACHPlotterService.parse_carbon_db('CL 16:0_18:1_18:2_20:4') == (72, 7)
 
     def test_single_chain(self):
-        """LPC(18:1) → (18, 1)."""
-        assert FACHPlotterService.parse_carbon_db('LPC(18:1)') == (18, 1)
+        """LPC 18:1 → (18, 1)."""
+        assert FACHPlotterService.parse_carbon_db('LPC 18:1') == (18, 1)
 
     def test_zero_double_bonds_is_valid(self):
-        """PC(32:0) → (32, 0) — zero DB is valid."""
-        assert FACHPlotterService.parse_carbon_db('PC(32:0)') == (32, 0)
+        """PC 32:0 → (32, 0) — zero DB is valid."""
+        assert FACHPlotterService.parse_carbon_db('PC 32:0') == (32, 0)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -336,7 +331,7 @@ class TestPrepareFachData:
     def test_unparsable_lipids_tracked(self, experiment_2x3):
         """Unparsable lipid names should be recorded."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'UnknownLipid'],
+            lipids=['PC 16:0_18:1', 'UnknownLipid'],
             classes=['PC', 'PC'],
             sample_values=[
                 [100.0, 50.0],
@@ -416,7 +411,7 @@ class TestPrepareFachDataEdgeCases:
     def test_all_zeros_proportion_is_zero(self, experiment_2x3):
         """All zero concentrations → proportion = 0."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[
                 [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
@@ -431,7 +426,7 @@ class TestPrepareFachDataEdgeCases:
     def test_single_lipid(self, experiment_2x3):
         """Single parsable lipid → 100% proportion."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[
                 [100.0], [110.0], [120.0], [200.0], [210.0], [220.0],
@@ -445,7 +440,7 @@ class TestPrepareFachDataEdgeCases:
     def test_missing_concentration_columns(self, experiment_2x3):
         """Missing sample columns should be skipped gracefully."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': [100.0],
             # s2, s3 missing for Control; s4-s6 missing for Treatment
@@ -459,7 +454,7 @@ class TestPrepareFachDataEdgeCases:
     def test_mixed_parsable_and_unparsable(self, experiment_2x3):
         """Mix of parsable and unparsable lipids."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'BadLipid', 'PC(18:0_20:4)'],
+            lipids=['PC 16:0_18:1', 'BadLipid', 'PC 18:0_20:4'],
             classes=['PC', 'PC', 'PC'],
             sample_values=[
                 [300.0, 50.0, 100.0],
@@ -529,7 +524,7 @@ class TestCreateFachHeatmap:
     def test_heatmap_has_correct_proportions(self, experiment_2x3):
         """Single lipid at C=34, DB=1 should have 100% in that cell."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],  # C=34, DB=1
+            lipids=['PC 16:0_18:1'],  # C=34, DB=1
             classes=['PC'],
             sample_values=[[100.0], [100.0], [100.0], [100.0], [100.0], [100.0]],
         )
@@ -686,7 +681,7 @@ class TestAverageLines:
     def test_average_values_correct(self, experiment_2x3):
         """Single lipid at C=34, DB=1 → avg_db=1.0, avg_carbon=34.0."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],  # C=34, DB=1
+            lipids=['PC 16:0_18:1'],  # C=34, DB=1
             classes=['PC'],
             sample_values=[[100.0], [100.0], [100.0], [200.0], [200.0], [200.0]],
         )
@@ -716,7 +711,7 @@ class TestAverageLines:
     def test_all_zero_proportions_avg_is_zero(self, experiment_2x3):
         """All zero concentrations → avg lines at 0."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[0.0], [0.0], [0.0], [0.0], [0.0], [0.0]],
         )
@@ -860,7 +855,7 @@ class TestTypeCoercion:
 
     def test_integer_concentrations(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'PC(16:0_18:2)'],
+            lipids=['PC 16:0_18:1', 'PC 16:0_18:2'],
             classes=['PC', 'PC'],
             sample_values=[
                 [100, 50], [110, 60], [120, 70],
@@ -875,7 +870,7 @@ class TestTypeCoercion:
 
     def test_float32_concentrations(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[
                 np.array([100.0], dtype=np.float32),
@@ -893,7 +888,7 @@ class TestTypeCoercion:
 
     def test_numpy_int64_concentrations(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[
                 np.array([100], dtype=np.int64),
@@ -912,7 +907,7 @@ class TestTypeCoercion:
     def test_object_dtype_concentrations(self, experiment_2x3):
         """String numbers in object dtype columns should still work."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': pd.array(['100.0'], dtype='object'),
             'concentration[s2]': pd.array(['110.0'], dtype='object'),
@@ -932,7 +927,7 @@ class TestTypeCoercion:
 
     def test_mixed_int_float_columns(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[
                 [100], [110.5], [120], [200.5], [210], [220.5],
@@ -946,7 +941,7 @@ class TestTypeCoercion:
     def test_full_pipeline_with_int_data(self, experiment_2x3):
         """End-to-end: int data → prepare → heatmap renders."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'PC(16:0_18:2)'],
+            lipids=['PC 16:0_18:1', 'PC 16:0_18:2'],
             classes=['PC', 'PC'],
             sample_values=[
                 [100, 50], [110, 60], [120, 70],
@@ -984,7 +979,7 @@ class TestImmutability:
 
     def test_prepare_with_unparsable_preserves_input(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'BadLipid'],
+            lipids=['PC 16:0_18:1', 'BadLipid'],
             classes=['PC', 'PC'],
             sample_values=[
                 [100.0, 50.0], [110.0, 60.0], [120.0, 70.0],
@@ -1029,7 +1024,7 @@ class TestLargeDataset:
         """100 lipids in one class should be processed correctly."""
         rng = np.random.RandomState(42)
         n = 100
-        lipids = [f'PC({14 + i // 10}:{i % 7}_{16 + i % 5}:{i % 4})' for i in range(n)]
+        lipids = [f'PC {14 + i // 10}:{i % 7}_{16 + i % 5}:{i % 4}' for i in range(n)]
         classes = ['PC'] * n
         sample_values = [rng.uniform(10, 1000, n).tolist() for _ in range(6)]
 
@@ -1044,7 +1039,7 @@ class TestLargeDataset:
         """Heatmap with 100 lipids should render without error."""
         rng = np.random.RandomState(42)
         n = 100
-        lipids = [f'PC({14 + i // 10}:{i % 7}_{16 + i % 5}:{i % 4})' for i in range(n)]
+        lipids = [f'PC {14 + i // 10}:{i % 7}_{16 + i % 5}:{i % 4}' for i in range(n)]
         classes = ['PC'] * n
         sample_values = [rng.uniform(10, 1000, n).tolist() for _ in range(6)]
 
@@ -1061,9 +1056,9 @@ class TestLargeDataset:
         """Wide range of Carbon/DB values produces correct grid."""
         rng = np.random.RandomState(42)
         lipids = [
-            'PC(12:0_14:0)',  # C=26, DB=0
-            'PC(20:4_22:6)',  # C=42, DB=10
-            'PC(16:0_18:1)',  # C=34, DB=1
+            'PC 12:0_14:0',  # C=26, DB=0
+            'PC 20:4_22:6',  # C=42, DB=10
+            'PC 16:0_18:1',  # C=34, DB=1
         ]
         classes = ['PC'] * 3
         sample_values = [rng.uniform(10, 1000, 3).tolist() for _ in range(6)]

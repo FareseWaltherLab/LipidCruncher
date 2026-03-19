@@ -100,7 +100,7 @@ def _make_conc_df(n_lipids=5, n_samples=6, classes=None, lipids=None,
         classes = default_classes[:n_lipids]
     if lipids is None:
         lipids = [
-            f'{cls}({16 + i}:{i}_18:{i + 1})' for i, cls in enumerate(classes)
+            f'{cls} {16 + i}:{i}_{18}:{i + 1}' for i, cls in enumerate(classes)
         ]
     data = {
         'LipidMolec': lipids,
@@ -122,10 +122,10 @@ def multi_species_df(exp_2x3):
     """6-sample DataFrame with multiple species per class."""
     classes = ['PC', 'PC', 'PC', 'PE', 'PE', 'TG', 'TG', 'SM']
     lipids = [
-        'PC(16:0_18:1)', 'PC(16:0_18:2)', 'PC(18:0_20:4)',
-        'PE(16:0_18:1)', 'PE(18:0_18:2)',
-        'TG(16:0_18:1_18:2)', 'TG(18:0_18:1_18:1)',
-        'SM(d18:1_16:0)',
+        'PC 16:0_18:1', 'PC 16:0_18:2', 'PC 18:0_20:4',
+        'PE 16:0_18:1', 'PE 18:0_18:2',
+        'TG 16:0_18:1_18:2', 'TG 18:0_18:1_18:1',
+        'SM 18:1;O2/16:0',
     ]
     return _make_conc_df(n_lipids=8, n_samples=6, classes=classes, lipids=lipids)
 
@@ -135,9 +135,9 @@ def df_9_samples(exp_3x3):
     """9-sample DataFrame for 3-condition experiments."""
     classes = ['PC', 'PC', 'PE', 'PE', 'TG']
     lipids = [
-        'PC(16:0_18:1)', 'PC(18:0_20:4)',
-        'PE(16:0_18:1)', 'PE(18:0_18:2)',
-        'TG(16:0_18:1_18:2)',
+        'PC 16:0_18:1', 'PC 18:0_20:4',
+        'PE 16:0_18:1', 'PE 18:0_18:2',
+        'TG 16:0_18:1_18:2',
     ]
     return _make_conc_df(n_lipids=5, n_samples=9, classes=classes, lipids=lipids)
 
@@ -146,7 +146,7 @@ def df_9_samples(exp_3x3):
 def df_4_samples(exp_2x2):
     """4-sample DataFrame for 2x2 experiments."""
     classes = ['PC', 'PE', 'TG']
-    lipids = ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)']
+    lipids = ['PC 16:0_18:1', 'PE 18:0_20:4', 'TG 16:0_18:1_18:2']
     return _make_conc_df(n_lipids=3, n_samples=4, classes=classes, lipids=lipids)
 
 
@@ -291,7 +291,7 @@ class TestValidateInputs:
 
     def test_missing_classkey(self, exp_2x3):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)'],
+            'LipidMolec': ['PC 16:0'],
             'concentration[s1]': [100.0],
         })
         errors = AnalysisWorkflow.validate_inputs(df, exp_2x3)
@@ -299,7 +299,7 @@ class TestValidateInputs:
 
     def test_no_concentration_columns(self, exp_2x3):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)'],
+            'LipidMolec': ['PC 16:0'],
             'ClassKey': ['PC'],
             'intensity[s1]': [100.0],
         })
@@ -308,7 +308,7 @@ class TestValidateInputs:
 
     def test_mismatched_sample_labels(self, exp_2x3):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)'],
+            'LipidMolec': ['PC 16:0'],
             'ClassKey': ['PC'],
             'concentration[x1]': [100.0],
         })
@@ -343,13 +343,13 @@ class TestGetAvailableClasses:
         assert len(classes) == len(set(classes))
 
     def test_missing_classkey(self):
-        df = pd.DataFrame({'LipidMolec': ['PC(16:0)']})
+        df = pd.DataFrame({'LipidMolec': ['PC 16:0']})
         with pytest.raises(ValueError, match='ClassKey'):
             AnalysisWorkflow.get_available_classes(df)
 
     def test_nan_values_excluded(self):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0)'],
+            'LipidMolec': ['PC 16:0', 'PE 18:0', 'TG 16:0'],
             'ClassKey': ['PC', np.nan, 'TG'],
         })
         classes = AnalysisWorkflow.get_available_classes(df)
@@ -1115,7 +1115,7 @@ class TestEdgeCases:
 
     def test_single_lipid_bar_chart(self, exp_2x3):
         df = _make_conc_df(n_lipids=1, n_samples=6,
-                           classes=['PC'], lipids=['PC(16:0_18:1)'])
+                           classes=['PC'], lipids=['PC 16:0_18:1'])
         result = AnalysisWorkflow.run_bar_chart(
             df, exp_2x3, ['Control', 'Treatment'], ['PC'],
         )
@@ -1123,7 +1123,7 @@ class TestEdgeCases:
 
     def test_single_lipid_pie_chart(self, exp_2x3):
         df = _make_conc_df(n_lipids=1, n_samples=6,
-                           classes=['PC'], lipids=['PC(16:0_18:1)'])
+                           classes=['PC'], lipids=['PC 16:0_18:1'])
         result = AnalysisWorkflow.run_pie_charts(
             df, exp_2x3, ['Control'], ['PC'],
         )
@@ -1131,7 +1131,7 @@ class TestEdgeCases:
 
     def test_many_classes_bar_chart(self, exp_2x3):
         classes = [f'Class{i}' for i in range(15)]
-        lipids = [f'Class{i}({16 + i}:0)' for i in range(15)]
+        lipids = [f'Class{i} {16 + i}:0' for i in range(15)]
         df = _make_conc_df(n_lipids=15, n_samples=6,
                            classes=classes, lipids=lipids)
         result = AnalysisWorkflow.run_bar_chart(
@@ -1141,7 +1141,7 @@ class TestEdgeCases:
 
     def test_zero_values_in_data(self, exp_2x3):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+            'LipidMolec': ['PC 16:0_18:1', 'PE 18:0_20:4'],
             'ClassKey': ['PC', 'PE'],
             'concentration[s1]': [0.0, 0.0],
             'concentration[s2]': [100.0, 200.0],
@@ -1158,7 +1158,7 @@ class TestEdgeCases:
     def test_string_numeric_values(self, exp_2x3):
         """DataFrame with string-encoded numeric values."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+            'LipidMolec': ['PC 16:0_18:1', 'PE 18:0_20:4'],
             'ClassKey': ['PC', 'PE'],
             'concentration[s1]': ['1000.0', '2000.0'],
             'concentration[s2]': ['1100.0', '2100.0'],
@@ -1183,7 +1183,7 @@ class TestEdgeCases:
     def test_pathway_with_no_matching_classes(self, exp_2x3):
         """Pathway with classes not in the pathway diagram."""
         classes = ['CustomClass1', 'CustomClass2']
-        lipids = ['CustomClass1(16:0_18:1)', 'CustomClass2(18:0_20:4)']
+        lipids = ['CustomClass1 16:0_18:1', 'CustomClass2 18:0_20:4']
         df = _make_conc_df(n_lipids=2, n_samples=6,
                            classes=classes, lipids=lipids)
         result = AnalysisWorkflow.run_pathway(

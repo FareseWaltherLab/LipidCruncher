@@ -185,34 +185,34 @@ class TestStandardizeLipidName:
     """Tests for standardize_lipid_name."""
 
     def test_space_separated(self):
-        assert DataStandardizationService.standardize_lipid_name('LPC O-17:4') == 'LPC(O-17:4)'
+        assert DataStandardizationService.standardize_lipid_name('LPC O-17:4') == 'LPC O-17:4'
 
     def test_space_separated_pc(self):
-        assert DataStandardizationService.standardize_lipid_name('PC 16:0_18:1') == 'PC(16:0_18:1)'
+        assert DataStandardizationService.standardize_lipid_name('PC 16:0_18:1') == 'PC 16:0_18:1'
 
     def test_slash_separated(self):
         result = DataStandardizationService.standardize_lipid_name('Cer d18:0/C24:0')
-        assert result == 'Cer(d18:0_C24:0)'
+        assert result == 'Cer d18:0/C24:0'
 
     def test_already_parenthesized(self):
         result = DataStandardizationService.standardize_lipid_name('CerG1(d13:0_25:2)')
-        assert result == 'CerG1(d13:0_25:2)'
+        assert result == 'CerG1 d13:0/25:2'
 
     def test_already_parenthesized_with_slash(self):
         result = DataStandardizationService.standardize_lipid_name('PC(16:0/18:1)')
-        assert result == 'PC(16:0_18:1)'
+        assert result == 'PC 16:0_18:1'
 
     def test_deuterium_d7(self):
         result = DataStandardizationService.standardize_lipid_name('LPC 18:1(d7)')
-        assert result == 'LPC(18:1)(d7)'
+        assert result == 'LPC 18:1(d7)'
 
     def test_deuterium_d9(self):
         result = DataStandardizationService.standardize_lipid_name('PE 15:0_15:0(d9)')
-        assert result == 'PE(15:0_15:0)(d9)'
+        assert result == 'PE 15:0_15:0(d9)'
 
     def test_msdial_hydroxyl_format(self):
         result = DataStandardizationService.standardize_lipid_name('Cer 18:1;2O/24:0')
-        assert result == 'Cer(18:1;2O_24:0)'
+        assert result == 'Cer 18:1;O2/24:0'
 
     def test_none_returns_unknown(self):
         assert DataStandardizationService.standardize_lipid_name(None) == 'Unknown'
@@ -233,15 +233,15 @@ class TestStandardizeLipidName:
 
     def test_complex_cardiolipin(self):
         result = DataStandardizationService.standardize_lipid_name('CL(18:2/16:0/18:1/18:2)')
-        assert result == 'CL(18:2_16:0_18:1_18:2)'
+        assert result == 'CL 16:0_18:1_18:2_18:2'
 
     def test_preserves_parenthesized_name(self):
         result = DataStandardizationService.standardize_lipid_name('PC(16:0_18:1)')
-        assert result == 'PC(16:0_18:1)'
+        assert result == 'PC 16:0_18:1'
 
     def test_whitespace_stripped(self):
         result = DataStandardizationService.standardize_lipid_name('  PC 16:0  ')
-        assert result == 'PC(16:0)'
+        assert result == 'PC 16:0'
 
     def test_numeric_input(self):
         result = DataStandardizationService.standardize_lipid_name(12345)
@@ -254,11 +254,11 @@ class TestStandardizeLipidName:
 
     def test_multiple_slashes(self):
         result = DataStandardizationService.standardize_lipid_name('TG 16:0/18:1/18:2')
-        assert result == 'TG(16:0_18:1_18:2)'
+        assert result == 'TG 16:0_18:1_18:2'
 
     def test_o_ether_lipid(self):
         result = DataStandardizationService.standardize_lipid_name('PE O-18:0/20:4')
-        assert result == 'PE(O-18:0_20:4)'
+        assert result == 'PE O-18:0_20:4'
 
 
 # =============================================================================
@@ -483,8 +483,8 @@ class TestGenericStandardization:
         })
         result = DataStandardizationService._process_generic(df)
         sdf = result.standardized_df
-        assert sdf['LipidMolec'].iloc[0] == 'PC(16:0_18:1)'
-        assert sdf['LipidMolec'].iloc[1] == 'PE(18:0_20:4)'
+        assert sdf['LipidMolec'].iloc[0] == 'PC 16:0_18:1'
+        assert sdf['LipidMolec'].iloc[1] == 'PE 18:0_20:4'
 
     def test_classkey_inferred_when_absent(self):
         df = make_generic_df(n_samples=2, with_classkey=False)
@@ -625,7 +625,7 @@ class TestMSDIALStandardization:
     def test_lipid_names_standardized(self):
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert result.standardized_df['LipidMolec'].iloc[0] == 'PC(16:0_18:1)'
+        assert result.standardized_df['LipidMolec'].iloc[0] == 'PC 16:0_18:1'
 
     def test_intensity_columns_named(self):
         df = make_msdial_df(n_samples=3)
@@ -806,7 +806,7 @@ class TestMetabolomicsWorkbenchStandardization:
         text = make_mw_text(n_samples=2, n_lipids=1)
         result = DataStandardizationService._process_metabolomics_workbench(text)
         sdf = result.standardized_df
-        assert sdf['LipidMolec'].iloc[0] == 'PC(16:0_18:1)'
+        assert sdf['LipidMolec'].iloc[0] == 'PC 16:0_18:1'
 
     def test_classkey_inferred(self):
         text = make_mw_text(n_samples=2, n_lipids=2)
@@ -1278,7 +1278,7 @@ class TestStandardizeLipidNameAdditional:
 
     def test_name_with_dash_separator(self):
         result = DataStandardizationService.standardize_lipid_name('SM d18:1/24:0')
-        assert result == 'SM(d18:1_24:0)'
+        assert result == 'SM d18:1/24:0'
 
     def test_false_value(self):
         result = DataStandardizationService.standardize_lipid_name(False)

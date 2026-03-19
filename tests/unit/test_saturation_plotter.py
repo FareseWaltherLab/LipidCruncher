@@ -43,9 +43,9 @@ def _make_df(
     """Build a concentration DataFrame for saturation tests."""
     if lipids is None:
         lipids = [
-            'PC(16:0_18:1)',  # 1 SFA, 1 MUFA
-            'PC(16:0_20:4)',  # 1 SFA, 1 PUFA
-            'PE(18:0_18:2)',  # 1 SFA, 1 PUFA
+            'PC 16:0_18:1',  # 1 SFA, 1 MUFA
+            'PC 16:0_20:4',  # 1 SFA, 1 PUFA
+            'PE 18:0_18:2',  # 1 SFA, 1 PUFA
         ]
     if classes is None:
         classes = ['PC', 'PC', 'PE']
@@ -119,43 +119,43 @@ class TestCalculateFaRatios:
     """Tests for calculate_fa_ratios() — lipid name parsing."""
 
     def test_two_chain_sfa_mufa(self):
-        """PC(16:0_18:1) → 0.5 SFA, 0.5 MUFA, 0 PUFA."""
-        result = SaturationPlotterService.calculate_fa_ratios('PC(16:0_18:1)')
+        """PC 16:0_18:1 → 0.5 SFA, 0.5 MUFA, 0 PUFA."""
+        result = SaturationPlotterService.calculate_fa_ratios('PC 16:0_18:1')
         assert result == pytest.approx((0.5, 0.5, 0.0))
 
     def test_two_chain_sfa_pufa(self):
-        """PA(16:0_20:4) → 0.5 SFA, 0 MUFA, 0.5 PUFA."""
-        result = SaturationPlotterService.calculate_fa_ratios('PA(16:0_20:4)')
+        """PA 16:0_20:4 → 0.5 SFA, 0 MUFA, 0.5 PUFA."""
+        result = SaturationPlotterService.calculate_fa_ratios('PA 16:0_20:4')
         assert result == pytest.approx((0.5, 0.0, 0.5))
 
     def test_three_chains(self):
-        """TAG(16:0_18:1_20:4) → 1/3 each."""
-        result = SaturationPlotterService.calculate_fa_ratios('TAG(16:0_18:1_20:4)')
+        """TAG 16:0_18:1_20:4 → 1/3 each."""
+        result = SaturationPlotterService.calculate_fa_ratios('TAG 16:0_18:1_20:4')
         assert result == pytest.approx((1/3, 1/3, 1/3))
 
     def test_all_saturated(self):
-        """PC(16:0_18:0) → 1.0 SFA."""
-        result = SaturationPlotterService.calculate_fa_ratios('PC(16:0_18:0)')
+        """PC 16:0_18:0 → 1.0 SFA."""
+        result = SaturationPlotterService.calculate_fa_ratios('PC 16:0_18:0')
         assert result == pytest.approx((1.0, 0.0, 0.0))
 
     def test_all_pufa(self):
-        """PC(20:4_22:6) → 0 SFA, 0 MUFA, 1.0 PUFA."""
-        result = SaturationPlotterService.calculate_fa_ratios('PC(20:4_22:6)')
+        """PC 20:4_22:6 → 0 SFA, 0 MUFA, 1.0 PUFA."""
+        result = SaturationPlotterService.calculate_fa_ratios('PC 20:4_22:6')
         assert result == pytest.approx((0.0, 0.0, 1.0))
 
     def test_hydroxyl_notation_stripped(self):
-        """Cer(18:1;2O_16:0) → hydroxyl stripped, 0.5 MUFA, 0.5 SFA."""
-        result = SaturationPlotterService.calculate_fa_ratios('Cer(18:1;2O_16:0)')
+        """Cer 18:1;O2/16:0 → hydroxyl stripped, 0.5 MUFA, 0.5 SFA."""
+        result = SaturationPlotterService.calculate_fa_ratios('Cer 18:1;O2/16:0')
         assert result == pytest.approx((0.5, 0.5, 0.0))
 
     def test_complex_hydroxyl(self):
-        """SM(18:0;3O_24:1) → 0.5 SFA, 0.5 MUFA."""
-        result = SaturationPlotterService.calculate_fa_ratios('SM(18:0;3O_24:1)')
+        """SM 18:0;O3/24:1 → 0.5 SFA, 0.5 MUFA."""
+        result = SaturationPlotterService.calculate_fa_ratios('SM 18:0;O3/24:1')
         assert result == pytest.approx((0.5, 0.5, 0.0))
 
     def test_consolidated_format_single_chain(self):
-        """PC(34:1) → single chain counted as MUFA."""
-        result = SaturationPlotterService.calculate_fa_ratios('PC(34:1)')
+        """PC 34:1 → single chain counted as MUFA."""
+        result = SaturationPlotterService.calculate_fa_ratios('PC 34:1')
         assert result == pytest.approx((0.0, 1.0, 0.0))
 
     def test_invalid_string_returns_zeros(self):
@@ -171,12 +171,12 @@ class TestCalculateFaRatios:
         assert result == (0.0, 0.0, 0.0)
 
     def test_no_parentheses_returns_zeros(self):
-        result = SaturationPlotterService.calculate_fa_ratios('PC 16:0_18:1')
+        result = SaturationPlotterService.calculate_fa_ratios('JustAClassName')
         assert result == (0.0, 0.0, 0.0)
 
     def test_four_chains(self):
-        """CL(18:1_18:2_16:0_20:4) → 1 SFA, 1 MUFA, 2 PUFA."""
-        result = SaturationPlotterService.calculate_fa_ratios('CL(18:1_18:2_16:0_20:4)')
+        """CL 18:1_18:2_16:0_20:4 → 1 SFA, 1 MUFA, 2 PUFA."""
+        result = SaturationPlotterService.calculate_fa_ratios('CL 18:1_18:2_16:0_20:4')
         assert result == pytest.approx((0.25, 0.25, 0.5))
 
 
@@ -258,10 +258,10 @@ class TestCalculateSfaMufaPufa:
 
     def test_weighted_values_calculation(self):
         """Verify SFA value = sum(concentration * sfa_ratio) per sample."""
-        # PC(16:0_18:0): 100% SFA → ratio (1.0, 0.0, 0.0)
+        # PC 16:0_18:0: 100% SFA → ratio (1.0, 0.0, 0.0)
         # Concentration 100 for s1 → SFA = 100*1.0 = 100
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:0)'],
+            'LipidMolec': ['PC 16:0_18:0'],
             'ClassKey': ['PC'],
             'concentration[s1]': [100.0],
             'concentration[s2]': [200.0],
@@ -282,7 +282,7 @@ class TestCalculateSfaMufaPufa:
     def test_multiple_species_summed(self):
         """Two species in same class: values are summed per sample."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:0)', 'PC(16:0_18:0)'],
+            'LipidMolec': ['PC 16:0_18:0', 'PC 16:0_18:0'],
             'ClassKey': ['PC', 'PC'],
             'concentration[s1]': [100.0, 50.0],
             'concentration[s2]': [200.0, 100.0],
@@ -345,17 +345,17 @@ class TestIdentifyConsolidatedLipids:
 
     def test_detects_consolidated(self):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(34:1)', 'PC(16:0_18:1)'],
+            'LipidMolec': ['PC 34:1', 'PC 16:0_18:1'],
             'ClassKey': ['PC', 'PC'],
         })
         result = SaturationPlotterService.identify_consolidated_lipids(df, ['PC'])
         assert 'PC' in result
-        assert 'PC(34:1)' in result['PC']
-        assert 'PC(16:0_18:1)' not in result['PC']
+        assert 'PC 34:1' in result['PC']
+        assert 'PC 16:0_18:1' not in result['PC']
 
     def test_detailed_format_not_flagged(self):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+            'LipidMolec': ['PC 16:0_18:1', 'PE 18:0_20:4'],
             'ClassKey': ['PC', 'PE'],
         })
         result = SaturationPlotterService.identify_consolidated_lipids(df, ['PC', 'PE'])
@@ -365,7 +365,7 @@ class TestIdentifyConsolidatedLipids:
         """CE, LPC, etc. are truly single-chain and should not be flagged."""
         for cls in ['CE', 'LPC', 'LPE', 'MAG', 'FFA']:
             df = pd.DataFrame({
-                'LipidMolec': [f'{cls}(18:1)'],
+                'LipidMolec': [f'{cls} 18:1'],
                 'ClassKey': [cls],
             })
             result = SaturationPlotterService.identify_consolidated_lipids(df, [cls])
@@ -374,7 +374,7 @@ class TestIdentifyConsolidatedLipids:
     def test_sphingolipid_consolidated_detected(self):
         """Cer, SM are two-chain — consolidated format should be detected."""
         df = pd.DataFrame({
-            'LipidMolec': ['Cer(42:1)', 'SM(34:1)'],
+            'LipidMolec': ['Cer 42:1', 'SM 34:1'],
             'ClassKey': ['Cer', 'SM'],
         })
         result = SaturationPlotterService.identify_consolidated_lipids(df, ['Cer', 'SM'])
@@ -393,7 +393,7 @@ class TestIdentifyConsolidatedLipids:
     def test_mixed_classes(self):
         """Only classes with consolidated lipids appear in result."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(34:1)', 'PE(18:0_20:4)'],
+            'LipidMolec': ['PC 34:1', 'PE 18:0_20:4'],
             'ClassKey': ['PC', 'PE'],
         })
         result = SaturationPlotterService.identify_consolidated_lipids(df, ['PC', 'PE'])
@@ -403,7 +403,7 @@ class TestIdentifyConsolidatedLipids:
     def test_no_colon_not_flagged(self):
         """Lipid without colon is not consolidated (no chain notation)."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(unknown)'],
+            'LipidMolec': ['PC unknown'],
             'ClassKey': ['PC'],
         })
         result = SaturationPlotterService.identify_consolidated_lipids(df, ['PC'])
@@ -657,7 +657,7 @@ class TestEdgeCases:
     def test_all_zeros_excluded(self):
         """If all concentration values are 0, class should be excluded."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': [0.0],
             'concentration[s2]': [0.0],
@@ -675,7 +675,7 @@ class TestEdgeCases:
     def test_single_lipid_per_class(self):
         """Works with just one species in a class."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': [100.0],
             'concentration[s2]': [200.0],
@@ -712,8 +712,8 @@ class TestEdgeCases:
     def test_many_classes(self):
         """Handles 5+ classes without error."""
         lipids = [
-            'PC(16:0_18:1)', 'PE(16:0_18:1)', 'PS(16:0_18:1)',
-            'PI(16:0_18:1)', 'PA(16:0_18:1)',
+            'PC 16:0_18:1', 'PE 16:0_18:1', 'PS 16:0_18:1',
+            'PI 16:0_18:1', 'PA 16:0_18:1',
         ]
         classes = ['PC', 'PE', 'PS', 'PI', 'PA']
         df = _make_df(lipids=lipids, classes=classes)
@@ -800,7 +800,7 @@ class TestTypeCoercion:
 
     def test_integer_concentrations(self):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': [100],
             'concentration[s2]': [200],
@@ -818,7 +818,7 @@ class TestTypeCoercion:
     def test_string_concentrations(self):
         """String numbers should be coerced to float."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': ['100.0'],
             'concentration[s2]': ['200.0'],
@@ -835,7 +835,7 @@ class TestTypeCoercion:
 
     def test_numpy_int64_concentrations(self):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': np.array([100], dtype=np.int64),
             'concentration[s2]': np.array([200], dtype=np.int64),
@@ -852,7 +852,7 @@ class TestTypeCoercion:
 
     def test_float32_concentrations(self):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': np.array([100.0], dtype=np.float32),
             'concentration[s2]': np.array([200.0], dtype=np.float32),
@@ -870,7 +870,7 @@ class TestTypeCoercion:
     def test_object_dtype_concentrations(self):
         """String numbers stored as object dtype should be coerced."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': pd.array(['100.0'], dtype='object'),
             'concentration[s2]': pd.array(['200.0'], dtype='object'),
@@ -887,7 +887,7 @@ class TestTypeCoercion:
 
     def test_mixed_int_float_columns(self):
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': [100],
             'concentration[s2]': [200.5],
@@ -934,7 +934,7 @@ class TestImmutabilityExtended:
 
     def test_multi_class_preserves_input(self):
         """Multiple classes in one call — input should not change."""
-        lipids = ['PC(16:0_18:1)', 'PE(18:0_18:2)']
+        lipids = ['PC 16:0_18:1', 'PE 18:0_18:2']
         classes = ['PC', 'PE']
         df = _make_df(lipids=lipids, classes=classes)
         df_copy = df.copy()
@@ -971,7 +971,7 @@ class TestLargeDataset:
         """100 lipid species in one class — should aggregate correctly."""
         n = 100
         rng = np.random.RandomState(42)
-        lipids = [f'PC(16:0_{i}:{i % 5})' for i in range(n)]
+        lipids = [f'PC 16:0_{i}:{i % 5}' for i in range(n)]
         df = pd.DataFrame({
             'LipidMolec': lipids,
             'ClassKey': ['PC'] * n,
@@ -992,7 +992,7 @@ class TestLargeDataset:
         """20 different lipid classes — all should appear in output."""
         n = 20
         rng = np.random.RandomState(42)
-        lipids = [f'Class{i}(16:0_18:1)' for i in range(n)]
+        lipids = [f'Class{i} 16:0_18:1' for i in range(n)]
         classes = [f'Class{i}' for i in range(n)]
         df = pd.DataFrame({
             'LipidMolec': lipids,
@@ -1010,7 +1010,7 @@ class TestLargeDataset:
         """Chart should render without error with many species."""
         n = 50
         rng = np.random.RandomState(42)
-        lipids = [f'PC(16:0_{i}:{i % 5})' for i in range(n)]
+        lipids = [f'PC 16:0_{i}:{i % 5}' for i in range(n)]
         df = pd.DataFrame({
             'LipidMolec': lipids,
             'ClassKey': ['PC'] * n,

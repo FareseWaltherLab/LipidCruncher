@@ -228,14 +228,25 @@ class DataStandardizationService:
 
     @staticmethod
     def standardize_lipid_name(lipid_name: object) -> str:
-        """Standardize a lipid name to Class(chain_details)(modifications).
+        """Standardize a lipid name to LIPID MAPS shorthand notation.
+
+        Output format: 'Class chain1_chain2' (space-separated, no parentheses).
+        Sphingolipids use '/' as chain separator.
+        Hydroxyl notation: ;O2 (element before count).
 
         Examples:
-            LPC O-17:4 -> LPC(O-17:4)
-            Cer d18:0/C24:0 -> Cer(d18:0_C24:0)
-            LPC 18:1(d7) -> LPC(18:1)(d7)
-            Cer 18:1;2O/24:0 -> Cer(18:1;2O_24:0)
+            LPC O-17:4 -> LPC O-17:4
+            Cer d18:0/C24:0 -> Cer d18:0/C24:0
+            LPC 18:1(d7) -> LPC 18:1(d7)
+            Cer 18:1;2O/24:0 -> Cer 18:1;O2/24:0
+            PC(16:0_18:1) -> PC 16:0_18:1
+            LPC(20:0_0:0) -> LPC 20:0
         """
+        from app.constants import (
+            LYSO_CLASSES, normalize_hydroxyl,
+            sort_chains_lipid_maps, remove_phantom_chains,
+            get_chain_separator, format_lipid_name,
+        )
         try:
             if not lipid_name or pd.isna(lipid_name):
                 return "Unknown"
@@ -247,14 +258,29 @@ class DataStandardizationService:
             first_colon = lipid_name.find(':')
 
             if first_paren > 0 and (first_colon < 0 or first_paren < first_colon):
-                result = DataStandardizationService._parse_parenthesized_name(lipid_name, first_paren)
+                class_name, chain_info = DataStandardizationService._parse_parenthesized_name(
+                    lipid_name, first_paren
+                )
             else:
-                result = DataStandardizationService._parse_bare_name(lipid_name)
+                class_name, chain_info = DataStandardizationService._parse_bare_name(lipid_name)
 
-            if modification:
-                result = f"{result}{modification}"
+            if not chain_info:
+                return f"{class_name}{modification}" if modification else class_name
 
-            return result
+            # Normalize hydroxyl notation: ;2O → ;O2
+            chain_info = normalize_hydroxyl(chain_info)
+
+            # Split chains (input may use / or _)
+            raw_chains = re.split(r'[/_]', chain_info)
+
+            # Remove phantom 0:0 chains for lyso-species
+            if class_name in LYSO_CLASSES:
+                raw_chains = remove_phantom_chains(raw_chains)
+
+            # Sort chains per LIPID MAPS rules
+            raw_chains = sort_chains_lipid_maps(raw_chains, class_name)
+
+            return format_lipid_name(class_name, raw_chains, modification)
 
         except (TypeError, AttributeError, ValueError, IndexError):
             return str(lipid_name) if lipid_name else "Unknown"
@@ -268,8 +294,13 @@ class DataStandardizationService:
         return lipid_name, ""
 
     @staticmethod
-    def _parse_parenthesized_name(lipid_name: str, first_paren: int) -> str:
-        """Parse a lipid name that already has parentheses around chain info."""
+    def _parse_parenthesized_name(
+        lipid_name: str, first_paren: int
+    ) -> Tuple[str, str]:
+        """Parse a lipid name that has parentheses around chain info.
+
+        Returns (class_name, chain_info) with raw separators preserved.
+        """
         class_name = lipid_name[:first_paren]
         paren_depth = 0
         chain_end = first_paren
@@ -281,46 +312,54 @@ class DataStandardizationService:
                 if paren_depth == 0:
                     chain_end = i
                     break
-        chain_info = lipid_name[first_paren + 1:chain_end].replace('/', '_')
+        chain_info = lipid_name[first_paren + 1:chain_end]
         trailing = lipid_name[chain_end + 1:].strip()
-        result = f"{class_name}({chain_info})"
         if trailing:
-            result = f"{result}{trailing}"
-        return result
+            chain_info = f"{chain_info}{trailing}"
+        return class_name, chain_info
 
     @staticmethod
-    def _parse_bare_name(lipid_name: str) -> str:
-        """Parse a lipid name without parentheses (space-separated or compact)."""
+    def _parse_bare_name(lipid_name: str) -> Tuple[str, str]:
+        """Parse a lipid name without parentheses (space-separated or compact).
+
+        Returns (class_name, chain_info).
+        """
         first_space = lipid_name.find(' ')
         if first_space > 0:
             class_name = lipid_name[:first_space]
-            chain_info = lipid_name[first_space + 1:].replace('/', '_')
-            return f"{class_name}({chain_info})"
+            chain_info = lipid_name[first_space + 1:]
+            return class_name, chain_info
 
         match = re.match(r'^([A-Za-z][A-Za-z0-9]*)[- ]?(.*)', lipid_name)
         if match:
             class_name, chain_info = match.groups()
-            chain_info = chain_info.replace('/', '_')
-            return f"{class_name}({chain_info})" if chain_info else class_name
-        return lipid_name
+            return class_name, chain_info
+        return lipid_name, ""
 
     @staticmethod
     def infer_class_key(lipid_molec) -> str:
         """Infer ClassKey from a standardized LipidMolec name.
 
+        Handles both new format ('PC 16:0_18:1') and legacy ('PC(16:0_18:1)').
+
         Examples:
-            CL(18:2/16:0/18:1/18:2) -> CL
-            LPC(18:1)(d7) -> LPC
-            SPLASH(LPC 18:1)(d7) -> LPC
+            PC 16:0_18:1 -> PC
+            LPC 18:1(d7) -> LPC
+            SPLASH LPC 18:1(d7) -> LPC
         """
         try:
+            name = str(lipid_molec).strip()
+
+            # SPLASH standards: extract the actual class
             splash_match = re.match(
-                r'^SPLASH\s*\(\s*([A-Za-z]+)', str(lipid_molec), re.IGNORECASE
+                r'^SPLASH[\s(]+([A-Za-z]+)', name, re.IGNORECASE
             )
             if splash_match:
                 return splash_match.group(1).strip()
 
-            match = re.match(r'^([A-Za-z][A-Za-z0-9]*)', str(lipid_molec))
+            # New format: class is everything before first space
+            # Legacy format: class is everything before first '('
+            match = re.match(r'^([A-Za-z][A-Za-z0-9-]*)', name)
             if match:
                 return match.group(1).strip()
             return "Unknown"

@@ -69,8 +69,7 @@ FIG_SIZE = (10, 10)
 PLOT_XLIM = (-25, 25)
 PLOT_YLIM = (-20, 30)
 
-# Hydroxyl-notation pattern used when counting sat/unsat chains.
-_HYDROXYL_PATTERN = re.compile(r';[\dO()]+')
+from app.constants import HYDROXYL_PATTERN, parse_lipid_name
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -107,13 +106,15 @@ def _count_saturated_unsaturated(mol_structure: str) -> Tuple[int, int]:
         (n_saturated, n_unsaturated).  (0, 0) if parsing fails.
     """
     try:
-        content = mol_structure.split('(')[1].rstrip(')')
-        chains = content.split('_')
+        _, chain_info, _ = parse_lipid_name(mol_structure)
+        if not chain_info:
+            return 0, 0
+        chains = re.split(r'[/_]', chain_info)
         n_sat = 0
         n_unsat = 0
         for chain in chains:
             db_str = chain.split(':')[-1]
-            db_str = _HYDROXYL_PATTERN.sub('', db_str)
+            db_str = HYDROXYL_PATTERN.sub('', db_str)
             if db_str == '0':
                 n_sat += 1
             else:

@@ -73,7 +73,7 @@ def experiment_3x2():
 def simple_df():
     """DataFrame with 4 lipids across 2 classes, 6 concentration columns."""
     return _make_df(
-        lipids=['PC(16:0_18:1)', 'PC(16:0_16:0)', 'PE(18:1_18:2)', 'PE(18:0_20:4)'],
+        lipids=['PC 16:0_18:1', 'PC 16:0_16:0', 'PE 18:1_18:2', 'PE 18:0_20:4'],
         classes=['PC', 'PC', 'PE', 'PE'],
         sample_values=[
             [100, 200, 150, 50],   # s1
@@ -91,9 +91,9 @@ def multi_class_df():
     """DataFrame with 6 lipids across 4 classes."""
     return _make_df(
         lipids=[
-            'TG(16:0_18:0_18:1)', 'TG(16:0_16:0_16:0)',
-            'PC(16:0_18:1)', 'PE(18:0_20:4)',
-            'SM(d18:1_16:0)', 'Cer(d18:1_24:0)',
+            'TG 16:0_18:0_18:1', 'TG 16:0_16:0_16:0',
+            'PC 16:0_18:1', 'PE 18:0_20:4',
+            'SM d18:1/16:0', 'Cer d18:1/24:0',
         ],
         classes=['TG', 'TG', 'PC', 'PE', 'SM', 'Cer'],
         sample_values=[
@@ -116,42 +116,42 @@ class TestCountSaturatedUnsaturated:
     """Tests for the _count_saturated_unsaturated helper."""
 
     def test_two_chain_one_sat_one_unsat(self):
-        assert _count_saturated_unsaturated('PC(16:0_18:1)') == (1, 1)
+        assert _count_saturated_unsaturated('PC 16:0_18:1') == (1, 1)
 
     def test_two_chain_both_saturated(self):
-        assert _count_saturated_unsaturated('PC(16:0_16:0)') == (2, 0)
+        assert _count_saturated_unsaturated('PC 16:0_16:0') == (2, 0)
 
     def test_two_chain_both_unsaturated(self):
-        assert _count_saturated_unsaturated('PC(18:1_18:2)') == (0, 2)
+        assert _count_saturated_unsaturated('PC 18:1_18:2') == (0, 2)
 
     def test_three_chain_mixed(self):
-        assert _count_saturated_unsaturated('TG(16:0_18:1_18:0)') == (2, 1)
+        assert _count_saturated_unsaturated('TG 16:0_18:1_18:0') == (2, 1)
 
     def test_three_chain_all_saturated(self):
-        assert _count_saturated_unsaturated('TG(16:0_16:0_16:0)') == (3, 0)
+        assert _count_saturated_unsaturated('TG 16:0_16:0_16:0') == (3, 0)
 
     def test_single_chain(self):
-        assert _count_saturated_unsaturated('LPC(16:0)') == (1, 0)
+        assert _count_saturated_unsaturated('LPC 16:0') == (1, 0)
 
     def test_single_chain_unsaturated(self):
-        assert _count_saturated_unsaturated('LPC(18:1)') == (0, 1)
+        assert _count_saturated_unsaturated('LPC 18:1') == (0, 1)
 
     def test_pufa_chain(self):
         """Chain with 4 double bonds is unsaturated."""
-        assert _count_saturated_unsaturated('PE(20:4_18:0)') == (1, 1)
+        assert _count_saturated_unsaturated('PE 20:4_18:0') == (1, 1)
 
 
 class TestCountSaturatedUnsaturatedHydroxyl:
-    """Hydroxyl-notation lipids (e.g., ;2O suffixes)."""
+    """Hydroxyl-notation lipids (e.g., ;O2 suffixes)."""
 
     def test_hydroxyl_saturated(self):
-        assert _count_saturated_unsaturated('Cer(d18:0;2O_16:0)') == (2, 0)
+        assert _count_saturated_unsaturated('Cer d18:0;O2/16:0') == (2, 0)
 
     def test_hydroxyl_unsaturated(self):
-        assert _count_saturated_unsaturated('Cer(d18:1;2O_16:0)') == (1, 1)
+        assert _count_saturated_unsaturated('Cer d18:1;O2/16:0') == (1, 1)
 
     def test_hydroxyl_complex(self):
-        assert _count_saturated_unsaturated('SM(d18:1;2O_24:0)') == (1, 1)
+        assert _count_saturated_unsaturated('SM d18:1;O2/24:0') == (1, 1)
 
 
 class TestCountSaturatedUnsaturatedEdgeCases:
@@ -169,19 +169,19 @@ class TestCountSaturatedUnsaturatedEdgeCases:
     def test_numeric_input(self):
         assert _count_saturated_unsaturated(123) == (0, 0)
 
-    def test_empty_parentheses(self):
-        """Empty parentheses: one 'chain' with empty string, classified as unsaturated."""
-        assert _count_saturated_unsaturated('PC()') == (0, 1)
+    def test_empty_chains(self):
+        """Class-only name with no chains returns (0, 0)."""
+        assert _count_saturated_unsaturated('PC') == (0, 0)
 
     def test_malformed_chain(self):
         """No colon separator — parsing should not crash."""
-        result = _count_saturated_unsaturated('PC(abc_def)')
+        result = _count_saturated_unsaturated('PC abc_def')
         assert isinstance(result, tuple)
         assert len(result) == 2
 
     def test_consolidated_format(self):
-        """Consolidated lipids like 'PC 34:1' have no parenthesised chains."""
-        assert _count_saturated_unsaturated('PC 34:1') == (0, 0)
+        """Consolidated lipids like 'PC 34:1' — single chain with 1 DB."""
+        assert _count_saturated_unsaturated('PC 34:1') == (0, 1)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -203,14 +203,14 @@ class TestCalculateClassSaturationRatio:
         assert (result['saturation_ratio'] <= 1).all()
 
     def test_pc_class_ratio(self, simple_df):
-        """PC(16:0_18:1) has 1 sat + 1 unsat; PC(16:0_16:0) has 2 sat.
+        """PC 16:0_18:1 has 1 sat + 1 unsat; PC 16:0_16:0 has 2 sat.
         Total: 3 sat + 1 unsat → ratio = 3/4 = 0.75."""
         result = PathwayVizPlotterService.calculate_class_saturation_ratio(simple_df)
         pc_ratio = result.loc[result['ClassKey'] == 'PC', 'saturation_ratio'].iloc[0]
         assert pc_ratio == pytest.approx(0.75)
 
     def test_pe_class_ratio(self, simple_df):
-        """PE(18:1_18:2) has 0 sat + 2 unsat; PE(18:0_20:4) has 1 sat + 1 unsat.
+        """PE 18:1_18:2 has 0 sat + 2 unsat; PE 18:0_20:4 has 1 sat + 1 unsat.
         Total: 1 sat + 3 unsat → ratio = 1/4 = 0.25."""
         result = PathwayVizPlotterService.calculate_class_saturation_ratio(simple_df)
         pe_ratio = result.loc[result['ClassKey'] == 'PE', 'saturation_ratio'].iloc[0]
@@ -218,7 +218,7 @@ class TestCalculateClassSaturationRatio:
 
     def test_all_saturated_class(self):
         df = _make_df(
-            lipids=['PC(16:0_16:0)', 'PC(18:0_16:0)'],
+            lipids=['PC 16:0_16:0', 'PC 18:0_16:0'],
             classes=['PC', 'PC'],
             sample_values=[[100, 200], [110, 210]],
         )
@@ -227,7 +227,7 @@ class TestCalculateClassSaturationRatio:
 
     def test_all_unsaturated_class(self):
         df = _make_df(
-            lipids=['PC(18:1_18:2)', 'PC(20:4_22:6)'],
+            lipids=['PC 18:1_18:2', 'PC 20:4_22:6'],
             classes=['PC', 'PC'],
             sample_values=[[100, 200], [110, 210]],
         )
@@ -253,7 +253,7 @@ class TestCalculateClassSaturationRatio:
             PathwayVizPlotterService.calculate_class_saturation_ratio(df)
 
     def test_missing_classkey_column(self):
-        df = pd.DataFrame({'LipidMolec': ['PC(16:0_18:1)'], 'concentration[s1]': [100]})
+        df = pd.DataFrame({'LipidMolec': ['PC 16:0_18:1'], 'concentration[s1]': [100]})
         with pytest.raises(ValueError, match="ClassKey"):
             PathwayVizPlotterService.calculate_class_saturation_ratio(df)
 
@@ -261,7 +261,7 @@ class TestCalculateClassSaturationRatio:
         """Lipids that can't be parsed contribute (0, 0) — they shouldn't
         crash or bias the ratio."""
         df = _make_df(
-            lipids=['PC 34:1', 'PC(16:0_18:1)'],
+            lipids=['UnknownLipid', 'PC 16:0_18:1'],
             classes=['PC', 'PC'],
             sample_values=[[100, 200], [110, 210]],
         )
@@ -272,7 +272,7 @@ class TestCalculateClassSaturationRatio:
 
     def test_single_lipid(self):
         df = _make_df(
-            lipids=['TG(16:0_18:0_18:1)'],
+            lipids=['TG 16:0_18:0_18:1'],
             classes=['TG'],
             sample_values=[[500]],
         )
@@ -305,7 +305,7 @@ class TestCalculateClassFoldChange:
     def test_fold_change_ratio_correct(self, experiment_2x3):
         """Control samples all 100, experimental samples all 200 → FC = 2.0."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[
                 [100], [100], [100],  # s1-s3 (Control)
@@ -321,7 +321,7 @@ class TestCalculateClassFoldChange:
     def test_fold_change_less_than_one(self, experiment_2x3):
         """Experimental lower than control → FC < 1."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[
                 [200], [200], [200],  # Control
@@ -336,7 +336,7 @@ class TestCalculateClassFoldChange:
 
     def test_equal_abundances_fc_one(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[100]] * 6,
         )
@@ -349,7 +349,7 @@ class TestCalculateClassFoldChange:
     def test_multiple_species_summed(self, experiment_2x3):
         """Two PC species should be summed per class before fold change."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'PC(16:0_16:0)'],
+            lipids=['PC 16:0_18:1', 'PC 16:0_16:0'],
             classes=['PC', 'PC'],
             sample_values=[
                 [100, 100], [100, 100], [100, 100],  # Control
@@ -371,7 +371,7 @@ class TestCalculateClassFoldChange:
     def test_zero_control_abundance(self, experiment_2x3):
         """Zero control mean → fold change = 0 (not inf)."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[0], [0], [0], [100], [100], [100]],
         )
@@ -395,7 +395,7 @@ class TestCalculateClassFoldChange:
         assert result.empty
 
     def test_missing_classkey_column(self, experiment_2x3):
-        df = pd.DataFrame({'LipidMolec': ['PC(16:0)'], 'concentration[s1]': [100]})
+        df = pd.DataFrame({'LipidMolec': ['PC 16:0'], 'concentration[s1]': [100]})
         with pytest.raises(ValueError, match="ClassKey"):
             PathwayVizPlotterService.calculate_class_fold_change(
                 df, experiment_2x3, 'Control', 'Treatment',
@@ -416,7 +416,7 @@ class TestCalculateClassFoldChange:
     def test_no_matching_concentration_columns(self, experiment_2x3):
         """DataFrame exists but has no concentration columns matching samples."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'intensity[s1]': [100],
         })
@@ -428,7 +428,7 @@ class TestCalculateClassFoldChange:
     def test_three_conditions(self, experiment_3x2):
         """Fold change between two of three conditions."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[
                 [100], [100],  # Control (s1-s2)
@@ -740,7 +740,7 @@ class TestEndToEnd:
 
     def test_pipeline_three_conditions(self, experiment_3x2):
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+            lipids=['PC 16:0_18:1', 'PE 18:0_20:4'],
             classes=['PC', 'PE'],
             sample_values=[
                 [100, 50], [100, 50],    # Control
@@ -769,7 +769,7 @@ class TestEdgeCases:
     def test_all_zeros_saturation(self):
         """All-zero concentration still computes saturation from lipid names."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'PC(16:0_16:0)'],
+            lipids=['PC 16:0_18:1', 'PC 16:0_16:0'],
             classes=['PC', 'PC'],
             sample_values=[[0, 0], [0, 0]],
         )
@@ -779,7 +779,7 @@ class TestEdgeCases:
     def test_all_zeros_fold_change(self, experiment_2x3):
         """All-zero data → fold change = 0."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[0]] * 6,
         )
@@ -791,7 +791,7 @@ class TestEdgeCases:
     def test_nan_in_concentration_columns(self, experiment_2x3):
         """NaN values in concentrations should not crash."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[np.nan], [100], [100], [200], [200], [np.nan]],
         )
@@ -804,7 +804,7 @@ class TestEdgeCases:
         """1 sample per condition should work."""
         exp = make_experiment(2, 1)
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[100], [200]],
         )
@@ -815,7 +815,7 @@ class TestEdgeCases:
 
     def test_very_large_fold_change(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[1], [1], [1], [1000000], [1000000], [1000000]],
         )
@@ -828,7 +828,7 @@ class TestEdgeCases:
     def test_negative_values_in_data(self, experiment_2x3):
         """Negative concentration values should not crash."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[-100], [-100], [-100], [200], [200], [200]],
         )
@@ -840,7 +840,7 @@ class TestEdgeCases:
     def test_special_characters_in_lipid_names(self):
         """Lipid names with special characters in saturation calc."""
         df = _make_df(
-            lipids=['PC(O-16:0_18:1)', 'PE(P-18:0_20:4)'],
+            lipids=['PC O-16:0_18:1', 'PE P-18:0_20:4'],
             classes=['PC', 'PE'],
             sample_values=[[100, 50], [200, 100]],
         )
@@ -870,7 +870,7 @@ class TestTypeCoercion:
 
     def test_int_concentrations(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[int(100)]] * 6,
         )
@@ -881,7 +881,7 @@ class TestTypeCoercion:
 
     def test_float32_concentrations(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[np.float32(100)]] * 3 + [[np.float32(200)]] * 3,
         )
@@ -892,7 +892,7 @@ class TestTypeCoercion:
 
     def test_int64_concentrations(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[np.int64(100)]] * 3 + [[np.int64(200)]] * 3,
         )
@@ -904,7 +904,7 @@ class TestTypeCoercion:
     def test_object_dtype_concentrations(self, experiment_2x3):
         """String numbers stored as object dtype."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
+            'LipidMolec': ['PC 16:0_18:1'],
             'ClassKey': ['PC'],
             'concentration[s1]': pd.array([100], dtype='object'),
             'concentration[s2]': pd.array([100], dtype='object'),
@@ -921,7 +921,7 @@ class TestTypeCoercion:
     def test_mixed_types_in_saturation(self):
         """Mixed numeric types should not crash saturation calculation."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)', 'PC(16:0_16:0)'],
+            'LipidMolec': ['PC 16:0_18:1', 'PC 16:0_16:0'],
             'ClassKey': ['PC', 'PC'],
             'concentration[s1]': [np.int64(100), np.float32(200)],
         })
@@ -931,7 +931,7 @@ class TestTypeCoercion:
     def test_full_pipeline_with_int_data(self, experiment_2x3):
         """Full pipeline with integer-only data."""
         df = _make_df(
-            lipids=['PC(16:0_18:1)', 'PE(18:0_18:0)'],
+            lipids=['PC 16:0_18:1', 'PE 18:0_18:0'],
             classes=['PC', 'PE'],
             sample_values=[
                 [int(100), int(50)], [int(100), int(50)], [int(100), int(50)],
@@ -1004,7 +1004,7 @@ class TestLargeDataset:
     """Stress tests with large datasets."""
 
     def test_saturation_100_lipids(self):
-        lipids = [f'PC({i}:0_{i+1}:1)' for i in range(100)]
+        lipids = [f'PC {i}:0_{i+1}:1' for i in range(100)]
         classes = ['PC'] * 100
         values = [list(np.random.rand(100) * 1000)]
         df = _make_df(lipids, classes, values)
@@ -1015,7 +1015,7 @@ class TestLargeDataset:
     def test_fold_change_many_classes(self):
         """20 different classes."""
         exp = make_experiment(2, 3)
-        lipids = [f'{cls}(16:0_18:1)' for cls in PATHWAY_CLASSES[:18]]
+        lipids = [f'{cls} 16:0_18:1' for cls in PATHWAY_CLASSES[:18]]
         classes = list(PATHWAY_CLASSES[:18])
         values = [list(np.random.rand(18) * 1000) for _ in range(6)]
         df = _make_df(lipids, classes, values)
@@ -1043,7 +1043,7 @@ class TestLargeDataset:
         """500 lipids across 10 classes."""
         exp = make_experiment(2, 3)
         classes_pool = PATHWAY_CLASSES[:10]
-        lipids = [f'{classes_pool[i % 10]}({16 + i % 5}:0_{18 + i % 3}:{i % 4})'
+        lipids = [f'{classes_pool[i % 10]} {16 + i % 5}:0_{18 + i % 3}:{i % 4}'
                   for i in range(500)]
         classes = [classes_pool[i % 10] for i in range(500)]
         values = [list(np.random.rand(500) * 10000) for _ in range(6)]
@@ -1069,7 +1069,7 @@ class TestNaNHandling:
     def test_nan_lipid_name_in_saturation(self):
         """NaN in LipidMolec should not crash."""
         df = pd.DataFrame({
-            'LipidMolec': [np.nan, 'PC(16:0_18:1)'],
+            'LipidMolec': [np.nan, 'PC 16:0_18:1'],
             'ClassKey': ['PC', 'PC'],
             'concentration[s1]': [100, 200],
         })
@@ -1079,7 +1079,7 @@ class TestNaNHandling:
     def test_nan_classkey(self):
         """NaN ClassKey should be handled (grouped as NaN)."""
         df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_18:0)'],
+            'LipidMolec': ['PC 16:0_18:1', 'PE 18:0_18:0'],
             'ClassKey': [np.nan, 'PE'],
             'concentration[s1]': [100, 200],
         })
@@ -1088,7 +1088,7 @@ class TestNaNHandling:
 
     def test_all_nan_concentrations(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[np.nan]] * 6,
         )
@@ -1109,7 +1109,7 @@ class TestBoundary:
     def test_single_lipid_single_sample(self):
         exp = make_experiment(2, 1)
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[100], [200]],
         )
@@ -1121,7 +1121,7 @@ class TestBoundary:
     def test_fold_change_exactly_one(self):
         exp = make_experiment(2, 2)
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[500], [500], [500], [500]],
         )
@@ -1132,7 +1132,7 @@ class TestBoundary:
 
     def test_saturation_ratio_boundary_all_sat(self):
         df = _make_df(
-            lipids=['PC(16:0_16:0)'],
+            lipids=['PC 16:0_16:0'],
             classes=['PC'],
             sample_values=[[100]],
         )
@@ -1141,7 +1141,7 @@ class TestBoundary:
 
     def test_saturation_ratio_boundary_all_unsat(self):
         df = _make_df(
-            lipids=['PC(18:1_20:4)'],
+            lipids=['PC 18:1_20:4'],
             classes=['PC'],
             sample_values=[[100]],
         )
@@ -1150,7 +1150,7 @@ class TestBoundary:
 
     def test_very_small_fold_change(self, experiment_2x3):
         df = _make_df(
-            lipids=['PC(16:0_18:1)'],
+            lipids=['PC 16:0_18:1'],
             classes=['PC'],
             sample_values=[[1000000]] * 3 + [[1]] * 3,
         )

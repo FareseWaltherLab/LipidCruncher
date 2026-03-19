@@ -564,7 +564,9 @@ class StandardsService:
         # Infer ClassKey from LipidMolec if not present
         if 'ClassKey' not in df.columns:
             df['ClassKey'] = df['LipidMolec'].apply(
-                lambda x: str(x).split('(')[0] if '(' in str(x) else str(x)
+                lambda x: str(x).split()[0] if ' ' in str(x) else (
+                    str(x).split('(')[0] if '(' in str(x) else str(x)
+                )
             )
 
         return df
@@ -724,6 +726,8 @@ class StandardsService:
         if pd.isna(lipid_name):
             return 'Unknown'
         name = str(lipid_name)
+        if ' ' in name:
+            return name.split()[0]
         if '(' in name:
             return name.split('(')[0]
         return name

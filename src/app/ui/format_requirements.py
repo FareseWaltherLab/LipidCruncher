@@ -30,8 +30,8 @@ METABOLOMICS_WORKBENCH_REQUIREMENTS = """
 MS_METABOLITE_DATA_START
 Samples,Sample1,Sample2,Sample3,Sample4
 Factors,WT,WT,KO,KO
-LPC(16:0),234.5,256.7,189.3,201.4
-PE(18:0_20:4),456.7,478.2,390.1,405.6
+LPC 16:0,234.5,256.7,189.3,201.4
+PE 18:0_20:4,456.7,478.2,390.1,405.6
 MS_METABOLITE_DATA_END
 ```
 
@@ -107,7 +107,7 @@ The `Lipid IS` column separates raw from normalized data. You'll choose which to
 
 **✨ Auto-features:**
 - ClassKey inferred from lipid names
-- Hydroxyl notation preserved (`;2O`, `;3O`)
+- Hydroxyl notation normalized to LIPID MAPS format (`;O2`, `;O3`)
 - Internal standards detected: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`
 - Column mappings reviewable after upload
 """
@@ -130,16 +130,18 @@ GENERIC_REQUIREMENTS = """
 
 | Your Format | → Standardized |
 |-------------|----------------|
-| `LPC O-18:1` | `LPC(O-18:1)` |
-| `LPC 18:1(d7)` | `LPC(18:1)(d7)` |
-| `Cer d18:1;2O/24:0` | `Cer(d18:1;2O_24:0)` |
-| `PC 16:0/18:1` | `PC(16:0_18:1)` |
+| `LPC O-18:1` | `LPC O-18:1` |
+| `LPC 18:1(d7)` | `LPC 18:1(d7)` |
+| `Cer d18:1;2O/24:0` | `Cer d18:1;O2/24:0` |
+| `PC 16:0/18:1` | `PC 16:0_18:1` |
+| `LPC(20:0_0:0)` | `LPC 20:0` |
 
 ---
 
 **✨ Auto-features:**
-- Lipid names standardized to `Class(chains)` format
-- All chain notation preserved (`;O`, `;2O`, `;3O`, etc.)
+- Lipid names standardized to LIPID MAPS shorthand: `Class chains` (space-separated, no parentheses)
+- Sphingolipid chains separated by `/`, others by `_`
+- Hydroxyl notation normalized (`;2O` → `;O2`)
 - ClassKey extracted from lipid names
 - Intensity columns renamed to `intensity[s1]`, `intensity[s2]`, ...
 """

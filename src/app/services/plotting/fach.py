@@ -17,6 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from app.constants import parse_lipid_name
 from app.models.experiment import ExperimentConfig
 
 
@@ -66,11 +67,11 @@ class FACHPlotterService:
         """Parse total carbon atoms and double bonds from a lipid name.
 
         Handles standard, ether, sphingoid, oxidized, and modified formats:
-        - Standard: 'PC(34:1)' or 'PC(16:0_18:1)'
-        - Ether lipids: 'PC(O-38:4)', 'PE(P-36:2)'
-        - Sphingoid bases: 'Cer(d18:1_24:0)', 'SM(d18:1_16:0)'
-        - Oxidized: 'PC(16:0_18:1+O)', 'PE(18:0_20:4+2O)'
-        - With modifications: 'LPC(18:1)(d7)'
+        - Standard: 'PC 16:0_18:1'
+        - Ether lipids: 'PC O-38:4', 'PE P-36:2'
+        - Sphingoid bases: 'Cer d18:1;O2/24:0', 'SM d18:1/16:0'
+        - Oxidized: 'PC 16:0_18:1+O', 'PE 18:0_20:4+2O'
+        - With modifications: 'LPC 18:1(d7)'
 
         Args:
             lipid_name: Standardized lipid name string.
@@ -81,15 +82,15 @@ class FACHPlotterService:
         if not lipid_name or not isinstance(lipid_name, str):
             return None, None
 
-        match = re.search(r'\(([^)]+)\)', lipid_name)
-        if not match:
+        _, chain_info, _ = parse_lipid_name(lipid_name)
+        if not chain_info:
             return None, None
 
-        composition = match.group(1)
+        composition = chain_info
         total_c = 0
         total_db = 0
 
-        chains = composition.split('_')
+        chains = re.split(r'[/_]', composition)
 
         for chain in chains:
             # Remove ether/sphingoid prefixes: O-, P-, d, t, m

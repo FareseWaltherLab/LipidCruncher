@@ -199,16 +199,21 @@ class LipidSearchCleaner(BaseDataCleaner):
 
     @staticmethod
     def _standardize_single_name(class_key: str, fa_key) -> str:
-        """
-        Standardize a single lipid name.
+        """Standardize a single lipid name to LIPID MAPS shorthand notation.
 
         Args:
             class_key: Lipid class (e.g., 'PC', 'PE', 'Ch')
             fa_key: Fatty acid key (e.g., '18:0_20:4')
 
         Returns:
-            Standardized lipid name (e.g., 'PC(18:0_20:4)')
+            Standardized lipid name (e.g., 'PC 18:0_20:4')
         """
+        from app.constants import (
+            normalize_hydroxyl, sort_chains_lipid_maps,
+            remove_phantom_chains, format_lipid_name,
+            LYSO_CLASSES,
+        )
+
         fa_key = "" if pd.isna(fa_key) else str(fa_key)
 
         # Special handling for Cholesterol
@@ -219,20 +224,32 @@ class LipidSearchCleaner(BaseDataCleaner):
         fa_key, internal_standard = LipidSearchCleaner._extract_internal_standard_suffix(fa_key)
 
         if not fa_key or fa_key == '()':
-            return f"{class_key}(){internal_standard}"
+            return f"{class_key}{internal_standard}" if internal_standard else class_key
 
-        # Sort fatty acids for consistent naming
-        sorted_fatty_acids = '_'.join(sorted(fa_key.strip('()').split('_')))
-        return f"{class_key}({sorted_fatty_acids}){internal_standard}"
+        # Parse chains
+        raw = fa_key.strip('()')
+        chains = raw.split('_')
+
+        # Remove phantom 0:0 chains for lyso-species
+        if class_key in LYSO_CLASSES:
+            chains = remove_phantom_chains(chains)
+
+        # Normalize hydroxyl notation: ;2O → ;O2
+        chains = [normalize_hydroxyl(c) for c in chains]
+
+        # Sort per LIPID MAPS rules
+        chains = sort_chains_lipid_maps(chains, class_key)
+
+        return format_lipid_name(class_key, chains, internal_standard)
 
     @staticmethod
     def _standardize_cholesterol_name(fa_key: str) -> str:
         """Standardize cholesterol lipid name."""
         if not fa_key or fa_key.startswith('D'):
             if fa_key.startswith('D'):
-                return f"Ch-{fa_key}()"
-            return "Ch()"
-        return f"Ch({fa_key})"
+                return f"Ch-{fa_key}"
+            return "Ch"
+        return f"Ch {fa_key}"
 
     @staticmethod
     def _extract_internal_standard_suffix(fa_key: str) -> Tuple[str, str]:
