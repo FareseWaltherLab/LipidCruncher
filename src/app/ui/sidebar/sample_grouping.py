@@ -6,10 +6,13 @@ This module contains:
 - display_sample_grouping: Complete sample grouping UI orchestration
 """
 
+import logging
 from typing import Optional, Tuple
 
 import streamlit as st
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from app.models.experiment import ExperimentConfig
 from app.services.sample_grouping import SampleGroupingService
@@ -48,7 +51,11 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
             df, experiment, data_format, workbench_conditions,
         )
     except ValueError as e:
-        st.sidebar.error(f"Error building sample groups: {e}")
+        logger.error("Error building sample groups: %s", e)
+        st.sidebar.error(
+            "Could not build sample groups. Please check that the number of conditions and samples "
+            "matches your dataset. If the issue persists after refreshing the app, contact abdih@mskcc.org."
+        )
         return None, df
 
     group_df = result.group_df
@@ -116,7 +123,11 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         st.sidebar.dataframe(regroup_result.name_df, use_container_width=True)
         return regroup_result.group_df, regroup_result.reordered_df
     except ValueError as e:
-        st.sidebar.error(f"Error updating groups: {str(e)}")
+        logger.error("Error updating groups: %s", e)
+        st.sidebar.error(
+            "Could not update sample groups. Please verify that every condition has the correct number "
+            "of samples selected. If the issue persists after refreshing the app, contact abdih@mskcc.org."
+        )
         st.session_state.grouping_complete = False
         return group_df, df
 
@@ -156,7 +167,11 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
             number_of_samples_list=number_of_samples_list
         )
     except (ValueError, TypeError) as e:
-        st.sidebar.error(f"Invalid experiment setup: {e}")
+        logger.error("Invalid experiment setup: %s", e)
+        st.sidebar.error(
+            "Invalid experiment setup. Please ensure all condition names are filled in and each condition "
+            "has at least one sample. If the issue persists after refreshing the app, contact abdih@mskcc.org."
+        )
         return None, None
 
     # Step 2: Group Samples (with manual regrouping option)

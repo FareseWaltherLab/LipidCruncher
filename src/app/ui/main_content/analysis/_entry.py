@@ -169,6 +169,6 @@ def _display_pdf_report_section(
             )
         else:
             st.error(
-                "Failed to generate PDF report. "
-                "Please ensure kaleido is installed for plot export."
+                "Failed to generate PDF report. Please refresh the app and try again. "
+                "If the issue persists, contact abdih@mskcc.org."
             )

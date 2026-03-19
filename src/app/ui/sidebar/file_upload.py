@@ -7,11 +7,14 @@ This module contains:
 - display_file_upload: File uploader with sample data option
 """
 
+import logging
 from pathlib import Path
 from typing import Optional
 
 import streamlit as st
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.data_standardization import DataStandardizationService
@@ -158,8 +161,33 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
                 st.sidebar.success("File uploaded successfully!")
                 st.session_state.raw_df = df
                 return df
-        except (ValueError, KeyError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
-            st.sidebar.error(f"Error reading file: {e}")
+        except UnicodeDecodeError as e:
+            logger.error("File encoding error: %s", e)
+            st.sidebar.error(
+                "Could not read your file. It may not be a valid CSV/text file or uses an unsupported encoding. "
+                "Please ensure the file is saved as UTF-8 encoded CSV. "
+                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+            )
+            return None
+        except pd.errors.EmptyDataError as e:
+            logger.error("Empty file: %s", e)
+            st.sidebar.error(
+                "The uploaded file appears to be empty. Please check that your file contains data and try again."
+            )
+            return None
+        except pd.errors.ParserError as e:
+            logger.error("CSV parse error: %s", e)
+            st.sidebar.error(
+                "Could not parse the file. Please ensure it is a properly formatted CSV with consistent columns. "
+                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+            )
+            return None
+        except (ValueError, KeyError) as e:
+            logger.error("File processing error: %s", e)
+            st.sidebar.error(
+                "There was a problem processing your file. Please check that it matches the selected data format. "
+                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+            )
             return None
 
     return None

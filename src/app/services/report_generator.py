@@ -6,6 +6,7 @@ multi-page PDF using ReportLab. Handles both Plotly and Matplotlib figures.
 """
 import copy
 import io
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -14,6 +15,8 @@ import plotly.io as pio
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -324,7 +327,8 @@ def generate_pdf_report(
 
         pdf.save()
         pdf_buffer.seek(0)
-    except Exception:
+    except Exception as e:
+        logger.error("PDF report generation failed: %s", e, exc_info=True)
         return None
 
     return pdf_buffer

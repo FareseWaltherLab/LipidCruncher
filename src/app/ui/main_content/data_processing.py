@@ -11,8 +11,12 @@ This module contains:
 - display_final_filtered_data: Display final filtered data table with download
 """
 
+import logging
+
 import streamlit as st
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button
@@ -407,7 +411,12 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
             st.session_state.intsta_df = result.internal_standards_df
             st.session_state.continuation_df = result.cleaned_df
     except (ValueError, KeyError) as e:
-        st.error(f"Processing error: {e}")
+        logger.error("Data processing error: %s", e)
+        st.error(
+            "Data processing failed. Please check that your file matches the selected data format "
+            "and contains the required columns. "
+            "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+        )
         return None
 
     # Display validation results

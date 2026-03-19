@@ -6,8 +6,12 @@ This module contains:
   (auto-detect, upload custom, view consistency plots)
 """
 
+import logging
+
 import streamlit as st
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
@@ -192,10 +196,29 @@ def _process_uploaded_standards(
         return result.standards_df
 
     except ValueError as ve:
-        st.error(str(ve))
+        logger.error("Standards validation error: %s", ve)
+        st.error(
+            "Could not process the standards file. Please check that it contains a 'LipidMolec' column "
+            "and valid lipid standard entries. "
+            "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+        )
         return _fallback_standards(auto_detected_df)
-    except (KeyError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
-        st.error(f"Error reading file: {str(e)}")
+    except UnicodeDecodeError as e:
+        logger.error("Standards file encoding error: %s", e)
+        st.error(
+            "Could not read the standards file. Please ensure it is saved as a UTF-8 encoded CSV and try again."
+        )
+        return _fallback_standards(auto_detected_df)
+    except pd.errors.EmptyDataError as e:
+        logger.error("Empty standards file: %s", e)
+        st.error("The uploaded standards file appears to be empty. Please check the file and try again.")
+        return _fallback_standards(auto_detected_df)
+    except (KeyError, pd.errors.ParserError) as e:
+        logger.error("Standards file parse error: %s", e)
+        st.error(
+            "Could not parse the standards file. Please ensure it is a properly formatted CSV with consistent columns. "
+            "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+        )
         return _fallback_standards(auto_detected_df)
 
 

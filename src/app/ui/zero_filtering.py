@@ -1,8 +1,12 @@
 """
 Zero filtering UI component for configuring and applying zero value filtering.
 """
+import logging
+
 import pandas as pd
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 from app.constants import (
     LIPIDSEARCH_DETECTION_THRESHOLD,
@@ -134,5 +138,10 @@ def display_zero_filtering_config(
             }
 
         except ValueError as e:
-            st.error(f"Zero filtering error: {e}")
+            logger.error("Zero filtering error: %s", e)
+            st.error(
+                "Zero filtering failed. Please check that your threshold values are valid "
+                "(detection threshold ≥ 0, BQC and non-BQC thresholds between 0 and 1). "
+                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+            )
             return cleaned_df, [], {}

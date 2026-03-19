@@ -9,10 +9,13 @@ This module contains:
 - _run_normalization: Cached normalization workflow execution
 """
 
+import logging
 from typing import Optional
 
 import streamlit as st
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from app.models.experiment import ExperimentConfig
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowResult
@@ -230,8 +233,32 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
             st.success(f"✓ Loaded {len(protein_concentrations)} concentration values")
             return protein_concentrations
 
-        except (ValueError, KeyError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
-            st.error(f"Error reading CSV: {str(e)}")
+        except UnicodeDecodeError as e:
+            logger.error("Protein CSV encoding error: %s", e)
+            st.error(
+                "Could not read the protein concentration CSV. The file may use an unsupported encoding. "
+                "Please save it as a UTF-8 encoded CSV and try again."
+            )
+            return None
+        except pd.errors.EmptyDataError as e:
+            logger.error("Empty protein CSV: %s", e)
+            st.error("The uploaded protein concentration CSV appears to be empty. Please check the file and try again.")
+            return None
+        except pd.errors.ParserError as e:
+            logger.error("Protein CSV parse error: %s", e)
+            st.error(
+                "Could not parse the protein concentration CSV. Please ensure it is a properly formatted CSV "
+                "with 'Sample' and 'Concentration' columns. "
+                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+            )
+            return None
+        except (ValueError, KeyError) as e:
+            logger.error("Protein CSV processing error: %s", e)
+            st.error(
+                "Could not process the protein concentration CSV. Please ensure it contains a 'Sample' column "
+                "matching your sample names and a 'Concentration' column with numeric values. "
+                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+            )
             return None
 
     # No new file uploaded - check preserved data
@@ -345,7 +372,12 @@ def _run_normalization(
         return result
 
     except (ValueError, KeyError) as e:
-        st.error(f"Normalization error: {e}")
+        logger.error("Normalization error: %s", e)
+        st.error(
+            "Normalization failed. Please verify that the selected normalization method is compatible "
+            "with your data (e.g., internal standards are available, protein concentrations are provided). "
+            "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+        )
         return None
 
 
