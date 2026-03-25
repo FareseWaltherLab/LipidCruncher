@@ -75,6 +75,11 @@ class NormalizationService:
         elif config.method == 'protein':
             return NormalizationService._apply_protein(df, config, experiment)
 
+        elif config.method == 'total_intensity':
+            return NormalizationService._apply_total_intensity(
+                df, config, experiment
+            )
+
         elif config.method == 'both':
             return NormalizationService._apply_both(
                 df, config, experiment, intsta_df
@@ -142,6 +147,45 @@ class NormalizationService:
             normalized_df=result_df,
             removed_standards=[],
             method_applied="None (raw data with concentration column naming)"
+        )
+
+    @staticmethod
+    def _apply_total_intensity(
+        df: pd.DataFrame,
+        config: NormalizationConfig,
+        experiment: ExperimentConfig,
+    ) -> NormalizationResult:
+        """Apply total intensity normalization.
+
+        For each sample, divide every lipid intensity by that sample's total
+        intensity, then multiply by the median total intensity across all
+        samples. This keeps values in a biologically meaningful range while
+        equalizing total signal across samples.
+        """
+        result_df = df.copy()
+
+        if config.selected_classes:
+            result_df = result_df[result_df['ClassKey'].isin(config.selected_classes)]
+
+        intensity_cols = [col for col in result_df.columns if col.startswith('intensity[')]
+
+        # Compute per-sample totals and the median total
+        sample_totals = result_df[intensity_cols].sum(axis=0)
+        median_total = np.median(sample_totals[sample_totals > 0]) if (sample_totals > 0).any() else 1.0
+
+        # Normalize: (intensity / sample_total) * median_total
+        for col in intensity_cols:
+            total = sample_totals[col]
+            if total > 0:
+                result_df[col] = result_df[col] / total * median_total
+            # If a sample's total is 0, leave values as 0
+
+        result_df = NormalizationService._rename_intensity_to_concentration(result_df)
+
+        return NormalizationResult(
+            normalized_df=result_df,
+            removed_standards=[],
+            method_applied="Total intensity normalization"
         )
 
     @staticmethod

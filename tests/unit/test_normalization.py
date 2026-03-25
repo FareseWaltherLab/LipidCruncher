@@ -1578,6 +1578,104 @@ class TestIntegrationCombined:
         assert abs(pc_row['concentration[s1]'] - expected) < 0.01
 
 
+# =============================================================================
+# Total Intensity Normalization Tests
+# =============================================================================
+
+
+class TestTotalIntensityNormalization:
+    """Tests for total intensity normalization."""
+
+    @pytest.fixture
+    def total_intensity_config(self):
+        return NormalizationConfig(method='total_intensity')
+
+    @pytest.fixture
+    def total_intensity_config_with_classes(self):
+        return NormalizationConfig(method='total_intensity', selected_classes=['PC', 'PE'])
+
+    def test_basic_total_intensity(self, basic_lipid_df, simple_experiment_2x3, total_intensity_config):
+        """Test that total intensity normalization equalizes sample totals."""
+        result = NormalizationService.normalize(basic_lipid_df, total_intensity_config, simple_experiment_2x3)
+
+        assert result.method_applied == "Total intensity normalization"
+        assert result.removed_standards == []
+
+        # All samples should have the same total concentration after normalization
+        conc_cols = [col for col in result.normalized_df.columns if col.startswith('concentration[')]
+        totals = result.normalized_df[conc_cols].sum(axis=0)
+        assert totals.std() < 1e-6, "All sample totals should be equal after normalization"
+
+    def test_total_intensity_preserves_relative_proportions(self, basic_lipid_df, simple_experiment_2x3, total_intensity_config):
+        """Test that within-sample proportions are preserved."""
+        result = NormalizationService.normalize(basic_lipid_df, total_intensity_config, simple_experiment_2x3)
+
+        # For sample s1: original proportions are 1000/6000, 2000/6000, 3000/6000
+        conc_cols = [col for col in result.normalized_df.columns if col.startswith('concentration[')]
+        s1_col = [c for c in conc_cols if 's1]' in c][0]
+        s1_vals = result.normalized_df[s1_col].values
+        proportions = s1_vals / s1_vals.sum()
+        expected_proportions = np.array([1000, 2000, 3000]) / 6000.0
+        np.testing.assert_allclose(proportions, expected_proportions, rtol=1e-10)
+
+    def test_total_intensity_scaling_factor(self, simple_experiment_2x3):
+        """Test that the scaling factor is the median of sample totals."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [100.0, 200.0],   # total = 300
+            'intensity[s2]': [200.0, 400.0],   # total = 600
+            'intensity[s3]': [150.0, 300.0],   # total = 450
+            'intensity[s4]': [300.0, 600.0],   # total = 900
+            'intensity[s5]': [250.0, 500.0],   # total = 750
+            'intensity[s6]': [350.0, 700.0],   # total = 1050
+        })
+        config = NormalizationConfig(method='total_intensity')
+        result = NormalizationService.normalize(df, config, simple_experiment_2x3)
+
+        # Median of [300, 600, 450, 900, 750, 1050] = (600+750)/2 = 675
+        conc_cols = [col for col in result.normalized_df.columns if col.startswith('concentration[')]
+        totals = result.normalized_df[conc_cols].sum(axis=0)
+        np.testing.assert_allclose(totals.values, 675.0, rtol=1e-10)
+
+    def test_total_intensity_with_class_filter(self, multi_class_df, simple_experiment_2x3, total_intensity_config_with_classes):
+        """Test total intensity normalization with class selection."""
+        result = NormalizationService.normalize(
+            multi_class_df, total_intensity_config_with_classes, simple_experiment_2x3
+        )
+        # TG should be excluded
+        assert 'TG' not in result.normalized_df['ClassKey'].values
+
+    def test_total_intensity_renames_columns(self, basic_lipid_df, simple_experiment_2x3, total_intensity_config):
+        """Test that intensity columns are renamed to concentration."""
+        result = NormalizationService.normalize(basic_lipid_df, total_intensity_config, simple_experiment_2x3)
+        assert not any(col.startswith('intensity[') for col in result.normalized_df.columns)
+        assert any(col.startswith('concentration[') for col in result.normalized_df.columns)
+
+    def test_total_intensity_with_zero_sample(self, simple_experiment_2x3):
+        """Test handling of a sample where all lipids have zero intensity."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [0.0, 0.0],       # all zeros
+            'intensity[s2]': [100.0, 200.0],
+            'intensity[s3]': [150.0, 300.0],
+            'intensity[s4]': [200.0, 400.0],
+            'intensity[s5]': [250.0, 500.0],
+            'intensity[s6]': [300.0, 600.0],
+        })
+        config = NormalizationConfig(method='total_intensity')
+        result = NormalizationService.normalize(df, config, simple_experiment_2x3)
+
+        # s1 should remain all zeros
+        s1_col = [c for c in result.normalized_df.columns if 's1]' in c][0]
+        assert (result.normalized_df[s1_col] == 0).all()
+
+        # Other samples should be normalized
+        s2_col = [c for c in result.normalized_df.columns if 's2]' in c][0]
+        assert result.normalized_df[s2_col].sum() > 0
+
+
 class TestIntegrationPreserveStructure:
     """Integration tests for structure preservation."""
 

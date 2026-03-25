@@ -20,7 +20,7 @@ class NormalizationConfig(BaseModel):
     """
     model_config = {"frozen": True}
 
-    method: Literal['none', 'internal_standard', 'protein', 'both'] = 'none'
+    method: Literal['none', 'internal_standard', 'protein', 'both', 'total_intensity'] = 'none'
     selected_classes: List[str] = []
     internal_standards: Optional[Dict[str, str]] = None
     intsta_concentrations: Optional[Dict[str, float]] = None

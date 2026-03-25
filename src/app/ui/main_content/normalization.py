@@ -389,6 +389,13 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
     """Display normalization options and apply normalization automatically."""
     with st.expander("📖 About Normalization Methods", expanded=False):
         st.markdown(NORMALIZATION_METHODS_DOCS)
+        st.warning(
+            "**Total Intensity normalization** is the only method that does not require any external reference "
+            "data (no internal standards or protein concentrations). However, because it converts data into "
+            "relative proportions, a real change in one abundant lipid class can cause apparent changes in all "
+            "other classes — even if they did not change in absolute terms. For absolute quantification, use "
+            "Internal Standards or Protein-based normalization instead."
+        )
 
     # Class selection
     st.markdown("##### 🎯 Select Lipid Classes")
@@ -405,7 +412,8 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
         'None (pre-normalized data)': 'none',
         'Internal Standards': 'internal_standard',
         'Protein-based': 'protein',
-        'Both': 'both'
+        'Internal Standards + Protein': 'both',
+        'Total Intensity': 'total_intensity',
     }
     config_method = method_map.get(method, 'none')
 
@@ -435,12 +443,12 @@ def _get_normalization_options(intsta_df, data_format: str) -> list:
 
     if is_msdial_prenormalized:
         st.markdown("*Internal standards options unavailable — using pre-normalized MS-DIAL data.*")
-        return ['None (pre-normalized data)', 'Protein-based']
+        return ['None (pre-normalized data)', 'Protein-based', 'Total Intensity']
     elif has_standards:
-        return ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Both']
+        return ['None (pre-normalized data)', 'Internal Standards', 'Protein-based', 'Internal Standards + Protein', 'Total Intensity']
     else:
         st.markdown("*Internal standards options unavailable — no standards detected or uploaded.*")
-        return ['None (pre-normalized data)', 'Protein-based']
+        return ['None (pre-normalized data)', 'Protein-based', 'Total Intensity']
 
 
 def _display_method_selection(normalization_options: list) -> str:
@@ -477,12 +485,12 @@ def _collect_method_config(method: str, intsta_df, selected_classes: list, exper
     intsta_concentrations = {}
     protein_concentrations = {}
 
-    if method in ['Internal Standards', 'Both']:
+    if method in ['Internal Standards', 'Internal Standards + Protein']:
         internal_standards, intsta_concentrations = _display_internal_standards_config(intsta_df, selected_classes)
         if internal_standards is None:
             return None, None, None
 
-    if method in ['Protein-based', 'Both']:
+    if method in ['Protein-based', 'Internal Standards + Protein']:
         protein_concentrations = _display_protein_config(experiment)
         if protein_concentrations is None:
             return None, None, None

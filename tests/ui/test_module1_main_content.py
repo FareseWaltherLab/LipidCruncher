@@ -133,15 +133,16 @@ class TestNormalization:
         assert set(ms.value) == {'PC', 'PE'}
 
     def test_method_radio_has_four_options_with_standards(self, norm_with_standards_app):
-        """Normalization method radio has 4 options when standards exist."""
+        """Normalization method radio has 5 options when standards exist."""
         at = norm_with_standards_app
         radio = at.radio(key='norm_method_selection')
         assert radio is not None
-        assert len(radio.options) == 4
+        assert len(radio.options) == 5
         assert 'None (pre-normalized data)' in radio.options
         assert 'Internal Standards' in radio.options
         assert 'Protein-based' in radio.options
-        assert 'Both' in radio.options
+        assert 'Internal Standards + Protein' in radio.options
+        assert 'Total Intensity' in radio.options
 
     def test_method_radio_default_is_none(self, norm_with_standards_app):
         """Normalization method defaults to None (pre-normalized)."""
@@ -150,12 +151,13 @@ class TestNormalization:
         assert radio.value == 'None (pre-normalized data)'
 
     def test_method_radio_has_two_options_without_standards(self, norm_no_standards_app):
-        """Normalization method radio has 2 options without standards."""
+        """Normalization method radio has 3 options without standards."""
         at = norm_no_standards_app
         radio = at.radio(key='norm_method_selection')
-        assert len(radio.options) == 2
+        assert len(radio.options) == 3
         assert 'None (pre-normalized data)' in radio.options
         assert 'Protein-based' in radio.options
+        assert 'Total Intensity' in radio.options
 
     def test_none_method_runs_normalization(self, norm_with_standards_app):
         """'None' method produces normalized output."""
