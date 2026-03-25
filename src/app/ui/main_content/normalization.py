@@ -389,12 +389,18 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
     """Display normalization options and apply normalization automatically."""
     with st.expander("📖 About Normalization Methods", expanded=False):
         st.markdown(NORMALIZATION_METHODS_DOCS)
+        st.info(
+            "**When to use Total Intensity normalization:** This method corrects for differences in sample "
+            "loading or injection volume without requiring internal standards or protein concentrations. It is "
+            "best suited for experiments where the total lipid content is not expected to change between "
+            "conditions (e.g., comparing lipid profiles across similar tissue samples)."
+        )
         st.warning(
-            "**Total Intensity normalization** is the only method that does not require any external reference "
-            "data (no internal standards or protein concentrations). However, because it converts data into "
-            "relative proportions, a real change in one abundant lipid class can cause apparent changes in all "
-            "other classes — even if they did not change in absolute terms. For absolute quantification, use "
-            "Internal Standards or Protein-based normalization instead."
+            "**Caution:** Total Intensity normalization converts intensities to relative proportions. If total "
+            "lipid content truly differs between conditions (e.g., lipodystrophy models, DGAT knockouts, "
+            "starvation vs. fed), a real change in one abundant class will cause apparent changes in all other "
+            "classes — even if they did not change. For such experiments, use Internal Standards or "
+            "Protein-based normalization instead."
         )
 
     # Class selection
