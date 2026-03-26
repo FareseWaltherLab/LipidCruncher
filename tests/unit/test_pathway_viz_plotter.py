@@ -600,8 +600,8 @@ class TestCreatePathwayViz:
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         ax = fig.axes[0]
         circles = [p for p in ax.patches if isinstance(p, plt.Circle)]
-        # 6 grouping circles + 18 unit circles = 24
-        assert len(circles) == 24
+        # 18 unit + 17 missing-class dashed = 35
+        assert len(circles) == 35
         plt.close(fig)
 
     def test_connecting_lines_drawn(self):
@@ -610,7 +610,8 @@ class TestCreatePathwayViz:
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         ax = fig.axes[0]
         lines = ax.get_lines()
-        assert len(lines) == 9
+        # 17 metabolic edges + 3 annotation lines = 20
+        assert len(lines) == 20
         plt.close(fig)
 
     def test_text_labels_present(self):
@@ -643,8 +644,10 @@ class TestCreatePathwayViz:
         sizes = scatter.get_sizes()
         pc_idx = PATHWAY_CLASSES.index('PC')
         pe_idx = PATHWAY_CLASSES.index('PE')
-        assert sizes[pc_idx] == pytest.approx(SIZE_SCALE * 2.0)
-        assert sizes[pe_idx] == pytest.approx(SIZE_SCALE * 4.0)
+        # Log2-scaled: size = SIZE_SCALE * log2(fc + 1)
+        import math
+        assert sizes[pc_idx] == pytest.approx(SIZE_SCALE * math.log2(3.0))
+        assert sizes[pe_idx] == pytest.approx(SIZE_SCALE * math.log2(5.0))
         plt.close(fig)
 
 

@@ -143,6 +143,22 @@ class FACHResult:
 
 
 @dataclass
+class PathwayDataResult:
+    """Result from pathway data computation (no figure).
+
+    Attributes:
+        fold_change_df: Per-class fold change DataFrame.
+        saturation_df: Per-class saturation ratio DataFrame.
+    """
+    fold_change_df: pd.DataFrame = dataclass_field(
+        default_factory=pd.DataFrame
+    )
+    saturation_df: pd.DataFrame = dataclass_field(
+        default_factory=pd.DataFrame
+    )
+
+
+@dataclass
 class PathwayResult:
     """Result from pathway visualization.
 
@@ -579,6 +595,53 @@ class AnalysisWorkflow:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def compute_pathway_data(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        control: str,
+        experimental: str,
+    ) -> PathwayDataResult:
+        """Compute pathway fold-change and saturation data (no rendering).
+
+        This method is intended for caching — the expensive computation
+        is separated from the cheap figure rendering so that layout
+        changes (toggling classes, editing edges) do not invalidate
+        the cached data.
+
+        Args:
+            df: DataFrame with LipidMolec, ClassKey, concentration columns.
+            experiment: Experiment configuration.
+            control: Name of the control condition.
+            experimental: Name of the experimental condition.
+
+        Returns:
+            PathwayDataResult with fold_change_df and saturation_df.
+
+        Raises:
+            ValueError: If inputs are invalid.
+        """
+        if not control:
+            raise ValueError("Control condition must be specified")
+        if not experimental:
+            raise ValueError("Experimental condition must be specified")
+        if control == experimental:
+            raise ValueError(
+                "Control and experimental conditions must be different"
+            )
+
+        fold_change_df = PathwayVizPlotterService.calculate_class_fold_change(
+            df, experiment, control, experimental,
+        )
+        saturation_df = PathwayVizPlotterService.calculate_class_saturation_ratio(
+            df,
+        )
+
+        return PathwayDataResult(
+            fold_change_df=fold_change_df,
+            saturation_df=saturation_df,
+        )
+
+    @staticmethod
     def run_pathway(
         df: pd.DataFrame,
         experiment: ExperimentConfig,
@@ -602,31 +665,19 @@ class AnalysisWorkflow:
         Raises:
             ValueError: If inputs are invalid.
         """
-        if not control:
-            raise ValueError("Control condition must be specified")
-        if not experimental:
-            raise ValueError("Experimental condition must be specified")
-        if control == experimental:
-            raise ValueError(
-                "Control and experimental conditions must be different"
-            )
-
-        fold_change_df = PathwayVizPlotterService.calculate_class_fold_change(
+        data = AnalysisWorkflow.compute_pathway_data(
             df, experiment, control, experimental,
-        )
-        saturation_df = PathwayVizPlotterService.calculate_class_saturation_ratio(
-            df,
         )
 
         figure, pathway_dict = PathwayVizPlotterService.create_pathway_viz(
-            fold_change_df, saturation_df,
+            data.fold_change_df, data.saturation_df,
         )
 
         return PathwayResult(
             figure=figure,
             pathway_dict=pathway_dict,
-            fold_change_df=fold_change_df,
-            saturation_df=saturation_df,
+            fold_change_df=data.fold_change_df,
+            saturation_df=data.saturation_df,
         )
 
     # ------------------------------------------------------------------

@@ -906,7 +906,7 @@ class TestSessionStateFieldCompleteness:
         """Test total number of analysis fields (guard against accidental deletion)."""
         field_names = [f.name for f in fields(SessionState)]
         analysis_fields = [f for f in field_names if f.startswith('analysis_')]
-        assert len(analysis_fields) == 11
+        assert len(analysis_fields) == 16
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
@@ -917,8 +917,8 @@ class TestSessionStateFieldCompleteness:
     def test_total_field_count(self):
         """Test total SessionState field count matches expected."""
         field_names = [f.name for f in fields(SessionState)]
-        # 61 (pre-Module 3) + 11 (analysis) + 3 (QC plot storage) = 75
-        assert len(field_names) == 75
+        # 61 (pre-Module 3) + 16 (analysis) + 3 (QC plot storage) = 80
+        assert len(field_names) == 80
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""
@@ -935,8 +935,8 @@ class TestSessionStateFieldCompleteness:
                                        'fach_', 'pathway_', 'volcano_', 'heatmap_')
         )}
         # 1 (analysis_radio) + 5 (bar) + 1 (pie) + 6 (sat) + 2 (fach)
-        # + 2 (pathway) + 10 (volcano) + 5 (heatmap) = 32
-        assert len(analysis_widget_keys) == 32
+        # + 8 (pathway) + 10 (volcano) + 5 (heatmap) = 38
+        assert len(analysis_widget_keys) == 38
 
     def test_dynamic_prefix_count_includes_analysis(self):
         """Test that _DYNAMIC_KEY_PREFIXES count includes analysis prefixes."""

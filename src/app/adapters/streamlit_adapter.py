@@ -160,6 +160,11 @@ class SessionState:
     analysis_saturation_figs: Dict[str, Any] = field(default_factory=dict)
     analysis_fach_fig: Any = None
     analysis_pathway_fig: Any = None
+    analysis_pathway_active_classes: Optional[List[str]] = None
+    analysis_pathway_added_edges: List = field(default_factory=list)
+    analysis_pathway_removed_edges: List = field(default_factory=list)
+    analysis_pathway_custom_nodes: Dict[str, Any] = field(default_factory=dict)
+    analysis_pathway_position_overrides: Dict[str, Any] = field(default_factory=dict)
     analysis_volcano_fig: Any = None
     analysis_volcano_data: Any = None
     analysis_heatmap_fig: Any = None
@@ -218,6 +223,9 @@ _WIDGET_KEYS = {
     'sat_show_significance', 'sat_detailed_stats', 'sat_stats_mode',
     'fach_class', 'fach_conditions',
     'pathway_control', 'pathway_experimental',
+    'pathway_class_selector', 'pathway_add_node_name',
+    'pathway_add_node_x', 'pathway_add_node_y',
+    'pathway_add_edge_source', 'pathway_add_edge_target',
     'volcano_control', 'volcano_experimental', 'volcano_classes',
     'volcano_p_threshold', 'volcano_fc_threshold',
     'volcano_hide_nonsig', 'volcano_top_n',
@@ -726,6 +734,22 @@ class StreamlitAdapter:
 
     @staticmethod
     @st.cache_data(
+        show_spinner="Computing pathway data...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def compute_pathway_data(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        control: str,
+        experimental: str,
+    ):
+        """Cached pathway data computation (fold change + saturation)."""
+        return AnalysisWorkflow.compute_pathway_data(
+            df, experiment, control, experimental,
+        )
+
+    @staticmethod
+    @st.cache_data(
         show_spinner="Generating pathway visualization...",
         hash_funcs={ExperimentConfig: hash},
     )
@@ -735,7 +759,7 @@ class StreamlitAdapter:
         control: str,
         experimental: str,
     ):
-        """Cached pathway visualization."""
+        """Cached pathway visualization (default layout)."""
         return AnalysisWorkflow.run_pathway(
             df, experiment, control, experimental,
         )
