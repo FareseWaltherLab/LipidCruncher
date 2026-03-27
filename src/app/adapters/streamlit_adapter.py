@@ -182,6 +182,7 @@ _WIDGET_KEYS = {
     # Sidebar widgets (file_upload, experiment_config, sample_grouping, confirm_inputs)
     'manual_sample_override', 'grouping_radio',
     'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
+    'sample_data_experiment',
     # Data processing widgets (data_processing.py)
     'grade_filter_mode', 'grade_selections',
     'grade_filter_mode_radio',

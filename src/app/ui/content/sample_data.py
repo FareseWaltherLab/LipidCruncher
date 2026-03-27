@@ -8,7 +8,13 @@ SAMPLE_DATA_INFO = {
 **Sample order:**
 1. WT (s1–s4, n=4)
 2. ADGAT-DKO (s5–s8, n=4)
-3. BQC (s9–s12, n=4)"""
+3. BQC (s9–s12, n=4)""",
+        'experiment': {
+            'n_conditions': 3,
+            'conditions': ['WT', 'ADGAT-DKO', 'BQC'],
+            'samples_per_condition': [4, 4, 4],
+            'bqc_label': 'BQC',
+        },
     },
     'LipidSearch 5.0': {
         'file': 'lipidsearch5_test_dataset.csv',
@@ -17,7 +23,13 @@ SAMPLE_DATA_INFO = {
 **Sample order:**
 1. WT (s1–s4, n=4)
 2. ADGAT-DKO (s5–s8, n=4)
-3. BQC (s9–s12, n=4)"""
+3. BQC (s9–s12, n=4)""",
+        'experiment': {
+            'n_conditions': 3,
+            'conditions': ['WT', 'ADGAT-DKO', 'BQC'],
+            'samples_per_condition': [4, 4, 4],
+            'bqc_label': 'BQC',
+        },
     },
     'MS-DIAL': {
         'file': 'msdial_test_dataset.csv',
@@ -26,7 +38,13 @@ SAMPLE_DATA_INFO = {
 **Sample order:**
 1. Blank (n=1)
 2. fads2 KO (n=3)
-3. Wild-type (n=3)"""
+3. Wild-type (n=3)""",
+        'experiment': {
+            'n_conditions': 3,
+            'conditions': ['Blank', 'fads2 KO', 'Wild-type'],
+            'samples_per_condition': [1, 3, 3],
+            'bqc_label': None,
+        },
     },
     'Metabolomics Workbench': {
         'file': 'mw_test_dataset.csv',
@@ -38,7 +56,7 @@ SAMPLE_DATA_INFO = {
 3. HFD+Water (S1C–S11C, n=11)
 4. HFD+DCA (S1D–S11D, n=11)
 5. Blank (n=2)
-6. TQC (n=12)"""
+6. TQC (n=12)""",
     },
 }
 

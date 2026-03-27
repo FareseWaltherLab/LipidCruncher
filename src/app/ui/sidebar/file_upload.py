@@ -61,6 +61,43 @@ def _store_workbench_result(result) -> Optional[pd.DataFrame]:
         return None
 
 
+def _populate_sample_experiment(data_format: str) -> None:
+    """Pre-populate experiment config widget keys from sample dataset metadata.
+
+    Sets session state keys so that experiment definition, sample grouping,
+    and BQC widgets render with the correct defaults for the sample dataset.
+    """
+    info = get_sample_data_info(data_format)
+    if not info:
+        return
+    exp = info.get('experiment')
+    if not exp:
+        return
+
+    st.session_state.sample_data_experiment = exp
+
+    # Pre-set experiment config widget keys
+    for i, cond in enumerate(exp['conditions']):
+        st.session_state[f'cond_name_{i}'] = cond
+    for i, n in enumerate(exp['samples_per_condition']):
+        st.session_state[f'n_samples_{i}'] = n
+
+    # Pre-set BQC widget keys
+    if exp.get('bqc_label'):
+        st.session_state['bqc_radio'] = 'Yes'
+        st.session_state['bqc_label_radio'] = exp['bqc_label']
+    else:
+        st.session_state['bqc_radio'] = 'No'
+
+    # Pre-check the confirm checkbox
+    st.session_state['confirm_checkbox'] = True
+
+
+def _clear_sample_experiment() -> None:
+    """Remove sample experiment metadata from session state."""
+    st.session_state.pop('sample_data_experiment', None)
+
+
 # =============================================================================
 # UI Components
 # =============================================================================
@@ -122,6 +159,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
             if sample_df is not None:
                 st.session_state.using_sample_data = True
                 st.session_state.raw_df = sample_df
+                _populate_sample_experiment(data_format)
                 st.rerun()
 
     # Check if using sample data
@@ -131,6 +169,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
         if st.sidebar.button("Clear & Upload Your Data"):
             st.session_state.using_sample_data = False
             st.session_state.sample_data_file = None
+            _clear_sample_experiment()
             StreamlitAdapter.reset_data_state()
             st.rerun()
         return st.session_state.raw_df

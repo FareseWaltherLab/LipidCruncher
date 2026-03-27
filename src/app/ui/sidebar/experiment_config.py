@@ -128,11 +128,14 @@ def _display_manual_experiment(sample_cols: list) -> tuple:
     Returns (n_conditions, conditions_list, number_of_samples_list)
     or (None, None, None) if validation fails.
     """
+    meta = st.session_state.get('sample_data_experiment')
+    default_n = meta['n_conditions'] if meta else 2
+
     n_conditions = st.sidebar.number_input(
         'Number of conditions',
         min_value=1,
         max_value=20,
-        value=2,
+        value=default_n,
         step=1
     )
 
@@ -142,19 +145,25 @@ def _display_manual_experiment(sample_cols: list) -> tuple:
     for i in range(n_conditions):
         col1, col2 = st.sidebar.columns([1, 1])
         with col1:
+            cond_kwargs = {'key': f'cond_name_{i}'}
+            if f'cond_name_{i}' not in st.session_state:
+                cond_kwargs['value'] = f'Condition_{i + 1}'
             cond_name = st.text_input(
                 f'Condition {i + 1}',
-                value=f'Condition_{i + 1}',
-                key=f'cond_name_{i}'
+                **cond_kwargs,
             )
             conditions_list.append(cond_name)
         with col2:
+            samples_kwargs = {
+                'key': f'n_samples_{i}',
+                'min_value': 1,
+                'max_value': len(sample_cols),
+            }
+            if f'n_samples_{i}' not in st.session_state:
+                samples_kwargs['value'] = min(3, len(sample_cols))
             n_samples = st.number_input(
                 'Samples',
-                min_value=1,
-                max_value=len(sample_cols),
-                value=min(3, len(sample_cols)),
-                key=f'n_samples_{i}'
+                **samples_kwargs,
             )
             number_of_samples_list.append(n_samples)
 

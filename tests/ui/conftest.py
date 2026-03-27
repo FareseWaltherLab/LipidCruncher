@@ -166,14 +166,14 @@ def full_sidebar_app():
 
 @pytest.fixture
 def generic_sidebar_app(full_sidebar_app):
-    """Generic data loaded + 3x4=12 experiment config matching 12-sample dataset."""
+    """Generic data loaded + 3x4=12 experiment config matching 12-sample dataset.
+
+    Auto-population from sample data metadata sets 3 conditions (WT, ADGAT-DKO, BQC)
+    with 4 samples each and BQC=Yes.
+    """
     at = full_sidebar_app
     at.sidebar.button(key='load_sample').click().run()
-    # Set 3 conditions x 4 samples = 12 (matches Generic dataset)
-    at.sidebar.number_input[0].set_value(3).run()
-    at.number_input(key='n_samples_0').set_value(4).run()
-    at.number_input(key='n_samples_1').set_value(4).run()
-    at.number_input(key='n_samples_2').set_value(4).run()
+    # Auto-population sets 3 conditions x 4 samples = 12 (matches Generic dataset)
     return at
 
 

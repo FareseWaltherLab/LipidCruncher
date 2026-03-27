@@ -124,24 +124,27 @@ class TestSampleDataLoading:
 class TestExperimentDefinition:
     """Tests for experiment configuration (conditions + samples)."""
 
-    def test_default_conditions_is_two(self, full_sidebar_app):
-        """Default number of conditions is 2 after loading data."""
+    def test_sample_data_auto_populates_conditions(self, full_sidebar_app):
+        """Loading sample data auto-populates condition count from metadata."""
         at = full_sidebar_app
         at.sidebar.button(key='load_sample').click().run()
-        assert at.sidebar.number_input[0].value == 2
+        # Generic sample data has 3 conditions (WT, ADGAT-DKO, BQC)
+        assert at.sidebar.number_input[0].value == 3
 
-    def test_condition_text_inputs_created(self, full_sidebar_app):
-        """Condition name inputs are created with default names."""
+    def test_sample_data_auto_populates_condition_names(self, full_sidebar_app):
+        """Loading sample data auto-populates condition names from metadata."""
         at = full_sidebar_app
         at.sidebar.button(key='load_sample').click().run()
         cond_input = at.text_input(key='cond_name_0')
-        assert cond_input.value == 'Condition_1'
+        assert cond_input.value == 'WT'
 
     def test_sample_count_validation_blocks_progress(self, full_sidebar_app):
         """When sample counts don't match dataset, grouping/confirm are blocked."""
         at = full_sidebar_app
         at.sidebar.button(key='load_sample').click().run()
-        # Default: 2 conditions x 3 samples = 6, but dataset has 12 samples
+        # Override auto-populated value: set to 2 conditions so counts don't match
+        at.sidebar.number_input[0].set_value(2).run()
+        # 2 conditions x 4 samples = 8, but dataset has 12 samples
         # grouping_radio and confirm_checkbox should NOT be rendered
         grouping_radios = [r for r in at.sidebar.radio if r.key == 'grouping_radio']
         confirm_checkboxes = [c for c in at.sidebar.checkbox if c.key == 'confirm_checkbox']
@@ -165,20 +168,19 @@ class TestExperimentDefinition:
 class TestConfirmInputsBQC:
     """Tests for BQC specification and input confirmation."""
 
-    def test_bqc_radio_default_is_no(self, generic_sidebar_app):
-        """BQC radio defaults to 'No'."""
+    def test_bqc_radio_auto_populated_for_sample_data(self, generic_sidebar_app):
+        """BQC radio auto-populates to 'Yes' for Generic sample data with BQC."""
         at = generic_sidebar_app
-        assert at.sidebar.radio(key='bqc_radio').value == 'No'
+        assert at.sidebar.radio(key='bqc_radio').value == 'Yes'
 
-    def test_confirm_checkbox_default_unchecked(self, generic_sidebar_app):
-        """Confirm checkbox starts unchecked."""
+    def test_confirm_checkbox_auto_checked_for_sample_data(self, generic_sidebar_app):
+        """Confirm checkbox is auto-checked when loading sample data."""
         at = generic_sidebar_app
-        assert at.sidebar.checkbox(key='confirm_checkbox').value is False
+        assert at.sidebar.checkbox(key='confirm_checkbox').value is True
 
-    def test_checking_confirm_enables_flow(self, generic_sidebar_app):
-        """Checking confirm checkbox triggers data processing flow."""
+    def test_sample_data_auto_confirms_flow(self, generic_sidebar_app):
+        """Loading sample data auto-populates and confirms, enabling flow."""
         at = generic_sidebar_app
-        at.sidebar.checkbox(key='confirm_checkbox').check().run()
         # Wrapper outputs "confirmed:3c" when experiment is returned
         text_values = [t.value for t in at.text]
         assert any("confirmed:3c" in v for v in text_values)
