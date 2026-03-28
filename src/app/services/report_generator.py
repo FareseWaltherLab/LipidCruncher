@@ -36,7 +36,7 @@ _ANALYSIS_PLOT_ORDER: List[Tuple[str, str, str, bool]] = [
     # pie_* handled dynamically
     # sat_*_* handled dynamically
     ('fach', 'Fatty Acid Composition Heatmap', 'landscape', False),
-    ('pathway', 'Lipid Pathway Visualization', 'landscape', True),
+    ('pathway', 'Lipid Pathway Visualization', 'landscape', False),
     ('volcano', 'Volcano Plot', 'landscape', False),
     ('heatmap', 'Lipidomic Heatmap', 'portrait', False),
 ]
@@ -410,11 +410,11 @@ def _render_analysis_plots(pdf: canvas.Canvas,
                           "Fatty Acid Composition Heatmap",
                           'landscape', False)
 
-    # Pathway (matplotlib)
+    # Pathway (Plotly)
     if 'pathway' in plots:
         _render_plot_page(pdf, plots['pathway'],
                           "Lipid Pathway Visualization",
-                          'landscape', True)
+                          'landscape', False)
 
     # Volcano
     if 'volcano' in plots:

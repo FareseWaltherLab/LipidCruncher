@@ -268,8 +268,8 @@ class TestGeneratePdfReport:
         result = generate_pdf_report(plots, simple_metadata)
         assert result is not None
 
-    def test_pathway_matplotlib(self, simple_metadata, matplotlib_fig):
-        plots = {'pathway': matplotlib_fig}
+    def test_pathway_plotly(self, simple_metadata, plotly_fig):
+        plots = {'pathway': plotly_fig}
         result = generate_pdf_report(plots, simple_metadata)
         assert result is not None
 

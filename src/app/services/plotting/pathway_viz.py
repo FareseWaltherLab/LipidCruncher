@@ -2,9 +2,9 @@
 PathwayVizPlotterService — Lipid pathway visualization.
 
 Pure-logic service (no Streamlit). Computes class-level saturation ratios
-and fold changes, then renders a Matplotlib pathway diagram.  Circle size
-encodes abundance fold change (log2-scaled); color encodes saturated fatty
-acid ratio.
+and fold changes, then renders an interactive Plotly pathway diagram.
+Circle size encodes abundance fold change (log2-scaled); color encodes
+saturated fatty acid ratio.
 
 The pathway provides 28 curated lipid classes with 18 shown by default.
 Users can toggle classes on/off and add/remove nodes and edges.
@@ -15,10 +15,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
 from app.constants import HYDROXYL_PATTERN, parse_lipid_name
@@ -37,35 +36,35 @@ _SIN45 = math.sin(math.pi / 4)
 # label_x/label_y are absolute positions for the text label.
 ALL_PATHWAY_NODES: Dict[str, Tuple[float, float, str, float, float]] = {
     # --- Default 18 classes (always available) ---
-    'TG':      (0, 0, 'TAG', -4, 0.5),
+    'TG':      (0, 0, 'TAG', -2.5, -1.5),
     'DG':      (0, 5, 'DAG', -4, 5.5),
     'PA':      (0, 10, 'PA', -3, 9.5),
-    'LPA':     (0, 15, 'LPA', -4, 14),
-    'LCB':     (-10, 15, 'LCBs', -15, 15),
-    'Cer':     (-10, 10, 'Cer', -13.5, 10),
-    'SM':      (-10, 5, 'SM', -13, 5),
+    'LPA':     (0, 15, 'LPA', -2.5, 14),
+    'LCB':     (-10, 15, 'LCBs', -13, 15),
+    'Cer':     (-10, 10, 'Cer', -12.5, 10),
+    'SM':      (-10, 5, 'SM', -13, 4),
     'PE':      (5 * _COS30, -5 * _SIN30, 'PE', 2.5, -1.5),
     'LPE':     (10 * _COS30, -10 * _SIN30, 'LPE', 9.5, -6),
     'PC':      (-5 * _COS30, -5 * _SIN30, 'PC', -4, -2),
     'LPC':     (-10 * _COS30, -10 * _SIN30, 'LPC', -12.5, -6.5),
-    'PI':      (10, 15, 'PI', 10.5, 15.5),
+    'PI':      (10, 15, 'PI', 11.5, 15.5),
     'LPI':     (10 + 5 * _COS45, 15 + 5 * _SIN45, 'LPI', 14.5, 19),
-    'CDP-DAG': (5, 10, 'CDP-DAG', 2, 11),
+    'CDP-DAG': (5, 10, 'CDP-DAG', 2, 11.5),
     'PG':      (10, 10, 'PG', 11, 9.5),
     'LPG':     (15, 10, 'LPG', 16, 9.5),
-    'PS':      (10, 5, 'PS', 10.5, 4),
+    'PS':      (10, 5, 'PS', 11.5, 4),
     'LPS':     (10 + 5 * _COS45, 5 - 5 * _SIN45, 'LPS', 14.5, 1),
     # --- Additional curated classes (available but not shown by default) ---
     'MAG':     (0, -5, 'MAG', -1.5, -7),
     'dhCer':   (-10, 12.5, 'dhCer', -9, 11.5),
-    'CerP':    (-14, 12, 'CerP', -18.5, 12),
+    'CerP':    (-14, 12, 'CerP', -18, 12),
     'HexCer':  (-14, 2, 'HexCer', -20, 3),
     'Hex2Cer': (-18, -1, 'Hex2Cer', -24.5, 0),
     'Hex3Cer': (-22, -4, 'Hex3Cer', -24, -6),
-    'ePC':     (-5, -8, 'ePC', -9, -8.5),
-    'ePE':     (5, -8, 'ePE', 6, -8.5),
+    'ePC':     (-10, 18, 'ePC', -12.5, 18),
+    'ePE':     (-2, 19, 'ePE', -4.5, 20.5),
     'CL':      (17, 13, 'CL', 18.5, 13),
-    'CE':      (-2, -8, 'CE', -2, -10),
+    'CE':      (-5, 16, 'CE', -7.5, 16),
 }
 
 # All metabolic edges between curated classes.
@@ -102,11 +101,7 @@ ALL_PATHWAY_EDGES: List[Tuple[str, str]] = [
     ('Cer', 'HexCer'),
     ('HexCer', 'Hex2Cer'),
     ('Hex2Cer', 'Hex3Cer'),
-    ('PC', 'ePC'),
-    ('PE', 'ePE'),
     ('PG', 'CL'),
-    # Cholesteryl ester (LCAT: PC + Cholesterol → CE + LPC)
-    ('PC', 'CE'),
 ]
 
 # The 18 classes shown by default.
@@ -284,137 +279,22 @@ def _resolve_edges(
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Rendering helpers
+# Plotly circle shape helper
 # ═══════════════════════════════════════════════════════════════════════
 
-
-def _initiate_plot(show_grid: bool = False) -> Tuple[plt.Figure, plt.Axes]:
-    """Create the base pathway figure with axes styling."""
-    fig, ax = plt.subplots(figsize=FIG_SIZE)
-    fig.set_facecolor('white')
-    ax.set_facecolor('white')
-    ax.set_title('Lipid Pathway Visualization', fontsize=20)
-    ax.set_xlim(PLOT_XLIM)
-    ax.set_ylim(PLOT_YLIM)
-    ax.set_aspect('equal', adjustable='box')
-
-    if show_grid:
-        ax.axes.xaxis.set_visible(True)
-        ax.axes.yaxis.set_visible(True)
-        ax.set_xticks(range(PLOT_XLIM[0], PLOT_XLIM[1] + 1, 5))
-        ax.set_yticks(range(PLOT_YLIM[0], PLOT_YLIM[1] + 1, 5))
-        ax.grid(True, linestyle='--', linewidth=0.5, color='#cccccc',
-                zorder=0)
-        ax.tick_params(labelsize=8, colors='#999999')
-        for spine in ax.spines.values():
-            spine.set_edgecolor('#cccccc')
-    else:
-        ax.axes.xaxis.set_visible(False)
-        ax.axes.yaxis.set_visible(False)
-        for spine in ax.spines.values():
-            spine.set_edgecolor('black')
-
-    return fig, ax
+_CIRCLE_POINTS = 64  # number of points to approximate a circle
 
 
-
-def _draw_edges(
-    ax: plt.Axes,
-    edges: List[Tuple[str, str]],
-    nodes: Dict[str, Tuple[float, float, str, float, float]],
-) -> None:
-    """Draw blue connector lines between pathway nodes."""
-    for a, b in edges:
-        if a in nodes and b in nodes:
-            ax.plot(
-                [nodes[a][0], nodes[b][0]],
-                [nodes[a][1], nodes[b][1]],
-                c='b', linewidth=1, zorder=2,
-            )
-
-
-def _draw_annotations(ax: plt.Axes, active_set: Set[str]) -> None:
-    """Draw G3P and Fatty Acids annotations with connecting lines."""
-    if 'LPA' in active_set:
-        ax.plot([0, 0], [15, 20], c='b', linewidth=1, zorder=2)
-        ax.annotate(
-            'G3P', xy=(0, 20), xytext=(0, 23),
-            arrowprops=dict(facecolor='black'), fontsize=15, zorder=10,
-        )
-
-    if 'LCB' in active_set:
-        ax.plot([-5, -10], [20, 15], c='b', linewidth=1, zorder=2)
-        ax.annotate(
-            'Fatty Acids', xy=(-5, 20), xytext=(-5, 25),
-            arrowprops=dict(facecolor='black'), fontsize=15, zorder=10,
-        )
-        if 'LPA' in active_set:
-            ax.plot([0, -5], [15, 20], c='b', linewidth=1, zorder=2)
-
-
-def _draw_unit_circles(
-    ax: plt.Axes,
-    nodes: Dict[str, Tuple[float, float, str, float, float]],
-) -> None:
-    """Draw small black reference circles (fold-change = 1) at each node.
-
-    Rendered above the data scatter so the unit circle perimeter remains
-    visible even when the data circle is larger.
-    """
-    for _, (x, y, *_rest) in nodes.items():
-        ax.add_patch(plt.Circle(
-            (x, y), UNIT_CIRCLE_RADIUS, color='black', fill=False,
-            linewidth=1.2, zorder=6,
-        ))
-
-
-def _draw_missing_class_circles(
-    ax: plt.Axes,
-    nodes: Dict[str, Tuple[float, float, str, float, float]],
-    classes_with_data: Set[str],
-) -> None:
-    """Draw dashed gray circles for active classes absent from the dataset."""
-    for cls, (x, y, *_rest) in nodes.items():
-        if cls not in classes_with_data:
-            ax.add_patch(plt.Circle(
-                (x, y), UNIT_CIRCLE_RADIUS * 1.5,
-                color='gray', fill=False, linestyle='--', linewidth=1.5,
-                zorder=5,
-            ))
-
-
-def _add_text_labels(
-    ax: plt.Axes,
-    nodes: Dict[str, Tuple[float, float, str, float, float]],
-    classes_with_data: Set[str],
-) -> None:
-    """Add lipid class text labels.  Gray for classes not in the dataset."""
-    for cls, (_, _, label, lx, ly) in nodes.items():
-        color = 'black' if cls in classes_with_data else 'gray'
-        ax.text(lx, ly, label, fontsize=15, color=color, zorder=10)
-
-
-def _render_scatter(
-    ax: plt.Axes,
-    fig: plt.Figure,
-    resolved_classes: List[str],
-    nodes: Dict[str, Tuple[float, float, str, float, float]],
-    colors: List[float],
-    sizes: List[float],
-) -> None:
-    """Render the data scatter on the pathway with colorbar.
-
-    Colorbar is fixed to [0, 1] (saturation ratio range).
-    """
-    xs = [nodes[c][0] for c in resolved_classes]
-    ys = [nodes[c][1] for c in resolved_classes]
-    points = ax.scatter(
-        xs, ys, c=colors, s=sizes,
-        cmap='plasma', vmin=0, vmax=1, zorder=4,
-    )
-    cbar = fig.colorbar(points)
-    cbar.set_label(label='Saturation Ratio', size=15)
-    cbar.ax.tick_params(labelsize=15)
+def _circle_path(cx: float, cy: float, r: float) -> str:
+    """Return an SVG path string for a circle centered at (cx, cy)."""
+    angles = np.linspace(0, 2 * np.pi, _CIRCLE_POINTS, endpoint=True)
+    xs = cx + r * np.cos(angles)
+    ys = cy + r * np.sin(angles)
+    parts = [f"M {xs[0]:.4f},{ys[0]:.4f}"]
+    for x, y in zip(xs[1:], ys[1:]):
+        parts.append(f"L {x:.4f},{y:.4f}")
+    parts.append("Z")
+    return " ".join(parts)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -592,8 +472,8 @@ class PathwayVizPlotterService:
         removed_edges: Optional[List[Tuple[str, str]]] = None,
         position_overrides: Optional[Dict[str, Tuple[float, float]]] = None,
         show_grid: bool = False,
-    ) -> Tuple[Optional[plt.Figure], Dict[str, list]]:
-        """Render the full lipid pathway Matplotlib figure.
+    ) -> Tuple[Optional[go.Figure], Dict[str, list]]:
+        """Render the full lipid pathway as an interactive Plotly figure.
 
         Args:
             fold_change_df: DataFrame with ``ClassKey`` and ``fold_change``.
@@ -641,21 +521,193 @@ class PathwayVizPlotterService:
                 ]
             )
 
-        # Compute colors and log2-scaled sizes
-        colors = pathway_dict['saturated fatty acids ratio']
-        sizes = [
-            SIZE_SCALE * _scale_fold_change(v)
-            for v in pathway_dict['abundance ratio']
-        ]
+        # Compute log2-scaled sizes (in coordinate units for marker radius)
+        sat_values = pathway_dict['saturated fatty acids ratio']
+        fc_values = pathway_dict['abundance ratio']
+        scaled_sizes = [_scale_fold_change(v) for v in fc_values]
 
-        # --- Render ---
-        fig, ax = _initiate_plot(show_grid=show_grid)
+        # Dynamic colorbar max: use actual max saturation ratio (floor at 1)
+        sat_max = max(sat_values) if sat_values else 1.0
+        if sat_max <= 0:
+            sat_max = 1.0
 
-        _draw_edges(ax, edges, nodes)
-        _draw_annotations(ax, active_set)
-        _draw_unit_circles(ax, nodes)
-        _draw_missing_class_circles(ax, nodes, classes_with_data)
-        _render_scatter(ax, fig, resolved_classes, nodes, colors, sizes)
-        _add_text_labels(ax, nodes, classes_with_data)
+        # --- Build Plotly figure ---
+        fig = go.Figure()
+
+        # 1) Edges (blue connector lines)
+        for a, b in edges:
+            if a in nodes and b in nodes:
+                fig.add_trace(go.Scatter(
+                    x=[nodes[a][0], nodes[b][0]],
+                    y=[nodes[a][1], nodes[b][1]],
+                    mode='lines',
+                    line=dict(color='blue', width=1),
+                    hoverinfo='skip',
+                    showlegend=False,
+                ))
+
+        # 2) Annotation lines and labels (G3P, Fatty Acids)
+        #    Arrow points FROM text (ax, ay offset in px) TO (x, y).
+        #    Negative ay = text above the anchor → arrow points downward.
+        if 'LPA' in active_set:
+            fig.add_trace(go.Scatter(
+                x=[0, 0], y=[15, 20], mode='lines',
+                line=dict(color='blue', width=1),
+                hoverinfo='skip', showlegend=False,
+            ))
+            fig.add_annotation(
+                x=0, y=20, text='G3P', showarrow=True,
+                arrowhead=2, arrowcolor='black', ax=0, ay=-30,
+                font=dict(size=15),
+            )
+        if 'LCB' in active_set:
+            fig.add_trace(go.Scatter(
+                x=[-5, -10], y=[20, 15], mode='lines',
+                line=dict(color='blue', width=1),
+                hoverinfo='skip', showlegend=False,
+            ))
+            fig.add_annotation(
+                x=-5, y=20, text='Fatty Acids', showarrow=True,
+                arrowhead=2, arrowcolor='black', ax=0, ay=-30,
+                font=dict(size=15),
+            )
+            # Fatty acid supply edge to LPA
+            if 'LPA' in active_set and 'LPA' in nodes:
+                lpa_x, lpa_y = nodes['LPA'][0], nodes['LPA'][1]
+                fig.add_trace(go.Scatter(
+                    x=[-5, lpa_x], y=[20, lpa_y], mode='lines',
+                    line=dict(color='blue', width=1),
+                    hoverinfo='skip', showlegend=False,
+                ))
+            # Fatty acid supply edges to ether lipids and cholesteryl ester
+            fa_x, fa_y = -5, 20
+            for target_cls in ('ePC', 'ePE', 'CE'):
+                if target_cls in active_set and target_cls in nodes:
+                    tx, ty = nodes[target_cls][0], nodes[target_cls][1]
+                    fig.add_trace(go.Scatter(
+                        x=[fa_x, tx], y=[fa_y, ty], mode='lines',
+                        line=dict(color='blue', width=1),
+                        hoverinfo='skip', showlegend=False,
+                    ))
+
+        # 3) Unit circles and missing-class circles (as shapes)
+        for cls, (x, y, *_rest) in nodes.items():
+            # Unit circle (always drawn)
+            fig.add_shape(
+                type='path',
+                path=_circle_path(x, y, UNIT_CIRCLE_RADIUS),
+                line=dict(color='black', width=1.2),
+                fillcolor='rgba(0,0,0,0)',
+            )
+            # Missing-class dashed circle
+            if cls not in classes_with_data:
+                fig.add_shape(
+                    type='path',
+                    path=_circle_path(x, y, UNIT_CIRCLE_RADIUS * 1.5),
+                    line=dict(color='gray', width=1.5, dash='dash'),
+                    fillcolor='rgba(0,0,0,0)',
+                )
+
+        # 4) Data scatter — main visualization with hover
+        xs = [nodes[c][0] for c in resolved_classes]
+        ys = [nodes[c][1] for c in resolved_classes]
+        # Convert coordinate-space sizes to Plotly marker sizes (pixels).
+        # SIZE_SCALE acts as the pixel multiplier.
+        marker_sizes = [SIZE_SCALE * s / 5.0 for s in scaled_sizes]
+
+        # Build hover text
+        hover_texts = []
+        for i, cls in enumerate(resolved_classes):
+            fc_val = fc_values[i]
+            sat_val = sat_values[i]
+            n_species = 0
+            if not fold_change_df.empty and 'ClassKey' in fold_change_df.columns:
+                n_species = int(
+                    (fold_change_df['ClassKey'] == cls).sum()
+                )
+            hover_texts.append(
+                f"<b>{cls}</b><br>"
+                f"Fold Change: {fc_val:.3f}<br>"
+                f"Saturation Ratio: {sat_val:.3f}<br>"
+                f"Species Detected: {n_species}"
+            )
+
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys,
+            mode='markers',
+            marker=dict(
+                size=marker_sizes,
+                color=sat_values,
+                colorscale='Plasma',
+                cmin=0, cmax=sat_max,
+                colorbar=dict(
+                    title=dict(text='Saturation Ratio', font=dict(size=15)),
+                    tickfont=dict(size=13),
+                ),
+                line=dict(width=0),
+            ),
+            text=hover_texts,
+            hoverinfo='text',
+            showlegend=False,
+        ))
+
+        # 5) Text labels
+        for cls, (_, _, label, lx, ly) in nodes.items():
+            color = 'black' if cls in classes_with_data else 'gray'
+            fig.add_annotation(
+                x=lx, y=ly, text=label, showarrow=False,
+                font=dict(size=14, color=color),
+                xanchor='left', yanchor='middle',
+            )
+
+        # Auto-fit axis ranges to node positions with padding
+        all_xs = [nodes[c][0] for c in resolved_classes]
+        all_ys = [nodes[c][1] for c in resolved_classes]
+        # Include annotation target points if present
+        if 'LPA' in active_set:
+            all_ys.append(20)
+        if 'LCB' in active_set:
+            all_xs.append(-5)
+            all_ys.append(20)
+        # Include label positions for tighter fitting
+        for cls in resolved_classes:
+            _, _, _, lx, ly = nodes[cls]
+            all_xs.append(lx)
+            all_ys.append(ly)
+
+        pad = 4  # coordinate units of padding
+        x_min = min(all_xs) - pad
+        x_max = max(all_xs) + pad
+        y_min = min(all_ys) - pad
+        y_max = max(all_ys) + pad
+
+        # Layout
+        fig.update_layout(
+            title=dict(text='Lipid Pathway Visualization', font=dict(size=20)),
+            xaxis=dict(
+                range=[x_min, x_max],
+                scaleanchor='y', scaleratio=1,
+                showgrid=show_grid,
+                zeroline=False,
+                visible=show_grid,
+                dtick=5 if show_grid else None,
+                gridcolor='#cccccc' if show_grid else None,
+                gridwidth=0.5 if show_grid else None,
+            ),
+            yaxis=dict(
+                range=[y_min, y_max],
+                showgrid=show_grid,
+                zeroline=False,
+                visible=show_grid,
+                dtick=5 if show_grid else None,
+                gridcolor='#cccccc' if show_grid else None,
+                gridwidth=0.5 if show_grid else None,
+            ),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            width=800,
+            height=800,
+            margin=dict(l=10, r=10, t=60, b=10),
+        )
 
         return fig, pathway_dict

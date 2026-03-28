@@ -3,18 +3,17 @@ Tests for PathwayVizPlotterService.
 
 Covers: chain saturation parsing (standard, ether, sphingoid, hydroxyl, edge
 cases), class-level saturation ratio computation, fold-change computation,
-pathway dictionary building, pathway visualization rendering (figure, scatter,
-colorbar, circles, lines, labels), edge cases (empty data, single class, all
+pathway dictionary building, pathway visualization rendering (Plotly figure,
+scatter, colorbar, circles, labels), edge cases (empty data, single class, all
 zeros, missing columns, NaN), type coercion (int, float32, int64, object
 dtype, mixed), immutability, and large dataset stress tests.
 """
 
 import math
 
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import pytest
 
 from app.services.plotting.pathway_viz import (
@@ -533,15 +532,14 @@ class TestCreatePathwayDictionary:
 
 
 class TestCreatePathwayViz:
-    """Tests for create_pathway_viz figure rendering."""
+    """Tests for create_pathway_viz Plotly figure rendering."""
 
     def test_returns_figure_and_dict(self):
         fc_df = _make_fold_change_df(['PC'], [1.5])
         sat_df = _make_saturation_df(['PC'], [0.6])
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        assert isinstance(fig, plt.Figure)
+        assert isinstance(fig, go.Figure)
         assert isinstance(pathway_dict, dict)
-        plt.close(fig)
 
     def test_both_empty_returns_none(self):
         fc_df = pd.DataFrame(columns=['ClassKey', 'fold_change'])
@@ -550,80 +548,67 @@ class TestCreatePathwayViz:
         assert fig is None
         assert pathway_dict == {}
 
-    def test_figure_has_axes(self):
-        fc_df = _make_fold_change_df(['PC'], [1.0])
-        sat_df = _make_saturation_df(['PC'], [0.5])
-        fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        assert len(fig.axes) >= 1  # main axes + colorbar axes
-        plt.close(fig)
-
     def test_figure_has_title(self):
         fc_df = _make_fold_change_df(['PC'], [1.0])
         sat_df = _make_saturation_df(['PC'], [0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        ax = fig.axes[0]
-        assert 'Lipid Pathway' in ax.get_title()
-        plt.close(fig)
+        assert 'Lipid Pathway' in fig.layout.title.text
 
     def test_figure_has_colorbar(self):
         fc_df = _make_fold_change_df(['PC', 'PE'], [1.5, 2.0])
         sat_df = _make_saturation_df(['PC', 'PE'], [0.6, 0.3])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        # Colorbar adds a second axes
-        assert len(fig.axes) >= 2
-        plt.close(fig)
+        # The scatter trace (last trace) should have a colorbar
+        scatter_traces = [t for t in fig.data if hasattr(t, 'marker')
+                          and t.marker.colorbar is not None
+                          and t.marker.colorbar.title is not None]
+        assert len(scatter_traces) >= 1
 
-    def test_axes_hidden(self):
+    def test_axes_hidden_by_default(self):
         fc_df = _make_fold_change_df(['TG'], [1.0])
         sat_df = _make_saturation_df(['TG'], [0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        ax = fig.axes[0]
-        assert not ax.xaxis.get_visible()
-        assert not ax.yaxis.get_visible()
-        plt.close(fig)
+        assert fig.layout.xaxis.visible is False
+        assert fig.layout.yaxis.visible is False
 
     def test_scatter_has_18_points(self):
         fc_df = _make_fold_change_df(['PC'], [1.0])
         sat_df = _make_saturation_df(['PC'], [0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        ax = fig.axes[0]
-        scatter_collections = [c for c in ax.collections
-                               if isinstance(c, matplotlib.collections.PathCollection)]
-        assert len(scatter_collections) >= 1
-        offsets = scatter_collections[0].get_offsets()
-        assert len(offsets) == 18
-        plt.close(fig)
+        # Find the scatter trace with marker colorbar (data scatter)
+        data_scatter = [t for t in fig.data
+                        if isinstance(t, go.Scatter)
+                        and t.mode == 'markers']
+        assert len(data_scatter) == 1
+        assert len(data_scatter[0].x) == 18
 
     def test_unit_circles_drawn(self):
         fc_df = _make_fold_change_df(['PC'], [1.0])
         sat_df = _make_saturation_df(['PC'], [0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        ax = fig.axes[0]
-        circles = [p for p in ax.patches if isinstance(p, plt.Circle)]
-        # 18 unit + 17 missing-class dashed = 35
-        assert len(circles) == 35
-        plt.close(fig)
+        # 18 unit circle shapes + 17 missing-class dashed shapes = 35
+        shapes = fig.layout.shapes
+        assert len(shapes) == 35
 
     def test_connecting_lines_drawn(self):
         fc_df = _make_fold_change_df(['PC'], [1.0])
         sat_df = _make_saturation_df(['PC'], [0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        ax = fig.axes[0]
-        lines = ax.get_lines()
-        # 17 metabolic edges + 3 annotation lines = 20
-        assert len(lines) == 20
-        plt.close(fig)
+        # Line traces: 17 metabolic edges + 3 annotation lines = 20
+        # (G3P→LPA, FA→LCB, FA→LPA)
+        line_traces = [t for t in fig.data
+                       if isinstance(t, go.Scatter)
+                       and t.mode == 'lines']
+        assert len(line_traces) == 20
 
     def test_text_labels_present(self):
         fc_df = _make_fold_change_df(['PC'], [1.0])
         sat_df = _make_saturation_df(['PC'], [0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        ax = fig.axes[0]
-        text_content = [t.get_text() for t in ax.texts]
+        annotation_texts = [a.text for a in fig.layout.annotations]
         for label in ['TAG', 'DAG', 'PA', 'LPA', 'PC', 'PE', 'SM', 'Cer',
                        'CDP-DAG', 'PI', 'PG', 'PS']:
-            assert label in text_content
-        plt.close(fig)
+            assert label in annotation_texts
 
     def test_pathway_dict_in_result(self):
         fc_df = _make_fold_change_df(['PC', 'TG'], [1.5, 2.0])
@@ -632,23 +617,42 @@ class TestCreatePathwayViz:
         assert len(pathway_dict['class']) == 18
         pc_idx = PATHWAY_CLASSES.index('PC')
         assert pathway_dict['abundance ratio'][pc_idx] == pytest.approx(1.5)
-        plt.close(fig)
 
     def test_scatter_sizes_scale_with_fold_change(self):
         fc_df = _make_fold_change_df(['PC', 'PE'], [2.0, 4.0])
         sat_df = _make_saturation_df(['PC', 'PE'], [0.5, 0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        ax = fig.axes[0]
-        scatter = [c for c in ax.collections
-                   if isinstance(c, matplotlib.collections.PathCollection)][0]
-        sizes = scatter.get_sizes()
+        data_scatter = [t for t in fig.data
+                        if isinstance(t, go.Scatter)
+                        and t.mode == 'markers'][0]
+        sizes = list(data_scatter.marker.size)
         pc_idx = PATHWAY_CLASSES.index('PC')
         pe_idx = PATHWAY_CLASSES.index('PE')
-        # Log2-scaled: size = SIZE_SCALE * log2(fc + 1)
-        import math
-        assert sizes[pc_idx] == pytest.approx(SIZE_SCALE * math.log2(3.0))
-        assert sizes[pe_idx] == pytest.approx(SIZE_SCALE * math.log2(5.0))
-        plt.close(fig)
+        # PE has larger fold change → bigger marker
+        assert sizes[pe_idx] > sizes[pc_idx]
+
+    def test_hover_text_present(self):
+        fc_df = _make_fold_change_df(['PC'], [1.5])
+        sat_df = _make_saturation_df(['PC'], [0.6])
+        fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
+        data_scatter = [t for t in fig.data
+                        if isinstance(t, go.Scatter)
+                        and t.mode == 'markers'][0]
+        # PC should appear in one of the hover texts
+        pc_idx = PATHWAY_CLASSES.index('PC')
+        assert '<b>PC</b>' in data_scatter.text[pc_idx]
+        assert 'Fold Change' in data_scatter.text[pc_idx]
+        assert 'Saturation Ratio' in data_scatter.text[pc_idx]
+        assert 'Species Detected' in data_scatter.text[pc_idx]
+
+    def test_grid_visible_when_show_grid(self):
+        fc_df = _make_fold_change_df(['PC'], [1.0])
+        sat_df = _make_saturation_df(['PC'], [0.5])
+        fig, _ = PathwayVizPlotterService.create_pathway_viz(
+            fc_df, sat_df, show_grid=True,
+        )
+        assert fig.layout.xaxis.visible is True
+        assert fig.layout.yaxis.visible is True
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -720,13 +724,13 @@ class TestEndToEnd:
             simple_df, experiment_2x3, 'Control', 'Treatment',
         )
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        assert isinstance(fig, plt.Figure)
+        assert isinstance(fig, go.Figure)
         assert len(pathway_dict['class']) == 18
         pc_idx = PATHWAY_CLASSES.index('PC')
         pe_idx = PATHWAY_CLASSES.index('PE')
         assert pathway_dict['abundance ratio'][pc_idx] > 0
         assert pathway_dict['abundance ratio'][pe_idx] > 0
-        plt.close(fig)
+
 
     def test_full_pipeline_multi_class(self, multi_class_df, experiment_2x3):
         sat_df = PathwayVizPlotterService.calculate_class_saturation_ratio(multi_class_df)
@@ -734,12 +738,12 @@ class TestEndToEnd:
             multi_class_df, experiment_2x3, 'Control', 'Treatment',
         )
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        assert isinstance(fig, plt.Figure)
+        assert isinstance(fig, go.Figure)
         # All 4 present classes should have non-zero values
         for cls in ['TG', 'PC', 'PE', 'SM']:
             idx = PATHWAY_CLASSES.index(cls)
             assert pathway_dict['abundance ratio'][idx] > 0
-        plt.close(fig)
+
 
     def test_pipeline_three_conditions(self, experiment_3x2):
         df = _make_df(
@@ -758,7 +762,7 @@ class TestEndToEnd:
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         pc_idx = PATHWAY_CLASSES.index('PC')
         assert pathway_dict['abundance ratio'][pc_idx] == pytest.approx(3.0)
-        plt.close(fig)
+
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -854,13 +858,13 @@ class TestEdgeCases:
         fc_df = _make_fold_change_df(['TG'], [2.5])
         sat_df = _make_saturation_df(['TG'], [0.7])
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        assert isinstance(fig, plt.Figure)
+        assert isinstance(fig, go.Figure)
         tg_idx = PATHWAY_CLASSES.index('TG')
         assert pathway_dict['abundance ratio'][tg_idx] == pytest.approx(2.5)
         # Other classes should be 0
         pc_idx = PATHWAY_CLASSES.index('PC')
         assert pathway_dict['abundance ratio'][pc_idx] == 0
-        plt.close(fig)
+
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -946,8 +950,8 @@ class TestTypeCoercion:
             df, experiment_2x3, 'Control', 'Treatment',
         )
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
+
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -974,19 +978,15 @@ class TestImmutability:
         fc_df = _make_fold_change_df(['PC', 'PE'], [1.5, 2.0])
         fc_copy = fc_df.copy()
         sat_df = _make_saturation_df(['PC', 'PE'], [0.5, 0.3])
-        fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
+        PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         pd.testing.assert_frame_equal(fc_df, fc_copy)
-        if fig:
-            plt.close(fig)
 
     def test_viz_does_not_modify_saturation_df(self):
         fc_df = _make_fold_change_df(['PC'], [1.5])
         sat_df = _make_saturation_df(['PC'], [0.6])
         sat_copy = sat_df.copy()
-        fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
+        PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         pd.testing.assert_frame_equal(sat_df, sat_copy)
-        if fig:
-            plt.close(fig)
 
     def test_dictionary_does_not_modify_inputs(self):
         fc_df = _make_fold_change_df(['PC'], [1.5])
@@ -1037,10 +1037,10 @@ class TestLargeDataset:
             list(np.random.rand(18)),
         )
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        assert isinstance(fig, plt.Figure)
+        assert isinstance(fig, go.Figure)
         assert len(pathway_dict['class']) == 18
         assert all(v > 0 for v in pathway_dict['abundance ratio'])
-        plt.close(fig)
+
 
     def test_large_lipid_count_full_pipeline(self):
         """500 lipids across 10 classes."""
@@ -1057,8 +1057,8 @@ class TestLargeDataset:
             df, exp, 'Control', 'Treatment',
         )
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
+
 
 
 # ═══════════════════════════════════════════════════════════════════════

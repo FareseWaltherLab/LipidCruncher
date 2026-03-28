@@ -971,7 +971,7 @@ class TestPathwayEndToEnd:
     def test_pathway_figure_created(
         self, lipidsearch_normalized_df, lipidsearch_experiment,
     ):
-        """Pathway generates a matplotlib figure."""
+        """Pathway generates a Plotly figure."""
         df = lipidsearch_normalized_df
 
         result = AnalysisWorkflow.run_pathway(
@@ -979,8 +979,7 @@ class TestPathwayEndToEnd:
         )
 
         if result.figure is not None:
-            assert isinstance(result.figure, plt.Figure)
-        plt.close('all')
+            assert isinstance(result.figure, go.Figure)
 
     def test_pathway_reversed_conditions(
         self, lipidsearch_normalized_df, lipidsearch_experiment,

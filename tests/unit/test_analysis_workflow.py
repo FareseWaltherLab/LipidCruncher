@@ -755,8 +755,7 @@ class TestRunPathway:
             experimental='Treatment',
         )
         if result.figure is not None:
-            assert isinstance(result.figure, plt.Figure)
-        plt.close('all')
+            assert isinstance(result.figure, go.Figure)
 
     def test_empty_control_raises(self, multi_species_df, exp_2x3):
         with pytest.raises(ValueError, match='Control'):

@@ -12,7 +12,7 @@ from app.services.plotting.pathway_viz import (
     DEFAULT_PATHWAY_CLASSES,
     PathwayVizPlotterService,
 )
-from app.ui.download_utils import matplotlib_svg_download_button, csv_download_button
+from app.ui.download_utils import plotly_svg_download_button, csv_download_button
 
 from app.ui.main_content.analysis._utils import _check_fa_compatibility
 
@@ -351,7 +351,7 @@ def _display_pathway_viz(
             "> Fold Change = Mean(Experimental) / Mean(Control)"
         )
         st.markdown(
-            "**Saturation Ratio** (determines circle color, range 0–1):\n\n"
+            "**Saturation Ratio** (determines circle color, scaled 0 to max):\n\n"
             "> Saturation Ratio = Saturated Chains / Total Chains"
         )
         st.markdown(
@@ -428,13 +428,13 @@ def _display_pathway_viz(
             st.warning("Could not generate pathway visualization.")
             return
 
-        st.pyplot(figure)
+        st.plotly_chart(figure, use_container_width=True)
         st.session_state.analysis_pathway_fig = figure
         st.session_state.analysis_all_plots['pathway'] = figure
 
         col1, col2 = st.columns(2)
         with col1:
-            matplotlib_svg_download_button(
+            plotly_svg_download_button(
                 figure,
                 f"pathway_visualization_{control}_vs_{experimental}.svg",
                 key="analysis_svg_pathway",
