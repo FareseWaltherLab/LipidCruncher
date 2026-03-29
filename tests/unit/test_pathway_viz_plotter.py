@@ -17,13 +17,24 @@ import plotly.graph_objects as go
 import pytest
 
 from app.services.plotting.pathway_viz import (
+    ALL_PATHWAY_CLASSES,
+    ALL_PATHWAY_EDGES,
+    ALL_PATHWAY_NODES,
+    DEFAULT_PATHWAY_CLASSES,
+    MAX_LOG2_SIZE,
+    MIN_LOG2_SIZE,
     PATHWAY_CLASSES,
     PATHWAY_COORDS,
     PathwayData,
     PathwayVizPlotterService,
     SIZE_SCALE,
     UNIT_CIRCLE_RADIUS,
+    _auto_label_pos,
+    _circle_path,
     _count_saturated_unsaturated,
+    _resolve_edges,
+    _resolve_nodes,
+    _scale_fold_change,
 )
 from tests.conftest import make_experiment
 
@@ -1161,3 +1172,440 @@ class TestBoundary:
             df, experiment_2x3, 'Control', 'Treatment',
         )
         assert fc.loc[0, 'fold_change'] < 0.001
+
+
+# =============================================================================
+# _scale_fold_change tests
+# =============================================================================
+
+
+class TestScaleFoldChange:
+    """Tests for _scale_fold_change() log2 scaling."""
+
+    def test_zero_returns_zero(self):
+        assert _scale_fold_change(0) == 0
+
+    def test_negative_returns_zero(self):
+        assert _scale_fold_change(-1) == 0
+        assert _scale_fold_change(-100) == 0
+
+    def test_fold_change_one(self):
+        # log2(1 + 1) = 1.0, within [MIN, MAX]
+        result = _scale_fold_change(1)
+        assert result == pytest.approx(1.0)
+
+    def test_fold_change_two(self):
+        # log2(2 + 1) ≈ 1.585
+        result = _scale_fold_change(2)
+        assert result == pytest.approx(math.log2(3))
+
+    def test_small_fold_change_clamped_to_min(self):
+        # Very small positive fc → log2(fc+1) → close to 0, clamped to MIN_LOG2_SIZE
+        result = _scale_fold_change(0.001)
+        assert result == MIN_LOG2_SIZE
+
+    def test_large_fold_change_clamped_to_max(self):
+        # log2(1000 + 1) ≈ 9.97 > MAX_LOG2_SIZE
+        result = _scale_fold_change(1000)
+        assert result == MAX_LOG2_SIZE
+
+    def test_very_large_fold_change_clamped(self):
+        result = _scale_fold_change(1e10)
+        assert result == MAX_LOG2_SIZE
+
+    def test_fold_change_at_min_boundary(self):
+        # Find fc where log2(fc+1) = MIN_LOG2_SIZE
+        fc_at_min = 2**MIN_LOG2_SIZE - 1
+        result = _scale_fold_change(fc_at_min)
+        assert result == pytest.approx(MIN_LOG2_SIZE, abs=1e-10)
+
+    def test_fold_change_at_max_boundary(self):
+        # Find fc where log2(fc+1) = MAX_LOG2_SIZE
+        fc_at_max = 2**MAX_LOG2_SIZE - 1
+        result = _scale_fold_change(fc_at_max)
+        assert result == pytest.approx(MAX_LOG2_SIZE, abs=1e-10)
+
+    def test_monotonic_increase(self):
+        """Larger fold changes should give larger (or equal) scaled values."""
+        fcs = [0.1, 0.5, 1, 2, 5, 10, 50, 100]
+        scaled = [_scale_fold_change(fc) for fc in fcs]
+        for i in range(len(scaled) - 1):
+            assert scaled[i] <= scaled[i + 1]
+
+
+# =============================================================================
+# _auto_label_pos tests
+# =============================================================================
+
+
+class TestAutoLabelPos:
+    """Tests for _auto_label_pos()."""
+
+    def test_left_side_node(self):
+        """Negative x: label goes further left."""
+        lx, ly = _auto_label_pos(-5, 10, 'PC')
+        assert lx < -5  # label to the left of node
+
+    def test_right_side_node(self):
+        """Positive x: label goes further right."""
+        lx, ly = _auto_label_pos(5, 10, 'PC')
+        assert lx > 5  # label to the right of node
+
+    def test_zero_x_goes_left(self):
+        """x=0 is treated as left side (x <= 0)."""
+        lx, _ = _auto_label_pos(0, 0, 'TG')
+        assert lx < 0
+
+    def test_vertical_offset(self):
+        """Label y is offset from node y."""
+        _, ly = _auto_label_pos(0, 10, 'TG')
+        assert ly != 10
+
+    def test_longer_label_further_offset(self):
+        """Longer labels should be placed further from the node."""
+        lx_short, _ = _auto_label_pos(-5, 0, 'PC')
+        lx_long, _ = _auto_label_pos(-5, 0, 'HexCer')
+        assert lx_long < lx_short  # longer label pushed further left
+
+
+# =============================================================================
+# _resolve_nodes tests
+# =============================================================================
+
+
+class TestResolveNodes:
+    """Tests for _resolve_nodes()."""
+
+    def test_default_classes_resolved(self):
+        """Standard classes resolve to ALL_PATHWAY_NODES entries."""
+        nodes = _resolve_nodes(['PC', 'PE', 'TG'])
+        assert len(nodes) == 3
+        assert 'PC' in nodes
+        assert 'PE' in nodes
+        assert 'TG' in nodes
+
+    def test_node_values_match_curated(self):
+        """Resolved node matches ALL_PATHWAY_NODES data."""
+        nodes = _resolve_nodes(['PC'])
+        assert nodes['PC'] == ALL_PATHWAY_NODES['PC']
+
+    def test_unknown_class_excluded(self):
+        """Classes not in ALL_PATHWAY_NODES or custom_nodes are excluded."""
+        nodes = _resolve_nodes(['PC', 'UNKNOWN'])
+        assert len(nodes) == 1
+        assert 'UNKNOWN' not in nodes
+
+    def test_custom_node_included(self):
+        """Custom nodes are included when in active_classes."""
+        custom = {'CUSTOM': (5.0, 10.0)}
+        nodes = _resolve_nodes(['PC', 'CUSTOM'], custom_nodes=custom)
+        assert 'CUSTOM' in nodes
+        assert nodes['CUSTOM'][0] == 5.0  # x
+        assert nodes['CUSTOM'][1] == 10.0  # y
+
+    def test_custom_node_not_in_active_excluded(self):
+        """Custom nodes not in active_classes are excluded."""
+        custom = {'CUSTOM': (5.0, 10.0)}
+        nodes = _resolve_nodes(['PC'], custom_nodes=custom)
+        assert 'CUSTOM' not in nodes
+
+    def test_position_override_curated(self):
+        """Position overrides change curated node coordinates."""
+        overrides = {'PC': (99.0, 88.0)}
+        nodes = _resolve_nodes(['PC'], position_overrides=overrides)
+        assert nodes['PC'][0] == 99.0  # x overridden
+        assert nodes['PC'][1] == 88.0  # y overridden
+
+    def test_position_override_updates_label_pos(self):
+        """Overriding position also recomputes label position."""
+        orig = _resolve_nodes(['PC'])
+        orig_lx = orig['PC'][3]
+
+        overrides = {'PC': (99.0, 88.0)}
+        nodes = _resolve_nodes(['PC'], position_overrides=overrides)
+        assert nodes['PC'][3] != orig_lx  # label x changed
+
+    def test_position_override_custom_node(self):
+        """Position overrides work on custom nodes too."""
+        custom = {'CUSTOM': (5.0, 10.0)}
+        overrides = {'CUSTOM': (50.0, 60.0)}
+        nodes = _resolve_nodes(['CUSTOM'], custom_nodes=custom, position_overrides=overrides)
+        assert nodes['CUSTOM'][0] == 50.0
+        assert nodes['CUSTOM'][1] == 60.0
+
+    def test_empty_active_classes(self):
+        """Empty active_classes → empty result."""
+        nodes = _resolve_nodes([])
+        assert nodes == {}
+
+    def test_preserves_order(self):
+        """Nodes are returned in active_classes order."""
+        nodes = _resolve_nodes(['TG', 'PC', 'PE'])
+        assert list(nodes.keys()) == ['TG', 'PC', 'PE']
+
+
+# =============================================================================
+# _resolve_edges tests
+# =============================================================================
+
+
+class TestResolveEdges:
+    """Tests for _resolve_edges()."""
+
+    def test_default_edges_filtered_by_active(self):
+        """Only edges where both endpoints are active are returned."""
+        active = {'TG', 'DG', 'PA'}
+        edges = _resolve_edges(active)
+        assert ('TG', 'DG') in edges
+        assert ('DG', 'PA') in edges
+        # PC→LPC shouldn't be here since PC/LPC not in active
+        assert ('PC', 'LPC') not in edges
+
+    def test_all_default_active_returns_all_edges(self):
+        """When all curated classes are active, all default edges are returned."""
+        active = set(ALL_PATHWAY_NODES.keys())
+        edges = _resolve_edges(active)
+        for a, b in ALL_PATHWAY_EDGES:
+            assert (a, b) in edges
+
+    def test_added_edge_included(self):
+        """User-added edges appear in the result."""
+        active = {'TG', 'PC'}
+        added = [('TG', 'PC')]
+        edges = _resolve_edges(active, added_edges=added)
+        assert ('TG', 'PC') in edges
+
+    def test_added_edge_filtered_by_active(self):
+        """Added edges where one endpoint is inactive are excluded."""
+        active = {'TG'}
+        added = [('TG', 'NONEXIST')]
+        edges = _resolve_edges(active, added_edges=added)
+        assert ('TG', 'NONEXIST') not in edges
+
+    def test_removed_edge_excluded(self):
+        """Removed edges are excluded from the result."""
+        active = {'TG', 'DG', 'PA'}
+        removed = [('TG', 'DG')]
+        edges = _resolve_edges(active, removed_edges=removed)
+        assert ('TG', 'DG') not in edges
+        assert ('DG', 'PA') in edges  # other edges still present
+
+    def test_removed_edge_bidirectional(self):
+        """Removing (A, B) also removes (B, A)."""
+        active = {'TG', 'DG'}
+        removed = [('DG', 'TG')]  # reverse direction
+        edges = _resolve_edges(active, removed_edges=removed)
+        assert ('TG', 'DG') not in edges
+
+    def test_add_and_remove_combined(self):
+        """Can add and remove edges in the same call."""
+        active = {'TG', 'DG', 'PA', 'PC'}
+        added = [('TG', 'PC')]
+        removed = [('TG', 'DG')]
+        edges = _resolve_edges(active, added_edges=added, removed_edges=removed)
+        assert ('TG', 'DG') not in edges
+        assert ('TG', 'PC') in edges
+
+    def test_empty_active_set(self):
+        """Empty active set → no edges."""
+        edges = _resolve_edges(set())
+        assert edges == []
+
+
+# =============================================================================
+# _circle_path tests
+# =============================================================================
+
+
+class TestCirclePath:
+    """Tests for _circle_path() SVG helper."""
+
+    def test_returns_string(self):
+        result = _circle_path(0, 0, 1)
+        assert isinstance(result, str)
+
+    def test_starts_with_M(self):
+        result = _circle_path(0, 0, 1)
+        assert result.startswith('M ')
+
+    def test_ends_with_Z(self):
+        result = _circle_path(0, 0, 1)
+        assert result.endswith('Z')
+
+    def test_contains_L_commands(self):
+        result = _circle_path(0, 0, 1)
+        assert ' L ' in result
+
+    def test_zero_radius(self):
+        """Zero radius produces a degenerate path (all points at center)."""
+        result = _circle_path(5, 10, 0)
+        assert isinstance(result, str)
+        assert 'M 5.0000,10.0000' in result
+
+    def test_center_offset(self):
+        """Circle at (10, 20) should have points near that center."""
+        result = _circle_path(10, 20, 1)
+        # First point should be at (10+1, 20) = (11, 20)
+        assert 'M 11.0000,20.0000' in result
+
+
+# =============================================================================
+# create_pathway_viz with custom_nodes/edges/overrides
+# =============================================================================
+
+
+class TestCreatePathwayVizEditable:
+    """Tests for create_pathway_viz() with editable layout parameters."""
+
+    @pytest.fixture
+    def basic_fc(self):
+        return _make_fold_change_df(['PC', 'PE'], [2.0, 3.0])
+
+    @pytest.fixture
+    def basic_sat(self):
+        return _make_saturation_df(['PC', 'PE'], [0.5, 0.7])
+
+    def test_custom_node_in_figure(self, basic_fc, basic_sat):
+        """Custom node appears as a dashed circle (missing from data)."""
+        fig, data = PathwayVizPlotterService.create_pathway_viz(
+            basic_fc, basic_sat,
+            active_classes=['PC', 'PE', 'CUSTOM'],
+            custom_nodes={'CUSTOM': (20.0, 20.0)},
+        )
+        assert isinstance(fig, go.Figure)
+
+    def test_added_edge_in_figure(self, basic_fc, basic_sat):
+        """Added edges should appear in figure traces."""
+        fig, data = PathwayVizPlotterService.create_pathway_viz(
+            basic_fc, basic_sat,
+            active_classes=['PC', 'PE'],
+            added_edges=[('PC', 'PE')],
+        )
+        assert isinstance(fig, go.Figure)
+
+    def test_removed_edge_in_figure(self, basic_fc, basic_sat):
+        """Removing a default edge should reduce trace count."""
+        fig_default, _ = PathwayVizPlotterService.create_pathway_viz(
+            basic_fc, basic_sat,
+            active_classes=list(DEFAULT_PATHWAY_CLASSES),
+        )
+        fig_removed, _ = PathwayVizPlotterService.create_pathway_viz(
+            basic_fc, basic_sat,
+            active_classes=list(DEFAULT_PATHWAY_CLASSES),
+            removed_edges=[('TG', 'DG')],
+        )
+        # Fewer line traces after removing an edge
+        def count_line_traces(fig):
+            return sum(1 for t in fig.data if hasattr(t, 'mode') and t.mode == 'lines')
+        assert count_line_traces(fig_removed) < count_line_traces(fig_default)
+
+    def test_position_override_in_figure(self, basic_fc, basic_sat):
+        """Position overrides should shift the node in the figure."""
+        fig, _ = PathwayVizPlotterService.create_pathway_viz(
+            basic_fc, basic_sat,
+            active_classes=['PC', 'PE'],
+            position_overrides={'PC': (50.0, 50.0)},
+        )
+        assert isinstance(fig, go.Figure)
+
+    def test_empty_active_classes(self):
+        """Empty active classes with empty data → returns None."""
+        fc = _make_fold_change_df([], [])
+        sat = _make_saturation_df([], [])
+        result = PathwayVizPlotterService.create_pathway_viz(
+            fc, sat, active_classes=[],
+        )
+        # Both inputs empty → (None, {})
+        assert result == (None, {})
+
+    def test_all_classes_missing_from_data(self):
+        """All active classes absent from data → all shown as dashed outlines."""
+        # Need non-empty DataFrames with *different* classes than active
+        fc = _make_fold_change_df(['DUMMY'], [1.0])
+        sat = _make_saturation_df(['DUMMY'], [0.5])
+        fig, _ = PathwayVizPlotterService.create_pathway_viz(
+            fc, sat,
+            active_classes=['PC', 'PE', 'TG'],
+        )
+        assert isinstance(fig, go.Figure)
+        # Should still have shapes (dashed circles for missing classes)
+        assert len(fig.layout.shapes) > 0
+
+    def test_show_grid_toggle(self, basic_fc, basic_sat):
+        """show_grid=True should make axes visible."""
+        fig_grid, _ = PathwayVizPlotterService.create_pathway_viz(
+            basic_fc, basic_sat,
+            active_classes=['PC', 'PE'],
+            show_grid=True,
+        )
+        fig_no_grid, _ = PathwayVizPlotterService.create_pathway_viz(
+            basic_fc, basic_sat,
+            active_classes=['PC', 'PE'],
+            show_grid=False,
+        )
+        assert fig_grid.layout.xaxis.visible is True
+        assert fig_no_grid.layout.xaxis.visible is False
+
+    def test_all_28_classes(self):
+        """Rendering with all 28 classes should not error."""
+        fc = _make_fold_change_df(ALL_PATHWAY_CLASSES, [1.5] * len(ALL_PATHWAY_CLASSES))
+        sat = _make_saturation_df(ALL_PATHWAY_CLASSES, [0.5] * len(ALL_PATHWAY_CLASSES))
+        fig, data = PathwayVizPlotterService.create_pathway_viz(
+            fc, sat,
+            active_classes=list(ALL_PATHWAY_CLASSES),
+        )
+        assert isinstance(fig, go.Figure)
+
+
+# =============================================================================
+# Pathway config JSON round-trip
+# =============================================================================
+
+
+class TestPathwayConfigRoundTrip:
+    """Tests for save/load pathway configuration as JSON-compatible dict."""
+
+    def test_config_serializable(self):
+        """Pathway layout config is JSON-serializable."""
+        import json
+        config = {
+            'active_classes': ['PC', 'PE', 'TG'],
+            'custom_nodes': {'CUSTOM': [5.0, 10.0]},
+            'added_edges': [['PC', 'CUSTOM']],
+            'removed_edges': [['TG', 'DG']],
+            'position_overrides': {'PC': [99.0, 88.0]},
+        }
+        serialized = json.dumps(config)
+        loaded = json.loads(serialized)
+        assert loaded == config
+
+    def test_roundtrip_produces_same_figure(self):
+        """Loading a saved config produces the same figure structure."""
+        active = ['PC', 'PE', 'TG']
+        custom = {'MYNODE': (15.0, 15.0)}
+        added = [('PC', 'MYNODE')]
+        removed = [('TG', 'DG')]
+        overrides = {'PE': (0.0, 0.0)}
+
+        fc = _make_fold_change_df(['PC', 'PE', 'TG'], [2.0, 3.0, 1.5])
+        sat = _make_saturation_df(['PC', 'PE', 'TG'], [0.5, 0.7, 0.3])
+
+        fig1, data1 = PathwayVizPlotterService.create_pathway_viz(
+            fc, sat,
+            active_classes=active + ['MYNODE'],
+            custom_nodes=custom,
+            added_edges=added,
+            removed_edges=removed,
+            position_overrides=overrides,
+        )
+        fig2, data2 = PathwayVizPlotterService.create_pathway_viz(
+            fc, sat,
+            active_classes=active + ['MYNODE'],
+            custom_nodes=custom,
+            added_edges=added,
+            removed_edges=removed,
+            position_overrides=overrides,
+        )
+        # Same inputs → same number of traces and shapes
+        assert len(fig1.data) == len(fig2.data)
+        assert len(fig1.layout.shapes) == len(fig2.layout.shapes)

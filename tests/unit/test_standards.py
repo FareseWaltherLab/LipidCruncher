@@ -2033,3 +2033,134 @@ MS_METABOLITE_DATA_END
 """
         result = FormatDetectionService.detect_format(mw_text)
         assert result == DataFormat.METABOLOMICS_WORKBENCH
+
+
+# =============================================================================
+# LIPID MAPS Space-Separated Format — _infer_class tests
+# =============================================================================
+
+
+class TestInferClassSpaceSeparated:
+    """Tests for _infer_class with LIPID MAPS space-separated format."""
+
+    def test_phospholipid_space(self):
+        assert StandardsService._infer_class('PC 16:0_18:1') == 'PC'
+
+    def test_pe_space(self):
+        assert StandardsService._infer_class('PE 18:0_20:4') == 'PE'
+
+    def test_tg_space(self):
+        assert StandardsService._infer_class('TG 16:0_18:1_18:2') == 'TG'
+
+    def test_ceramide_space_slash(self):
+        assert StandardsService._infer_class('Cer 18:1;O2/24:0') == 'Cer'
+
+    def test_sm_space_slash(self):
+        assert StandardsService._infer_class('SM 18:1;O2/16:0') == 'SM'
+
+    def test_hexcer_space(self):
+        assert StandardsService._infer_class('HexCer 18:1;O2/24:0') == 'HexCer'
+
+    def test_lyso_space(self):
+        assert StandardsService._infer_class('LPC 18:1') == 'LPC'
+        assert StandardsService._infer_class('LPE 20:4') == 'LPE'
+
+    def test_modification_space(self):
+        assert StandardsService._infer_class('LPC 18:1(d7)') == 'LPC'
+
+    def test_ether_space(self):
+        assert StandardsService._infer_class('PC O-16:0_18:1') == 'PC'
+
+    def test_consolidated_space(self):
+        assert StandardsService._infer_class('PC 34:1') == 'PC'
+
+    def test_cardiolipin_space(self):
+        assert StandardsService._infer_class('CL 16:0_18:1_18:1_18:2') == 'CL'
+
+    def test_cholesteryl_ester_space(self):
+        assert StandardsService._infer_class('CE 18:2') == 'CE'
+
+    def test_dg_space(self):
+        assert StandardsService._infer_class('DG 16:0_18:1') == 'DG'
+
+
+class TestInferClassBackwardCompat:
+    """Ensure old parenthesis format still works (backward compatibility)."""
+
+    def test_pc_parenthesis(self):
+        assert StandardsService._infer_class('PC(16:0_18:1)') == 'PC'
+
+    def test_pe_parenthesis(self):
+        assert StandardsService._infer_class('PE(18:0_20:4)') == 'PE'
+
+    def test_sm_parenthesis(self):
+        assert StandardsService._infer_class('SM(d18:1_16:0)') == 'SM'
+
+    def test_cer_parenthesis(self):
+        assert StandardsService._infer_class('Cer(d18:1_24:0)') == 'Cer'
+
+    def test_tg_parenthesis(self):
+        assert StandardsService._infer_class('TG(16:0_18:1_18:2)') == 'TG'
+
+
+class TestStandardizeColumnsSpaceSeparated:
+    """Tests for _standardize_columns with space-separated lipid names."""
+
+    def test_class_inferred_from_space_format(self):
+        """ClassKey should be inferred from space-separated names when not provided."""
+        df = pd.DataFrame({
+            'Name': ['PC 16:0_18:1', 'PE 18:0_20:4', 'Cer 18:1;O2/24:0'],
+            'S1': [100.0, 200.0, 300.0],
+            'S2': [110.0, 210.0, 310.0],
+        })
+        expected_cols = ['intensity[s1]', 'intensity[s2]']
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert 'ClassKey' in result.columns
+        assert result['ClassKey'].tolist() == ['PC', 'PE', 'Cer']
+
+    def test_class_inferred_from_mixed_format(self):
+        """Mixed old/new formats should both infer correctly."""
+        df = pd.DataFrame({
+            'Name': ['PC 16:0_18:1', 'PE(18:0_20:4)'],
+            'S1': [100.0, 200.0],
+        })
+        expected_cols = ['intensity[s1]']
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert result['ClassKey'].tolist() == ['PC', 'PE']
+
+    def test_explicit_classkey_column_preserved(self):
+        """When ClassKey column is provided, it should be used as-is."""
+        df = pd.DataFrame({
+            'Name': ['PC 16:0_18:1', 'PE 18:0_20:4'],
+            'Class': ['PC', 'PE'],
+            'S1': [100.0, 200.0],
+        })
+        expected_cols = ['intensity[s1]']
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert 'ClassKey' in result.columns
+        assert result['ClassKey'].tolist() == ['PC', 'PE']
+
+    def test_class_only_names(self):
+        """Names without chain info should infer class as the full name."""
+        df = pd.DataFrame({
+            'Name': ['Cholesterol', 'SPLASH'],
+            'S1': [100.0, 200.0],
+        })
+        expected_cols = ['intensity[s1]']
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert result['ClassKey'].tolist() == ['Cholesterol', 'SPLASH']
+
+    def test_sphingolipid_slash_format(self):
+        """Sphingolipid names with slash separator should infer class correctly."""
+        df = pd.DataFrame({
+            'Name': ['Cer 18:1;O2/24:0', 'SM 18:1;O2/16:0', 'HexCer 18:1;O2/24:0'],
+            'S1': [100.0, 200.0, 300.0],
+        })
+        expected_cols = ['intensity[s1]']
+        result = StandardsService._standardize_columns(df, expected_cols)
+
+        assert result['ClassKey'].tolist() == ['Cer', 'SM', 'HexCer']

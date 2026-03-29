@@ -1130,6 +1130,109 @@ class TestRunWorkflowBothMethod:
         assert len(result.removed_standards) > 0
 
 
+class TestRunWorkflowTotalIntensity:
+    """Tests for total intensity normalization through the workflow."""
+
+    @pytest.fixture
+    def total_intensity_config(self):
+        return NormalizationConfig(method='total_intensity')
+
+    def test_basic_total_intensity_workflow(self, basic_df, simple_experiment_2x2, total_intensity_config):
+        """Total intensity normalization runs successfully through workflow."""
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=total_intensity_config
+        )
+        result = NormalizationWorkflow.run(basic_df, config)
+
+        assert result.success is True
+        assert result.method_applied == "Total intensity normalization"
+        assert result.normalized_df is not None
+
+    def test_total_intensity_equalizes_totals(self, basic_df, simple_experiment_2x2, total_intensity_config):
+        """Workflow output has equal sample totals."""
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=total_intensity_config
+        )
+        result = NormalizationWorkflow.run(basic_df, config)
+
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        totals = result.normalized_df[conc_cols].sum(axis=0)
+        assert totals.std() < 1e-6
+
+    def test_total_intensity_renames_columns(self, basic_df, simple_experiment_2x2, total_intensity_config):
+        """Workflow output has concentration columns, not intensity."""
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=total_intensity_config
+        )
+        result = NormalizationWorkflow.run(basic_df, config)
+
+        assert not any(c.startswith('intensity[') for c in result.normalized_df.columns)
+        assert any(c.startswith('concentration[') for c in result.normalized_df.columns)
+
+    def test_total_intensity_no_standards_removed(self, basic_df, simple_experiment_2x2, total_intensity_config):
+        """Total intensity normalization does not remove internal standards."""
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=total_intensity_config
+        )
+        result = NormalizationWorkflow.run(basic_df, config)
+
+        assert result.removed_standards == []
+
+    def test_total_intensity_preserves_essential_columns(self, simple_experiment_2x2, total_intensity_config):
+        """LipidSearch essential columns (CalcMass, BaseRt) are preserved."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+            'ClassKey': ['PC', 'PE'],
+            'CalcMass': [760.5, 768.5],
+            'BaseRt': [10.5, 12.3],
+            'intensity[s1]': [1e6, 2e6],
+            'intensity[s2]': [1.1e6, 2.1e6],
+            'intensity[s3]': [1.2e6, 2.2e6],
+            'intensity[s4]': [1.3e6, 2.3e6],
+        })
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=total_intensity_config,
+            data_format=DataFormat.LIPIDSEARCH,
+        )
+        result = NormalizationWorkflow.run(df, config)
+
+        assert result.success is True
+        assert 'CalcMass' in result.normalized_df.columns
+        assert 'BaseRt' in result.normalized_df.columns
+
+    def test_total_intensity_with_class_filter(self, basic_df, simple_experiment_2x2):
+        """Class filtering works through the workflow."""
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=NormalizationConfig(
+                method='total_intensity',
+                selected_classes=['PC', 'PE'],
+            )
+        )
+        result = NormalizationWorkflow.run(basic_df, config)
+
+        assert result.success is True
+        assert 'TG' not in result.normalized_df['ClassKey'].values
+        assert 'SM' not in result.normalized_df['ClassKey'].values
+
+    def test_total_intensity_tracks_statistics(self, basic_df, simple_experiment_2x2, total_intensity_config):
+        """Workflow tracks lipid counts and classes."""
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=total_intensity_config
+        )
+        result = NormalizationWorkflow.run(basic_df, config)
+
+        assert result.lipids_before == 4
+        assert result.lipids_after == 4
+        assert result.samples_processed == 4
+
+
 class TestRunWorkflowEdgeCases:
     """Tests for run method edge cases."""
 

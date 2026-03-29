@@ -1676,6 +1676,234 @@ class TestTotalIntensityNormalization:
         assert result.normalized_df[s2_col].sum() > 0
 
 
+class TestTotalIntensityEdgeCases:
+    """Edge cases and robustness tests for total intensity normalization."""
+
+    @pytest.fixture
+    def total_intensity_config(self):
+        return NormalizationConfig(method='total_intensity')
+
+    def test_all_zero_dataset(self, simple_experiment_2x3, total_intensity_config):
+        """When every sample is all zeros, values should remain zero."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [0.0, 0.0],
+            'intensity[s2]': [0.0, 0.0],
+            'intensity[s3]': [0.0, 0.0],
+            'intensity[s4]': [0.0, 0.0],
+            'intensity[s5]': [0.0, 0.0],
+            'intensity[s6]': [0.0, 0.0],
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, simple_experiment_2x3)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        assert (result.normalized_df[conc_cols] == 0).all().all()
+
+    def test_single_lipid(self, simple_experiment_2x3, total_intensity_config):
+        """Dataset with one lipid: each sample's value becomes the median total."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A'],
+            'ClassKey': ['X'],
+            'intensity[s1]': [100.0],
+            'intensity[s2]': [200.0],
+            'intensity[s3]': [300.0],
+            'intensity[s4]': [400.0],
+            'intensity[s5]': [500.0],
+            'intensity[s6]': [600.0],
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, simple_experiment_2x3)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        # Single lipid = 100% of total, so every value becomes median_total
+        median_total = np.median([100, 200, 300, 400, 500, 600])  # 350
+        for col in conc_cols:
+            np.testing.assert_allclose(result.normalized_df[col].values[0], median_total, rtol=1e-10)
+
+    def test_single_sample(self, total_intensity_config):
+        """Single sample: median of one total is itself."""
+        experiment = ExperimentConfig(
+            n_conditions=1,
+            conditions_list=['A'],
+            number_of_samples_list=[1],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [300.0, 700.0],
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, experiment)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        # With one sample, median_total = 1000, total = 1000
+        # Values unchanged: 300/1000 * 1000 = 300, 700/1000 * 1000 = 700
+        np.testing.assert_allclose(result.normalized_df[conc_cols[0]].values, [300.0, 700.0], rtol=1e-10)
+
+    def test_nan_values_propagate(self, simple_experiment_2x3, total_intensity_config):
+        """NaN values should propagate through normalization (not crash)."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [100.0, np.nan],
+            'intensity[s2]': [200.0, 400.0],
+            'intensity[s3]': [150.0, 300.0],
+            'intensity[s4]': [200.0, 400.0],
+            'intensity[s5]': [250.0, 500.0],
+            'intensity[s6]': [300.0, 600.0],
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, simple_experiment_2x3)
+        # Should not crash — NaN propagates through arithmetic
+        assert result.method_applied == "Total intensity normalization"
+
+    def test_uniform_intensities(self, simple_experiment_2x3, total_intensity_config):
+        """All samples have identical totals — normalization should not change values."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [100.0, 200.0],
+            'intensity[s2]': [100.0, 200.0],
+            'intensity[s3]': [100.0, 200.0],
+            'intensity[s4]': [100.0, 200.0],
+            'intensity[s5]': [100.0, 200.0],
+            'intensity[s6]': [100.0, 200.0],
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, simple_experiment_2x3)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        # All totals are 300, median is 300, so values stay the same
+        for col in conc_cols:
+            np.testing.assert_allclose(result.normalized_df[col].values, [100.0, 200.0], rtol=1e-10)
+
+    def test_odd_number_of_samples_median(self, total_intensity_config):
+        """Odd number of samples: median is the middle value."""
+        experiment = ExperimentConfig(
+            n_conditions=1,
+            conditions_list=['A'],
+            number_of_samples_list=[5],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['A'],
+            'ClassKey': ['X'],
+            'intensity[s1]': [100.0],    # total = 100
+            'intensity[s2]': [200.0],    # total = 200
+            'intensity[s3]': [300.0],    # total = 300
+            'intensity[s4]': [400.0],    # total = 400
+            'intensity[s5]': [500.0],    # total = 500
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, experiment)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        # Median of [100, 200, 300, 400, 500] = 300
+        # Every sample total → 300 after normalization
+        totals = result.normalized_df[conc_cols].sum(axis=0)
+        np.testing.assert_allclose(totals.values, 300.0, rtol=1e-10)
+
+    def test_sparse_data_mixed_zeros(self, simple_experiment_2x3, total_intensity_config):
+        """Some lipids have zeros in some samples but not all."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B', 'C'],
+            'ClassKey': ['X', 'X', 'X'],
+            'intensity[s1]': [100.0, 0.0, 300.0],
+            'intensity[s2]': [0.0, 200.0, 300.0],
+            'intensity[s3]': [100.0, 200.0, 0.0],
+            'intensity[s4]': [100.0, 200.0, 300.0],
+            'intensity[s5]': [0.0, 0.0, 500.0],
+            'intensity[s6]': [250.0, 250.0, 250.0],
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, simple_experiment_2x3)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        # All sample totals should be equal after normalization
+        totals = result.normalized_df[conc_cols].sum(axis=0)
+        assert totals.std() < 1e-6
+
+    def test_very_large_values(self, simple_experiment_2x3, total_intensity_config):
+        """Large intensity values should not overflow."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [1e15, 2e15],
+            'intensity[s2]': [3e15, 4e15],
+            'intensity[s3]': [5e15, 6e15],
+            'intensity[s4]': [1e15, 2e15],
+            'intensity[s5]': [3e15, 4e15],
+            'intensity[s6]': [5e15, 6e15],
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, simple_experiment_2x3)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        # Should not produce inf or NaN
+        assert not result.normalized_df[conc_cols].isin([np.inf, -np.inf]).any().any()
+        totals = result.normalized_df[conc_cols].sum(axis=0)
+        assert totals.std() / totals.mean() < 1e-6
+
+    def test_very_small_values(self, simple_experiment_2x3, total_intensity_config):
+        """Very small positive values should normalize correctly."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [1e-10, 2e-10],
+            'intensity[s2]': [3e-10, 4e-10],
+            'intensity[s3]': [5e-10, 6e-10],
+            'intensity[s4]': [1e-10, 2e-10],
+            'intensity[s5]': [3e-10, 4e-10],
+            'intensity[s6]': [5e-10, 6e-10],
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, simple_experiment_2x3)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        totals = result.normalized_df[conc_cols].sum(axis=0)
+        assert totals.std() / totals.mean() < 1e-6
+
+    def test_class_filter_changes_median(self, simple_experiment_2x3):
+        """Class filtering should recalculate totals on filtered data only."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B', 'C'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'intensity[s1]': [100.0, 200.0, 10000.0],
+            'intensity[s2]': [150.0, 250.0, 10000.0],
+            'intensity[s3]': [200.0, 300.0, 10000.0],
+            'intensity[s4]': [100.0, 200.0, 10000.0],
+            'intensity[s5]': [150.0, 250.0, 10000.0],
+            'intensity[s6]': [200.0, 300.0, 10000.0],
+        })
+        config_all = NormalizationConfig(method='total_intensity')
+        config_filtered = NormalizationConfig(method='total_intensity', selected_classes=['PC', 'PE'])
+
+        result_all = NormalizationService.normalize(df, config_all, simple_experiment_2x3)
+        result_filtered = NormalizationService.normalize(df, config_filtered, simple_experiment_2x3)
+
+        # Filtered result should not contain TG
+        assert 'TG' not in result_filtered.normalized_df['ClassKey'].values
+
+        # Totals should differ because TG dominates the unfiltered totals
+        conc_cols_all = [c for c in result_all.normalized_df.columns if c.startswith('concentration[')]
+        conc_cols_filt = [c for c in result_filtered.normalized_df.columns if c.startswith('concentration[')]
+        median_all = result_all.normalized_df[conc_cols_all].sum(axis=0).median()
+        median_filt = result_filtered.normalized_df[conc_cols_filt].sum(axis=0).median()
+        assert median_all != median_filt
+
+    def test_multiple_zero_samples_among_non_zero(self, simple_experiment_2x3, total_intensity_config):
+        """Multiple zero-total samples; median computed only from positive totals."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'intensity[s1]': [0.0, 0.0],
+            'intensity[s2]': [0.0, 0.0],
+            'intensity[s3]': [100.0, 200.0],   # total = 300
+            'intensity[s4]': [150.0, 150.0],   # total = 300
+            'intensity[s5]': [200.0, 400.0],   # total = 600
+            'intensity[s6]': [300.0, 300.0],   # total = 600
+        })
+        result = NormalizationService.normalize(df, total_intensity_config, simple_experiment_2x3)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+
+        # s1, s2 should stay zero
+        for col in conc_cols:
+            if 's1]' in col or 's2]' in col:
+                assert (result.normalized_df[col] == 0).all()
+
+        # Non-zero samples should have equal totals (median of [300, 300, 600, 600] = 450)
+        non_zero_totals = []
+        for col in conc_cols:
+            t = result.normalized_df[col].sum()
+            if t > 0:
+                non_zero_totals.append(t)
+        np.testing.assert_allclose(non_zero_totals, 450.0, rtol=1e-10)
+
+
 class TestIntegrationPreserveStructure:
     """Integration tests for structure preservation."""
 
