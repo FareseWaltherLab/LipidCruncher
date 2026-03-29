@@ -13,6 +13,12 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA as SklearnPCA
 
+from ..constants import (
+    CORRELATION_THRESHOLD_BIOLOGICAL,
+    CORRELATION_THRESHOLD_TECHNICAL,
+    CORRELATION_VMIN,
+    PCA_N_COMPONENTS,
+)
 from ..models.experiment import ExperimentConfig
 from ..services.validation import (
     validate_dataframe_not_empty,
@@ -484,8 +490,12 @@ class QualityCheckService:
         mean_area_df = df[conc_cols].copy()
         mean_area_df.columns = cond_samples
 
-        v_min = 0.5
-        threshold = 0.7 if sample_type == 'biological replicates' else 0.8
+        v_min = CORRELATION_VMIN
+        threshold = (
+            CORRELATION_THRESHOLD_BIOLOGICAL
+            if sample_type == 'biological replicates'
+            else CORRELATION_THRESHOLD_TECHNICAL
+        )
         correlation_df = mean_area_df.corr()
 
         return CorrelationResult(
@@ -536,7 +546,7 @@ class QualityCheckService:
         data_matrix = df[conc_cols].T  # (samples x lipids)
 
         scaled_data = StandardScaler().fit_transform(data_matrix)
-        pca = SklearnPCA(n_components=2)
+        pca = SklearnPCA(n_components=PCA_N_COMPONENTS)
         principal_components = pca.fit_transform(scaled_data)
         explained_variance = pca.explained_variance_ratio_
 

@@ -94,6 +94,41 @@ MSDIAL_DEFAULT_QUALITY_LEVEL: str = 'Moderate (Score ≥60)'
 
 
 # =============================================================================
+# Plotting Constants
+# =============================================================================
+
+# Colorblind-friendly palette for conditions (shared across all plotting services)
+CONDITION_COLORS: List[str] = [
+    '#1f77b4',  # blue
+    '#ff7f0e',  # orange
+    '#2ca02c',  # green
+    '#d62728',  # red
+    '#9467bd',  # purple
+    '#8c564b',  # brown
+    '#e377c2',  # pink
+    '#7f7f7f',  # gray
+    '#bcbd22',  # olive
+    '#17becf',  # cyan
+]
+
+
+# =============================================================================
+# Correlation Thresholds
+# =============================================================================
+
+CORRELATION_VMIN: float = 0.5
+CORRELATION_THRESHOLD_BIOLOGICAL: float = 0.7
+CORRELATION_THRESHOLD_TECHNICAL: float = 0.8
+
+
+# =============================================================================
+# PCA Constants
+# =============================================================================
+
+PCA_N_COMPONENTS: int = 2
+
+
+# =============================================================================
 # LIPID MAPS Nomenclature (Liebisch et al. 2020)
 # =============================================================================
 

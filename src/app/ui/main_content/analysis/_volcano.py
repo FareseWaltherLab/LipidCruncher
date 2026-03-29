@@ -11,11 +11,8 @@ from app.models.statistics import StatisticalTestConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.plotting.volcano_plot import VolcanoPlotterService
 from app.workflows.analysis import AnalysisWorkflow
-from app.ui.download_utils import (
-    plotly_svg_download_button,
-    matplotlib_svg_download_button,
-    csv_download_button,
-)
+from app.ui.download_utils import csv_download_button
+from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import _display_detailed_statistics
 
@@ -46,8 +43,7 @@ def _display_volcano_plot(
         stat_config = _display_volcano_statistical_options()
 
         # Data selection
-        st.markdown("---")
-        st.markdown("#### 🎯 Data Selection")
+        section_header("🎯 Data Selection")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -82,8 +78,7 @@ def _display_volcano_plot(
             return
 
         # Significance & display settings
-        st.markdown("---")
-        st.markdown("#### 📈 Results")
+        section_header("📈 Results")
         st.markdown("**Significance & Display Settings**")
 
         col1, col2 = st.columns(2)
@@ -231,20 +226,13 @@ def _render_volcano_results(
     st.markdown("###### Volcano Plot")
     st.plotly_chart(result.figure, use_container_width=True)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        plotly_svg_download_button(
-            result.figure,
+    if result.volcano_data and result.volcano_data.volcano_df is not None:
+        display_export_buttons(
+            result.figure, result.volcano_data.volcano_df,
             f"volcano_plot_{experimental}_vs_{control}.svg",
-            key="analysis_svg_volcano",
+            f"volcano_statistical_results_{experimental}_vs_{control}.csv",
+            "analysis_svg_volcano", "analysis_csv_volcano",
         )
-    with col2:
-        if result.volcano_data and result.volcano_data.volcano_df is not None:
-            csv_download_button(
-                result.volcano_data.volcano_df,
-                f"volcano_statistical_results_{experimental}_vs_{control}.csv",
-                key="analysis_csv_volcano",
-            )
 
     # Show detailed results
     _display_detailed_statistics(result.stat_summary, 'volcano')
@@ -255,20 +243,13 @@ def _render_volcano_results(
         st.markdown("###### Concentration vs. Fold Change")
         st.plotly_chart(result.concentration_plot, use_container_width=True)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(
-                result.concentration_plot,
+        if result.concentration_df is not None:
+            display_export_buttons(
+                result.concentration_plot, result.concentration_df,
                 f"conc_vs_fc_{experimental}_vs_{control}.svg",
-                key="analysis_svg_conc_fc",
+                f"conc_vs_fc_{experimental}_vs_{control}.csv",
+                "analysis_svg_conc_fc", "analysis_csv_conc_fc",
             )
-        with col2:
-            if result.concentration_df is not None:
-                csv_download_button(
-                    result.concentration_df,
-                    f"conc_vs_fc_{experimental}_vs_{control}.csv",
-                    key="analysis_csv_conc_fc",
-                )
 
     # Individual lipid analysis
     _display_individual_lipid_analysis(
@@ -380,23 +361,16 @@ def _display_individual_lipid_analysis(
 
     st.pyplot(dist_fig)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        matplotlib_svg_download_button(
-            dist_fig,
-            f"conc_dist_{experimental}_vs_{control}.svg",
-            key="analysis_svg_dist",
-        )
-    with col2:
-        # Build distribution CSV
-        dist_data = _build_distribution_csv(
-            df, detail_lipids, experiment, selected_conditions,
-        )
-        csv_download_button(
-            dist_data,
-            f"conc_dist_data_{experimental}_vs_{control}.csv",
-            key="analysis_csv_dist",
-        )
+    dist_data = _build_distribution_csv(
+        df, detail_lipids, experiment, selected_conditions,
+    )
+    display_export_buttons(
+        dist_fig, dist_data,
+        f"conc_dist_{experimental}_vs_{control}.svg",
+        f"conc_dist_data_{experimental}_vs_{control}.csv",
+        "analysis_svg_dist", "analysis_csv_dist",
+        is_matplotlib=True,
+    )
 
 
 def _build_distribution_csv(
@@ -446,18 +420,16 @@ def _display_excluded_lipids(
     st.markdown("#### Excluded Lipids")
     st.dataframe(removed_df, use_container_width=True)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        csv_download_button(
-            removed_df,
-            f"excluded_lipids_{experimental}_vs_{control}.csv",
-            key="analysis_csv_excluded",
+    csv_download_button(
+        removed_df,
+        f"excluded_lipids_{experimental}_vs_{control}.csv",
+        key="analysis_csv_excluded",
+    )
+
+    # Summarize reasons
+    if 'Reason' in removed_df.columns:
+        reasons = removed_df['Reason'].value_counts()
+        summary = " | ".join(
+            f"{reason}: {count}" for reason, count in reasons.items()
         )
-    with col2:
-        # Summarize reasons
-        if 'Reason' in removed_df.columns:
-            reasons = removed_df['Reason'].value_counts()
-            summary = " | ".join(
-                f"{reason}: {count}" for reason, count in reasons.items()
-            )
-            st.markdown(f"**Exclusion reasons:** {summary}")
+        st.markdown(f"**Exclusion reasons:** {summary}")

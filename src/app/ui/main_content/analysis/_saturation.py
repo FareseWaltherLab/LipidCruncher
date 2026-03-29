@@ -9,7 +9,7 @@ from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.plotting.saturation_plot import SaturationPlotterService
-from app.ui.download_utils import plotly_svg_download_button, csv_download_button
+from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
     _display_condition_class_selectors,
@@ -53,8 +53,7 @@ def _display_saturation_plots(
             'sat', len(selected_classes), len(selected_conditions),
         )
 
-        st.markdown("---")
-        st.markdown("#### 📊 Results")
+        section_header("📊 Results")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -123,22 +122,14 @@ def _render_saturation_results(
                 f'sat_{ptype}_{lipid_class}'
             ] = fig
 
-            col1, col2 = st.columns(2)
-            with col1:
-                plotly_svg_download_button(
-                    fig,
-                    f"saturation_{ptype}_{lipid_class}.svg",
-                    key=f"analysis_svg_sat_{ptype}_{lipid_class}",
-                )
-            with col2:
-                # Build CSV data from the saturation data
-                csv_download_button(
-                    _build_saturation_csv(
-                        df, experiment, selected_conditions, lipid_class
-                    ),
-                    f"saturation_{ptype}_{lipid_class}.csv",
-                    key=f"analysis_csv_sat_{ptype}_{lipid_class}",
-                )
+            display_export_buttons(
+                fig,
+                _build_saturation_csv(df, experiment, selected_conditions, lipid_class),
+                f"saturation_{ptype}_{lipid_class}.svg",
+                f"saturation_{ptype}_{lipid_class}.csv",
+                f"analysis_svg_sat_{ptype}_{lipid_class}",
+                f"analysis_csv_sat_{ptype}_{lipid_class}",
+            )
 
     _display_detailed_statistics(stat_summary, 'sat')
 

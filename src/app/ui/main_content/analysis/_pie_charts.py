@@ -6,7 +6,7 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.workflows.analysis import AnalysisWorkflow
-from app.ui.download_utils import plotly_svg_download_button, csv_download_button
+from app.ui.st_helpers import display_export_buttons, section_header
 
 
 def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
@@ -19,8 +19,7 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
         all_classes = AnalysisWorkflow.get_available_classes(df)
         all_conditions = AnalysisWorkflow.get_all_conditions(experiment)
 
-        st.markdown("---")
-        st.markdown("#### 🎯 Data Selection")
+        section_header("🎯 Data Selection")
 
         selected_classes = st.multiselect(
             "Lipid Classes",
@@ -33,8 +32,7 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
             st.warning("Please select at least one lipid class to create the pie charts.")
             return
 
-        st.markdown("---")
-        st.markdown("#### 📊 Results")
+        section_header("📊 Results")
 
         results = StreamlitAdapter.run_pie_charts(
             df, experiment, all_conditions, selected_classes,
@@ -47,16 +45,9 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
             st.session_state.analysis_pie_chart_figs[condition] = pie_result.figure
             st.session_state.analysis_all_plots[f'pie_{condition}'] = pie_result.figure
 
-            col1, col2 = st.columns(2)
-            with col1:
-                plotly_svg_download_button(
-                    pie_result.figure,
-                    f"abundance_pie_chart_{condition}.svg",
-                    key=f"analysis_svg_pie_{condition}",
-                )
-            with col2:
-                csv_download_button(
-                    pie_result.data_df,
-                    f"abundance_pie_chart_{condition}.csv",
-                    key=f"analysis_csv_pie_{condition}",
-                )
+            display_export_buttons(
+                pie_result.figure, pie_result.data_df,
+                f"abundance_pie_chart_{condition}.svg",
+                f"abundance_pie_chart_{condition}.csv",
+                f"analysis_svg_pie_{condition}", f"analysis_csv_pie_{condition}",
+            )

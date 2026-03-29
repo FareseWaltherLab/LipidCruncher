@@ -22,10 +22,14 @@ from app.constants import get_format_display_to_enum
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.ui.download_utils import (
-    plotly_svg_download_button,
-    matplotlib_svg_download_button,
-    csv_download_button,
+from app.ui.download_utils import csv_download_button
+from app.ui.st_helpers import (
+    display_export_buttons,
+    data_selection_header,
+    results_header,
+    settings_header,
+    section_header,
+    persist_widget,
 )
 
 
@@ -123,8 +127,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             return
 
         # --- Results ---
-        st.markdown("---")
-        st.markdown("##### 📈 Results")
+        results_header()
 
         # Missing Values Distribution
         st.markdown("###### Missing Values Distribution")
@@ -140,13 +143,11 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             "Sample": current_samples,
             "Percentage Missing": zero_values_percent_list,
         })
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(fig1, "missing_values_distribution.svg",
-                                       key="qc_missing_values_svg")
-        with col2:
-            csv_download_button(missing_values_df, "missing_values_data.csv",
-                               key="qc_missing_values_csv")
+        display_export_buttons(
+            fig1, missing_values_df,
+            "missing_values_distribution.svg", "missing_values_data.csv",
+            "qc_missing_values_svg", "qc_missing_values_csv",
+        )
 
         st.markdown("---")
 
@@ -160,12 +161,11 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
         st.plotly_chart(fig2, use_container_width=True)
 
         # Download buttons
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(fig2, "box_plot.svg", key="qc_box_plot_svg")
-        with col2:
-            csv_download_button(mean_area_df, "box_plot_data.csv",
-                               key="qc_box_plot_csv")
+        display_export_buttons(
+            fig2, mean_area_df,
+            "box_plot.svg", "box_plot_data.csv",
+            "qc_box_plot_svg", "qc_box_plot_csv",
+        )
 
 
 # =============================================================================
@@ -214,8 +214,7 @@ def _render_bqc_scatter(
     Returns (cov_threshold, scatter_plot, prepared_df, reliable_data_percent).
     """
     # --- Settings ---
-    st.markdown("---")
-    st.markdown("##### ⚙️ Settings")
+    settings_header()
 
     cov_threshold = st.number_input(
         'CoV Threshold (%)',
@@ -229,8 +228,7 @@ def _render_bqc_scatter(
     st.session_state.qc_cov_threshold = cov_threshold
 
     # --- Results ---
-    st.markdown("---")
-    st.markdown("##### 📈 Results")
+    results_header()
 
     bqc_sample_index = experiment.conditions_list.index(bqc_label)
     scatter_plot, prepared_df, reliable_data_percent, _ = (
@@ -254,12 +252,11 @@ def _render_bqc_scatter(
 
     # Download buttons
     cov_data = prepared_df[['LipidMolec', 'cov', 'mean']].dropna()
-    col1, col2 = st.columns(2)
-    with col1:
-        plotly_svg_download_button(scatter_plot, "bqc_quality_check.svg",
-                                   key="qc_bqc_svg")
-    with col2:
-        csv_download_button(cov_data, "cov_plot_data.csv", key="bqc_csv_download")
+    display_export_buttons(
+        scatter_plot, cov_data,
+        "bqc_quality_check.svg", "cov_plot_data.csv",
+        "qc_bqc_svg", "bqc_csv_download",
+    )
 
     return cov_threshold, scatter_plot, prepared_df, reliable_data_percent
 
@@ -372,25 +369,24 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
         )
 
         # --- Settings ---
-        st.markdown("---")
-        st.markdown("##### ⚙️ Settings")
+        settings_header()
 
         rt_options = ['Comparison Mode', 'Individual Mode']
-        restored_mode = StreamlitAdapter.restore_widget_value(
-            'rt_viewing_mode', '_preserved_rt_viewing_mode', 'Comparison Mode'
+        restored_mode = persist_widget(
+            'rt_viewing_mode', '_preserved_rt_viewing_mode', 'Comparison Mode',
+            options=rt_options,
         )
         mode = st.radio(
             'Viewing Mode',
             rt_options,
-            index=rt_options.index(restored_mode) if restored_mode in rt_options else 0,
+            index=rt_options.index(restored_mode),
             horizontal=True,
             key='rt_viewing_mode'
         )
         StreamlitAdapter.save_widget_value('rt_viewing_mode', '_preserved_rt_viewing_mode')
 
         if mode == 'Individual Mode':
-            st.markdown("---")
-            st.markdown("##### 📈 Results")
+            results_header()
 
             plots = StreamlitAdapter.run_retention_time_single(df)
             for idx, (plot, retention_df) in enumerate(plots, 1):
@@ -399,21 +395,16 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
                     st.session_state.qc_retention_time_plot = plot
                 st.plotly_chart(plot, use_container_width=True)
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    plotly_svg_download_button(
-                        plot, f"retention_time_plot_{idx}.svg",
-                        key=f'qc_rt_svg_individual_{idx}'
-                    )
-                with col2:
-                    csv_download_button(retention_df, f"retention_plot_{idx}.csv",
-                                       key=f"rt_csv_individual_{idx}")
+                display_export_buttons(
+                    plot, retention_df,
+                    f"retention_time_plot_{idx}.svg", f"retention_plot_{idx}.csv",
+                    f'qc_rt_svg_individual_{idx}', f"rt_csv_individual_{idx}",
+                )
                 st.markdown("---")
 
         elif mode == 'Comparison Mode':
             # --- Data Selection ---
-            st.markdown("---")
-            st.markdown("##### 🎯 Data Selection")
+            data_selection_header()
 
             all_classes = rt_result.lipid_classes
             selected_classes = st.multiselect(
@@ -428,8 +419,7 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
                 return
 
             # --- Results ---
-            st.markdown("---")
-            st.markdown("##### 📈 Results")
+            results_header()
 
             plot, retention_df = StreamlitAdapter.run_retention_time_multi(df, selected_classes)
             if plot:
@@ -437,15 +427,11 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
                 st.session_state.qc_retention_time_plot = plot
                 st.plotly_chart(plot, use_container_width=True)
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    plotly_svg_download_button(
-                        plot, "retention_time_comparison.svg",
-                        key='qc_rt_svg_comparison'
-                    )
-                with col2:
-                    csv_download_button(retention_df, "retention_time_comparison.csv",
-                                       key="rt_csv_comparison")
+                display_export_buttons(
+                    plot, retention_df,
+                    "retention_time_comparison.svg", "retention_time_comparison.csv",
+                    'qc_rt_svg_comparison', "rt_csv_comparison",
+                )
 
 
 # =============================================================================
@@ -478,8 +464,7 @@ def _display_correlation_analysis(
             return
 
         # --- Data Selection ---
-        st.markdown("---")
-        st.markdown("##### 🎯 Data Selection")
+        data_selection_header()
 
         selected_condition = st.selectbox(
             'Condition',
@@ -496,8 +481,7 @@ def _display_correlation_analysis(
             st.info("**Sample type:** Biological replicates (no BQC samples)")
 
         # --- Results ---
-        st.markdown("---")
-        st.markdown("##### 📈 Results")
+        results_header()
 
         condition_index = experiment.conditions_list.index(selected_condition)
         fig, correlation_df = StreamlitAdapter.run_correlation(
@@ -510,16 +494,13 @@ def _display_correlation_analysis(
         st.session_state.qc_correlation_plots[selected_condition] = fig
 
         # Download buttons
-        col1, col2 = st.columns(2)
-        with col1:
-            matplotlib_svg_download_button(
-                fig, f"correlation_plot_{selected_condition}.svg",
-                key='qc_corr_svg'
-            )
-        with col2:
-            csv_download_button(correlation_df,
-                               f"correlation_matrix_{selected_condition}.csv",
-                               key="corr_csv_download")
+        display_export_buttons(
+            fig, correlation_df,
+            f"correlation_plot_{selected_condition}.svg",
+            f"correlation_matrix_{selected_condition}.csv",
+            'qc_corr_svg', "corr_csv_download",
+            is_matplotlib=True,
+        )
 
         # Correlation matrix table
         st.markdown("###### Correlation Coefficients")
@@ -550,8 +531,7 @@ def _display_pca_analysis(
         )
 
         # --- Settings ---
-        st.markdown("---")
-        st.markdown("##### ⚙️ Settings")
+        settings_header()
 
         restored_pca = StreamlitAdapter.restore_widget_value(
             'pca_samples_remove', '_preserved_pca_samples_remove', []
@@ -588,18 +568,17 @@ def _display_pca_analysis(
             st.success(f"Proceeding with {remaining_count} samples.")
 
         # --- Results ---
-        st.markdown("---")
-        st.markdown("##### 📈 Results")
+        results_header()
 
         pca_plot, pca_df = StreamlitAdapter.run_pca(df, experiment)
         st.plotly_chart(pca_plot, use_container_width=True)
         st.session_state.qc_pca_plot = pca_plot
 
         # Download buttons
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(pca_plot, "pca_plot.svg", key="qc_pca_svg")
-        with col2:
-            csv_download_button(pca_df, "pca_data.csv", key="pca_csv_download")
+        display_export_buttons(
+            pca_plot, pca_df,
+            "pca_plot.svg", "pca_data.csv",
+            "qc_pca_svg", "pca_csv_download",
+        )
 
     return df, experiment

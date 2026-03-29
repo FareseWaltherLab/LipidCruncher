@@ -143,7 +143,12 @@ class DataStandardizationService:
             format_name = data_format.value if hasattr(data_format, 'value') else str(data_format)
             return StandardizationResult(
                 success=False,
-                message=f"Error during {format_name} preprocessing: {type(e).__name__}: {e}",
+                message=(
+                    f"Error during {format_name} data standardization.\n"
+                    f"  Type: {type(e).__name__}\n"
+                    f"  Detail: {e}\n"
+                    f"  Hint: Verify the uploaded file matches the selected format."
+                ),
             )
 
     # ------------------------------------------------------------------

@@ -14,6 +14,7 @@ from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.services.statistical_testing import StatisticalTestSummary
 from app.workflows.analysis import AnalysisWorkflow
+from app.ui.st_helpers import section_header
 
 
 def _display_statistical_options(
@@ -31,8 +32,7 @@ def _display_statistical_options(
     Returns:
         Configured StatisticalTestConfig.
     """
-    st.markdown("---")
-    st.markdown("#### ⚙️ Statistical Options")
+    section_header("⚙️ Statistical Options")
 
     mode = st.radio(
         "Select Analysis Mode:",
@@ -110,8 +110,7 @@ def _display_condition_class_selectors(
     Returns:
         Tuple of (selected_conditions, selected_classes).
     """
-    st.markdown("---")
-    st.markdown("#### 🎯 Data Selection")
+    section_header("🎯 Data Selection")
 
     valid_conditions = AnalysisWorkflow.get_eligible_conditions(experiment)
     all_classes = AnalysisWorkflow.get_available_classes(df)
@@ -148,8 +147,7 @@ def _display_detailed_statistics(
     if stat_summary is None:
         return
 
-    st.markdown("---")
-    st.markdown("#### 🔍 Detailed Statistics")
+    section_header("🔍 Detailed Statistics")
 
     show = st.checkbox(
         "Show detailed statistical analysis",

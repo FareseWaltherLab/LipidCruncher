@@ -6,7 +6,7 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.workflows.analysis import AnalysisWorkflow
-from app.ui.download_utils import plotly_svg_download_button, csv_download_button
+from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._utils import _check_fa_compatibility
 
@@ -32,8 +32,7 @@ def _display_fach_heatmaps(
             st.warning("No conditions with multiple samples available.")
             return
 
-        st.markdown("---")
-        st.markdown("#### 🎯 Data Selection")
+        section_header("🎯 Data Selection")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -58,8 +57,7 @@ def _display_fach_heatmaps(
             )
             return
 
-        st.markdown("---")
-        st.markdown("#### 📊 Results")
+        section_header("📊 Results")
 
         result = StreamlitAdapter.run_fach(
             df, experiment, selected_class, selected_conditions,
@@ -84,16 +82,9 @@ def _display_fach_heatmaps(
             combined_rows.append(cond_df_copy)
         combined_csv = pd.concat(combined_rows) if combined_rows else pd.DataFrame()
 
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(
-                result.figure,
-                f"fach_{selected_class}.svg",
-                key="analysis_svg_fach",
-            )
-        with col2:
-            csv_download_button(
-                combined_csv,
-                f"fach_data_{selected_class}.csv",
-                key="analysis_csv_fach",
-            )
+        display_export_buttons(
+            result.figure, combined_csv,
+            f"fach_{selected_class}.svg",
+            f"fach_data_{selected_class}.csv",
+            "analysis_svg_fach", "analysis_csv_fach",
+        )

@@ -5,7 +5,7 @@ import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.ui.download_utils import plotly_svg_download_button, csv_download_button
+from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
     _display_condition_class_selectors,
@@ -36,8 +36,7 @@ def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
             'bar', len(selected_classes), len(selected_conditions),
         )
 
-        st.markdown("---")
-        st.markdown("#### 📊 Results")
+        section_header("📊 Results")
 
         scale = st.radio(
             "Select scale:",
@@ -57,18 +56,11 @@ def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
         st.session_state.analysis_bar_chart_fig = result.figure
         st.session_state.analysis_all_plots['bar_chart'] = result.figure
 
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(
-                result.figure,
-                f"abundance_bar_chart_{scale_value}.svg",
-                key="analysis_svg_bar",
-            )
-        with col2:
-            csv_download_button(
-                result.abundance_df,
-                f"abundance_bar_chart_{scale_value}.csv",
-                key="analysis_csv_bar",
-            )
+        display_export_buttons(
+            result.figure, result.abundance_df,
+            f"abundance_bar_chart_{scale_value}.svg",
+            f"abundance_bar_chart_{scale_value}.csv",
+            "analysis_svg_bar", "analysis_csv_bar",
+        )
 
         _display_detailed_statistics(result.stat_summary, 'bar')

@@ -7,7 +7,8 @@ from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.plotting.lipidomic_heatmap import LipidomicHeatmapPlotterService
 from app.workflows.analysis import AnalysisWorkflow
-from app.ui.download_utils import plotly_svg_download_button, csv_download_button
+from app.ui.download_utils import csv_download_button
+from app.ui.st_helpers import display_export_buttons, section_header
 
 
 def _display_lipidomic_heatmap(
@@ -26,8 +27,7 @@ def _display_lipidomic_heatmap(
         all_conditions = AnalysisWorkflow.get_all_conditions(experiment)
         all_classes = AnalysisWorkflow.get_available_classes(df)
 
-        st.markdown("---")
-        st.markdown("#### 🎯 Data Selection")
+        section_header("🎯 Data Selection")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -49,8 +49,7 @@ def _display_lipidomic_heatmap(
             st.warning("Please select at least one condition and one lipid class.")
             return
 
-        st.markdown("---")
-        st.markdown("#### ⚙️ Heatmap Settings")
+        section_header("⚙️ Heatmap Settings")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -75,8 +74,7 @@ def _display_lipidomic_heatmap(
 
         heatmap_type_value = 'clustered' if heatmap_type == "Clustered" else 'regular'
 
-        st.markdown("---")
-        st.markdown("#### 📈 Results")
+        section_header("📈 Results")
 
         result = StreamlitAdapter.run_heatmap(
             df, experiment, selected_conditions, selected_classes,
@@ -92,20 +90,13 @@ def _display_lipidomic_heatmap(
         st.session_state.analysis_heatmap_fig = result.figure
         st.session_state.analysis_all_plots['heatmap'] = result.figure
 
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(
-                result.figure,
+        if result.z_scores_df is not None:
+            display_export_buttons(
+                result.figure, result.z_scores_df,
                 f"lipidomic_{heatmap_type_value}_heatmap.svg",
-                key="analysis_svg_heatmap",
+                f"{heatmap_type_value}_heatmap_data.csv",
+                "analysis_svg_heatmap", "analysis_csv_heatmap",
             )
-        with col2:
-            if result.z_scores_df is not None:
-                csv_download_button(
-                    result.z_scores_df,
-                    f"{heatmap_type_value}_heatmap_data.csv",
-                    key="analysis_csv_heatmap",
-                )
 
         # Cluster composition (clustered mode only)
         if heatmap_type == "Clustered":
