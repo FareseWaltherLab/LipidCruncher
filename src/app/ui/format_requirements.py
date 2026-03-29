@@ -35,7 +35,12 @@ PE 18:0_20:4,456.7,478.2,390.1,405.6
 MS_METABOLITE_DATA_END
 ```
 
-**✨ Auto-processing:** Lipid names standardized, intensity columns created, conditions extracted.
+**✨ Auto-features:**
+- Lipid names standardized to LIPID MAPS shorthand: `Class chains` (space-separated, no parentheses)
+- Sphingolipid chains separated by `/`, others by `_`
+- Hydroxyl notation normalized (`;2O` → `;O2`)
+- Phantom chains removed from lyso-species
+- Intensity columns created, conditions extracted from `Factors` row
 """
 
 LIPIDSEARCH_REQUIREMENTS = """
@@ -60,6 +65,30 @@ LipidMolec | ClassKey | CalcMass | BaseRt | TotalGrade | ... | MeanArea[s1] | Me
 ```
 
 **💡 Tip:** Export directly from LipidSearch — column names should match automatically.
+
+---
+
+**Lipid Name Standardization Examples:**
+
+| LipidSearch Output | → Standardized (LIPID MAPS) |
+|--------------------|-----------------------------|
+| `PC(16:0_18:1)` | `PC 16:0_18:1` |
+| `Cer(d18:1_24:0)` | `Cer d18:1/24:0` |
+| `SM(d18:1_16:0)` | `SM d18:1/16:0` |
+| `LPC(20:0_0:0)` | `LPC 20:0` |
+| `Cer(d18:1;2O_24:0)` | `Cer d18:1;O2/24:0` |
+
+---
+
+**✨ Auto-features:**
+- Lipid names standardized to LIPID MAPS shorthand: `Class chains` (space-separated, no parentheses)
+- Sphingolipid chains separated by `/`, others by `_`
+- Hydroxyl notation normalized (`;2O` → `;O2`)
+- Phantom chains removed from lyso-species (`LPC(20:0_0:0)` → `LPC 20:0`)
+- Chains sorted by carbon count, then double bond count (sphingolipids keep positional order)
+- `MeanArea[s*]` columns renamed to `intensity[s*]`
+- Grade-based quality filtering (A/B/C/D per class)
+- Internal standards detected: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`
 """
 
 MSDIAL_REQUIREMENTS = """
@@ -105,9 +134,24 @@ The `Lipid IS` column separates raw from normalized data. You'll choose which to
 
 ---
 
+**Lipid Name Standardization Examples:**
+
+| MS-DIAL Output | → Standardized (LIPID MAPS) |
+|----------------|-----------------------------|
+| `PC 16:0_18:1` | `PC 16:0_18:1` |
+| `Cer 18:1;2O/24:0` | `Cer 18:1;O2/24:0` |
+| `LPC 20:0_0:0` | `LPC 20:0` |
+| `SM d18:1/16:0` | `SM d18:1/16:0` |
+
+---
+
 **✨ Auto-features:**
+- Lipid names standardized to LIPID MAPS shorthand: `Class chains` (space-separated, no parentheses)
+- Sphingolipid chains separated by `/`, others by `_`
+- Hydroxyl notation normalized (`;2O` → `;O2`)
+- Phantom chains removed from lyso-species
+- Chains sorted by carbon count, then double bond count (sphingolipids keep positional order)
 - ClassKey inferred from lipid names
-- Hydroxyl notation normalized to LIPID MAPS format (`;O2`, `;O3`)
 - Internal standards detected: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`
 - Column mappings reviewable after upload
 """
