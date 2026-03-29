@@ -70,13 +70,13 @@ LipidMolec | ClassKey | CalcMass | BaseRt | TotalGrade | ... | MeanArea[s1] | Me
 
 **Lipid Name Standardization Examples:**
 
-| LipidSearch Output | → Standardized (LIPID MAPS) |
-|--------------------|-----------------------------|
-| `PC(16:0_18:1)` | `PC 16:0_18:1` |
-| `Cer(d18:1_24:0)` | `Cer d18:1/24:0` |
-| `SM(d18:1_16:0)` | `SM d18:1/16:0` |
-| `LPC(20:0_0:0)` | `LPC 20:0` |
-| `Cer(d18:1;2O_24:0)` | `Cer d18:1;O2/24:0` |
+| LipidSearch Output | → Standardized (LIPID MAPS) | Rule Applied |
+|--------------------|-----------------------------| -------------|
+| `PC(16:0_18:1)` | `PC 16:0_18:1` | Parentheses removed |
+| `Cer(d18:1_24:0)` | `Cer d18:1/24:0` | Sphingolipid `/` separator |
+| `Cer(d18:1;2O_24:0)` | `Cer d18:1;O2/24:0` | Hydroxyl `;2O` → `;O2` |
+| `LPC(20:0_0:0)` | `LPC 20:0` | Phantom chain removed |
+| `PC(20:4_16:0)` | `PC 16:0_20:4` | Chains sorted by carbon count |
 
 ---
 
@@ -136,12 +136,12 @@ The `Lipid IS` column separates raw from normalized data. You'll choose which to
 
 **Lipid Name Standardization Examples:**
 
-| MS-DIAL Output | → Standardized (LIPID MAPS) |
-|----------------|-----------------------------|
-| `PC 16:0_18:1` | `PC 16:0_18:1` |
-| `Cer 18:1;2O/24:0` | `Cer 18:1;O2/24:0` |
-| `LPC 20:0_0:0` | `LPC 20:0` |
-| `SM d18:1/16:0` | `SM d18:1/16:0` |
+| MS-DIAL Output | → Standardized (LIPID MAPS) | Rule Applied |
+|----------------|-----------------------------| -------------|
+| `Cer 18:1;2O/24:0` | `Cer 18:1;O2/24:0` | Hydroxyl `;2O` → `;O2` |
+| `LPC 20:0_0:0` | `LPC 20:0` | Phantom chain removed |
+| `PE 20:4_16:0` | `PE 16:0_20:4` | Chains sorted by carbon count |
+| `Cer 24:0_d18:1` | `Cer 24:0/d18:1` | Sphingolipid `_` → `/` |
 
 ---
 
@@ -172,13 +172,13 @@ GENERIC_REQUIREMENTS = """
 
 **Lipid Name Standardization Examples:**
 
-| Your Format | → Standardized |
-|-------------|----------------|
-| `LPC O-18:1` | `LPC O-18:1` |
-| `LPC 18:1(d7)` | `LPC 18:1(d7)` |
-| `Cer d18:1;2O/24:0` | `Cer d18:1;O2/24:0` |
-| `PC 16:0/18:1` | `PC 16:0_18:1` |
-| `LPC(20:0_0:0)` | `LPC 20:0` |
+| Your Format | → Standardized | Rule Applied |
+|-------------|----------------|--------------|
+| `PC(16:0_18:1)` | `PC 16:0_18:1` | Parentheses removed |
+| `Cer(d18:1_24:0)` | `Cer d18:1/24:0` | Sphingolipid `/` separator |
+| `Cer d18:1;2O/24:0` | `Cer d18:1;O2/24:0` | Hydroxyl `;2O` → `;O2` |
+| `LPC(20:0_0:0)` | `LPC 20:0` | Phantom chain removed |
+| `PC(20:4_16:0)` | `PC 16:0_20:4` | Chains sorted by carbon count |
 
 ---
 
