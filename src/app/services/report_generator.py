@@ -329,7 +329,7 @@ def generate_pdf_report(
         pdf_buffer.seek(0)
     except Exception as e:
         logger.error("PDF report generation failed: %s", e, exc_info=True)
-        return None
+        raise ValueError(f"PDF report generation failed: {e}") from e
 
     return pdf_buffer
 

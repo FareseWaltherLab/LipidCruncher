@@ -326,11 +326,11 @@ class TestCoverPageContent:
 # ── TestErrorHandling ───────────────────────────────────────────────────────
 
 class TestErrorHandling:
-    def test_invalid_figure_returns_none(self, simple_metadata):
-        """Non-figure object should cause error and return None."""
+    def test_invalid_figure_raises_error(self, simple_metadata):
+        """Non-figure object should raise ValueError with details."""
         plots = {'bar_chart': "not_a_figure"}
-        result = generate_pdf_report(plots, simple_metadata)
-        assert result is None
+        with pytest.raises(ValueError, match="PDF report generation failed"):
+            generate_pdf_report(plots, simple_metadata)
 
     def test_empty_analysis_plots_dict(self, simple_metadata):
         result = generate_pdf_report({}, simple_metadata)

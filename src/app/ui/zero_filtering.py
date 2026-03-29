@@ -139,9 +139,5 @@ def display_zero_filtering_config(
 
         except ValueError as e:
             logger.error("Zero filtering error: %s", e)
-            st.error(
-                "Zero filtering failed. Please check that your threshold values are valid "
-                "(detection threshold ≥ 0, BQC and non-BQC thresholds between 0 and 1). "
-                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
-            )
+            st.error(f"Zero filtering failed: {e}")
             return cleaned_df, [], {}

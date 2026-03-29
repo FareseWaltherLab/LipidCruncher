@@ -140,9 +140,10 @@ class DataStandardizationService:
                     message=f"Unsupported format: {data_format}",
                 )
         except (ValueError, KeyError, IndexError, TypeError) as e:
+            format_name = data_format.value if hasattr(data_format, 'value') else str(data_format)
             return StandardizationResult(
                 success=False,
-                message=f"Error during preprocessing: {e}",
+                message=f"Error during {format_name} preprocessing: {type(e).__name__}: {e}",
             )
 
     # ------------------------------------------------------------------

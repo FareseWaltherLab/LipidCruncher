@@ -86,7 +86,10 @@ class NormalizationService:
             )
 
         else:
-            raise ValueError(f"Unknown normalization method: {config.method}")
+            raise ValueError(
+                f"Unknown normalization method: '{config.method}'. "
+                "Available methods: none, internal_standard, protein, total_intensity, both"
+            )
 
     @staticmethod
     def _validate_input_dataframe(df: pd.DataFrame) -> None:

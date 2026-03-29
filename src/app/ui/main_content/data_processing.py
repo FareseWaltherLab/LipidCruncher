@@ -412,11 +412,7 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
             st.session_state.continuation_df = result.cleaned_df
     except (ValueError, KeyError) as e:
         logger.error("Data processing error: %s", e)
-        st.error(
-            "Data processing failed. Please check that your file matches the selected data format "
-            "and contains the required columns. "
-            "If the issue persists after refreshing the app, contact abdih@mskcc.org."
-        )
+        st.error(f"Data processing failed: {e}")
         return None
 
     # Display validation results

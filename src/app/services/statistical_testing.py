@@ -413,6 +413,7 @@ class StatisticalTestingService:
 
         results: Dict[str, StatisticalTestResult] = {}
         posthoc_results: Dict[str, List[PostHocResult]] = {}
+        skipped_keys = []
 
         for cls in selected_classes:
             if cls not in fa_data:
@@ -427,6 +428,7 @@ class StatisticalTestingService:
                     if cond in fa_data[cls][fa_type]
                 }
                 if len(groups) < 2:
+                    skipped_keys.append(key)
                     continue
 
                 try:
@@ -434,6 +436,7 @@ class StatisticalTestingService:
                         groups, test_type, config.auto_transform
                     )
                 except ValueError:
+                    skipped_keys.append(key)
                     continue
                 result.group_key = key
                 results[key] = result
@@ -475,6 +478,7 @@ class StatisticalTestingService:
                 'n_conditions': len(selected_conditions),
                 'n_classes': len(selected_classes),
                 'n_tests': len(results),
+                'n_skipped': len(skipped_keys),
                 'alpha': config.alpha,
             },
         )
@@ -507,6 +511,9 @@ class StatisticalTestingService:
         test_type, correction, _ = resolved
 
         results: Dict[str, StatisticalTestResult] = {}
+        skipped_insufficient = []
+        skipped_all_zero = []
+        skipped_test_error = []
 
         ctrl_cols = [f'concentration[{s}]' for s in control_samples]
         exp_cols = [f'concentration[{s}]' for s in experimental_samples]
@@ -520,10 +527,12 @@ class StatisticalTestingService:
             exp_clean = exp_vals[~np.isnan(exp_vals)]
 
             if len(ctrl_clean) < 2 or len(exp_clean) < 2:
+                skipped_insufficient.append(lipid)
                 continue
 
             # Check for all-zero groups
             if np.all(ctrl_clean == 0) or np.all(exp_clean == 0):
+                skipped_all_zero.append(lipid)
                 continue
 
             try:
@@ -531,6 +540,7 @@ class StatisticalTestingService:
                     ctrl_clean, exp_clean, test_type, config.auto_transform
                 )
             except ValueError:
+                skipped_test_error.append(lipid)
                 continue
 
             # Compute fold change on zero-adjusted original values
@@ -545,6 +555,7 @@ class StatisticalTestingService:
             results, correction, config.alpha
         )
 
+        n_skipped = len(skipped_insufficient) + len(skipped_all_zero) + len(skipped_test_error)
         return StatisticalTestSummary(
             results=results,
             test_info={
@@ -555,6 +566,10 @@ class StatisticalTestingService:
             parameters={
                 'n_lipids_tested': len(results),
                 'n_lipids_total': len(df),
+                'n_lipids_skipped': n_skipped,
+                'n_skipped_insufficient_data': len(skipped_insufficient),
+                'n_skipped_all_zero': len(skipped_all_zero),
+                'n_skipped_test_error': len(skipped_test_error),
                 'n_control_samples': len(control_samples),
                 'n_experimental_samples': len(experimental_samples),
                 'alpha': config.alpha,

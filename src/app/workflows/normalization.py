@@ -196,18 +196,20 @@ class NormalizationWorkflow:
             errors.append("Input DataFrame is empty. Please provide data to normalize.")
             return errors
 
+        available = ', '.join(list(df.columns)[:15])
+
         if 'LipidMolec' not in df.columns:
-            errors.append("Input DataFrame missing 'LipidMolec' column.")
+            errors.append(f"Input DataFrame missing 'LipidMolec' column. Available columns: [{available}]")
 
         if 'ClassKey' not in df.columns:
-            errors.append("Input DataFrame missing 'ClassKey' column.")
+            errors.append(f"Input DataFrame missing 'ClassKey' column. Available columns: [{available}]")
 
         # Check for intensity columns
         intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
         if not intensity_cols:
             errors.append(
                 "Input DataFrame has no intensity columns. "
-                "Expected columns like 'intensity[s1]', 'intensity[s2]', etc."
+                f"Expected columns like 'intensity[s1]', 'intensity[s2]', etc. Available columns: [{available}]"
             )
 
         # Validate experiment configuration
@@ -221,7 +223,8 @@ class NormalizationWorkflow:
             invalid_classes = set(config.normalization.selected_classes) - available_classes
             if invalid_classes:
                 errors.append(
-                    f"Selected classes not found in data: {', '.join(sorted(invalid_classes))}"
+                    f"Selected classes not found in data: {', '.join(sorted(invalid_classes))}. "
+                    f"Available classes: {', '.join(sorted(available_classes))}"
                 )
 
         # Delegate method-specific validation to NormalizationService
@@ -336,7 +339,10 @@ class NormalizationWorkflow:
         errors = []
 
         if intsta_df is None or intsta_df.empty:
-            errors.append("Internal standards DataFrame is required for validation.")
+            errors.append(
+                "Internal standards DataFrame is required for validation. "
+                "Ensure standards were detected or uploaded during data ingestion."
+            )
             return False, errors
 
         available_standards = set(NormalizationWorkflow.get_available_standards(intsta_df))
@@ -345,7 +351,8 @@ class NormalizationWorkflow:
         missing_classes = set(selected_classes) - set(internal_standards.keys())
         if missing_classes:
             errors.append(
-                f"Missing standard mappings for classes: {', '.join(sorted(missing_classes))}"
+                f"Missing standard mappings for classes: {', '.join(sorted(missing_classes))}. "
+                f"Mapped classes: {', '.join(sorted(internal_standards.keys())) or 'none'}"
             )
 
         # Check all mapped standards exist
@@ -353,7 +360,8 @@ class NormalizationWorkflow:
             if standard not in available_standards:
                 errors.append(
                     f"Standard '{standard}' for class '{lipid_class}' "
-                    f"not found in standards DataFrame."
+                    f"not found in standards DataFrame. "
+                    f"Available standards: {', '.join(sorted(available_standards))}"
                 )
 
         return len(errors) == 0, errors

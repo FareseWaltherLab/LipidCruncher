@@ -104,8 +104,10 @@ class QualityCheckWorkflow:
             )
             return errors
 
+        available = ', '.join(list(df.columns)[:15])
+
         if 'LipidMolec' not in df.columns:
-            errors.append("Input DataFrame missing 'LipidMolec' column.")
+            errors.append(f"Input DataFrame missing 'LipidMolec' column. Available columns: [{available}]")
 
         # Check for concentration columns
         conc_cols = [
@@ -114,6 +116,7 @@ class QualityCheckWorkflow:
         if not conc_cols:
             errors.append(
                 "Input DataFrame has no concentration columns. "
+                f"Expected 'concentration[s1]', etc. Available columns: [{available}]. "
                 "Run normalization before quality checks."
             )
             return errors
@@ -121,15 +124,17 @@ class QualityCheckWorkflow:
         # Check that at least some concentration columns match the experiment
         matching = get_matching_concentration_columns(df, experiment)
         if not matching:
+            expected = ', '.join([f"concentration[{s}]" for s in experiment.full_samples_list[:5]])
+            found = ', '.join(conc_cols[:5])
             errors.append(
-                "No concentration columns match the experiment's sample labels. "
-                "Expected columns like 'concentration[s1]', 'concentration[s2]', etc."
+                f"No concentration columns match the experiment's sample labels. "
+                f"Expected: [{expected}, ...]. Found: [{found}]"
             )
 
         if len(matching) < 2:
             errors.append(
                 f"At least 2 samples are required for quality checks, "
-                f"but only {len(matching)} matched."
+                f"but only {len(matching)} matched: {matching}"
             )
 
         return errors

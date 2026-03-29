@@ -142,8 +142,11 @@ class DataIngestionWorkflow:
 
         if data_format == DataFormat.UNKNOWN:
             result.is_valid = False
+            available_cols = ', '.join(list(df.columns)[:15])
             result.validation_errors.append(
-                "Could not detect data format. Please ensure your file matches one of the supported formats."
+                f"Could not detect data format. Found columns: [{available_cols}]. "
+                "Please ensure your file matches one of the supported formats "
+                "(LipidSearch 5.0, MS-DIAL, Generic, or Metabolomics Workbench)."
             )
             return result
 
@@ -293,18 +296,27 @@ class DataIngestionWorkflow:
 
         # Check for LipidMolec column (required for all formats)
         if 'LipidMolec' not in df.columns:
-            errors.append("Missing required column: LipidMolec")
+            available = ', '.join(list(df.columns)[:15])
+            errors.append(f"Missing required column: 'LipidMolec'. Available columns: [{available}]")
 
         # Format-specific validation
         if data_format == DataFormat.LIPIDSEARCH:
             required = {'ClassKey', 'CalcMass', 'BaseRt', 'TotalGrade', 'FAKey'}
             missing = required - set(df.columns)
             if missing:
-                errors.append(f"Missing LipidSearch columns: {', '.join(sorted(missing))}")
+                available = ', '.join(list(df.columns)[:15])
+                errors.append(
+                    f"Missing {len(missing)} required LipidSearch column(s): "
+                    f"{', '.join(sorted(missing))}. Available columns: [{available}]"
+                )
 
         elif data_format == DataFormat.MSDIAL:
             if 'Ontology' not in df.columns:
-                errors.append("Missing MS-DIAL column: Ontology (used as ClassKey)")
+                available = ', '.join(list(df.columns)[:15])
+                errors.append(
+                    f"Missing MS-DIAL column: 'Ontology' (used as ClassKey). "
+                    f"Available columns: [{available}]"
+                )
 
         return len(errors) == 0, errors
 

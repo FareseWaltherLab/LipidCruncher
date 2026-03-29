@@ -395,7 +395,10 @@ def _display_pathway_layout_editor() -> None:
                             uploaded.read().decode('utf-8')
                         )
                         if not isinstance(loaded, dict):
-                            st.error("Invalid configuration file.")
+                            st.error(
+                                "Invalid configuration file: expected a JSON object (dictionary), "
+                                f"but got {type(loaded).__name__}."
+                            )
                         elif 'active_classes' not in loaded:
                             st.error(
                                 "Configuration file must contain "
@@ -427,8 +430,8 @@ def _display_pathway_layout_editor() -> None:
                                 '_pathway_config_applied'
                             ] = True
                             st.rerun()
-                    except json.JSONDecodeError:
-                        st.error("Could not parse JSON file.")
+                    except json.JSONDecodeError as e:
+                        st.error(f"Could not parse JSON file: {e}")
             else:
                 # File removed — allow next upload to be processed.
                 st.session_state.pop(

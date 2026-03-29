@@ -151,15 +151,15 @@ def _display_pdf_report_section(
     )
 
     if st.button("Generate PDF Report", key="generate_pdf_report"):
-        with st.spinner("Generating PDF report..."):
-            metadata = build_metadata_from_experiment(experiment, format_type)
-            pdf_buffer = generate_pdf_report(
-                analysis_plots=analysis_plots,
-                metadata=metadata,
-                qc_plots=qc_plots,
-            )
+        try:
+            with st.spinner("Generating PDF report..."):
+                metadata = build_metadata_from_experiment(experiment, format_type)
+                pdf_buffer = generate_pdf_report(
+                    analysis_plots=analysis_plots,
+                    metadata=metadata,
+                    qc_plots=qc_plots,
+                )
 
-        if pdf_buffer is not None:
             st.download_button(
                 label="Download PDF Report",
                 data=pdf_buffer,
@@ -167,8 +167,5 @@ def _display_pdf_report_section(
                 mime="application/pdf",
                 key="download_pdf_report",
             )
-        else:
-            st.error(
-                "Failed to generate PDF report. Please refresh the app and try again. "
-                "If the issue persists, contact abdih@mskcc.org."
-            )
+        except (ValueError, Exception) as e:
+            st.error(f"Failed to generate PDF report: {e}")

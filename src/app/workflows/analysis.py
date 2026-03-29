@@ -247,15 +247,18 @@ class AnalysisWorkflow:
 
         if df is None or df.empty:
             errors.append(
-                "Input DataFrame is empty. Cannot run analysis."
+                "Input DataFrame is empty. Quality checks may have removed all lipids. "
+                "Check filtering and quality control steps."
             )
             return errors
 
+        available = ', '.join(list(df.columns)[:15])
+
         if 'LipidMolec' not in df.columns:
-            errors.append("Input DataFrame missing 'LipidMolec' column.")
+            errors.append(f"Input DataFrame missing 'LipidMolec' column. Available columns: [{available}]")
 
         if 'ClassKey' not in df.columns:
-            errors.append("Input DataFrame missing 'ClassKey' column.")
+            errors.append(f"Input DataFrame missing 'ClassKey' column. Available columns: [{available}]")
 
         conc_cols = [
             col for col in df.columns if col.startswith('concentration[')
@@ -263,14 +266,18 @@ class AnalysisWorkflow:
         if not conc_cols:
             errors.append(
                 "Input DataFrame has no concentration columns. "
+                f"Expected 'concentration[s1]', etc. Available columns: [{available}]. "
                 "Run normalization and QC before analysis."
             )
             return errors
 
         matching = get_matching_concentration_columns(df, experiment)
         if not matching:
+            expected = ', '.join([f"concentration[{s}]" for s in experiment.full_samples_list[:5]])
+            found = ', '.join(conc_cols[:5])
             errors.append(
-                "No concentration columns match the experiment's sample labels."
+                f"No concentration columns match the experiment's sample labels. "
+                f"Expected: [{expected}, ...]. Found: [{found}]"
             )
 
         return errors
@@ -736,7 +743,11 @@ class AnalysisWorkflow:
         # Filter to selected classes
         filtered_df = df[df['ClassKey'].isin(selected_classes)].copy()
         if filtered_df.empty:
-            raise ValueError("No data found for the selected classes")
+            available_classes = sorted(df['ClassKey'].unique().tolist())
+            raise ValueError(
+                f"No data found for selected classes: {selected_classes}. "
+                f"Available classes in data: {available_classes}"
+            )
 
         control_samples = AnalysisWorkflow._get_samples_for_condition(
             experiment, control,

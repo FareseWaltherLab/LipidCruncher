@@ -176,6 +176,24 @@ def _display_detailed_statistics(
     if rows:
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
+    # Report skipped items
+    params = stat_summary.parameters or {}
+    n_skipped = params.get('n_lipids_skipped', 0) or params.get('n_skipped', 0)
+    if n_skipped:
+        skip_parts = []
+        if params.get('n_skipped_insufficient_data'):
+            skip_parts.append(f"{params['n_skipped_insufficient_data']} had insufficient data (<2 values per group)")
+        if params.get('n_skipped_all_zero'):
+            skip_parts.append(f"{params['n_skipped_all_zero']} had all-zero values in one or both groups")
+        if params.get('n_skipped_test_error'):
+            skip_parts.append(f"{params['n_skipped_test_error']} failed the statistical test")
+        detail = '; '.join(skip_parts) if skip_parts else ''
+        total = params.get('n_lipids_total', '?')
+        msg = f"{n_skipped} of {total} lipids were skipped during testing"
+        if detail:
+            msg += f" ({detail})"
+        st.info(msg)
+
     # Post-hoc results
     if stat_summary.posthoc_results:
         st.markdown("**Post-hoc Comparisons:**")
