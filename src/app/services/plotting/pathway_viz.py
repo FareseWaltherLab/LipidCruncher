@@ -111,6 +111,9 @@ DEFAULT_PATHWAY_CLASSES: List[str] = [
     'CDP-DAG', 'PG', 'LPG', 'PS', 'LPS',
 ]
 
+# All 28 curated classes.
+ALL_PATHWAY_CLASSES: List[str] = list(ALL_PATHWAY_NODES.keys())
+
 # Backward-compatibility aliases.
 PATHWAY_CLASSES: List[str] = list(DEFAULT_PATHWAY_CLASSES)
 PATHWAY_COORDS: List[Tuple[float, float]] = [
@@ -676,10 +679,14 @@ class PathwayVizPlotterService:
             all_ys.append(ly)
 
         pad = 4  # coordinate units of padding
-        x_min = min(all_xs) - pad
-        x_max = max(all_xs) + pad
-        y_min = min(all_ys) - pad
-        y_max = max(all_ys) + pad
+        if not all_xs or not all_ys:
+            x_min, x_max = -25, 25
+            y_min, y_max = -15, 25
+        else:
+            x_min = min(all_xs) - pad
+            x_max = max(all_xs) + pad
+            y_min = min(all_ys) - pad
+            y_max = max(all_ys) + pad
 
         # Layout
         fig.update_layout(

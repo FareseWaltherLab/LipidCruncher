@@ -1,5 +1,7 @@
 """Feature 5: Pathway Visualization analysis with editable layout."""
 
+import json
+
 import pandas as pd
 import streamlit as st
 
@@ -9,6 +11,7 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.services.plotting.pathway_viz import (
     ALL_PATHWAY_NODES,
     ALL_PATHWAY_EDGES,
+    ALL_PATHWAY_CLASSES,
     DEFAULT_PATHWAY_CLASSES,
     PathwayVizPlotterService,
 )
@@ -28,8 +31,32 @@ _KEY_REMOVED_EDGES = 'analysis_pathway_removed_edges'
 _KEY_POS_OVERRIDES = 'analysis_pathway_position_overrides'
 
 
+_KEY_PENDING_CONFIG = '_pathway_pending_config'
+
+
 def _init_pathway_state() -> None:
-    """Ensure pathway session state keys exist with defaults."""
+    """Ensure pathway session state keys exist with defaults.
+
+    Also applies any pending uploaded configuration (must happen before
+    widgets that are bound to these keys are instantiated).
+    """
+    # Apply pending uploaded config before widgets bind to the keys.
+    pending = st.session_state.pop(_KEY_PENDING_CONFIG, None)
+    if pending is not None:
+        st.session_state[_KEY_ACTIVE] = pending['active_classes']
+        st.session_state[_KEY_CUSTOM_NODES] = pending.get(
+            'custom_nodes', {}
+        )
+        st.session_state[_KEY_ADDED_EDGES] = pending.get(
+            'added_edges', []
+        )
+        st.session_state[_KEY_REMOVED_EDGES] = pending.get(
+            'removed_edges', []
+        )
+        st.session_state[_KEY_POS_OVERRIDES] = pending.get(
+            'position_overrides', {}
+        )
+
     if _KEY_ACTIVE not in st.session_state:
         st.session_state[_KEY_ACTIVE] = list(DEFAULT_PATHWAY_CLASSES)
     if _KEY_CUSTOM_NODES not in st.session_state:
@@ -89,49 +116,52 @@ def _display_pathway_layout_editor() -> None:
     """Display the pathway layout editing controls."""
     _init_pathway_state()
 
-    with st.expander("Customize Pathway Layout", expanded=False):
-        st.markdown(
-            "Toggle lipid classes, add custom nodes, or modify edges. "
-            "Choose a starting point below."
-        )
+    st.markdown("---")
+    st.markdown("#### Customize Pathway Layout")
+    st.markdown(
+        "Toggle lipid classes, add custom nodes, or modify edges. "
+        "Choose a starting point below."
+    )
+    with st.expander("Layout Options", expanded=False):
 
         # --- Starting point toggle ---
-        col_mode1, col_mode2 = st.columns(2)
+        col_mode1, col_mode2, col_mode3 = st.columns(3)
+
+        def _reset_layout_state(active_classes: list) -> None:
+            """Reset all pathway layout state to a preset."""
+            st.session_state[_KEY_ACTIVE] = active_classes
+            st.session_state[_KEY_CUSTOM_NODES] = {}
+            st.session_state[_KEY_ADDED_EDGES] = []
+            st.session_state[_KEY_REMOVED_EDGES] = []
+            st.session_state[_KEY_POS_OVERRIDES] = {}
+            for key in ['pathway_edge_to_remove_select',
+                        'pathway_add_edge_source',
+                        'pathway_add_edge_target',
+                        'pathway_move_node_select',
+                        'pathway_move_node_x',
+                        'pathway_move_node_y']:
+                st.session_state.pop(key, None)
+
         with col_mode1:
             if st.button(
-                "Start from Default (18 classes)",
+                "Default (18 classes)",
                 key='pathway_start_default',
             ):
-                st.session_state[_KEY_ACTIVE] = list(DEFAULT_PATHWAY_CLASSES)
-                st.session_state[_KEY_CUSTOM_NODES] = {}
-                st.session_state[_KEY_ADDED_EDGES] = []
-                st.session_state[_KEY_REMOVED_EDGES] = []
-                st.session_state[_KEY_POS_OVERRIDES] = {}
-                for key in ['pathway_edge_to_remove_select',
-                            'pathway_add_edge_source',
-                            'pathway_add_edge_target',
-                            'pathway_move_node_select',
-                            'pathway_move_node_x',
-                            'pathway_move_node_y']:
-                    st.session_state.pop(key, None)
+                _reset_layout_state(list(DEFAULT_PATHWAY_CLASSES))
                 st.rerun()
         with col_mode2:
+            if st.button(
+                "All Classes (28)",
+                key='pathway_start_all',
+            ):
+                _reset_layout_state(list(ALL_PATHWAY_CLASSES))
+                st.rerun()
+        with col_mode3:
             if st.button(
                 "Start from Scratch",
                 key='pathway_start_scratch',
             ):
-                st.session_state[_KEY_ACTIVE] = []
-                st.session_state[_KEY_CUSTOM_NODES] = {}
-                st.session_state[_KEY_ADDED_EDGES] = []
-                st.session_state[_KEY_REMOVED_EDGES] = []
-                st.session_state[_KEY_POS_OVERRIDES] = {}
-                for key in ['pathway_edge_to_remove_select',
-                            'pathway_add_edge_source',
-                            'pathway_add_edge_target',
-                            'pathway_move_node_select',
-                            'pathway_move_node_x',
-                            'pathway_move_node_y']:
-                    st.session_state.pop(key, None)
+                _reset_layout_state([])
                 st.rerun()
 
         # --- Class selector ---
@@ -326,6 +356,84 @@ def _display_pathway_layout_editor() -> None:
             "Show coordinate grid (for positioning nodes)",
             key='pathway_show_grid',
         )
+
+        # --- Save / Load configuration ---
+        st.markdown("##### Save / Load Configuration")
+        st.caption(
+            "Download your current pathway layout as a JSON file, "
+            "or upload a previously saved configuration."
+        )
+
+        col_save, col_load = st.columns(2)
+        with col_save:
+            config = {
+                'active_classes': _get_active_classes(),
+                'custom_nodes': _get_custom_nodes(),
+                'added_edges': _get_added_edges(),
+                'removed_edges': _get_removed_edges(),
+                'position_overrides': _get_position_overrides(),
+            }
+            st.download_button(
+                "Download Configuration",
+                data=json.dumps(config, indent=2),
+                file_name="pathway_config.json",
+                mime="application/json",
+                key='pathway_download_config',
+            )
+        with col_load:
+            uploaded = st.file_uploader(
+                "Upload Configuration",
+                type=['json'],
+                key='pathway_upload_config',
+                label_visibility='collapsed',
+            )
+            if uploaded is not None:
+                # Only process if we haven't already applied this file.
+                if not st.session_state.get('_pathway_config_applied'):
+                    try:
+                        loaded = json.loads(
+                            uploaded.read().decode('utf-8')
+                        )
+                        if not isinstance(loaded, dict):
+                            st.error("Invalid configuration file.")
+                        elif 'active_classes' not in loaded:
+                            st.error(
+                                "Configuration file must contain "
+                                "'active_classes'."
+                            )
+                        else:
+                            st.session_state[_KEY_PENDING_CONFIG] = {
+                                'active_classes': list(
+                                    loaded['active_classes']
+                                ),
+                                'custom_nodes': dict(
+                                    loaded.get('custom_nodes') or {}
+                                ),
+                                'added_edges': [
+                                    list(e) for e in
+                                    (loaded.get('added_edges') or [])
+                                ],
+                                'removed_edges': [
+                                    list(e) for e in
+                                    (loaded.get('removed_edges') or [])
+                                ],
+                                'position_overrides': {
+                                    k: tuple(v) for k, v in
+                                    (loaded.get('position_overrides')
+                                     or {}).items()
+                                },
+                            }
+                            st.session_state[
+                                '_pathway_config_applied'
+                            ] = True
+                            st.rerun()
+                    except json.JSONDecodeError:
+                        st.error("Could not parse JSON file.")
+            else:
+                # File removed — allow next upload to be processed.
+                st.session_state.pop(
+                    '_pathway_config_applied', None
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════════
