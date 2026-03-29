@@ -247,18 +247,17 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
         except pd.errors.ParserError as e:
             logger.error("Protein CSV parse error: %s", e)
             st.error(
-                "Could not parse the protein concentration CSV. Please ensure it is a properly formatted CSV "
-                "with 'Sample' and 'Concentration' columns. "
-                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
+                "Could not parse the protein concentration CSV. The file may be corrupted or improperly "
+                "formatted. Please ensure it is a valid CSV file with proper delimiters."
             )
             return None
-        except (ValueError, KeyError) as e:
-            logger.error("Protein CSV processing error: %s", e)
-            st.error(
-                "Could not process the protein concentration CSV. Please ensure it contains a 'Sample' column "
-                "matching your sample names and a 'Concentration' column with numeric values. "
-                "If the issue persists after refreshing the app, contact abdih@mskcc.org."
-            )
+        except KeyError as e:
+            logger.error("Protein CSV missing column: %s", e)
+            st.error(f"Missing required column in protein CSV: {e}. Expected a 'Concentration' column.")
+            return None
+        except ValueError as e:
+            logger.error("Protein CSV value error: %s", e)
+            st.error(f"Invalid values in protein CSV: {e}")
             return None
 
     # No new file uploaded - check preserved data
@@ -373,11 +372,7 @@ def _run_normalization(
 
     except (ValueError, KeyError) as e:
         logger.error("Normalization error: %s", e)
-        st.error(
-            "Normalization failed. Please verify that the selected normalization method is compatible "
-            "with your data (e.g., internal standards are available, protein concentrations are provided). "
-            "If the issue persists after refreshing the app, contact abdih@mskcc.org."
-        )
+        st.error(f"Normalization failed: {e}")
         return None
 
 
@@ -499,6 +494,14 @@ def _collect_method_config(method: str, intsta_df, selected_classes: list, exper
     if method in ['Protein-based', 'Internal Standards + Protein']:
         protein_concentrations = _display_protein_config(experiment)
         if protein_concentrations is None:
+            return None, None, None
+        # Validate: zero concentrations cannot be used as denominators
+        zero_samples = [s for s, c in protein_concentrations.items() if c <= 0]
+        if zero_samples:
+            st.error(
+                f"Protein concentration must be greater than zero for all samples. "
+                f"The following samples have zero or negative values: {', '.join(zero_samples)}"
+            )
             return None, None, None
 
     return internal_standards, intsta_concentrations, protein_concentrations
