@@ -20,10 +20,8 @@ def _display_lipidomic_heatmap(
             "Z-score normalized heatmaps."
         )
 
-        st.markdown(
-            "**Z-score** (color scale):\n\n"
-            "> Z = (Value - Mean) / Std Dev  (computed per lipid species)"
-        )
+        st.markdown("**Z-score** (color scale):")
+        st.code("Z = (Value - Mean) / Std Dev  (computed per lipid species)", language=None)
 
         all_conditions = AnalysisWorkflow.get_all_conditions(experiment)
         all_classes = AnalysisWorkflow.get_available_classes(df)

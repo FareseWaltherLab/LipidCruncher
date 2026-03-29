@@ -457,14 +457,10 @@ def _display_pathway_viz(
             "Visualize lipid class relationships on a metabolic pathway diagram."
         )
 
-        st.markdown(
-            "**Fold Change** (determines circle size, log2-scaled):\n\n"
-            "> Fold Change = Mean(Experimental) / Mean(Control)"
-        )
-        st.markdown(
-            "**Saturation Ratio** (determines circle color, scaled 0 to max):\n\n"
-            "> Saturation Ratio = Saturated Chains / Total Chains"
-        )
+        st.markdown("**Fold Change** (determines circle size, log2-scaled):")
+        st.code("Fold Change = Mean(Experimental) / Mean(Control)", language=None)
+        st.markdown("**Saturation Ratio** (determines circle color, scaled 0 to max):")
+        st.code("Saturation Ratio = Saturated Chains / Total Chains", language=None)
         st.markdown(
             "Classes present in the dataset are shown as filled circles. "
             "Classes on the pathway but absent from your data are shown "

@@ -29,14 +29,10 @@ def _display_volcano_plot(
             "Identify differentially abundant lipid species between two conditions."
         )
 
-        st.markdown(
-            "**Fold Change** (x-axis, log2-transformed):\n\n"
-            "> Log2(FC) = log2(Mean Experimental / Mean Control)"
-        )
-        st.markdown(
-            "**Significance** (y-axis):\n\n"
-            "> -log10(p-value) from statistical test"
-        )
+        st.markdown("**Fold Change** (x-axis, log2-transformed):")
+        st.code("Log2(FC) = log2(Mean Experimental / Mean Control)", language=None)
+        st.markdown("**Significance** (y-axis):")
+        st.code("-log10(p-value) from statistical test", language=None)
 
         valid_conditions = AnalysisWorkflow.get_eligible_conditions(experiment)
         if len(valid_conditions) < 2:
