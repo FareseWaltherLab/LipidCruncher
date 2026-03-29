@@ -17,7 +17,10 @@ from app.services.plotting.pathway_viz import (
 )
 from app.ui.download_utils import plotly_svg_download_button, csv_download_button
 
-from app.ui.main_content.analysis._utils import _check_fa_compatibility
+from app.ui.main_content.analysis._utils import (
+    _check_fa_compatibility,
+    _display_consolidated_lipids,
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -501,12 +504,29 @@ def _display_pathway_viz(
             st.warning("Control and experimental conditions must be different.")
             return
 
+        # --- Consolidated lipid handling ---
+        all_classes = list(df['ClassKey'].unique())
+        excluded_lipids = _display_consolidated_lipids(
+            df, all_classes, 'pathway',
+        )
+        st.markdown(
+            "Consolidated-format lipids affect **circle colors** "
+            "(saturation ratio) but not **circle sizes** (fold change)."
+        )
+
         # --- Layout editor ---
         _display_pathway_layout_editor()
 
         # --- Compute data (cached) ---
+        saturation_source = None
+        if excluded_lipids:
+            saturation_source = df[
+                ~df['LipidMolec'].isin(excluded_lipids)
+            ].copy()
+
         data = StreamlitAdapter.compute_pathway_data(
             df, experiment, control, experimental,
+            saturation_source_df=saturation_source,
         )
 
         # --- Render figure (uses current layout, not cached) ---

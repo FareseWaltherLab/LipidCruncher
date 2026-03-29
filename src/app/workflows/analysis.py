@@ -607,6 +607,7 @@ class AnalysisWorkflow:
         experiment: ExperimentConfig,
         control: str,
         experimental: str,
+        saturation_source_df: Optional[pd.DataFrame] = None,
     ) -> PathwayDataResult:
         """Compute pathway fold-change and saturation data (no rendering).
 
@@ -617,9 +618,16 @@ class AnalysisWorkflow:
 
         Args:
             df: DataFrame with LipidMolec, ClassKey, concentration columns.
+                Used for fold-change calculation (always uses the full
+                dataset so abundance is preserved).
             experiment: Experiment configuration.
             control: Name of the control condition.
             experimental: Name of the experimental condition.
+            saturation_source_df: Optional DataFrame to use for saturation
+                ratio calculation. When consolidated-format lipids have
+                been excluded, pass the filtered DataFrame here so that
+                saturation ratios are computed only from lipids with
+                detailed chain information. If ``None``, ``df`` is used.
 
         Returns:
             PathwayDataResult with fold_change_df and saturation_df.
@@ -640,7 +648,7 @@ class AnalysisWorkflow:
             df, experiment, control, experimental,
         )
         saturation_df = PathwayVizPlotterService.calculate_class_saturation_ratio(
-            df,
+            saturation_source_df if saturation_source_df is not None else df,
         )
 
         return PathwayDataResult(

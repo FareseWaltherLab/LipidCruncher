@@ -21,6 +21,7 @@ from app.workflows.analysis import (
     PieChartResult,
     SaturationResult,
     FACHResult,
+    PathwayDataResult,
     PathwayResult,
     VolcanoResult,
     HeatmapResult,
@@ -795,6 +796,140 @@ class TestRunPathway:
             assert 'abundance ratio' in result.pathway_dict
             assert 'saturated fatty acids ratio' in result.pathway_dict
         plt.close('all')
+
+
+# =============================================================================
+# Pathway — compute_pathway_data with saturation_source_df
+# =============================================================================
+
+
+class TestComputePathwayDataSaturationSource:
+    """Tests for compute_pathway_data with saturation_source_df parameter."""
+
+    def _make_mixed_df(self, n_samples=6):
+        """DataFrame with both detailed and consolidated lipid names."""
+        rng = np.random.RandomState(99)
+        lipids = [
+            'PC 16:0_18:1',   # detailed
+            'PC 34:1',        # consolidated
+            'PE 16:0_20:4',   # detailed
+            'PE 36:2',        # consolidated
+            'SM 18:1;O2/16:0',  # detailed (sphingolipid)
+        ]
+        classes = ['PC', 'PC', 'PE', 'PE', 'SM']
+        data = {
+            'LipidMolec': lipids,
+            'ClassKey': classes,
+        }
+        for s in range(1, n_samples + 1):
+            data[f'concentration[s{s}]'] = rng.uniform(100, 5000, len(lipids))
+        return pd.DataFrame(data)
+
+    def test_without_saturation_source_uses_full_df(self, exp_2x3):
+        """When saturation_source_df is None, both calculations use df."""
+        df = self._make_mixed_df()
+        result = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+        )
+        assert isinstance(result, PathwayDataResult)
+        assert not result.fold_change_df.empty
+        assert not result.saturation_df.empty
+
+    def test_with_saturation_source_filters_saturation(self, exp_2x3):
+        """saturation_source_df is used for saturation, df for fold change."""
+        df = self._make_mixed_df()
+        # Remove consolidated lipids for saturation
+        detailed_only = df[df['LipidMolec'].str.contains('_|/')].copy()
+
+        result_full = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+        )
+        result_filtered = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+            saturation_source_df=detailed_only,
+        )
+
+        # Fold change should be identical (both use full df)
+        pd.testing.assert_frame_equal(
+            result_full.fold_change_df, result_filtered.fold_change_df,
+        )
+        # Saturation should differ (filtered excludes consolidated lipids)
+        assert not result_full.saturation_df.equals(result_filtered.saturation_df)
+
+    def test_fold_change_preserved_when_excluding_consolidated(self, exp_2x3):
+        """Fold change uses full df even when saturation_source_df is given."""
+        df = self._make_mixed_df()
+        detailed_only = df[df['LipidMolec'].str.contains('_|/')].copy()
+
+        result_no_filter = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+        )
+        result_with_filter = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+            saturation_source_df=detailed_only,
+        )
+
+        # Fold change must be identical — consolidated lipids excluded from
+        # saturation only, not from abundance/fold change
+        pd.testing.assert_frame_equal(
+            result_no_filter.fold_change_df,
+            result_with_filter.fold_change_df,
+        )
+
+    def test_saturation_source_empty_df(self, exp_2x3):
+        """Empty saturation_source_df produces empty saturation results."""
+        df = self._make_mixed_df()
+        empty = df.iloc[0:0].copy()
+
+        result = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+            saturation_source_df=empty,
+        )
+        assert not result.fold_change_df.empty
+        assert result.saturation_df.empty
+
+    def test_saturation_source_same_as_df(self, exp_2x3):
+        """Passing df as saturation_source_df gives same result as None."""
+        df = self._make_mixed_df()
+        result_none = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+        )
+        result_same = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+            saturation_source_df=df,
+        )
+        pd.testing.assert_frame_equal(
+            result_none.fold_change_df, result_same.fold_change_df,
+        )
+        pd.testing.assert_frame_equal(
+            result_none.saturation_df, result_same.saturation_df,
+        )
+
+    def test_validation_errors_still_raised(self, exp_2x3):
+        """Validation errors are raised regardless of saturation_source_df."""
+        df = self._make_mixed_df()
+        with pytest.raises(ValueError, match='Control'):
+            AnalysisWorkflow.compute_pathway_data(
+                df, exp_2x3, '', 'Treatment',
+                saturation_source_df=df,
+            )
+        with pytest.raises(ValueError, match='different'):
+            AnalysisWorkflow.compute_pathway_data(
+                df, exp_2x3, 'Control', 'Control',
+                saturation_source_df=df,
+            )
+
+    def test_returns_pathway_data_result(self, exp_2x3):
+        """Return type is PathwayDataResult with both parameters."""
+        df = self._make_mixed_df()
+        detailed_only = df[df['LipidMolec'].str.contains('_|/')].copy()
+        result = AnalysisWorkflow.compute_pathway_data(
+            df, exp_2x3, 'Control', 'Treatment',
+            saturation_source_df=detailed_only,
+        )
+        assert isinstance(result, PathwayDataResult)
+        assert isinstance(result.fold_change_df, pd.DataFrame)
+        assert isinstance(result.saturation_df, pd.DataFrame)
 
 
 # =============================================================================

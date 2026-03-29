@@ -743,10 +743,22 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         control: str,
         experimental: str,
+        saturation_source_df: pd.DataFrame = None,
     ):
-        """Cached pathway data computation (fold change + saturation)."""
+        """Cached pathway data computation (fold change + saturation).
+
+        Args:
+            df: Full DataFrame for fold-change calculation.
+            experiment: Experiment configuration.
+            control: Control condition name.
+            experimental: Experimental condition name.
+            saturation_source_df: Optional filtered DataFrame for
+                saturation ratio (excludes consolidated lipids).
+                If None, ``df`` is used for both.
+        """
         return AnalysisWorkflow.compute_pathway_data(
             df, experiment, control, experimental,
+            saturation_source_df=saturation_source_df,
         )
 
     @staticmethod
