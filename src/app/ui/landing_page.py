@@ -187,11 +187,36 @@ def _display_call_to_action() -> None:
 
 def _display_whats_new() -> None:
     """Display the What's New changelog section."""
-    st.markdown("#### ✨ What's New in Version 1.2 (January 20, 2026)")
+    st.markdown("#### ✨ What's New in Version 1.3 (March 30, 2026)")
 
     with st.expander("New Features & Improvements", expanded=False):
         st.markdown("""
         ### Major Features
+        - **LIPID MAPS Nomenclature**: Full compliance with the LIPID MAPS shorthand notation system
+          (Liebisch et al. 2020)—all lipid names, labels, and documentation now follow the community standard
+        - **Overhauled Pathway Visualization**: Expanded from 18 to 28 lipid classes with a fully data-driven,
+          editable layout—drag classes to reposition, save/load custom configurations, and choose from built-in presets
+        - **Interactive Pathway Plots**: Migrated pathway visualization from static Matplotlib to interactive Plotly
+          with hover details, zoom, and pan
+        - **Total Intensity Normalization**: New normalization method that scales each sample by its total lipid
+          signal—useful when internal standards are unavailable
+
+        ### UI/UX Improvements
+        - **Auto-Populated Experiment Config**: Loading a sample dataset automatically fills in condition names
+          and sample counts—no manual setup needed
+        - **Clearer Error Messages**: All error messages rewritten to be specific and actionable instead of
+          showing raw Python exceptions
+        - **Consistent Formula Rendering**: All normalization formulas displayed uniformly using code blocks
+          for better readability
+        - **Updated Format Requirements**: Standardization examples and documentation aligned with LIPID MAPS
+          nomenclature
+        - **Streamlit 1.50 Upgrade**: Updated from Streamlit 1.22 to 1.50 for improved performance,
+          stability, and modern widget behavior
+        """)
+
+    with st.expander("Version 1.2 (January 20, 2026)", expanded=False):
+        st.markdown("""
+        ### New Features
         - **Increased File Upload Limit**: Now supports files up to 800MB for larger lipidomics datasets
         - **MS-DIAL Format Support**: Full integration with MS-DIAL exports including quality filtering (Total score, MS/MS matched),
           dual data type selection (raw vs. pre-normalized), and automatic internal standards detection
@@ -209,61 +234,19 @@ def _display_whats_new() -> None:
         - **Improved PDF Reports**: Metadata cover page, fixed empty pages, better heatmap scaling for many lipids
         - **Box Plots by Condition**: Samples now colored by experimental condition with colorblind-friendly palette
         - **Internal Standards Visualization**: Separate subplots for multiple standards within the same class
-        """)
 
-    with st.expander("⚠️ Bug Fixes", expanded=False):
-        st.markdown("""
-        ### Statistical Testing Bug (Bonferroni All Post-Hoc)
-
-        *Affected Feature*: Statistical testing with "Bonferroni All" post-hoc correction (Level 2) in Abundance Bar Charts and Saturation Plots
-
-        *Issue*: When using the "Bonferroni All" option for pairwise comparisons, the software incorrectly applied non-parametric tests
-        (Mann-Whitney U) even when you selected parametric analysis. This made the analysis overly conservative—combining the strictest
-        correction method with the least powerful test type—potentially causing real differences to be missed.
-
-        *Who is affected*: Users who selected Parametric tests (Welch's t-test/ANOVA) AND "Bonferroni All" for Level 2 correction AND had 3+ conditions.
-
-        *Recommendation*: If you used these settings and found fewer significant results than expected, consider re-running your analysis.
-
-        ---
-
-        ### Sphingolipid Classification in Saturation Analysis
-
-        *Problem*: Sphingolipids (Cer, SM, CerG1, CerG2, CerG3) were incorrectly classified as "single-chain" lipids and excluded from
-        consolidated format detection. In reality, sphingolipids have two chains: a sphingoid base (e.g., d18:1) and a fatty acyl chain (e.g., 24:0).
-
-        This meant consolidated sphingolipids like Cer(42:1) or SM(34:1) were silently included in saturation analysis without warning,
-        potentially producing inaccurate SFA/MUFA/PUFA results.
-
-        *Solution*: Sphingolipids are now correctly recognized as two-chain lipids. Consolidated sphingolipids are detected and flagged,
-        allowing users to review and decide whether to include or exclude them.
-
-        ---
-
-        ### Fatty Acid Composition Heatmap Display Issues
-
-        *Issues*: (1) Heatmap cells appeared as stretched rectangles instead of uniform squares. (2) Hover text only worked for some cells.
-
-        *Solution*: We now construct a complete 2D grid matrix, ensuring each Carbon × Double Bond cell renders as a uniform square with
-        full hover support. Empty cells display as white.
-
-        ---
-
-        ### Other Fixes
+        ### Bug Fixes
+        - Fixed statistical testing incorrectly applying non-parametric tests with "Bonferroni All" post-hoc correction
+        - Fixed sphingolipids incorrectly classified as single-chain in saturation analysis
+        - Fixed fatty acid composition heatmap cells rendering as stretched rectangles with broken hover text
         - Fixed manual sample grouping error when rearranging samples
         - Fixed session state issues causing double-click required for normalization method switching
-        - Fixed double-click issue on radio buttons in manage internal standards
-        - Fixed number input widgets requiring double entry to update values
         - Fixed pathway visualization missing unit circles (LPA, LCB, CDP-DAG)
         - Fixed SPLASH standard ClassKey inference
-        - Fixed markdown parsing of pipe characters in condition names
-        - Fixed volcano plot duplicate messages
-        - Fixed volcano plot duplicate checkbox in detailed stats
+        - Fixed volcano plot duplicate messages and duplicate checkbox in detailed stats
         - Fixed saturation plots not filtering by selected lipid classes
-        - Fixed compatibility with older Streamlit versions
-        - Changed concentration vs fold change plot download from PNG to CSV for better data accessibility
         - Fixed various MS-DIAL issues (group reordering, data type/quality filter selections, sample column override)
-        - Fixed widget state issues causing selections to reset on page navigation (zero filtering, grade filtering, protein input, custom standards)
+        - Fixed widget state issues causing selections to reset on page navigation
         """)
 
     st.markdown("---")
