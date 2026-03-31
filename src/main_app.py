@@ -94,7 +94,7 @@ def display_app_page() -> None:
 
     if raw_df is None:
         with center:
-            st.info("Upload a dataset or load sample data to begin.")
+            st.info("Upload a dataset or load sample data from the sidebar (left panel) to begin.")
 
             # Back to landing button
             if st.button("← Back to Home", key="back_home_no_data"):
