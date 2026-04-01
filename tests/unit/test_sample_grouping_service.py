@@ -494,6 +494,54 @@ class TestRegroupSamples:
                 self.df[col].values,
             )
 
+    def test_regroup_idempotent_when_applied_to_original(self):
+        """Regrouping the original df twice with the same selections must
+        produce identical results — this is the pattern the UI uses after
+        the fix for the double-application bug where each Streamlit re-run
+        was re-applying the swap to already-swapped data."""
+        selections = {
+            'Cond_1': ['s4', 's5', 's6'],
+            'Cond_2': ['s1', 's2', 's3'],
+        }
+        first = SampleGroupingService.regroup_samples(
+            self.df, self.group_df, selections, self.exp,
+        )
+        second = SampleGroupingService.regroup_samples(
+            self.df, self.group_df, selections, self.exp,
+        )
+        pd.testing.assert_frame_equal(first.reordered_df, second.reordered_df)
+
+    def test_regroup_double_application_corrupts_data(self):
+        """Applying regrouping to already-regrouped data produces WRONG
+        results — this was the root cause of the sample-swap bug.  The
+        test documents the failure mode so it stays visible."""
+        orig_s1 = self.df['intensity[s1]'].values.copy()
+        orig_s4 = self.df['intensity[s4]'].values.copy()
+
+        selections = {
+            'Cond_1': ['s4', 's5', 's6'],
+            'Cond_2': ['s1', 's2', 's3'],
+        }
+        first = SampleGroupingService.regroup_samples(
+            self.df, self.group_df, selections, self.exp,
+        )
+        # After first regroup: s1 col holds orig s4 data, s4 col holds orig s1 data
+        np.testing.assert_array_equal(first.reordered_df['intensity[s1]'].values, orig_s4)
+        np.testing.assert_array_equal(first.reordered_df['intensity[s4]'].values, orig_s1)
+
+        # Rebuild group_df from the reordered data (mimics what the UI does on re-run)
+        reordered_group = SampleGroupingService.build_group_df(
+            first.reordered_df, self.exp,
+        ).group_df
+
+        # Apply the SAME swap again to already-swapped data
+        second = SampleGroupingService.regroup_samples(
+            first.reordered_df, reordered_group, selections, self.exp,
+        )
+        # The swap is undone — s1 is back to original s1 data (WRONG!)
+        np.testing.assert_array_equal(second.reordered_df['intensity[s1]'].values, orig_s1)
+        np.testing.assert_array_equal(second.reordered_df['intensity[s4]'].values, orig_s4)
+
     def test_regroup_does_not_mutate_input(self):
         orig_df = self.df.copy()
         orig_group = self.group_df.copy()

@@ -84,6 +84,14 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
     """
     if st.session_state.get('original_column_order') is None:
         st.session_state.original_column_order = df.columns.tolist()
+        # Save the original pre-regrouping data so that regrouping is always
+        # applied to the untouched DataFrame.  Without this, every Streamlit
+        # re-run re-applies the swap to already-swapped data, corrupting the
+        # column assignments.
+        st.session_state['_pre_regroup_df'] = df.copy()
+
+    # Always regroup from the original data to make the operation idempotent
+    base_df = st.session_state.get('_pre_regroup_df', df)
 
     st.session_state.grouping_complete = False
     selections = {}
@@ -116,7 +124,7 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
 
     try:
         regroup_result = SampleGroupingService.regroup_samples(
-            df, group_df, selections, experiment,
+            base_df, group_df, selections, experiment,
         )
         st.session_state.grouping_complete = True
         st.sidebar.write("New sample order after regrouping:")
