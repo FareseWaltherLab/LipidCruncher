@@ -31,9 +31,9 @@ def df_with_deuterated_standards():
     """DataFrame with deuterated internal standards (d5, d7, d9 patterns)."""
     return pd.DataFrame({
         'LipidMolec': [
-            'PC(16:0_18:1)', 'PC(15:0_15:0)(d7)', 'PC(18:0_18:1)',
-            'PE(18:0_20:4)', 'PE(17:0_17:0)(d5)',
-            'TG(16:0_18:1_18:2)', 'TG(15:0_15:0_15:0)(d9)',
+            'PC 16:0_18:1', 'PC 15:0_15:0(d7)', 'PC 18:0_18:1',
+            'PE 18:0_20:4', 'PE 17:0_17:0(d5)',
+            'TG 16:0_18:1_18:2', 'TG 15:0_15:0_15:0(d9)',
         ],
         'ClassKey': ['PC', 'PC', 'PC', 'PE', 'PE', 'TG', 'TG'],
         'intensity[s1]': [1000.0, 500.0, 1100.0, 2000.0, 600.0, 3000.0, 700.0],
@@ -165,7 +165,7 @@ def df_with_mixed_standards():
 def standards_only_df():
     """DataFrame with only standards."""
     return pd.DataFrame({
-        'LipidMolec': ['PC(15:0_15:0)(d7)', 'PE(17:0_17:0)(d5)', 'TG(15:0)(d9)'],
+        'LipidMolec': ['PC 15:0_15:0(d7)', 'PE 17:0_17:0(d5)', 'TG 15:0(d9)'],
         'ClassKey': ['PC', 'PE', 'TG'],
         'intensity[s1]': [500.0, 600.0, 700.0],
         'intensity[s2]': [520.0, 620.0, 720.0],
@@ -555,9 +555,9 @@ class TestGetMatchedPatterns:
     def test_deuterated_pattern_match(self, df_with_deuterated_standards):
         """Test matching deuterated patterns."""
         matches = StandardsService.get_matched_patterns(df_with_deuterated_standards)
-        assert 'PC(15:0_15:0)(d7)' in matches
-        assert 'PE(17:0_17:0)(d5)' in matches
-        assert 'TG(15:0_15:0_15:0)(d9)' in matches
+        assert 'PC 15:0_15:0(d7)' in matches
+        assert 'PE 17:0_17:0(d5)' in matches
+        assert 'TG 15:0_15:0_15:0(d9)' in matches
 
     def test_multiple_patterns_per_lipid(self):
         """Test lipid matching multiple patterns."""
@@ -685,9 +685,9 @@ class TestRemoveStandardsFromDataset:
 
     def test_remove_existing_standards(self, df_with_deuterated_standards, standards_only_df):
         """Test removing standards that exist in dataset."""
-        # Create standards_df with just names
+        # Create standards_df with just names (LIPID MAPS format, matching cleaned data)
         standards_df = pd.DataFrame({
-            'LipidMolec': ['PC(15:0_15:0)(d7)', 'PE(17:0_17:0)(d5)'],
+            'LipidMolec': ['PC 15:0_15:0(d7)', 'PE 17:0_17:0(d5)'],
         })
 
         filtered_df, removed = StandardsService.remove_standards_from_dataset(
@@ -695,8 +695,8 @@ class TestRemoveStandardsFromDataset:
         )
 
         assert len(removed) == 2
-        assert 'PC(15:0_15:0)(d7)' in removed
-        assert 'PE(17:0_17:0)(d5)' in removed
+        assert 'PC 15:0_15:0(d7)' in removed
+        assert 'PE 17:0_17:0(d5)' in removed
         assert len(filtered_df) == 5  # 7 - 2
 
     def test_remove_nonexistent_standards(self, basic_lipid_df):
@@ -1035,6 +1035,92 @@ class TestProcessStandardsFileExtractMode:
 
 
 # =============================================================================
+# Test: process_standards_file - Extract Mode with notation mismatch
+# =============================================================================
+
+class TestProcessStandardsFileExtractModeNotation:
+    """Tests that extract mode normalizes uploaded names to LIPID MAPS notation.
+
+    In production, cleaned_df has LIPID MAPS names (space-separated, no parens)
+    while user-uploaded standards may use old notation (parenthesized).
+    """
+
+    def test_extract_old_notation_against_lipid_maps_dataset(self):
+        """Old-format uploads must match LIPID MAPS names in cleaned data."""
+        uploaded_df = pd.DataFrame({
+            'LipidMolec': ['PC(14:0_16:0)', 'PE(18:0_20:4)'],
+        })
+        cleaned_df = pd.DataFrame({
+            'LipidMolec': ['PC 14:0_16:0', 'PE 18:0_20:4', 'TG 16:0_18:1_18:2'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'intensity[s1]': [100.0, 200.0, 300.0],
+            'intensity[s2]': [110.0, 210.0, 310.0],
+        })
+
+        result = StandardsService.process_standards_file(
+            uploaded_df, cleaned_df, standards_in_dataset=True
+        )
+
+        assert result.standards_count == 2
+        assert result.source_mode == 'extract'
+        assert set(result.standards_df['LipidMolec']) == {'PC 14:0_16:0', 'PE 18:0_20:4'}
+
+    def test_extract_deuterated_old_notation(self):
+        """Deuterated standards in old notation match LIPID MAPS cleaned data."""
+        uploaded_df = pd.DataFrame({
+            'LipidMolec': ['PC(15:0_15:0)(d7)'],
+        })
+        cleaned_df = pd.DataFrame({
+            'LipidMolec': ['PC 15:0_15:0(d7)', 'PC 16:0_18:1'],
+            'ClassKey': ['PC', 'PC'],
+            'intensity[s1]': [500.0, 1000.0],
+        })
+
+        result = StandardsService.process_standards_file(
+            uploaded_df, cleaned_df, standards_in_dataset=True
+        )
+
+        assert result.standards_count == 1
+        assert result.standards_df['LipidMolec'].iloc[0] == 'PC 15:0_15:0(d7)'
+        assert result.standards_df['intensity[s1]'].iloc[0] == 500.0
+
+    def test_extract_sphingolipid_old_notation(self):
+        """Sphingolipid old notation (underscore) matches LIPID MAPS (slash)."""
+        uploaded_df = pd.DataFrame({
+            'LipidMolec': ['Cer(16:0_d18:1)'],
+        })
+        cleaned_df = pd.DataFrame({
+            'LipidMolec': ['Cer 16:0/d18:1', 'PC 16:0_18:1'],
+            'ClassKey': ['Cer', 'PC'],
+            'intensity[s1]': [400.0, 1000.0],
+        })
+
+        result = StandardsService.process_standards_file(
+            uploaded_df, cleaned_df, standards_in_dataset=True
+        )
+
+        assert result.standards_count == 1
+        assert result.standards_df['LipidMolec'].iloc[0] == 'Cer 16:0/d18:1'
+
+    def test_extract_already_lipid_maps_notation(self):
+        """Standards already in LIPID MAPS notation still work."""
+        uploaded_df = pd.DataFrame({
+            'LipidMolec': ['PC 14:0_16:0', 'PE 18:0_20:4'],
+        })
+        cleaned_df = pd.DataFrame({
+            'LipidMolec': ['PC 14:0_16:0', 'PE 18:0_20:4', 'TG 16:0_18:1_18:2'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'intensity[s1]': [100.0, 200.0, 300.0],
+        })
+
+        result = StandardsService.process_standards_file(
+            uploaded_df, cleaned_df, standards_in_dataset=True
+        )
+
+        assert result.standards_count == 2
+
+
+# =============================================================================
 # Test: process_standards_file - Complete Mode
 # =============================================================================
 
@@ -1219,7 +1305,7 @@ class TestGetAvailableStandards:
         standards = StandardsService.get_available_standards(standards_only_df)
 
         assert len(standards) == 3
-        assert 'PC(15:0_15:0)(d7)' in standards
+        assert 'PC 15:0_15:0(d7)' in standards
 
     def test_empty_dataframe(self):
         """Test empty DataFrame returns empty list."""
@@ -1262,7 +1348,7 @@ class TestGetStandardsByClass:
         assert 'PC' in by_class
         assert 'PE' in by_class
         assert 'TG' in by_class
-        assert 'PC(15:0_15:0)(d7)' in by_class['PC']
+        assert 'PC 15:0_15:0(d7)' in by_class['PC']
 
     def test_multiple_standards_per_class(self):
         """Test multiple standards in same class."""
@@ -1391,8 +1477,8 @@ class TestSuggestStandardsForClasses:
             standards_only_df, ['PC', 'PE', 'TG']
         )
 
-        assert suggestions['PC'] == 'PC(15:0_15:0)(d7)'
-        assert suggestions['PE'] == 'PE(17:0_17:0)(d5)'
+        assert suggestions['PC'] == 'PC 15:0_15:0(d7)'
+        assert suggestions['PE'] == 'PE 17:0_17:0(d5)'
 
     def test_no_standards_available(self):
         """Test when no standards available."""
@@ -1409,7 +1495,7 @@ class TestSuggestStandardsForClasses:
             standards_only_df, ['PC', 'NewClass']
         )
 
-        assert suggestions['PC'] == 'PC(15:0_15:0)(d7)'
+        assert suggestions['PC'] == 'PC 15:0_15:0(d7)'
         assert suggestions['NewClass'] is None
 
     def test_empty_target_classes(self, standards_only_df):
@@ -1443,9 +1529,9 @@ class TestCreateDefaultMapping:
             basic_lipid_df, standards_only_df
         )
 
-        assert mapping['PC'] == 'PC(15:0_15:0)(d7)'
-        assert mapping['PE'] == 'PE(17:0_17:0)(d5)'
-        assert mapping['TG'] == 'TG(15:0)(d9)'
+        assert mapping['PC'] == 'PC 15:0_15:0(d7)'
+        assert mapping['PE'] == 'PE 17:0_17:0(d5)'
+        assert mapping['TG'] == 'TG 15:0(d9)'
 
     def test_fallback_for_missing_class(self, standards_only_df):
         """Test fallback to first standard for classes without specific standard."""

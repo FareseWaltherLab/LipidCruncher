@@ -594,6 +594,15 @@ class StandardsService:
         if 'LipidMolec' not in standards_df.columns:
             raise ValueError("Standards file must have LipidMolec column.")
 
+        # Normalize uploaded standard names to LIPID MAPS notation so they
+        # match the names in the cleaned dataset (which have already been
+        # standardized during data ingestion).
+        from app.services.data_standardization import DataStandardizationService
+        standards_df = standards_df.copy()
+        standards_df['LipidMolec'] = standards_df['LipidMolec'].apply(
+            DataStandardizationService.standardize_lipid_name
+        )
+
         # Get unique standard names
         unique_standards = standards_df['LipidMolec'].unique()
 
