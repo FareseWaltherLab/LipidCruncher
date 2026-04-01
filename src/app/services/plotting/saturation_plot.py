@@ -221,7 +221,7 @@ class SaturationPlotterService:
         df: pd.DataFrame,
         selected_classes: List[str],
     ) -> Dict[str, List[str]]:
-        """Detect lipids in consolidated format (e.g., PC(34:1) instead of PC(16:0_18:1)).
+        """Detect lipids in consolidated format (e.g., PC 34:1 instead of PC 16:0_18:1).
 
         Consolidated lipids lack individual chain detail (no underscore separator),
         which prevents accurate SFA/MUFA/PUFA calculation. Single-chain classes

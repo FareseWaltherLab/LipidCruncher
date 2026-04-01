@@ -17,11 +17,11 @@ def _check_fa_compatibility(df: pd.DataFrame) -> None:
     if 'LipidMolec' not in df.columns:
         return
     sample = df['LipidMolec'].head(20)
-    has_detailed = sample.str.contains('_').any()
+    has_detailed = sample.str.contains(r'[_/]').any()
     if not has_detailed:
         st.info(
             "⚠️ Your data appears to use consolidated lipid names "
-            "(e.g., PC(34:1) instead of PC(16:0_18:1)). "
+            "(e.g., PC 34:1 instead of PC 16:0_18:1). "
             "Saturation and pathway analyses work best with "
             "detailed fatty acid composition."
         )
