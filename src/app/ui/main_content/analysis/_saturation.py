@@ -3,6 +3,7 @@
 from typing import List
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from app.models.experiment import ExperimentConfig
@@ -106,15 +107,20 @@ def _render_saturation_results(
             df, experiment, selected_conditions, selected_classes,
             stat_config=stat_config if ptype == 'concentration' else None,
             plot_type=ptype,
-            show_significance=show_sig,
+            show_significance=True,
         )
 
         if ptype == 'concentration':
             stat_summary = result.stat_summary
 
         for lipid_class, fig in result.plots.items():
+            display_fig = fig
+            if not show_sig and ptype == 'concentration':
+                display_fig = go.Figure(fig)
+                display_fig.layout.annotations = ()
+                display_fig.layout.shapes = ()
             st.markdown(f"###### {lipid_class}")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(display_fig, use_container_width=True)
             st.session_state.analysis_saturation_figs[
                 f"{lipid_class}_{ptype}"
             ] = fig

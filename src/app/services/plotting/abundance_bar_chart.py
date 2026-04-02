@@ -324,6 +324,7 @@ def _add_significance_annotations(
         p_val = (
             result.adjusted_p_value
             if result.adjusted_p_value is not None
+            and not np.isnan(result.adjusted_p_value)
             else result.p_value
         )
 

@@ -690,20 +690,35 @@ class StatisticalTestingService:
         correction: str,
         alpha: float,
     ) -> None:
-        """Apply Level 1 correction across all results (mutates in place)."""
+        """Apply Level 1 correction across all results (mutates in place).
+
+        NaN p-values (from failed tests) are excluded from correction
+        to prevent statsmodels from propagating NaN to all adjusted values.
+        """
         if not results:
             return
 
         keys = list(results.keys())
         p_values = np.array([results[k].p_value for k in keys])
 
-        sig, adj = StatisticalTestingService.apply_correction(
-            p_values, correction, alpha
-        )
+        # Separate valid and NaN p-values to avoid NaN poisoning
+        valid_mask = ~np.isnan(p_values)
+        valid_keys = [k for k, m in zip(keys, valid_mask) if m]
+        valid_p = p_values[valid_mask]
 
-        for i, k in enumerate(keys):
-            results[k].adjusted_p_value = float(adj[i])
-            results[k].significant = bool(sig[i])
+        if len(valid_p) > 0:
+            sig, adj = StatisticalTestingService.apply_correction(
+                valid_p, correction, alpha
+            )
+            for i, k in enumerate(valid_keys):
+                results[k].adjusted_p_value = float(adj[i])
+                results[k].significant = bool(sig[i])
+
+        # Mark NaN p-value results as non-significant
+        for k, m in zip(keys, valid_mask):
+            if not m:
+                results[k].adjusted_p_value = float('nan')
+                results[k].significant = False
 
     @staticmethod
     def _resolve_config(

@@ -47,6 +47,17 @@ def _display_consolidated_lipids(
     st.markdown("---")
     st.markdown("#### ⚠️ Consolidated Format Lipids")
 
+    st.markdown(
+        "**No perfect solution exists for consolidated format lipids:**\n\n"
+        "- **Include:** The lipid's abundance is counted, but SFA/MUFA/PUFA "
+        "classification is based only on total double bonds (inaccurate)\n"
+        "- **Exclude:** Classification is accurate for remaining lipids, but "
+        "you lose abundance from excluded species\n\n"
+        "Review the table and list below. Some may be legitimate single-chain "
+        "lipids (accurate as-is). For multi-chain lipids, decide based on "
+        "your analysis goals."
+    )
+
     # Build summary table
     summary_rows = []
     all_consolidated = []
@@ -66,6 +77,12 @@ def _display_consolidated_lipids(
     summary_df = pd.DataFrame(summary_rows)
     summary_df = summary_df.sort_values('Consolidated', ascending=False)
     st.dataframe(summary_df, use_container_width=True)
+
+    st.caption(
+        "Note: True single-chain classes (LPC, LPE, LPA, LPG, LPI, LPS, "
+        "MAG, FFA, CE, ChE) are excluded from this check — their format "
+        "is always accurate."
+    )
 
     exclude_labels = st.multiselect(
         f"Select lipids to exclude ({len(all_consolidated)} detected):",

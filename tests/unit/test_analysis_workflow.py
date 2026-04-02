@@ -668,6 +668,113 @@ class TestRunSaturation:
         )
         assert isinstance(result, SaturationResult)
 
+    def test_significance_annotations_appear_on_significant_data(self, exp_2x3):
+        """Annotations must appear on plots when data has significant differences."""
+        # Create data with large, consistent differences between conditions
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 16:0_18:1', 'PC 18:0_20:4'],
+            'ClassKey': ['PC', 'PC'],
+            'concentration[s1]': [100.0, 200.0],
+            'concentration[s2]': [110.0, 190.0],
+            'concentration[s3]': [105.0, 210.0],
+            'concentration[s4]': [500.0, 800.0],
+            'concentration[s5]': [510.0, 790.0],
+            'concentration[s6]': [505.0, 810.0],
+        })
+        stat_config = StatisticalTestConfig.create_manual()
+        result = AnalysisWorkflow.run_saturation(
+            df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            stat_config=stat_config,
+            show_significance=True,
+        )
+        fig = result.plots['PC']
+        assert len(fig.layout.shapes) > 0, "Expected significance lines on plot"
+        assert len(fig.layout.annotations) > 0, "Expected significance asterisks on plot"
+
+    def test_no_annotations_when_show_significance_false(self, exp_2x3):
+        """No annotations when show_significance=False, even with significant data."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 16:0_18:1', 'PC 18:0_20:4'],
+            'ClassKey': ['PC', 'PC'],
+            'concentration[s1]': [100.0, 200.0],
+            'concentration[s2]': [110.0, 190.0],
+            'concentration[s3]': [105.0, 210.0],
+            'concentration[s4]': [500.0, 800.0],
+            'concentration[s5]': [510.0, 790.0],
+            'concentration[s6]': [505.0, 810.0],
+        })
+        stat_config = StatisticalTestConfig.create_manual()
+        result = AnalysisWorkflow.run_saturation(
+            df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            stat_config=stat_config,
+            show_significance=False,
+        )
+        fig = result.plots['PC']
+        assert len(fig.layout.shapes) == 0, "No lines expected when show_significance=False"
+        assert len(fig.layout.annotations) == 0, "No asterisks expected when show_significance=False"
+
+    def test_nan_concentrations_do_not_exclude_conditions(self, exp_2x3):
+        """NaN concentrations must not exclude a condition from the plot."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 16:0_18:1', 'PC 18:0_20:4'],
+            'ClassKey': ['PC', 'PC'],
+            'concentration[s1]': [100.0, 200.0],
+            'concentration[s2]': [110.0, 190.0],
+            'concentration[s3]': [np.nan, np.nan],   # NaN sample
+            'concentration[s4]': [500.0, 800.0],
+            'concentration[s5]': [510.0, 790.0],
+            'concentration[s6]': [505.0, 810.0],
+        })
+        stat_config = StatisticalTestConfig.create_manual()
+        result = AnalysisWorkflow.run_saturation(
+            df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            stat_config=stat_config,
+            show_significance=True,
+        )
+        # Both conditions should appear in plot despite NaN in Control
+        fig = result.plots['PC']
+        assert len(fig.data) == 3, "Should have 3 traces (SFA, MUFA, PUFA)"
+        # Each trace should have 2 bars (2 conditions)
+        assert len(fig.data[0].x) == 2, "Each trace should have 2 condition bars"
+
+    def test_nan_concentrations_with_significant_data(self):
+        """Significance annotations appear despite NaN in some samples."""
+        exp = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[4, 4],
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 16:0_18:1', 'PC 18:0_20:4'],
+            'ClassKey': ['PC', 'PC'],
+            'concentration[s1]': [100.0, 200.0],
+            'concentration[s2]': [110.0, 190.0],
+            'concentration[s3]': [np.nan, np.nan],   # NaN sample
+            'concentration[s4]': [105.0, 205.0],
+            'concentration[s5]': [900.0, 1800.0],
+            'concentration[s6]': [910.0, 1790.0],
+            'concentration[s7]': [905.0, 1810.0],
+            'concentration[s8]': [895.0, 1805.0],
+        })
+        stat_config = StatisticalTestConfig.create_manual()
+        result = AnalysisWorkflow.run_saturation(
+            df, exp,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            stat_config=stat_config,
+            show_significance=True,
+        )
+        fig = result.plots['PC']
+        assert len(fig.data[0].x) == 2, "Both conditions should appear"
+        assert len(fig.layout.shapes) > 0, "Expected significance lines"
+        assert len(fig.layout.annotations) > 0, "Expected significance asterisks"
+
 
 # =============================================================================
 # FACH Tests

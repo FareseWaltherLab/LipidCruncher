@@ -165,9 +165,9 @@ class SaturationPlotterService:
 
                 for col in sample_cols:
                     concentrations = class_df[col].values.astype(float)
-                    sfa_values.append(np.sum(concentrations * sfa_ratios))
-                    mufa_values.append(np.sum(concentrations * mufa_ratios))
-                    pufa_values.append(np.sum(concentrations * pufa_ratios))
+                    sfa_values.append(np.nansum(concentrations * sfa_ratios))
+                    mufa_values.append(np.nansum(concentrations * mufa_ratios))
+                    pufa_values.append(np.nansum(concentrations * pufa_ratios))
 
                 sfa_arr = np.array(sfa_values)
                 mufa_arr = np.array(mufa_values)
@@ -179,21 +179,21 @@ class SaturationPlotterService:
 
                 # Check if we have meaningful data (at least one FA type > 0)
                 has_data = (
-                    sfa_arr.mean() > 0 or
-                    mufa_arr.mean() > 0 or
-                    pufa_arr.mean() > 0
+                    np.nanmean(sfa_arr) > 0 or
+                    np.nanmean(mufa_arr) > 0 or
+                    np.nanmean(pufa_arr) > 0
                 )
 
                 if has_data and len(sample_cols) > 1:
                     n_samples = len(sample_cols)
                     rows.append({
                         'Condition': f"{condition} (n={n_samples})",
-                        'SFA_AUC': sfa_arr.mean(),
-                        'MUFA_AUC': mufa_arr.mean(),
-                        'PUFA_AUC': pufa_arr.mean(),
-                        'SFA_std': sfa_arr.std(ddof=1),
-                        'MUFA_std': mufa_arr.std(ddof=1),
-                        'PUFA_std': pufa_arr.std(ddof=1),
+                        'SFA_AUC': np.nanmean(sfa_arr),
+                        'MUFA_AUC': np.nanmean(mufa_arr),
+                        'PUFA_AUC': np.nanmean(pufa_arr),
+                        'SFA_std': np.nanstd(sfa_arr, ddof=1),
+                        'MUFA_std': np.nanstd(mufa_arr, ddof=1),
+                        'PUFA_std': np.nanstd(pufa_arr, ddof=1),
                     })
 
             if rows:
@@ -472,6 +472,7 @@ def _add_significance_annotations(
         p_val = (
             result.adjusted_p_value
             if result.adjusted_p_value is not None
+            and not np.isnan(result.adjusted_p_value)
             else result.p_value
         )
 
@@ -513,6 +514,7 @@ def _add_significance_annotations(
                 effective_p = (
                     ph.adjusted_p_value
                     if ph.adjusted_p_value is not None
+                    and not np.isnan(ph.adjusted_p_value)
                     else ph.p_value
                 )
                 if effective_p >= 0.05:

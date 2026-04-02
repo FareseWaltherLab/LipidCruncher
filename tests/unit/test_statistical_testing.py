@@ -1086,6 +1086,24 @@ class TestLevel1Correction:
         )
         assert results == {}
 
+    def test_nan_p_values_do_not_poison_correction(self):
+        """NaN p-values from failed tests must not corrupt other results."""
+        results = {
+            'PC': StatisticalTestResult("t", 3.0, 0.001),
+            'PE': StatisticalTestResult("t", 2.5, 0.01),
+            'BAD': StatisticalTestResult("t", float('nan'), float('nan')),
+        }
+        StatisticalTestingService._apply_level1_correction(
+            results, 'fdr_bh', 0.05
+        )
+        # Valid results should have non-NaN adjusted p-values
+        assert not np.isnan(results['PC'].adjusted_p_value)
+        assert not np.isnan(results['PE'].adjusted_p_value)
+        assert results['PC'].significant
+        # NaN result should remain non-significant
+        assert not results['BAD'].significant
+        assert np.isnan(results['BAD'].adjusted_p_value)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Type Coercion

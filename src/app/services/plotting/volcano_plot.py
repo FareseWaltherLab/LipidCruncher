@@ -138,6 +138,7 @@ class VolcanoPlotterService:
                 adj_p = (
                     result.adjusted_p_value
                     if result.adjusted_p_value is not None
+                    and not np.isnan(result.adjusted_p_value)
                     else raw_p
                 )
 
