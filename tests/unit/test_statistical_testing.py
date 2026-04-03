@@ -1365,3 +1365,213 @@ class TestLargeDataset:
         g2 = rng.normal(105, 10, 1000)
         result = StatisticalTestingService.test_two_groups(g1, g2, 'parametric')
         assert 0 <= result.p_value <= 1
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Dataset-Wide Zero Replacement
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestDatasetWideSmallValue:
+    """Tests for _compute_dataset_small_value and its propagation."""
+
+    def test_compute_from_concentration_columns(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            'concentration[s1]': [0.0, 100.0],
+            'concentration[s2]': [50.0, 200.0],
+        })
+        result = StatisticalTestingService._compute_dataset_small_value(df)
+        # min positive = 50, small = 50 / 10 = 5.0
+        assert result == pytest.approx(5.0)
+
+    def test_ignores_zeros(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [0.0, 0.0, 10.0],
+            'concentration[s2]': [0.0, 5.0, 20.0],
+        })
+        result = StatisticalTestingService._compute_dataset_small_value(df)
+        # min positive = 5, small = 0.5
+        assert result == pytest.approx(0.5)
+
+    def test_ignores_nan(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [np.nan, 8.0],
+            'concentration[s2]': [np.nan, 20.0],
+        })
+        result = StatisticalTestingService._compute_dataset_small_value(df)
+        assert result == pytest.approx(0.8)
+
+    def test_no_concentration_columns_returns_fallback(self):
+        df = pd.DataFrame({'LipidMolec': ['A'], 'ClassKey': ['X']})
+        result = StatisticalTestingService._compute_dataset_small_value(df)
+        assert result == pytest.approx(0.1)  # 1.0 / 10
+
+    def test_all_zeros_returns_fallback(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [0.0, 0.0],
+            'concentration[s2]': [0.0, 0.0],
+        })
+        result = StatisticalTestingService._compute_dataset_small_value(df)
+        assert result == pytest.approx(0.1)
+
+    def test_empty_dataframe_returns_fallback(self):
+        df = pd.DataFrame({'concentration[s1]': pd.Series([], dtype=float)})
+        result = StatisticalTestingService._compute_dataset_small_value(df)
+        assert result == pytest.approx(0.1)
+
+    def test_finds_global_minimum_across_all_columns(self):
+        df = pd.DataFrame({
+            'concentration[s1]': [100.0, 200.0],
+            'concentration[s2]': [300.0, 400.0],
+            'concentration[s3]': [1.0, 500.0],  # 1.0 is the global min
+        })
+        result = StatisticalTestingService._compute_dataset_small_value(df)
+        assert result == pytest.approx(0.1)  # 1.0 / 10
+
+
+class TestSmallValueFromArrays:
+    """Tests for _compute_small_value_from_arrays fallback."""
+
+    def test_two_arrays(self):
+        a = np.array([0.0, 10.0, 20.0])
+        b = np.array([5.0, 30.0])
+        result = StatisticalTestingService._compute_small_value_from_arrays(a, b)
+        # min positive across both = 5, small = 0.5
+        assert result == pytest.approx(0.5)
+
+    def test_single_array(self):
+        a = np.array([0.0, 0.0, 7.0])
+        result = StatisticalTestingService._compute_small_value_from_arrays(a)
+        assert result == pytest.approx(0.7)
+
+    def test_all_zeros_returns_fallback(self):
+        a = np.array([0.0, 0.0])
+        b = np.array([0.0, 0.0])
+        result = StatisticalTestingService._compute_small_value_from_arrays(a, b)
+        assert result == pytest.approx(0.1)
+
+    def test_ignores_nan(self):
+        a = np.array([np.nan, 3.0])
+        b = np.array([np.nan, 10.0])
+        result = StatisticalTestingService._compute_small_value_from_arrays(a, b)
+        assert result == pytest.approx(0.3)
+
+
+class TestGlobalSmallValuePropagation:
+    """Tests that dataset-wide small value is actually used by orchestration methods."""
+
+    def test_prepare_group_data_uses_global_small(self):
+        arr = np.array([0.0, 100.0, 200.0])
+        # With global_small=5.0, zeros should be replaced with 5.0
+        result = StatisticalTestingService._prepare_group_data(arr, True, 5.0)
+        assert result[0] == pytest.approx(np.log10(5.0))
+        assert result[1] == pytest.approx(np.log10(100.0))
+
+    def test_prepare_group_data_global_overrides_per_group(self):
+        """Global small value should override what per-group would compute."""
+        arr = np.array([0.0, 1000.0, 2000.0])
+        # Per-group would compute 1000/10=100, but global says 0.5
+        result = StatisticalTestingService._prepare_group_data(arr, True, 0.5)
+        assert result[0] == pytest.approx(np.log10(0.5))
+
+    def test_two_groups_with_global_small(self):
+        g1 = np.array([0.0, 100.0, 200.0])
+        g2 = np.array([300.0, 400.0, 500.0])
+        result = StatisticalTestingService.test_two_groups(
+            g1, g2, 'parametric', True, global_small_value=1.0
+        )
+        assert 0 <= result.p_value <= 1
+
+    def test_multiple_groups_with_global_small(self):
+        groups = {
+            'A': np.array([0.0, 100.0, 200.0]),
+            'B': np.array([300.0, 400.0, 500.0]),
+            'C': np.array([600.0, 700.0, 800.0]),
+        }
+        result = StatisticalTestingService.test_multiple_groups(
+            groups, 'parametric', True, global_small_value=1.0
+        )
+        assert 0 <= result.p_value <= 1
+
+    def test_posthoc_with_global_small(self):
+        groups = {
+            'A': np.array([0.0, 100.0, 200.0]),
+            'B': np.array([300.0, 400.0, 500.0]),
+            'C': np.array([600.0, 700.0, 800.0]),
+        }
+        results = StatisticalTestingService.run_posthoc(
+            groups, 'tukey', 0.05, True, global_small_value=1.0
+        )
+        assert len(results) == 3
+
+    def test_saturation_uses_df_not_empty(self, rng):
+        """Saturation tests should use the df's concentrations for small value."""
+        experiment = make_experiment(2, 3)
+        config = StatisticalTestConfig.create_manual(
+            test_type='parametric', correction_method='uncorrected',
+        )
+        # DataFrame with a very small concentration (0.5)
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'ClassKey': ['PC'],
+            'concentration[s1]': [0.5],
+            'concentration[s2]': [100.0],
+            'concentration[s3]': [200.0],
+            'concentration[s4]': [300.0],
+            'concentration[s5]': [400.0],
+            'concentration[s6]': [500.0],
+        })
+        fa_data = {
+            'PC': {
+                'SFA': {
+                    'Control': rng.normal(100, 10, 3),
+                    'Treatment': rng.normal(200, 10, 3),
+                },
+                'MUFA': {
+                    'Control': rng.normal(50, 5, 3),
+                    'Treatment': rng.normal(50, 5, 3),
+                },
+                'PUFA': {
+                    'Control': rng.normal(30, 3, 3),
+                    'Treatment': rng.normal(60, 3, 3),
+                },
+            },
+        }
+        summary = StatisticalTestingService.run_saturation_tests(
+            df, experiment,
+            ['Control', 'Treatment'], ['PC'],
+            fa_data, config,
+        )
+        assert 'PC_SFA' in summary.results
+        assert 'PC_MUFA' in summary.results
+        assert 'PC_PUFA' in summary.results
+
+    def test_consistent_small_value_across_tests(self):
+        """All tests in an orchestration run should use the same small value."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PE'],
+            'concentration[s1]': [0.0, 2.0],
+            'concentration[s2]': [100.0, 200.0],
+            'concentration[s3]': [150.0, 250.0],
+            'concentration[s4]': [500.0, 600.0],
+            'concentration[s5]': [550.0, 650.0],
+            'concentration[s6]': [600.0, 700.0],
+        })
+        # The global small should be 2.0/10 = 0.2 (from PE's s1 value)
+        small = StatisticalTestingService._compute_dataset_small_value(df)
+        assert small == pytest.approx(0.2)
+
+        experiment = make_experiment(2, 3)
+        config = StatisticalTestConfig.create_manual(
+            test_type='parametric', correction_method='uncorrected',
+        )
+        summary = StatisticalTestingService.run_class_level_tests(
+            df, experiment,
+            ['Control', 'Treatment'], ['PC', 'PE'],
+            config,
+        )
+        # Both classes should produce valid results
+        assert 'PC' in summary.results
+        assert 'PE' in summary.results
