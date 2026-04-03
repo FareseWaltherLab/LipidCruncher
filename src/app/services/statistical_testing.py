@@ -66,6 +66,7 @@ class StatisticalTestingService:
         group2_values: np.ndarray,
         test_type: Literal['parametric', 'non_parametric'] = 'parametric',
         auto_transform: bool = True,
+        global_small_value: Optional[float] = None,
     ) -> StatisticalTestResult:
         """Run a two-group statistical test.
 
@@ -75,6 +76,8 @@ class StatisticalTestingService:
             test_type: 'parametric' for Welch's t-test,
                        'non_parametric' for Mann-Whitney U.
             auto_transform: If True, apply zero replacement + log10.
+            global_small_value: Dataset-wide zero-replacement threshold.
+                If None, falls back to computing from these two groups.
 
         Returns:
             StatisticalTestResult with test name, statistic, and p-value.
@@ -83,11 +86,16 @@ class StatisticalTestingService:
             ValueError: If either group has fewer than 2 values or
                         all values are non-positive after filtering NaN.
         """
+        small = global_small_value
+        if small is None and auto_transform:
+            small = StatisticalTestingService._compute_small_value_from_arrays(
+                group1_values, group2_values
+            )
         g1 = StatisticalTestingService._prepare_group_data(
-            group1_values, auto_transform
+            group1_values, auto_transform, small
         )
         g2 = StatisticalTestingService._prepare_group_data(
-            group2_values, auto_transform
+            group2_values, auto_transform, small
         )
 
         if len(g1) < 2 or len(g2) < 2:
@@ -111,6 +119,7 @@ class StatisticalTestingService:
         groups_dict: Dict[str, np.ndarray],
         test_type: Literal['parametric', 'non_parametric'] = 'parametric',
         auto_transform: bool = True,
+        global_small_value: Optional[float] = None,
     ) -> StatisticalTestResult:
         """Run an omnibus test across 3+ groups.
 
@@ -119,6 +128,8 @@ class StatisticalTestingService:
             test_type: 'parametric' for Welch's ANOVA (Alexander-Govern),
                        'non_parametric' for Kruskal-Wallis.
             auto_transform: If True, apply zero replacement + log10.
+            global_small_value: Dataset-wide zero-replacement threshold.
+                If None, falls back to computing from these groups.
 
         Returns:
             StatisticalTestResult with omnibus statistic and p-value.
@@ -129,8 +140,15 @@ class StatisticalTestingService:
         if len(groups_dict) < 2:
             raise ValueError("Need at least 2 groups for multi-group test")
 
+        small = global_small_value
+        if small is None and auto_transform:
+            small = StatisticalTestingService._compute_small_value_from_arrays(
+                *groups_dict.values()
+            )
         prepared = {
-            k: StatisticalTestingService._prepare_group_data(v, auto_transform)
+            k: StatisticalTestingService._prepare_group_data(
+                v, auto_transform, small
+            )
             for k, v in groups_dict.items()
         }
 
@@ -191,6 +209,7 @@ class StatisticalTestingService:
         correction: Literal['tukey', 'bonferroni', 'uncorrected'] = 'tukey',
         alpha: float = 0.05,
         auto_transform: bool = True,
+        global_small_value: Optional[float] = None,
     ) -> List[PostHocResult]:
         """Run pairwise post-hoc tests for 3+ groups.
 
@@ -201,6 +220,8 @@ class StatisticalTestingService:
                         'uncorrected' for raw pairwise tests.
             alpha: Significance threshold.
             auto_transform: If True, apply zero replacement + log10.
+            global_small_value: Dataset-wide zero-replacement threshold.
+                If None, falls back to computing from these groups.
 
         Returns:
             List of PostHocResult for each pairwise comparison.
@@ -211,8 +232,15 @@ class StatisticalTestingService:
         if len(groups_dict) < 2:
             raise ValueError("Need at least 2 groups for post-hoc tests")
 
+        small = global_small_value
+        if small is None and auto_transform:
+            small = StatisticalTestingService._compute_small_value_from_arrays(
+                *groups_dict.values()
+            )
         prepared = {
-            k: StatisticalTestingService._prepare_group_data(v, auto_transform)
+            k: StatisticalTestingService._prepare_group_data(
+                v, auto_transform, small
+            )
             for k, v in groups_dict.items()
         }
 
@@ -326,6 +354,12 @@ class StatisticalTestingService:
         )
         test_type, correction, posthoc_corr = resolved
 
+        # Compute one dataset-wide small value for all tests
+        global_small = (
+            StatisticalTestingService._compute_dataset_small_value(df)
+            if config.auto_transform else None
+        )
+
         results: Dict[str, StatisticalTestResult] = {}
         posthoc_results: Dict[str, List[PostHocResult]] = {}
 
@@ -337,7 +371,7 @@ class StatisticalTestingService:
                 continue
 
             result = StatisticalTestingService._run_test_for_groups(
-                groups, test_type, config.auto_transform
+                groups, test_type, config.auto_transform, global_small
             )
             result.group_key = cls
             results[cls] = result
@@ -358,7 +392,8 @@ class StatisticalTestingService:
                 if not results[cls].significant:
                     continue
                 ph = StatisticalTestingService.run_posthoc(
-                    groups, posthoc_corr, config.alpha, config.auto_transform
+                    groups, posthoc_corr, config.alpha, config.auto_transform,
+                    global_small,
                 )
                 posthoc_results[cls] = ph
 
@@ -393,7 +428,8 @@ class StatisticalTestingService:
         Tests each (class, FA type) combination across conditions.
 
         Args:
-            df: DataFrame (unused directly, included for API consistency).
+            df: DataFrame with concentration columns (used to derive the
+                dataset-wide zero-replacement threshold).
             experiment: Experiment configuration.
             selected_conditions: Conditions to compare.
             selected_classes: Lipid classes to test.
@@ -410,6 +446,12 @@ class StatisticalTestingService:
             config, total_tests, len(selected_conditions)
         )
         test_type, correction, posthoc_corr = resolved
+
+        # Compute one dataset-wide small value for all tests
+        global_small = (
+            StatisticalTestingService._compute_dataset_small_value(df)
+            if config.auto_transform else None
+        )
 
         results: Dict[str, StatisticalTestResult] = {}
         posthoc_results: Dict[str, List[PostHocResult]] = {}
@@ -433,7 +475,7 @@ class StatisticalTestingService:
 
                 try:
                     result = StatisticalTestingService._run_test_for_groups(
-                        groups, test_type, config.auto_transform
+                        groups, test_type, config.auto_transform, global_small
                     )
                 except ValueError:
                     skipped_keys.append(key)
@@ -459,7 +501,8 @@ class StatisticalTestingService:
                 }
                 try:
                     ph = StatisticalTestingService.run_posthoc(
-                        groups, posthoc_corr, config.alpha, config.auto_transform
+                        groups, posthoc_corr, config.alpha, config.auto_transform,
+                        global_small,
                     )
                     posthoc_results[key] = ph
                 except ValueError:
@@ -510,6 +553,12 @@ class StatisticalTestingService:
         )
         test_type, correction, _ = resolved
 
+        # Compute one dataset-wide small value for all tests
+        global_small = (
+            StatisticalTestingService._compute_dataset_small_value(df)
+            if config.auto_transform else None
+        )
+
         results: Dict[str, StatisticalTestResult] = {}
         skipped_insufficient = []
         skipped_all_zero = []
@@ -537,7 +586,8 @@ class StatisticalTestingService:
 
             try:
                 result = StatisticalTestingService.test_two_groups(
-                    ctrl_clean, exp_clean, test_type, config.auto_transform
+                    ctrl_clean, exp_clean, test_type, config.auto_transform,
+                    global_small,
                 )
             except ValueError:
                 skipped_test_error.append(lipid)
@@ -613,13 +663,18 @@ class StatisticalTestingService:
 
     @staticmethod
     def _prepare_group_data(
-        values: np.ndarray, auto_transform: bool
+        values: np.ndarray,
+        auto_transform: bool,
+        global_small_value: Optional[float] = None,
     ) -> np.ndarray:
         """Filter NaN, replace zeros, and optionally log10-transform.
 
         Args:
             values: Raw values array (may contain NaN and zeros).
             auto_transform: If True, replace zeros and apply log10.
+            global_small_value: If provided, use this as the zero-replacement
+                threshold instead of computing per-group. This ensures
+                consistent zero handling across all groups in a comparison.
 
         Returns:
             Cleaned (and optionally transformed) array.
@@ -630,12 +685,63 @@ class StatisticalTestingService:
         if not auto_transform:
             return arr
 
-        positive = arr[arr > 0]
-        min_pos = float(positive.min()) if len(positive) > 0 else MIN_POSITIVE_FALLBACK
-        small_value = min_pos / ZERO_REPLACEMENT_DIVISOR
+        if global_small_value is not None:
+            small_value = global_small_value
+        else:
+            positive = arr[arr > 0]
+            min_pos = float(positive.min()) if len(positive) > 0 else MIN_POSITIVE_FALLBACK
+            small_value = min_pos / ZERO_REPLACEMENT_DIVISOR
 
         arr = np.maximum(arr, small_value)
         return np.log10(arr)
+
+    @staticmethod
+    def _compute_dataset_small_value(df: pd.DataFrame) -> float:
+        """Compute the zero-replacement value from the entire dataset.
+
+        Finds the smallest non-zero concentration across all concentration
+        columns and divides by ZERO_REPLACEMENT_DIVISOR. This provides a
+        single, consistent detection-floor proxy for all statistical tests.
+
+        Args:
+            df: DataFrame with concentration[s*] columns.
+
+        Returns:
+            The small value to use for zero replacement.
+        """
+        conc_cols = [c for c in df.columns if c.startswith('concentration[')]
+        if not conc_cols:
+            return MIN_POSITIVE_FALLBACK / ZERO_REPLACEMENT_DIVISOR
+
+        values = df[conc_cols].values.astype(float).ravel()
+        values = values[~np.isnan(values)]
+        positive = values[values > 0]
+
+        if len(positive) == 0:
+            return MIN_POSITIVE_FALLBACK / ZERO_REPLACEMENT_DIVISOR
+
+        return float(positive.min()) / ZERO_REPLACEMENT_DIVISOR
+
+    @staticmethod
+    def _compute_small_value_from_arrays(*arrays: np.ndarray) -> float:
+        """Compute a shared zero-replacement value from raw arrays.
+
+        Fallback for when no DataFrame is available (e.g., direct
+        test_two_groups calls without an orchestration method).
+
+        Args:
+            *arrays: One or more raw value arrays.
+
+        Returns:
+            The small value to use for zero replacement.
+        """
+        combined = np.concatenate([
+            np.asarray(a, dtype=float)[~np.isnan(np.asarray(a, dtype=float))]
+            for a in arrays
+        ])
+        positive = combined[combined > 0]
+        min_pos = float(positive.min()) if len(positive) > 0 else MIN_POSITIVE_FALLBACK
+        return min_pos / ZERO_REPLACEMENT_DIVISOR
 
     @staticmethod
     def _extract_class_totals(
@@ -673,15 +779,17 @@ class StatisticalTestingService:
         groups: Dict[str, np.ndarray],
         test_type: str,
         auto_transform: bool,
+        global_small_value: Optional[float] = None,
     ) -> StatisticalTestResult:
         """Dispatch to two-group or multi-group test based on group count."""
         if len(groups) == 2:
             keys = list(groups.keys())
             return StatisticalTestingService.test_two_groups(
-                groups[keys[0]], groups[keys[1]], test_type, auto_transform
+                groups[keys[0]], groups[keys[1]], test_type, auto_transform,
+                global_small_value,
             )
         return StatisticalTestingService.test_multiple_groups(
-            groups, test_type, auto_transform
+            groups, test_type, auto_transform, global_small_value,
         )
 
     @staticmethod

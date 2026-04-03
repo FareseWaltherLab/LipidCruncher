@@ -201,6 +201,12 @@ def _display_whats_new() -> None:
         - **Total Intensity Normalization**: New normalization method that scales each sample by its total lipid
           signal—useful when internal standards are unavailable
 
+        ### Bug Fixes
+        - Fixed statistical testing using inconsistent zero-replacement values across experimental groups,
+          which produced incorrect t-statistics and p-values in saturation, bar chart, and volcano analyses.
+          Zero replacement now uses a single dataset-wide detection floor derived from the smallest non-zero
+          concentration in the dataset.
+
         ### UI/UX Improvements
         - **Auto-Populated Experiment Config**: Loading a sample dataset automatically fills in condition names
           and sample counts—no manual setup needed
