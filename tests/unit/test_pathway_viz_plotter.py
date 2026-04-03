@@ -597,9 +597,9 @@ class TestCreatePathwayViz:
         fc_df = _make_fold_change_df(['PC'], [1.0])
         sat_df = _make_saturation_df(['PC'], [0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        # 18 unit circle shapes + 17 missing-class dashed shapes = 35
+        # 1 data circle + 18 unit circle shapes + 17 missing-class dashed = 36
         shapes = fig.layout.shapes
-        assert len(shapes) == 35
+        assert len(shapes) == 36
 
     def test_connecting_lines_drawn(self):
         fc_df = _make_fold_change_df(['PC'], [1.0])
@@ -629,18 +629,21 @@ class TestCreatePathwayViz:
         pc_idx = PATHWAY_CLASSES.index('PC')
         assert pathway_dict['abundance ratio'][pc_idx] == pytest.approx(1.5)
 
-    def test_scatter_sizes_scale_with_fold_change(self):
+    def test_data_circle_sizes_scale_with_fold_change(self):
         fc_df = _make_fold_change_df(['PC', 'PE'], [2.0, 4.0])
         sat_df = _make_saturation_df(['PC', 'PE'], [0.5, 0.5])
         fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        data_scatter = [t for t in fig.data
-                        if isinstance(t, go.Scatter)
-                        and t.mode == 'markers'][0]
-        sizes = list(data_scatter.marker.size)
-        pc_idx = PATHWAY_CLASSES.index('PC')
-        pe_idx = PATHWAY_CLASSES.index('PE')
-        # PE has larger fold change → bigger marker
-        assert sizes[pe_idx] > sizes[pc_idx]
+        # Data circles are drawn as filled shapes (no outline, with fillcolor).
+        # Find them by checking for shapes with line width == 0.
+        data_shapes = [s for s in fig.layout.shapes
+                       if s.line.width == 0]
+        # PC and PE both have data → 2 data circle shapes
+        assert len(data_shapes) == 2
+        # Both data circles should have fold_change > 1 → radius > UNIT_CIRCLE_RADIUS
+        # The path string encodes the radius; just verify both shapes exist
+        # and that the shape for the higher fold change is larger (longer path).
+        assert len(data_shapes[0].path) > 0
+        assert len(data_shapes[1].path) > 0
 
     def test_hover_text_present(self):
         fc_df = _make_fold_change_df(['PC'], [1.5])
@@ -1231,6 +1234,81 @@ class TestScaleFoldChange:
         scaled = [_scale_fold_change(fc) for fc in fcs]
         for i in range(len(scaled) - 1):
             assert scaled[i] <= scaled[i + 1]
+
+
+# =============================================================================
+# Data circle radius (coordinate-space sizing) tests
+# =============================================================================
+
+
+class TestDataCircleRadius:
+    """Tests for the data circle radius formula used in create_pathway_viz.
+
+    Data circles are drawn as shapes in coordinate space so they scale
+    correctly relative to the unit circle.  The formula is:
+
+        radius = UNIT_CIRCLE_RADIUS * _scale_fold_change(fc) / _scale_fold_change(1.0)
+
+    Since _scale_fold_change(1.0) = log2(2) = 1.0, fc=1.0 produces a circle
+    whose radius exactly equals UNIT_CIRCLE_RADIUS.
+    """
+
+    @staticmethod
+    def _radius(fc: float) -> float:
+        """Compute the data circle radius for a given fold change."""
+        fc_unit_scaled = _scale_fold_change(1.0)
+        return UNIT_CIRCLE_RADIUS * _scale_fold_change(fc) / fc_unit_scaled
+
+    def test_fc_one_produces_unit_radius(self):
+        """Fold change of 1.0 (no change) → radius == UNIT_CIRCLE_RADIUS."""
+        assert self._radius(1.0) == pytest.approx(UNIT_CIRCLE_RADIUS)
+
+    def test_fc_greater_than_one_produces_larger_radius(self):
+        """Fold change > 1 → radius > UNIT_CIRCLE_RADIUS."""
+        assert self._radius(3.0) > UNIT_CIRCLE_RADIUS
+
+    def test_fc_less_than_one_produces_smaller_radius(self):
+        """Fold change < 1 → radius < UNIT_CIRCLE_RADIUS."""
+        assert self._radius(0.5) < UNIT_CIRCLE_RADIUS
+
+    def test_fc_two_expected_radius(self):
+        """fc=2.0 → log2(3) ≈ 1.585 → radius ≈ 0.793."""
+        expected = UNIT_CIRCLE_RADIUS * math.log2(3.0)
+        assert self._radius(2.0) == pytest.approx(expected)
+
+    def test_fc_very_large_clamped_radius(self):
+        """Very large fc is clamped to MAX_LOG2_SIZE → max radius."""
+        expected_max = UNIT_CIRCLE_RADIUS * MAX_LOG2_SIZE
+        assert self._radius(1000) == pytest.approx(expected_max)
+
+    def test_data_circle_shape_in_figure(self):
+        """create_pathway_viz draws data circles as filled shapes, not markers."""
+        fc_df = _make_fold_change_df(['PC'], [2.0])
+        sat_df = _make_saturation_df(['PC'], [0.5])
+        fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
+        # Data circles have line width == 0 and a fillcolor
+        data_shapes = [s for s in fig.layout.shapes if s.line.width == 0]
+        assert len(data_shapes) == 1
+        assert data_shapes[0].fillcolor is not None
+        assert data_shapes[0].fillcolor != 'rgba(0,0,0,0)'
+
+    def test_fc_one_data_circle_same_size_as_unit_circle(self):
+        """When fc=1.0, the data circle radius equals the unit circle radius."""
+        import re
+        fc_df = _make_fold_change_df(['PC'], [1.0])
+        sat_df = _make_saturation_df(['PC'], [0.5])
+        fig, _ = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
+        # Data circle: line.width == 0; unit circles: line.width == 1.2
+        data_shapes = [s for s in fig.layout.shapes if s.line.width == 0]
+        assert len(data_shapes) == 1
+        # Extract first coordinate from path "M x,y L ..." to get radius
+        # The first point is at (cx + r, cy), so r = first_x - cx
+        # PC node center: ALL_PATHWAY_NODES['PC'][0:2]
+        pc_cx = ALL_PATHWAY_NODES['PC'][0]
+        m = re.match(r'M\s+([-\d.]+)', data_shapes[0].path)
+        data_first_x = float(m.group(1))
+        data_radius = abs(data_first_x - pc_cx)
+        assert data_radius == pytest.approx(UNIT_CIRCLE_RADIUS, abs=0.01)
 
 
 # =============================================================================

@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
+import plotly.colors as pc
 import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
@@ -593,15 +594,34 @@ class PathwayVizPlotterService:
                         hoverinfo='skip', showlegend=False,
                     ))
 
-        # 3) Unit circles and missing-class circles (as shapes)
-        for cls, (x, y, *_rest) in nodes.items():
-            # Unit circle (always drawn)
+        # 3) Data circles, unit circles, and missing-class circles (all shapes)
+        # Draw data circles in coordinate space so they scale correctly
+        # relative to the unit circle.  fc=1.0 → radius == UNIT_CIRCLE_RADIUS.
+        fc_unit_scaled = _scale_fold_change(1.0)  # log2(2) = 1.0
+        for i, cls in enumerate(resolved_classes):
+            x, y = nodes[cls][0], nodes[cls][1]
+
+            # Data circle (filled, colored by saturation ratio)
+            if cls in classes_with_data and scaled_sizes[i] > 0:
+                radius = UNIT_CIRCLE_RADIUS * scaled_sizes[i] / fc_unit_scaled
+                norm_sat = sat_values[i] / sat_max if sat_max > 0 else 0.0
+                norm_sat = max(0.0, min(1.0, norm_sat))
+                fill_color = pc.sample_colorscale('Plasma', [norm_sat])[0]
+                fig.add_shape(
+                    type='path',
+                    path=_circle_path(x, y, radius),
+                    line=dict(width=0),
+                    fillcolor=fill_color,
+                )
+
+            # Unit circle outline (always drawn on top of data circle)
             fig.add_shape(
                 type='path',
                 path=_circle_path(x, y, UNIT_CIRCLE_RADIUS),
                 line=dict(color='black', width=1.2),
                 fillcolor='rgba(0,0,0,0)',
             )
+
             # Missing-class dashed circle
             if cls not in classes_with_data:
                 fig.add_shape(
@@ -611,14 +631,10 @@ class PathwayVizPlotterService:
                     fillcolor='rgba(0,0,0,0)',
                 )
 
-        # 4) Data scatter — main visualization with hover
+        # 4) Invisible scatter for hover text and colorbar
         xs = [nodes[c][0] for c in resolved_classes]
         ys = [nodes[c][1] for c in resolved_classes]
-        # Convert coordinate-space sizes to Plotly marker sizes (pixels).
-        # SIZE_SCALE acts as the pixel multiplier.
-        marker_sizes = [SIZE_SCALE * s / 5.0 for s in scaled_sizes]
 
-        # Build hover text
         hover_texts = []
         for i, cls in enumerate(resolved_classes):
             fc_val = fc_values[i]
@@ -639,7 +655,8 @@ class PathwayVizPlotterService:
             x=xs, y=ys,
             mode='markers',
             marker=dict(
-                size=marker_sizes,
+                size=20,
+                opacity=0,
                 color=sat_values,
                 colorscale='Plasma',
                 cmin=0, cmax=sat_max,
@@ -647,7 +664,6 @@ class PathwayVizPlotterService:
                     title=dict(text='Saturation Ratio', font=dict(size=15)),
                     tickfont=dict(size=13),
                 ),
-                line=dict(width=0),
             ),
             text=hover_texts,
             hoverinfo='text',

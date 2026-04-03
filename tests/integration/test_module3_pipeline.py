@@ -964,6 +964,62 @@ class TestPathwayEndToEnd:
         assert not result.fold_change_df.empty
         plt.close('all')
 
+    def test_generic_pathway(
+        self, generic_normalized_df, generic_experiment,
+    ):
+        """Generic format pathway analysis."""
+        df = generic_normalized_df
+
+        result = AnalysisWorkflow.run_pathway(
+            df, generic_experiment, 'WT', 'ADGAT_DKO',
+        )
+
+        assert isinstance(result, PathwayResult)
+        assert isinstance(result.pathway_dict, dict)
+        assert not result.fold_change_df.empty
+        assert 'ClassKey' in result.fold_change_df.columns
+        assert 'fold_change' in result.fold_change_df.columns
+        assert not result.saturation_df.empty
+
+    def test_generic_pathway_fold_change_positive(
+        self, generic_normalized_df, generic_experiment,
+    ):
+        """Generic format: fold change values are positive."""
+        df = generic_normalized_df
+
+        result = AnalysisWorkflow.run_pathway(
+            df, generic_experiment, 'WT', 'ADGAT_DKO',
+        )
+
+        assert (result.fold_change_df['fold_change'] > 0).all()
+
+    def test_generic_pathway_saturation_bounded(
+        self, generic_normalized_df, generic_experiment,
+    ):
+        """Generic format: saturation ratios are between 0 and 1."""
+        df = generic_normalized_df
+
+        result = AnalysisWorkflow.run_pathway(
+            df, generic_experiment, 'WT', 'ADGAT_DKO',
+        )
+
+        ratios = result.saturation_df['saturation_ratio']
+        assert (ratios >= 0).all()
+        assert (ratios <= 1).all()
+
+    def test_generic_pathway_figure_created(
+        self, generic_normalized_df, generic_experiment,
+    ):
+        """Generic format: pathway generates a Plotly figure."""
+        df = generic_normalized_df
+
+        result = AnalysisWorkflow.run_pathway(
+            df, generic_experiment, 'WT', 'ADGAT_DKO',
+        )
+
+        if result.figure is not None:
+            assert isinstance(result.figure, go.Figure)
+
 
 class TestVolcanoEndToEnd:
     """Volcano plot analysis with real data."""

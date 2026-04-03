@@ -299,6 +299,97 @@ class TestPathwayUI:
 
 
 # =============================================================================
+# Group 6b: Pathway Layout Editor (10 tests)
+# =============================================================================
+
+class TestPathwayLayoutEditorUI:
+    """Tests for pathway layout editing controls."""
+
+    def _switch_to_pathway(self, at):
+        """Helper to switch to pathway analysis."""
+        radio = at.radio(key='analysis_radio')
+        pathway_option = [o for o in radio.options if "Pathway" in o][0]
+        at.radio(key='analysis_radio').set_value(pathway_option).run()
+        return at
+
+    def test_default_active_classes_18(self, analysis_generic_app):
+        """Initial pathway state has 18 default active classes."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        active = at.session_state['pathway_class_selector']
+        assert len(active) == 18
+
+    def test_preset_all_28_classes(self, analysis_generic_app):
+        """Clicking 'All Classes (28)' sets active classes to 28."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        at.button(key='pathway_start_all').click().run()
+        assert not at.exception
+        active = at.session_state['pathway_class_selector']
+        assert len(active) == 28
+
+    def test_preset_start_from_scratch(self, analysis_generic_app):
+        """Clicking 'Start from Scratch' empties active classes."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        at.button(key='pathway_start_scratch').click().run()
+        assert not at.exception
+        active = at.session_state['pathway_class_selector']
+        assert active == []
+
+    def test_preset_default_resets_to_18(self, analysis_generic_app):
+        """Clicking 'Default (18 classes)' after 'All' resets to 18."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        # Switch to all 28 first
+        at.button(key='pathway_start_all').click().run()
+        assert len(at.session_state['pathway_class_selector']) == 28
+        # Now reset to default 18
+        at.button(key='pathway_start_default').click().run()
+        assert not at.exception
+        assert len(at.session_state['pathway_class_selector']) == 18
+
+    def test_add_custom_node(self, analysis_generic_app):
+        """Adding a custom node updates session state."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        at.text_input(key='pathway_add_node_name').set_value('CUSTOM').run()
+        at.number_input(key='pathway_add_node_x').set_value(5.0).run()
+        at.number_input(key='pathway_add_node_y').set_value(10.0).run()
+        at.button(key='pathway_add_node_btn').click().run()
+        assert not at.exception
+        custom_nodes = at.session_state['analysis_pathway_custom_nodes']
+        assert 'CUSTOM' in custom_nodes
+        assert 'CUSTOM' in at.session_state['pathway_class_selector']
+
+    def test_move_node_creates_position_override(self, analysis_generic_app):
+        """Moving a node creates a position override in session state."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        at.number_input(key='pathway_move_node_x').set_value(99.0).run()
+        at.number_input(key='pathway_move_node_y').set_value(88.0).run()
+        at.button(key='pathway_move_node_btn').click().run()
+        assert not at.exception
+        overrides = at.session_state['analysis_pathway_position_overrides']
+        assert len(overrides) > 0
+
+    def test_grid_toggle_defaults_to_false(self, analysis_generic_app):
+        """Grid checkbox defaults to unchecked."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        grid = at.checkbox(key='pathway_show_grid')
+        assert grid is not None
+        assert grid.value is False
+
+    def test_grid_toggle_can_be_enabled(self, analysis_generic_app):
+        """Grid checkbox can be toggled on."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        at.checkbox(key='pathway_show_grid').set_value(True).run()
+        assert not at.exception
+        assert at.session_state['pathway_show_grid'] is True
+
+    def test_class_multiselect_widget_exists(self, analysis_generic_app):
+        """Class selector multiselect widget is rendered with all 28 options."""
+        at = self._switch_to_pathway(analysis_generic_app)
+        ms = at.multiselect(key='pathway_class_selector')
+        assert ms is not None
+        assert len(ms.options) == 28
+
+
+# =============================================================================
 # Group 7: Volcano Plot (6 tests)
 # =============================================================================
 
