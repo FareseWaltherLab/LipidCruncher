@@ -117,6 +117,37 @@ class TestBarChartUI:
         assert at.session_state['analysis_bar_chart_fig'] is not None
         assert 'bar_chart' in at.session_state['analysis_all_plots']
 
+    def test_bar_manual_mode_renders(self, analysis_generic_app):
+        """Switching bar chart stats to Manual mode renders without error."""
+        at = analysis_generic_app
+        at.radio(key='bar_stats_mode').set_value("Manual").run()
+        assert not at.exception
+        assert at.session_state['analysis_bar_chart_fig'] is not None
+
+    def test_bar_manual_non_parametric(self, analysis_generic_app):
+        """Bar chart with Manual non-parametric test renders without error."""
+        at = analysis_generic_app
+        at.radio(key='bar_stats_mode').set_value("Manual").run()
+        at.selectbox(key='bar_test_type').set_value("non_parametric").run()
+        assert not at.exception
+        assert at.session_state['analysis_bar_chart_fig'] is not None
+
+    def test_bar_manual_bonferroni_correction(self, analysis_generic_app):
+        """Bar chart with Manual bonferroni correction renders without error."""
+        at = analysis_generic_app
+        at.radio(key='bar_stats_mode').set_value("Manual").run()
+        at.selectbox(key='bar_correction').set_value("bonferroni").run()
+        assert not at.exception
+        assert at.session_state['analysis_bar_chart_fig'] is not None
+
+    def test_bar_manual_uncorrected(self, analysis_generic_app):
+        """Bar chart with Manual uncorrected renders without error."""
+        at = analysis_generic_app
+        at.radio(key='bar_stats_mode').set_value("Manual").run()
+        at.selectbox(key='bar_correction').set_value("uncorrected").run()
+        assert not at.exception
+        assert at.session_state['analysis_bar_chart_fig'] is not None
+
     def test_bar_deselect_all_classes_shows_warning(self, analysis_generic_app):
         """Deselecting all classes shows a warning."""
         at = analysis_generic_app
@@ -217,6 +248,23 @@ class TestSaturationUI:
         # Percentage plots stored in session
         figs = at.session_state['analysis_saturation_figs']
         assert any('percentage' in k for k in figs)
+
+    def test_saturation_switch_to_both(self, analysis_generic_app):
+        """Switching to Both plot type renders concentration and percentage."""
+        at = self._switch_to_saturation(analysis_generic_app)
+        at.radio(key='sat_plot_type').set_value("Both").run()
+        assert not at.exception
+        figs = at.session_state['analysis_saturation_figs']
+        assert any('concentration' in k for k in figs)
+        assert any('percentage' in k for k in figs)
+
+    def test_saturation_manual_mode_renders(self, analysis_generic_app):
+        """Switching saturation stats to Manual mode renders without error."""
+        at = self._switch_to_saturation(analysis_generic_app)
+        at.radio(key='sat_stats_mode').set_value("Manual").run()
+        assert not at.exception
+        figs = at.session_state['analysis_saturation_figs']
+        assert len(figs) > 0
 
     def test_saturation_detailed_fa_no_consolidated_warning(self, analysis_detailed_fa_app):
         """Detailed FA names do not trigger consolidated warning."""
@@ -445,6 +493,27 @@ class TestVolcanoUI:
         at = self._switch_to_volcano(analysis_generic_app)
         assert at.session_state['analysis_volcano_data'] is not None
 
+    def test_volcano_non_parametric(self, analysis_generic_app):
+        """Switching volcano to non-parametric test renders without error."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        at.selectbox(key='volcano_stats_mode').set_value("non_parametric").run()
+        assert not at.exception
+        assert at.session_state['analysis_volcano_fig'] is not None
+
+    def test_volcano_uncorrected(self, analysis_generic_app):
+        """Switching volcano to uncorrected renders without error."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        at.selectbox(key='volcano_correction').set_value("uncorrected").run()
+        assert not at.exception
+        assert at.session_state['analysis_volcano_fig'] is not None
+
+    def test_volcano_bonferroni(self, analysis_generic_app):
+        """Switching volcano to bonferroni correction renders without error."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        at.selectbox(key='volcano_correction').set_value("bonferroni").run()
+        assert not at.exception
+        assert at.session_state['analysis_volcano_fig'] is not None
+
 
 # =============================================================================
 # Group 8: Lipidomic Heatmap (7 tests)
@@ -504,6 +573,13 @@ class TestHeatmapUI:
             assert at.session_state['analysis_heatmap_fig'] is not None
         else:
             assert True
+
+    def test_heatmap_total_concentration_view(self, analysis_generic_app):
+        """Switching cluster view to Total Concentration renders without error."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_cluster_view').set_value("Total Concentration").run()
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_clusters'] is not None
 
     def test_heatmap_stores_figure_in_session(self, analysis_generic_app):
         """Heatmap figure is stored in session state."""

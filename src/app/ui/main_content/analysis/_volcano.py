@@ -183,16 +183,21 @@ def _render_volcano_results(
         )
 
     # Additional lipids to label
+    available_lipids = st.session_state.get('_volcano_available_lipids', [])
     additional_labels = st.multiselect(
         "Additional lipids to label:",
-        [],
+        available_lipids,
         default=[],
         key='volcano_additional_labels',
     )
 
+    # Determine which p-value column the plot will use
+    use_adjusted = stat_config.correction_method != 'uncorrected'
+    p_col = '-log10(adjusted_pValue)' if use_adjusted else '-log10(pValue)'
+
     # Build custom label positions
     custom_positions = _collect_label_positions(
-        top_n, additional_labels, enable_adjustment,
+        top_n, additional_labels, enable_adjustment, p_col,
     )
 
     # Log2 FC threshold
@@ -206,6 +211,7 @@ def _render_volcano_results(
         hide_non_sig=hide_nonsig,
         top_n_labels=top_n,
         custom_label_positions=custom_positions if custom_positions else None,
+        additional_labels=tuple(additional_labels) if additional_labels else None,
     )
 
     if result.figure is None:
@@ -264,6 +270,7 @@ def _collect_label_positions(
     top_n: int,
     additional_labels: List[str],
     enable_adjustment: bool,
+    p_col: str = '-log10(pValue)',
 ) -> Optional[Dict[str, Tuple[float, float]]]:
     """Collect custom label position adjustments."""
     if not enable_adjustment:
@@ -280,8 +287,8 @@ def _collect_label_positions(
         return None
 
     labeled_lipids = additional_labels.copy() if additional_labels else []
-    if top_n > 0 and '-log10(pValue)' in vdf.columns:
-        top_lipids = vdf.nlargest(top_n, '-log10(pValue)')['LipidMolec'].tolist()
+    if top_n > 0 and p_col in vdf.columns:
+        top_lipids = vdf.nlargest(top_n, p_col)['LipidMolec'].tolist()
         for lip in top_lipids:
             if lip not in labeled_lipids:
                 labeled_lipids.append(lip)

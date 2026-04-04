@@ -712,6 +712,7 @@ class AnalysisWorkflow:
         hide_non_sig: bool = False,
         top_n_labels: int = 0,
         custom_label_positions: Optional[Dict[str, Tuple[float, float]]] = None,
+        additional_labels: Optional[List[str]] = None,
     ) -> VolcanoResult:
         """Run volcano plot analysis.
 
@@ -730,6 +731,7 @@ class AnalysisWorkflow:
             hide_non_sig: Whether to hide non-significant points.
             top_n_labels: Number of top significant lipids to label.
             custom_label_positions: Manual label position overrides.
+            additional_labels: Extra lipids to label (user-selected).
 
         Returns:
             VolcanoResult with figures and data.
@@ -792,6 +794,7 @@ class AnalysisWorkflow:
             use_adjusted_p=use_adjusted,
             top_n_labels=top_n_labels,
             custom_label_positions=custom_label_positions,
+            additional_labels=additional_labels,
         )
 
         # Create concentration scatter

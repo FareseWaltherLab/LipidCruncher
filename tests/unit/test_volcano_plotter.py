@@ -1556,3 +1556,140 @@ class TestSignificanceLevels:
             experimental_samples=['s4', 's5', 's6'],
         )
         assert result.volcano_df['FoldChange'].iloc[0] == pytest.approx(expected_fc)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Additional Labels
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestAdditionalLabels:
+    """Tests for additional_labels parameter in create_volcano_plot.
+
+    These tests verify that user-selected lipids are labeled on the plot
+    independently of the top_n_labels ranking, and that the combined set
+    (top N + additional) is rendered correctly.
+    """
+
+    @pytest.fixture
+    def five_lipid_data(self):
+        """5 lipids with distinct raw and adjusted p-values."""
+        lipids = ['L1', 'L2', 'L3', 'L4', 'L5']
+        classes = ['PC', 'PC', 'PE', 'PE', 'SM']
+        df = _make_df(lipids=lipids, classes=classes, n_samples=6)
+        # Raw p-values rank: L1 < L2 < L3 < L4 < L5
+        # Adjusted p-values rank: L3 < L1 < L5 < L2 < L4  (different order)
+        stat_results = _make_stat_results(
+            lipids=lipids,
+            p_values=[0.001, 0.005, 0.01, 0.05, 0.10],
+            adjusted_p_values=[0.005, 0.08, 0.002, 0.20, 0.03],
+            effect_sizes=[2.0, -1.5, 1.0, -0.5, 0.3],
+        )
+        vd = VolcanoPlotterService.prepare_volcano_data(
+            df, stat_results,
+            control_samples=['s1', 's2', 's3'],
+            experimental_samples=['s4', 's5', 's6'],
+        )
+        colors = VolcanoPlotterService.generate_color_mapping(
+            list(set(classes)),
+        )
+        return vd, colors
+
+    def test_additional_labels_only(self, five_lipid_data):
+        """additional_labels alone (no top_n) should label specified lipids."""
+        vd, colors = five_lipid_data
+        fig = VolcanoPlotterService.create_volcano_plot(
+            vd, colors,
+            top_n_labels=0,
+            additional_labels=['L4', 'L5'],
+        )
+        text_annotations = [a for a in fig.layout.annotations if a.text]
+        labeled = {a.text for a in text_annotations}
+        assert labeled == {'L4', 'L5'}
+
+    def test_additional_labels_combined_with_top_n(self, five_lipid_data):
+        """top_n + additional_labels should produce the union (no duplicates)."""
+        vd, colors = five_lipid_data
+        fig = VolcanoPlotterService.create_volcano_plot(
+            vd, colors,
+            top_n_labels=2,
+            use_adjusted_p=True,
+            additional_labels=['L1', 'L4'],
+        )
+        text_annotations = [a for a in fig.layout.annotations if a.text]
+        labeled = {a.text for a in text_annotations}
+        # Top 2 by adjusted p: L3 (0.002), L1 (0.005)
+        # Additional: L1 (already in top 2), L4
+        assert labeled == {'L3', 'L1', 'L4'}
+
+    def test_additional_labels_deduplicates(self, five_lipid_data):
+        """A lipid in both top N and additional should appear only once."""
+        vd, colors = five_lipid_data
+        # Top 1 by adjusted p is L3
+        fig = VolcanoPlotterService.create_volcano_plot(
+            vd, colors,
+            top_n_labels=1,
+            use_adjusted_p=True,
+            additional_labels=['L3'],  # duplicate
+        )
+        text_annotations = [a for a in fig.layout.annotations if a.text]
+        labeled = [a.text for a in text_annotations]
+        assert labeled.count('L3') == 1
+
+    def test_additional_labels_nonexistent_ignored(self, five_lipid_data):
+        """Lipids not in the data should be silently skipped."""
+        vd, colors = five_lipid_data
+        fig = VolcanoPlotterService.create_volcano_plot(
+            vd, colors,
+            top_n_labels=0,
+            additional_labels=['L1', 'NONEXISTENT'],
+        )
+        text_annotations = [a for a in fig.layout.annotations if a.text]
+        labeled = {a.text for a in text_annotations}
+        assert labeled == {'L1'}
+
+    def test_additional_labels_custom_positions_applied(self, five_lipid_data):
+        """Custom positions should work for additional_labels lipids."""
+        vd, colors = five_lipid_data
+        custom = {'L4': (2.0, 3.0)}
+        fig_with = VolcanoPlotterService.create_volcano_plot(
+            vd, colors,
+            top_n_labels=0,
+            additional_labels=['L4'],
+            custom_label_positions=custom,
+        )
+        fig_without = VolcanoPlotterService.create_volcano_plot(
+            vd, colors,
+            top_n_labels=0,
+            additional_labels=['L4'],
+        )
+        ann_with = [a for a in fig_with.layout.annotations if a.text == 'L4'][0]
+        ann_without = [a for a in fig_without.layout.annotations if a.text == 'L4'][0]
+        # The custom offset should change the label position
+        assert ann_with.x != ann_without.x or ann_with.y != ann_without.y
+
+    def test_top_n_uses_adjusted_p_when_specified(self, five_lipid_data):
+        """Top N should rank by adjusted p-values when use_adjusted_p=True."""
+        vd, colors = five_lipid_data
+        fig = VolcanoPlotterService.create_volcano_plot(
+            vd, colors,
+            top_n_labels=2,
+            use_adjusted_p=True,
+        )
+        text_annotations = [a for a in fig.layout.annotations if a.text]
+        labeled = {a.text for a in text_annotations}
+        # Top 2 by adjusted p: L3 (0.002), L1 (0.005)
+        assert labeled == {'L3', 'L1'}
+
+    def test_top_n_uses_raw_p_when_not_adjusted(self, five_lipid_data):
+        """Top N should rank by raw p-values when use_adjusted_p=False."""
+        vd, colors = five_lipid_data
+        fig = VolcanoPlotterService.create_volcano_plot(
+            vd, colors,
+            top_n_labels=2,
+            use_adjusted_p=False,
+        )
+        text_annotations = [a for a in fig.layout.annotations if a.text]
+        labeled = {a.text for a in text_annotations}
+        # Top 2 by raw p: L1 (0.001), L2 (0.005)
+        assert labeled == {'L1', 'L2'}

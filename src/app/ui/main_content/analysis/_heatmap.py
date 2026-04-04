@@ -126,7 +126,7 @@ def _display_cluster_composition(
         key='heatmap_cluster_view',
     )
 
-    mode = 'species_count' if composition_view == "Species Count" else 'total_concentration'
+    mode = 'species_count' if composition_view == "Species Count" else 'concentration'
 
     # Get filtered data for concentration mode
     filtered_df, _ = LipidomicHeatmapPlotterService.filter_data(

@@ -794,6 +794,7 @@ class StreamlitAdapter:
         hide_non_sig: bool = False,
         top_n_labels: int = 0,
         custom_label_positions: Optional[Dict] = None,
+        additional_labels: Optional[tuple] = None,
     ):
         """Cached volcano plot analysis."""
         return AnalysisWorkflow.run_volcano(
@@ -802,6 +803,7 @@ class StreamlitAdapter:
             p_threshold=p_threshold, fc_threshold=fc_threshold,
             hide_non_sig=hide_non_sig, top_n_labels=top_n_labels,
             custom_label_positions=custom_label_positions,
+            additional_labels=list(additional_labels) if additional_labels else None,
         )
 
     @staticmethod

@@ -187,6 +187,7 @@ class VolcanoPlotterService:
         use_adjusted_p: bool = True,
         top_n_labels: int = 0,
         custom_label_positions: Optional[Dict[str, Tuple[float, float]]] = None,
+        additional_labels: Optional[List[str]] = None,
     ) -> go.Figure:
         """Create a Plotly volcano plot scatter with threshold lines.
 
@@ -255,11 +256,20 @@ class VolcanoPlotterService:
                 fig, display_df, p_col, q_threshold, fc_threshold
             )
 
-        # Top N labels with collision-aware placement
-        if top_n_labels > 0 and not vdf.empty:
-            _add_top_labels(
+        # Combine top N + additional labels for rendering
+        lipids_to_label: List[str] = []
+        if top_n_labels > 0:
+            top_df = vdf.sort_values(p_col, ascending=False).head(top_n_labels)
+            lipids_to_label = top_df['LipidMolec'].tolist()
+        if additional_labels:
+            for lip in additional_labels:
+                if lip not in lipids_to_label:
+                    lipids_to_label.append(lip)
+
+        if lipids_to_label and not vdf.empty:
+            _add_labels(
                 fig, vdf, p_col, color_mapping,
-                top_n_labels, custom_label_positions,
+                lipids_to_label, custom_label_positions,
             )
 
         # Layout
@@ -615,16 +625,17 @@ def _add_threshold_lines(
         )
 
 
-def _add_top_labels(
+def _add_labels(
     fig: go.Figure,
     vdf: pd.DataFrame,
     p_col: str,
     color_mapping: Dict[str, str],
-    top_n: int,
+    lipids_to_label: List[str],
     custom_positions: Optional[Dict[str, Tuple[float, float]]],
 ) -> None:
-    """Add collision-aware labels for the top N most significant lipids."""
-    sorted_df = vdf.sort_values(p_col, ascending=False).head(top_n)
+    """Add collision-aware labels for the specified lipids."""
+    sorted_df = vdf[vdf['LipidMolec'].isin(lipids_to_label)]
+    sorted_df = sorted_df.sort_values(p_col, ascending=False)
     placed_boxes: List[Dict[str, float]] = []
     custom_positions = custom_positions or {}
 
