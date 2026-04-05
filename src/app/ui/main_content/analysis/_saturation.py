@@ -9,7 +9,7 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.services.plotting.saturation_plot import SaturationPlotterService
+from app.services.plotting.saturation_plot import SaturationPlotterService, Y_PADDING_FACTOR
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
@@ -119,6 +119,8 @@ def _render_saturation_results(
                 display_fig = go.Figure(fig)
                 display_fig.layout.annotations = ()
                 display_fig.layout.shapes = ()
+                # Reset y-axis range that was expanded for annotations
+                _reset_y_range(display_fig)
             st.markdown(f"###### {lipid_class}")
             st.plotly_chart(display_fig, use_container_width=True)
             st.session_state.analysis_saturation_figs[
@@ -153,3 +155,17 @@ def _build_saturation_csv(
     if lipid_class in sat_data.plot_data:
         return sat_data.plot_data[lipid_class]
     return pd.DataFrame()
+
+
+def _reset_y_range(fig: go.Figure) -> None:
+    """Reset y-axis range to fit bar data without annotation headroom."""
+    y_max = 0.0
+    for trace in fig.data:
+        if not hasattr(trace, 'y') or trace.y is None or len(trace.y) == 0:
+            continue
+        err_arr = trace.error_y.array if trace.error_y and trace.error_y.array is not None else None
+        for i, val in enumerate(trace.y):
+            err = float(err_arr[i]) if err_arr is not None and i < len(err_arr) else 0.0
+            y_max = max(y_max, val + err)
+    if y_max > 0:
+        fig.update_layout(yaxis_range=[0, y_max * Y_PADDING_FACTOR])
