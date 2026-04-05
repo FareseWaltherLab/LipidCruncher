@@ -357,11 +357,20 @@ class DataStandardizationService:
             name = str(lipid_molec).strip()
 
             # SPLASH standards: extract the actual class
-            splash_match = re.match(
-                r'^SPLASH[\s(]+([A-Za-z]+)', name, re.IGNORECASE
-            )
-            if splash_match:
-                return splash_match.group(1).strip()
+            # Handles both "SPLASH LPC 18:1(d7)" and "SPLASH 16:0_Cer 18:1;O2(d9)"
+            if name.upper().startswith('SPLASH'):
+                # Try direct class after SPLASH (e.g., "SPLASH LPC ...")
+                splash_match = re.match(
+                    r'^SPLASH[\s(]+([A-Za-z][A-Za-z0-9-]*)', name, re.IGNORECASE
+                )
+                if splash_match:
+                    return splash_match.group(1).strip()
+                # Try class after leading chain (e.g., "SPLASH 16:0_Cer ...")
+                chain_class_match = re.match(
+                    r'^SPLASH\s+[\d:]+_([A-Za-z][A-Za-z0-9-]*)', name, re.IGNORECASE
+                )
+                if chain_class_match:
+                    return chain_class_match.group(1).strip()
 
             # New format: class is everything before first space
             # Legacy format: class is everything before first '('

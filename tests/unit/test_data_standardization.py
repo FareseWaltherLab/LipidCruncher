@@ -310,6 +310,19 @@ class TestInferClassKey:
     def test_cholesterol(self):
         assert DataStandardizationService.infer_class_key('Cholesterol') == 'Cholesterol'
 
+    def test_splash_space_separated(self):
+        """SPLASH with class directly after space (MS-DIAL format)."""
+        assert DataStandardizationService.infer_class_key('SPLASH LPC 18:1(d7)') == 'LPC'
+        assert DataStandardizationService.infer_class_key('SPLASH MG 18:1(d7)') == 'MG'
+        assert DataStandardizationService.infer_class_key('SPLASH Cholesterol(d7)') == 'Cholesterol'
+
+    def test_splash_chain_prefixed(self):
+        """SPLASH with fatty acid chain before class name (e.g., SPLASH 16:0_Cer)."""
+        assert DataStandardizationService.infer_class_key('SPLASH 16:0_Cer 18:1;O2(d9)') == 'Cer'
+        assert DataStandardizationService.infer_class_key('SPLASH 18:1_PI 15:0(d7)') == 'PI'
+        assert DataStandardizationService.infer_class_key('SPLASH 18:1_PS 15:0(d7)') == 'PS'
+        assert DataStandardizationService.infer_class_key('SPLASH 18:1_SM 18:1;O2(d9)') == 'SM'
+
 
 # =============================================================================
 # TestLipidSearchStandardization
