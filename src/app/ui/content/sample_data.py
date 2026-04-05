@@ -57,6 +57,7 @@ SAMPLE_DATA_INFO = {
 4. HFD+DCA (S1D–S11D, n=11)
 5. Blank (n=2)
 6. TQC (n=12)""",
+        'bqc_label': 'Diet:QC | BileAcid:QC',
     },
 }
 

@@ -156,10 +156,15 @@ def _display_detailed_statistics(
     if not show:
         return
 
+    # Context-appropriate column label for the group key
+    group_col = {'bar': 'Class', 'sat': 'Class', 'volcano': 'Lipid'}.get(
+        key_prefix, 'Group'
+    )
+
     rows = []
     for group_key, result in stat_summary.results.items():
         rows.append({
-            'Group': group_key,
+            group_col: group_key,
             'Test': result.test_name,
             'Statistic': f"{result.statistic:.4f}",
             'p-value': f"{result.p_value:.4e}",
@@ -199,7 +204,7 @@ def _display_detailed_statistics(
         for group_key, comparisons in stat_summary.posthoc_results.items():
             for comp in comparisons:
                 posthoc_rows.append({
-                    'Group': group_key,
+                    group_col: group_key,
                     'Comparison': f"{comp.group1} vs {comp.group2}",
                     'Test': comp.test_name,
                     'p-value': f"{comp.p_value:.4e}",

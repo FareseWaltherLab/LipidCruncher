@@ -70,6 +70,16 @@ def _populate_sample_experiment(data_format: str) -> None:
     info = get_sample_data_info(data_format)
     if not info:
         return
+    # Pre-check the confirm checkbox for all sample datasets
+    st.session_state['confirm_checkbox'] = True
+
+    # Pre-set BQC widget keys (works for all formats, including those
+    # without full experiment metadata like Metabolomics Workbench)
+    bqc_label = info.get('bqc_label')
+    if bqc_label:
+        st.session_state['bqc_radio'] = 'Yes'
+        st.session_state['bqc_label_radio'] = bqc_label
+
     exp = info.get('experiment')
     if not exp:
         return
@@ -82,15 +92,12 @@ def _populate_sample_experiment(data_format: str) -> None:
     for i, n in enumerate(exp['samples_per_condition']):
         st.session_state[f'n_samples_{i}'] = n
 
-    # Pre-set BQC widget keys
+    # Pre-set BQC from experiment metadata (overrides top-level if present)
     if exp.get('bqc_label'):
         st.session_state['bqc_radio'] = 'Yes'
         st.session_state['bqc_label_radio'] = exp['bqc_label']
-    else:
+    elif bqc_label is None:
         st.session_state['bqc_radio'] = 'No'
-
-    # Pre-check the confirm checkbox
-    st.session_state['confirm_checkbox'] = True
 
 
 def _clear_sample_experiment() -> None:
