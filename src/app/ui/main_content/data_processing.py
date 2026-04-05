@@ -169,6 +169,10 @@ Your MS-DIAL export contains both raw and pre-normalized intensity values:
             st.session_state.cleaned_df = None
             st.session_state.pre_filter_df = None
             st.session_state.continuation_df = None
+            # Clear column mapping so it gets rebuilt from fresh standardization
+            # (otherwise the stale override mapping causes incorrect column lookups)
+            st.session_state.column_mapping = None
+            st.session_state.n_intensity_cols = None
 
         data_type = st.radio(
             "Select which data to use:",

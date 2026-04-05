@@ -242,11 +242,13 @@ class TestMSDIALOverridePreservation:
         assert any("override:['s1', 's2', 's3']" in v for v in text_values)
 
     def test_override_preserved_after_data_type_switch(self, msdial_features_dict):
-        """Switching data type clears standardized_df but NOT the override."""
+        """Switching data type clears standardized_df and column_mapping but NOT the override."""
         at = AppTest.from_function(override_preservation_script, default_timeout=DEFAULT_TIMEOUT)
         at.session_state['msdial_features'] = msdial_features_dict
         at.session_state['_msdial_override_samples'] = ['s1', 's2', 's3']
         at.session_state['standardized_df'] = 'placeholder'
+        at.session_state['column_mapping'] = 'stale_mapping'
+        at.session_state['n_intensity_cols'] = 99
         at.run()
         # Switch to pre-normalized (triggers on_data_type_change callback)
         radio = at.radio(key='msdial_data_type_radio')
@@ -255,8 +257,10 @@ class TestMSDIALOverridePreservation:
         text_values = [t.value for t in at.text]
         # Override should still be present
         assert any("override:['s1', 's2', 's3']" in v for v in text_values)
-        # standardized_df should be cleared by the callback
+        # standardized_df, column_mapping, n_intensity_cols should all be cleared
         assert any("std_df_cleared:True" in v for v in text_values)
+        assert any("col_mapping_cleared:True" in v for v in text_values)
+        assert any("n_intensity_cleared:True" in v for v in text_values)
 
     def test_override_cleared_on_reset(self, msdial_features_dict):
         """reset_data_state() removes the override from session state."""

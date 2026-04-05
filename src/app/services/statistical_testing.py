@@ -643,7 +643,7 @@ class StatisticalTestingService:
         """
         test_type = 'parametric'
 
-        if n_tests <= 3:
+        if n_tests <= 1:
             correction = 'uncorrected'
         else:
             correction = 'fdr_bh'

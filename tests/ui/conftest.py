@@ -128,6 +128,8 @@ def override_preservation_script():
     override = st.session_state.get('_msdial_override_samples')
     st.text(f"override:{override}")
     st.text(f"std_df_cleared:{st.session_state.get('standardized_df') is None}")
+    st.text(f"col_mapping_cleared:{st.session_state.get('column_mapping') is None}")
+    st.text(f"n_intensity_cleared:{st.session_state.get('n_intensity_cols') is None}")
 
 
 def override_reset_script():

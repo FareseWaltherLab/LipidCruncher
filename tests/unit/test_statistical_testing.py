@@ -511,13 +511,17 @@ class TestPostHoc:
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestAutoMode:
-    def test_few_tests_uncorrected(self):
-        result = StatisticalTestingService.apply_auto_mode(2, 2)
+    def test_single_test_uncorrected(self):
+        result = StatisticalTestingService.apply_auto_mode(1, 2)
         assert result['correction_method'] == 'uncorrected'
 
-    def test_three_tests_uncorrected(self):
+    def test_two_tests_fdr(self):
+        result = StatisticalTestingService.apply_auto_mode(2, 2)
+        assert result['correction_method'] == 'fdr_bh'
+
+    def test_three_tests_fdr(self):
         result = StatisticalTestingService.apply_auto_mode(3, 2)
-        assert result['correction_method'] == 'uncorrected'
+        assert result['correction_method'] == 'fdr_bh'
 
     def test_many_tests_fdr(self):
         result = StatisticalTestingService.apply_auto_mode(10, 2)
@@ -767,8 +771,8 @@ class TestSaturationTests:
             fa_data, auto_config,
         )
         assert summary.test_info['test_type'] == 'parametric'
-        # 1 class * 3 FA types = 3 tests → uncorrected
-        assert summary.test_info['correction'] == 'uncorrected'
+        # 1 class * 3 FA types = 3 tests → fdr_bh (correction for multiple tests)
+        assert summary.test_info['correction'] == 'fdr_bh'
 
     def test_parameters_populated(self, fa_data, experiment_2x3, manual_parametric_config):
         summary = StatisticalTestingService.run_saturation_tests(
@@ -973,11 +977,18 @@ class TestResolveConfig:
         assert corr == 'fdr_bh'
         assert ph == 'tukey'
 
-    def test_auto_few_tests(self, auto_config):
+    def test_auto_single_test(self, auto_config):
+        tt, corr, ph = StatisticalTestingService._resolve_config(
+            auto_config, 1, 2
+        )
+        assert corr == 'uncorrected'
+        assert ph == 'uncorrected'
+
+    def test_auto_multiple_tests(self, auto_config):
         tt, corr, ph = StatisticalTestingService._resolve_config(
             auto_config, 2, 2
         )
-        assert corr == 'uncorrected'
+        assert corr == 'fdr_bh'
         assert ph == 'uncorrected'
 
 

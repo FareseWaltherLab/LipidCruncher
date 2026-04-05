@@ -19,6 +19,7 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.services.report_generator import generate_pdf_report, build_metadata_from_experiment
 from app.workflows.analysis import AnalysisWorkflow
+from app.ui.content import STATISTICAL_TESTING_DOCS, SATURATION_PROFILE_DOCS
 
 from app.ui.main_content.analysis._bar_chart import _display_bar_chart
 from app.ui.main_content.analysis._pie_charts import _display_pie_charts
@@ -70,6 +71,12 @@ def display_analysis_module(
         for err in errors:
             st.error(err)
         return
+
+    with st.expander("📊 About Statistical Testing"):
+        st.markdown(STATISTICAL_TESTING_DOCS)
+
+    with st.expander("📊 About Saturation Profile Calculations"):
+        st.markdown(SATURATION_PROFILE_DOCS)
 
     analysis_type = st.radio(
         "Select Analysis",
