@@ -45,6 +45,7 @@ class LipidSearchCleaner(BaseDataCleaner):
             ValueError: If dataset is empty or becomes empty after cleaning.
         """
         messages = []
+        initial_count = len(df)
 
         # Validate input
         if LipidSearchCleaner.is_effectively_empty(df):
@@ -77,6 +78,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         # Step 6: Final cleanup
         df = LipidSearchCleaner._final_cleanup(df)
 
+        messages.append(LipidSearchCleaner._make_summary_message(initial_count, len(df)))
         return df, messages
 
     # ==================== Cleaning Steps ====================

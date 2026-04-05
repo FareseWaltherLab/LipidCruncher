@@ -215,6 +215,15 @@ class BaseDataCleaner:
         msg = f"Removed {removed} rows with all-zero intensities" if removed > 0 else None
         return df, msg
 
+    @staticmethod
+    def _make_summary_message(initial_count: int, final_count: int) -> str:
+        """Build a pipeline summary message."""
+        removed = initial_count - final_count
+        return (
+            f"Summary: {initial_count} entries → {final_count} unique lipid species "
+            f"({removed} removed total)"
+        )
+
     # ==================== Internal Standards Extraction ====================
 
     @staticmethod

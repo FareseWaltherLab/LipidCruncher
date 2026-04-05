@@ -43,6 +43,7 @@ class GenericCleaner(BaseDataCleaner):
             ValueError: If dataset is empty or becomes empty after cleaning.
         """
         messages = []
+        initial_count = len(df)
 
         # Validate input
         if GenericCleaner.is_effectively_empty(df):
@@ -76,6 +77,7 @@ class GenericCleaner(BaseDataCleaner):
                 "No lipid species with non-zero intensity values found."
             )
 
+        messages.append(GenericCleaner._make_summary_message(initial_count, len(df)))
         return df.reset_index(drop=True), messages
 
     # ==================== Cleaning Steps ====================

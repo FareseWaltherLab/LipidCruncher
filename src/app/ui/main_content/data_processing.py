@@ -237,6 +237,9 @@ def _display_score_filtering(msms_filtering_available: bool) -> dict:
 
     def on_quality_level_change():
         st.session_state.msdial_quality_level = st.session_state[widget_key]
+        # Sync MS/MS checkbox with the new preset value
+        new_preset = MSDIAL_QUALITY_PRESETS.get(st.session_state[widget_key], {})
+        st.session_state['msdial_custom_msms'] = new_preset.get('require_msms', False)
 
     selected_option = st.radio(
         "Quality filtering level:",

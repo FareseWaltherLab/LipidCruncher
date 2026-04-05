@@ -48,6 +48,8 @@ class MSDIALCleaner(BaseDataCleaner):
                 "Dataset is empty. Please upload a valid MS-DIAL data file."
             )
 
+        initial_count = len(df)
+
         # Step 1: Apply quality filtering
         df, filter_msgs = MSDIALCleaner._step_apply_quality_filter(df, quality_config)
         messages.extend(filter_msgs)
@@ -77,6 +79,8 @@ class MSDIALCleaner(BaseDataCleaner):
             raise ValueError(
                 "No lipid species with non-zero intensity values found."
             )
+
+        messages.append(MSDIALCleaner._make_summary_message(initial_count, len(df)))
 
         return df.reset_index(drop=True), messages
 
