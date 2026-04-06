@@ -303,16 +303,14 @@ class TestExperimentConfigWithoutSamples:
         assert config.n_conditions == 2
 
     def test_remove_nonexistent_samples(self):
-        """Test that removing non-existent samples is handled gracefully."""
+        """Test that removing non-existent samples raises ValueError."""
         config = ExperimentConfig(
             n_conditions=2,
             conditions_list=['WT', 'KO'],
             number_of_samples_list=[3, 3]
         )
-        # s100 doesn't exist - should be ignored
-        new_config = config.without_samples(['s1', 's100'])
-
-        assert new_config.number_of_samples_list == [2, 3]
+        with pytest.raises(ValueError, match="unknown samples"):
+            config.without_samples(['s1', 's100'])
 
     def test_remove_samples_from_all_conditions(self):
         """Test removing one sample from each condition."""
@@ -505,15 +503,14 @@ class TestExperimentConfigListLengthValidation:
 class TestExperimentConfigConditionLabels:
     """Additional tests for condition label validation."""
 
-    def test_duplicate_condition_labels_allowed(self):
-        """Test that duplicate condition labels are allowed (may be valid use case)."""
-        # Note: Duplicates might be a valid scenario in some experimental designs
-        config = ExperimentConfig(
-            n_conditions=3,
-            conditions_list=['Control', 'Treatment', 'Control'],
-            number_of_samples_list=[2, 2, 2]
-        )
-        assert config.conditions_list == ['Control', 'Treatment', 'Control']
+    def test_duplicate_condition_labels_rejected(self):
+        """Test that duplicate condition labels are rejected."""
+        with pytest.raises(ValidationError, match="unique"):
+            ExperimentConfig(
+                n_conditions=3,
+                conditions_list=['Control', 'Treatment', 'Control'],
+                number_of_samples_list=[2, 2, 2]
+            )
 
     def test_very_long_condition_label(self):
         """Test condition label with very long string."""
@@ -788,27 +785,26 @@ class TestExperimentConfigWithoutSamplesEdgeCases:
     """Additional edge cases for without_samples method."""
 
     def test_remove_samples_case_sensitive(self):
-        """Test that sample removal is case-sensitive."""
+        """Test that sample removal is case-sensitive and rejects unknown labels."""
         config = ExperimentConfig(
             n_conditions=2,
             conditions_list=['A', 'B'],
             number_of_samples_list=[3, 3]
         )
-        # 'S1' (uppercase) should not match 's1' (lowercase)
-        new_config = config.without_samples(['S1', 'S2'])
-        # No samples should be removed since 'S1' != 's1'
-        assert new_config.number_of_samples_list == [3, 3]
+        # 'S1' (uppercase) doesn't exist as a sample label
+        with pytest.raises(ValueError, match="unknown samples"):
+            config.without_samples(['S1', 'S2'])
 
     def test_remove_samples_with_invalid_format(self):
-        """Test removing samples with invalid format is ignored."""
+        """Test removing samples with invalid format raises ValueError."""
         config = ExperimentConfig(
             n_conditions=2,
             conditions_list=['A', 'B'],
             number_of_samples_list=[3, 3]
         )
         # 'sample1' format doesn't match 's1' format
-        new_config = config.without_samples(['sample1', 'x1', '1'])
-        assert new_config.number_of_samples_list == [3, 3]
+        with pytest.raises(ValueError, match="unknown samples"):
+            config.without_samples(['sample1', 'x1', '1'])
 
     def test_remove_samples_duplicates_in_list(self):
         """Test removing with duplicate entries in removal list."""

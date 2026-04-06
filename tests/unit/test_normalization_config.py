@@ -1,5 +1,6 @@
 """Unit tests for NormalizationConfig model."""
 import pytest
+from pydantic import ValidationError
 from app.models.normalization import NormalizationConfig
 
 
@@ -1010,30 +1011,22 @@ class TestNormalizationConfigInputValidation:
             pass  # Also acceptable
 
     def test_inf_concentration_handling(self):
-        """Test infinity concentration handling."""
+        """Test infinity concentration is rejected."""
         import math
-        # Infinity should fail the positive check? Actually inf > 0 is True
-        config = NormalizationConfig(
-            method='protein',
-            protein_concentrations={'s1': math.inf}
-        )
-        assert config.protein_concentrations['s1'] == math.inf
+        with pytest.raises(ValidationError, match="must be finite"):
+            NormalizationConfig(
+                method='protein',
+                protein_concentrations={'s1': math.inf}
+            )
 
     def test_nan_concentration_handling(self):
-        """Test NaN concentration handling."""
+        """Test NaN concentration is rejected."""
         import math
-        # NaN comparisons are tricky - NaN <= 0 is False, but NaN > 0 is also False
-        # The validator uses `if conc <= 0` so NaN should pass the check
-        # but this may not be desired behavior
-        try:
-            config = NormalizationConfig(
+        with pytest.raises(ValidationError, match="must be finite"):
+            NormalizationConfig(
                 method='protein',
                 protein_concentrations={'s1': math.nan}
             )
-            # If it passes, NaN is stored
-            assert math.isnan(config.protein_concentrations['s1'])
-        except ValueError:
-            pass  # Also acceptable if validation catches NaN
 
     def test_very_small_positive_concentration(self):
         """Test very small positive concentration (near machine epsilon)."""

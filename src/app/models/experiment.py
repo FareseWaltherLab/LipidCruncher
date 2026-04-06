@@ -2,7 +2,7 @@
 Experiment configuration model.
 """
 from pydantic import BaseModel, Field, field_validator, computed_field, model_validator
-from typing import List
+from typing import List, Optional
 
 
 class ExperimentConfig(BaseModel):
@@ -10,7 +10,8 @@ class ExperimentConfig(BaseModel):
     Experiment configuration with automatic derived field calculations.
 
     Attributes:
-        n_conditions: Number of experimental conditions
+        n_conditions: Number of experimental conditions (auto-derived from
+            conditions_list if not provided; validated for consistency if provided)
         conditions_list: Labels for each condition
         number_of_samples_list: Number of samples per condition
 
@@ -26,15 +27,30 @@ class ExperimentConfig(BaseModel):
     conditions_list: List[str] = Field(description="Labels for each condition")
     number_of_samples_list: List[int] = Field(description="Number of samples per condition")
 
+    @model_validator(mode='before')
+    @classmethod
+    def auto_derive_n_conditions(cls, data):
+        """Auto-derive n_conditions from conditions_list when not provided."""
+        if isinstance(data, dict):
+            conditions = data.get('conditions_list')
+            if conditions is not None and 'n_conditions' not in data:
+                data = {**data, 'n_conditions': len(conditions)}
+        return data
+
     def __hash__(self) -> int:
         return hash((self.n_conditions, tuple(self.conditions_list), tuple(self.number_of_samples_list)))
 
     @field_validator('conditions_list')
     @classmethod
     def validate_conditions_not_empty(cls, v):
-        """Ensure all condition labels are non-empty strings."""
+        """Ensure all condition labels are non-empty strings and unique."""
         if not all(label and label.strip() for label in v):
             raise ValueError("All condition labels must be non-empty")
+        if len(v) != len(set(v)):
+            duplicates = [label for label in v if v.count(label) > 1]
+            raise ValueError(
+                f"Condition labels must be unique, found duplicates: {sorted(set(duplicates))}"
+            )
         return v
 
     @field_validator('number_of_samples_list')
@@ -111,6 +127,14 @@ class ExperimentConfig(BaseModel):
         """
         if not samples_to_remove:
             return self
+
+        # Validate that all samples to remove actually exist
+        unknown = set(samples_to_remove) - set(self.full_samples_list)
+        if unknown:
+            raise ValueError(
+                f"Cannot remove unknown samples: {sorted(unknown)}. "
+                f"Valid samples are: {self.full_samples_list}"
+            )
 
         # Count samples per condition after removal
         new_conditions = []

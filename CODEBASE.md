@@ -241,7 +241,7 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 | Model | File | Purpose |
 |---|---|---|
 | `ExperimentConfig` | `experiment.py` | Defines experimental setup: number of conditions, condition labels, sample counts. Computed properties generate sample labels (s1, s2, ...) and group them by condition. |
-| `NormalizationConfig` | `normalization.py` | Normalization method (`none`, `internal_standard`, `protein`, `internal_standard_protein`, `total_intensity`), selected lipid classes, standard-to-class mappings, concentrations. |
+| `NormalizationConfig` | `normalization.py` | Normalization method (`none`, `internal_standard`, `protein`, `both`, `total_intensity`), selected lipid classes, standard-to-class mappings, concentrations. |
 | `StatisticalTestConfig` | `statistics.py` | Test type (`parametric`, `non_parametric`, `auto`), multiple-testing correction (`fdr_bh`, `bonferroni`), post-hoc method (`tukey`, `bonferroni`), `auto_transform` flag for log10 transformation. |
 
 ### Services

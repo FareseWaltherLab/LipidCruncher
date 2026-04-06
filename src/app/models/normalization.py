@@ -1,6 +1,7 @@
 """
 Normalization configuration model.
 """
+import math
 from typing import Dict, List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -38,9 +39,13 @@ class NormalizationConfig(BaseModel):
     @field_validator('intsta_concentrations')
     @classmethod
     def validate_intsta_concentrations_positive(cls, v):
-        """Ensure all internal standard concentrations are positive."""
+        """Ensure all internal standard concentrations are positive and finite."""
         if v is not None:
             for standard, conc in v.items():
+                if not math.isfinite(conc):
+                    raise ValueError(
+                        f"Internal standard concentration for '{standard}' must be finite, got {conc}"
+                    )
                 if conc <= 0:
                     raise ValueError(
                         f"Internal standard concentration for '{standard}' must be positive, got {conc}"
@@ -50,9 +55,13 @@ class NormalizationConfig(BaseModel):
     @field_validator('protein_concentrations')
     @classmethod
     def validate_protein_concentrations_positive(cls, v):
-        """Ensure all protein concentrations are positive."""
+        """Ensure all protein concentrations are positive and finite."""
         if v is not None:
             for sample, conc in v.items():
+                if not math.isfinite(conc):
+                    raise ValueError(
+                        f"Protein concentration for sample '{sample}' must be finite, got {conc}"
+                    )
                 if conc <= 0:
                     raise ValueError(
                         f"Protein concentration for sample '{sample}' must be positive, got {conc}"
