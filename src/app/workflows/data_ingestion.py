@@ -239,7 +239,12 @@ class DataIngestionWorkflow:
                 )
 
         except ValueError as e:
-            result.validation_warnings.append(f"Zero filtering skipped: {str(e)}")
+            msg = str(e)
+            # Only suppress user-configuration errors; propagate programmer errors
+            if any(kw in msg.lower() for kw in ["threshold", "bqc", "no samples", "empty", "lipidmolec"]):
+                result.validation_warnings.append(f"Zero filtering skipped: {msg}")
+            else:
+                raise
 
         return result
 

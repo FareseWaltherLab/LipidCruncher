@@ -265,6 +265,14 @@ class NormalizationService:
         """
         normalized_dfs = []
 
+        # Fail-fast: validate all classes have mappings before processing any
+        missing = [cls for cls in selected_classes if config.get_standard_for_class(cls) is None]
+        if missing:
+            raise ValueError(
+                f"No internal standard mapped for lipid class(es): {missing}. "
+                f"Please provide mappings in internal_standards."
+            )
+
         for lipid_class in selected_classes:
             standard_name = config.get_standard_for_class(lipid_class)
             if standard_name is None:

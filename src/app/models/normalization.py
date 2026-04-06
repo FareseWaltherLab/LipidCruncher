@@ -2,7 +2,7 @@
 Normalization configuration model.
 """
 from typing import Dict, List, Optional, Literal
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class NormalizationConfig(BaseModel):
@@ -21,7 +21,7 @@ class NormalizationConfig(BaseModel):
     model_config = {"frozen": True}
 
     method: Literal['none', 'internal_standard', 'protein', 'both', 'total_intensity'] = 'none'
-    selected_classes: List[str] = []
+    selected_classes: List[str] = Field(default_factory=list)
     internal_standards: Optional[Dict[str, str]] = None
     intsta_concentrations: Optional[Dict[str, float]] = None
     protein_concentrations: Optional[Dict[str, float]] = None
@@ -30,9 +30,9 @@ class NormalizationConfig(BaseModel):
         return hash((
             self.method,
             tuple(self.selected_classes),
-            tuple(sorted(self.internal_standards.items())) if self.internal_standards else None,
-            tuple(sorted(self.intsta_concentrations.items())) if self.intsta_concentrations else None,
-            tuple(sorted(self.protein_concentrations.items())) if self.protein_concentrations else None,
+            tuple(sorted(self.internal_standards.items())) if self.internal_standards else (),
+            tuple(sorted(self.intsta_concentrations.items())) if self.intsta_concentrations else (),
+            tuple(sorted(self.protein_concentrations.items())) if self.protein_concentrations else (),
         ))
 
     @field_validator('intsta_concentrations')

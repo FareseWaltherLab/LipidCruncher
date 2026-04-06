@@ -144,20 +144,16 @@ class ZeroFilteringService:
             bqc_label in experiment.conditions_list
         )
 
-        # Evaluate each lipid
-        to_keep = []
-        for idx, row in df.iterrows():
-            should_keep = ZeroFilteringService._evaluate_lipid(
-                row=row,
-                experiment=experiment,
-                config=config,
-                bqc_label=bqc_label if has_bqc else None
-            )
-            if should_keep:
-                to_keep.append(idx)
+        # Vectorized evaluation of all lipids
+        keep_mask = ZeroFilteringService._evaluate_all_lipids(
+            df=df,
+            experiment=experiment,
+            config=config,
+            bqc_label=bqc_label if has_bqc else None
+        )
 
         # Create filtered dataframe
-        filtered_df = df.loc[to_keep].reset_index(drop=True)
+        filtered_df = df[keep_mask].reset_index(drop=True)
 
         # Compute removed species
         kept_species = set(filtered_df['LipidMolec'].tolist())
@@ -185,89 +181,78 @@ class ZeroFilteringService:
             )
 
     @staticmethod
-    def _evaluate_lipid(
-        row: pd.Series,
+    def _evaluate_all_lipids(
+        df: pd.DataFrame,
         experiment: ExperimentConfig,
         config: ZeroFilterConfig,
         bqc_label: Optional[str]
-    ) -> bool:
+    ) -> pd.Series:
         """
-        Evaluate whether a single lipid should be kept.
+        Vectorized evaluation of which lipids to keep.
 
         Args:
-            row: DataFrame row containing lipid data.
+            df: DataFrame with intensity columns.
             experiment: Experiment configuration.
             config: Zero filtering configuration.
             bqc_label: BQC condition label (already validated), or None.
 
         Returns:
-            True if lipid should be kept, False if it should be removed.
+            Boolean Series — True for lipids to keep.
         """
-        # Initialize tracking variables
-        # If BQC exists, default to fail (must pass to be kept)
-        # If no BQC, default to pass (BQC check is skipped)
-        bqc_fail = bqc_label is not None
-        non_bqc_all_fail = True
+        n_rows = len(df)
+        # If BQC exists, default to fail (must pass); if no BQC, default to pass
+        bqc_pass = pd.Series(bqc_label is None, index=df.index)
+        non_bqc_any_pass = pd.Series(False, index=df.index)
 
         for cond_idx, cond_samples in enumerate(experiment.individual_samples_list):
             if not cond_samples:
                 continue
 
-            # Count zeros in this condition
-            zero_count = ZeroFilteringService._count_zeros(
-                row=row,
-                samples=cond_samples,
-                threshold=config.detection_threshold
-            )
-
-            n_samples = len(cond_samples)
-            zero_proportion = zero_count / n_samples if n_samples > 0 else 1.0
-
-            # Check if this is BQC condition
             condition_name = experiment.conditions_list[cond_idx]
             is_bqc = condition_name == bqc_label
+            threshold_pct = config.bqc_threshold if is_bqc else config.non_bqc_threshold
 
-            # Determine which threshold to use
-            threshold = config.bqc_threshold if is_bqc else config.non_bqc_threshold
+            # Vectorized zero counting for this condition
+            zero_proportion = ZeroFilteringService._condition_zero_proportion(
+                df, cond_samples, config.detection_threshold
+            )
 
-            # Check if condition passes (proportion below threshold)
-            if zero_proportion < threshold:
-                if is_bqc:
-                    bqc_fail = False
-                else:
-                    non_bqc_all_fail = False
+            passes = zero_proportion < threshold_pct
 
-        # Keep lipid if: BQC passes AND at least one non-BQC passes
-        return not bqc_fail and not non_bqc_all_fail
+            if is_bqc:
+                bqc_pass = passes
+            else:
+                non_bqc_any_pass = non_bqc_any_pass | passes
+
+        return bqc_pass & non_bqc_any_pass
 
     @staticmethod
-    def _count_zeros(
-        row: pd.Series,
+    def _condition_zero_proportion(
+        df: pd.DataFrame,
         samples: List[str],
-        threshold: float
-    ) -> int:
+        detection_threshold: float
+    ) -> pd.Series:
         """
-        Count how many samples have values at or below the detection threshold.
+        Compute per-row zero proportion for a set of samples (vectorized).
+
+        Treats NaN and values <= detection_threshold as zeros.
 
         Args:
-            row: DataFrame row containing intensity values.
+            df: DataFrame with intensity columns.
             samples: List of sample names in the condition.
-            threshold: Detection threshold (values <= this are counted).
+            detection_threshold: Values <= this are counted as zero.
 
         Returns:
-            Count of zero/below-detection values.
+            Series of zero proportions (0.0 to 1.0) per row.
         """
-        zero_count = 0
+        cols = [f'intensity[{s}]' for s in samples if f'intensity[{s}]' in df.columns]
+        if not cols:
+            # No columns found means no zeros can be counted → 0% zeros → passes
+            return pd.Series(0.0, index=df.index)
 
-        for sample in samples:
-            col = f'intensity[{sample}]'
-            if col in row.index:
-                value = row[col]
-                # Handle NaN as zero
-                if pd.isna(value) or value <= threshold:
-                    zero_count += 1
-
-        return zero_count
+        subset = df[cols]
+        zero_counts = (subset.isna() | (subset <= detection_threshold)).sum(axis=1)
+        return zero_counts / len(cols)
 
     @staticmethod
     def get_zero_statistics(
@@ -298,32 +283,35 @@ class ZeroFilteringService:
 
         ZeroFilteringService._validate_input(df, experiment)
 
-        stats = []
         total_samples = sum(experiment.number_of_samples_list)
 
-        for _, row in df.iterrows():
-            lipid = row['LipidMolec']
-            total_zeros = 0
-            zeros_per_condition = {}
+        # Compute zero counts per condition (vectorized)
+        condition_zero_counts = {}
+        total_zeros = pd.Series(0, index=df.index)
 
-            for cond_idx, cond_samples in enumerate(experiment.individual_samples_list):
-                condition_name = experiment.conditions_list[cond_idx]
-                zero_count = ZeroFilteringService._count_zeros(
-                    row=row,
-                    samples=cond_samples,
-                    threshold=config.detection_threshold
-                )
-                zeros_per_condition[condition_name] = zero_count
-                total_zeros += zero_count
+        for cond_idx, cond_samples in enumerate(experiment.individual_samples_list):
+            condition_name = experiment.conditions_list[cond_idx]
+            cols = [f'intensity[{s}]' for s in cond_samples if f'intensity[{s}]' in df.columns]
+            if cols:
+                subset = df[cols]
+                cond_zeros = (subset.isna() | (subset <= config.detection_threshold)).sum(axis=1)
+            else:
+                cond_zeros = pd.Series(0, index=df.index)
+            condition_zero_counts[condition_name] = cond_zeros
+            total_zeros = total_zeros + cond_zeros
 
-            zero_percentage = (total_zeros / total_samples * 100) if total_samples > 0 else 0
+        zero_percentage = (total_zeros / total_samples * 100).round(2) if total_samples > 0 else 0
 
-            stats.append({
-                'LipidMolec': lipid,
-                'total_zeros': total_zeros,
-                'total_samples': total_samples,
-                'zero_percentage': round(zero_percentage, 2),
-                'zeros_per_condition': zeros_per_condition
-            })
+        stats_df = pd.DataFrame({
+            'LipidMolec': df['LipidMolec'].values,
+            'total_zeros': total_zeros.values,
+            'total_samples': total_samples,
+            'zero_percentage': zero_percentage if isinstance(zero_percentage, pd.Series) else 0,
+            'zeros_per_condition': [
+                {cond: int(condition_zero_counts[cond].iloc[i])
+                 for cond in experiment.conditions_list}
+                for i in range(len(df))
+            ]
+        })
 
-        return pd.DataFrame(stats)
+        return stats_df

@@ -88,10 +88,14 @@ class BarChartResult:
         figure: Plotly bar chart figure.
         abundance_df: DataFrame with mean/std per class per condition.
         stat_summary: Statistical test results (if tests were run).
+        success: Whether the analysis completed successfully.
+        validation_errors: List of error messages if analysis failed.
     """
-    figure: go.Figure
-    abundance_df: pd.DataFrame
+    figure: Optional[go.Figure] = None
+    abundance_df: Optional[pd.DataFrame] = None
     stat_summary: Optional[StatisticalTestSummary] = None
+    success: bool = True
+    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -102,10 +106,14 @@ class PieChartResult:
         figure: Plotly pie chart figure.
         data_df: DataFrame with class proportions for this condition.
         condition: The condition this chart represents.
+        success: Whether the analysis completed successfully.
+        validation_errors: List of error messages if analysis failed.
     """
-    figure: go.Figure
-    data_df: pd.DataFrame
+    figure: Optional[go.Figure] = None
+    data_df: Optional[pd.DataFrame] = None
     condition: str = ""
+    success: bool = True
+    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -116,12 +124,16 @@ class SaturationResult:
         plots: Dict mapping class name to its Plotly figure.
         stat_summary: Statistical test results (if tests were run).
         consolidated_lipids: Dict mapping class → list of consolidated lipid names.
+        success: Whether the analysis completed successfully.
+        validation_errors: List of error messages if analysis failed.
     """
     plots: Dict[str, go.Figure] = dataclass_field(default_factory=dict)
     stat_summary: Optional[StatisticalTestSummary] = None
     consolidated_lipids: Dict[str, List[str]] = dataclass_field(
         default_factory=dict
     )
+    success: bool = True
+    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -133,6 +145,8 @@ class FACHResult:
         data_dict: Per-condition DataFrames with Carbon/DB/Proportion.
         unparsable_lipids: Lipid names that could not be parsed.
         weighted_averages: Per-condition (avg_carbon, avg_db) tuples.
+        success: Whether the analysis completed successfully.
+        validation_errors: List of error messages if analysis failed.
     """
     figure: Optional[go.Figure] = None
     data_dict: Dict[str, pd.DataFrame] = dataclass_field(default_factory=dict)
@@ -140,6 +154,8 @@ class FACHResult:
     weighted_averages: Dict[str, Tuple[float, float]] = dataclass_field(
         default_factory=dict
     )
+    success: bool = True
+    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -167,6 +183,8 @@ class PathwayResult:
         pathway_dict: Dict with class, abundance ratio, saturation ratio.
         fold_change_df: Per-class fold change DataFrame.
         saturation_df: Per-class saturation ratio DataFrame.
+        success: Whether the analysis completed successfully.
+        validation_errors: List of error messages if analysis failed.
     """
     figure: Optional[plt.Figure] = None
     pathway_dict: Dict[str, list] = dataclass_field(default_factory=dict)
@@ -176,6 +194,8 @@ class PathwayResult:
     saturation_df: pd.DataFrame = dataclass_field(
         default_factory=pd.DataFrame
     )
+    success: bool = True
+    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -188,12 +208,16 @@ class VolcanoResult:
         concentration_plot: Plotly concentration-vs-fold-change figure.
         concentration_df: DataFrame from concentration plot.
         stat_summary: The statistical test summary used.
+        success: Whether the analysis completed successfully.
+        validation_errors: List of error messages if analysis failed.
     """
     figure: Optional[go.Figure] = None
     volcano_data: Optional[VolcanoData] = None
     concentration_plot: Optional[go.Figure] = None
     concentration_df: Optional[pd.DataFrame] = None
     stat_summary: Optional[StatisticalTestSummary] = None
+    success: bool = True
+    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -204,10 +228,14 @@ class HeatmapResult:
         figure: Plotly heatmap figure.
         z_scores_df: Row-wise Z-score DataFrame.
         cluster_composition: Cluster composition DataFrame (clustered mode only).
+        success: Whether the analysis completed successfully.
+        validation_errors: List of error messages if analysis failed.
     """
     figure: Optional[go.Figure] = None
     z_scores_df: Optional[pd.DataFrame] = None
     cluster_composition: Optional[pd.DataFrame] = None
+    success: bool = True
+    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 # ═══════════════════════════════════════════════════════════════════════

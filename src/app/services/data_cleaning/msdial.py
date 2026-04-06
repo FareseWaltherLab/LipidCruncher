@@ -105,11 +105,16 @@ class MSDIALCleaner(BaseDataCleaner):
     @staticmethod
     def _step_remove_duplicates(df: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[str]]:
         """Remove duplicates step (keeps highest Total score)."""
+        has_score = 'Total score' in df.columns
         pre_count = len(df)
         df = MSDIALCleaner._remove_duplicates(df)
 
         removed = pre_count - len(df)
-        msg = f"Removed {removed} duplicate entries" if removed > 0 else None
+        if removed > 0:
+            strategy = "highest Total score" if has_score else "first occurrence (Total score column not found)"
+            msg = f"Removed {removed} duplicate entries (kept {strategy})"
+        else:
+            msg = None
         return df, msg
 
     # ==================== Quality Filtering ====================

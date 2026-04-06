@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
-from app.constants import COV_THRESHOLD_DEFAULT
+from app.constants import COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING
 
 from ..models.experiment import ExperimentConfig
 from ..models.normalization import NormalizationConfig
@@ -70,8 +70,8 @@ class SessionState:
       main_app.py          → page, module
     """
     # --- App-level routing (owner: main_app.py) ---
-    page: str = 'landing'
-    module: str = "Data Cleaning, Filtering, & Normalization"
+    page: str = PAGE_LANDING
+    module: str = MODULE_DATA_PROCESSING
 
     # --- File upload (owner: file_upload.py) ---
     raw_df: Optional[pd.DataFrame] = None

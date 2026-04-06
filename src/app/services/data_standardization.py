@@ -15,6 +15,11 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
+from app.constants import (
+    LYSO_CLASSES, normalize_hydroxyl,
+    sort_chains_lipid_maps, remove_phantom_chains,
+    get_chain_separator, format_lipid_name,
+)
 from app.services.format_detection import DataFormat, FormatDetectionService
 
 
@@ -248,11 +253,6 @@ class DataStandardizationService:
             PC(16:0_18:1) -> PC 16:0_18:1
             LPC(20:0_0:0) -> LPC 20:0
         """
-        from app.constants import (
-            LYSO_CLASSES, normalize_hydroxyl,
-            sort_chains_lipid_maps, remove_phantom_chains,
-            get_chain_separator, format_lipid_name,
-        )
         try:
             if not lipid_name or pd.isna(lipid_name):
                 return "Unknown"

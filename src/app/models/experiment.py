@@ -112,9 +112,6 @@ class ExperimentConfig(BaseModel):
         if not samples_to_remove:
             return self
 
-        # Calculate remaining samples per condition
-        remaining_samples = [s for s in self.full_samples_list if s not in samples_to_remove]
-
         # Count samples per condition after removal
         new_conditions = []
         new_sample_counts = []
@@ -132,31 +129,4 @@ class ExperimentConfig(BaseModel):
             n_conditions=len(new_conditions),
             conditions_list=new_conditions,
             number_of_samples_list=new_sample_counts
-        )
-
-    @classmethod
-    def from_user_input(
-        cls,
-        n_conditions: int,
-        conditions_list: List[str],
-        number_of_samples_list: List[int]
-    ) -> "ExperimentConfig":
-        """
-        Factory method to create ExperimentConfig from user input.
-
-        Args:
-            n_conditions: Number of conditions
-            conditions_list: Condition labels
-            number_of_samples_list: Sample counts per condition
-
-        Returns:
-            ExperimentConfig instance
-
-        Raises:
-            ValueError: If validation fails
-        """
-        return cls(
-            n_conditions=n_conditions,
-            conditions_list=conditions_list,
-            number_of_samples_list=number_of_samples_list
         )

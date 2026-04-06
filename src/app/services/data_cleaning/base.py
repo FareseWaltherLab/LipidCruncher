@@ -153,7 +153,11 @@ class BaseDataCleaner:
         try:
             lipid_col = BaseDataCleaner.find_lipid_column(df)
         except KeyError:
-            return df  # No lipid column, return unchanged
+            available = ', '.join(list(df.columns)[:10])
+            raise ValueError(
+                f"Cannot validate lipid rows: 'LipidMolec' column not found. "
+                f"Available columns: [{available}]"
+            )
 
         valid_mask = BaseDataCleaner._create_valid_lipid_mask(df, lipid_col)
         return df[valid_mask].copy()

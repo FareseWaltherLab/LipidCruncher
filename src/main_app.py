@@ -31,6 +31,7 @@ st.set_page_config(
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
@@ -98,7 +99,7 @@ def display_app_page() -> None:
 
             # Back to landing button
             if st.button("← Back to Home", key="back_home_no_data"):
-                st.session_state.page = 'landing'
+                st.session_state.page = PAGE_LANDING
                 st.rerun()
         return
 
@@ -147,13 +148,13 @@ def display_app_page() -> None:
     # ==========================================================================
     # Main area: Module routing
     # ==========================================================================
-    current_module = st.session_state.get('module', 'Data Cleaning, Filtering, & Normalization')
+    current_module = st.session_state.get('module', MODULE_DATA_PROCESSING)
 
-    if current_module == "Data Cleaning, Filtering, & Normalization":
+    if current_module == MODULE_DATA_PROCESSING:
         with center:
             _display_module1(df, raw_df, experiment, bqc_label, data_format)
 
-    elif current_module == "Quality Check & Analysis":
+    elif current_module == MODULE_QC_ANALYSIS:
         with center:
             _display_module2_and_3(experiment, bqc_label, data_format)
 
@@ -219,11 +220,11 @@ def _display_module1(
         if st.button("Next: Quality Check, Visualization & Analysis →"):
             _reset_qc_state()
             _reset_analysis_state()
-            st.session_state.module = "Quality Check & Analysis"
+            st.session_state.module = MODULE_QC_ANALYSIS
             st.rerun()
 
     if st.button("← Back to Home", key="back_home_module1"):
-        st.session_state.page = 'landing'
+        st.session_state.page = PAGE_LANDING
         StreamlitAdapter.reset_data_state()
         st.rerun()
 
@@ -239,7 +240,7 @@ def _display_module2_and_3(
     if continuation_df is None:
         st.error("No normalized data available. Please complete Module 1 first.")
         if st.button("← Back to Data Processing", key="back_processing_error"):
-            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+            st.session_state.module = MODULE_DATA_PROCESSING
             st.rerun()
         return
 
@@ -274,11 +275,11 @@ def _display_module2_and_3(
         if st.button("← Back to Data Processing", key="back_processing_module2"):
             _reset_qc_state()
             _reset_analysis_state()
-            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+            st.session_state.module = MODULE_DATA_PROCESSING
             st.rerun()
     with col2:
         if st.button("← Back to Home", key="back_home_module2"):
-            st.session_state.page = 'landing'
+            st.session_state.page = PAGE_LANDING
             StreamlitAdapter.reset_data_state()
             st.rerun()
 
@@ -289,10 +290,14 @@ def _display_module2_and_3(
 
 def main() -> None:
     """Main application entry point."""
-    if st.session_state.page == 'landing':
-        display_landing_page()
-    elif st.session_state.page == 'app':
-        display_app_page()
+    try:
+        if st.session_state.page == PAGE_LANDING:
+            display_landing_page()
+        elif st.session_state.page == PAGE_APP:
+            display_app_page()
+    except KeyError as e:
+        st.error(f"Session state error. Please refresh the page. Detail: {e}")
+        st.stop()
 
 
 if __name__ == "__main__":

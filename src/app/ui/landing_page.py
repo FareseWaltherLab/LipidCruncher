@@ -13,6 +13,8 @@ from typing import Optional
 import streamlit as st
 from PIL import Image
 
+from app.constants import PAGE_APP
+
 
 try:
     from pdf2image import convert_from_path
@@ -179,7 +181,7 @@ def _display_call_to_action() -> None:
     btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
     with btn_col2:
         if st.button("🚀 Start Crunching", use_container_width=True, type="primary"):
-            st.session_state.page = 'app'
+            st.session_state.page = PAGE_APP
             st.rerun()
 
     st.markdown("---")

@@ -346,25 +346,20 @@ class LipidSearchCleaner(BaseDataCleaner):
         if class_filter:
             temp_df = temp_df[temp_df['ClassKey'].isin(class_filter)]
 
+        existing_lipids = set(clean_df['LipidMolec'].values)
+        new_rows = []
         for lipid in temp_df['LipidMolec'].unique():
-            if lipid not in clean_df['LipidMolec'].values:
-                clean_df = LipidSearchCleaner._add_best_lipid_entry(
-                    temp_df, clean_df, lipid
-                )
+            if lipid not in existing_lipids:
+                lipid_df = temp_df[temp_df['LipidMolec'] == lipid]
+                best_row = LipidSearchCleaner._select_best_row(lipid_df)
+                new_rows.append({col: best_row[col] for col in clean_df.columns})
+                existing_lipids.add(lipid)
+
+        if new_rows:
+            clean_df = pd.concat(
+                [clean_df, pd.DataFrame(new_rows)], ignore_index=True
+            )
         return clean_df
-
-    @staticmethod
-    def _add_best_lipid_entry(
-        source_df: pd.DataFrame,
-        target_df: pd.DataFrame,
-        lipid: str
-    ) -> pd.DataFrame:
-        """Add the best quality entry for a lipid to target DataFrame."""
-        lipid_df = source_df[source_df['LipidMolec'] == lipid]
-        best_row = LipidSearchCleaner._select_best_row(lipid_df)
-
-        new_row = {col: best_row[col] for col in target_df.columns}
-        return pd.concat([target_df, pd.DataFrame([new_row])], ignore_index=True)
 
     @staticmethod
     def _select_best_row(lipid_df: pd.DataFrame) -> pd.Series:

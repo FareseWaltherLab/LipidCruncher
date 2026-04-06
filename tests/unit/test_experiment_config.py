@@ -19,9 +19,9 @@ class TestExperimentConfigCreation:
         assert config.conditions_list == ['WT', 'KO']
         assert config.number_of_samples_list == [3, 3]
 
-    def test_from_user_input(self):
-        """Test factory method."""
-        config = ExperimentConfig.from_user_input(
+    def test_direct_construction(self):
+        """Test direct construction with keyword arguments."""
+        config = ExperimentConfig(
             n_conditions=2,
             conditions_list=['Control', 'Treatment'],
             number_of_samples_list=[4, 4]
@@ -743,39 +743,39 @@ class TestExperimentConfigRepr:
         assert 'n_conditions' in str_repr
 
 
-class TestExperimentConfigFactoryMethod:
-    """Additional tests for from_user_input factory method."""
+class TestExperimentConfigConstructionValidation:
+    """Tests for validation during direct construction."""
 
-    def test_from_user_input_propagates_n_conditions_error(self):
-        """Test factory method propagates n_conditions validation error."""
+    def test_construction_propagates_n_conditions_error(self):
+        """Test construction propagates n_conditions validation error."""
         with pytest.raises(ValueError, match="greater than 0"):
-            ExperimentConfig.from_user_input(
+            ExperimentConfig(
                 n_conditions=0,
                 conditions_list=[],
                 number_of_samples_list=[]
             )
 
-    def test_from_user_input_propagates_empty_label_error(self):
-        """Test factory method propagates empty label validation error."""
+    def test_construction_propagates_empty_label_error(self):
+        """Test construction propagates empty label validation error."""
         with pytest.raises(ValueError, match="non-empty"):
-            ExperimentConfig.from_user_input(
+            ExperimentConfig(
                 n_conditions=2,
                 conditions_list=['Valid', ''],
                 number_of_samples_list=[2, 2]
             )
 
-    def test_from_user_input_propagates_sample_count_error(self):
-        """Test factory method propagates sample count validation error."""
+    def test_construction_propagates_sample_count_error(self):
+        """Test construction propagates sample count validation error."""
         with pytest.raises(ValueError, match="greater than 0"):
-            ExperimentConfig.from_user_input(
+            ExperimentConfig(
                 n_conditions=2,
                 conditions_list=['A', 'B'],
                 number_of_samples_list=[2, 0]
             )
 
-    def test_from_user_input_with_all_valid_inputs(self):
-        """Test factory method with all valid inputs."""
-        config = ExperimentConfig.from_user_input(
+    def test_construction_with_all_valid_inputs(self):
+        """Test construction with all valid inputs."""
+        config = ExperimentConfig(
             n_conditions=3,
             conditions_list=['Control', 'Low Dose', 'High Dose'],
             number_of_samples_list=[5, 5, 5]

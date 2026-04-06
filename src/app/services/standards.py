@@ -13,6 +13,7 @@ from app.constants import (
     INTERNAL_STANDARD_LIPID_PATTERNS,
     INTERNAL_STANDARD_CLASS_PATTERN,
 )
+from app.services.data_standardization import DataStandardizationService
 
 
 @dataclass
@@ -597,7 +598,6 @@ class StandardsService:
         # Normalize uploaded standard names to LIPID MAPS notation so they
         # match the names in the cleaned dataset (which have already been
         # standardized during data ingestion).
-        from app.services.data_standardization import DataStandardizationService
         standards_df = standards_df.copy()
         standards_df['LipidMolec'] = standards_df['LipidMolec'].apply(
             DataStandardizationService.standardize_lipid_name

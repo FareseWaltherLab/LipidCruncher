@@ -8,6 +8,16 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 
 
 # =============================================================================
+# Application Routing
+# =============================================================================
+
+MODULE_DATA_PROCESSING = "Data Cleaning, Filtering, & Normalization"
+MODULE_QC_ANALYSIS = "Quality Check & Analysis"
+PAGE_LANDING = "landing"
+PAGE_APP = "app"
+
+
+# =============================================================================
 # Format Mappings
 # =============================================================================
 
