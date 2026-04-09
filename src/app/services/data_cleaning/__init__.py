@@ -3,16 +3,35 @@ Data cleaning service package.
 Provides format-specific cleaners for lipidomic data.
 """
 import pandas as pd
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from ...models.experiment import ExperimentConfig
 from ..format_detection import DataFormat
 
 from .configs import GradeFilterConfig, QualityFilterConfig, CleaningResult
+from .exceptions import DataCleaningError, ConfigurationError, EmptyDataError
 from .base import BaseDataCleaner
 from .lipidsearch import LipidSearchCleaner
 from .msdial import MSDIALCleaner
 from .generic import GenericCleaner
+
+
+# Registry mapping DataFormat to cleaning function.
+# Each entry is a callable(df, experiment, **kwargs) -> Tuple[DataFrame, List[str]].
+# Adding a new format only requires adding an entry here.
+_CLEANER_REGISTRY: Dict[DataFormat, type] = {
+    DataFormat.LIPIDSEARCH: LipidSearchCleaner,
+    DataFormat.MSDIAL: MSDIALCleaner,
+    DataFormat.GENERIC: GenericCleaner,
+    DataFormat.METABOLOMICS_WORKBENCH: GenericCleaner,
+    DataFormat.UNKNOWN: GenericCleaner,
+}
+
+# Maps DataFormat to the keyword argument name for its format-specific config.
+_FORMAT_CONFIG_KEY: Dict[DataFormat, str] = {
+    DataFormat.LIPIDSEARCH: 'grade_config',
+    DataFormat.MSDIAL: 'quality_config',
+}
 
 
 class DataCleaningService:
@@ -51,16 +70,22 @@ class DataCleaningService:
             CleaningResult containing cleaned_df, internal_standards_df, and messages.
 
         Raises:
-            ValueError: If dataset is empty or becomes empty after cleaning.
+            DataCleaningError: If dataset is empty or becomes empty after cleaning.
         """
-        # Dispatch to format-specific cleaner
-        if data_format == DataFormat.LIPIDSEARCH:
-            cleaned_df, messages = LipidSearchCleaner.clean(df, experiment, grade_config)
-        elif data_format == DataFormat.MSDIAL:
-            cleaned_df, messages = MSDIALCleaner.clean(df, experiment, quality_config)
-        else:
-            # Generic and Metabolomics Workbench use same cleaner
-            cleaned_df, messages = GenericCleaner.clean(df, experiment)
+        # Look up cleaner from registry
+        cleaner_cls = _CLEANER_REGISTRY.get(data_format, GenericCleaner)
+
+        # Build format-specific kwargs
+        config_map = {
+            'grade_config': grade_config,
+            'quality_config': quality_config,
+        }
+        config_key = _FORMAT_CONFIG_KEY.get(data_format)
+        kwargs = {}
+        if config_key and config_map[config_key] is not None:
+            kwargs[config_key] = config_map[config_key]
+
+        cleaned_df, messages = cleaner_cls.clean(df, experiment, **kwargs)
 
         # Extract internal standards
         cleaned_df, internal_standards_df = BaseDataCleaner.extract_internal_standards(
@@ -131,6 +156,9 @@ __all__ = [
     'GradeFilterConfig',
     'QualityFilterConfig',
     'CleaningResult',
+    'DataCleaningError',
+    'ConfigurationError',
+    'EmptyDataError',
     'BaseDataCleaner',
     'LipidSearchCleaner',
     'MSDIALCleaner',

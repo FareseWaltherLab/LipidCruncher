@@ -1,21 +1,37 @@
 """
 Configuration classes for data cleaning.
 """
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
 import pandas as pd
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-@dataclass
-class GradeFilterConfig:
+class GradeFilterConfig(BaseModel):
     """Configuration for LipidSearch grade filtering.
 
     Args:
         grade_config: Optional dict mapping ClassKey to list of acceptable grades.
                      If None, uses default filtering (A/B/C for all classes).
     """
+    model_config = {"frozen": True}
+
     grade_config: Optional[Dict[str, List[str]]] = None
+
+    @field_validator('grade_config')
+    @classmethod
+    def validate_grades(cls, v: Optional[Dict[str, List[str]]]) -> Optional[Dict[str, List[str]]]:
+        if v is None:
+            return v
+        valid_grades = {'A', 'B', 'C', 'D'}
+        for class_key, grades in v.items():
+            invalid = set(grades) - valid_grades
+            if invalid:
+                raise ValueError(
+                    f"Invalid grade(s) {invalid} for class '{class_key}'. "
+                    f"Valid grades are: {sorted(valid_grades)}"
+                )
+        return v
 
     def __hash__(self) -> int:
         if self.grade_config is None:
@@ -28,15 +44,16 @@ class GradeFilterConfig:
         return self.grade_config is None
 
 
-@dataclass
-class QualityFilterConfig:
+class QualityFilterConfig(BaseModel):
     """Configuration for MS-DIAL quality filtering.
 
     Args:
         total_score_threshold: Minimum Total Score (0-100). 0 means no filtering.
         require_msms: Whether to require MS/MS matched = TRUE.
     """
-    total_score_threshold: int = 0
+    model_config = {"frozen": True}
+
+    total_score_threshold: int = Field(default=0, ge=0, le=100)
     require_msms: bool = False
 
     def __hash__(self) -> int:
@@ -63,8 +80,7 @@ class QualityFilterConfig:
         return cls(total_score_threshold=0, require_msms=False)
 
 
-@dataclass
-class CleaningResult:
+class CleaningResult(BaseModel):
     """Result object containing cleaned data and metadata.
 
     Args:
@@ -72,6 +88,8 @@ class CleaningResult:
         internal_standards_df: DataFrame containing only internal standards.
         filter_messages: Optional list of filter messages (e.g., rows removed).
     """
-    cleaned_df: pd.DataFrame = field(default_factory=pd.DataFrame)
-    internal_standards_df: pd.DataFrame = field(default_factory=pd.DataFrame)
-    filter_messages: List[str] = field(default_factory=list)
+    model_config = {"arbitrary_types_allowed": True}
+
+    cleaned_df: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    internal_standards_df: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    filter_messages: List[str] = Field(default_factory=list)

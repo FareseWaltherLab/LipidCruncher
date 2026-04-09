@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 
 from ...models.experiment import ExperimentConfig
 from .base import BaseDataCleaner
+from .exceptions import EmptyDataError
 
 
 class GenericCleaner(BaseDataCleaner):
@@ -47,7 +48,7 @@ class GenericCleaner(BaseDataCleaner):
 
         # Validate input
         if GenericCleaner.is_effectively_empty(df):
-            raise ValueError(
+            raise EmptyDataError(
                 "Dataset is empty. Please upload a valid data file with lipid species."
             )
 
@@ -73,7 +74,7 @@ class GenericCleaner(BaseDataCleaner):
             messages.append(msg)
 
         if df.empty:
-            raise ValueError(
+            raise EmptyDataError(
                 "No lipid species with non-zero intensity values found."
             )
 

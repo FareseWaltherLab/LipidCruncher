@@ -18,7 +18,9 @@ from ..services.data_cleaning import (
     DataCleaningService,
     CleaningResult,
     GradeFilterConfig,
-    QualityFilterConfig
+    QualityFilterConfig,
+    DataCleaningError,
+    ConfigurationError,
 )
 from ..services.zero_filtering import (
     ZeroFilteringService,
@@ -163,7 +165,7 @@ class DataIngestionWorkflow:
             result.internal_standards_df = cleaning_result.internal_standards_df
             result.cleaning_messages = cleaning_result.filter_messages
 
-        except (ValueError, KeyError) as e:
+        except (DataCleaningError, ValueError, KeyError) as e:
             result.is_valid = False
             result.validation_errors.append(str(e))
             return result
@@ -238,9 +240,12 @@ class DataIngestionWorkflow:
                     f"({filter_result.species_before} → {filter_result.species_after})"
                 )
 
-        except ValueError as e:
+        except ConfigurationError as e:
+            # User-configuration errors are recoverable — show as warning
+            result.validation_warnings.append(f"Zero filtering skipped: {e}")
+        except (DataCleaningError, ValueError) as e:
             msg = str(e)
-            # Only suppress user-configuration errors; propagate programmer errors
+            # Only suppress known data-related errors; propagate programmer errors
             if any(kw in msg.lower() for kw in ["threshold", "bqc", "no samples", "empty", "lipidmolec"]):
                 result.validation_warnings.append(f"Zero filtering skipped: {msg}")
             else:

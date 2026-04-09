@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 from ...models.experiment import ExperimentConfig
 from .base import BaseDataCleaner
 from .configs import QualityFilterConfig
+from .exceptions import EmptyDataError, ConfigurationError
 
 
 class MSDIALCleaner(BaseDataCleaner):
@@ -44,7 +45,7 @@ class MSDIALCleaner(BaseDataCleaner):
 
         # Validate input
         if MSDIALCleaner.is_effectively_empty(df):
-            raise ValueError(
+            raise EmptyDataError(
                 "Dataset is empty. Please upload a valid MS-DIAL data file."
             )
 
@@ -76,7 +77,7 @@ class MSDIALCleaner(BaseDataCleaner):
             messages.append(msg)
 
         if df.empty:
-            raise ValueError(
+            raise EmptyDataError(
                 "No lipid species with non-zero intensity values found."
             )
 
@@ -95,7 +96,7 @@ class MSDIALCleaner(BaseDataCleaner):
         df, messages = MSDIALCleaner._apply_quality_filter(df, quality_config)
 
         if df.empty:
-            raise ValueError(
+            raise ConfigurationError(
                 "No data remaining after quality filtering. "
                 "Please adjust your quality filter settings."
             )

@@ -6,8 +6,14 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple
 
 from ...models.experiment import ExperimentConfig
+from ...constants import (
+    normalize_hydroxyl, sort_chains_lipid_maps,
+    remove_phantom_chains, format_lipid_name,
+    LYSO_CLASSES,
+)
 from .base import BaseDataCleaner
 from .configs import GradeFilterConfig
+from .exceptions import EmptyDataError, ConfigurationError
 
 
 class LipidSearchCleaner(BaseDataCleaner):
@@ -22,7 +28,7 @@ class LipidSearchCleaner(BaseDataCleaner):
     """
 
     # Columns to keep in cleaned output
-    OUTPUT_COLUMNS: List[str] = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt']
+    OUTPUT_COLUMNS: Tuple[str, ...] = ('LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt')
 
     @staticmethod
     def clean(
@@ -49,7 +55,7 @@ class LipidSearchCleaner(BaseDataCleaner):
 
         # Validate input
         if LipidSearchCleaner.is_effectively_empty(df):
-            raise ValueError(
+            raise EmptyDataError(
                 "Dataset is empty. Please upload a valid LipidSearch data file."
             )
 
@@ -90,7 +96,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         df = LipidSearchCleaner._remove_missing_fa_keys(df)
 
         if df.empty:
-            raise ValueError(
+            raise EmptyDataError(
                 "No valid lipid species found. "
                 "Dataset contains no rows with valid fatty acid (FA) keys."
             )
@@ -109,7 +115,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         df = LipidSearchCleaner._apply_grade_filter(df, grade_config)
 
         if df.empty:
-            raise ValueError(
+            raise ConfigurationError(
                 "No lipid species remain after grade filtering. "
                 "Please adjust your grade filter settings."
             )
@@ -129,7 +135,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         df = LipidSearchCleaner._select_best_auc(df, experiment, grade_config)
 
         if df.empty:
-            raise ValueError(
+            raise EmptyDataError(
                 "No lipid species remain after quality filtering."
             )
 
@@ -200,22 +206,16 @@ class LipidSearchCleaner(BaseDataCleaner):
         return df.rename(columns={'LipidMolec_modified': 'LipidMolec'})
 
     @staticmethod
-    def _standardize_single_name(class_key: str, fa_key) -> str:
+    def _standardize_single_name(class_key: str, fa_key: object) -> str:
         """Standardize a single lipid name to LIPID MAPS shorthand notation.
 
         Args:
             class_key: Lipid class (e.g., 'PC', 'PE', 'Ch')
-            fa_key: Fatty acid key (e.g., '18:0_20:4')
+            fa_key: Fatty acid key (e.g., '18:0_20:4'). May be str, float (NaN), or None.
 
         Returns:
             Standardized lipid name (e.g., 'PC 18:0_20:4')
         """
-        from app.constants import (
-            normalize_hydroxyl, sort_chains_lipid_maps,
-            remove_phantom_chains, format_lipid_name,
-            LYSO_CLASSES,
-        )
-
         fa_key = "" if pd.isna(fa_key) else str(fa_key)
 
         # Special handling for Cholesterol
@@ -268,6 +268,9 @@ class LipidSearchCleaner(BaseDataCleaner):
 
     # ==================== AUC Selection ====================
 
+    # Grade priority for sorting: lower number = better grade
+    _GRADE_PRIORITY: Dict[str, int] = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
+
     @staticmethod
     def _select_best_auc(
         df: pd.DataFrame,
@@ -278,88 +281,55 @@ class LipidSearchCleaner(BaseDataCleaner):
         Select best AUC for each lipid based on grade priority.
 
         When multiple entries exist for the same lipid, select based on:
-        1. Highest TotalSmpIDRate(%)
-        2. Best grade (A > B > C)
+        1. Best grade (A > B > C > D)
+        2. Highest TotalSmpIDRate(%)
+
+        Default mode: A/B for all classes, C only for LPC/SM.
+        Custom mode: each class has its own allowed grades from config.
         """
-        sample_names = experiment.full_samples_list
-        clean_df = LipidSearchCleaner._initialize_output_df(sample_names)
+        # Filter to eligible entries based on grade config
+        eligible = LipidSearchCleaner._build_eligibility_mask(df, grade_config)
+        df = df[eligible].copy()
 
+        if df.empty:
+            sample_cols = [f'intensity[{s}]' for s in experiment.full_samples_list]
+            return pd.DataFrame(
+                columns=['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'TotalSmpIDRate(%)'] + sample_cols
+            )
+
+        # Sort by best grade first, then highest quality rate
+        df['_grade_priority'] = df['TotalGrade'].map(LipidSearchCleaner._GRADE_PRIORITY).fillna(99)
+        df = df.sort_values(
+            ['_grade_priority', 'TotalSmpIDRate(%)'],
+            ascending=[True, False]
+        )
+
+        # Keep first (best) entry per lipid
+        df = df.drop_duplicates(subset=['LipidMolec'], keep='first')
+        df = df.drop(columns=['_grade_priority'])
+
+        return df.reset_index(drop=True)
+
+    @staticmethod
+    def _build_eligibility_mask(
+        df: pd.DataFrame,
+        grade_config: Optional[Dict[str, List[str]]]
+    ) -> 'pd.Series':
+        """Build boolean mask for entries eligible for AUC selection."""
         if grade_config is None:
-            clean_df = LipidSearchCleaner._process_default_grades(df, clean_df, sample_names)
-        else:
-            clean_df = LipidSearchCleaner._process_custom_grades(
-                df, clean_df, sample_names, grade_config
+            # Default: A/B for all classes, C only for LPC/SM
+            return (
+                df['TotalGrade'].isin(['A', 'B']) |
+                (df['TotalGrade'].eq('C') & df['ClassKey'].isin(['LPC', 'SM']))
             )
 
-        return clean_df
-
-    @staticmethod
-    def _initialize_output_df(full_samples_list: List[str]) -> pd.DataFrame:
-        """Initialize empty DataFrame with correct columns."""
-        columns = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'TotalSmpIDRate(%)'] + \
-                  [f'intensity[{sample}]' for sample in full_samples_list]
-        return pd.DataFrame(columns=columns)
-
-    @staticmethod
-    def _process_default_grades(
-        df: pd.DataFrame,
-        clean_df: pd.DataFrame,
-        sample_names: List[str]
-    ) -> pd.DataFrame:
-        """Process grades using default rules (A/B for all, C for LPC/SM)."""
-        for grade in ['A', 'B', 'C']:
-            class_filter = ['LPC', 'SM'] if grade == 'C' else None
-            clean_df = LipidSearchCleaner._process_grade(
-                df, clean_df, [grade], sample_names, class_filter
+        # Custom: each class has its own allowed grades
+        eligible = pd.Series(False, index=df.index)
+        for class_key, grades in grade_config.items():
+            eligible = eligible | (
+                df['ClassKey'].eq(class_key) & df['TotalGrade'].isin(grades)
             )
-        return clean_df
-
-    @staticmethod
-    def _process_custom_grades(
-        df: pd.DataFrame,
-        clean_df: pd.DataFrame,
-        sample_names: List[str],
-        grade_config: Dict[str, List[str]]
-    ) -> pd.DataFrame:
-        """Process grades using custom configuration."""
-        for grade in ['A', 'B', 'C']:
-            classes_for_grade = [
-                class_key for class_key, grades in grade_config.items()
-                if grade in grades
-            ]
-            if classes_for_grade:
-                clean_df = LipidSearchCleaner._process_grade(
-                    df, clean_df, [grade], sample_names, classes_for_grade
-                )
-        return clean_df
-
-    @staticmethod
-    def _process_grade(
-        df: pd.DataFrame,
-        clean_df: pd.DataFrame,
-        grades: List[str],
-        sample_names: List[str],
-        class_filter: Optional[List[str]] = None
-    ) -> pd.DataFrame:
-        """Process lipids of specific grades."""
-        temp_df = df[df['TotalGrade'].isin(grades)]
-        if class_filter:
-            temp_df = temp_df[temp_df['ClassKey'].isin(class_filter)]
-
-        existing_lipids = set(clean_df['LipidMolec'].values)
-        new_rows = []
-        for lipid in temp_df['LipidMolec'].unique():
-            if lipid not in existing_lipids:
-                lipid_df = temp_df[temp_df['LipidMolec'] == lipid]
-                best_row = LipidSearchCleaner._select_best_row(lipid_df)
-                new_rows.append({col: best_row[col] for col in clean_df.columns})
-                existing_lipids.add(lipid)
-
-        if new_rows:
-            clean_df = pd.concat(
-                [clean_df, pd.DataFrame(new_rows)], ignore_index=True
-            )
-        return clean_df
+        return eligible
 
     @staticmethod
     def _select_best_row(lipid_df: pd.DataFrame) -> pd.Series:
@@ -367,8 +337,9 @@ class LipidSearchCleaner(BaseDataCleaner):
         max_quality = lipid_df['TotalSmpIDRate(%)'].max()
         best_quality_df = lipid_df[lipid_df['TotalSmpIDRate(%)'] == max_quality].copy()
 
-        grade_priority = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
-        best_quality_df['grade_priority'] = best_quality_df['TotalGrade'].map(grade_priority).fillna(99)
+        best_quality_df['grade_priority'] = best_quality_df['TotalGrade'].map(
+            LipidSearchCleaner._GRADE_PRIORITY
+        ).fillna(99)
 
         return best_quality_df.sort_values('grade_priority').iloc[0]
 

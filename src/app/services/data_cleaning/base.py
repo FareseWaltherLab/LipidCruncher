@@ -9,6 +9,7 @@ from app.constants import (
     INTERNAL_STANDARD_LIPID_PATTERNS,
     INTERNAL_STANDARD_CLASS_PATTERN,
 )
+from .exceptions import EmptyDataError
 
 
 class BaseDataCleaner:
@@ -19,7 +20,7 @@ class BaseDataCleaner:
     """
 
     # Invalid lipid name patterns
-    INVALID_LIPID_PATTERNS: List[str] = [
+    INVALID_LIPID_PATTERNS: Tuple[str, ...] = (
         r'^\s*$',           # Empty strings or pure whitespace
         r'^Unknown$',       # Unknown from failed standardization
         r'^[#@$%&*]+$',     # Strings of only special characters
@@ -27,10 +28,10 @@ class BaseDataCleaner:
         r'^nan$',           # Literal 'nan'
         r'^null$',          # Literal 'null'
         r'^none$',          # Literal 'none'
-    ]
+    )
 
     # Internal standard patterns (imported from app.constants)
-    INTERNAL_STANDARD_LIPID_PATTERNS: List[str] = INTERNAL_STANDARD_LIPID_PATTERNS
+    INTERNAL_STANDARD_LIPID_PATTERNS: Tuple[str, ...] = tuple(INTERNAL_STANDARD_LIPID_PATTERNS)
     INTERNAL_STANDARD_CLASS_PATTERN: str = INTERNAL_STANDARD_CLASS_PATTERN
 
     # ==================== Validation Methods ====================
@@ -126,19 +127,17 @@ class BaseDataCleaner:
         rename_dict: Dict[str, str]
     ) -> Tuple[List[str], Dict[str, str]]:
         """Add intensity columns via case-insensitive lookup."""
+        col_map = {col.lower(): col for col in df.columns}
+
         for sample in full_samples_list:
             expected_col = f'intensity[{sample}]'.lower()
-            found = False
+            actual_col = col_map.get(expected_col)
 
-            for actual_col in df.columns:
-                if actual_col.lower() == expected_col:
-                    columns.append(actual_col)
-                    rename_dict[actual_col] = f'intensity[{sample}]'
-                    found = True
-                    break
-
-            if not found:
+            if actual_col is None:
                 raise KeyError(f"Missing intensity column: intensity[{sample}]")
+
+            columns.append(actual_col)
+            rename_dict[actual_col] = f'intensity[{sample}]'
 
         return columns, rename_dict
 
@@ -200,7 +199,7 @@ class BaseDataCleaner:
         df = BaseDataCleaner.remove_invalid_lipid_rows(df)
 
         if df.empty:
-            raise ValueError(
+            raise EmptyDataError(
                 "No valid lipid species found. All rows had invalid or missing lipid names. "
                 "Please check that your 'LipidMolec' column contains valid identifiers."
             )

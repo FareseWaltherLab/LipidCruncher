@@ -11,6 +11,9 @@ from app.services.data_cleaning import (
     LipidSearchCleaner,
     MSDIALCleaner,
     GenericCleaner,
+    DataCleaningError,
+    ConfigurationError,
+    EmptyDataError,
 )
 from app.services.format_detection import DataFormat
 from app.models.experiment import ExperimentConfig
@@ -103,27 +106,27 @@ class TestGradeFilterConfig:
     def test_custom_config(self):
         """Test custom grade config."""
         grade_dict = {'PC': ['A', 'B'], 'PE': ['A']}
-        config = GradeFilterConfig(grade_dict)
+        config = GradeFilterConfig(grade_config=grade_dict)
         assert config.is_default is False
         assert config.grade_config == grade_dict
 
     def test_empty_dict_config(self):
         """Test empty dict is not default."""
-        config = GradeFilterConfig({})
+        config = GradeFilterConfig(grade_config={})
         assert config.is_default is False
         assert config.grade_config == {}
 
     def test_config_with_all_grades(self):
         """Test config with all grades for a class."""
         grade_dict = {'PC': ['A', 'B', 'C', 'D']}
-        config = GradeFilterConfig(grade_dict)
+        config = GradeFilterConfig(grade_config=grade_dict)
         assert 'A' in config.grade_config['PC']
         assert 'D' in config.grade_config['PC']
 
     def test_config_with_single_grade(self):
         """Test config with single grade."""
         grade_dict = {'PC': ['A']}
-        config = GradeFilterConfig(grade_dict)
+        config = GradeFilterConfig(grade_config=grade_dict)
         assert config.grade_config['PC'] == ['A']
 
 
@@ -191,7 +194,11 @@ class TestCleaningResult:
         standards = pd.DataFrame({'LipidMolec': ['PC(d7)']})
         messages = ['Removed 5 duplicates']
 
-        result = CleaningResult(cleaned, standards, messages)
+        result = CleaningResult(
+            cleaned_df=cleaned,
+            internal_standards_df=standards,
+            filter_messages=messages,
+        )
 
         assert len(result.cleaned_df) == 1
         assert len(result.internal_standards_df) == 1
@@ -199,19 +206,25 @@ class TestCleaningResult:
 
     def test_result_empty_messages(self):
         """Test result with no messages."""
-        result = CleaningResult(pd.DataFrame(), pd.DataFrame())
+        result = CleaningResult(
+            cleaned_df=pd.DataFrame(), internal_standards_df=pd.DataFrame()
+        )
         assert result.filter_messages == []
 
     def test_result_empty_standards(self):
         """Test result with empty standards."""
         cleaned = pd.DataFrame({'LipidMolec': ['PC(16:0)']})
-        result = CleaningResult(cleaned, pd.DataFrame())
+        result = CleaningResult(cleaned_df=cleaned, internal_standards_df=pd.DataFrame())
         assert len(result.internal_standards_df) == 0
 
     def test_result_multiple_messages(self):
         """Test result with multiple messages."""
         messages = ['Msg 1', 'Msg 2', 'Msg 3']
-        result = CleaningResult(pd.DataFrame(), pd.DataFrame(), messages)
+        result = CleaningResult(
+            cleaned_df=pd.DataFrame(),
+            internal_standards_df=pd.DataFrame(),
+            filter_messages=messages,
+        )
         assert len(result.filter_messages) == 3
 
     def test_result_preserves_dataframe_columns(self):
@@ -221,7 +234,7 @@ class TestCleaningResult:
             'ClassKey': ['PC'],
             'intensity[s1]': [1000]
         })
-        result = CleaningResult(cleaned, pd.DataFrame())
+        result = CleaningResult(cleaned_df=cleaned, internal_standards_df=pd.DataFrame())
         assert 'LipidMolec' in result.cleaned_df.columns
         assert 'ClassKey' in result.cleaned_df.columns
         assert 'intensity[s1]' in result.cleaned_df.columns
@@ -667,7 +680,7 @@ class TestLipidSearchCleanerBasic:
 
     def test_clean_raises_on_empty_df(self, simple_experiment_2x2):
         """Test error on empty DataFrame."""
-        with pytest.raises(ValueError, match="empty"):
+        with pytest.raises(EmptyDataError, match="empty"):
             LipidSearchCleaner.clean(pd.DataFrame(), simple_experiment_2x2)
 
     def test_clean_returns_messages(self, lipidsearch_df, simple_experiment_2x2):
@@ -957,7 +970,7 @@ class TestMSDIALCleanerBasic:
 
     def test_clean_raises_on_empty_df(self, simple_experiment_2x2):
         """Test error on empty DataFrame."""
-        with pytest.raises(ValueError, match="empty"):
+        with pytest.raises(EmptyDataError, match="empty"):
             MSDIALCleaner.clean(pd.DataFrame(), simple_experiment_2x2)
 
     def test_clean_preserves_required_columns(self, msdial_df, simple_experiment_2x2):
@@ -1141,7 +1154,7 @@ class TestGenericCleanerBasic:
 
     def test_clean_raises_on_empty_df(self, simple_experiment_2x2):
         """Test error on empty DataFrame."""
-        with pytest.raises(ValueError, match="empty"):
+        with pytest.raises(EmptyDataError, match="empty"):
             GenericCleaner.clean(pd.DataFrame(), simple_experiment_2x2)
 
     def test_removes_duplicates(self, simple_experiment_2x2):
@@ -1253,7 +1266,7 @@ class TestDataCleaningServiceConvenience:
 
     def test_clean_lipidsearch_with_grade_config(self, lipidsearch_df, simple_experiment_2x2):
         """Test clean_lipidsearch with grade config."""
-        config = GradeFilterConfig({'PC': ['A'], 'PE': ['A', 'B'], 'TG': ['A']})
+        config = GradeFilterConfig(grade_config={'PC': ['A'], 'PE': ['A', 'B'], 'TG': ['A']})
         result = DataCleaningService.clean_lipidsearch(lipidsearch_df, simple_experiment_2x2, config)
         assert isinstance(result, CleaningResult)
 
@@ -1349,7 +1362,7 @@ class TestEdgeCases:
             'intensity[s3]': [0.0],
             'intensity[s4]': [0.0],
         })
-        with pytest.raises(ValueError, match="non-zero"):
+        with pytest.raises(EmptyDataError, match="non-zero"):
             DataCleaningService.clean_generic(df, simple_experiment_2x2)
 
     def test_all_invalid_lipids_raises(self, simple_experiment_2x2):
@@ -1362,7 +1375,7 @@ class TestEdgeCases:
             'intensity[s3]': [1200.0, 2200.0, 3200.0],
             'intensity[s4]': [1300.0, 2300.0, 3300.0],
         })
-        with pytest.raises(ValueError, match="invalid"):
+        with pytest.raises(EmptyDataError, match="invalid"):
             DataCleaningService.clean_generic(df, simple_experiment_2x2)
 
     def test_missing_required_column_raises(self, simple_experiment_2x2):
@@ -1437,7 +1450,7 @@ class TestLipidSearchEdgeCases:
             'intensity[s3]': [1200.0],
             'intensity[s4]': [1300.0],
         })
-        with pytest.raises(ValueError, match="grade"):
+        with pytest.raises(ConfigurationError, match="grade"):
             DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
 
     def test_all_missing_fakey_raises(self, simple_experiment_2x2):
@@ -1455,7 +1468,7 @@ class TestLipidSearchEdgeCases:
             'intensity[s3]': [1200.0, 2200.0],
             'intensity[s4]': [1300.0, 2300.0],
         })
-        with pytest.raises(ValueError, match="FA"):
+        with pytest.raises(EmptyDataError, match="FA"):
             DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
 
     def test_only_cholesterol_data(self, simple_experiment_2x2):
@@ -1492,7 +1505,7 @@ class TestMSDIALEdgeCases:
             'intensity[s4]': [1300.0],
         })
         config = QualityFilterConfig(total_score_threshold=80)
-        with pytest.raises(ValueError, match="quality"):
+        with pytest.raises(ConfigurationError, match="quality"):
             DataCleaningService.clean_msdial(df, simple_experiment_2x2, config)
 
     def test_missing_total_score_column(self, simple_experiment_2x2):
