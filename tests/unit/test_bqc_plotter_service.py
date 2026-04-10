@@ -371,18 +371,18 @@ class TestEdgeCases:
 
 class TestErrorHandling:
     def test_missing_concentration_column_raises(self, bqc_df):
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="Missing concentration"):
             BQCPlotterService.prepare_dataframe_for_plot(
                 bqc_df, ['concentration[nonexistent]']
             )
 
     def test_generate_cov_plot_data_invalid_index(self, bqc_df):
         ind_samples = [['bqc1', 'bqc2', 'bqc3']]
-        with pytest.raises(IndexError):
+        with pytest.raises(ValueError, match="out of range"):
             BQCPlotterService.generate_cov_plot_data(bqc_df, ind_samples, 5)
 
     def test_generate_and_display_cov_plot_invalid_index(self, bqc_df, simple_experiment):
-        with pytest.raises(IndexError):
+        with pytest.raises(ValueError, match="out of range"):
             BQCPlotterService.generate_and_display_cov_plot(bqc_df, simple_experiment, 99)
 
     def test_all_nan_arrays_produce_empty_plot(self):

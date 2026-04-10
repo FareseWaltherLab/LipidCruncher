@@ -60,8 +60,21 @@ class BoxPlotService:
 
         Returns:
             DataFrame with only the concentration columns.
+
+        Raises:
+            ValueError: If df is empty, full_samples_list is empty,
+                or required columns are missing.
         """
+        if df is None or df.empty:
+            raise ValueError("Input DataFrame is empty")
+        if not full_samples_list:
+            raise ValueError("Sample list must not be empty")
         concentration_cols = [f'concentration[{s}]' for s in full_samples_list]
+        missing = [c for c in concentration_cols if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"Missing concentration columns: {', '.join(missing)}"
+            )
         return df[concentration_cols]
 
     @staticmethod
@@ -75,7 +88,12 @@ class BoxPlotService:
 
         Returns:
             List of percentages (one per column).
+
+        Raises:
+            ValueError: If DataFrame is empty.
         """
+        if mean_area_df is None or mean_area_df.empty:
+            raise ValueError("Input DataFrame is empty")
         return [
             len(mean_area_df[mean_area_df[col] == 0]) / len(mean_area_df) * 100
             for col in mean_area_df.columns

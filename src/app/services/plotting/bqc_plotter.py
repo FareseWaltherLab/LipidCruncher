@@ -34,7 +34,20 @@ class BQCPlotterService:
         Returns:
             Copy of dataframe with added 'cov' and 'mean' columns.
             The 'mean' column contains log10-transformed values where mean > 0.
+
+        Raises:
+            ValueError: If DataFrame is empty or concentration columns
+                are missing.
         """
+        if dataframe is None or dataframe.empty:
+            raise ValueError("Input DataFrame is empty")
+        if not concentration_columns:
+            raise ValueError("Concentration columns list must not be empty")
+        missing = [c for c in concentration_columns if c not in dataframe.columns]
+        if missing:
+            raise ValueError(
+                f"Missing concentration columns: {', '.join(missing)}"
+            )
         df = dataframe.copy()
 
         df['cov'] = df[concentration_columns].apply(
@@ -67,7 +80,15 @@ class BQCPlotterService:
 
         Returns:
             Prepared DataFrame with 'cov' and 'mean' columns.
+
+        Raises:
+            ValueError: If bqc_sample_index is out of bounds.
         """
+        if bqc_sample_index < 0 or bqc_sample_index >= len(individual_samples_list):
+            raise ValueError(
+                f"BQC sample index {bqc_sample_index} is out of range "
+                f"(0-{len(individual_samples_list) - 1})"
+            )
         bqc_samples = individual_samples_list[bqc_sample_index]
         conc_cols = [f'concentration[{s}]' for s in bqc_samples]
         return BQCPlotterService.prepare_dataframe_for_plot(

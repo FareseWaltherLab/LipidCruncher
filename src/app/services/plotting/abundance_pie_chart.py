@@ -14,6 +14,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
+from app.services.plotting._shared import generate_class_color_mapping
 
 
 # Large qualitative palette for lipid classes (many possible classes)
@@ -193,12 +194,17 @@ class PieChartPlotterService:
     def generate_color_mapping(classes: List[str]) -> Dict[str, str]:
         """Map each lipid class to a consistent color.
 
+        Uses the shared class color palette with extended colors for
+        pie charts that may show many classes.
+
         Args:
             classes: List of lipid class labels.
 
         Returns:
             Dict mapping class name to hex color string.
         """
+        # Pie charts use an extended palette (20 colors) since they may
+        # show many more classes than other chart types.
         return {
             cls: CLASS_COLORS[i % len(CLASS_COLORS)]
             for i, cls in enumerate(classes)

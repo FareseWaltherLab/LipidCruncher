@@ -20,6 +20,7 @@ import plotly.graph_objects as go
 import seaborn as sns
 
 from app.models.experiment import ExperimentConfig
+from app.services.plotting._shared import generate_class_color_mapping
 from app.services.statistical_testing import (
     StatisticalTestResult,
     StatisticalTestSummary,
@@ -465,6 +466,7 @@ class VolcanoPlotterService:
         ax.legend(title='Condition', loc='upper right')
         fig.tight_layout()
 
+        plt.close(fig)
         return fig
 
     @staticmethod
@@ -479,8 +481,7 @@ class VolcanoPlotterService:
         Returns:
             Dict mapping class name to hex color string.
         """
-        colors = itertools.cycle(CLASS_COLORS)
-        return {cls: next(colors) for cls in classes}
+        return generate_class_color_mapping(classes)
 
     @staticmethod
     def get_most_abundant_lipid(

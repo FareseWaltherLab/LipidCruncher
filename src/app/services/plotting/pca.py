@@ -16,6 +16,8 @@ import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
+from app.services.plotting._shared import generate_class_color_mapping
+
 
 class PCAPlotterService:
     """Creates PCA scatter plots with confidence ellipses."""
@@ -84,11 +86,7 @@ def _run_pca(
 def _generate_color_mapping(conditions) -> Dict[str, str]:
     """Map each unique condition to a Plotly qualitative color."""
     unique_conditions = sorted(set(conditions))
-    palette = px.colors.qualitative.Plotly
-    return {
-        cond: palette[i % len(palette)]
-        for i, cond in enumerate(unique_conditions)
-    }
+    return generate_class_color_mapping(unique_conditions)
 
 
 def _create_scatter_plot(

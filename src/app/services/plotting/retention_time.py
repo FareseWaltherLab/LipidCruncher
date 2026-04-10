@@ -31,7 +31,15 @@ class RetentionTimePlotterService:
         Returns:
             List of (figure, retention_df) tuples, one per lipid class,
             ordered by class frequency (most frequent first).
+
+        Raises:
+            ValueError: If df is empty or missing required columns.
         """
+        if df is None or df.empty:
+            raise ValueError("Input DataFrame is empty")
+        for col in ('ClassKey', 'BaseRt', 'CalcMass', 'LipidMolec'):
+            if col not in df.columns:
+                raise ValueError(f"Missing required column: {col}")
         plots = []
         for lipid_class in df['ClassKey'].value_counts().index:
             class_df = df[df['ClassKey'] == lipid_class]
@@ -57,7 +65,19 @@ class RetentionTimePlotterService:
 
         Returns:
             Tuple of (figure, retention_df).
+
+        Raises:
+            ValueError: If df is empty, missing required columns,
+                or selected_classes_list is empty.
         """
+        if df is None or df.empty:
+            raise ValueError("Input DataFrame is empty")
+        for col in ('ClassKey', 'BaseRt', 'CalcMass', 'LipidMolec'):
+            if col not in df.columns:
+                raise ValueError(f"Missing required column: {col}")
+        if not selected_classes_list:
+            raise ValueError("At least one class must be selected")
+
         all_classes = df['ClassKey'].value_counts().index.tolist()
         unique_colors = _get_unique_colors(len(all_classes))
 
@@ -65,6 +85,7 @@ class RetentionTimePlotterService:
         plot_data = []
         for lipid_class in selected_classes_list:
             class_df = df[df['ClassKey'] == lipid_class]
+            # Safe lookup: default to 0 if class not found in all_classes
             color_idx = all_classes.index(lipid_class) if lipid_class in all_classes else 0
             plot_data.append(pd.DataFrame({
                 'Mass': class_df['CalcMass'],

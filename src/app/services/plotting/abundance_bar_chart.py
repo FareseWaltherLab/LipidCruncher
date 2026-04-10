@@ -16,6 +16,11 @@ import plotly.graph_objects as go
 
 from app.constants import CONDITION_COLORS
 from app.models.experiment import ExperimentConfig
+from app.services.plotting._shared import (
+    generate_condition_color_mapping,
+    get_effective_p_value,
+    p_value_to_marker,
+)
 from app.services.statistical_testing import StatisticalTestSummary
 
 ZERO_REPLACEMENT_DIVISOR = 10
@@ -267,10 +272,7 @@ class BarChartPlotterService:
         Returns:
             Dict mapping condition name to hex color string.
         """
-        return {
-            cond: CONDITION_COLORS[i % len(CONDITION_COLORS)]
-            for i, cond in enumerate(conditions)
-        }
+        return generate_condition_color_mapping(conditions)
 
 
 # ── Private helpers ────────────────────────────────────────────────────
@@ -321,14 +323,9 @@ def _add_significance_annotations(
             continue
 
         result = stat_results.results[class_name]
-        p_val = (
-            result.adjusted_p_value
-            if result.adjusted_p_value is not None
-            and not np.isnan(result.adjusted_p_value)
-            else result.p_value
-        )
+        p_val = get_effective_p_value(result)
 
-        marker = _p_value_to_marker(p_val)
+        marker = p_value_to_marker(p_val)
         if marker:
             fig.add_annotation(
                 x=max_x * SIGNIFICANCE_OFFSET_FACTOR,
@@ -339,12 +336,6 @@ def _add_significance_annotations(
             )
 
 
-def _p_value_to_marker(p_value: float) -> str:
-    """Convert a p-value to a significance marker string."""
-    if p_value < 0.001:
-        return '***'
-    if p_value < 0.01:
-        return '**'
-    if p_value < 0.05:
-        return '*'
-    return ''
+
+# _p_value_to_marker is now in _shared.py — re-export for backward compatibility
+_p_value_to_marker = p_value_to_marker

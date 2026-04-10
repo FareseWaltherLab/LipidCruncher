@@ -137,9 +137,9 @@ class TestPlotMultiRetention:
         assert isinstance(fig, go.Figure)
         assert len(df) == 1
 
-    def test_empty_class_list_empty_df(self, rt_df):
-        fig, df = RetentionTimePlotterService.plot_multi_retention(rt_df, [])
-        assert len(df) == 0
+    def test_empty_class_list_raises(self, rt_df):
+        with pytest.raises(ValueError, match="At least one class"):
+            RetentionTimePlotterService.plot_multi_retention(rt_df, [])
 
 
 # =============================================================================
@@ -236,7 +236,7 @@ class TestErrorHandling:
             'BaseRt': [3.5],
             'CalcMass': [733.5],
         })
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="Missing required column.*ClassKey"):
             RetentionTimePlotterService.plot_single_retention(df)
 
     def test_missing_basert_column_raises(self):
@@ -245,7 +245,7 @@ class TestErrorHandling:
             'ClassKey': ['PC'],
             'CalcMass': [733.5],
         })
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="Missing required column.*BaseRt"):
             RetentionTimePlotterService.plot_single_retention(df)
 
     def test_missing_calcmass_column_raises(self):
@@ -254,7 +254,7 @@ class TestErrorHandling:
             'ClassKey': ['PC'],
             'BaseRt': [3.5],
         })
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="Missing required column.*CalcMass"):
             RetentionTimePlotterService.plot_single_retention(df)
 
     def test_multi_retention_nonexistent_class_empty_rows(self, rt_df):
@@ -269,8 +269,8 @@ class TestErrorHandling:
             'BaseRt': pd.Series(dtype=float),
             'CalcMass': pd.Series(dtype=float),
         })
-        result = RetentionTimePlotterService.plot_single_retention(df)
-        assert result == []
+        with pytest.raises(ValueError, match="empty"):
+            RetentionTimePlotterService.plot_single_retention(df)
 
 
 # =============================================================================

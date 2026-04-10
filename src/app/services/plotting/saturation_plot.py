@@ -18,6 +18,7 @@ import plotly.graph_objects as go
 
 from app.constants import HYDROXYL_PATTERN, SINGLE_CHAIN_CLASSES, parse_lipid_name
 from app.models.experiment import ExperimentConfig
+from app.services.plotting._shared import get_effective_p_value, p_value_to_marker
 from app.services.statistical_testing import StatisticalTestSummary
 
 
@@ -469,12 +470,7 @@ def _add_significance_annotations(
             continue
 
         result = stat_results.results[key]
-        p_val = (
-            result.adjusted_p_value
-            if result.adjusted_p_value is not None
-            and not np.isnan(result.adjusted_p_value)
-            else result.p_value
-        )
+        p_val = get_effective_p_value(result)
 
         if n_conditions == 2:
             # Two conditions: single comparison line
@@ -489,7 +485,7 @@ def _add_significance_annotations(
                     line=dict(color=FA_COLORS[fa], width=2),
                 )
 
-                symbol = _p_value_to_marker(p_val)
+                symbol = p_value_to_marker(p_val)
                 fig.add_annotation(
                     x=(x0 + x1) / 2,
                     y=y + y_increment * ANNOTATION_TEXT_OFFSET,
@@ -511,12 +507,7 @@ def _add_significance_annotations(
             ]
 
             for ph in stat_results.posthoc_results[key]:
-                effective_p = (
-                    ph.adjusted_p_value
-                    if ph.adjusted_p_value is not None
-                    and not np.isnan(ph.adjusted_p_value)
-                    else ph.p_value
-                )
+                effective_p = get_effective_p_value(ph)
                 if effective_p >= 0.05:
                     continue
 
@@ -536,7 +527,7 @@ def _add_significance_annotations(
                     line=dict(color=FA_COLORS[fa], width=2),
                 )
 
-                symbol = _p_value_to_marker(effective_p)
+                symbol = p_value_to_marker(effective_p)
                 fig.add_annotation(
                     x=(x0 + x1) / 2,
                     y=y + y_increment * ANNOTATION_TEXT_OFFSET,
@@ -553,12 +544,6 @@ def _add_significance_annotations(
         fig.update_layout(yaxis_range=[0, new_y_max])
 
 
-def _p_value_to_marker(p_value: float) -> str:
-    """Convert a p-value to a significance marker string."""
-    if p_value < 0.001:
-        return '***'
-    if p_value < 0.01:
-        return '**'
-    if p_value < 0.05:
-        return '*'
-    return ''
+
+# _p_value_to_marker is now in _shared.py — re-export for backward compatibility
+_p_value_to_marker = p_value_to_marker

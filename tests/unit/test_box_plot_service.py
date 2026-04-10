@@ -66,7 +66,7 @@ class TestCreateMeanAreaDf:
         assert len(result.columns) == 1
 
     def test_missing_sample_raises(self, simple_df):
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="Missing concentration"):
             BoxPlotService.create_mean_area_df(simple_df, ['nonexistent'])
 
 
@@ -326,13 +326,13 @@ class TestEdgeCases:
 
 class TestErrorHandling:
     def test_create_mean_area_df_empty_sample_list(self, simple_df):
-        result = BoxPlotService.create_mean_area_df(simple_df, [])
-        assert len(result.columns) == 0
+        with pytest.raises(ValueError, match="empty"):
+            BoxPlotService.create_mean_area_df(simple_df, [])
 
     def test_missing_values_empty_dataframe(self):
-        """Empty DataFrame (0 rows) causes ZeroDivisionError."""
+        """Empty DataFrame raises ValueError."""
         df = pd.DataFrame({'concentration[s1]': pd.Series(dtype=float)})
-        with pytest.raises(ZeroDivisionError):
+        with pytest.raises(ValueError, match="empty"):
             BoxPlotService.calculate_missing_values_percentage(df)
 
     def test_plot_box_plot_empty_dataframe(self):
@@ -343,8 +343,8 @@ class TestErrorHandling:
         assert len(fig.data[0].y) == 0
 
     def test_create_mean_area_df_partial_missing_samples(self, simple_df):
-        """Mix of valid and invalid sample names raises KeyError."""
-        with pytest.raises(KeyError):
+        """Mix of valid and invalid sample names raises ValueError."""
+        with pytest.raises(ValueError, match="Missing concentration"):
             BoxPlotService.create_mean_area_df(simple_df, ['s1', 'nonexistent'])
 
 
