@@ -15,6 +15,10 @@ from app.constants import (
 )
 from app.services.data_standardization import DataStandardizationService
 
+# Canonical class inference function — used throughout this module
+# instead of a local _infer_class, so all class inference is consistent.
+_infer_class_key = DataStandardizationService.infer_class_key
+
 
 @dataclass
 class StandardsExtractionResult:
@@ -564,11 +568,7 @@ class StandardsService:
 
         # Infer ClassKey from LipidMolec if not present
         if 'ClassKey' not in df.columns:
-            df['ClassKey'] = df['LipidMolec'].apply(
-                lambda x: str(x).split()[0] if ' ' in str(x) else (
-                    str(x).split('(')[0] if '(' in str(x) else str(x)
-                )
-            )
+            df['ClassKey'] = df['LipidMolec'].apply(_infer_class_key)
 
         return df
 
@@ -634,9 +634,9 @@ class StandardsService:
                         standards_df['LipidMolec'] == standard_name
                     ]['ClassKey']
                     row['ClassKey'] = class_val.iloc[0] if not class_val.empty else \
-                        StandardsService._infer_class(standard_name)
+                        _infer_class_key(standard_name)
                 else:
-                    row['ClassKey'] = StandardsService._infer_class(standard_name)
+                    row['ClassKey'] = _infer_class_key(standard_name)
 
                 # Get intensity values
                 for col in expected_intensity_cols:
@@ -708,7 +708,7 @@ class StandardsService:
         if 'ClassKey' not in standards_df.columns:
             standards_df = standards_df.copy()
             standards_df['ClassKey'] = standards_df['LipidMolec'].apply(
-                StandardsService._infer_class
+                _infer_class_key
             )
             available_cols = [c for c in result_cols if c in standards_df.columns]
 
@@ -721,25 +721,9 @@ class StandardsService:
 
         return result_df
 
-    @staticmethod
-    def _infer_class(lipid_name: str) -> str:
-        """
-        Infer ClassKey from lipid name.
-
-        Args:
-            lipid_name: Lipid molecule name
-
-        Returns:
-            Inferred class key
-        """
-        if pd.isna(lipid_name):
-            return 'Unknown'
-        name = str(lipid_name)
-        if ' ' in name:
-            return name.split()[0]
-        if '(' in name:
-            return name.split('(')[0]
-        return name
+    # Backward-compatible alias — delegates to the canonical implementation
+    # in DataStandardizationService.infer_class_key.
+    _infer_class = staticmethod(_infer_class_key)
 
     # ==================== Utility Methods ====================
 
@@ -782,7 +766,7 @@ class StandardsService:
         # Ensure ClassKey exists
         if 'ClassKey' not in standards_df.columns:
             df = standards_df.copy()
-            df['ClassKey'] = df['LipidMolec'].apply(StandardsService._infer_class)
+            df['ClassKey'] = df['LipidMolec'].apply(_infer_class_key)
         else:
             df = standards_df
 

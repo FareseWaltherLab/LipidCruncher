@@ -24,6 +24,7 @@ from ..services.validation import (
     validate_dataframe_not_empty,
     validate_concentration_columns,
 )
+from .exceptions import EmptyDataError, ValidationError
 
 
 # ============================================================
@@ -281,7 +282,7 @@ class QualityCheckService:
 
         missing = [c for c in auc_columns if c not in df.columns]
         if missing:
-            raise ValueError(
+            raise ValidationError(
                 f"BQC concentration columns not found in DataFrame: {missing}"
             )
 
@@ -301,16 +302,28 @@ class QualityCheckService:
 
     @staticmethod
     def _compute_cov_and_mean(df: pd.DataFrame, auc_columns: List[str]) -> pd.DataFrame:
-        """Calculate CoV and log10 mean for BQC samples."""
+        """Calculate CoV and log10 mean for BQC samples (vectorized)."""
         work_df = df.copy()
-        work_df['cov'] = work_df[auc_columns].apply(
-            QualityCheckService.calculate_coefficient_of_variation, axis=1
-        )
-        work_df['mean'] = work_df[auc_columns].apply(
-            QualityCheckService.calculate_mean_including_zeros, axis=1
-        )
-        valid_mask = work_df['mean'].notnull() & (work_df['mean'] > 0)
-        work_df.loc[valid_mask, 'mean'] = np.log10(work_df.loc[valid_mask, 'mean'])
+        bqc_data = work_df[auc_columns].astype(float)
+
+        n_cols = len(auc_columns)
+        if n_cols < 2:
+            work_df['cov'] = np.nan
+            work_df['mean'] = np.nan
+            return work_df
+
+        row_mean = bqc_data.mean(axis=1)
+        row_std = bqc_data.std(axis=1, ddof=1)
+
+        # CoV = (std / mean) * 100; undefined when mean == 0
+        with np.errstate(divide='ignore', invalid='ignore'):
+            cov = np.where(row_mean != 0, row_std / row_mean * 100, np.nan)
+        work_df['cov'] = cov
+
+        # log10 of mean (only where mean > 0)
+        log_mean = np.where(row_mean > 0, np.log10(row_mean), np.nan)
+        work_df['mean'] = log_mean
+
         return work_df
 
     @staticmethod
@@ -467,7 +480,7 @@ class QualityCheckService:
 
         n_samples = experiment.number_of_samples_list[cond_index]
         if n_samples < 2:
-            raise ValueError(
+            raise ValidationError(
                 f"Condition '{condition}' has only {n_samples} sample(s). "
                 f"Correlation requires at least 2 replicates."
             )
@@ -482,7 +495,7 @@ class QualityCheckService:
         conc_cols = [f'concentration[{s}]' for s in cond_samples]
         missing = [c for c in conc_cols if c not in df.columns]
         if missing:
-            raise ValueError(
+            raise ValidationError(
                 f"Missing concentration columns for condition '{condition}': "
                 f"{missing}"
             )
@@ -537,7 +550,7 @@ class QualityCheckService:
         )
 
         if len(available) < 2:
-            raise ValueError(
+            raise ValidationError(
                 f"PCA requires at least 2 samples, but only {len(available)} "
                 f"sample(s) have concentration columns."
             )
@@ -579,7 +592,7 @@ class QualityCheckService:
     ) -> SampleRemovalResult:
         """Remove samples from DataFrame and create updated ExperimentConfig."""
         if not samples_to_remove:
-            raise ValueError(
+            raise ValidationError(
                 "samples_to_remove cannot be empty. "
                 "Pass a non-empty list of sample labels."
             )
@@ -591,7 +604,7 @@ class QualityCheckService:
         remaining = total_samples - len(actual_to_remove)
 
         if remaining < 2:
-            raise ValueError(
+            raise ValidationError(
                 f"Cannot remove {len(actual_to_remove)} sample(s): only "
                 f"{remaining} would remain, but at least 2 are required."
             )
@@ -661,7 +674,7 @@ class QualityCheckService:
             ValueError: If bqc_label not found.
         """
         if bqc_label not in experiment.conditions_list:
-            raise ValueError(
+            raise ValidationError(
                 f"BQC label '{bqc_label}' not found in conditions: "
                 f"{experiment.conditions_list}"
             )
@@ -678,7 +691,7 @@ class QualityCheckService:
             ValueError: If condition not found.
         """
         if condition not in experiment.conditions_list:
-            raise ValueError(
+            raise ValidationError(
                 f"Condition '{condition}' not found in conditions: "
                 f"{experiment.conditions_list}"
             )
@@ -692,6 +705,6 @@ class QualityCheckService:
             ValueError: If threshold is not positive.
         """
         if threshold <= 0:
-            raise ValueError(
+            raise ValidationError(
                 f"CoV threshold must be positive, got {threshold}."
             )

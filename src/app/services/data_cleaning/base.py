@@ -2,6 +2,8 @@
 Base data cleaning functionality with common methods.
 Pure logic - no Streamlit dependencies.
 """
+from abc import ABC, abstractmethod
+
 import pandas as pd
 from typing import Dict, List, Optional, Tuple, Set
 
@@ -12,12 +14,35 @@ from app.constants import (
 from .exceptions import EmptyDataError
 
 
-class BaseDataCleaner:
+class BaseDataCleaner(ABC):
     """
-    Base class with common data cleaning methods.
+    Abstract base class with common data cleaning methods.
 
-    All methods are static for easy testing and stateless operation.
+    Subclasses must implement the ``clean()`` class method.
+    All helper methods are static for easy testing and stateless operation.
     """
+
+    @staticmethod
+    @abstractmethod
+    def clean(
+        df: pd.DataFrame,
+        experiment: "ExperimentConfig",
+        **kwargs,
+    ) -> Tuple[pd.DataFrame, List[str]]:
+        """Clean format-specific data.
+
+        Args:
+            df: Input DataFrame (already column-standardized).
+            experiment: Experiment configuration with sample information.
+            **kwargs: Format-specific options (e.g. grade_config, quality_config).
+
+        Returns:
+            Tuple of (cleaned_df, messages_list).
+
+        Raises:
+            EmptyDataError: If dataset is empty or becomes empty after cleaning.
+        """
+        ...
 
     # Invalid lipid name patterns
     INVALID_LIPID_PATTERNS: Tuple[str, ...] = (
@@ -233,8 +258,10 @@ class BaseDataCleaner:
     def extract_internal_standards(
         df: pd.DataFrame
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Extract internal standards from cleaned dataframe.
+        """Extract internal standards from cleaned dataframe.
+
+        Delegates to StandardsService.detect_standards() as the single
+        source of truth for standard-detection logic.
 
         Returns:
             Tuple of (df_without_standards, standards_df)
@@ -242,44 +269,13 @@ class BaseDataCleaner:
         if df.empty or 'LipidMolec' not in df.columns:
             return df, pd.DataFrame(columns=df.columns)
 
-        is_standard = BaseDataCleaner._identify_standards(df)
+        # Import here to avoid circular import (standards imports
+        # DataStandardizationService, not BaseDataCleaner).
+        from ..standards import StandardsService
+
+        is_standard = StandardsService.detect_standards(df)
 
         standards_df = df[is_standard].copy().reset_index(drop=True)
         cleaned_df = df[~is_standard].copy().reset_index(drop=True)
 
         return cleaned_df, standards_df
-
-    @staticmethod
-    def _identify_standards(df: pd.DataFrame) -> pd.Series:
-        """Create boolean mask identifying internal standards."""
-        is_standard_lipid = BaseDataCleaner._check_lipid_standard_patterns(df)
-        is_standard_class = BaseDataCleaner._check_class_standard_patterns(df)
-
-        return is_standard_lipid | is_standard_class
-
-    @staticmethod
-    def _check_lipid_standard_patterns(df: pd.DataFrame) -> pd.Series:
-        """Check LipidMolec column for internal standard patterns."""
-        combined_pattern = '|'.join(
-            f'(?:{p})' for p in BaseDataCleaner.INTERNAL_STANDARD_LIPID_PATTERNS
-        )
-
-        return df['LipidMolec'].str.contains(
-            combined_pattern,
-            regex=True,
-            case=False,
-            na=False
-        )
-
-    @staticmethod
-    def _check_class_standard_patterns(df: pd.DataFrame) -> pd.Series:
-        """Check ClassKey column for internal standard markers."""
-        if 'ClassKey' not in df.columns:
-            return pd.Series([False] * len(df), index=df.index)
-
-        return df['ClassKey'].str.contains(
-            BaseDataCleaner.INTERNAL_STANDARD_CLASS_PATTERN,
-            regex=True,
-            case=False,
-            na=False
-        )

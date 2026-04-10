@@ -107,7 +107,7 @@ class TestSampleDataLoading:
         at = format_upload_app
         at.sidebar.selectbox[0].set_value('MS-DIAL').run()
         at.sidebar.button(key='load_sample').click().run()
-        assert at.session_state['msdial_features']['has_normalized_data'] is True
+        assert at.session_state['msdial_features'].has_normalized_data is True
 
     def test_load_metabolomics_workbench_sample_data(self, format_upload_app):
         """Loading Metabolomics Workbench sample data succeeds."""

@@ -7,7 +7,8 @@ bar chart, saturation plot, and volcano plot analyses.
 """
 from dataclasses import dataclass, field
 from itertools import combinations
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, Any
+from typing_extensions import TypedDict
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ from statsmodels.stats.multitest import multipletests
 
 from ..models.experiment import ExperimentConfig
 from ..models.statistics import StatisticalTestConfig
+from .exceptions import ValidationError
 
 MIN_POSITIVE_FALLBACK = 1.0
 ZERO_REPLACEMENT_DIVISOR = 10
@@ -46,13 +48,38 @@ class PostHocResult:
     test_name: str = ""
 
 
+class TestInfo(TypedDict, total=False):
+    """Typed dict for statistical test metadata."""
+    test_type: str
+    correction: str
+    posthoc: str
+    transform: str
+
+
+class TestParameters(TypedDict, total=False):
+    """Typed dict for statistical test parameters."""
+    n_conditions: int
+    n_classes: int
+    n_tests: int
+    n_skipped: int
+    n_lipids_tested: int
+    n_lipids_total: int
+    n_lipids_skipped: int
+    n_skipped_insufficient_data: int
+    n_skipped_all_zero: int
+    n_skipped_test_error: int
+    n_control_samples: int
+    n_experimental_samples: int
+    alpha: float
+
+
 @dataclass
 class StatisticalTestSummary:
     """Complete results from a statistical testing run."""
     results: Dict[str, StatisticalTestResult] = field(default_factory=dict)
     posthoc_results: Dict[str, List[PostHocResult]] = field(default_factory=dict)
-    test_info: Dict[str, str] = field(default_factory=dict)
-    parameters: Dict[str, object] = field(default_factory=dict)
+    test_info: TestInfo = field(default_factory=lambda: TestInfo())
+    parameters: TestParameters = field(default_factory=lambda: TestParameters())
 
 
 class StatisticalTestingService:
@@ -99,7 +126,7 @@ class StatisticalTestingService:
         )
 
         if len(g1) < 2 or len(g2) < 2:
-            raise ValueError(
+            raise ValidationError(
                 "Each group must have at least 2 non-NaN values"
             )
 
@@ -138,7 +165,7 @@ class StatisticalTestingService:
             ValueError: If fewer than 2 groups or any group has < 2 values.
         """
         if len(groups_dict) < 2:
-            raise ValueError("Need at least 2 groups for multi-group test")
+            raise ValidationError("Need at least 2 groups for multi-group test")
 
         small = global_small_value
         if small is None and auto_transform:
@@ -154,7 +181,7 @@ class StatisticalTestingService:
 
         for k, v in prepared.items():
             if len(v) < 2:
-                raise ValueError(
+                raise ValidationError(
                     f"Group '{k}' must have at least 2 non-NaN values"
                 )
 
@@ -230,7 +257,7 @@ class StatisticalTestingService:
             ValueError: If fewer than 2 groups.
         """
         if len(groups_dict) < 2:
-            raise ValueError("Need at least 2 groups for post-hoc tests")
+            raise ValidationError("Need at least 2 groups for post-hoc tests")
 
         small = global_small_value
         if small is None and auto_transform:
@@ -567,29 +594,39 @@ class StatisticalTestingService:
         ctrl_cols = [f'concentration[{s}]' for s in control_samples]
         exp_cols = [f'concentration[{s}]' for s in experimental_samples]
 
-        for _, row in df.iterrows():
-            lipid = row['LipidMolec']
-            ctrl_vals = row[ctrl_cols].values.astype(float)
-            exp_vals = row[exp_cols].values.astype(float)
+        # Extract matrices for vectorized pre-filtering
+        ctrl_matrix = df[ctrl_cols].values.astype(float)
+        exp_matrix = df[exp_cols].values.astype(float)
+        lipid_names = df['LipidMolec'].values
 
-            ctrl_clean = ctrl_vals[~np.isnan(ctrl_vals)]
-            exp_clean = exp_vals[~np.isnan(exp_vals)]
+        # Vectorized: count non-NaN per row
+        ctrl_valid_count = np.sum(~np.isnan(ctrl_matrix), axis=1)
+        exp_valid_count = np.sum(~np.isnan(exp_matrix), axis=1)
 
-            if len(ctrl_clean) < 2 or len(exp_clean) < 2:
+        # Vectorized: check all-zero (treating NaN as not-zero for this check)
+        ctrl_all_zero = np.all(np.nan_to_num(ctrl_matrix, nan=1.0) == 0, axis=1)
+        exp_all_zero = np.all(np.nan_to_num(exp_matrix, nan=1.0) == 0, axis=1)
+
+        for i in range(len(df)):
+            lipid = lipid_names[i]
+
+            if ctrl_valid_count[i] < 2 or exp_valid_count[i] < 2:
                 skipped_insufficient.append(lipid)
                 continue
 
-            # Check for all-zero groups
-            if np.all(ctrl_clean == 0) or np.all(exp_clean == 0):
+            if ctrl_all_zero[i] or exp_all_zero[i]:
                 skipped_all_zero.append(lipid)
                 continue
+
+            ctrl_clean = ctrl_matrix[i][~np.isnan(ctrl_matrix[i])]
+            exp_clean = exp_matrix[i][~np.isnan(exp_matrix[i])]
 
             try:
                 result = StatisticalTestingService.test_two_groups(
                     ctrl_clean, exp_clean, test_type, config.auto_transform,
                     global_small,
                 )
-            except ValueError:
+            except (ValueError, ValidationError):
                 skipped_test_error.append(lipid)
                 continue
 

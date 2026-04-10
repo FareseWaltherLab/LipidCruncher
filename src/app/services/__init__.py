@@ -1,4 +1,10 @@
 # Business logic services (NO Streamlit dependencies)
+from .exceptions import (
+    ServiceError,
+    ConfigurationError as ServiceConfigurationError,
+    EmptyDataError as ServiceEmptyDataError,
+    ValidationError as ServiceValidationError,
+)
 from .format_detection import FormatDetectionService, DataFormat
 from .data_cleaning import (
     DataCleaningService,
@@ -33,6 +39,10 @@ from .quality_check import (
 )
 
 __all__ = [
+    'ServiceError',
+    'ServiceConfigurationError',
+    'ServiceEmptyDataError',
+    'ServiceValidationError',
     'FormatDetectionService',
     'DataFormat',
     'DataCleaningService',

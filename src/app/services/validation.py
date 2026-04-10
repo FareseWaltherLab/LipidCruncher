@@ -9,16 +9,17 @@ from typing import List
 import pandas as pd
 
 from app.models.experiment import ExperimentConfig
+from app.services.exceptions import EmptyDataError, ValidationError
 
 
 def validate_dataframe_not_empty(df: pd.DataFrame) -> None:
     """Validate that the DataFrame is not None or empty.
 
     Raises:
-        ValueError: If DataFrame is None or empty.
+        EmptyDataError: If DataFrame is None or empty.
     """
     if df is None or df.empty:
-        raise ValueError(
+        raise EmptyDataError(
             "Input DataFrame is empty. Cannot perform analysis."
         )
 
@@ -61,7 +62,7 @@ def validate_concentration_columns(
     """
     available = get_matching_concentration_columns(df, experiment)
     if not available:
-        raise ValueError(
+        raise ValidationError(
             "DataFrame has no concentration columns matching the experiment. "
             "Expected columns like 'concentration[s1]', 'concentration[s2]', etc."
         )

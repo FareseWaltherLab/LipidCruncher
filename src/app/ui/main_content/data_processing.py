@@ -133,10 +133,10 @@ def display_grade_filtering_config(df: pd.DataFrame) -> dict:
 
 def display_msdial_data_type_selection():
     """Display MS-DIAL data type selection (raw vs pre-normalized)."""
-    features = st.session_state.get('msdial_features', {})
-    has_normalized_data = features.get('has_normalized_data', False)
-    raw_samples = features.get('raw_sample_columns', [])
-    norm_samples = features.get('normalized_sample_columns', [])
+    features = st.session_state.get('msdial_features', None)
+    has_normalized_data = getattr(features, 'has_normalized_data', False)
+    raw_samples = getattr(features, 'raw_sample_columns', [])
+    norm_samples = getattr(features, 'normalized_sample_columns', [])
 
     if has_normalized_data and len(norm_samples) > 0:
         st.markdown("##### 📊 Data Type Selection")
@@ -202,9 +202,9 @@ def display_quality_filtering_config() -> dict:
     Returns:
         dict: Quality config with 'total_score_threshold' and 'require_msms' keys
     """
-    features = st.session_state.get('msdial_features', {})
-    quality_filtering_available = features.get('has_quality_score', False)
-    msms_filtering_available = features.get('has_msms_matched', False)
+    features = st.session_state.get('msdial_features', None)
+    quality_filtering_available = getattr(features, 'has_quality_score', False)
+    msms_filtering_available = getattr(features, 'has_msms_matched', False)
 
     if not quality_filtering_available and not msms_filtering_available:
         st.warning("Quality filtering unavailable — no 'Total score' or 'MS/MS matched' columns found.")

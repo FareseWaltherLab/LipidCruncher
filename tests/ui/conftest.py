@@ -182,13 +182,14 @@ def generic_sidebar_app(full_sidebar_app):
 @pytest.fixture
 def msdial_features_dict():
     """MS-DIAL feature detection results for pre-populating session state."""
-    return {
-        'has_normalized_data': True,
-        'raw_sample_columns': ['s1', 's2', 's3', 's4', 's5', 's6', 's7'],
-        'normalized_sample_columns': ['s1', 's2', 's3', 's4', 's5', 's6', 's7'],
-        'has_quality_score': True,
-        'has_msms_matched': False,
-    }
+    from app.services.data_standardization import MSDIALFeatures
+    return MSDIALFeatures(
+        has_normalized_data=True,
+        raw_sample_columns=['s1', 's2', 's3', 's4', 's5', 's6', 's7'],
+        normalized_sample_columns=['s1', 's2', 's3', 's4', 's5', 's6', 's7'],
+        has_quality_score=True,
+        has_msms_matched=False,
+    )
 
 
 @pytest.fixture
@@ -818,12 +819,13 @@ def grade_filtering_app():
 def quality_filtering_app():
     """Quality filtering: MS-DIAL with quality score available."""
     at = AppTest.from_function(quality_filtering_script, default_timeout=DEFAULT_TIMEOUT)
-    at.session_state['msdial_features'] = {
-        'has_quality_score': True,
-        'has_msms_matched': True,
-        'raw_sample_columns': ['s1', 's2', 's3'],
-        'normalized_sample_columns': [],
-    }
+    from app.services.data_standardization import MSDIALFeatures
+    at.session_state['msdial_features'] = MSDIALFeatures(
+        has_quality_score=True,
+        has_msms_matched=True,
+        raw_sample_columns=['s1', 's2', 's3'],
+        normalized_sample_columns=[],
+    )
     return at.run()
 
 

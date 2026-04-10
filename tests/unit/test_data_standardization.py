@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from app.services.data_standardization import (
     DataStandardizationService,
+    MSDIALFeatures,
     MSDIALOverrideResult,
     StandardizationResult,
 )
@@ -167,13 +168,13 @@ class TestStandardizationResult:
             standardized_df=df,
             column_mapping=df,
             n_intensity_cols=5,
-            msdial_features={'key': 'val'},
+            msdial_features=MSDIALFeatures(has_quality_score=True),
             msdial_sample_names={'s1': 'sample1'},
             workbench_conditions={'s1': 'cond1'},
             workbench_samples={'s1': 'samp1'},
         )
         assert result.n_intensity_cols == 5
-        assert result.msdial_features == {'key': 'val'}
+        assert result.msdial_features.has_quality_score is True
 
 
 # =============================================================================
@@ -284,15 +285,13 @@ class TestInferClassKey:
     def test_splash_fa(self):
         assert DataStandardizationService.infer_class_key('SPLASH(FA 20:4)(d11)') == 'FA'
 
-    def test_none_returns_none_string(self):
-        # infer_class_key converts to str first, so None -> 'None' -> match 'None'
+    def test_none_returns_unknown(self):
         result = DataStandardizationService.infer_class_key(None)
-        assert result == 'None'
+        assert result == 'Unknown'
 
-    def test_nan_returns_nan_string(self):
-        # infer_class_key converts to str first, so nan -> 'nan' -> match 'nan'
+    def test_nan_returns_unknown(self):
         result = DataStandardizationService.infer_class_key(float('nan'))
-        assert result == 'nan'
+        assert result == 'Unknown'
 
     def test_empty_string(self):
         assert DataStandardizationService.infer_class_key('') == 'Unknown'
@@ -677,25 +676,25 @@ class TestMSDIALStandardization:
         result = DataStandardizationService._process_msdial(df)
         features = result.msdial_features
         assert features is not None
-        expected_keys = [
+        expected_attrs = [
             'has_ontology', 'has_quality_score', 'has_msms_matched',
             'has_rt', 'has_mz', 'has_normalized_data', 'lipid_column',
             'lipid_column_index', 'raw_sample_columns', 'raw_sample_indices',
             'normalized_sample_columns', 'normalized_sample_indices',
             'header_row_index', 'actual_columns', 'column_indices',
         ]
-        for key in expected_keys:
-            assert key in features
+        for attr in expected_attrs:
+            assert hasattr(features, attr)
 
     def test_features_quality_score(self):
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert result.msdial_features['has_quality_score'] is True
+        assert result.msdial_features.has_quality_score is True
 
     def test_features_msms_matched(self):
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert result.msdial_features['has_msms_matched'] is True
+        assert result.msdial_features.has_msms_matched is True
 
     def test_quality_columns_preserved(self):
         df = make_msdial_df(n_samples=2)
@@ -793,12 +792,12 @@ class TestMSDIALStandardization:
     def test_features_has_normalized_data_false(self):
         df = make_msdial_df(n_samples=2, with_normalized=False)
         result = DataStandardizationService._process_msdial(df)
-        assert result.msdial_features['has_normalized_data'] is False
+        assert result.msdial_features.has_normalized_data is False
 
     def test_features_has_normalized_data_true(self):
         df = make_msdial_df(n_samples=2, with_normalized=True)
         result = DataStandardizationService._process_msdial(df)
-        assert result.msdial_features['has_normalized_data'] is True
+        assert result.msdial_features.has_normalized_data is True
 
 
 # =============================================================================
@@ -1414,28 +1413,28 @@ class TestMSDIALStandardizationAdditional:
         df = make_msdial_df(n_samples=2, with_header_rows=True)
         result = DataStandardizationService._process_msdial(df)
         assert result.success is True
-        assert result.msdial_features['header_row_index'] >= 0
+        assert result.msdial_features.header_row_index >= 0
 
     def test_without_header_row_index_negative(self):
         df = make_msdial_df(n_samples=2, with_header_rows=False)
         result = DataStandardizationService._process_msdial(df)
         assert result.success is True
-        assert result.msdial_features['header_row_index'] == -1
+        assert result.msdial_features.header_row_index == -1
 
     def test_features_lipid_column_name(self):
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert result.msdial_features['lipid_column'] == 'Metabolite name'
+        assert result.msdial_features.lipid_column == 'Metabolite name'
 
     def test_features_has_rt(self):
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert result.msdial_features['has_rt'] is True
+        assert result.msdial_features.has_rt is True
 
     def test_features_has_mz(self):
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert result.msdial_features['has_mz'] is True
+        assert result.msdial_features.has_mz is True
 
     def test_basert_numeric(self):
         df = make_msdial_df(n_samples=2)
@@ -1478,11 +1477,12 @@ def _make_override_inputs(n_samples=5, n_to_keep=3):
         })
     column_mapping = pd.DataFrame(mapping_rows)
 
-    # Features dict
-    features = {
-        'raw_sample_columns': original_samples,
-        'normalized_sample_columns': original_samples[:3],
-    }
+    # Features object
+    from app.services.data_standardization import MSDIALFeatures
+    features = MSDIALFeatures(
+        raw_sample_columns=original_samples,
+        normalized_sample_columns=original_samples[:3],
+    )
 
     manual_samples = original_samples[:n_to_keep]
     return df, column_mapping, manual_samples, features
@@ -1549,7 +1549,7 @@ class TestApplyMSDIALSampleOverride:
     def test_normalized_columns_filtered_to_manual_subset(self):
         """Only normalized samples that are in manual_samples are kept."""
         df, mapping, _, features = _make_override_inputs(n_samples=5, n_to_keep=5)
-        features['normalized_sample_columns'] = ['sample_1', 'sample_3', 'sample_5']
+        features.normalized_sample_columns = ['sample_1', 'sample_3', 'sample_5']
         manual = ['sample_1', 'sample_2']  # sample_3 and sample_5 excluded
         result = DataStandardizationService.apply_msdial_sample_override(
             df, mapping, manual, features
@@ -1621,7 +1621,7 @@ class TestApplyMSDIALSampleOverride:
 
     def test_empty_normalized_columns(self):
         df, mapping, manual, features = _make_override_inputs(n_samples=3, n_to_keep=2)
-        features['normalized_sample_columns'] = []
+        features.normalized_sample_columns = []
         result = DataStandardizationService.apply_msdial_sample_override(
             df, mapping, manual, features
         )

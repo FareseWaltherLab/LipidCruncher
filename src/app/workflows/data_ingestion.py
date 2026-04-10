@@ -14,6 +14,7 @@ import pandas as pd
 
 from ..models.experiment import ExperimentConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
+from ..services.exceptions import ServiceError, ConfigurationError as ServiceConfigurationError
 from ..services.data_cleaning import (
     DataCleaningService,
     CleaningResult,
@@ -165,7 +166,7 @@ class DataIngestionWorkflow:
             result.internal_standards_df = cleaning_result.internal_standards_df
             result.cleaning_messages = cleaning_result.filter_messages
 
-        except (DataCleaningError, ValueError, KeyError) as e:
+        except (DataCleaningError, ServiceError, ValueError, KeyError) as e:
             result.is_valid = False
             result.validation_errors.append(str(e))
             return result
@@ -240,16 +241,12 @@ class DataIngestionWorkflow:
                     f"({filter_result.species_before} → {filter_result.species_after})"
                 )
 
-        except ConfigurationError as e:
+        except ServiceConfigurationError as e:
             # User-configuration errors are recoverable — show as warning
             result.validation_warnings.append(f"Zero filtering skipped: {e}")
-        except (DataCleaningError, ValueError) as e:
-            msg = str(e)
-            # Only suppress known data-related errors; propagate programmer errors
-            if any(kw in msg.lower() for kw in ["threshold", "bqc", "no samples", "empty", "lipidmolec"]):
-                result.validation_warnings.append(f"Zero filtering skipped: {msg}")
-            else:
-                raise
+        except ServiceError as e:
+            # All service-layer errors (data/validation) are recoverable for zero filtering
+            result.validation_warnings.append(f"Zero filtering skipped: {e}")
 
         return result
 

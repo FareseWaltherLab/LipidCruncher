@@ -13,6 +13,7 @@ import streamlit as st
 from app.constants import COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING
 
 from ..models.experiment import ExperimentConfig
+from ..services.data_standardization import MSDIALFeatures
 from ..models.normalization import NormalizationConfig
 from ..models.statistics import StatisticalTestConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
@@ -83,7 +84,7 @@ class SessionState:
     column_mapping: Optional[pd.DataFrame] = None
     n_intensity_cols: Optional[int] = None
     format_type: Optional[DataFormat] = None
-    msdial_features: Dict[str, Any] = field(default_factory=dict)
+    msdial_features: Optional[MSDIALFeatures] = None
     msdial_sample_names: Optional[List[str]] = None
     _msdial_override_samples: Optional[List[str]] = None
 

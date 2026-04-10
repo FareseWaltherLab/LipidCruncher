@@ -46,8 +46,8 @@ def _apply_msdial_sample_override(
     )
 
     # Update session state with results
-    st.session_state.msdial_features['raw_sample_columns'] = result.raw_sample_columns
-    st.session_state.msdial_features['normalized_sample_columns'] = result.normalized_sample_columns
+    st.session_state.msdial_features.raw_sample_columns = result.raw_sample_columns
+    st.session_state.msdial_features.normalized_sample_columns = result.normalized_sample_columns
     st.session_state.n_intensity_cols = result.n_intensity_cols
     st.session_state.column_mapping = result.column_mapping
     st.session_state.msdial_sample_names = result.sample_names
@@ -135,9 +135,9 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> Tuple[bool, Op
         with st.sidebar.expander("🔧 Override Sample Detection (Optional)", expanded=False):
             st.write("Only change this if auto-detection incorrectly classified columns.")
 
-            features = st.session_state.get('msdial_features', {})
-            detected_samples = features.get('raw_sample_columns', [])
-            all_columns = features.get('actual_columns', [])
+            features = st.session_state.get('msdial_features', None)
+            detected_samples = getattr(features, 'raw_sample_columns', [])
+            all_columns = getattr(features, 'actual_columns', [])
 
             # Deduplicate: raw and normalized columns share same names in MS-DIAL
             available_for_samples = list(dict.fromkeys(

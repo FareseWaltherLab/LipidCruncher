@@ -12,6 +12,7 @@ import pandas as pd
 
 from ..models.experiment import ExperimentConfig
 from ..models.normalization import NormalizationConfig
+from .exceptions import ConfigurationError, EmptyDataError, ValidationError
 
 
 @dataclass
@@ -86,7 +87,7 @@ class NormalizationService:
             )
 
         else:
-            raise ValueError(
+            raise ConfigurationError(
                 f"Unknown normalization method: '{config.method}'. "
                 "Available methods: none, internal_standard, protein, total_intensity, both"
             )
@@ -103,21 +104,21 @@ class NormalizationService:
             ValueError: If validation fails
         """
         if df is None or df.empty:
-            raise ValueError(
+            raise EmptyDataError(
                 "Input DataFrame is empty. Please provide a dataset with lipid data."
             )
 
         required_cols = ['LipidMolec', 'ClassKey']
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
-            raise ValueError(
+            raise ValidationError(
                 f"Input DataFrame is missing required columns: {', '.join(missing_cols)}"
             )
 
         # Check for intensity columns
         intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
         if not intensity_cols:
-            raise ValueError(
+            raise ValidationError(
                 "Input DataFrame has no intensity columns. "
                 "Expected columns like 'intensity[s1]', 'intensity[s2]', etc."
             )
@@ -216,7 +217,7 @@ class NormalizationService:
             ValueError: If intsta_df is missing or empty
         """
         if intsta_df is None or intsta_df.empty:
-            raise ValueError(
+            raise ConfigurationError(
                 "Internal standards DataFrame is required for internal_standard normalization. "
                 "Please provide intsta_df with standard intensity data."
             )
@@ -268,7 +269,7 @@ class NormalizationService:
         # Fail-fast: validate all classes have mappings before processing any
         missing = [cls for cls in selected_classes if config.get_standard_for_class(cls) is None]
         if missing:
-            raise ValueError(
+            raise ConfigurationError(
                 f"No internal standard mapped for lipid class(es): {missing}. "
                 f"Please provide mappings in internal_standards."
             )
@@ -276,14 +277,14 @@ class NormalizationService:
         for lipid_class in selected_classes:
             standard_name = config.get_standard_for_class(lipid_class)
             if standard_name is None:
-                raise ValueError(
+                raise ConfigurationError(
                     f"No internal standard mapped for lipid class '{lipid_class}'. "
                     f"Please provide a mapping in internal_standards."
                 )
 
             concentration = config.get_standard_concentration(standard_name)
             if concentration is None:
-                raise ValueError(
+                raise ConfigurationError(
                     f"No concentration provided for internal standard '{standard_name}'. "
                     f"Please provide concentration in intsta_concentrations."
                 )
@@ -312,7 +313,7 @@ class NormalizationService:
         Formula: Intensity_lipid / Protein_conc
         """
         if not config.protein_concentrations:
-            raise ValueError(
+            raise ConfigurationError(
                 "Protein concentrations are required for protein normalization. "
                 "Please provide protein_concentrations mapping sample -> concentration."
             )
@@ -326,7 +327,7 @@ class NormalizationService:
         cols_to_normalize = intensity_cols if intensity_cols else concentration_cols
 
         if not cols_to_normalize:
-            raise ValueError(
+            raise ValidationError(
                 "No intensity or concentration columns found in DataFrame. "
                 "Cannot apply protein normalization."
             )
@@ -420,14 +421,14 @@ class NormalizationService:
             ValueError: If validation fails
         """
         if 'LipidMolec' not in intsta_df.columns:
-            raise ValueError(
+            raise ValidationError(
                 "Internal standards DataFrame must have 'LipidMolec' column "
                 "containing standard lipid names."
             )
 
         intensity_cols = [col for col in intsta_df.columns if col.startswith('intensity[')]
         if not intensity_cols:
-            raise ValueError(
+            raise ValidationError(
                 "Internal standards DataFrame has no intensity columns. "
                 "Expected columns like 'intensity[s1]', 'intensity[s2]', etc."
             )
@@ -455,7 +456,7 @@ class NormalizationService:
         filtered_intsta = intsta_df[intsta_df['LipidMolec'] == intsta_species]
 
         if filtered_intsta.empty:
-            raise ValueError(
+            raise ConfigurationError(
                 f"Internal standard '{intsta_species}' not found in standards DataFrame. "
                 f"Available standards: {list(intsta_df['LipidMolec'].unique())}"
             )
@@ -465,7 +466,7 @@ class NormalizationService:
         # Check for missing columns
         missing_cols = [col for col in cols if col not in intsta_df.columns]
         if missing_cols:
-            raise ValueError(
+            raise ValidationError(
                 f"Internal standards DataFrame is missing intensity columns: {', '.join(missing_cols)}"
             )
 

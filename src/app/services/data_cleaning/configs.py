@@ -1,6 +1,7 @@
 """
 Configuration classes for data cleaning.
 """
+from dataclasses import dataclass, field as dc_field
 from typing import Dict, FrozenSet, List, Optional, Tuple
 
 import pandas as pd
@@ -80,16 +81,15 @@ class QualityFilterConfig(BaseModel):
         return cls(total_score_threshold=0, require_msms=False)
 
 
-class CleaningResult(BaseModel):
+@dataclass
+class CleaningResult:
     """Result object containing cleaned data and metadata.
 
-    Args:
+    Attributes:
         cleaned_df: Cleaned DataFrame without internal standards.
         internal_standards_df: DataFrame containing only internal standards.
-        filter_messages: Optional list of filter messages (e.g., rows removed).
+        filter_messages: List of filter messages (e.g., rows removed).
     """
-    model_config = {"arbitrary_types_allowed": True}
-
-    cleaned_df: pd.DataFrame = Field(default_factory=pd.DataFrame)
-    internal_standards_df: pd.DataFrame = Field(default_factory=pd.DataFrame)
-    filter_messages: List[str] = Field(default_factory=list)
+    cleaned_df: pd.DataFrame = dc_field(default_factory=pd.DataFrame)
+    internal_standards_df: pd.DataFrame = dc_field(default_factory=pd.DataFrame)
+    filter_messages: List[str] = dc_field(default_factory=list)

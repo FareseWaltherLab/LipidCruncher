@@ -48,10 +48,34 @@ class StandardizationResult:
     standardized_df: Optional[pd.DataFrame] = None
     column_mapping: Optional[pd.DataFrame] = None
     n_intensity_cols: int = 0
-    msdial_features: Optional[Dict] = None
+    msdial_features: Optional["MSDIALFeatures"] = None
     msdial_sample_names: Optional[Dict[str, str]] = None
     workbench_conditions: Optional[Dict[str, str]] = None
     workbench_samples: Optional[Dict[str, str]] = None
+
+
+@dataclass
+class MSDIALFeatures:
+    """Typed feature flags and column lists for MS-DIAL data.
+
+    Replaces the untyped ``Dict`` previously used, so that all field
+    accesses are validated at definition time rather than at runtime.
+    """
+    has_ontology: bool = False
+    has_quality_score: bool = False
+    has_msms_matched: bool = False
+    has_rt: bool = False
+    has_mz: bool = False
+    has_normalized_data: bool = False
+    lipid_column: str = ''
+    lipid_column_index: int = 0
+    raw_sample_columns: List[str] = field(default_factory=list)
+    raw_sample_indices: List[int] = field(default_factory=list)
+    normalized_sample_columns: List[str] = field(default_factory=list)
+    normalized_sample_indices: List[int] = field(default_factory=list)
+    header_row_index: int = -1
+    actual_columns: List[str] = field(default_factory=list)
+    column_indices: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -64,14 +88,14 @@ class MSDIALStructure:
         lipid_col: Name of the lipid name column (e.g., 'Metabolite name').
         lipid_col_idx: Index of the lipid column in actual_columns.
         col_indices: Mapping of column name to first-occurrence index.
-        features: Dict of MS-DIAL-specific feature flags and column lists.
+        features: Typed MS-DIAL feature flags and column lists.
     """
     header_row_idx: int
     actual_columns: List[str]
     lipid_col: str
     lipid_col_idx: int
     col_indices: Dict[str, int]
-    features: Dict
+    features: MSDIALFeatures
 
 
 @dataclass
@@ -144,7 +168,7 @@ class DataStandardizationService:
                     success=False,
                     message=f"Unsupported format: {data_format}",
                 )
-        except (ValueError, KeyError, IndexError, TypeError) as e:
+        except (ValueError, KeyError) as e:
             format_name = data_format.value if hasattr(data_format, 'value') else str(data_format)
             return StandardizationResult(
                 success=False,
@@ -165,7 +189,7 @@ class DataStandardizationService:
         df: pd.DataFrame,
         column_mapping: pd.DataFrame,
         manual_samples: List[str],
-        features: Dict,
+        features: "MSDIALFeatures",
     ) -> MSDIALOverrideResult:
         """Rebuild DataFrame and column mapping after manual MS-DIAL sample override.
 
@@ -176,14 +200,14 @@ class DataStandardizationService:
             column_mapping: Current column mapping DataFrame with
                 'standardized_name' and 'original_name' columns.
             manual_samples: User-selected original sample column names.
-            features: MS-DIAL features dict (needs 'normalized_sample_columns').
+            features: Typed MS-DIAL features (needs normalized_sample_columns).
 
         Returns:
             MSDIALOverrideResult with rebuilt DataFrame, mapping, and updated lists.
         """
         # Update feature lists
         raw_sample_columns = list(manual_samples)
-        current_norm_samples = features.get('normalized_sample_columns', [])
+        current_norm_samples = features.normalized_sample_columns
         normalized_sample_columns = [s for s in current_norm_samples if s in manual_samples]
 
         # Build reverse lookup: standardized_name -> original_name
@@ -288,7 +312,7 @@ class DataStandardizationService:
 
             return format_lipid_name(class_name, raw_chains, modification)
 
-        except (TypeError, AttributeError, ValueError, IndexError):
+        except (ValueError, IndexError):
             return str(lipid_name) if lipid_name else "Unknown"
 
     @staticmethod
@@ -354,6 +378,8 @@ class DataStandardizationService:
             SPLASH LPC 18:1(d7) -> LPC
         """
         try:
+            if lipid_molec is None or pd.isna(lipid_molec):
+                return "Unknown"
             name = str(lipid_molec).strip()
 
             # SPLASH standards: extract the actual class
@@ -644,23 +670,23 @@ class DataStandardizationService:
             if col not in col_indices:
                 col_indices[col] = idx
 
-        features = {
-            'has_ontology': 'Ontology' in actual_columns,
-            'has_quality_score': 'Total score' in actual_columns,
-            'has_msms_matched': 'MS/MS matched' in actual_columns,
-            'has_rt': 'Average Rt(min)' in actual_columns,
-            'has_mz': 'Average Mz' in actual_columns,
-            'has_normalized_data': len(norm_samples) > 0,
-            'lipid_column': lipid_col,
-            'lipid_column_index': lipid_col_idx,
-            'raw_sample_columns': raw_samples,
-            'raw_sample_indices': raw_indices,
-            'normalized_sample_columns': norm_samples,
-            'normalized_sample_indices': norm_indices,
-            'header_row_index': header_row_idx,
-            'actual_columns': actual_columns,
-            'column_indices': col_indices,
-        }
+        features = MSDIALFeatures(
+            has_ontology='Ontology' in actual_columns,
+            has_quality_score='Total score' in actual_columns,
+            has_msms_matched='MS/MS matched' in actual_columns,
+            has_rt='Average Rt(min)' in actual_columns,
+            has_mz='Average Mz' in actual_columns,
+            has_normalized_data=len(norm_samples) > 0,
+            lipid_column=lipid_col,
+            lipid_column_index=lipid_col_idx,
+            raw_sample_columns=raw_samples,
+            raw_sample_indices=raw_indices,
+            normalized_sample_columns=norm_samples,
+            normalized_sample_indices=norm_indices,
+            header_row_index=header_row_idx,
+            actual_columns=actual_columns,
+            column_indices=col_indices,
+        )
 
         return MSDIALStructure(
             header_row_idx=header_row_idx,
@@ -677,7 +703,7 @@ class DataStandardizationService:
         header_row_idx: int,
         lipid_col_idx: int,
         col_indices: Dict[str, int],
-        features: Dict,
+        features: "MSDIALFeatures",
         sample_cols: List[str],
         sample_indices: List[int],
     ) -> Tuple[pd.DataFrame, Dict[str, str]]:
@@ -704,21 +730,21 @@ class DataStandardizationService:
         )
 
         # Optional metadata columns
-        if features['has_rt'] and 'Average Rt(min)' in col_indices:
+        if features.has_rt and 'Average Rt(min)' in col_indices:
             standardized_data['BaseRt'] = pd.to_numeric(
                 data_df.iloc[:, col_indices['Average Rt(min)']], errors='coerce'
             )
-        if features['has_mz'] and 'Average Mz' in col_indices:
+        if features.has_mz and 'Average Mz' in col_indices:
             standardized_data['CalcMass'] = pd.to_numeric(
                 data_df.iloc[:, col_indices['Average Mz']], errors='coerce'
             )
 
         # Quality columns (preserved for filtering)
-        if features['has_quality_score'] and 'Total score' in col_indices:
+        if features.has_quality_score and 'Total score' in col_indices:
             standardized_data['Total score'] = pd.to_numeric(
                 data_df.iloc[:, col_indices['Total score']], errors='coerce'
             )
-        if features['has_msms_matched'] and 'MS/MS matched' in col_indices:
+        if features.has_msms_matched and 'MS/MS matched' in col_indices:
             standardized_data['MS/MS matched'] = data_df.iloc[
                 :, col_indices['MS/MS matched']
             ]
@@ -740,19 +766,19 @@ class DataStandardizationService:
     def _build_msdial_mapping(
         lipid_col: str,
         col_indices: Dict[str, int],
-        features: Dict,
+        features: "MSDIALFeatures",
         column_mapping_dict: Dict[str, str],
     ) -> pd.DataFrame:
         """Build the column mapping DataFrame for MS-DIAL."""
         mapping_rows = [
             {'original_name': lipid_col, 'standardized_name': 'LipidMolec'}
         ]
-        if features['has_rt'] and 'Average Rt(min)' in col_indices:
+        if features.has_rt and 'Average Rt(min)' in col_indices:
             mapping_rows.append({
                 'original_name': 'Average Rt(min)',
                 'standardized_name': 'BaseRt',
             })
-        if features['has_mz'] and 'Average Mz' in col_indices:
+        if features.has_mz and 'Average Mz' in col_indices:
             mapping_rows.append({
                 'original_name': 'Average Mz',
                 'standardized_name': 'CalcMass',
@@ -776,13 +802,13 @@ class DataStandardizationService:
             structure = DataStandardizationService._detect_msdial_structure(df)
 
             # Choose raw vs normalized sample columns
-            norm_samples = structure.features['normalized_sample_columns']
+            norm_samples = structure.features.normalized_sample_columns
             if use_normalized and len(norm_samples) > 0:
                 sample_cols = norm_samples
-                sample_indices = structure.features['normalized_sample_indices']
+                sample_indices = structure.features.normalized_sample_indices
             else:
-                sample_cols = structure.features['raw_sample_columns']
-                sample_indices = structure.features['raw_sample_indices']
+                sample_cols = structure.features.raw_sample_columns
+                sample_indices = structure.features.raw_sample_indices
 
             result_df, column_mapping_dict = (
                 DataStandardizationService._standardize_msdial_columns(
@@ -813,7 +839,7 @@ class DataStandardizationService:
 
         except ValueError as e:
             return StandardizationResult(False, str(e))
-        except (KeyError, IndexError, TypeError) as e:
+        except KeyError as e:
             return StandardizationResult(
                 False, f"MS-DIAL standardization error: {e}"
             )
@@ -909,7 +935,7 @@ class DataStandardizationService:
                 workbench_samples=wb_samples,
             )
 
-        except (ValueError, KeyError, IndexError, TypeError) as e:
+        except (ValueError, KeyError, IndexError) as e:
             return StandardizationResult(
                 False, f"Error standardizing Metabolomics Workbench data: {e}"
             )

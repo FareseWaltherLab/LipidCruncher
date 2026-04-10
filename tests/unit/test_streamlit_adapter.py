@@ -95,7 +95,7 @@ class TestSessionStateDefaults:
         """Test default MS-DIAL configuration."""
         state = SessionState()
         assert state.msdial_quality_config is None
-        assert state.msdial_features == {}
+        assert state.msdial_features is None
         assert state.msdial_use_normalized is False
         assert state.msdial_data_type_index == 0
 
