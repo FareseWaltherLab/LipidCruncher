@@ -7,6 +7,10 @@ to users when they select a data format.
 
 import streamlit as st
 
+from app.constants import (
+    FORMAT_METABOLOMICS_WORKBENCH, FORMAT_LIPIDSEARCH, FORMAT_MSDIAL, FORMAT_GENERIC,
+)
+
 
 # =============================================================================
 # Format Requirement Strings
@@ -203,10 +207,10 @@ def display_format_requirements(data_format: str):
         data_format: The selected data format string
     """
     requirements_map = {
-        'Metabolomics Workbench': METABOLOMICS_WORKBENCH_REQUIREMENTS,
-        'LipidSearch 5.0': LIPIDSEARCH_REQUIREMENTS,
-        'MS-DIAL': MSDIAL_REQUIREMENTS,
-        'Generic Format': GENERIC_REQUIREMENTS,
+        FORMAT_METABOLOMICS_WORKBENCH: METABOLOMICS_WORKBENCH_REQUIREMENTS,
+        FORMAT_LIPIDSEARCH: LIPIDSEARCH_REQUIREMENTS,
+        FORMAT_MSDIAL: MSDIAL_REQUIREMENTS,
+        FORMAT_GENERIC: GENERIC_REQUIREMENTS,
     }
 
     requirements_text = requirements_map.get(data_format, GENERIC_REQUIREMENTS)

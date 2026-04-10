@@ -44,6 +44,18 @@ ANALYSIS_OPTIONS = [
     "Species Level Breakdown - Lipidomic Heatmap",
 ]
 
+# Dispatch table: analysis option → rendering function.
+# Avoids fragile index-based routing (ANALYSIS_OPTIONS[0], [1], ...).
+_ANALYSIS_DISPATCH = {
+    ANALYSIS_OPTIONS[0]: lambda df, exp: _display_bar_chart(df, exp),
+    ANALYSIS_OPTIONS[1]: lambda df, exp: _display_pie_charts(df, exp),
+    ANALYSIS_OPTIONS[2]: lambda df, exp: _display_saturation_plots(df, exp),
+    ANALYSIS_OPTIONS[3]: lambda df, exp: _display_fach_heatmaps(df, exp),
+    ANALYSIS_OPTIONS[4]: lambda df, exp: _display_pathway_viz(df, exp),
+    ANALYSIS_OPTIONS[5]: lambda df, exp: _display_volcano_plot(df, exp),
+    ANALYSIS_OPTIONS[6]: lambda df, exp: _display_lipidomic_heatmap(df, exp),
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Entry Point
@@ -84,20 +96,9 @@ def display_analysis_module(
         key='analysis_radio',
     )
 
-    if analysis_type == ANALYSIS_OPTIONS[0]:
-        _display_bar_chart(df, experiment)
-    elif analysis_type == ANALYSIS_OPTIONS[1]:
-        _display_pie_charts(df, experiment)
-    elif analysis_type == ANALYSIS_OPTIONS[2]:
-        _display_saturation_plots(df, experiment)
-    elif analysis_type == ANALYSIS_OPTIONS[3]:
-        _display_fach_heatmaps(df, experiment)
-    elif analysis_type == ANALYSIS_OPTIONS[4]:
-        _display_pathway_viz(df, experiment)
-    elif analysis_type == ANALYSIS_OPTIONS[5]:
-        _display_volcano_plot(df, experiment)
-    elif analysis_type == ANALYSIS_OPTIONS[6]:
-        _display_lipidomic_heatmap(df, experiment)
+    handler = _ANALYSIS_DISPATCH.get(analysis_type)
+    if handler is not None:
+        handler(df, experiment)
 
     # PDF Report Download
     _display_pdf_report_section(experiment, format_type)
@@ -174,5 +175,5 @@ def _display_pdf_report_section(
                 mime="application/pdf",
                 key="download_pdf_report",
             )
-        except (ValueError, Exception) as e:
+        except Exception as e:
             st.error(f"Failed to generate PDF report: {e}")

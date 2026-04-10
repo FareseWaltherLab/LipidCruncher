@@ -22,7 +22,8 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button
 
 from app.constants import (
-    get_format_display_to_enum,
+    FORMAT_LIPIDSEARCH, FORMAT_MSDIAL,
+    resolve_format_enum,
     LIPIDSEARCH_GRADE_OPTIONS,
     LIPIDSEARCH_DEFAULT_GRADES,
     LIPIDSEARCH_RELAXED_GRADE_CLASSES,
@@ -315,14 +316,6 @@ def _display_cached_filter_results(quality_config: dict):
 # Pipeline Orchestration
 # =============================================================================
 
-FORMAT_MAP = None  # Lazy-loaded below
-
-
-def _get_format_map():
-    global FORMAT_MAP
-    if FORMAT_MAP is None:
-        FORMAT_MAP = get_format_display_to_enum()
-    return FORMAT_MAP
 
 
 def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):
@@ -340,12 +333,12 @@ def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):
     quality_config = None
     quality_config_dict = None
 
-    if data_format == 'LipidSearch 5.0':
+    if data_format == FORMAT_LIPIDSEARCH:
         grade_config_dict = display_grade_filtering_config(raw_df)
         if grade_config_dict is not None:
             grade_config = GradeFilterConfig(grade_config=grade_config_dict)
 
-    elif data_format == 'MS-DIAL':
+    elif data_format == FORMAT_MSDIAL:
         display_msdial_data_type_selection()
         quality_config_dict = display_quality_filtering_config()
         if quality_config_dict is not None:
@@ -377,7 +370,7 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
     Returns:
         IngestionResult if successful, None if error or invalid
     """
-    format_enum = _get_format_map().get(data_format)
+    format_enum = resolve_format_enum(data_format)
 
     # Capture previous config BEFORE running workflow (to detect config changes)
     prev_quality_config = st.session_state.get('last_quality_config')
@@ -417,7 +410,7 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
         st.warning(warning)
 
     # MS-DIAL: rerun if quality config changed so expander shows updated results
-    if data_format == 'MS-DIAL' and quality_config is not None:
+    if data_format == FORMAT_MSDIAL and quality_config is not None:
         config_changed = (prev_quality_config != quality_config)
         if config_changed:
             st.rerun()

@@ -31,7 +31,7 @@ st.set_page_config(
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP
+from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
@@ -113,7 +113,7 @@ def display_app_page() -> None:
         # For MS-DIAL: restore sample override widget after re-standardization
         # (re-validation resets msdial_features, so we need to ensure the
         # multiselect widget still has the overridden selection)
-        if data_format == 'MS-DIAL':
+        if data_format == FORMAT_MSDIAL:
             override_samples = st.session_state.get('_msdial_override_samples')
             if override_samples:
                 st.session_state['manual_sample_override'] = override_samples

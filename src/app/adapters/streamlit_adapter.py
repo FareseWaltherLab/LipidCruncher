@@ -28,7 +28,17 @@ from ..services.plotting.correlation import CorrelationPlotterService
 from ..services.plotting.pca import PCAPlotterService
 from ..services.plotting.retention_time import RetentionTimePlotterService
 from ..services.validation import get_matching_concentration_columns
-from ..workflows.analysis import AnalysisWorkflow, VolcanoData
+from ..workflows.analysis import (
+    AnalysisWorkflow,
+    BarChartResult,
+    FACHResult,
+    HeatmapResult,
+    PathwayDataResult,
+    PathwayResult,
+    SaturationResult,
+    VolcanoData,
+    VolcanoResult,
+)
 from ..workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig, IngestionResult
 from ..workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
 
@@ -641,7 +651,7 @@ class StreamlitAdapter:
         selected_classes: List[str],
         stat_config: Optional[StatisticalTestConfig] = None,
         scale: str = 'linear',
-    ):
+    ) -> BarChartResult:
         """Cached bar chart analysis."""
         return AnalysisWorkflow.run_bar_chart(
             df, experiment, selected_conditions, selected_classes,
@@ -658,7 +668,7 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         selected_conditions: List[str],
         selected_classes: List[str],
-    ):
+    ) -> Dict[str, Any]:
         """Cached pie chart analysis."""
         return AnalysisWorkflow.run_pie_charts(
             df, experiment, selected_conditions, selected_classes,
@@ -677,7 +687,7 @@ class StreamlitAdapter:
         stat_config: Optional[StatisticalTestConfig] = None,
         plot_type: str = 'concentration',
         show_significance: bool = False,
-    ):
+    ) -> SaturationResult:
         """Cached saturation analysis."""
         return AnalysisWorkflow.run_saturation(
             df, experiment, selected_conditions, selected_classes,
@@ -695,7 +705,7 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         selected_class: str,
         selected_conditions: List[str],
-    ):
+    ) -> FACHResult:
         """Cached FACH heatmap analysis."""
         return AnalysisWorkflow.run_fach(
             df, experiment, selected_class, selected_conditions,
@@ -712,7 +722,7 @@ class StreamlitAdapter:
         control: str,
         experimental: str,
         saturation_source_df: pd.DataFrame = None,
-    ):
+    ) -> PathwayDataResult:
         """Cached pathway data computation (fold change + saturation).
 
         Args:
@@ -739,7 +749,7 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         control: str,
         experimental: str,
-    ):
+    ) -> PathwayResult:
         """Cached pathway visualization (default layout)."""
         return AnalysisWorkflow.run_pathway(
             df, experiment, control, experimental,
@@ -763,7 +773,7 @@ class StreamlitAdapter:
         top_n_labels: int = 0,
         custom_label_positions: Optional[Dict] = None,
         additional_labels: Optional[tuple] = None,
-    ):
+    ) -> VolcanoResult:
         """Cached volcano plot analysis."""
         return AnalysisWorkflow.run_volcano(
             df, experiment, control, experimental, selected_classes,
@@ -786,7 +796,7 @@ class StreamlitAdapter:
         selected_classes: List[str],
         heatmap_type: str = 'regular',
         n_clusters: int = 3,
-    ):
+    ) -> HeatmapResult:
         """Cached lipidomic heatmap analysis."""
         return AnalysisWorkflow.run_heatmap(
             df, experiment, selected_conditions, selected_classes,

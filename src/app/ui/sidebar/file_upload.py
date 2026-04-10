@@ -17,6 +17,10 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.constants import (
+    FORMAT_GENERIC, FORMAT_METABOLOMICS_WORKBENCH, FORMAT_LIPIDSEARCH, FORMAT_MSDIAL,
+    FORMAT_OPTIONS,
+)
 from app.services.data_standardization import DataStandardizationService
 from app.services.format_detection import DataFormat
 from app.ui.content import get_sample_data_info
@@ -113,7 +117,7 @@ def display_format_selection() -> str:
     """Display format selection dropdown in sidebar."""
     return st.sidebar.selectbox(
         'Select Data Format',
-        ['Generic Format', 'Metabolomics Workbench', 'LipidSearch 5.0', 'MS-DIAL']
+        FORMAT_OPTIONS,
     )
 
 
@@ -132,7 +136,7 @@ def load_sample_dataset(data_format: str) -> Optional[pd.DataFrame]:
         if filepath.exists():
             st.session_state.sample_data_file = info['file']
 
-            if data_format == 'Metabolomics Workbench':
+            if data_format == FORMAT_METABOLOMICS_WORKBENCH:
                 # Metabolomics Workbench needs raw text for parsing special markers
                 with open(filepath, 'r', encoding='utf-8') as f:
                     text_content = f.read()
@@ -182,7 +186,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
         return st.session_state.raw_df
 
     # File upload
-    file_types = ['csv'] if data_format == 'Metabolomics Workbench' else ['csv', 'txt']
+    file_types = ['csv'] if data_format == FORMAT_METABOLOMICS_WORKBENCH else ['csv', 'txt']
     uploaded_file = st.sidebar.file_uploader(
         f'Upload your {data_format} dataset',
         type=file_types,
@@ -191,7 +195,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
 
     if uploaded_file is not None:
         try:
-            if data_format == 'Metabolomics Workbench':
+            if data_format == FORMAT_METABOLOMICS_WORKBENCH:
                 # Metabolomics Workbench needs raw text for parsing special markers
                 text_content = uploaded_file.getvalue().decode('utf-8')
                 result = DataStandardizationService.validate_and_standardize(

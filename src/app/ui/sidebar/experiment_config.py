@@ -10,6 +10,8 @@ This module contains:
 import streamlit as st
 import pandas as pd
 
+from app.constants import FORMAT_METABOLOMICS_WORKBENCH
+
 
 # =============================================================================
 # Helper Functions
@@ -73,7 +75,7 @@ def display_experiment_definition(df: pd.DataFrame, data_format: str, sample_col
     st.sidebar.subheader("Define Experiment")
 
     # Handle Metabolomics Workbench auto-detection
-    if data_format == 'Metabolomics Workbench' and 'workbench_conditions' in st.session_state:
+    if data_format == FORMAT_METABOLOMICS_WORKBENCH and 'workbench_conditions' in st.session_state:
         result = _display_workbench_auto_detection()
         if result is not None:
             return result

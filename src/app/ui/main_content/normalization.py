@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 from app.models.experiment import ExperimentConfig
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowResult
-from app.constants import get_format_display_to_enum
+from app.constants import FORMAT_MSDIAL, resolve_format_enum
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
@@ -342,7 +342,7 @@ def _run_normalization(
             df=cleaned_df,
             experiment=experiment,
             normalization=norm_config,
-            data_format=get_format_display_to_enum().get(data_format, DataFormat.GENERIC),
+            data_format=resolve_format_enum(data_format),
             intsta_df=intsta_df,
         )
 
@@ -415,14 +415,15 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
         internal_standards, intsta_concentrations, protein_concentrations
     )
 
-    _display_normalization_results(result)
+    if result is not None:
+        _display_normalization_results(result)
     return st.session_state.get('normalized_df')
 
 
 def _get_normalization_options(intsta_df, data_format: str) -> list:
     """Determine available normalization options based on standards and data format."""
     has_standards = intsta_df is not None and not intsta_df.empty
-    is_msdial_prenormalized = (data_format == 'MS-DIAL' and
+    is_msdial_prenormalized = (data_format == FORMAT_MSDIAL and
                                st.session_state.get('msdial_use_normalized', False))
 
     if is_msdial_prenormalized:

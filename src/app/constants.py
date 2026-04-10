@@ -18,6 +18,26 @@ PAGE_APP = "app"
 
 
 # =============================================================================
+# Format Display Strings
+# =============================================================================
+
+# Display names used in UI selectboxes, content dicts, and session state.
+# Always use these constants instead of raw strings.
+FORMAT_LIPIDSEARCH: str = 'LipidSearch 5.0'
+FORMAT_MSDIAL: str = 'MS-DIAL'
+FORMAT_GENERIC: str = 'Generic Format'
+FORMAT_METABOLOMICS_WORKBENCH: str = 'Metabolomics Workbench'
+
+# Ordered list for format selector dropdown
+FORMAT_OPTIONS: List[str] = [
+    FORMAT_GENERIC,
+    FORMAT_METABOLOMICS_WORKBENCH,
+    FORMAT_LIPIDSEARCH,
+    FORMAT_MSDIAL,
+]
+
+
+# =============================================================================
 # Format Mappings
 # =============================================================================
 
@@ -28,11 +48,29 @@ def get_format_display_to_enum() -> Dict:
     """
     from app.services.format_detection import DataFormat
     return {
-        'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
-        'MS-DIAL': DataFormat.MSDIAL,
-        'Generic Format': DataFormat.GENERIC,
-        'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
+        FORMAT_LIPIDSEARCH: DataFormat.LIPIDSEARCH,
+        FORMAT_MSDIAL: DataFormat.MSDIAL,
+        FORMAT_GENERIC: DataFormat.GENERIC,
+        FORMAT_METABOLOMICS_WORKBENCH: DataFormat.METABOLOMICS_WORKBENCH,
     }
+
+
+def resolve_format_enum(format_type):
+    """Resolve a format display string or DataFormat to a DataFormat enum.
+
+    Accepts either a display string (e.g., 'LipidSearch 5.0') or a DataFormat
+    enum value. Returns DataFormat.GENERIC as fallback.
+
+    Args:
+        format_type: Display string or DataFormat enum.
+
+    Returns:
+        DataFormat enum value.
+    """
+    from app.services.format_detection import DataFormat
+    if isinstance(format_type, DataFormat):
+        return format_type
+    return get_format_display_to_enum().get(format_type, DataFormat.GENERIC)
 
 
 # =============================================================================

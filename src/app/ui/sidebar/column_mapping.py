@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 import streamlit as st
 import pandas as pd
 
-from app.constants import get_format_display_to_enum
+from app.constants import FORMAT_METABOLOMICS_WORKBENCH, FORMAT_MSDIAL, resolve_format_enum
 from app.services.data_standardization import DataStandardizationService
 from app.services.format_detection import DataFormat, FormatDetectionService
 
@@ -73,11 +73,11 @@ def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> Optional[pd
     """
     # Metabolomics Workbench is already standardized during file loading
     # (it requires raw text parsing, done in load_sample_dataset/display_file_upload)
-    if data_format == 'Metabolomics Workbench':
+    if data_format == FORMAT_METABOLOMICS_WORKBENCH:
         st.session_state.format_type = data_format
         return df
 
-    format_enum = get_format_display_to_enum().get(data_format, DataFormat.GENERIC)
+    format_enum = resolve_format_enum(data_format)
     use_normalized = st.session_state.get('msdial_data_type_index', 0) == 1
 
     result = DataStandardizationService.validate_and_standardize(
@@ -131,7 +131,7 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> Tuple[bool, Op
     )
 
     # MS-DIAL: Optional override for sample column detection
-    if data_format == 'MS-DIAL':
+    if data_format == FORMAT_MSDIAL:
         with st.sidebar.expander("🔧 Override Sample Detection (Optional)", expanded=False):
             st.write("Only change this if auto-detection incorrectly classified columns.")
 

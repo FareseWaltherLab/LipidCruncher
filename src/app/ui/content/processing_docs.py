@@ -1,7 +1,11 @@
 """Data processing pipeline documentation for each format."""
 
+from app.constants import (
+    FORMAT_LIPIDSEARCH, FORMAT_MSDIAL, FORMAT_METABOLOMICS_WORKBENCH, FORMAT_GENERIC,
+)
+
 PROCESSING_DOCS = {
-    'LipidSearch 5.0': """
+    FORMAT_LIPIDSEARCH: """
 ### Data Cleaning Pipeline
 
 | Step | Action |
@@ -31,7 +35,7 @@ LipidSearch assigns quality grades to each identification:
 **Configure in "Configure Grade Filtering" section below.**
 """,
 
-    'MS-DIAL': """
+    FORMAT_MSDIAL: """
 ### Data Cleaning Pipeline
 
 | Step | Action |
@@ -63,7 +67,7 @@ MS-DIAL provides quality metrics for filtering:
 **Configure in "Configure Quality Filtering" section below.**
 """,
 
-    'Metabolomics Workbench': """
+    FORMAT_METABOLOMICS_WORKBENCH: """
 ### Data Cleaning Pipeline
 
 | Step | Action |
@@ -78,7 +82,7 @@ MS-DIAL provides quality metrics for filtering:
 | 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
 """,
 
-    'Generic Format': """
+    FORMAT_GENERIC: """
 ### Data Cleaning Pipeline
 
 | Step | Action |
@@ -109,4 +113,4 @@ Removes lipid species with too many zero/below-detection values:
 
 def get_processing_docs(data_format: str) -> str:
     """Get processing documentation for a specific format."""
-    return PROCESSING_DOCS.get(data_format, PROCESSING_DOCS['Generic Format'])
+    return PROCESSING_DOCS.get(data_format, PROCESSING_DOCS[FORMAT_GENERIC])

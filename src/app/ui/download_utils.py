@@ -5,9 +5,12 @@ Provides SVG and CSV download buttons for Plotly figures,
 Matplotlib figures, and DataFrames.
 """
 import io
+import logging
 
 import streamlit as st
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def plotly_svg_download_button(fig, filename, key=None):
@@ -18,7 +21,12 @@ def plotly_svg_download_button(fig, filename, key=None):
         filename: Name for the downloaded file.
         key: Optional unique widget key.
     """
-    svg_bytes = fig.to_image(format="svg")
+    try:
+        svg_bytes = fig.to_image(format="svg")
+    except (ValueError, OSError) as e:
+        logger.error("SVG export failed (is kaleido installed?): %s", e)
+        st.warning("SVG export unavailable. Install kaleido: `pip install kaleido`")
+        return
     svg_string = svg_bytes.decode('utf-8')
     if not svg_string.startswith('<?xml'):
         svg_string = '<?xml version="1.0" encoding="utf-8"?>\n' + svg_string
@@ -39,10 +47,15 @@ def matplotlib_svg_download_button(fig, filename, key=None):
         filename: Name for the downloaded file.
         key: Optional unique widget key.
     """
-    buf = io.BytesIO()
-    fig.savefig(buf, format='svg', bbox_inches='tight')
-    buf.seek(0)
-    svg_string = buf.getvalue().decode('utf-8')
+    try:
+        buf = io.BytesIO()
+        fig.savefig(buf, format='svg', bbox_inches='tight')
+        buf.seek(0)
+        svg_string = buf.getvalue().decode('utf-8')
+    except (ValueError, OSError) as e:
+        logger.error("Matplotlib SVG export failed: %s", e)
+        st.warning("SVG export failed. The figure may be in an invalid state.")
+        return
     st.download_button(
         label="Download SVG",
         data=svg_string,

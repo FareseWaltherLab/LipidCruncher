@@ -1,7 +1,11 @@
 """Sample dataset information for each supported format."""
 
+from app.constants import (
+    FORMAT_GENERIC, FORMAT_LIPIDSEARCH, FORMAT_MSDIAL, FORMAT_METABOLOMICS_WORKBENCH,
+)
+
 SAMPLE_DATA_INFO = {
-    'Generic Format': {
+    FORMAT_GENERIC: {
         'file': 'generic_test_dataset.csv',
         'description': """ADGAT-DKO case study (normalized): inguinal white adipose tissue, WT vs ADGAT-DKO.
 
@@ -16,7 +20,7 @@ SAMPLE_DATA_INFO = {
             'bqc_label': 'BQC',
         },
     },
-    'LipidSearch 5.0': {
+    FORMAT_LIPIDSEARCH: {
         'file': 'lipidsearch5_test_dataset.csv',
         'description': """ADGAT-DKO case study (raw): inguinal white adipose tissue, WT vs ADGAT-DKO. Includes quality grades and retention times.
 
@@ -31,7 +35,7 @@ SAMPLE_DATA_INFO = {
             'bqc_label': 'BQC',
         },
     },
-    'MS-DIAL': {
+    FORMAT_MSDIAL: {
         'file': 'msdial_test_dataset.csv',
         'description': """Mouse adrenal gland lipidomics: fads2 knockout vs wild-type.
 
@@ -46,7 +50,7 @@ SAMPLE_DATA_INFO = {
             'bqc_label': None,
         },
     },
-    'Metabolomics Workbench': {
+    FORMAT_METABOLOMICS_WORKBENCH: {
         'file': 'mw_test_dataset.csv',
         'description': """Mouse serum HFD study: 2×2 factorial (Normal/HFD × Water/DCA).
 

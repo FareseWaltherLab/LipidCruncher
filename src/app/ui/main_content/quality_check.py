@@ -18,7 +18,7 @@ from typing import Optional, Tuple
 import pandas as pd
 import streamlit as st
 
-from app.constants import get_format_display_to_enum
+from app.constants import resolve_format_enum
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
@@ -57,10 +57,7 @@ def display_quality_check_module(
     st.subheader("Quality Check and Anomaly Detection Module")
 
     # Resolve format_type to DataFormat enum
-    if isinstance(format_type, str):
-        format_enum = get_format_display_to_enum().get(format_type, DataFormat.GENERIC)
-    else:
-        format_enum = format_type
+    format_enum = resolve_format_enum(format_type)
 
     # Validate inputs
     errors = QualityCheckWorkflow.validate_inputs(continuation_df, experiment)

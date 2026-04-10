@@ -9,6 +9,7 @@ import streamlit as st
 logger = logging.getLogger(__name__)
 
 from app.constants import (
+    FORMAT_LIPIDSEARCH,
     LIPIDSEARCH_DETECTION_THRESHOLD,
     ZERO_FILTER_NON_BQC_DEFAULT,
     ZERO_FILTER_BQC_DEFAULT,
@@ -39,7 +40,7 @@ def display_zero_filtering_config(
     has_bqc = bqc_label is not None and bqc_label in experiment.conditions_list
 
     # Determine default detection threshold based on format
-    default_detection = LIPIDSEARCH_DETECTION_THRESHOLD if data_format == 'LipidSearch 5.0' else 0.0
+    default_detection = LIPIDSEARCH_DETECTION_THRESHOLD if data_format == FORMAT_LIPIDSEARCH else 0.0
 
     with st.expander("⚙️ Configure Zero Filtering", expanded=False):
         if cleaned_df is None or cleaned_df.empty:
