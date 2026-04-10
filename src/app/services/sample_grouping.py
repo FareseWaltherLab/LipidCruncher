@@ -13,6 +13,8 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from app.constants import FORMAT_MSDIAL, FORMAT_METABOLOMICS_WORKBENCH
+
 from app.models.experiment import ExperimentConfig
 
 
@@ -113,7 +115,7 @@ class SampleGroupingService:
         actual = len(intensity_cols)
 
         if expected != actual:
-            if data_format == 'MS-DIAL' and actual == 2 * expected:
+            if data_format == FORMAT_MSDIAL and actual == 2 * expected:
                 msg = (
                     f"MS-DIAL Data Error: Found {actual} intensity columns "
                     f"but expected {expected} samples. Your MS-DIAL export "
@@ -203,7 +205,7 @@ class SampleGroupingService:
         sample_names = ['s' + str(i) for i in sample_numbers]
 
         if (
-            data_format == 'Metabolomics Workbench'
+            data_format == FORMAT_METABOLOMICS_WORKBENCH
             and workbench_conditions is not None
         ):
             conditions = [

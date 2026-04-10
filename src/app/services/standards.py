@@ -80,7 +80,7 @@ class StandardsService:
     """
 
     # Internal standard patterns (imported from app.constants)
-    INTERNAL_STANDARD_LIPID_PATTERNS: List[str] = INTERNAL_STANDARD_LIPID_PATTERNS
+    INTERNAL_STANDARD_LIPID_PATTERNS: Tuple[str, ...] = INTERNAL_STANDARD_LIPID_PATTERNS
     INTERNAL_STANDARD_CLASS_PATTERN: str = INTERNAL_STANDARD_CLASS_PATTERN
 
     # ==================== Detection Methods ====================

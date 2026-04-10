@@ -10,6 +10,7 @@ Architecture:
 
 """
 
+import logging
 from typing import Optional
 
 import pandas as pd
@@ -26,12 +27,14 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+logger = logging.getLogger(__name__)
+
 # =============================================================================
 # Imports
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL
+from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL, Module, Page
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
@@ -158,6 +161,55 @@ def display_app_page() -> None:
         with center:
             _display_module2_and_3(experiment, bqc_label, data_format)
 
+    else:
+        logger.error("Unknown module: %s — falling back to data processing", current_module)
+        st.session_state.module = MODULE_DATA_PROCESSING
+        st.rerun()
+
+
+# =============================================================================
+# Module 1: Decomposed Steps
+# =============================================================================
+
+def _run_zero_filtering(result) -> None:
+    """Step 4: Apply zero filtering to cleaned data."""
+    pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
+    if pre_filter_df is not None and not pre_filter_df.empty:
+        filtered_df, removed_species, zero_config = display_zero_filtering_config(
+            pre_filter_df, st.session_state.get('experiment'), st.session_state.get('bqc_label'),
+            data_format=st.session_state.get('format_type')
+        )
+        if filtered_df is not None:
+            st.session_state.cleaned_df = filtered_df
+            st.session_state.continuation_df = filtered_df
+
+
+def _run_internal_standards(result) -> None:
+    """Step 6: Manage internal standards."""
+    auto_detected_intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
+    intsta_df = display_manage_internal_standards(
+        cleaned_df=st.session_state.cleaned_df,
+        auto_detected_df=auto_detected_intsta_df
+    )
+    st.session_state.intsta_df = intsta_df
+
+
+def _display_module1_navigation() -> None:
+    """Module 1 navigation buttons."""
+    st.markdown("---")
+    normalized_df = st.session_state.get('normalized_df')
+    if normalized_df is not None:
+        if st.button("Next: Quality Check, Visualization & Analysis →"):
+            _reset_qc_state()
+            _reset_analysis_state()
+            st.session_state.module = MODULE_QC_ANALYSIS
+            st.rerun()
+
+    if st.button("← Back to Home", key="back_home_module1"):
+        st.session_state.page = PAGE_LANDING
+        StreamlitAdapter.reset_data_state()
+        st.rerun()
+
 
 def _display_module1(
     df: pd.DataFrame,
@@ -184,49 +236,24 @@ def _display_module1(
         return
 
     # Step 4: Zero Filtering Configuration (interactive)
-    pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
-    if pre_filter_df is not None and not pre_filter_df.empty:
-        filtered_df, removed_species, zero_config = display_zero_filtering_config(
-            pre_filter_df, experiment, bqc_label,
-            data_format=st.session_state.get('format_type')
-        )
-        if filtered_df is not None:
-            st.session_state.cleaned_df = filtered_df
-            st.session_state.continuation_df = filtered_df
+    _run_zero_filtering(result)
 
     # Step 5: Final filtered data
     display_final_filtered_data(st.session_state.cleaned_df)
 
     # Step 6: Manage Internal Standards
-    auto_detected_intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
-    intsta_df = display_manage_internal_standards(
-        cleaned_df=st.session_state.cleaned_df,
-        auto_detected_df=auto_detected_intsta_df
-    )
-    st.session_state.intsta_df = intsta_df
+    _run_internal_standards(result)
 
     # Step 7: Normalization
     display_normalization_ui(
         cleaned_df=st.session_state.cleaned_df,
-        intsta_df=intsta_df,
+        intsta_df=st.session_state.intsta_df,
         experiment=experiment,
         data_format=data_format
     )
 
     # Navigation
-    st.markdown("---")
-    normalized_df = st.session_state.get('normalized_df')
-    if normalized_df is not None:
-        if st.button("Next: Quality Check, Visualization & Analysis →"):
-            _reset_qc_state()
-            _reset_analysis_state()
-            st.session_state.module = MODULE_QC_ANALYSIS
-            st.rerun()
-
-    if st.button("← Back to Home", key="back_home_module1"):
-        st.session_state.page = PAGE_LANDING
-        StreamlitAdapter.reset_data_state()
-        st.rerun()
+    _display_module1_navigation()
 
 
 def _display_module2_and_3(
@@ -290,14 +317,16 @@ def _display_module2_and_3(
 
 def main() -> None:
     """Main application entry point."""
-    try:
-        if st.session_state.page == PAGE_LANDING:
-            display_landing_page()
-        elif st.session_state.page == PAGE_APP:
-            display_app_page()
-    except KeyError as e:
-        st.error(f"Session state error. Please refresh the page. Detail: {e}")
-        st.stop()
+    page = st.session_state.get('page', PAGE_LANDING)
+
+    if page == PAGE_LANDING:
+        display_landing_page()
+    elif page == PAGE_APP:
+        display_app_page()
+    else:
+        logger.error("Unknown page: %s — resetting to landing", page)
+        st.session_state.page = PAGE_LANDING
+        st.rerun()
 
 
 if __name__ == "__main__":
