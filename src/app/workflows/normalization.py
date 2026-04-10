@@ -10,7 +10,6 @@ All methods are pure logic (no Streamlit dependencies).
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-import numpy as np
 import pandas as pd
 
 from ..models.experiment import ExperimentConfig
@@ -75,6 +74,26 @@ class NormalizationWorkflowResult:
     def has_warnings(self) -> bool:
         """Check if there are any warnings."""
         return len(self.validation_warnings) > 0
+
+
+@dataclass
+class NormalizationPreview:
+    """Preview of what normalization will do before committing.
+
+    Attributes:
+        method: Normalization method name.
+        classes_to_process: Classes that will be normalized.
+        standards_to_remove: Standards that will be removed from the dataset.
+        samples_to_normalize: Number of samples to process.
+        validation_errors: Errors that would prevent normalization.
+        can_proceed: Whether normalization can proceed without errors.
+    """
+    method: str = "none"
+    classes_to_process: List[str] = field(default_factory=list)
+    standards_to_remove: List[str] = field(default_factory=list)
+    samples_to_normalize: int = 0
+    validation_errors: List[str] = field(default_factory=list)
+    can_proceed: bool = True
 
 
 class NormalizationWorkflow:
@@ -448,12 +467,9 @@ class NormalizationWorkflow:
 
         for col_name, col_data in stored_columns.items():
             if col_name not in result.columns:
-                # Need to align by index if DataFrame was filtered
-                if len(col_data) == len(result):
-                    result[col_name] = col_data.values
-                else:
-                    # Try to align by the original index
-                    result[col_name] = col_data.reindex(result.index).values
+                # Always align by index to prevent silent misalignment
+                # when DataFrame was filtered during normalization
+                result[col_name] = col_data.reindex(result.index).values
 
         return result
 
@@ -494,7 +510,7 @@ class NormalizationWorkflow:
         df: pd.DataFrame,
         config: NormalizationWorkflowConfig,
         intsta_df: Optional[pd.DataFrame] = None
-    ) -> Dict:
+    ) -> NormalizationPreview:
         """
         Preview what normalization will do without actually applying it.
 
@@ -506,41 +522,37 @@ class NormalizationWorkflow:
             intsta_df: Internal standards DataFrame
 
         Returns:
-            Dictionary with preview information:
-            - method: Normalization method
-            - classes_to_process: Classes that will be normalized
-            - standards_to_remove: Standards that will be removed
-            - samples_to_normalize: Sample count
-            - validation_errors: Any errors that would prevent normalization
+            NormalizationPreview with method, classes, standards, and validation info.
         """
-        preview = {
-            'method': config.normalization.method,
-            'classes_to_process': [],
-            'standards_to_remove': [],
-            'samples_to_normalize': 0,
-            'validation_errors': [],
-            'can_proceed': True
-        }
+        preview = NormalizationPreview(method=config.normalization.method)
 
         # Validate configuration
         errors = NormalizationWorkflow.validate_config(df, config, intsta_df)
         if errors:
-            preview['validation_errors'] = errors
-            preview['can_proceed'] = False
+            preview = NormalizationPreview(
+                method=config.normalization.method,
+                validation_errors=errors,
+                can_proceed=False,
+            )
             return preview
 
         # Determine classes to process
         if config.normalization.selected_classes:
-            preview['classes_to_process'] = config.normalization.selected_classes
+            classes = list(config.normalization.selected_classes)
         else:
-            preview['classes_to_process'] = list(df['ClassKey'].unique()) if 'ClassKey' in df.columns else []
+            classes = list(df['ClassKey'].unique()) if 'ClassKey' in df.columns else []
 
         # Determine standards to remove
+        standards = []
         if config.normalization.internal_standards:
-            preview['standards_to_remove'] = list(set(config.normalization.internal_standards.values()))
+            standards = list(set(config.normalization.internal_standards.values()))
 
         # Count samples
         intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
-        preview['samples_to_normalize'] = len(intensity_cols)
 
-        return preview
+        return NormalizationPreview(
+            method=config.normalization.method,
+            classes_to_process=classes,
+            standards_to_remove=standards,
+            samples_to_normalize=len(intensity_cols),
+        )

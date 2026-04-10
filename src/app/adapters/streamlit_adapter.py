@@ -4,10 +4,14 @@ Streamlit adapter layer.
 Bridge between UI and services - handles session state management and caching.
 This module contains all Streamlit-specific code that wraps the pure business logic services.
 """
-from dataclasses import dataclass, field, fields
-from typing import Any, Dict, List, Optional, Tuple
+from __future__ import annotations
 
+from dataclasses import dataclass, field, fields
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import matplotlib.figure
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from app.constants import COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING
@@ -24,7 +28,7 @@ from ..services.plotting.correlation import CorrelationPlotterService
 from ..services.plotting.pca import PCAPlotterService
 from ..services.plotting.retention_time import RetentionTimePlotterService
 from ..services.validation import get_matching_concentration_columns
-from ..workflows.analysis import AnalysisWorkflow
+from ..workflows.analysis import AnalysisWorkflow, VolcanoData
 from ..workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig, IngestionResult
 from ..workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
 
@@ -104,9 +108,9 @@ class SessionState:
     intsta_df: Optional[pd.DataFrame] = None
     continuation_df: Optional[pd.DataFrame] = None
     pre_filter_df: Optional[pd.DataFrame] = None
-    ingestion_result: Any = None
+    ingestion_result: Optional[IngestionResult] = None
     grade_config: Optional[GradeFilterConfig] = None
-    last_quality_config: Any = None
+    last_quality_config: Optional[QualityFilterConfig] = None
     msdial_quality_config: Optional[QualityFilterConfig] = None
     msdial_use_normalized: bool = False
     msdial_data_type_index: int = 0  # 0 = raw, 1 = pre-normalized
@@ -133,7 +137,7 @@ class SessionState:
     create_norm_dataset: bool = False
     norm_method_selection: Optional[str] = None
     _preserved_norm_method_selection: Optional[str] = None
-    normalization_result: Any = None
+    normalization_result: Optional[NormalizationWorkflowResult] = None
     class_standard_map: Optional[Dict[str, str]] = None
     standard_concentrations: Optional[Dict[str, float]] = None
     protein_df: Optional[pd.DataFrame] = None
@@ -142,13 +146,13 @@ class SessionState:
 
     # --- Quality Check (owner: quality_check.py) ---
     qc_continuation_df: Optional[pd.DataFrame] = None
-    qc_box_plot_fig1: Any = None
-    qc_box_plot_fig2: Any = None
-    qc_bqc_plot: Any = None
+    qc_box_plot_fig1: Optional[go.Figure] = None
+    qc_box_plot_fig2: Optional[go.Figure] = None
+    qc_bqc_plot: Optional[go.Figure] = None
     qc_cov_threshold: int = COV_THRESHOLD_DEFAULT
-    qc_retention_time_plot: Any = None
-    qc_correlation_plots: Dict[str, Any] = field(default_factory=dict)
-    qc_pca_plot: Any = None
+    qc_retention_time_plot: Optional[go.Figure] = None
+    qc_correlation_plots: Dict[str, matplotlib.figure.Figure] = field(default_factory=dict)
+    qc_pca_plot: Optional[go.Figure] = None
     qc_samples_removed: List[str] = field(default_factory=list)
     _preserved_bqc_filter_choice: str = 'No'
     _preserved_rt_viewing_mode: str = 'Comparison Mode'
@@ -156,21 +160,21 @@ class SessionState:
 
     # --- Analysis (owner: analysis.py) ---
     analysis_selection: Optional[str] = None
-    analysis_bar_chart_fig: Any = None
-    analysis_pie_chart_figs: Dict[str, Any] = field(default_factory=dict)
-    analysis_saturation_figs: Dict[str, Any] = field(default_factory=dict)
-    analysis_fach_fig: Any = None
-    analysis_pathway_fig: Any = None
+    analysis_bar_chart_fig: Optional[go.Figure] = None
+    analysis_pie_chart_figs: Dict[str, go.Figure] = field(default_factory=dict)
+    analysis_saturation_figs: Dict[str, go.Figure] = field(default_factory=dict)
+    analysis_fach_fig: Optional[go.Figure] = None
+    analysis_pathway_fig: Optional[go.Figure] = None
     analysis_pathway_active_classes: Optional[List[str]] = None
-    analysis_pathway_added_edges: List = field(default_factory=list)
-    analysis_pathway_removed_edges: List = field(default_factory=list)
-    analysis_pathway_custom_nodes: Dict[str, Any] = field(default_factory=dict)
-    analysis_pathway_position_overrides: Dict[str, Any] = field(default_factory=dict)
-    analysis_volcano_fig: Any = None
-    analysis_volcano_data: Any = None
-    analysis_heatmap_fig: Any = None
+    analysis_pathway_added_edges: List[Tuple[str, str]] = field(default_factory=list)
+    analysis_pathway_removed_edges: List[Tuple[str, str]] = field(default_factory=list)
+    analysis_pathway_custom_nodes: Dict[str, Tuple[float, float]] = field(default_factory=dict)
+    analysis_pathway_position_overrides: Dict[str, Tuple[float, float]] = field(default_factory=dict)
+    analysis_volcano_fig: Optional[go.Figure] = None
+    analysis_volcano_data: Optional[VolcanoData] = None
+    analysis_heatmap_fig: Optional[go.Figure] = None
     analysis_heatmap_clusters: Optional[pd.DataFrame] = None
-    analysis_all_plots: Dict[str, Any] = field(default_factory=dict)
+    analysis_all_plots: Dict[str, Union[go.Figure, matplotlib.figure.Figure]] = field(default_factory=dict)
 
 
 # Keys that should NOT be reset when starting a fresh analysis
@@ -429,15 +433,7 @@ class StreamlitAdapter:
         apply_zero_filter: bool = False,
         grade_config: Optional[GradeFilterConfig] = None,
         quality_config: Optional[QualityFilterConfig] = None
-    ) -> Tuple[
-        Optional[pd.DataFrame],  # cleaned_df
-        Optional[pd.DataFrame],  # internal_standards_df
-        str,                     # detected_format
-        bool,                    # is_valid
-        List[str],               # validation_errors
-        List[str],               # validation_warnings
-        List[str],               # cleaning_messages
-    ]:
+    ) -> IngestionResult:
         """
         Cached data ingestion workflow wrapper.
 
@@ -451,7 +447,7 @@ class StreamlitAdapter:
             quality_config: Quality filter config (MS-DIAL only)
 
         Returns:
-            Tuple of (cleaned_df, intsta_df, format, is_valid, errors, warnings, messages)
+            IngestionResult with cleaned data, standards, format, and validation info.
         """
         config = IngestionConfig(
             experiment=experiment,
@@ -462,17 +458,7 @@ class StreamlitAdapter:
             quality_config=quality_config,
         )
 
-        result = DataIngestionWorkflow.run(df, config)
-
-        return (
-            result.cleaned_df,
-            result.internal_standards_df,
-            result.detected_format.value,
-            result.is_valid,
-            result.validation_errors,
-            result.validation_warnings,
-            result.cleaning_messages,
-        )
+        return DataIngestionWorkflow.run(df, config)
 
     @staticmethod
     @st.cache_data(
@@ -485,14 +471,7 @@ class StreamlitAdapter:
         normalization: NormalizationConfig,
         data_format: DataFormat = DataFormat.GENERIC,
         intsta_df: Optional[pd.DataFrame] = None
-    ) -> Tuple[
-        Optional[pd.DataFrame],  # normalized_df
-        bool,                    # success
-        str,                     # method_applied
-        List[str],               # removed_standards
-        List[str],               # validation_errors
-        List[str],               # validation_warnings
-    ]:
+    ) -> NormalizationWorkflowResult:
         """
         Cached normalization workflow wrapper.
 
@@ -504,7 +483,7 @@ class StreamlitAdapter:
             intsta_df: Internal standards DataFrame
 
         Returns:
-            Tuple of (normalized_df, success, method_applied, removed_standards, errors, warnings)
+            NormalizationWorkflowResult with normalized data and metadata.
         """
         workflow_config = NormalizationWorkflowConfig(
             experiment=experiment,
@@ -512,19 +491,10 @@ class StreamlitAdapter:
             data_format=data_format
         )
 
-        result = NormalizationWorkflow.run(
+        return NormalizationWorkflow.run(
             df=df,
             config=workflow_config,
             intsta_df=intsta_df
-        )
-
-        return (
-            result.normalized_df,
-            result.success,
-            result.method_applied,
-            result.removed_standards,
-            result.validation_errors,
-            result.validation_warnings,
         )
 
     # ==================== Cached QC Wrappers ====================
@@ -537,11 +507,8 @@ class StreamlitAdapter:
     def run_box_plots(
         df: pd.DataFrame,
         experiment: ExperimentConfig,
-    ) -> Tuple:
+    ) -> Tuple[go.Figure, go.Figure, pd.DataFrame, List[float], List[str]]:
         """Cached box plot computation.
-
-        Computes mean area DataFrame, missing values percentages,
-        and both box plot figures in a single cached call.
 
         Returns:
             Tuple of (missing_values_fig, box_plot_fig, mean_area_df,
@@ -572,7 +539,7 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         bqc_sample_index: int,
         cov_threshold: int,
-    ) -> Tuple:
+    ) -> Tuple[go.Figure, pd.DataFrame, float, pd.DataFrame]:
         """Cached BQC scatter plot computation.
 
         Returns:
@@ -592,7 +559,7 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         condition_index: int,
         sample_type: str,
-    ) -> Tuple:
+    ) -> Tuple[matplotlib.figure.Figure, pd.DataFrame]:
         """Cached pairwise correlation computation.
 
         Returns:
@@ -620,7 +587,7 @@ class StreamlitAdapter:
     def run_pca(
         df: pd.DataFrame,
         experiment: ExperimentConfig,
-    ) -> Tuple:
+    ) -> Tuple[go.Figure, pd.DataFrame]:
         """Cached PCA computation.
 
         Returns:
@@ -635,7 +602,7 @@ class StreamlitAdapter:
     @st.cache_data(
         show_spinner="Computing retention time plots...",
     )
-    def run_retention_time_single(df: pd.DataFrame) -> list:
+    def run_retention_time_single(df: pd.DataFrame) -> List[Tuple[go.Figure, pd.DataFrame]]:
         """Cached single-class retention time plot computation.
 
         Returns:
@@ -650,7 +617,7 @@ class StreamlitAdapter:
     def run_retention_time_multi(
         df: pd.DataFrame,
         selected_classes: List[str],
-    ) -> Tuple:
+    ) -> Tuple[Optional[go.Figure], Optional[pd.DataFrame]]:
         """Cached multi-class retention time comparison plot.
 
         Returns:

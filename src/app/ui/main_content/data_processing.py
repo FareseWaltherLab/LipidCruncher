@@ -30,9 +30,7 @@ from app.constants import (
     MSDIAL_QUALITY_PRESETS,
     MSDIAL_DEFAULT_QUALITY_LEVEL,
 )
-from app.services.format_detection import DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
-from app.workflows.data_ingestion import IngestionResult
 from app.ui.content import get_processing_docs, ZERO_FILTERING_DOCS
 
 
@@ -385,10 +383,7 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
     prev_quality_config = st.session_state.get('last_quality_config')
 
     try:
-        (
-            cleaned_df, intsta_df, detected_format,
-            is_valid, validation_errors, validation_warnings, cleaning_messages,
-        ) = StreamlitAdapter.run_ingestion(
+        result = StreamlitAdapter.run_ingestion(
             df=df,
             experiment=experiment,
             data_format=format_enum,
@@ -396,16 +391,6 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
             apply_zero_filter=False,
             grade_config=grade_config,
             quality_config=quality_config,
-        )
-
-        result = IngestionResult(
-            detected_format=DataFormat(detected_format),
-            cleaned_df=cleaned_df,
-            internal_standards_df=intsta_df,
-            is_valid=is_valid,
-            validation_errors=validation_errors,
-            validation_warnings=validation_warnings,
-            cleaning_messages=cleaning_messages,
         )
 
         st.session_state.ingestion_result = result

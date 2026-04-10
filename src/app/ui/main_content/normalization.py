@@ -338,29 +338,12 @@ def _run_normalization(
             protein_concentrations=protein_concentrations if protein_concentrations else None,
         )
 
-        (
-            normalized_df,
-            success,
-            method_applied,
-            removed_standards,
-            validation_errors,
-            validation_warnings,
-        ) = StreamlitAdapter.run_normalization(
+        result = StreamlitAdapter.run_normalization(
             df=cleaned_df,
             experiment=experiment,
             normalization=norm_config,
             data_format=get_format_display_to_enum().get(data_format, DataFormat.GENERIC),
             intsta_df=intsta_df,
-        )
-
-        # Reconstruct result object for compatibility
-        result = NormalizationWorkflowResult(
-            normalized_df=normalized_df,
-            success=success,
-            method_applied=method_applied,
-            removed_standards=removed_standards,
-            validation_errors=validation_errors,
-            validation_warnings=validation_warnings,
         )
 
         if result.success:

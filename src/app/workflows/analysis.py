@@ -16,7 +16,6 @@ from dataclasses import field as dataclass_field
 from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 

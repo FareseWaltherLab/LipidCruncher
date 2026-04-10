@@ -899,10 +899,10 @@ class TestPreviewNormalization:
         )
         preview = NormalizationWorkflow.preview_normalization(basic_df, config)
 
-        assert preview['method'] == 'none'
-        assert preview['can_proceed'] is True
-        assert set(preview['classes_to_process']) == {'PC', 'PE', 'TG', 'SM'}
-        assert preview['samples_to_normalize'] == 4
+        assert preview.method == 'none'
+        assert preview.can_proceed is True
+        assert set(preview.classes_to_process) == {'PC', 'PE', 'TG', 'SM'}
+        assert preview.samples_to_normalize == 4
 
     def test_preview_with_class_filter(self, basic_df, simple_experiment_2x2):
         """Test preview with class filter."""
@@ -916,7 +916,7 @@ class TestPreviewNormalization:
         )
         preview = NormalizationWorkflow.preview_normalization(basic_df, config)
 
-        assert preview['classes_to_process'] == ['PC', 'PE']
+        assert preview.classes_to_process == ['PC', 'PE']
 
     def test_preview_with_standards_removal(
         self, basic_df, simple_experiment_2x2, internal_standard_config, basic_intsta_df
@@ -930,7 +930,7 @@ class TestPreviewNormalization:
             basic_df, config, basic_intsta_df
         )
 
-        assert len(preview['standards_to_remove']) > 0
+        assert len(preview.standards_to_remove) > 0
 
     def test_preview_with_validation_errors(self, empty_df, simple_experiment_2x2, none_config):
         """Test preview with validation errors."""
@@ -940,8 +940,8 @@ class TestPreviewNormalization:
         )
         preview = NormalizationWorkflow.preview_normalization(empty_df, config)
 
-        assert preview['can_proceed'] is False
-        assert len(preview['validation_errors']) > 0
+        assert preview.can_proceed is False
+        assert len(preview.validation_errors) > 0
 
 
 class TestRunWorkflowNoneMethod:
