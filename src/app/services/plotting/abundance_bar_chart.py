@@ -27,7 +27,6 @@ ZERO_REPLACEMENT_DIVISOR = 10
 MIN_CHART_HEIGHT = 400
 HEIGHT_PER_CLASS = 30
 CHART_WIDTH = 800
-SIGNIFICANCE_OFFSET_FACTOR = 1.1
 
 
 @dataclass
@@ -247,13 +246,13 @@ class BarChartPlotterService:
                 yanchor='top',
                 y=1,
                 xanchor='left',
-                x=1.02,
+                x=1.15,
                 font=dict(color='black'),
                 bgcolor='rgba(255,255,255,0.8)',
                 bordercolor='lightgray',
                 borderwidth=1,
             ),
-            margin=dict(r=180),
+            margin=dict(r=250),
             height=max(MIN_CHART_HEIGHT, len(abundance_df) * HEIGHT_PER_CLASS),
             width=CHART_WIDTH,
             plot_bgcolor='white',
@@ -311,13 +310,6 @@ def _add_significance_annotations(
     stat_results: StatisticalTestSummary,
 ) -> None:
     """Add *, **, *** annotations to the bar chart for significant classes."""
-    max_x = max(
-        (max(trace.x) for trace in fig.data if len(trace.x) > 0),
-        default=0,
-    )
-    if max_x == 0:
-        return
-
     for i, class_name in enumerate(abundance_df['ClassKey']):
         if class_name not in stat_results.results:
             continue
@@ -328,11 +320,13 @@ def _add_significance_annotations(
         marker = p_value_to_marker(p_val)
         if marker:
             fig.add_annotation(
-                x=max_x * SIGNIFICANCE_OFFSET_FACTOR,
+                x=1.0,
+                xref='paper',
+                xanchor='left',
                 y=i,
-                text=marker,
+                text=f"  {marker}",
                 showarrow=False,
-                font=dict(size=12, color='black'),
+                font=dict(size=14, color='black'),
             )
 
 

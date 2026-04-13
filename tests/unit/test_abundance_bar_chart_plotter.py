@@ -451,7 +451,7 @@ class TestSignificanceAnnotations:
             bar_data, 'linear scale', stat_results=stats
         )
         annotations = fig.layout.annotations
-        texts = [a.text for a in annotations]
+        texts = [a.text.strip() for a in annotations]
         assert '***' in texts  # PC p=0.0001 < 0.001
         # PE should NOT have annotation
         assert texts.count('***') + texts.count('**') + texts.count('*') == 1
@@ -498,7 +498,7 @@ class TestSignificanceAnnotations:
         fig = BarChartPlotterService.create_bar_chart(
             bar_data, 'linear scale', stat_results=stats
         )
-        assert any(a.text == '***' for a in fig.layout.annotations)
+        assert any(a.text.strip() == '***' for a in fig.layout.annotations)
 
 
 # ═══════════════════════════════════════════════════════════════════════

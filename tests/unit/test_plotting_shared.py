@@ -392,7 +392,7 @@ class TestSignificanceAnnotationContent:
         fig = BarChartPlotterService.create_bar_chart(
             bar_data, 'linear scale', stat_results
         )
-        annotation_texts = [a.text for a in fig.layout.annotations]
+        annotation_texts = [a.text.strip() for a in fig.layout.annotations]
         assert '***' in annotation_texts  # PC: p=0.0001
         assert '*' in annotation_texts    # PE: p=0.03
 
