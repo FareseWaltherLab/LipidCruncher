@@ -12,9 +12,35 @@ from typing import Dict, List
 
 import numpy as np
 import pandas as pd
-import plotly.express as px
 
 from app.constants import CONDITION_COLORS
+
+
+# Extended qualitative palette for lipid classes (tab20-based, 20 distinct colors).
+# Ordered so adjacent colors are perceptually far apart, avoiding the confusion
+# that arises when a small default palette cycles.
+CLASS_COLORS = (
+    '#1f77b4',  # blue
+    '#ff7f0e',  # orange
+    '#2ca02c',  # green
+    '#d62728',  # red
+    '#9467bd',  # purple
+    '#8c564b',  # brown
+    '#e377c2',  # pink
+    '#7f7f7f',  # gray
+    '#bcbd22',  # olive
+    '#17becf',  # cyan
+    '#aec7e8',  # light blue
+    '#ffbb78',  # light orange
+    '#98df8a',  # light green
+    '#ff9896',  # light red
+    '#c5b0d5',  # light purple
+    '#c49c94',  # light brown
+    '#f7b6d2',  # light pink
+    '#c7c7c7',  # light gray
+    '#dbdb8d',  # light olive
+    '#9edae5',  # light cyan
+)
 
 
 # ── Significance markers ──────────────────────────────────────────────
@@ -92,9 +118,8 @@ def generate_class_color_mapping(classes: List[str]) -> Dict[str, str]:
     Returns:
         Dict mapping class name to hex color string.
     """
-    palette = px.colors.qualitative.Plotly
     return {
-        cls: palette[i % len(palette)]
+        cls: CLASS_COLORS[i % len(CLASS_COLORS)]
         for i, cls in enumerate(classes)
     }
 

@@ -15,7 +15,6 @@ from typing import Dict, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import seaborn as sns
 
@@ -26,9 +25,6 @@ from app.services.statistical_testing import (
     StatisticalTestSummary,
 )
 
-
-# Plotly qualitative color palette for lipid classes
-CLASS_COLORS = list(px.colors.qualitative.Plotly)
 
 CHART_HEIGHT = 600
 CHART_WIDTH = 800

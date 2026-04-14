@@ -957,7 +957,7 @@ class TestGenerateColorMapping:
 
     def test_wraps_around_colors(self):
         """More classes than colors should cycle."""
-        from app.services.plotting.volcano_plot import CLASS_COLORS
+        from app.services.plotting._shared import CLASS_COLORS
         n = len(CLASS_COLORS) + 3
         classes = [f'C{i}' for i in range(n)]
         result = VolcanoPlotterService.generate_color_mapping(classes)

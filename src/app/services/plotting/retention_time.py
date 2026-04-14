@@ -12,8 +12,9 @@ import itertools
 from typing import List, Tuple
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
+
+from app.services.plotting._shared import CLASS_COLORS
 
 
 class RetentionTimePlotterService:
@@ -184,5 +185,5 @@ def _get_distinct_colors(n: int) -> List[tuple]:
 
 def _get_unique_colors(n_classes: int) -> List[str]:
     """Generate unique color hex codes from Plotly Express palette (cycles if needed)."""
-    colors = itertools.cycle(px.colors.qualitative.Plotly)
+    colors = itertools.cycle(CLASS_COLORS)
     return [next(colors) for _ in range(n_classes)]
