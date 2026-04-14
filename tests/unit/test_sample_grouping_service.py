@@ -542,6 +542,37 @@ class TestRegroupSamples:
         np.testing.assert_array_equal(second.reordered_df['intensity[s1]'].values, orig_s1)
         np.testing.assert_array_equal(second.reordered_df['intensity[s4]'].values, orig_s4)
 
+    def test_reindex_does_not_undo_regrouping(self):
+        """After regrouping, column names are identical (intensity[s1], etc.)
+        so reindex(columns=original_order) is a no-op — it does NOT restore
+        the original data.  This documents the bug that caused the 'undo
+        reshuffling' feature to fail: the UI used reindex to restore, but
+        the correct approach is to save and restore the pre-regroup DataFrame."""
+        orig_s1 = self.df['intensity[s1]'].values.copy()
+        original_column_order = self.df.columns.tolist()
+
+        selections = {
+            'Cond_1': ['s4', 's5', 's6'],
+            'Cond_2': ['s1', 's2', 's3'],
+        }
+        result = SampleGroupingService.regroup_samples(
+            self.df, self.group_df, selections, self.exp,
+        )
+        reordered_df = result.reordered_df
+
+        # Column names are identical before and after regrouping
+        assert set(reordered_df.columns) == set(self.df.columns)
+
+        # reindex does NOT restore original data (the bug)
+        reindexed = reordered_df.reindex(columns=original_column_order)
+        assert not np.array_equal(
+            reindexed['intensity[s1]'].values, orig_s1,
+        ), "reindex should NOT restore original data — column names are the same"
+
+        # Restoring from saved original DOES work (the fix)
+        restored = self.df.copy()
+        np.testing.assert_array_equal(restored['intensity[s1]'].values, orig_s1)
+
     def test_regroup_does_not_mutate_input(self):
         orig_df = self.df.copy()
         orig_group = self.group_df.copy()

@@ -70,9 +70,16 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
         return _handle_manual_regrouping(df, group_df, experiment)
     else:
         st.session_state.grouping_complete = True
-        # Restore original column order if it was stored
-        if st.session_state.get('original_column_order') is not None:
-            df = df.reindex(columns=st.session_state.original_column_order)
+        # Restore the original pre-regrouping DataFrame if user previously
+        # reshuffled samples.  A simple reindex is insufficient because
+        # regrouping renames columns (e.g. intensity[s4] → intensity[s1]),
+        # so the column names are identical before and after — only the data
+        # underneath differs.
+        if st.session_state.get('_pre_regroup_df') is not None:
+            df = st.session_state['_pre_regroup_df'].copy()
+            # Clean up regrouping state so it doesn't persist
+            del st.session_state['_pre_regroup_df']
+            st.session_state.pop('original_column_order', None)
 
     return group_df, df
 
