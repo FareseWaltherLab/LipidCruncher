@@ -91,17 +91,22 @@ LipidCruncher follows a **layered architecture** with strict dependency rules �
 ```
 LipidCruncher/
 ├── src/
-│   ├── main_app.py                          # Entry point (page routing)
+│   ├── main_app.py                          # Entry point (enum-based page routing)
 │   └── app/
-│       ├── constants.py                     # Shared constants + LIPID MAPS nomenclature
+│       ├── constants.py                     # Shared constants, enums, format mappings
+│       ├── lipid_nomenclature.py            # LIPID MAPS nomenclature functions
 │       ├── models/                          # Pydantic data models
 │       │   ├── experiment.py                #   ExperimentConfig
 │       │   ├── normalization.py             #   NormalizationConfig
 │       │   └── statistics.py                #   StatisticalTestConfig
 │       ├── services/                        # Pure business logic
+│       │   ├── __init__.py                  #   Public API: re-exports services + exceptions
+│       │   ├── exceptions.py                #   Typed exception hierarchy (ServiceError, etc.)
 │       │   ├── format_detection.py          #   DataFormat enum + detection
 │       │   ├── data_standardization.py      #   Column name standardization
 │       │   ├── data_cleaning/               #   Format-specific cleaning
+│       │   │   ├── __init__.py              #     Registry dispatch (DataCleaningService)
+│       │   │   ├── exceptions.py            #     Domain-specific cleaning exceptions
 │       │   │   ├── base.py                  #     BaseDataCleaner
 │       │   │   ├── configs.py               #     GradeFilterConfig, QualityFilterConfig
 │       │   │   ├── lipidsearch.py           #     LipidSearchCleaner
@@ -116,6 +121,9 @@ LipidCruncher/
 │       │   ├── sample_grouping.py           #   Sample assignment to conditions
 │       │   ├── report_generator.py          #   PDF report generation
 │       │   └── plotting/                    #   Visualization services
+│       │       ├── __init__.py              #     Public API: re-exports all plotters + shared utils
+│       │       ├── base.py                  #     PlotterServiceProtocol (interface contract)
+│       │       ├── _shared.py               #     Shared utilities (colors, significance, validation)
 │       │       ├── box_plot.py
 │       │       ├── bqc_plotter.py
 │       │       ├── correlation.py
@@ -163,6 +171,8 @@ LipidCruncher/
 │           │       ├── _saturation.py
 │           │       ├── _fach.py
 │           │       ├── _pathway.py
+│           │       ├── _pathway_state.py    #     Pathway session state management
+│           │       ├── _pathway_editor.py   #     Pathway layout customization panel
 │           │       ├── _volcano.py
 │           │       └── _heatmap.py
 │           └── content/                     #   Static docs/help text
@@ -240,13 +250,26 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 
 | Model | File | Purpose |
 |---|---|---|
-| `ExperimentConfig` | `experiment.py` | Defines experimental setup: number of conditions, condition labels, sample counts. Computed properties generate sample labels (s1, s2, ...) and group them by condition. |
+| `ExperimentConfig` | `experiment.py` | Defines experimental setup: number of conditions, condition labels, sample counts. Auto-derives `n_conditions` from `conditions_list` if omitted. Validates condition label uniqueness. Computed properties generate sample labels (s1, s2, ...) and group them by condition. Provides `without_samples()` for creating configs after sample removal. |
 | `NormalizationConfig` | `normalization.py` | Normalization method (`none`, `internal_standard`, `protein`, `both`, `total_intensity`), selected lipid classes, standard-to-class mappings, concentrations. |
 | `StatisticalTestConfig` | `statistics.py` | Test type (`parametric`, `non_parametric`, `auto`), multiple-testing correction (`fdr_bh`, `bonferroni`), post-hoc method (`tukey`, `bonferroni`), `auto_transform` flag for log10 transformation. |
 
 ### Services
 
-Located in `src/app/services/`. All classes use **static methods only** — no instance state, no Streamlit imports.
+Located in `src/app/services/`. All classes use **static methods only** — no instance state, no Streamlit imports. A unified public API (`services/__init__.py`) re-exports all services, exceptions, and result dataclasses.
+
+#### Exception Hierarchy (`services/exceptions.py`)
+
+Typed exceptions replace scattered `ValueError` raises, enabling callers to distinguish error categories. All inherit from `ValueError` for backward compatibility.
+
+```
+ServiceError (base)
+├── ConfigurationError   — user-fixable settings (overly strict filters, invalid config)
+├── EmptyDataError       — empty or missing input data
+└── ValidationError      — data fails structural or content validation
+```
+
+Domain-specific subclasses exist in `data_cleaning/exceptions.py` (`DataCleaningError`, etc.) using multiple inheritance so callers can catch at either the domain or service level.
 
 #### Data Cleaning (`services/data_cleaning/`)
 
@@ -258,6 +281,8 @@ Located in `src/app/services/`. All classes use **static methods only** — no i
 | `GenericCleaner` | Basic cleanup: invalid lipid removal, zero column check, standard extraction. Used for Generic and Metabolomics Workbench formats. |
 
 Configuration dataclasses: `GradeFilterConfig` (per-class grade selections), `QualityFilterConfig` (score threshold, MS/MS flag). Results returned as `CleaningResult` dataclass.
+
+Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`: `DataCleaningService.clean_data()` looks up the format in `_CLEANER_REGISTRY` (a `Dict[DataFormat, type]` mapping) and delegates to the appropriate cleaner. Adding a new format requires only a registry entry and a new cleaner class.
 
 #### Core Services
 
@@ -274,7 +299,9 @@ Configuration dataclasses: `GradeFilterConfig` (per-class grade selections), `Qu
 
 #### Plotting Services (`services/plotting/`)
 
-Each module provides a static service class that returns Plotly or Matplotlib figures:
+Each module provides a static service class that returns Plotly or Matplotlib figures. All plotters follow the contract documented in `PlotterServiceProtocol` (`base.py`): static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`.
+
+Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment from a 20-color palette), and `validate_dataframe()` (non-null, non-empty, required columns).
 
 | Service | Output |
 |---|---|
@@ -334,7 +361,7 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 | `internal_standards.py` | Review/edit auto-detected standards, upload custom standards |
 | `normalization.py` | Normalization method selection, standard mapping, protein input |
 | `quality_check.py` | All QC steps rendered with interactive controls |
-| `analysis/` | Subpackage with one module per analysis type (`_bar_chart.py`, `_volcano.py`, etc.) plus shared utilities |
+| `analysis/` | Subpackage with one module per analysis type (`_bar_chart.py`, `_volcano.py`, etc.) plus shared utilities. The pathway module is decomposed into `_pathway.py` (main rendering), `_pathway_state.py` (session state accessors), and `_pathway_editor.py` (layout customization panel). |
 
 **Static content** (`ui/content/`): Documentation text for processing steps, normalization methods, sample data descriptions, standards help, and analysis methodology (statistical testing guide, saturation profile calculations).
 
@@ -366,7 +393,7 @@ All lipid names are standardized to [LIPID MAPS shorthand notation](https://www.
 | Lyso species | `LPC(20:0_0:0)` | `LPC 20:0` (phantom chain removed) |
 | Chain ordering | Alphabetical | Ascending by carbon count, then double bonds |
 
-Nomenclature functions are centralized in `constants.py`: `parse_lipid_name()`, `normalize_hydroxyl()`, `sort_chains_lipid_maps()`, `remove_phantom_chains()`, `format_lipid_name()`.
+Nomenclature functions live in `lipid_nomenclature.py`: `parse_lipid_name()`, `normalize_hydroxyl()`, `sort_chains_lipid_maps()`, `remove_phantom_chains()`, `format_lipid_name()`. All lipid class sets (`SPHINGOLIPID_CLASSES`, `SINGLE_CHAIN_CLASSES`, `LYSO_CLASSES`) are `frozenset` for immutability. The functions are re-exported from `constants.py` for backward compatibility.
 
 ---
 
@@ -511,11 +538,12 @@ The app runs on port 8501 by default.
 1. **Add an enum value** to `DataFormat` in `services/format_detection.py`.
 2. **Add detection logic** in `FormatDetectionService.detect_format()` — place it in the correct priority order.
 3. **Create a cleaner** in `services/data_cleaning/` extending `BaseDataCleaner`.
-4. **Add standardization logic** in `services/data_standardization.py`.
-5. **Update the format display mapping** in `constants.py` (`get_format_display_to_enum()`).
-6. **Add a sample dataset** in `sample_datasets/`.
-7. **Add format requirements** in `ui/format_requirements.py`.
-8. **Add tests** covering detection, cleaning, and end-to-end ingestion.
+4. **Register the cleaner** in `_CLEANER_REGISTRY` in `data_cleaning/__init__.py`.
+5. **Add standardization logic** in `services/data_standardization.py`.
+6. **Update the format display mapping** in `constants.py` (`get_format_display_to_enum()`).
+7. **Add a sample dataset** in `sample_datasets/`.
+8. **Add format requirements** in `ui/format_requirements.py`.
+9. **Add tests** covering detection, cleaning, and end-to-end ingestion.
 
 ### Adding a New QC Step
 
@@ -530,9 +558,12 @@ The app runs on port 8501 by default.
 
 - **Services are stateless** — all methods are `@staticmethod`. No instance variables.
 - **Return dataclasses, not tuples** — workflow results are typed dataclasses for clarity.
+- **Typed exceptions** — raise `ConfigurationError`, `EmptyDataError`, or `ValidationError` (from `services/exceptions.py`) instead of bare `ValueError`.
+- **Immutable collections** — constants use `Tuple` and `frozenset` instead of mutable `List`/`set` to prevent accidental mutation in cached contexts.
+- **Enum-based routing** — `Page` and `Module` enums in `constants.py` replace raw strings for type-safe page/module navigation. Backward-compatible aliases (`PAGE_LANDING`, `MODULE_DATA_PROCESSING`, etc.) are provided.
 - **Prefix session state keys** — by module: `qc_*`, `analysis_*`, `_preserved_*`, etc.
-- **Plotting services return figures** — the UI layer handles rendering with `st.plotly_chart()` or `st.pyplot()`.
-- **Constants go in `constants.py`** — thresholds, regex patterns, format mappings. Not scattered in service files.
+- **Plotting services return figures** — the UI layer handles rendering with `st.plotly_chart()` or `st.pyplot()`. All plotters follow `PlotterServiceProtocol` (`plotting/base.py`).
+- **Constants go in `constants.py`** — thresholds, regex patterns, format mappings. Nomenclature functions live in `lipid_nomenclature.py`.
 
 ---
 
