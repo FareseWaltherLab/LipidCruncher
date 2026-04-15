@@ -1,14 +1,15 @@
 """
 Entry point for Module 3: Visualize and Analyze UI.
 
-Provides 7 analysis features accessed via radio selector:
+Provides 8 analysis features accessed via radio selector:
 1. Abundance Bar Chart (class level)
 2. Abundance Pie Charts (class level)
 3. Saturation Plots (class level, requires detailed FA)
-4. Fatty Acid Composition Heatmaps (class level)
-5. Pathway Visualization (class level, requires detailed FA)
-6. Volcano Plot (species level)
-7. Lipidomic Heatmap (species level)
+4. Chain Length Distribution (class level)
+5. Fatty Acid Composition Heatmaps (class level)
+6. Pathway Visualization (class level, requires detailed FA)
+7. Volcano Plot (species level)
+8. Lipidomic Heatmap (species level)
 """
 
 from typing import Any, Dict, Optional
@@ -24,6 +25,7 @@ from app.ui.content import STATISTICAL_TESTING_DOCS, SATURATION_PROFILE_DOCS
 from app.ui.main_content.analysis._bar_chart import _display_bar_chart
 from app.ui.main_content.analysis._pie_charts import _display_pie_charts
 from app.ui.main_content.analysis._saturation import _display_saturation_plots
+from app.ui.main_content.analysis._chain_length import _display_chain_length_plots
 from app.ui.main_content.analysis._fach import _display_fach_heatmaps
 from app.ui.main_content.analysis._pathway import _display_pathway_viz
 from app.ui.main_content.analysis._volcano import _display_volcano_plot
@@ -38,6 +40,7 @@ ANALYSIS_OPTIONS = [
     "Class Level Breakdown - Bar Chart",
     "Class Level Breakdown - Pie Charts",
     "Class Level Breakdown - Saturation Plots (requires detailed fatty acid composition)",
+    "Class Level Breakdown - Chain Length Distribution",
     "Class Level Breakdown - Fatty Acid Composition Heatmaps",
     "Class Level Breakdown - Pathway Visualization (requires detailed fatty acid composition)",
     "Species Level Breakdown - Volcano Plot",
@@ -50,10 +53,11 @@ _ANALYSIS_DISPATCH = {
     ANALYSIS_OPTIONS[0]: lambda df, exp: _display_bar_chart(df, exp),
     ANALYSIS_OPTIONS[1]: lambda df, exp: _display_pie_charts(df, exp),
     ANALYSIS_OPTIONS[2]: lambda df, exp: _display_saturation_plots(df, exp),
-    ANALYSIS_OPTIONS[3]: lambda df, exp: _display_fach_heatmaps(df, exp),
-    ANALYSIS_OPTIONS[4]: lambda df, exp: _display_pathway_viz(df, exp),
-    ANALYSIS_OPTIONS[5]: lambda df, exp: _display_volcano_plot(df, exp),
-    ANALYSIS_OPTIONS[6]: lambda df, exp: _display_lipidomic_heatmap(df, exp),
+    ANALYSIS_OPTIONS[3]: lambda df, exp: _display_chain_length_plots(df, exp),
+    ANALYSIS_OPTIONS[4]: lambda df, exp: _display_fach_heatmaps(df, exp),
+    ANALYSIS_OPTIONS[5]: lambda df, exp: _display_pathway_viz(df, exp),
+    ANALYSIS_OPTIONS[6]: lambda df, exp: _display_volcano_plot(df, exp),
+    ANALYSIS_OPTIONS[7]: lambda df, exp: _display_lipidomic_heatmap(df, exp),
 }
 
 

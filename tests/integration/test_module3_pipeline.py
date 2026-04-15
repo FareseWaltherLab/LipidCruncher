@@ -3,7 +3,7 @@ Integration tests for Module 3: Visualize and Analyze Pipeline.
 
 Tests the complete end-to-end analysis flow using real sample datasets
 processed through Module 1 (ingestion + normalization) first:
-Bar chart → Pie chart → Saturation → FACH → Pathway → Volcano → Heatmap
+Bar chart → Pie chart → Saturation → Chain Length → FACH → Pathway → Volcano → Heatmap
 
 Multi-step chains validate cross-analysis consistency (same input →
 consistent class totals across bar chart and pie chart), cascading
@@ -33,6 +33,7 @@ from app.workflows.analysis import (
     BarChartResult,
     PieChartResult,
     SaturationResult,
+    ChainLengthResult,
     FACHResult,
     PathwayResult,
     VolcanoResult,
@@ -778,6 +779,126 @@ class TestSaturationEndToEnd:
         )
 
         assert isinstance(result, SaturationResult)
+
+
+class TestChainLengthEndToEnd:
+    """Chain length distribution analysis with real data."""
+
+    def test_lipidsearch_chain_length(
+        self, lipidsearch_normalized_df, lipidsearch_experiment,
+    ):
+        """Full chain length analysis on LipidSearch data."""
+        df = lipidsearch_normalized_df
+        classes = AnalysisWorkflow.get_available_classes(df)
+        conditions = ['WT', 'ADGAT_DKO']
+
+        result = AnalysisWorkflow.run_chain_length(
+            df, lipidsearch_experiment, conditions, classes,
+        )
+
+        assert isinstance(result, ChainLengthResult)
+        assert result.success
+        assert result.figure is not None
+        assert isinstance(result.figure, go.Figure)
+        assert len(result.data.records) > 0
+
+    def test_chain_length_class_subset(
+        self, lipidsearch_normalized_df, lipidsearch_experiment,
+    ):
+        """Selecting a subset of classes filters results."""
+        df = lipidsearch_normalized_df
+        all_classes = AnalysisWorkflow.get_available_classes(df)
+        subset = all_classes[:2]
+        conditions = ['WT', 'ADGAT_DKO']
+
+        result = AnalysisWorkflow.run_chain_length(
+            df, lipidsearch_experiment, conditions, subset,
+        )
+
+        assert result.success
+        result_classes = {r['ClassKey'] for r in result.data.records}
+        assert result_classes <= set(subset)
+
+    def test_chain_length_records_have_positive_concentration(
+        self, lipidsearch_normalized_df, lipidsearch_experiment,
+    ):
+        """All records have positive mean concentrations."""
+        df = lipidsearch_normalized_df
+        classes = AnalysisWorkflow.get_available_classes(df)
+        conditions = ['WT', 'ADGAT_DKO']
+
+        result = AnalysisWorkflow.run_chain_length(
+            df, lipidsearch_experiment, conditions, classes,
+        )
+
+        for rec in result.data.records:
+            assert rec['MeanConcentration'] > 0
+
+    def test_msdial_chain_length(
+        self, msdial_normalized_df, msdial_experiment,
+    ):
+        """MS-DIAL format chain length analysis."""
+        df = msdial_normalized_df
+        classes = AnalysisWorkflow.get_available_classes(df)
+        conditions = ['fads2_KO', 'WT']
+
+        result = AnalysisWorkflow.run_chain_length(
+            df, msdial_experiment, conditions, classes,
+        )
+
+        assert isinstance(result, ChainLengthResult)
+        assert result.success
+
+    def test_generic_chain_length(
+        self, generic_normalized_df, generic_experiment,
+    ):
+        """Generic format chain length analysis (species-level names)."""
+        df = generic_normalized_df
+        classes = AnalysisWorkflow.get_available_classes(df)
+        conditions = AnalysisWorkflow.get_all_conditions(generic_experiment)
+
+        result = AnalysisWorkflow.run_chain_length(
+            df, generic_experiment, conditions, classes,
+        )
+
+        assert isinstance(result, ChainLengthResult)
+        assert result.success
+        # Generic data has species-level names (e.g. PC 34:1) — should still parse
+        assert len(result.data.records) > 0
+
+    def test_mw_chain_length(
+        self, mw_normalized_df, mw_experiment,
+    ):
+        """MW format chain length analysis with many samples."""
+        df = mw_normalized_df
+        classes = AnalysisWorkflow.get_available_classes(df)
+        conditions = AnalysisWorkflow.get_all_conditions(mw_experiment)
+
+        result = AnalysisWorkflow.run_chain_length(
+            df, mw_experiment, conditions, classes,
+        )
+
+        assert isinstance(result, ChainLengthResult)
+        assert result.success
+
+    def test_chain_length_no_conditions_raises(
+        self, lipidsearch_normalized_df, lipidsearch_experiment,
+    ):
+        """Empty conditions list raises ValueError."""
+        with pytest.raises(ValueError, match="condition"):
+            AnalysisWorkflow.run_chain_length(
+                lipidsearch_normalized_df, lipidsearch_experiment, [], ['PC'],
+            )
+
+    def test_chain_length_no_classes_raises(
+        self, lipidsearch_normalized_df, lipidsearch_experiment,
+    ):
+        """Empty classes list raises ValueError."""
+        with pytest.raises(ValueError, match="class"):
+            AnalysisWorkflow.run_chain_length(
+                lipidsearch_normalized_df, lipidsearch_experiment,
+                ['WT'], [],
+            )
 
 
 class TestFACHEndToEnd:

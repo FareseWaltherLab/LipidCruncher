@@ -35,12 +35,12 @@ from tests.ui.conftest import (
 class TestAnalysisRadioSelection:
     """Tests for the main analysis type radio selector."""
 
-    def test_analysis_radio_exists_with_7_options(self, analysis_generic_app):
-        """Analysis radio renders with all 7 analysis options."""
+    def test_analysis_radio_exists_with_8_options(self, analysis_generic_app):
+        """Analysis radio renders with all 8 analysis options."""
         at = analysis_generic_app
         radio = at.radio(key='analysis_radio')
         assert radio is not None
-        assert len(radio.options) == 7
+        assert len(radio.options) == 8
 
     def test_default_selection_is_bar_chart(self, analysis_generic_app):
         """Default selection is the first option (Bar Chart)."""
@@ -278,7 +278,47 @@ class TestSaturationUI:
 
 
 # =============================================================================
-# Group 5: FACH Heatmaps (3 tests)
+# Group 5: Chain Length Distribution (4 tests)
+# =============================================================================
+
+class TestChainLengthUI:
+    """Tests for Chain Length Distribution bubble chart section."""
+
+    def _switch_to_chain_length(self, at):
+        """Helper to switch to chain length analysis."""
+        radio = at.radio(key='analysis_radio')
+        cl_option = [o for o in radio.options if "Chain Length" in o][0]
+        at.radio(key='analysis_radio').set_value(cl_option).run()
+        return at
+
+    def test_chain_length_renders_without_error(self, analysis_generic_app):
+        """Chain length section renders without exceptions."""
+        at = self._switch_to_chain_length(analysis_generic_app)
+        assert not at.exception
+
+    def test_chain_length_condition_selector_exists(self, analysis_generic_app):
+        """Chain length has a condition multiselect."""
+        at = self._switch_to_chain_length(analysis_generic_app)
+        ms = at.multiselect(key='clen_conditions')
+        assert ms is not None
+        assert len(ms.value) > 0
+
+    def test_chain_length_class_selector_exists(self, analysis_generic_app):
+        """Chain length has a class multiselect."""
+        at = self._switch_to_chain_length(analysis_generic_app)
+        ms = at.multiselect(key='clen_classes')
+        assert ms is not None
+        assert len(ms.value) > 0
+
+    def test_chain_length_figure_stored_in_session(self, analysis_generic_app):
+        """Chain length figure is stored in session state."""
+        at = self._switch_to_chain_length(analysis_generic_app)
+        assert 'analysis_chain_length_fig' in at.session_state
+        assert at.session_state['analysis_chain_length_fig'] is not None
+
+
+# =============================================================================
+# Group 6: FACH Heatmaps (3 tests)
 # =============================================================================
 
 class TestFACHUI:

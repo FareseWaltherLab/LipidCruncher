@@ -39,6 +39,10 @@ from ..services.plotting.saturation_plot import (
     SaturationPlotterService,
     SaturationData,
 )
+from ..services.plotting.chain_length_plot import (
+    ChainLengthPlotterService,
+    ChainLengthData,
+)
 from ..services.plotting.fach import (
     FACHPlotterService,
     FACHData,
@@ -153,6 +157,22 @@ class FACHResult:
     weighted_averages: Dict[str, Tuple[float, float]] = dataclass_field(
         default_factory=dict
     )
+    success: bool = True
+    validation_errors: List[str] = dataclass_field(default_factory=list)
+
+
+@dataclass
+class ChainLengthResult:
+    """Result from chain length distribution analysis.
+
+    Attributes:
+        figure: Plotly bubble chart figure.
+        data: ChainLengthData with aggregated records.
+        success: Whether the analysis completed successfully.
+        validation_errors: List of error messages if analysis failed.
+    """
+    figure: Optional[go.Figure] = None
+    data: Optional[ChainLengthData] = None
     success: bool = True
     validation_errors: List[str] = dataclass_field(default_factory=list)
 
@@ -579,6 +599,50 @@ class AnalysisWorkflow:
             stat_summary=stat_summary,
             consolidated_lipids=consolidated,
         )
+
+    # ------------------------------------------------------------------
+    # Chain Length Distribution
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def run_chain_length(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_classes: List[str],
+    ) -> ChainLengthResult:
+        """Run chain length and double bond distribution analysis.
+
+        Args:
+            df: DataFrame with LipidMolec, ClassKey, concentration columns.
+            experiment: Experiment configuration.
+            selected_conditions: Conditions to include.
+            selected_classes: Lipid classes to include.
+
+        Returns:
+            ChainLengthResult with bubble chart figure and data.
+
+        Raises:
+            ValueError: If inputs are invalid.
+        """
+        if not selected_conditions:
+            raise ValueError("At least one condition must be selected")
+        if not selected_classes:
+            raise ValueError("At least one lipid class must be selected")
+
+        data = ChainLengthPlotterService.calculate_chain_length_data(
+            df, experiment, selected_conditions, selected_classes,
+        )
+
+        color_mapping = ChainLengthPlotterService.generate_color_mapping(
+            data.classes,
+        )
+
+        figure = ChainLengthPlotterService.create_chain_length_figure(
+            data, color_mapping,
+        )
+
+        return ChainLengthResult(figure=figure, data=data)
 
     # ------------------------------------------------------------------
     # FACH

@@ -31,6 +31,7 @@ from ..services.validation import get_matching_concentration_columns
 from ..workflows.analysis import (
     AnalysisWorkflow,
     BarChartResult,
+    ChainLengthResult,
     FACHResult,
     HeatmapResult,
     PathwayDataResult,
@@ -78,7 +79,7 @@ class SessionState:
                              _preserved_pca_samples_remove
       analysis.py          → analysis_selection, analysis_bar_chart_fig,
                              analysis_pie_chart_figs, analysis_saturation_figs,
-                             analysis_fach_fig, analysis_pathway_fig,
+                             analysis_chain_length_fig, analysis_fach_fig, analysis_pathway_fig,
                              analysis_volcano_fig, analysis_volcano_data,
                              analysis_heatmap_fig, analysis_heatmap_clusters,
                              analysis_all_plots
@@ -173,6 +174,7 @@ class SessionState:
     analysis_bar_chart_fig: Optional[go.Figure] = None
     analysis_pie_chart_figs: Dict[str, go.Figure] = field(default_factory=dict)
     analysis_saturation_figs: Dict[str, go.Figure] = field(default_factory=dict)
+    analysis_chain_length_fig: Optional[go.Figure] = None
     analysis_fach_fig: Optional[go.Figure] = None
     analysis_pathway_fig: Optional[go.Figure] = None
     analysis_pathway_active_classes: Optional[List[str]] = None
@@ -693,6 +695,22 @@ class StreamlitAdapter:
             df, experiment, selected_conditions, selected_classes,
             stat_config=stat_config, plot_type=plot_type,
             show_significance=show_significance,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating chain length distribution...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_chain_length(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_classes: List[str],
+    ) -> ChainLengthResult:
+        """Cached chain length distribution analysis."""
+        return AnalysisWorkflow.run_chain_length(
+            df, experiment, selected_conditions, selected_classes,
         )
 
     @staticmethod

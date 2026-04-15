@@ -906,7 +906,7 @@ class TestSessionStateFieldCompleteness:
         """Test total number of analysis fields (guard against accidental deletion)."""
         field_names = [f.name for f in fields(SessionState)]
         analysis_fields = [f for f in field_names if f.startswith('analysis_')]
-        assert len(analysis_fields) == 16
+        assert len(analysis_fields) == 17
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
@@ -917,8 +917,8 @@ class TestSessionStateFieldCompleteness:
     def test_total_field_count(self):
         """Test total SessionState field count matches expected."""
         field_names = [f.name for f in fields(SessionState)]
-        # 61 (pre-Module 3) + 16 (analysis) + 3 (QC plot storage) = 80
-        assert len(field_names) == 80
+        # 61 (pre-Module 3) + 17 (analysis) + 3 (QC plot storage) = 81
+        assert len(field_names) == 81
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""

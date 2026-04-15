@@ -6,6 +6,7 @@ from app.services.plotting._shared import (  # noqa: F401
     validate_dataframe,
 )
 from app.services.plotting.abundance_bar_chart import BarChartPlotterService
+from app.services.plotting.chain_length_plot import ChainLengthPlotterService
 from app.services.plotting.abundance_pie_chart import PieChartPlotterService
 from app.services.plotting.box_plot import BoxPlotService
 from app.services.plotting.bqc_plotter import BQCPlotterService
@@ -21,6 +22,7 @@ from app.services.plotting.volcano_plot import VolcanoPlotterService
 
 __all__ = [
     'BarChartPlotterService',
+    'ChainLengthPlotterService',
     'FACHPlotterService',
     'LipidomicHeatmapPlotterService',
     'PathwayVizPlotterService',

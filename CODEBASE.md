@@ -133,6 +133,7 @@ LipidCruncher/
 │       │       ├── abundance_bar_chart.py
 │       │       ├── abundance_pie_chart.py
 │       │       ├── saturation_plot.py
+│       │       ├── chain_length_plot.py
 │       │       ├── fach.py
 │       │       ├── pathway_viz.py
 │       │       ├── volcano_plot.py
@@ -169,6 +170,7 @@ LipidCruncher/
 │           │       ├── _bar_chart.py
 │           │       ├── _pie_charts.py
 │           │       ├── _saturation.py
+│           │       ├── _chain_length.py
 │           │       ├── _fach.py
 │           │       ├── _pathway.py
 │           │       ├── _pathway_state.py    #     Pathway session state management
@@ -235,7 +237,7 @@ Box Plots → BQC Assessment → Retention Time → Correlation → PCA
 
 **Analysis section:**
 ```
-Bar Charts | Pie Charts | Saturation | FACH | Pathway | Volcano | Heatmap
+Bar Charts | Pie Charts | Saturation | Chain Length | FACH | Pathway | Volcano | Heatmap
 ```
 
 Each analysis type is independent and user-selectable. All produce interactive plots with export options (SVG, CSV, PDF).
@@ -314,6 +316,7 @@ Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strin
 | `BarChartPlotterService` | Mean ± std per condition per class (with optional stats) |
 | `PieChartPlotterService` | Class composition per condition |
 | `SaturationPlotterService` | Saturation degree distribution |
+| `ChainLengthPlotterService` | Carbon chain length and double bond bubble charts |
 | `FACHPlotterService` | Fatty acid composition heatmap |
 | `PathwayVizService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
 | `VolcanoPlotterService` | Fold-change vs. p-value scatter |
@@ -328,7 +331,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 | `DataIngestionWorkflow` | `run()` → `IngestionResult` | Format detection → cleaning → zero filtering → standards validation. Returns cleaned DataFrame + internal standards + messages. |
 | `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. Also provides `suggest_standard_mappings()` and `preview_normalization()`. |
 | `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_pca()`, `remove_samples()`. Each step can be run independently. |
-| `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
+| `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
 
 ### Adapter
 
