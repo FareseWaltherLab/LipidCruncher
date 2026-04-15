@@ -197,11 +197,7 @@ def _process_uploaded_standards(
 
     except ValueError as ve:
         logger.error("Standards validation error: %s", ve)
-        st.error(
-            "Could not process the standards file. Please check that it contains a 'LipidMolec' column "
-            "and valid lipid standard entries. "
-            "If the issue persists after refreshing the app, contact abdih@mskcc.org."
-        )
+        st.error(str(ve))
         return _fallback_standards(auto_detected_df)
     except UnicodeDecodeError as e:
         logger.error("Standards file encoding error: %s", e)
