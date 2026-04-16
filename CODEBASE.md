@@ -120,6 +120,7 @@ LipidCruncher/
 │       │   ├── zero_filtering.py            #   ZeroFilteringService
 │       │   ├── sample_grouping.py           #   Sample assignment to conditions
 │       │   ├── report_generator.py          #   PDF report generation
+│       │   ├── lsi_report.py               #   LSI compliance checklist generation
 │       │   └── plotting/                    #   Visualization services
 │       │       ├── __init__.py              #     Public API: re-exports all plotters + shared utils
 │       │       ├── base.py                  #     PlotterServiceProtocol (interface contract)
@@ -163,6 +164,7 @@ LipidCruncher/
 │           │   ├── internal_standards.py
 │           │   ├── normalization.py
 │           │   ├── quality_check.py
+│           │   ├── lsi_report.py            #   LSI compliance report UI
 │           │   └── analysis/                #   Analysis visualizations
 │           │       ├── _entry.py
 │           │       ├── _shared.py
@@ -298,6 +300,7 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | `ZeroFilteringService` | `zero_filtering.py` | Removes lipids exceeding configurable zero-value thresholds (default: 75% for non-BQC, 50% for BQC samples). |
 | `StandardsService` | `standards.py` | Standards extraction, validation, and class-to-standard mapping. |
 | `ReportGeneratorService` | `report_generator.py` | Generates PDF reports from collected plots and analysis results. |
+| `LSIReportService` | `lsi_report.py` | Generates Lipidomics Standards Initiative (LSI) compliance checklists with auto-filled fields from the analysis pipeline. Supports PDF and CSV export. |
 
 #### Plotting Services (`services/plotting/`)
 
@@ -364,6 +367,7 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 | `internal_standards.py` | Review/edit auto-detected standards, upload custom standards |
 | `normalization.py` | Normalization method selection, standard mapping, protein input |
 | `quality_check.py` | All QC steps rendered with interactive controls |
+| `lsi_report.py` | LSI compliance checklist generation and export (PDF/CSV) |
 | `analysis/` | Subpackage with one module per analysis type (`_bar_chart.py`, `_volcano.py`, etc.) plus shared utilities. The pathway module is decomposed into `_pathway.py` (main rendering), `_pathway_state.py` (session state accessors), and `_pathway_editor.py` (layout customization panel). |
 
 **Static content** (`ui/content/`): Documentation text for processing steps, normalization methods, sample data descriptions, standards help, and analysis methodology (statistical testing guide, saturation profile calculations).
@@ -436,7 +440,7 @@ This allows imports like `from app.services.normalization import NormalizationSe
 
 | Directory | Count | Scope |
 |---|---|---|
-| `tests/unit/` | 33 modules | Individual services, models, plotters, adapter |
+| `tests/unit/` | 42 modules | Individual services, models, plotters, adapter |
 | `tests/integration/` | 4 modules | End-to-end pipeline per module |
 | `tests/ui/` | 5 modules | Streamlit component rendering (AppTest framework) |
 
