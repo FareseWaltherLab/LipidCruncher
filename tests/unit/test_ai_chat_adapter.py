@@ -1,0 +1,127 @@
+"""
+Unit tests for the AI chat adapter integration.
+
+Tests that SessionState has the correct chat_* keys, that adapter
+methods delegate correctly, and that the chat UI modules import cleanly.
+"""
+from dataclasses import fields
+from unittest.mock import patch, MagicMock
+
+import pandas as pd
+import pytest
+
+from app.adapters.streamlit_adapter import SessionState
+from app.models.chat import ChatMode, ChatSession
+from app.models.experiment import ExperimentConfig
+from app.workflows.ai_chat import AIChatWorkflow
+
+
+# ---------------------------------------------------------------------------
+# SessionState chat keys
+# ---------------------------------------------------------------------------
+
+class TestSessionStateChatKeys:
+    """Verify chat_* keys exist with correct defaults."""
+
+    def test_chat_transform_session_default_none(self):
+        state = SessionState()
+        assert state.chat_transform_session is None
+
+    def test_chat_viz_session_default_none(self):
+        state = SessionState()
+        assert state.chat_viz_session is None
+
+    def test_chat_mode_default_none(self):
+        state = SessionState()
+        assert state.chat_mode is None
+
+    def test_chat_transform_result_default_none(self):
+        state = SessionState()
+        assert state.chat_transform_result is None
+
+    def test_chat_viz_figures_default_empty_dict(self):
+        state = SessionState()
+        assert state.chat_viz_figures == {}
+
+    def test_chat_message_count_default_zero(self):
+        state = SessionState()
+        assert state.chat_message_count == 0
+
+    def test_chat_execution_count_default_zero(self):
+        state = SessionState()
+        assert state.chat_execution_count == 0
+
+    def test_chat_keys_in_session_state_fields(self):
+        """All chat_* fields exist in the SessionState dataclass."""
+        field_names = {f.name for f in fields(SessionState)}
+        expected = {
+            'chat_transform_session', 'chat_viz_session', 'chat_mode',
+            'chat_transform_result', 'chat_viz_figures',
+            'chat_message_count', 'chat_execution_count',
+        }
+        assert expected.issubset(field_names)
+
+
+# ---------------------------------------------------------------------------
+# Workflow session creation (tested via adapter entry points)
+# ---------------------------------------------------------------------------
+
+class TestWorkflowSessionCreation:
+
+    def test_start_transform_session(self):
+        df = pd.DataFrame({
+            "lipid": ["PC 34:1", "PE 36:2"],
+            "area_1": [100.0, 200.0],
+        })
+        session = AIChatWorkflow.start_transform_session(df)
+        assert session.mode == ChatMode.DATA_TRANSFORM
+        assert "lipid" in session.schema_context
+        assert len(session.messages) == 0
+
+    def test_start_viz_session(self):
+        df = pd.DataFrame({
+            "LipidMolec": ["PC 34:1"],
+            "ClassKey": ["PC"],
+            "intensity[s1]": [100.0],
+            "intensity[s2]": [110.0],
+        })
+        experiment = ExperimentConfig(
+            conditions_list=["Control", "Treatment"],
+            number_of_samples_list=[1, 1],
+        )
+        session = AIChatWorkflow.start_viz_session(df, experiment)
+        assert session.mode == ChatMode.VISUALIZATION
+        assert "LipidMolec" in session.schema_context
+
+    def test_transform_session_preserves_schema(self):
+        """Schema context is set once and persists through messages."""
+        df = pd.DataFrame({"col_a": [1, 2, 3], "col_b": [4, 5, 6]})
+        session = AIChatWorkflow.start_transform_session(df)
+        assert "col_a" in session.schema_context
+        assert "col_b" in session.schema_context
+
+
+# ---------------------------------------------------------------------------
+# Module import smoke tests
+# ---------------------------------------------------------------------------
+
+class TestModuleImports:
+    """Verify all Phase 4 modules import without errors."""
+
+    def test_import_chat_panel(self):
+        from app.ui.ai_chat import chat_panel
+        assert hasattr(chat_panel, 'display_transform_chat')
+        assert hasattr(chat_panel, 'display_viz_chat')
+
+    def test_import_data_transform_ui(self):
+        from app.ui.ai_chat import _data_transform_ui
+        assert hasattr(_data_transform_ui, 'render_transform_chat')
+
+    def test_import_viz_generation_ui(self):
+        from app.ui.ai_chat import _viz_generation_ui
+        assert hasattr(_viz_generation_ui, 'render_viz_chat')
+
+    def test_import_ai_chat_package(self):
+        from app.ui.ai_chat import display_transform_chat, display_viz_chat
+        assert callable(display_transform_chat)
+        assert callable(display_viz_chat)

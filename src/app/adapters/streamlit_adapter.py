@@ -192,6 +192,15 @@ class SessionState:
     lsi_manual_fields: Dict[str, str] = field(default_factory=dict)
     lsi_pdf_bytes: Optional[bytes] = None
 
+    # --- AI Chat (owner: ai_chat/chat_panel.py) ---
+    chat_transform_session: Optional[Any] = None
+    chat_viz_session: Optional[Any] = None
+    chat_mode: Optional[str] = None
+    chat_transform_result: Optional[pd.DataFrame] = None
+    chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
+    chat_message_count: int = 0
+    chat_execution_count: int = 0
+
 
 # Keys that should NOT be reset when starting a fresh analysis
 # (they control app-level routing, not data-specific state)
@@ -236,6 +245,8 @@ _WIDGET_KEYS = {
     'qc_missing_values_svg', 'qc_missing_values_csv',
     'qc_box_plot_svg', 'qc_box_plot_csv',
     'qc_bqc_svg', 'qc_pca_svg',
+    # AI Chat widgets (ai_chat/)
+    'chat_input', 'chat_apply_transform',
     # Analysis widgets (analysis.py)
     'analysis_radio',
     'bar_conditions', 'bar_classes', 'bar_scale_radio',
@@ -823,4 +834,59 @@ class StreamlitAdapter:
         return AnalysisWorkflow.run_heatmap(
             df, experiment, selected_conditions, selected_classes,
             heatmap_type=heatmap_type, n_clusters=n_clusters,
+        )
+
+    # ==================== AI Chat Wrappers (NOT cached — stateful) ====================
+
+    @staticmethod
+    def run_ai_transform(
+        user_message: str,
+        session,
+        source_df: pd.DataFrame,
+    ):
+        """Run one turn of the AI data transformation chat.
+
+        NOT cached because chat is inherently stateful.
+
+        Args:
+            user_message: The user's message.
+            session: Current ChatSession.
+            source_df: The user's uploaded DataFrame.
+
+        Returns:
+            TransformStepResult from the workflow.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.handle_transform_message(
+            user_message=user_message,
+            session=session,
+            source_df=source_df,
+        )
+
+    @staticmethod
+    def run_ai_viz(
+        user_message: str,
+        session,
+        analysis_df: pd.DataFrame,
+        experiment: ExperimentConfig,
+    ):
+        """Run one turn of the AI visualization chat.
+
+        NOT cached because chat is inherently stateful.
+
+        Args:
+            user_message: The user's message.
+            session: Current ChatSession.
+            analysis_df: The analysis-ready DataFrame.
+            experiment: Experiment configuration.
+
+        Returns:
+            VizStepResult from the workflow.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.handle_viz_message(
+            user_message=user_message,
+            session=session,
+            analysis_df=analysis_df,
+            experiment=experiment,
         )

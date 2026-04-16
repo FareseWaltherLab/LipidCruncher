@@ -55,6 +55,7 @@ from app.ui.main_content import (
     display_quality_check_module,
     display_analysis_module,
 )
+from app.ui.ai_chat import display_transform_chat, display_viz_chat
 
 
 # =============================================================================
@@ -105,6 +106,15 @@ def display_app_page() -> None:
                 st.session_state.page = PAGE_LANDING
                 st.rerun()
         return
+
+    # AI-Assisted Import: available when a file is uploaded
+    with center:
+        with st.expander("AI-Assisted Import", expanded=False):
+            st.caption(
+                "Use AI to transform non-standard data into a format LipidCruncher can analyze. "
+                "Requires an Anthropic API key set as the `ANTHROPIC_API_KEY` environment variable."
+            )
+            display_transform_chat(raw_df)
 
     # Standardize data if not already done
     if st.session_state.get('standardized_df') is None:
@@ -294,6 +304,15 @@ def _display_module2_and_3(
         bqc_label=bqc_label,
         format_type=data_format,
     )
+
+    # --- AI Custom Visualization ---
+    st.markdown("---")
+    with st.expander("AI Custom Visualization", expanded=False):
+        st.caption(
+            "Generate custom visualizations by describing what you want in plain English. "
+            "Requires an Anthropic API key set as the `ANTHROPIC_API_KEY` environment variable."
+        )
+        display_viz_chat(analysis_df, updated_experiment)
 
     # Navigation
     st.markdown("---")
