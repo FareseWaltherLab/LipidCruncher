@@ -1,0 +1,159 @@
+"""
+AI chat workflow.
+
+Orchestrates AI-powered data transformation and (later) visualization
+generation. Pure logic — no Streamlit dependencies.
+"""
+from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
+import pandas as pd
+
+from ..models.chat import (
+    AIConfig,
+    ChatMessage,
+    ChatMode,
+    ChatSession,
+    SandboxConfig,
+)
+from ..services.ai_chat.data_transformer import DataTransformerService, TransformationResult
+from ..services.ai_chat.schema_extractor import SchemaExtractorService
+
+
+@dataclass(frozen=True)
+class TransformStepResult:
+    """Result of a single transform conversation turn.
+
+    Attributes:
+        session: Updated chat session with new messages appended.
+        transformation: Transformation result (None if AI only asked a question).
+        assistant_message: The full assistant response text for display.
+    """
+    session: ChatSession
+    transformation: Optional[TransformationResult] = None
+    assistant_message: str = ""
+
+
+class AIChatWorkflow:
+    """Orchestrates AI chat interactions.
+
+    All methods are stateless static methods. No Streamlit imports.
+    """
+
+    @staticmethod
+    def start_transform_session(source_df: pd.DataFrame) -> ChatSession:
+        """Initialize a new data transformation chat session.
+
+        Pre-loads the DataFrame schema into the session context so
+        the AI has structural information without raw data.
+
+        Args:
+            source_df: The user's uploaded DataFrame.
+
+        Returns:
+            A new ChatSession in DATA_TRANSFORM mode with schema context.
+        """
+        schema = SchemaExtractorService.extract_schema(source_df)
+        return ChatSession(
+            mode=ChatMode.DATA_TRANSFORM,
+            schema_context=schema,
+        )
+
+    @staticmethod
+    def handle_transform_message(
+        user_message: str,
+        session: ChatSession,
+        source_df: pd.DataFrame,
+        ai_config: Optional[AIConfig] = None,
+        sandbox_config: Optional[SandboxConfig] = None,
+    ) -> TransformStepResult:
+        """Handle one user message in a data transformation chat.
+
+        Flow:
+        1. Append user message to session.
+        2. Send conversation to AI to generate transformation code.
+        3. If code is returned, execute in sandbox and validate output.
+        4. Append assistant response to session.
+        5. Return updated session + transformation result.
+
+        Args:
+            user_message: The user's latest message.
+            session: Current chat session.
+            source_df: The user's original DataFrame.
+            ai_config: AI configuration. Uses defaults if None.
+            sandbox_config: Sandbox configuration. Uses defaults if None.
+
+        Returns:
+            TransformStepResult with updated session and transformation outcome.
+        """
+        if ai_config is None:
+            ai_config = AIConfig()
+        if sandbox_config is None:
+            sandbox_config = SandboxConfig()
+
+        # 1. Append user message
+        user_msg = ChatMessage(role="user", content=user_message)
+        session = session.add_message(user_msg)
+
+        # 2. Generate transformation code via AI
+        history = session.to_api_messages()[:-1]  # exclude the latest (we pass it separately)
+
+        explanation, code = DataTransformerService.generate_transformation_code(
+            source_schema=session.schema_context,
+            user_message=user_message,
+            history=history,
+            config=ai_config,
+        )
+
+        # 3. If code was generated, execute and validate
+        transformation = None
+        if code:
+            transformation = DataTransformerService.execute_transformation(
+                code=code,
+                source_df=source_df,
+                sandbox_config=sandbox_config,
+            )
+            # Include explanation in the transformation result
+            transformation = TransformationResult(
+                success=transformation.success,
+                result_df=transformation.result_df,
+                explanation=explanation,
+                code=code,
+                sandbox_result=transformation.sandbox_result,
+                validation_errors=transformation.validation_errors,
+            )
+
+            # Build assistant response text
+            if transformation.success:
+                assistant_text = (
+                    f"{explanation}\n\n"
+                    f"The transformation was successful! "
+                    f"The result has {len(transformation.result_df)} rows and "
+                    f"{len(transformation.result_df.columns)} columns. "
+                    f"Click 'Apply Transformation' to use this data in LipidCruncher."
+                )
+            else:
+                error_summary = "; ".join(transformation.validation_errors)
+                assistant_text = (
+                    f"{explanation}\n\n"
+                    f"The transformation encountered issues: {error_summary}\n\n"
+                    f"Please describe what needs to be fixed and I'll adjust the code."
+                )
+        else:
+            # AI responded with a question or explanation, no code
+            assistant_text = explanation
+
+        # 4. Append assistant message
+        assistant_msg = ChatMessage(
+            role="assistant",
+            content=assistant_text,
+            code=code if code else None,
+        )
+        session = session.add_message(assistant_msg)
+
+        return TransformStepResult(
+            session=session,
+            transformation=transformation,
+            assistant_message=assistant_text,
+        )
