@@ -695,3 +695,50 @@ class TestEdgeCases:
         assert ms is not None
         assert len(ms.value) == 3
         assert 'Vehicle' in ms.value
+
+
+# =============================================================================
+# Group 11: LSI Compliance Report (6 tests)
+# =============================================================================
+
+
+class TestLSIComplianceReportUI:
+    """Tests for the LSI compliance report section in the analysis module."""
+
+    def test_lsi_expander_renders(self, analysis_generic_app):
+        """LSI compliance report expander renders without exceptions."""
+        at = analysis_generic_app
+        assert not at.exception
+        expander_labels = [e.label for e in at.expander]
+        assert any("LSI" in label for label in expander_labels)
+
+    def test_lsi_description_present(self, analysis_generic_app):
+        """LSI section includes description with link to LSI website."""
+        at = analysis_generic_app
+        markdown_values = [m.value for m in at.markdown]
+        assert any("Lipidomics Standards Initiative" in m for m in markdown_values)
+
+    def test_lsi_preview_expander_exists(self, analysis_generic_app):
+        """Auto-filled fields preview expander exists."""
+        at = analysis_generic_app
+        expander_labels = [e.label for e in at.expander]
+        assert any("auto-filled" in label.lower() for label in expander_labels)
+
+    def test_lsi_manual_fields_expander_exists(self, analysis_generic_app):
+        """Manual fields expander exists."""
+        at = analysis_generic_app
+        expander_labels = [e.label for e in at.expander]
+        assert any("additional fields" in label.lower() for label in expander_labels)
+
+    def test_lsi_generate_pdf_button_exists(self, analysis_generic_app):
+        """PDF generation button exists."""
+        at = analysis_generic_app
+        button = at.button(key='lsi_generate_pdf')
+        assert button is not None
+
+    def test_lsi_expander_renders_three_conditions(self, analysis_three_cond_app):
+        """LSI expander renders correctly with 3 conditions."""
+        at = analysis_three_cond_app
+        assert not at.exception
+        expander_labels = [e.label for e in at.expander]
+        assert any("LSI" in label for label in expander_labels)

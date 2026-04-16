@@ -19,6 +19,7 @@ import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.services.report_generator import generate_pdf_report, build_metadata_from_experiment
+from app.ui.main_content.lsi_report import display_lsi_report_section
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.content import STATISTICAL_TESTING_DOCS, SATURATION_PROFILE_DOCS
 
@@ -106,6 +107,9 @@ def display_analysis_module(
 
     # PDF Report Download
     _display_pdf_report_section(experiment, format_type)
+
+    # LSI Compliance Report
+    display_lsi_report_section(experiment, format_type, bqc_label)
 
 
 # ═══════════════════════════════════════════════════════════════════════

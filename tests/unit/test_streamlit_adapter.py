@@ -917,8 +917,8 @@ class TestSessionStateFieldCompleteness:
     def test_total_field_count(self):
         """Test total SessionState field count matches expected."""
         field_names = [f.name for f in fields(SessionState)]
-        # 61 (pre-Module 3) + 17 (analysis) + 3 (QC plot storage) = 81
-        assert len(field_names) == 81
+        # 61 (pre-Module 3) + 17 (analysis) + 3 (QC plot storage) + 2 (LSI report) = 83
+        assert len(field_names) == 83
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""

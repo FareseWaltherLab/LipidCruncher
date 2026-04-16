@@ -188,6 +188,10 @@ class SessionState:
     analysis_heatmap_clusters: Optional[pd.DataFrame] = None
     analysis_all_plots: Dict[str, Union[go.Figure, matplotlib.figure.Figure]] = field(default_factory=dict)
 
+    # --- LSI Compliance Report (owner: lsi_report.py) ---
+    lsi_manual_fields: Dict[str, str] = field(default_factory=dict)
+    lsi_pdf_bytes: Optional[bytes] = None
+
 
 # Keys that should NOT be reset when starting a fresh analysis
 # (they control app-level routing, not data-specific state)

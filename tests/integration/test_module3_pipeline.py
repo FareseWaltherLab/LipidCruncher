@@ -1959,3 +1959,170 @@ class TestHelperMethods:
         )
 
         assert errors == []
+
+
+# =============================================================================
+# LSI Compliance Report — Integration Tests
+# =============================================================================
+
+
+class TestLSIReportEndToEnd:
+    """Integration tests for LSI compliance report generation using real sample data."""
+
+    def test_collect_auto_fields_lipidsearch(
+        self, lipidsearch_normalized_df, lipidsearch_experiment,
+    ):
+        """Auto-fields from real LipidSearch data are complete and correct."""
+        from app.services.lsi_report import LSIReportService
+
+        fields = LSIReportService.collect_auto_fields(
+            format_type="LipidSearch 5.0",
+            experiment=lipidsearch_experiment,
+            normalization_config=NormalizationConfig(method='none'),
+            stat_config=None,
+            cleaned_df=lipidsearch_normalized_df,
+            intsta_df=None,
+            bqc_label="BQC",
+            cleaning_params={"Grade filter": "A, B"},
+            qc_summary={"BQC CoV threshold": "30%"},
+        )
+
+        assert fields["Software"] == "LipidCruncher"
+        assert fields["Data format / identification software"] == "LipidSearch 5.0"
+        assert fields["Number of conditions"] == 3
+        assert "WT" in fields["Condition labels"]
+        assert fields["Total samples"] == 12
+        assert "BQC" in fields["BQC samples"]
+        assert fields["Number of lipid species (after filtering)"] == len(
+            lipidsearch_normalized_df
+        )
+        assert fields["Number of lipid classes"] > 0
+        assert "Cleaning: Grade filter" in fields
+        assert fields["Cleaning: Grade filter"] == "A, B"
+
+    def test_collect_auto_fields_generic(
+        self, generic_normalized_df, generic_experiment,
+    ):
+        """Auto-fields from real Generic data are complete."""
+        from app.services.lsi_report import LSIReportService
+
+        fields = LSIReportService.collect_auto_fields(
+            format_type="Generic Format",
+            experiment=generic_experiment,
+            normalization_config=None,
+            stat_config=StatisticalTestConfig.create_auto(),
+            cleaned_df=generic_normalized_df,
+            intsta_df=None,
+            bqc_label=None,
+            cleaning_params={},
+            qc_summary={},
+        )
+
+        assert fields["Number of conditions"] == 3
+        assert fields["BQC samples"] == "Not used"
+        assert fields["Statistical test mode"] == "Auto"
+        assert fields["Number of lipid species (after filtering)"] > 0
+
+    def test_collect_auto_fields_msdial(
+        self, msdial_normalized_df, msdial_experiment,
+    ):
+        """Auto-fields from real MS-DIAL data include correct format."""
+        from app.services.lsi_report import LSIReportService
+
+        fields = LSIReportService.collect_auto_fields(
+            format_type="MS-DIAL",
+            experiment=msdial_experiment,
+            normalization_config=None,
+            stat_config=None,
+            cleaned_df=msdial_normalized_df,
+            intsta_df=None,
+            bqc_label=None,
+            cleaning_params={"Score threshold": "80"},
+            qc_summary={},
+        )
+
+        assert fields["Data format / identification software"] == "MS-DIAL"
+        assert "Blank" in fields["Condition labels"]
+        assert fields["Number of lipid species (after filtering)"] > 0
+
+    def test_csv_from_real_data(
+        self, lipidsearch_normalized_df, lipidsearch_experiment,
+    ):
+        """CSV generation with real data produces valid structure."""
+        from app.services.lsi_report import LSIReportService, _MANUAL_FIELDS
+
+        fields = LSIReportService.collect_auto_fields(
+            format_type="LipidSearch 5.0",
+            experiment=lipidsearch_experiment,
+            normalization_config=NormalizationConfig(method='none'),
+            stat_config=StatisticalTestConfig.create_manual(),
+            cleaned_df=lipidsearch_normalized_df,
+            intsta_df=None,
+            bqc_label="BQC",
+            cleaning_params={},
+            qc_summary={"BQC CoV threshold": "30%"},
+        )
+
+        csv = LSIReportService.generate_checklist_csv(fields)
+        lines = csv.strip().split("\n")
+        # Header + auto fields + manual fields
+        assert len(lines) == 1 + len(fields) + len(_MANUAL_FIELDS)
+        assert "LipidCruncher" in csv
+        assert "LipidSearch" in csv
+        assert "TO BE FILLED" in csv
+
+    def test_pdf_from_real_data(
+        self, generic_normalized_df, generic_experiment,
+    ):
+        """PDF generation with real data produces valid PDF bytes."""
+        from app.services.lsi_report import LSIReportService
+
+        fields = LSIReportService.collect_auto_fields(
+            format_type="Generic Format",
+            experiment=generic_experiment,
+            normalization_config=None,
+            stat_config=None,
+            cleaned_df=generic_normalized_df,
+            intsta_df=None,
+            bqc_label=None,
+            cleaning_params={},
+            qc_summary={},
+        )
+
+        manual = {"Organism / tissue type": "Mouse liver", "Ion mode": "Positive"}
+        pdf = LSIReportService.generate_checklist_pdf(fields, manual)
+
+        assert isinstance(pdf, bytes)
+        assert pdf[:5] == b"%PDF-"
+        assert len(pdf) > 500
+
+    def test_csv_with_manual_fields_from_real_data(
+        self, msdial_normalized_df, msdial_experiment,
+    ):
+        """CSV with manual fields filled in marks them as 'Researcher' source."""
+        from app.services.lsi_report import LSIReportService
+
+        fields = LSIReportService.collect_auto_fields(
+            format_type="MS-DIAL",
+            experiment=msdial_experiment,
+            normalization_config=None,
+            stat_config=None,
+            cleaned_df=msdial_normalized_df,
+            intsta_df=None,
+            bqc_label=None,
+            cleaning_params={},
+            qc_summary={},
+        )
+
+        manual = {
+            "Organism / tissue type": "Zebrafish larvae",
+            "Extraction protocol": "Folch method",
+            "Instrument model": "Thermo Q Exactive HF",
+        }
+        csv = LSIReportService.generate_checklist_csv(fields, manual)
+
+        assert "Zebrafish larvae" in csv
+        assert "Folch method" in csv
+        assert "Thermo Q Exactive HF" in csv
+        # Filled fields should be sourced as "Researcher"
+        assert csv.count('"Researcher"') == 3
