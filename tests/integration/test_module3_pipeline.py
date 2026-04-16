@@ -800,7 +800,10 @@ class TestChainLengthEndToEnd:
         assert result.success
         assert result.figure is not None
         assert isinstance(result.figure, go.Figure)
-        assert len(result.data.records) > 0
+        assert result.per_condition_data is not None
+        assert len(result.per_condition_data) == 2
+        for cond_data in result.per_condition_data.values():
+            assert len(cond_data.records) > 0
 
     def test_chain_length_class_subset(
         self, lipidsearch_normalized_df, lipidsearch_experiment,
@@ -816,7 +819,9 @@ class TestChainLengthEndToEnd:
         )
 
         assert result.success
-        result_classes = {r['ClassKey'] for r in result.data.records}
+        result_classes = set()
+        for cond_data in result.per_condition_data.values():
+            result_classes.update(r['ClassKey'] for r in cond_data.records)
         assert result_classes <= set(subset)
 
     def test_chain_length_records_have_positive_concentration(
@@ -831,8 +836,9 @@ class TestChainLengthEndToEnd:
             df, lipidsearch_experiment, conditions, classes,
         )
 
-        for rec in result.data.records:
-            assert rec['MeanConcentration'] > 0
+        for cond_data in result.per_condition_data.values():
+            for rec in cond_data.records:
+                assert rec['MeanConcentration'] > 0
 
     def test_msdial_chain_length(
         self, msdial_normalized_df, msdial_experiment,
@@ -864,7 +870,9 @@ class TestChainLengthEndToEnd:
         assert isinstance(result, ChainLengthResult)
         assert result.success
         # Generic data has species-level names (e.g. PC 34:1) — should still parse
-        assert len(result.data.records) > 0
+        assert any(
+            len(d.records) > 0 for d in result.per_condition_data.values()
+        )
 
     def test_mw_chain_length(
         self, mw_normalized_df, mw_experiment,
@@ -899,6 +907,53 @@ class TestChainLengthEndToEnd:
                 lipidsearch_normalized_df, lipidsearch_experiment,
                 ['WT'], [],
             )
+
+
+class TestChainLengthParseCoverage:
+    """Ensure parse_total_chain_info handles all lipid formats in real datasets.
+
+    These tests catch silent parse failures: if a class has lipids with
+    chain notation (carbon:db) but none parse, the test fails. This forces
+    us to update the parser when new lipid name formats appear in the data.
+    """
+
+    @staticmethod
+    def _check_parse_coverage(df):
+        """Assert every class with chain-bearing lipids has >0 parseable."""
+        from app.services.plotting.chain_length_plot import (
+            ChainLengthPlotterService,
+        )
+        failures = []
+        for cls in sorted(df['ClassKey'].unique()):
+            lipids = df[df['ClassKey'] == cls]['LipidMolec'].tolist()
+            # Skip classes where no lipid has chain notation (e.g. Ch)
+            has_chain_notation = any(':' in str(lip) for lip in lipids)
+            if not has_chain_notation:
+                continue
+            parseable = sum(
+                1 for lip in lipids
+                if ChainLengthPlotterService.parse_total_chain_info(lip)
+                is not None
+            )
+            if parseable == 0:
+                samples = lipids[:3]
+                failures.append(f"{cls}: 0/{len(lipids)} parsed ({samples})")
+        assert not failures, (
+            "Classes with chain notation but 0 parseable lipids:\n"
+            + "\n".join(failures)
+        )
+
+    def test_lipidsearch_parse_coverage(self, lipidsearch_normalized_df):
+        self._check_parse_coverage(lipidsearch_normalized_df)
+
+    def test_msdial_parse_coverage(self, msdial_normalized_df):
+        self._check_parse_coverage(msdial_normalized_df)
+
+    def test_generic_parse_coverage(self, generic_normalized_df):
+        self._check_parse_coverage(generic_normalized_df)
+
+    def test_mw_parse_coverage(self, mw_normalized_df):
+        self._check_parse_coverage(mw_normalized_df)
 
 
 class TestFACHEndToEnd:

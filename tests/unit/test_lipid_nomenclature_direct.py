@@ -15,6 +15,7 @@ from app.lipid_nomenclature import (
     format_lipid_name,
     get_chain_separator,
     normalize_hydroxyl,
+    parse_chain_carbon_db,
     parse_lipid_name,
     remove_phantom_chains,
     sort_chains_lipid_maps,
@@ -123,3 +124,66 @@ class TestDirectFunctionCalls:
 
     def test_get_separator_sphingolipid(self):
         assert get_chain_separator('Cer') == '/'
+
+
+# =============================================================================
+# parse_chain_carbon_db Tests
+# =============================================================================
+
+
+class TestParseChainCarbonDb:
+    """Tests for the shared chain-parsing helper."""
+
+    def test_standard_chain(self):
+        assert parse_chain_carbon_db('16:0') == (16, 0)
+
+    def test_chain_with_double_bonds(self):
+        assert parse_chain_carbon_db('18:1') == (18, 1)
+
+    def test_high_double_bonds(self):
+        assert parse_chain_carbon_db('22:6') == (22, 6)
+
+    # -- Prefix handling --
+
+    def test_sphingoid_d_prefix(self):
+        assert parse_chain_carbon_db('d18:1') == (18, 1)
+
+    def test_ether_O_prefix(self):
+        assert parse_chain_carbon_db('O-30:1') == (30, 1)
+
+    def test_plasmalogen_P_prefix(self):
+        assert parse_chain_carbon_db('P-16:0') == (16, 0)
+
+    def test_t_prefix(self):
+        assert parse_chain_carbon_db('t18:0') == (18, 0)
+
+    def test_m_prefix(self):
+        assert parse_chain_carbon_db('m18:1') == (18, 1)
+
+    def test_C_prefix(self):
+        assert parse_chain_carbon_db('C24:0') == (24, 0)
+
+    # -- Suffix handling --
+
+    def test_hydroxyl_suffix(self):
+        assert parse_chain_carbon_db('18:1;O2') == (18, 1)
+
+    def test_old_hydroxyl_suffix(self):
+        assert parse_chain_carbon_db('18:1;2O') == (18, 1)
+
+    def test_oxidation_suffix(self):
+        assert parse_chain_carbon_db('20:4+O') == (20, 4)
+
+    def test_multi_oxidation_suffix(self):
+        assert parse_chain_carbon_db('20:4+2O') == (20, 4)
+
+    # -- Unparseable --
+
+    def test_empty_string(self):
+        assert parse_chain_carbon_db('') is None
+
+    def test_no_colon(self):
+        assert parse_chain_carbon_db('abc') is None
+
+    def test_phantom_chain(self):
+        assert parse_chain_carbon_db('0:0') == (0, 0)

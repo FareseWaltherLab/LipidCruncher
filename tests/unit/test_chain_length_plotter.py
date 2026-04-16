@@ -3,11 +3,12 @@ Unit tests for ChainLengthPlotterService.
 
 Tests cover:
 1. parse_total_chain_info — lipid name parsing for carbons and double bonds
-2. calculate_chain_length_data — data aggregation
-3. create_chain_length_figure — figure structure
-4. _scale_marker_sizes — marker size scaling
-5. generate_color_mapping — color assignment
-6. Edge cases — empty data, unparsable lipids, single class
+2. calculate_chain_length_data — data aggregation (single condition)
+3. calculate_per_condition_data — per-condition data separation
+4. create_per_condition_figure — vertical per-condition figure structure
+5. _scale_marker_sizes — marker size scaling (local and global)
+6. generate_color_mapping — color assignment
+7. Edge cases — empty data, unparsable lipids, single class
 """
 
 import numpy as np
@@ -105,6 +106,36 @@ class TestParseTotalChainInfo:
     def test_high_double_bonds(self):
         result = ChainLengthPlotterService.parse_total_chain_info('PE 20:4_22:6')
         assert result == (42, 10)
+
+    # -- Formats that previously failed (prefix handling) --
+
+    def test_sphingoid_d_prefix_cer(self):
+        result = ChainLengthPlotterService.parse_total_chain_info('Cer 16:0/d18:1')
+        assert result == (34, 1)
+
+    def test_sphingoid_d_prefix_sm(self):
+        result = ChainLengthPlotterService.parse_total_chain_info('SM d37:1')
+        assert result == (37, 1)
+
+    def test_sphingoid_d_prefix_hexcer(self):
+        result = ChainLengthPlotterService.parse_total_chain_info('Hex1Cer 18:0_d18:1')
+        assert result == (36, 1)
+
+    def test_plasmalogen_P_prefix(self):
+        result = ChainLengthPlotterService.parse_total_chain_info('PE P-16:0_22:5')
+        assert result == (38, 5)
+
+    def test_ether_O_prefix(self):
+        result = ChainLengthPlotterService.parse_total_chain_info('DG 20:1_O-30:1')
+        assert result == (50, 2)
+
+    def test_ether_O_prefix_species_level(self):
+        result = ChainLengthPlotterService.parse_total_chain_info('PC O-38:4')
+        assert result == (38, 4)
+
+    def test_ether_O_prefix_triglyceride(self):
+        result = ChainLengthPlotterService.parse_total_chain_info('TG 18:2_O-20:0_22:6')
+        assert result == (60, 8)
 
 
 # =============================================================================
@@ -211,74 +242,201 @@ class TestCalculateChainLengthData:
 
 
 # =============================================================================
-# TestCreateChainLengthFigure
+# TestCalculatePerConditionData
 # =============================================================================
 
 
-class TestCreateChainLengthFigure:
-    """Tests for figure creation."""
+class TestCalculatePerConditionData:
+    """Tests for per-condition data separation."""
+
+    def test_returns_dict_per_condition(self, basic_df, basic_experiment):
+        result = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control', 'Treatment'], ['PC', 'PE', 'SM'],
+        )
+        assert isinstance(result, dict)
+        assert 'Control' in result
+        assert 'Treatment' in result
+        assert len(result) == 2
+
+    def test_each_value_is_chain_length_data(self, basic_df, basic_experiment):
+        result = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control', 'Treatment'], ['PC'],
+        )
+        for cond, data in result.items():
+            assert isinstance(data, ChainLengthData)
+
+    def test_single_condition(self, basic_df, basic_experiment):
+        result = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control'], ['PC', 'PE'],
+        )
+        assert len(result) == 1
+        assert 'Control' in result
+
+    def test_conditions_have_different_concentrations(self, basic_df, basic_experiment):
+        """Each condition uses only its own samples, so means should differ."""
+        result = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control', 'Treatment'], ['PC'],
+        )
+        # Get mean concentration for 34:1 in PC for each condition
+        ctrl_conc = [
+            r['MeanConcentration'] for r in result['Control'].records
+            if r['TotalCarbons'] == 34 and r['TotalDoubleBonds'] == 1
+        ]
+        treat_conc = [
+            r['MeanConcentration'] for r in result['Treatment'].records
+            if r['TotalCarbons'] == 34 and r['TotalDoubleBonds'] == 1
+        ]
+        assert len(ctrl_conc) == 1
+        assert len(treat_conc) == 1
+        # Control uses s1-s3, Treatment uses s4-s6 — different values
+        assert ctrl_conc[0] != treat_conc[0]
+
+    def test_empty_conditions_returns_empty_dict(self, basic_df, basic_experiment):
+        result = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment, [], ['PC'],
+        )
+        assert result == {}
+
+    def test_class_filtering_applies_per_condition(self, basic_df, basic_experiment):
+        result = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control', 'Treatment'], ['PC'],
+        )
+        for data in result.values():
+            assert all(r['ClassKey'] == 'PC' for r in data.records)
+
+
+# =============================================================================
+# TestCreatePerConditionFigure
+# =============================================================================
+
+
+class TestCreatePerConditionFigure:
+    """Tests for per-condition vertical figure creation."""
 
     def test_returns_plotly_figure(self, basic_df, basic_experiment):
-        data = ChainLengthPlotterService.calculate_chain_length_data(
+        per_cond = ChainLengthPlotterService.calculate_per_condition_data(
             basic_df, basic_experiment,
             ['Control', 'Treatment'], ['PC', 'PE'],
         )
-        color_mapping = ChainLengthPlotterService.generate_color_mapping(
-            data.classes,
-        )
-        fig = ChainLengthPlotterService.create_chain_length_figure(
-            data, color_mapping,
+        all_classes = sorted({
+            cls for d in per_cond.values() for cls in d.classes
+        })
+        colors = ChainLengthPlotterService.generate_color_mapping(all_classes)
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
         )
         assert isinstance(fig, go.Figure)
 
-    def test_has_two_subplots(self, basic_df, basic_experiment):
-        data = ChainLengthPlotterService.calculate_chain_length_data(
+    def test_vertical_layout_two_conditions(self, basic_df, basic_experiment):
+        """Two conditions should produce 2 rows x 2 cols = 4 subplot axes."""
+        per_cond = ChainLengthPlotterService.calculate_per_condition_data(
             basic_df, basic_experiment,
             ['Control', 'Treatment'], ['PC', 'PE'],
         )
-        color_mapping = ChainLengthPlotterService.generate_color_mapping(
-            data.classes,
+        colors = ChainLengthPlotterService.generate_color_mapping(['PC', 'PE'])
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
         )
-        fig = ChainLengthPlotterService.create_chain_length_figure(
-            data, color_mapping,
+        # 2 rows × 2 cols → xaxis, xaxis2, xaxis3, xaxis4
+        assert fig.layout.xaxis is not None
+        assert fig.layout.xaxis2 is not None
+        assert fig.layout.xaxis3 is not None
+        assert fig.layout.xaxis4 is not None
+
+    def test_single_condition_has_two_panels(self, basic_df, basic_experiment):
+        per_cond = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control'], ['PC'],
         )
-        # Two subplots → xaxis and xaxis2
+        colors = ChainLengthPlotterService.generate_color_mapping(['PC'])
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
+        )
         assert fig.layout.xaxis is not None
         assert fig.layout.xaxis2 is not None
 
     def test_empty_data_returns_figure(self):
-        data = ChainLengthData(records=[], classes=[])
-        fig = ChainLengthPlotterService.create_chain_length_figure(data, {})
+        fig = ChainLengthPlotterService.create_per_condition_figure({}, {})
+        assert isinstance(fig, go.Figure)
+
+    def test_all_empty_conditions_returns_figure(self):
+        per_cond = {
+            'Control': ChainLengthData(records=[], classes=[]),
+            'Treatment': ChainLengthData(records=[], classes=[]),
+        }
+        fig = ChainLengthPlotterService.create_per_condition_figure(per_cond, {})
         assert isinstance(fig, go.Figure)
 
     def test_traces_have_correct_mode(self, basic_df, basic_experiment):
-        data = ChainLengthPlotterService.calculate_chain_length_data(
+        per_cond = ChainLengthPlotterService.calculate_per_condition_data(
             basic_df, basic_experiment,
             ['Control'], ['PC'],
         )
-        color_mapping = ChainLengthPlotterService.generate_color_mapping(
-            data.classes,
-        )
-        fig = ChainLengthPlotterService.create_chain_length_figure(
-            data, color_mapping,
+        colors = ChainLengthPlotterService.generate_color_mapping(['PC'])
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
         )
         for trace in fig.data:
             assert trace.mode == 'markers'
 
     def test_legend_shows_each_class_once(self, basic_df, basic_experiment):
-        data = ChainLengthPlotterService.calculate_chain_length_data(
+        """Even with multiple conditions, each class appears once in legend."""
+        per_cond = ChainLengthPlotterService.calculate_per_condition_data(
             basic_df, basic_experiment,
             ['Control', 'Treatment'], ['PC', 'PE', 'SM'],
         )
-        color_mapping = ChainLengthPlotterService.generate_color_mapping(
-            data.classes,
-        )
-        fig = ChainLengthPlotterService.create_chain_length_figure(
-            data, color_mapping,
+        all_classes = sorted({
+            cls for d in per_cond.values() for cls in d.classes
+        })
+        colors = ChainLengthPlotterService.generate_color_mapping(all_classes)
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
         )
         legend_entries = [t.name for t in fig.data if t.showlegend]
         # Each class appears exactly once in legend
         assert len(legend_entries) == len(set(legend_entries))
+
+    def test_legend_is_horizontal(self, basic_df, basic_experiment):
+        per_cond = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control', 'Treatment'], ['PC', 'PE'],
+        )
+        colors = ChainLengthPlotterService.generate_color_mapping(['PC', 'PE'])
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
+        )
+        assert fig.layout.legend.orientation == 'h'
+
+    def test_subplot_titles_contain_condition_names(self, basic_df, basic_experiment):
+        per_cond = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control', 'Treatment'], ['PC'],
+        )
+        colors = ChainLengthPlotterService.generate_color_mapping(['PC'])
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
+        )
+        annotations = [a.text for a in fig.layout.annotations]
+        assert any('Control' in t for t in annotations)
+        assert any('Treatment' in t for t in annotations)
+
+    def test_height_scales_with_conditions(self, basic_df, basic_experiment):
+        """More conditions should produce a taller figure."""
+        from app.services.plotting.chain_length_plot import CHART_HEIGHT_PER_CONDITION
+        per_cond = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment,
+            ['Control', 'Treatment'], ['PC'],
+        )
+        colors = ChainLengthPlotterService.generate_color_mapping(['PC'])
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
+        )
+        assert fig.layout.height == CHART_HEIGHT_PER_CONDITION * 2
 
 
 # =============================================================================
@@ -308,6 +466,26 @@ class TestScaleMarkerSizes:
     def test_values_within_bounds(self):
         from app.services.plotting.chain_length_plot import MIN_MARKER_SIZE, MAX_MARKER_SIZE
         result = _scale_marker_sizes(np.array([1.0, 50.0, 100.0, 500.0]))
+        assert np.all(result >= MIN_MARKER_SIZE)
+        assert np.all(result <= MAX_MARKER_SIZE)
+
+    def test_global_scaling_produces_consistent_sizes(self):
+        """Using a global range ensures markers from different conditions are comparable."""
+        global_vals = np.array([10.0, 100.0, 500.0, 1000.0])
+        subset1 = np.array([10.0, 100.0])
+        subset2 = np.array([500.0, 1000.0])
+
+        sizes1 = _scale_marker_sizes(subset1, global_vals)
+        sizes2 = _scale_marker_sizes(subset2, global_vals)
+
+        # The largest in subset1 should be smaller than the smallest in subset2
+        assert sizes1[-1] < sizes2[0]
+
+    def test_global_scaling_values_within_bounds(self):
+        from app.services.plotting.chain_length_plot import MIN_MARKER_SIZE, MAX_MARKER_SIZE
+        global_vals = np.array([1.0, 50.0, 100.0, 500.0])
+        subset = np.array([50.0, 100.0])
+        result = _scale_marker_sizes(subset, global_vals)
         assert np.all(result >= MIN_MARKER_SIZE)
         assert np.all(result <= MAX_MARKER_SIZE)
 

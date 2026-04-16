@@ -18,6 +18,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from app.constants import parse_lipid_name
+from app.lipid_nomenclature import parse_chain_carbon_db
 from app.models.experiment import ExperimentConfig
 
 
@@ -86,24 +87,16 @@ class FACHPlotterService:
         if not chain_info:
             return None, None
 
-        composition = chain_info
         total_c = 0
         total_db = 0
 
-        chains = re.split(r'[/_]', composition)
+        chains = re.split(r'[/_]', chain_info)
 
         for chain in chains:
-            # Remove ether/sphingoid prefixes: O-, P-, d, t, m
-            chain_cleaned = re.sub(r'^[OPdtm]-?', '', chain)
-            # Remove oxidation suffixes: +O, +2O, +3O
-            chain_cleaned = re.sub(r'\+\d*O', '', chain_cleaned)
-            # Remove chain identifier C (e.g., C24:0)
-            chain_cleaned = re.sub(r'^C', '', chain_cleaned)
-
-            chain_match = re.match(r'(\d+):(\d+)', chain_cleaned)
-            if chain_match:
-                total_c += int(chain_match.group(1))
-                total_db += int(chain_match.group(2))
+            parsed = parse_chain_carbon_db(chain)
+            if parsed is not None:
+                total_c += parsed[0]
+                total_db += parsed[1]
 
         return (total_c, total_db) if total_c > 0 else (None, None)
 

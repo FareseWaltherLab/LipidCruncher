@@ -21,8 +21,8 @@ def _display_chain_length_plots(
     ):
         st.markdown(
             "Bubble charts showing the distribution of total carbon chain "
-            "lengths and double bonds per lipid class. Bubble size reflects "
-            "mean concentration across selected conditions."
+            "lengths and double bonds per lipid class, separated by condition. "
+            "Bubble size reflects mean concentration."
         )
 
         selected_conditions, selected_classes = _display_condition_class_selectors(
@@ -36,7 +36,7 @@ def _display_chain_length_plots(
             st.warning("Please select at least one lipid class.")
             return
 
-        section_header("📊 Results")
+        section_header("Results")
 
         result = StreamlitAdapter.run_chain_length(
             df, experiment, selected_conditions, selected_classes,
@@ -47,7 +47,11 @@ def _display_chain_length_plots(
                 st.error(err)
             return
 
-        if result.figure is None or not result.data or not result.data.records:
+        has_data = (
+            result.per_condition_data
+            and any(d.records for d in result.per_condition_data.values())
+        )
+        if result.figure is None or not has_data:
             st.info(
                 "No chain length data could be extracted. This analysis "
                 "requires lipid names with chain information (e.g. PC 34:1)."
@@ -59,7 +63,13 @@ def _display_chain_length_plots(
         st.session_state.analysis_chain_length_fig = result.figure
         st.session_state.analysis_all_plots['chain_length'] = result.figure
 
-        csv_df = pd.DataFrame(result.data.records)
+        # Build combined CSV from all conditions
+        csv_rows = []
+        for cond, data in result.per_condition_data.items():
+            for rec in data.records:
+                csv_rows.append({**rec, 'Condition': cond})
+        csv_df = pd.DataFrame(csv_rows)
+
         display_export_buttons(
             result.figure,
             csv_df,

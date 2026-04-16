@@ -109,14 +109,9 @@ def sort_chains_lipid_maps(chains: List[str], class_name: str) -> List[str]:
         return chains  # Positional — don't reorder
 
     def _sort_key(chain: str) -> Tuple[int, int]:
-        # Strip prefixes like O-, P-, d, t, m, C
-        cleaned = re.sub(r'^[OPdtm]-?', '', chain)
-        cleaned = re.sub(r'^C', '', cleaned)
-        # Strip hydroxyl/oxidation suffixes
-        cleaned = re.sub(r'[;+].*', '', cleaned)
-        m = re.match(r'(\d+):(\d+)', cleaned)
-        if m:
-            return (int(m.group(1)), int(m.group(2)))
+        parsed = parse_chain_carbon_db(chain)
+        if parsed is not None:
+            return parsed
         return (9999, 9999)
 
     return sorted(chains, key=_sort_key)
@@ -125,6 +120,39 @@ def sort_chains_lipid_maps(chains: List[str], class_name: str) -> List[str]:
 def remove_phantom_chains(chains: List[str]) -> List[str]:
     """Remove phantom 0:0 chains from lyso-species."""
     return [c for c in chains if c != '0:0']
+
+
+def parse_chain_carbon_db(chain: str) -> Optional[Tuple[int, int]]:
+    """Extract (carbon_count, double_bond_count) from a single chain string.
+
+    Strips known prefixes (O-, P-, d, t, m, C), hydroxyl/oxidation suffixes,
+    and then matches the carbon:db pattern.
+
+    Examples:
+        '16:0'      → (16, 0)
+        'd18:1'     → (18, 1)
+        'O-30:1'    → (30, 1)
+        'P-16:0'    → (16, 0)
+        '18:1;O2'   → (18, 1)
+        '20:4+O'    → (20, 4)
+        'C24:0'     → (24, 0)
+
+    Returns:
+        (carbons, double_bonds) or None if the chain cannot be parsed.
+    """
+    # Strip ether/sphingoid prefixes: O-, P-, d, t, m
+    cleaned = re.sub(r'^[OPdtm]-?', '', chain)
+    # Strip chain identifier C (e.g., C24:0)
+    cleaned = re.sub(r'^C', '', cleaned)
+    # Strip hydroxyl notation (e.g. ;O2, ;2O)
+    cleaned = HYDROXYL_PATTERN.sub('', cleaned)
+    # Strip oxidation suffixes (e.g. +O, +2O)
+    cleaned = re.sub(r'\+\d*O', '', cleaned)
+
+    m = re.match(r'(\d+):(\d+)', cleaned)
+    if m:
+        return (int(m.group(1)), int(m.group(2)))
+    return None
 
 
 def format_lipid_name(

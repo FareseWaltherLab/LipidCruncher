@@ -166,13 +166,13 @@ class ChainLengthResult:
     """Result from chain length distribution analysis.
 
     Attributes:
-        figure: Plotly bubble chart figure.
-        data: ChainLengthData with aggregated records.
+        figure: Plotly bubble chart figure (per-condition vertical layout).
+        per_condition_data: Dict mapping condition name to ChainLengthData.
         success: Whether the analysis completed successfully.
         validation_errors: List of error messages if analysis failed.
     """
     figure: Optional[go.Figure] = None
-    data: Optional[ChainLengthData] = None
+    per_condition_data: Optional[Dict[str, ChainLengthData]] = None
     success: bool = True
     validation_errors: List[str] = dataclass_field(default_factory=list)
 
@@ -630,19 +630,28 @@ class AnalysisWorkflow:
         if not selected_classes:
             raise ValueError("At least one lipid class must be selected")
 
-        data = ChainLengthPlotterService.calculate_chain_length_data(
+        per_condition_data = ChainLengthPlotterService.calculate_per_condition_data(
             df, experiment, selected_conditions, selected_classes,
         )
 
+        # Collect all classes across conditions for consistent coloring
+        all_classes = sorted({
+            cls
+            for data in per_condition_data.values()
+            for cls in data.classes
+        })
+
         color_mapping = ChainLengthPlotterService.generate_color_mapping(
-            data.classes,
+            all_classes,
         )
 
-        figure = ChainLengthPlotterService.create_chain_length_figure(
-            data, color_mapping,
+        figure = ChainLengthPlotterService.create_per_condition_figure(
+            per_condition_data, color_mapping,
         )
 
-        return ChainLengthResult(figure=figure, data=data)
+        return ChainLengthResult(
+            figure=figure, per_condition_data=per_condition_data,
+        )
 
     # ------------------------------------------------------------------
     # FACH
