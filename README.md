@@ -27,7 +27,7 @@ Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/fare
 Import your data, define experimental conditions, and apply automatic standardization, filtering, and normalization (internal standards, protein concentration, or both). Internal standards consistency plots verify sample prep quality.
 
 ### Step 2: Quality Check & Analysis
-Validate your data with box plots, BQC coefficient-of-variation analysis, correlation heatmaps, and PCA—then explore results with bar/pie charts, volcano plots, saturation profiles, metabolic pathway maps, clustered heatmaps, and fatty acid composition analysis. All on a single integrated page.
+Validate your data with box plots, BQC coefficient-of-variation analysis, correlation heatmaps, and PCA—then explore results with bar/pie charts, volcano plots, saturation profiles, chain length distributions, metabolic pathway maps, clustered heatmaps, and fatty acid composition analysis. All on a single integrated page.
 
 ---
 
@@ -82,19 +82,21 @@ src/
     ├── models/                  # Immutable Pydantic models
     ├── services/                # Stateless business logic
     │   ├── data_cleaning/       #   Format-specific data cleaning
-    │   ├── plotting/            #   13 visualization services
+    │   ├── plotting/            #   14 visualization services
     │   ├── normalization.py     #   Internal standard / protein normalization
     │   ├── quality_check.py     #   Box plots, BQC, correlation, PCA
-    │   └── statistical_testing.py  # Parametric & non-parametric tests
+    │   ├── statistical_testing.py  # Parametric & non-parametric tests
+    │   ├── report_generator.py  #   PDF report generation
+    │   └── lsi_report.py        #   LSI compliance checklist generation
     ├── workflows/               # Multi-step pipeline orchestration
     ├── adapters/                # Streamlit session state & caching
     └── ui/                      # Streamlit UI components
         ├── sidebar/             #   Input controls
-        ├── main_content/        #   Processing, QC, and analysis views
+        ├── main_content/        #   Processing, QC, analysis, and LSI report views
         └── content/             #   Static documentation text
 tests/
-├── unit/                        # 31 service & model tests
-├── integration/                 # 3 end-to-end pipeline tests
+├── unit/                        # 42 service & model tests
+├── integration/                 # 4 end-to-end pipeline tests
 └── ui/                          # 5 UI component tests
 ```
 
