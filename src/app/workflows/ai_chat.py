@@ -1,12 +1,11 @@
 """
 AI chat workflow.
 
-Orchestrates AI-powered data transformation and (later) visualization
+Orchestrates AI-powered data transformation and visualization
 generation. Pure logic — no Streamlit dependencies.
 """
-from datetime import datetime
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import pandas as pd
 
@@ -17,8 +16,11 @@ from ..models.chat import (
     ChatSession,
     SandboxConfig,
 )
+from ..models.experiment import ExperimentConfig
 from ..services.ai_chat.data_transformer import DataTransformerService, TransformationResult
+from ..services.ai_chat.sandbox import SandboxResult
 from ..services.ai_chat.schema_extractor import SchemaExtractorService
+from ..services.ai_chat.viz_generator import VizGeneratorService
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,20 @@ class TransformStepResult:
     """
     session: ChatSession
     transformation: Optional[TransformationResult] = None
+    assistant_message: str = ""
+
+
+@dataclass(frozen=True)
+class VizStepResult:
+    """Result of a single visualization conversation turn.
+
+    Attributes:
+        session: Updated chat session with new messages appended.
+        sandbox_result: Sandbox execution result (None if AI only asked a question).
+        assistant_message: The full assistant response text for display.
+    """
+    session: ChatSession
+    sandbox_result: Optional[SandboxResult] = None
     assistant_message: str = ""
 
 
@@ -155,5 +171,124 @@ class AIChatWorkflow:
         return TransformStepResult(
             session=session,
             transformation=transformation,
+            assistant_message=assistant_text,
+        )
+
+    # ------------------------------------------------------------------
+    # Visualization mode
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def start_viz_session(
+        analysis_df: pd.DataFrame,
+        experiment: ExperimentConfig,
+    ) -> ChatSession:
+        """Initialize a new visualization chat session.
+
+        Pre-loads the DataFrame schema into the session context.
+
+        Args:
+            analysis_df: The analysis-ready DataFrame.
+            experiment: Experiment configuration (conditions, samples).
+
+        Returns:
+            A new ChatSession in VISUALIZATION mode with schema context.
+        """
+        schema = SchemaExtractorService.extract_schema(analysis_df)
+        return ChatSession(
+            mode=ChatMode.VISUALIZATION,
+            schema_context=schema,
+        )
+
+    @staticmethod
+    def handle_viz_message(
+        user_message: str,
+        session: ChatSession,
+        analysis_df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        ai_config: Optional[AIConfig] = None,
+        sandbox_config: Optional[SandboxConfig] = None,
+    ) -> VizStepResult:
+        """Handle one user message in a visualization chat.
+
+        Flow:
+        1. Append user message to session.
+        2. Send conversation to AI to generate visualization code.
+        3. If code is returned, execute in sandbox.
+        4. Append assistant response to session.
+        5. Return updated session + sandbox result.
+
+        Args:
+            user_message: The user's latest message.
+            session: Current chat session.
+            analysis_df: The analysis-ready DataFrame.
+            experiment: Experiment configuration.
+            ai_config: AI configuration. Uses defaults if None.
+            sandbox_config: Sandbox configuration. Uses defaults if None.
+
+        Returns:
+            VizStepResult with updated session and execution outcome.
+        """
+        if ai_config is None:
+            ai_config = AIConfig()
+        if sandbox_config is None:
+            sandbox_config = SandboxConfig()
+
+        # 1. Append user message
+        user_msg = ChatMessage(role="user", content=user_message)
+        session = session.add_message(user_msg)
+
+        # 2. Generate viz code via AI
+        history = session.to_api_messages()[:-1]
+
+        explanation, code = VizGeneratorService.generate_viz_code(
+            user_request=user_message,
+            schema_context=session.schema_context,
+            experiment=experiment,
+            history=history,
+            config=ai_config,
+        )
+
+        # 3. If code was generated, execute in sandbox
+        sandbox_result = None
+        if code:
+            sandbox_result = VizGeneratorService.execute_viz_code(
+                code=code,
+                df=analysis_df,
+                sandbox_config=sandbox_config,
+            )
+
+            if sandbox_result.success and sandbox_result.figure is not None:
+                assistant_text = (
+                    f"{explanation}\n\n"
+                    f"Here's the visualization you requested."
+                )
+            elif sandbox_result.success and sandbox_result.figure is None:
+                assistant_text = (
+                    f"{explanation}\n\n"
+                    f"The code executed but didn't produce a figure. "
+                    f"Make sure the code assigns a Plotly figure to `fig`."
+                )
+            else:
+                assistant_text = (
+                    f"{explanation}\n\n"
+                    f"The visualization code encountered an error: "
+                    f"{sandbox_result.error_message}\n\n"
+                    f"Please describe what you'd like changed and I'll fix it."
+                )
+        else:
+            assistant_text = explanation
+
+        # 4. Append assistant message
+        assistant_msg = ChatMessage(
+            role="assistant",
+            content=assistant_text,
+            code=code if code else None,
+        )
+        session = session.add_message(assistant_msg)
+
+        return VizStepResult(
+            session=session,
+            sandbox_result=sandbox_result,
             assistant_message=assistant_text,
         )
