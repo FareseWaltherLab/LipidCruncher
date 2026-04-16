@@ -35,6 +35,7 @@ _ANALYSIS_PLOT_ORDER: List[Tuple[str, str, str, bool]] = [
     ('bar_chart', 'Abundance Bar Chart', 'landscape', False),
     # pie_* handled dynamically
     # sat_*_* handled dynamically
+    ('chain_length', 'Chain Length Distribution', 'landscape', False),
     ('fach', 'Fatty Acid Composition Heatmap', 'landscape', False),
     ('pathway', 'Lipid Pathway Visualization', 'landscape', False),
     ('volcano', 'Volcano Plot', 'landscape', False),
@@ -270,6 +271,8 @@ def _build_analyses_list(plots: Dict[str, Any],
                      if k.startswith('sat_')})
     if sat_count:
         items.append(f"Saturation Profiles ({sat_count} class(es))")
+    if 'chain_length' in plots:
+        items.append("Chain Length Distribution")
     if 'fach' in plots:
         items.append("Fatty Acid Composition Heatmap")
     if 'pathway' in plots:
@@ -403,6 +406,11 @@ def _render_analysis_plots(pdf: canvas.Canvas,
             _render_plot_page(pdf, plots[pct_key],
                               f"Saturation Plot (Percentage) for {cls}",
                               'landscape', False)
+
+    # Chain length distribution
+    if 'chain_length' in plots:
+        _render_plot_page(pdf, plots['chain_length'],
+                          "Chain Length Distribution", 'landscape', False)
 
     # FACH
     if 'fach' in plots:
