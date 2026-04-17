@@ -51,8 +51,11 @@ def render_viz_chat(analysis_df, experiment) -> None:
     _render_messages(session)
 
     # Rate limit check
-    if st.session_state.get('chat_message_count', 0) >= MAX_MESSAGES:
-        st.warning("Message limit reached for this session. Please start a new session.")
+    msg_count = st.session_state.get('chat_message_count', 0)
+    exec_count = st.session_state.get('chat_execution_count', 0)
+    if msg_count >= MAX_MESSAGES or exec_count >= MAX_EXECUTIONS:
+        limit_type = "Message" if msg_count >= MAX_MESSAGES else "Execution"
+        st.warning(f"{limit_type} limit reached for this session. Please start a new session.")
         if st.button("Reset Chat", key="chat_reset_viz"):
             st.session_state.chat_viz_session = None
             st.session_state.chat_viz_figures = {}
