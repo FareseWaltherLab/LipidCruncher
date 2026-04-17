@@ -13,7 +13,7 @@ from typing import Optional
 import streamlit as st
 from PIL import Image
 
-from app.constants import PAGE_APP
+from app.constants import PAGE_APP, PAGE_AI_STUDIO
 
 
 try:
@@ -176,12 +176,35 @@ def _display_modules_overview() -> None:
 
 
 def _display_call_to_action() -> None:
-    """Display the Start Crunching button."""
+    """Display the Start Crunching button and AI Studio option."""
     st.subheader("🎯 Ready to Crunch?")
+
+    st.markdown(
+        "If your data is in one of the supported formats "
+        "(LipidSearch, MS-DIAL, Generic, or Metabolomics Workbench), "
+        "start crunching to begin the full analysis pipeline."
+    )
+
     btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
     with btn_col2:
         if st.button("🚀 Start Crunching", use_container_width=True, type="primary"):
             st.session_state.page = PAGE_APP
+            st.rerun()
+
+    st.markdown("")
+
+    st.markdown(
+        "If your dataset is in a **different format**, use **AI Studio** to "
+        "transform it into the Generic format through a guided conversation "
+        "with AI. You can then load the result back into LipidCruncher "
+        "for the full analysis pipeline. AI Studio also lets you generate "
+        "custom visualizations from any dataset."
+    )
+
+    btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
+    with btn_col2:
+        if st.button("🤖 Open AI Studio", use_container_width=True):
+            st.session_state.page = PAGE_AI_STUDIO
             st.rerun()
 
     st.markdown("---")

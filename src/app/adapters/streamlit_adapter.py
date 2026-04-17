@@ -201,6 +201,10 @@ class SessionState:
     chat_message_count: int = 0
     chat_execution_count: int = 0
 
+    # --- AI Studio (owner: ai_studio_page.py) ---
+    chat_studio_df: Optional[pd.DataFrame] = None
+    chat_studio_experiment: Optional[Any] = None
+
 
 # Keys that should NOT be reset when starting a fresh analysis
 # (they control app-level routing, not data-specific state)

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL, Module, Page
+from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, PAGE_AI_STUDIO, FORMAT_MSDIAL, Module, Page
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
@@ -55,7 +55,7 @@ from app.ui.main_content import (
     display_quality_check_module,
     display_analysis_module,
 )
-from app.ui.ai_chat import display_transform_chat, display_viz_chat
+from app.ui.ai_studio_page import display_ai_studio_page
 
 
 # =============================================================================
@@ -106,15 +106,6 @@ def display_app_page() -> None:
                 st.session_state.page = PAGE_LANDING
                 st.rerun()
         return
-
-    # AI-Assisted Import: available when a file is uploaded
-    with center:
-        with st.expander("AI-Assisted Import", expanded=False):
-            st.caption(
-                "Use AI to transform non-standard data into a format LipidCruncher can analyze. "
-                "Requires an Anthropic API key set as the `ANTHROPIC_API_KEY` environment variable."
-            )
-            display_transform_chat(raw_df)
 
     # Standardize data if not already done
     if st.session_state.get('standardized_df') is None:
@@ -305,15 +296,6 @@ def _display_module2_and_3(
         format_type=data_format,
     )
 
-    # --- AI Custom Visualization ---
-    st.markdown("---")
-    with st.expander("AI Custom Visualization", expanded=False):
-        st.caption(
-            "Generate custom visualizations by describing what you want in plain English. "
-            "Requires an Anthropic API key set as the `ANTHROPIC_API_KEY` environment variable."
-        )
-        display_viz_chat(analysis_df, updated_experiment)
-
     # Navigation
     st.markdown("---")
     col1, col2 = st.columns(2)
@@ -342,6 +324,8 @@ def main() -> None:
         display_landing_page()
     elif page == PAGE_APP:
         display_app_page()
+    elif page == PAGE_AI_STUDIO:
+        display_ai_studio_page()
     else:
         logger.error("Unknown page: %s — resetting to landing", page)
         st.session_state.page = PAGE_LANDING
