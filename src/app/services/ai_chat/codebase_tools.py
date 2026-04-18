@@ -241,6 +241,8 @@ def _search_codebase(query: str, file_pattern: Optional[str] = None) -> str:
                             break
                 if len(results) >= _MAX_SEARCH_RESULTS:
                     break
+            if len(results) >= _MAX_SEARCH_RESULTS:
+                break
         if len(results) >= _MAX_SEARCH_RESULTS:
             break
 
