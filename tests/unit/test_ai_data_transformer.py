@@ -29,12 +29,11 @@ def source_df():
 
 @pytest.fixture
 def valid_generic_df():
-    """A properly formatted Generic DataFrame."""
+    """A properly formatted Generic DataFrame (col1=lipid names, cols2+=numeric)."""
     return pd.DataFrame({
         "LipidMolec": ["PC 34:1", "PE 36:2", "SM 42:1"],
-        "ClassKey": ["PC", "PE", "SM"],
-        "intensity[s1]": [100.0, 200.0, 300.0],
-        "intensity[s2]": [110.0, 190.0, 310.0],
+        "Sample1": [100.0, 200.0, 300.0],
+        "Sample2": [110.0, 190.0, 310.0],
     })
 
 
@@ -49,91 +48,69 @@ class TestValidateGenericSchema:
         assert is_valid is True
         assert errors == []
 
-    def test_missing_lipid_molec(self, valid_generic_df):
-        df = valid_generic_df.drop(columns=["LipidMolec"])
-        is_valid, errors = DataTransformerService.validate_generic_schema(df)
-        assert is_valid is False
-        assert any("LipidMolec" in e for e in errors)
-
-    def test_missing_class_key(self, valid_generic_df):
-        df = valid_generic_df.drop(columns=["ClassKey"])
-        is_valid, errors = DataTransformerService.validate_generic_schema(df)
-        assert is_valid is False
-        assert any("ClassKey" in e for e in errors)
-
-    def test_missing_intensity_columns(self):
-        df = pd.DataFrame({
-            "LipidMolec": ["PC 34:1"],
-            "ClassKey": ["PC"],
-            "some_other_col": [100.0],
-        })
-        is_valid, errors = DataTransformerService.validate_generic_schema(df)
-        assert is_valid is False
-        assert any("intensity" in e.lower() for e in errors)
-
-    def test_non_numeric_intensity(self):
-        df = pd.DataFrame({
-            "LipidMolec": ["PC 34:1"],
-            "ClassKey": ["PC"],
-            "intensity[s1]": ["not_a_number"],
-        })
-        is_valid, errors = DataTransformerService.validate_generic_schema(df)
-        assert is_valid is False
-        assert any("numeric" in e.lower() for e in errors)
-
     def test_empty_dataframe(self):
-        df = pd.DataFrame(columns=["LipidMolec", "ClassKey", "intensity[s1]"])
+        df = pd.DataFrame(columns=["Lipid", "Sample1"])
         is_valid, errors = DataTransformerService.validate_generic_schema(df)
         assert is_valid is False
         assert any("empty" in e.lower() for e in errors)
 
-    def test_all_nan_lipid_molec(self):
+    def test_single_column_rejected(self):
+        df = pd.DataFrame({"Lipid": ["PC 34:1", "PE 36:2"]})
+        is_valid, errors = DataTransformerService.validate_generic_schema(df)
+        assert is_valid is False
+        assert any("at least 2 columns" in e.lower() for e in errors)
+
+    def test_first_column_all_nan(self):
         df = pd.DataFrame({
-            "LipidMolec": [None, None],
-            "ClassKey": ["PC", "PE"],
-            "intensity[s1]": [100.0, 200.0],
+            "Lipid": [None, None],
+            "Sample1": [100.0, 200.0],
         })
         is_valid, errors = DataTransformerService.validate_generic_schema(df)
         assert is_valid is False
-        assert any("LipidMolec" in e and "empty" in e for e in errors)
+        assert any("empty" in e.lower() and "NaN" in e for e in errors)
 
-    def test_all_nan_class_key(self):
+    def test_non_numeric_column_after_first(self):
         df = pd.DataFrame({
-            "LipidMolec": ["PC 34:1", "PE 36:2"],
-            "ClassKey": [None, None],
-            "intensity[s1]": [100.0, 200.0],
-        })
-        is_valid, errors = DataTransformerService.validate_generic_schema(df)
-        assert is_valid is False
-        assert any("ClassKey" in e and "empty" in e for e in errors)
-
-    def test_multiple_intensity_columns(self):
-        df = pd.DataFrame({
-            "LipidMolec": ["PC 34:1"],
+            "Lipid": ["PC 34:1"],
             "ClassKey": ["PC"],
-            "intensity[s1]": [100.0],
-            "intensity[s2]": [110.0],
-            "intensity[s3]": [120.0],
+            "Sample1": [100.0],
+        })
+        is_valid, errors = DataTransformerService.validate_generic_schema(df)
+        assert is_valid is False
+        assert any("non-numeric" in e.lower() for e in errors)
+        assert any("ClassKey" in e for e in errors)
+
+    def test_multiple_non_numeric_columns_reported(self):
+        df = pd.DataFrame({
+            "Lipid": ["PC 34:1"],
+            "ClassKey": ["PC"],
+            "Score": ["high"],
+            "Sample1": [100.0],
+        })
+        is_valid, errors = DataTransformerService.validate_generic_schema(df)
+        assert is_valid is False
+        assert any("ClassKey" in e for e in errors)
+        assert any("Score" in e for e in errors)
+
+    def test_multiple_numeric_columns_valid(self):
+        df = pd.DataFrame({
+            "Lipid": ["PC 34:1"],
+            "S1": [100.0],
+            "S2": [110.0],
+            "S3": [120.0],
         })
         is_valid, errors = DataTransformerService.validate_generic_schema(df)
         assert is_valid is True
 
-    def test_extra_columns_allowed(self):
+    def test_any_column_names_accepted(self):
+        """Column names are arbitrary — only data types matter."""
         df = pd.DataFrame({
-            "LipidMolec": ["PC 34:1"],
-            "ClassKey": ["PC"],
-            "intensity[s1]": [100.0],
-            "CalcMass": [758.57],
-            "BaseRt": [12.3],
+            "my_lipids": ["PC 34:1", "PE 36:2"],
+            "KO-1": [100.0, 200.0],
+            "WT-2": [110.0, 190.0],
         })
         is_valid, errors = DataTransformerService.validate_generic_schema(df)
         assert is_valid is True
-
-    def test_multiple_errors_reported(self):
-        df = pd.DataFrame({"random_col": [1, 2]})
-        is_valid, errors = DataTransformerService.validate_generic_schema(df)
-        assert is_valid is False
-        assert len(errors) >= 3  # LipidMolec, ClassKey, intensity
 
 
 # ---------------------------------------------------------------------------
@@ -147,16 +124,14 @@ class TestExecuteTransformation:
             "result_df = pd.DataFrame()\n"
             "result_df['LipidMolec'] = df['lipid_name'].str.replace("
             "r'^([A-Za-z]+)\\((.+)\\)$', r'\\1 \\2', regex=True)\n"
-            "result_df['ClassKey'] = df['lipid_class']\n"
-            "result_df['intensity[s1]'] = pd.to_numeric(df['area_sample1'])\n"
-            "result_df['intensity[s2]'] = pd.to_numeric(df['area_sample2'])\n"
+            "result_df['Sample1'] = pd.to_numeric(df['area_sample1'])\n"
+            "result_df['Sample2'] = pd.to_numeric(df['area_sample2'])\n"
         )
         result = DataTransformerService.execute_transformation(code, source_df)
         assert result.success is True
         assert result.result_df is not None
         assert "LipidMolec" in result.result_df.columns
-        assert "ClassKey" in result.result_df.columns
-        assert "intensity[s1]" in result.result_df.columns
+        assert "Sample1" in result.result_df.columns
         assert result.result_df["LipidMolec"].iloc[0] == "PC 34:1"
 
     def test_code_with_syntax_error(self, source_df):

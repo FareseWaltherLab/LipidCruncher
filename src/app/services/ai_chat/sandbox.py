@@ -10,9 +10,9 @@ All AI output is treated as untrusted.
 """
 import ast
 import math
-import signal
 import statistics
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Set
@@ -211,15 +211,44 @@ def _build_globals(df: pd.DataFrame) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Timeout handler (Unix only — used in ECS/Linux deployment)
+# Thread-based timeout execution
 # ---------------------------------------------------------------------------
 
 class _TimeoutError(Exception):
     pass
 
 
-def _timeout_handler(signum, frame):
-    raise _TimeoutError("Code execution timed out")
+def _exec_with_timeout(compiled, exec_globals, timeout_seconds):
+    """Execute compiled code in a thread with a timeout.
+
+    Args:
+        compiled: Compiled code object.
+        exec_globals: Globals dict for exec().
+        timeout_seconds: Maximum wall-clock seconds to allow.
+
+    Raises:
+        _TimeoutError: If execution exceeds the timeout.
+        Exception: Any exception raised by the executed code.
+    """
+    result = {"error": None}
+
+    def _target():
+        try:
+            exec(compiled, exec_globals)
+        except Exception as e:
+            result["error"] = e
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout_seconds)
+
+    if thread.is_alive():
+        # Thread is still running — we can't forcibly kill it, but
+        # the daemon flag ensures it won't block process exit.
+        raise _TimeoutError(f"Code execution timed out after {timeout_seconds} seconds")
+
+    if result["error"] is not None:
+        raise result["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -264,15 +293,9 @@ class SandboxService:
         exec_globals = _build_globals(df)
         start_time = time.monotonic()
 
-        # Set timeout (Unix only; no-op on platforms without SIGALRM)
-        has_alarm = hasattr(signal, "SIGALRM")
-        if has_alarm:
-            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-            signal.alarm(config.execution_timeout)
-
         try:
             compiled = compile(tree, "<sandbox>", "exec")
-            exec(compiled, exec_globals)
+            _exec_with_timeout(compiled, exec_globals, config.execution_timeout)
         except _TimeoutError:
             return SandboxResult(
                 success=False,
@@ -285,10 +308,6 @@ class SandboxService:
                 error_message=f"Runtime error: {type(e).__name__}: {e}",
                 execution_time=time.monotonic() - start_time,
             )
-        finally:
-            if has_alarm:
-                signal.alarm(0)
-                signal.signal(signal.SIGALRM, old_handler)
 
         elapsed = time.monotonic() - start_time
         stdout = "\n".join(exec_globals.get("_captured_output", []))

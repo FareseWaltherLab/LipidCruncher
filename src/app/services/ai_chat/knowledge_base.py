@@ -1,0 +1,103 @@
+"""
+LipidCruncher knowledge base for AI system prompts.
+
+Provides a condensed reference about the application's capabilities,
+supported formats, terminology, and analysis features. Included in
+AI system prompts so the assistant can answer user questions accurately.
+"""
+
+
+def get_app_knowledge() -> str:
+    """Return a condensed knowledge base about LipidCruncher.
+
+    This is appended to AI system prompts so the assistant understands
+    the application context without needing access to the full codebase.
+    """
+    return """\
+## About LipidCruncher
+
+LipidCruncher is an open-source lipidomics data analysis platform built by the Farese & Walther \
+Lab at Memorial Sloan Kettering Cancer Center. It helps researchers process, visualize, and \
+analyze lipidomic data without bioinformatics expertise.
+
+## Supported Input Formats
+
+1. **LipidSearch 5.0** — exports from Thermo LipidSearch software. Key columns: LipidMolec, \
+ClassKey, BaseRt, CalcMass, Grade, MeanArea[s1], MeanArea[s2], etc.
+2. **MS-DIAL** — exports from MS-DIAL software. Key columns: Metabolite name, Ontology, \
+Total score, plus sample columns.
+3. **Generic** — the simplest format. Column 1 = lipid names, columns 2+ = sample intensities. \
+No extra columns. Column names can be anything.
+4. **Metabolomics Workbench** — tab-delimited files with START/END markers from the \
+Metabolomics Workbench repository.
+
+## What LipidCruncher Does Automatically
+
+After uploading data in any supported format, LipidCruncher automatically:
+- **Standardizes lipid names** to LIPID MAPS shorthand notation (e.g., PC(34:1) → PC 34:1, \
+Cer(d18:1_24:0) → Cer 18:1;O2/24:0)
+- **Extracts ClassKey** (lipid class) from lipid names
+- **Renames sample columns** to intensity[s1], intensity[s2], etc.
+- **Detects internal standards** via regex patterns
+- **Handles format-specific cleaning** (grade filtering for LipidSearch, score filtering for MS-DIAL)
+
+## Analysis Pipeline (3 Modules)
+
+### Module 1: Data Cleaning, Filtering, & Normalization
+- Format detection and column standardization
+- Format-specific data cleaning (deduplication, grade/score filtering)
+- Zero filtering (removes lipids with too many missing values)
+- Internal standards management
+- Normalization (5 options): none, internal standard, protein, both, total intensity
+
+### Module 2: Quality Check
+- **Box plots** — concentration distributions per sample
+- **BQC assessment** — coefficient of variation across batch quality control samples
+- **Retention time plots** — RT consistency (LipidSearch/MS-DIAL only)
+- **Pairwise correlation** — Pearson correlation heatmaps between replicates
+- **PCA** — principal component analysis colored by condition, with outlier removal
+
+### Module 3: Visualization & Analysis
+- **Bar charts** — mean ± std per condition per lipid class, with optional statistical testing
+- **Pie charts** — lipid class composition per condition
+- **Saturation profiles** — SFA/MUFA/PUFA distribution
+- **Chain length analysis** — carbon chain length and double bond bubble charts
+- **FACH** — fatty acid composition heatmap
+- **Pathway visualization** — interactive metabolic pathway network (28 lipid classes)
+- **Volcano plots** — fold-change vs. p-value
+- **Lipidomic heatmaps** — clustered heatmap with k-means
+
+## Statistical Testing
+
+- **Parametric**: Welch's t-test (2 conditions), Alexander-Govern ANOVA (3+ conditions)
+- **Non-parametric**: Mann-Whitney U (2 conditions), Kruskal-Wallis (3+ conditions)
+- **Auto mode**: selects parametric with log10 transform
+- **Multiple testing correction**: FDR (Benjamini-Hochberg) or Bonferroni
+- **Post-hoc**: Tukey's HSD or Bonferroni
+
+## Lipid Nomenclature (LIPID MAPS)
+
+All lipid names are standardized to LIPID MAPS shorthand notation:
+- Class and chains separated by space: PC 34:1 (not PC(34:1))
+- General chains separated by underscore: PC 16:0_18:1
+- Sphingolipid chains separated by slash: Cer 18:1;O2/24:0
+- Hydroxyl notation: ;O2 (not ;2O)
+- Lyso species: phantom chains removed (LPC 20:0, not LPC 20:0_0:0)
+- Chains sorted by carbon count, then double bonds
+
+## Common Lipid Classes
+
+FA (fatty acid), CE (cholesteryl ester), MG (monoacylglycerol), DG (diacylglycerol), \
+TG (triacylglycerol), PC (phosphatidylcholine), PE (phosphatidylethanolamine), \
+PS (phosphatidylserine), PI (phosphatidylinositol), PG (phosphatidylglycerol), \
+PA (phosphatidic acid), SM (sphingomyelin), Cer (ceramide), HexCer (hexosylceramide), \
+LPC (lysophosphatidylcholine), LPE (lysophosphatidylethanolamine), CL (cardiolipin)
+
+## Key Terminology
+
+- **BQC**: Batch Quality Control samples — used to assess measurement precision
+- **CoV**: Coefficient of Variation — measure of data variability
+- **Internal standards**: Known-concentration lipids spiked into samples for normalization
+- **Zero filtering**: Removing lipids with excessive missing/zero values across samples
+- **Intensity**: Raw signal/area values from mass spectrometry
+"""

@@ -3,13 +3,12 @@ Data transformation mode UI for the AI chat.
 
 Renders the chat conversation for transforming arbitrary data into
 the LipidCruncher Generic format. When a valid transformation is
-produced, offers an "Apply Transformation" button that feeds the
-result into the normal pipeline.
+produced, offers a download button so the user can save the result
+and upload it to the main pipeline.
 """
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.services.format_detection import DataFormat
 
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
@@ -37,10 +36,9 @@ def render_transform_chat(source_df) -> None:
     # Show introductory message if no messages yet
     if len(session.messages) == 0:
         st.info(
-            "Describe your data format and I'll help transform it into "
-            "the LipidCruncher Generic format. For example:\n\n"
-            "*'My data has columns: lipid_name, lipid_class, sample_A, sample_B, sample_C. "
-            "Please transform it.'*"
+            "Ask questions about your data or request a transformation. "
+            "For example:\n\n"
+            "*'Transform my data into the Generic format for LipidCruncher.'*"
         )
 
     # Render existing messages
@@ -51,15 +49,23 @@ def render_transform_chat(source_df) -> None:
     if transform_result_df is not None:
         with st.expander("Preview transformed data", expanded=True):
             st.dataframe(transform_result_df.head(10), use_container_width=True)
-            st.caption(f"{len(transform_result_df)} rows, {len(transform_result_df.columns)} columns")
+            st.caption(
+                f"{len(transform_result_df)} rows, "
+                f"{len(transform_result_df.columns)} columns"
+            )
 
-        if st.button("Apply Transformation", key="chat_apply_transform", type="primary"):
-            st.session_state.standardized_df = transform_result_df
-            st.session_state.format_type = DataFormat.GENERIC
-            # Clear the chat session
-            st.session_state.chat_transform_session = None
-            st.session_state.chat_transform_result = None
-            st.rerun()
+            csv_data = transform_result_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="Download transformed CSV",
+                data=csv_data,
+                file_name="transformed_data.csv",
+                mime="text/csv",
+                key="chat_download_transform",
+            )
+            st.caption(
+                "Download this file, then go to **Start Crunching** and "
+                "upload it as a **Generic** format dataset."
+            )
 
     # Rate limit check
     msg_count = st.session_state.get('chat_message_count', 0)
@@ -77,7 +83,7 @@ def render_transform_chat(source_df) -> None:
 
     # Chat input
     user_input = st.chat_input(
-        "Describe your data or ask for changes...",
+        "Ask about your data or request a transformation...",
         key="chat_input_transform",
     )
 
@@ -112,13 +118,21 @@ def render_transform_chat(source_df) -> None:
                         with st.expander("View code"):
                             st.code(result.transformation.code, language="python")
 
-                    # Store successful result for "Apply" button
+                    # Store successful transformation result for download
                     if result.transformation and result.transformation.success:
                         st.session_state.chat_transform_result = (
                             result.transformation.result_df
                         )
+                    elif result.transformation and not result.transformation.success:
+                        # Clear stale result on failed transformation
+                        st.session_state.chat_transform_result = None
 
                 except Exception as e:
-                    st.error(f"An error occurred: {e}")
+                    st.session_state.chat_last_error = str(e)
 
         st.rerun()
+
+    # Display persistent error from last attempt
+    last_error = st.session_state.pop('chat_last_error', None)
+    if last_error:
+        st.error(f"An error occurred: {last_error}")

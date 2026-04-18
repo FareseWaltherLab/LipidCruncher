@@ -13,6 +13,8 @@ lipidcruncher_env/
 
 # Environment variables (secrets)
 .env
+.streamlit/secrets.toml
+src/.streamlit/secrets.toml
 
 # Temporary files and logs
 *.tmp
@@ -40,3 +42,4 @@ task-definition.json
 PROJECT_KNOWLEDGE.md
 paper_review_plan.md
 AI_CHAT_LAYER_PLAN.md
+AI_STUDIO_TOOL_USE_PLAN.md

@@ -40,9 +40,8 @@ I'll rename the columns to match the Generic format.
 ```python
 result_df = pd.DataFrame()
 result_df['LipidMolec'] = df['lipid_name'].str.replace(r'^([A-Za-z]+)\\((.+)\\)$', r'\\1 \\2', regex=True)
-result_df['ClassKey'] = df['lipid_class']
-result_df['intensity[s1]'] = pd.to_numeric(df['area_s1'])
-result_df['intensity[s2]'] = pd.to_numeric(df['area_s2'])
+result_df['Sample1'] = pd.to_numeric(df['area_s1'])
+result_df['Sample2'] = pd.to_numeric(df['area_s2'])
 ```
 """
 
@@ -88,9 +87,8 @@ class TestHandleTransformMessage:
                 "result_df = pd.DataFrame()\n"
                 "result_df['LipidMolec'] = df['lipid_name'].str.replace("
                 "r'^([A-Za-z]+)\\\\((.+)\\\\)$', r'\\\\1 \\\\2', regex=True)\n"
-                "result_df['ClassKey'] = df['lipid_class']\n"
-                "result_df['intensity[s1]'] = pd.to_numeric(df['area_s1'])\n"
-                "result_df['intensity[s2]'] = pd.to_numeric(df['area_s2'])\n"
+                "result_df['Sample1'] = pd.to_numeric(df['area_s1'])\n"
+                "result_df['Sample2'] = pd.to_numeric(df['area_s2'])\n"
             ),
         )
 

@@ -11,6 +11,7 @@ Architecture:
 """
 
 import logging
+import os
 from typing import Optional
 
 import pandas as pd
@@ -28,6 +29,18 @@ st.set_page_config(
 )
 
 logger = logging.getLogger(__name__)
+
+# Load ANTHROPIC_API_KEY from Streamlit secrets into the environment so
+# the AI service layer (which reads os.environ) can find it. This lets
+# deployers set the key once in .streamlit/secrets.toml or the Streamlit
+# Cloud dashboard instead of requiring an environment variable.
+if not os.environ.get("ANTHROPIC_API_KEY"):
+    try:
+        _key = st.secrets.get("ANTHROPIC_API_KEY", "")
+        if _key:
+            os.environ["ANTHROPIC_API_KEY"] = _key
+    except Exception:
+        pass  # No secrets file — key must come from environment
 
 # =============================================================================
 # Imports

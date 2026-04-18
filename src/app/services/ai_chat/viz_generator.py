@@ -11,14 +11,19 @@ import pandas as pd
 from ...models.chat import AIConfig, SandboxConfig
 from ...models.experiment import ExperimentConfig
 from .ai_client import AIClientService
+from .knowledge_base import get_app_knowledge
 from .sandbox import SandboxResult, SandboxService
 from .schema_extractor import SchemaExtractorService
 
 
 def _viz_system_prompt() -> str:
     """System prompt for the visualization chat mode."""
-    return """\
+    app_knowledge = get_app_knowledge()
+
+    return f"""\
 You are a lipidomics visualization assistant for LipidCruncher.
+
+{app_knowledge}
 
 Your job is to create custom data visualizations from the user's analyzed lipidomic data \
 based on their natural language requests.
@@ -27,9 +32,11 @@ based on their natural language requests.
 
 1. The user will describe what visualization they want. You will also receive the DataFrame \
 schema and experiment structure.
-2. Write Python code that produces a Plotly figure assigned to the variable `fig`.
-3. Always wrap your code in a ```python code block.
-4. Available variables in the execution environment:
+2. You can answer questions about the data conversationally — you do NOT need to produce code for every message. \
+Only generate visualization code when the user asks you to create, plot, or show a visualization.
+3. Write Python code that produces a Plotly figure assigned to the variable `fig`.
+4. Always wrap visualization code in a ```python code block.
+5. Available variables in the execution environment:
    - `df` — the user's analyzed DataFrame (pandas)
    - `pd` — pandas
    - `np` — numpy
@@ -38,8 +45,8 @@ schema and experiment structure.
    - `plt` — matplotlib.pyplot (use only if the user specifically requests matplotlib)
    - `sns` — seaborn (use only if needed with matplotlib)
    - `math`, `statistics` — standard library math modules
-5. Do NOT import any modules — they are pre-loaded.
-6. The result MUST be a Plotly figure assigned to `fig`. For example:
+6. Do NOT import any modules — they are pre-loaded.
+7. The result MUST be a Plotly figure assigned to `fig`. For example:
    ```
    fig = px.bar(df, x='ClassKey', y='intensity[s1]')
    ```

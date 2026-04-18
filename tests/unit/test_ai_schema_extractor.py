@@ -62,16 +62,16 @@ class TestExtractSchema:
 
 class TestExtractGenericFormatSpec:
 
-    def test_mentions_required_columns(self):
+    def test_mentions_column_structure(self):
         spec = SchemaExtractorService.extract_generic_format_spec()
-        assert "LipidMolec" in spec
-        assert "ClassKey" in spec
-        assert "intensity[s1]" in spec
+        assert "Column 1" in spec
+        assert "Lipid names" in spec or "lipid names" in spec.lower()
+        assert "Columns 2+" in spec
+        assert "Sample intensities" in spec or "sample intensities" in spec.lower()
 
-    def test_mentions_optional_columns(self):
+    def test_mentions_no_extra_columns(self):
         spec = SchemaExtractorService.extract_generic_format_spec()
-        assert "CalcMass" in spec
-        assert "BaseRt" in spec
+        assert "NO extra columns" in spec or "no extra columns" in spec.lower()
 
     def test_mentions_lipid_maps(self):
         spec = SchemaExtractorService.extract_generic_format_spec()

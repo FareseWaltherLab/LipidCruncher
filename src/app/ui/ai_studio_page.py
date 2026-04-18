@@ -41,28 +41,46 @@ def _derive_experiment(df: pd.DataFrame) -> ExperimentConfig:
     )
 
 
-def _load_uploaded_file() -> Optional[pd.DataFrame]:
-    """Handle the file upload widget and return parsed DataFrame."""
+def _handle_file_upload() -> None:
+    """Handle the file upload widget. Only processes the file on first
+    upload or when the file changes (tracked by name + size)."""
     uploaded = st.file_uploader(
         "Upload a CSV file",
         type=["csv"],
         key="ai_studio_file_uploader",
     )
-    if uploaded is not None:
-        try:
-            df = pd.read_csv(uploaded)
-            if df.empty:
-                st.error("The uploaded file is empty.")
-                return None
-            st.success(
-                f"Loaded **{uploaded.name}** — {len(df)} rows, "
-                f"{len(df.columns)} columns."
-            )
-            return df
-        except Exception as e:
-            st.error(f"Could not read CSV: {e}")
-            return None
-    return None
+
+    if uploaded is None:
+        # File was removed — clear studio data
+        if st.session_state.get("chat_studio_file_id") is not None:
+            st.session_state.chat_studio_df = None
+            st.session_state.chat_studio_file_id = None
+            st.session_state.chat_studio_experiment = None
+            st.session_state.chat_transform_session = None
+            st.session_state.chat_viz_session = None
+        return
+
+    # Track file identity to avoid re-processing on every rerun
+    file_id = f"{uploaded.name}_{uploaded.size}"
+    if st.session_state.get("chat_studio_file_id") == file_id:
+        # Same file — nothing to do
+        return
+
+    # New file — parse and store
+    try:
+        df = pd.read_csv(uploaded)
+        if df.empty:
+            st.error("The uploaded file is empty.")
+            return
+        st.session_state.chat_studio_df = df
+        st.session_state.chat_studio_file_id = file_id
+        # Reset chat sessions for the new data
+        st.session_state.chat_transform_session = None
+        st.session_state.chat_viz_session = None
+        st.session_state.chat_studio_experiment = None
+        st.session_state.chat_transform_result = None
+    except Exception as e:
+        st.error(f"Could not read CSV: {e}")
 
 
 def _offer_pipeline_import() -> Optional[pd.DataFrame]:
@@ -109,32 +127,28 @@ def display_ai_studio_page() -> None:
             "Upload any CSV and use AI to transform your data or generate "
             "custom visualizations. No pipeline setup required."
         )
-        st.markdown(
-            "_Requires an Anthropic API key set as the "
-            "`ANTHROPIC_API_KEY` environment variable._"
-        )
 
         st.markdown("---")
 
         # --- Data Loading ---
+        _handle_file_upload()
         studio_df = st.session_state.get("chat_studio_df")
 
-        # File upload
-        uploaded_df = _load_uploaded_file()
-        if uploaded_df is not None:
-            studio_df = uploaded_df
-            st.session_state.chat_studio_df = studio_df
-            # Reset chat sessions when data changes
-            st.session_state.chat_transform_session = None
-            st.session_state.chat_viz_session = None
-            st.session_state.chat_studio_experiment = None
+        # Show file info if loaded
+        if studio_df is not None:
+            file_id = st.session_state.get("chat_studio_file_id", "")
+            file_name = file_id.rsplit("_", 1)[0] if file_id else "data"
+            st.success(
+                f"**{file_name}** — {len(studio_df)} rows, "
+                f"{len(studio_df.columns)} columns."
+            )
 
-        # Pipeline import
+        # Pipeline import (only if no file loaded)
         if studio_df is None:
             pipeline_df = _offer_pipeline_import()
             if pipeline_df is not None:
-                studio_df = pipeline_df
-                st.session_state.chat_studio_df = studio_df
+                st.session_state.chat_studio_df = pipeline_df
+                st.session_state.chat_studio_file_id = "_pipeline_import"
                 st.session_state.chat_transform_session = None
                 st.session_state.chat_viz_session = None
                 st.session_state.chat_studio_experiment = None
@@ -189,6 +203,7 @@ def _display_navigation() -> None:
     if st.button("Back to Home", key="ai_studio_back_home"):
         # Clear studio-specific state
         st.session_state.chat_studio_df = None
+        st.session_state.chat_studio_file_id = None
         st.session_state.chat_studio_experiment = None
         st.session_state.chat_transform_session = None
         st.session_state.chat_viz_session = None

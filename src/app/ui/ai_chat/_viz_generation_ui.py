@@ -123,6 +123,11 @@ def render_viz_chat(analysis_df, experiment) -> None:
                                 st.code(last_msg.code, language="python")
 
                 except Exception as e:
-                    st.error(f"An error occurred: {e}")
+                    st.session_state.chat_last_error = str(e)
 
         st.rerun()
+
+    # Display persistent error from last attempt
+    last_error = st.session_state.pop('chat_last_error', None)
+    if last_error:
+        st.error(f"An error occurred: {last_error}")

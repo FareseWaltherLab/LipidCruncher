@@ -142,10 +142,14 @@ class DataTransformerService:
 
     @staticmethod
     def validate_generic_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
-        """Validate that a DataFrame conforms to the Generic format.
+        """Validate that a DataFrame conforms to the Generic upload format.
 
-        Checks for required columns: LipidMolec, ClassKey, and at least
-        one intensity[sN] column.
+        The Generic format is simple:
+          - Column 1: lipid names (string)
+          - Columns 2+: sample intensities (numeric)
+
+        LipidCruncher handles all further standardization (renaming columns,
+        extracting ClassKey, normalizing lipid names) after upload.
 
         Args:
             df: DataFrame to validate.
@@ -159,30 +163,39 @@ class DataTransformerService:
             errors.append("DataFrame is empty — no rows produced.")
             return False, errors
 
-        if "LipidMolec" not in df.columns:
-            errors.append("Missing required column: 'LipidMolec'")
-
-        if "ClassKey" not in df.columns:
-            errors.append("Missing required column: 'ClassKey'")
-
-        intensity_pattern = re.compile(r"^intensity\[s\d+\]$")
-        intensity_cols = [c for c in df.columns if intensity_pattern.match(c)]
-        if not intensity_cols:
+        if len(df.columns) < 2:
             errors.append(
-                "No intensity columns found. Expected columns like "
-                "'intensity[s1]', 'intensity[s2]', etc."
+                "Need at least 2 columns: one for lipid names and "
+                "one or more for sample intensities."
+            )
+            return False, errors
+
+        # Column 1 should contain lipid names (strings)
+        first_col = df.iloc[:, 0]
+        if first_col.isna().all():
+            errors.append(
+                f"First column ('{df.columns[0]}') is entirely empty/NaN — "
+                f"it should contain lipid names."
             )
 
-        # Check that intensity columns are numeric
-        for col in intensity_cols:
+        # Columns 2+ should be numeric (sample intensities)
+        non_numeric_cols = []
+        for col in df.columns[1:]:
             if not pd.api.types.is_numeric_dtype(df[col]):
-                errors.append(f"Column '{col}' should be numeric but has dtype {df[col].dtype}")
+                non_numeric_cols.append(col)
 
-        # Check LipidMolec has actual values
-        if "LipidMolec" in df.columns and df["LipidMolec"].isna().all():
-            errors.append("'LipidMolec' column is entirely empty/NaN")
-
-        if "ClassKey" in df.columns and df["ClassKey"].isna().all():
-            errors.append("'ClassKey' column is entirely empty/NaN")
+        if non_numeric_cols:
+            if len(non_numeric_cols) <= 3:
+                col_list = ", ".join(f"'{c}'" for c in non_numeric_cols)
+            else:
+                col_list = (
+                    ", ".join(f"'{c}'" for c in non_numeric_cols[:3])
+                    + f", and {len(non_numeric_cols) - 3} more"
+                )
+            errors.append(
+                f"Non-numeric columns found after column 1: {col_list}. "
+                f"Columns 2+ should contain only sample intensities. "
+                f"Remove any metadata columns (class, mass, score, etc.)."
+            )
 
         return len(errors) == 0, errors
