@@ -519,13 +519,11 @@ class AIChatWorkflow:
             sandbox_result = SandboxService.execute(code, source_df, sandbox_config)
 
             if sandbox_result.success:
-                # Check what was produced
-                if sandbox_result.figure is not None:
-                    figure = sandbox_result.figure
-                    assistant_text = explanation
-                elif sandbox_result.result_df is not None:
-                    result_df = sandbox_result.result_df
-                    # Detect if this is a transformation (Generic format)
+                # Collect all outputs (figure and result_df can coexist)
+                figure = sandbox_result.figure
+                result_df = sandbox_result.result_df
+
+                if result_df is not None:
                     is_transformation = _looks_like_generic_format(result_df)
                     if is_transformation:
                         assistant_text = (
