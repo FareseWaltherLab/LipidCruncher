@@ -15,7 +15,7 @@ import streamlit as st
 from app.constants import PAGE_LANDING
 from app.models.experiment import ExperimentConfig
 from app.ui.landing_page import display_logo
-from app.ui.ai_chat import display_transform_chat, display_viz_chat, display_data_questions_chat
+from app.ui.ai_chat import display_unified_chat
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +56,10 @@ def _handle_file_upload() -> None:
             st.session_state.chat_studio_df = None
             st.session_state.chat_studio_file_id = None
             st.session_state.chat_studio_experiment = None
-            st.session_state.chat_transform_session = None
-            st.session_state.chat_viz_session = None
-            st.session_state.chat_data_questions_session = None
+            st.session_state.chat_unified_session = None
+            st.session_state.chat_transform_result = None
+            st.session_state.chat_viz_figures = {}
+            st.session_state.chat_result_tables = {}
         return
 
     # Track file identity to avoid re-processing on every rerun
@@ -75,12 +76,12 @@ def _handle_file_upload() -> None:
             return
         st.session_state.chat_studio_df = df
         st.session_state.chat_studio_file_id = file_id
-        # Reset chat sessions for the new data
-        st.session_state.chat_transform_session = None
-        st.session_state.chat_viz_session = None
-        st.session_state.chat_data_questions_session = None
+        # Reset chat session for the new data
+        st.session_state.chat_unified_session = None
         st.session_state.chat_studio_experiment = None
         st.session_state.chat_transform_result = None
+        st.session_state.chat_viz_figures = {}
+        st.session_state.chat_result_tables = {}
     except Exception as e:
         st.error(f"Could not read CSV: {e}")
 
@@ -151,10 +152,11 @@ def display_ai_studio_page() -> None:
             if pipeline_df is not None:
                 st.session_state.chat_studio_df = pipeline_df
                 st.session_state.chat_studio_file_id = "_pipeline_import"
-                st.session_state.chat_transform_session = None
-                st.session_state.chat_viz_session = None
-                st.session_state.chat_data_questions_session = None
+                st.session_state.chat_unified_session = None
                 st.session_state.chat_studio_experiment = None
+                st.session_state.chat_transform_result = None
+                st.session_state.chat_viz_figures = {}
+                st.session_state.chat_result_tables = {}
                 st.rerun()
 
         if studio_df is None:
@@ -171,37 +173,8 @@ def display_ai_studio_page() -> None:
 
         st.markdown("---")
 
-        # --- Mode Tabs ---
-        tab_questions, tab_viz, tab_transform = st.tabs(
-            ["Data Questions", "Custom Visualization", "Data Transform"]
-        )
-
-        with tab_questions:
-            st.markdown(
-                "Ask questions about your data — describe the dataset, "
-                "compute summaries, or learn about LipidCruncher features."
-            )
-            display_data_questions_chat(studio_df)
-
-        with tab_viz:
-            st.markdown(
-                "Describe the visualization you want and the AI will "
-                "generate it from your data."
-            )
-            # Derive experiment config if not already set
-            experiment = st.session_state.get("chat_studio_experiment")
-            if experiment is None:
-                experiment = _derive_experiment(studio_df)
-                st.session_state.chat_studio_experiment = experiment
-
-            display_viz_chat(studio_df, experiment)
-
-        with tab_transform:
-            st.markdown(
-                "Describe your data format and the AI will help transform it "
-                "into a format LipidCruncher can analyze."
-            )
-            display_transform_chat(studio_df)
+        # --- Unified Chat ---
+        display_unified_chat(studio_df)
 
         # Navigation
         _display_navigation()
@@ -215,11 +188,10 @@ def _display_navigation() -> None:
         st.session_state.chat_studio_df = None
         st.session_state.chat_studio_file_id = None
         st.session_state.chat_studio_experiment = None
-        st.session_state.chat_transform_session = None
-        st.session_state.chat_viz_session = None
-        st.session_state.chat_data_questions_session = None
+        st.session_state.chat_unified_session = None
         st.session_state.chat_transform_result = None
         st.session_state.chat_viz_figures = {}
+        st.session_state.chat_result_tables = {}
         st.session_state.chat_message_count = 0
         st.session_state.chat_execution_count = 0
         st.session_state.page = PAGE_LANDING

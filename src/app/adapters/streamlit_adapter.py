@@ -196,6 +196,8 @@ class SessionState:
     chat_transform_session: Optional[Any] = None
     chat_viz_session: Optional[Any] = None
     chat_data_questions_session: Optional[Any] = None
+    chat_unified_session: Optional[Any] = None
+    chat_result_tables: Dict[str, Any] = field(default_factory=dict)
     chat_mode: Optional[str] = None
     chat_transform_result: Optional[pd.DataFrame] = None
     chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
@@ -916,6 +918,31 @@ class StreamlitAdapter:
         """
         from ..workflows.ai_chat import AIChatWorkflow
         return AIChatWorkflow.handle_data_questions_message(
+            user_message=user_message,
+            session=session,
+            source_df=source_df,
+        )
+
+    @staticmethod
+    def run_ai_unified(
+        user_message: str,
+        session,
+        source_df: pd.DataFrame,
+    ):
+        """Run one turn of the unified AI Studio chat.
+
+        NOT cached because chat is inherently stateful.
+
+        Args:
+            user_message: The user's message.
+            session: Current ChatSession.
+            source_df: The user's DataFrame.
+
+        Returns:
+            UnifiedStepResult from the workflow.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.handle_unified_message(
             user_message=user_message,
             session=session,
             source_df=source_df,

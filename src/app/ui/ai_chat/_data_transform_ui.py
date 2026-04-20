@@ -63,8 +63,8 @@ def render_transform_chat(source_df) -> None:
                 key="chat_download_transform",
             )
             st.caption(
-                "Download this file, then go to **Start Crunching** and "
-                "upload it as a **Generic** format dataset."
+                "Download this file, then upload it to LipidCruncher as a "
+                "**Generic** format dataset to run it through the analysis pipeline."
             )
 
     # Rate limit check

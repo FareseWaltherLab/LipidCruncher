@@ -1,0 +1,155 @@
+"""
+Unified AI Studio chat UI.
+
+Single chat interface that handles data questions, transformations,
+and visualizations in one conversation. No tabs, no "view code".
+"""
+import streamlit as st
+
+from app.adapters.streamlit_adapter import StreamlitAdapter
+
+# Rate limits per session
+MAX_MESSAGES = 50
+MAX_EXECUTIONS = 20
+
+
+def _render_messages(session) -> None:
+    """Render all chat messages with inline figures and result tables."""
+    for i, msg in enumerate(session.messages):
+        with st.chat_message(msg.role):
+            st.markdown(msg.content)
+
+        # Check for stored figure
+        fig_key = f"chat_fig_{i}"
+        fig = st.session_state.get('chat_viz_figures', {}).get(fig_key)
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Check for stored result table
+        table_key = f"chat_table_{i}"
+        table = st.session_state.get('chat_result_tables', {}).get(table_key)
+        if table is not None:
+            st.dataframe(table, use_container_width=True)
+
+
+def render_unified_chat(source_df) -> None:
+    """Render the unified AI Studio chat interface.
+
+    Args:
+        source_df: The user's uploaded DataFrame.
+    """
+    session = st.session_state.chat_unified_session
+
+    # Show introductory message if no messages yet
+    if len(session.messages) == 0:
+        st.info(
+            "I can help you with:\n\n"
+            "- **Data questions** — describe your dataset, compute summaries, "
+            "explain LipidCruncher features\n"
+            "- **Data transformation** — convert your data into LipidCruncher "
+            "Generic format\n"
+            "- **Custom visualizations** — create plots from your processed data\n\n"
+            "Ask me anything about your lipidomic data!"
+        )
+
+    # Render existing messages
+    _render_messages(session)
+
+    # Show download button for last successful transformation
+    transform_result_df = st.session_state.get('chat_transform_result')
+    if transform_result_df is not None:
+        with st.expander("Download transformed data", expanded=False):
+            st.dataframe(transform_result_df.head(10), use_container_width=True)
+            st.caption(
+                f"{len(transform_result_df)} rows, "
+                f"{len(transform_result_df.columns)} columns"
+            )
+            csv_data = transform_result_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="Download CSV",
+                data=csv_data,
+                file_name="transformed_data.csv",
+                mime="text/csv",
+                key="chat_download_transform",
+            )
+
+    # Rate limit check
+    msg_count = st.session_state.get('chat_message_count', 0)
+    exec_count = st.session_state.get('chat_execution_count', 0)
+    if msg_count >= MAX_MESSAGES or exec_count >= MAX_EXECUTIONS:
+        limit_type = "Message" if msg_count >= MAX_MESSAGES else "Execution"
+        st.warning(f"{limit_type} limit reached. Please start a new session.")
+        if st.button("Reset Chat", key="chat_reset_unified"):
+            st.session_state.chat_unified_session = None
+            st.session_state.chat_transform_result = None
+            st.session_state.chat_viz_figures = {}
+            st.session_state.chat_result_tables = {}
+            st.session_state.chat_message_count = 0
+            st.session_state.chat_execution_count = 0
+            st.rerun()
+        return
+
+    # Chat input
+    user_input = st.chat_input(
+        "Ask about your data, request a transformation, or describe a visualization...",
+        key="chat_input_unified",
+    )
+
+    if user_input:
+        # Show user message immediately
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        # Run AI
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    result = StreamlitAdapter.run_ai_unified(
+                        user_message=user_input,
+                        session=session,
+                        source_df=source_df,
+                    )
+
+                    # Update session state
+                    st.session_state.chat_unified_session = result.session
+                    st.session_state.chat_message_count = (
+                        st.session_state.get('chat_message_count', 0) + 1
+                    )
+
+                    # Display response
+                    st.markdown(result.assistant_message)
+
+                    if result.code:
+                        st.session_state.chat_execution_count = (
+                            st.session_state.get('chat_execution_count', 0) + 1
+                        )
+
+                    # Store figure if produced
+                    if result.figure is not None:
+                        fig_index = len(result.session.messages) - 1
+                        fig_key = f"chat_fig_{fig_index}"
+                        if 'chat_viz_figures' not in st.session_state:
+                            st.session_state.chat_viz_figures = {}
+                        st.session_state.chat_viz_figures[fig_key] = result.figure
+
+                    # Store result table if produced (and not a transform)
+                    if result.result_df is not None and not result.is_transformation:
+                        table_index = len(result.session.messages) - 1
+                        table_key = f"chat_table_{table_index}"
+                        if 'chat_result_tables' not in st.session_state:
+                            st.session_state.chat_result_tables = {}
+                        st.session_state.chat_result_tables[table_key] = result.result_df
+
+                    # Store successful transformation for download
+                    if result.is_transformation and result.result_df is not None:
+                        st.session_state.chat_transform_result = result.result_df
+
+                except Exception as e:
+                    st.session_state.chat_last_error = str(e)
+
+        st.rerun()
+
+    # Display persistent error from last attempt
+    last_error = st.session_state.pop('chat_last_error', None)
+    if last_error:
+        st.error(f"An error occurred: {last_error}")
