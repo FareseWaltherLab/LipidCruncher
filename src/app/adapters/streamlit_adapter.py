@@ -195,6 +195,7 @@ class SessionState:
     # --- AI Chat (owner: ai_chat/chat_panel.py) ---
     chat_transform_session: Optional[Any] = None
     chat_viz_session: Optional[Any] = None
+    chat_data_questions_session: Optional[Any] = None
     chat_mode: Optional[str] = None
     chat_transform_result: Optional[pd.DataFrame] = None
     chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
@@ -893,4 +894,29 @@ class StreamlitAdapter:
             session=session,
             analysis_df=analysis_df,
             experiment=experiment,
+        )
+
+    @staticmethod
+    def run_ai_data_questions(
+        user_message: str,
+        session,
+        source_df: pd.DataFrame,
+    ):
+        """Run one turn of the AI data questions chat.
+
+        NOT cached because chat is inherently stateful.
+
+        Args:
+            user_message: The user's message.
+            session: Current ChatSession.
+            source_df: The user's DataFrame.
+
+        Returns:
+            DataQuestionsStepResult from the workflow.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.handle_data_questions_message(
+            user_message=user_message,
+            session=session,
+            source_df=source_df,
         )

@@ -15,7 +15,7 @@ import streamlit as st
 from app.constants import PAGE_LANDING
 from app.models.experiment import ExperimentConfig
 from app.ui.landing_page import display_logo
-from app.ui.ai_chat import display_transform_chat, display_viz_chat
+from app.ui.ai_chat import display_transform_chat, display_viz_chat, display_data_questions_chat
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,7 @@ def _handle_file_upload() -> None:
             st.session_state.chat_studio_experiment = None
             st.session_state.chat_transform_session = None
             st.session_state.chat_viz_session = None
+            st.session_state.chat_data_questions_session = None
         return
 
     # Track file identity to avoid re-processing on every rerun
@@ -77,6 +78,7 @@ def _handle_file_upload() -> None:
         # Reset chat sessions for the new data
         st.session_state.chat_transform_session = None
         st.session_state.chat_viz_session = None
+        st.session_state.chat_data_questions_session = None
         st.session_state.chat_studio_experiment = None
         st.session_state.chat_transform_result = None
     except Exception as e:
@@ -151,6 +153,7 @@ def display_ai_studio_page() -> None:
                 st.session_state.chat_studio_file_id = "_pipeline_import"
                 st.session_state.chat_transform_session = None
                 st.session_state.chat_viz_session = None
+                st.session_state.chat_data_questions_session = None
                 st.session_state.chat_studio_experiment = None
                 st.rerun()
 
@@ -169,16 +172,16 @@ def display_ai_studio_page() -> None:
         st.markdown("---")
 
         # --- Mode Tabs ---
-        tab_transform, tab_viz = st.tabs(
-            ["Data Transform", "Custom Visualization"]
+        tab_questions, tab_viz, tab_transform = st.tabs(
+            ["Data Questions", "Custom Visualization", "Data Transform"]
         )
 
-        with tab_transform:
+        with tab_questions:
             st.markdown(
-                "Describe your data format and the AI will help transform it "
-                "into a format LipidCruncher can analyze."
+                "Ask questions about your data — describe the dataset, "
+                "compute summaries, or learn about LipidCruncher features."
             )
-            display_transform_chat(studio_df)
+            display_data_questions_chat(studio_df)
 
         with tab_viz:
             st.markdown(
@@ -192,6 +195,13 @@ def display_ai_studio_page() -> None:
                 st.session_state.chat_studio_experiment = experiment
 
             display_viz_chat(studio_df, experiment)
+
+        with tab_transform:
+            st.markdown(
+                "Describe your data format and the AI will help transform it "
+                "into a format LipidCruncher can analyze."
+            )
+            display_transform_chat(studio_df)
 
         # Navigation
         _display_navigation()
@@ -207,6 +217,7 @@ def _display_navigation() -> None:
         st.session_state.chat_studio_experiment = None
         st.session_state.chat_transform_session = None
         st.session_state.chat_viz_session = None
+        st.session_state.chat_data_questions_session = None
         st.session_state.chat_transform_result = None
         st.session_state.chat_viz_figures = {}
         st.session_state.chat_message_count = 0

@@ -2,7 +2,8 @@
 Main chat panel UI for AI-powered interactions.
 
 Renders chat messages, handles user input, and delegates to
-mode-specific UI modules for data transformation and visualization.
+mode-specific UI modules for data transformation, visualization,
+and data questions.
 """
 import streamlit as st
 
@@ -59,3 +60,26 @@ def display_viz_chat(analysis_df, experiment) -> None:
         st.session_state.chat_execution_count = 0
 
     render_viz_chat(analysis_df, experiment)
+
+
+def display_data_questions_chat(source_df) -> None:
+    """Display the AI Data Questions chat panel.
+
+    Creates a new data questions session if one doesn't exist,
+    then delegates to the questions-specific UI.
+
+    Args:
+        source_df: The user's uploaded DataFrame.
+    """
+    from app.workflows.ai_chat import AIChatWorkflow
+    from ._data_questions_ui import render_data_questions_chat
+
+    # Initialize session if needed
+    if st.session_state.get('chat_data_questions_session') is None:
+        st.session_state.chat_data_questions_session = (
+            AIChatWorkflow.start_data_questions_session(source_df)
+        )
+        st.session_state.chat_message_count = 0
+        st.session_state.chat_execution_count = 0
+
+    render_data_questions_chat(source_df)

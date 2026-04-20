@@ -15,6 +15,7 @@ class ChatMode(str, Enum):
     """Chat interaction mode."""
     DATA_TRANSFORM = "data_transform"
     VISUALIZATION = "visualization"
+    DATA_QUESTIONS = "data_questions"
 
 
 class ChatMessage(BaseModel):

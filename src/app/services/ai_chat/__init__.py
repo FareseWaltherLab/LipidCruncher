@@ -11,7 +11,7 @@ from .sandbox import SandboxService, SandboxResult, validate_code
 from .data_transformer import DataTransformerService, TransformationResult
 from .viz_generator import VizGeneratorService
 from .codebase_tools import TOOL_DEFINITIONS, execute_tool
-from .prompt_templates import data_transform_system_prompt, build_transform_context
+from .prompt_templates import data_transform_system_prompt, data_questions_system_prompt, build_transform_context
 
 __all__ = [
     "AIChatError",
@@ -29,5 +29,6 @@ __all__ = [
     "TOOL_DEFINITIONS",
     "execute_tool",
     "data_transform_system_prompt",
+    "data_questions_system_prompt",
     "build_transform_context",
 ]

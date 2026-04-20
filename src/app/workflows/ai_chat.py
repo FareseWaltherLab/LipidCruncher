@@ -1,8 +1,8 @@
 """
 AI chat workflow.
 
-Orchestrates AI-powered data transformation and visualization
-generation. Pure logic — no Streamlit dependencies.
+Orchestrates AI-powered data transformation, visualization
+generation, and data questions. Pure logic — no Streamlit dependencies.
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -17,8 +17,11 @@ from ..models.chat import (
     SandboxConfig,
 )
 from ..models.experiment import ExperimentConfig
+from ..services.ai_chat.ai_client import AIClientService
+from ..services.ai_chat.codebase_tools import TOOL_DEFINITIONS, execute_tool
 from ..services.ai_chat.data_transformer import DataTransformerService, TransformationResult
-from ..services.ai_chat.sandbox import SandboxResult
+from ..services.ai_chat.prompt_templates import data_questions_system_prompt
+from ..services.ai_chat.sandbox import SandboxResult, SandboxService
 from ..services.ai_chat.schema_extractor import SchemaExtractorService
 from ..services.ai_chat.viz_generator import VizGeneratorService
 
@@ -49,6 +52,22 @@ class VizStepResult:
     session: ChatSession
     sandbox_result: Optional[SandboxResult] = None
     assistant_message: str = ""
+
+
+@dataclass(frozen=True)
+class DataQuestionsStepResult:
+    """Result of a single data questions conversation turn.
+
+    Attributes:
+        session: Updated chat session with new messages appended.
+        assistant_message: The full assistant response text for display.
+        result_df: Optional DataFrame if the AI computed a summary table.
+        code: Optional code that was executed to compute the answer.
+    """
+    session: ChatSession
+    assistant_message: str = ""
+    result_df: Optional[pd.DataFrame] = None
+    code: str = ""
 
 
 class AIChatWorkflow:
@@ -291,4 +310,113 @@ class AIChatWorkflow:
             session=session,
             sandbox_result=sandbox_result,
             assistant_message=assistant_text,
+        )
+
+    # ------------------------------------------------------------------
+    # Data Questions mode
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def start_data_questions_session(df: pd.DataFrame) -> ChatSession:
+        """Initialize a new data questions chat session.
+
+        Args:
+            df: The user's uploaded DataFrame.
+
+        Returns:
+            A new ChatSession in DATA_QUESTIONS mode with schema context.
+        """
+        schema = SchemaExtractorService.extract_schema(df)
+        return ChatSession(
+            mode=ChatMode.DATA_QUESTIONS,
+            schema_context=schema,
+        )
+
+    @staticmethod
+    def handle_data_questions_message(
+        user_message: str,
+        session: ChatSession,
+        source_df: pd.DataFrame,
+        ai_config: Optional[AIConfig] = None,
+        sandbox_config: Optional[SandboxConfig] = None,
+    ) -> DataQuestionsStepResult:
+        """Handle one user message in a data questions chat.
+
+        Flow:
+        1. Append user message to session.
+        2. Send conversation to AI (with tools) to answer the question.
+        3. If code is returned, execute in sandbox to compute the answer.
+        4. Append assistant response to session.
+        5. Return updated session + optional result DataFrame.
+
+        Args:
+            user_message: The user's latest message.
+            session: Current chat session.
+            source_df: The user's DataFrame.
+            ai_config: AI configuration. Uses defaults if None.
+            sandbox_config: Sandbox configuration. Uses defaults if None.
+
+        Returns:
+            DataQuestionsStepResult with updated session and answer.
+        """
+        if ai_config is None:
+            ai_config = AIConfig()
+        if sandbox_config is None:
+            sandbox_config = SandboxConfig()
+
+        # 1. Append user message
+        user_msg = ChatMessage(role="user", content=user_message)
+        session = session.add_message(user_msg)
+
+        # 2. Build context and call AI with tools
+        context = f"## DataFrame Schema\n{session.schema_context}"
+        augmented_message = f"{user_message}\n\n{context}"
+        history = session.to_api_messages()[:-1]
+        messages = history + [{"role": "user", "content": augmented_message}]
+
+        system_prompt = data_questions_system_prompt()
+
+        response_text = AIClientService.execute_tool_loop(
+            messages=messages,
+            system_prompt=system_prompt,
+            config=ai_config,
+            tools=TOOL_DEFINITIONS,
+            tool_executor=execute_tool,
+        )
+
+        # 3. Extract and execute code if present
+        explanation, code = AIClientService.extract_code_block(response_text)
+        result_df = None
+
+        if code:
+            sandbox_result = SandboxService.execute(code, source_df, sandbox_config)
+            if sandbox_result.success and sandbox_result.result_df is not None:
+                result_df = sandbox_result.result_df
+                assistant_text = explanation
+            elif sandbox_result.success:
+                # Code ran but no result_df — just show the explanation
+                assistant_text = explanation
+            else:
+                assistant_text = (
+                    f"{explanation}\n\n"
+                    f"I tried to compute the answer but encountered an error: "
+                    f"{sandbox_result.error_message}"
+                )
+        else:
+            assistant_text = explanation
+            code = ""
+
+        # 4. Append assistant message
+        assistant_msg = ChatMessage(
+            role="assistant",
+            content=assistant_text,
+            code=code if code else None,
+        )
+        session = session.add_message(assistant_msg)
+
+        return DataQuestionsStepResult(
+            session=session,
+            assistant_message=assistant_text,
+            result_df=result_df,
+            code=code,
         )
