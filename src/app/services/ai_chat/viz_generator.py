@@ -4,13 +4,14 @@ AI-powered visualization generation service.
 Generates custom Plotly/Matplotlib visualizations from natural language
 requests. All methods are stateless static methods — no Streamlit imports.
 """
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import pandas as pd
 
 from ...models.chat import AIConfig, SandboxConfig
 from ...models.experiment import ExperimentConfig
 from .ai_client import AIClientService
+from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .knowledge_base import get_app_knowledge
 from .sandbox import SandboxResult, SandboxService
 from .schema_extractor import SchemaExtractorService
@@ -110,8 +111,12 @@ class VizGeneratorService:
         experiment: ExperimentConfig,
         history: list,
         config: Optional[AIConfig] = None,
+        on_tool_call: Optional[Callable[[str, dict], None]] = None,
     ) -> Tuple[str, str]:
         """Ask the AI to generate visualization code.
+
+        Uses the tool-aware API so the AI can search/read the codebase
+        before generating visualization code.
 
         Args:
             user_request: The user's visualization request.
@@ -119,6 +124,8 @@ class VizGeneratorService:
             experiment: Experiment configuration (conditions, samples).
             history: Previous conversation messages in API format.
             config: AI configuration. Uses defaults if None.
+            on_tool_call: Optional callback(tool_name, tool_input) for
+                UI status updates (e.g. "Searching codebase...").
 
         Returns:
             Tuple of (explanation, code).
@@ -138,9 +145,16 @@ class VizGeneratorService:
         augmented_message = f"{user_request}\n\n{context}"
         messages = history + [{"role": "user", "content": augmented_message}]
 
-        return AIClientService.send_message_for_code(
-            messages, _viz_system_prompt(), config
+        response_text = AIClientService.execute_tool_loop(
+            messages=messages,
+            system_prompt=_viz_system_prompt(),
+            config=config,
+            tools=TOOL_DEFINITIONS,
+            tool_executor=execute_tool,
+            on_tool_call=on_tool_call,
         )
+
+        return AIClientService.extract_code_block(response_text)
 
     @staticmethod
     def execute_viz_code(
