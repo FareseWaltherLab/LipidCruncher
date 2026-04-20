@@ -7,12 +7,13 @@ All methods are stateless static methods — no Streamlit imports.
 """
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import pandas as pd
 
 from ...models.chat import AIConfig, SandboxConfig
 from .ai_client import AIClientService
+from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .exceptions import TransformationError
 from .prompt_templates import build_transform_context, data_transform_system_prompt
 from .sandbox import SandboxResult, SandboxService
@@ -51,14 +52,20 @@ class DataTransformerService:
         user_message: str,
         history: list,
         config: Optional[AIConfig] = None,
+        on_tool_call: Optional[Callable[[str, dict], None]] = None,
     ) -> Tuple[str, str]:
         """Ask the AI to generate transformation code.
+
+        Uses the tool-aware API so the AI can search/read the codebase
+        before generating code.
 
         Args:
             source_schema: Schema description of the source DataFrame.
             user_message: The user's latest message/instructions.
             history: Previous conversation messages in API format.
             config: AI configuration. Uses defaults if None.
+            on_tool_call: Optional callback(tool_name, tool_input) for
+                UI status updates (e.g. "Searching codebase...").
 
         Returns:
             Tuple of (explanation, code).
@@ -78,7 +85,17 @@ class DataTransformerService:
         augmented_message = f"{user_message}\n\n{context}"
         messages = history + [{"role": "user", "content": augmented_message}]
 
-        return AIClientService.send_message_for_code(messages, system_prompt, config)
+        # Use the tool loop so the AI can look up implementation details
+        response_text = AIClientService.execute_tool_loop(
+            messages=messages,
+            system_prompt=system_prompt,
+            config=config,
+            tools=TOOL_DEFINITIONS,
+            tool_executor=execute_tool,
+            on_tool_call=on_tool_call,
+        )
+
+        return AIClientService.extract_code_block(response_text)
 
     @staticmethod
     def execute_transformation(

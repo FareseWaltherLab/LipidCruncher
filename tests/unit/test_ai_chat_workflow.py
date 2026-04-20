@@ -79,17 +79,17 @@ class TestStartTransformSession:
 
 class TestHandleTransformMessage:
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.send_message_for_code")
+    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
     def test_successful_transformation(self, mock_send, source_df, transform_session):
         mock_send.return_value = (
-            "I'll rename the columns to match the Generic format.",
-            (
-                "result_df = pd.DataFrame()\n"
-                "result_df['LipidMolec'] = df['lipid_name'].str.replace("
-                "r'^([A-Za-z]+)\\\\((.+)\\\\)$', r'\\\\1 \\\\2', regex=True)\n"
-                "result_df['Sample1'] = pd.to_numeric(df['area_s1'])\n"
-                "result_df['Sample2'] = pd.to_numeric(df['area_s2'])\n"
-            ),
+            "I'll rename the columns to match the Generic format.\n\n"
+            "```python\n"
+            "result_df = pd.DataFrame()\n"
+            "result_df['LipidMolec'] = df['lipid_name'].str.replace("
+            "r'^([A-Za-z]+)\\\\((.+)\\\\)$', r'\\\\1 \\\\2', regex=True)\n"
+            "result_df['Sample1'] = pd.to_numeric(df['area_s1'])\n"
+            "result_df['Sample2'] = pd.to_numeric(df['area_s2'])\n"
+            "```"
         )
 
         result = AIChatWorkflow.handle_transform_message(
@@ -105,9 +105,9 @@ class TestHandleTransformMessage:
         assert "LipidMolec" in result.transformation.result_df.columns
         assert len(result.session.messages) == 2  # user + assistant
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.send_message_for_code")
+    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
     def test_ai_asks_question(self, mock_send, source_df, transform_session):
-        mock_send.return_value = (MOCK_QUESTION_RESPONSE, "")
+        mock_send.return_value = MOCK_QUESTION_RESPONSE
 
         result = AIChatWorkflow.handle_transform_message(
             user_message="Please transform my data",
@@ -119,11 +119,13 @@ class TestHandleTransformMessage:
         assert "confirm" in result.assistant_message.lower()
         assert len(result.session.messages) == 2
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.send_message_for_code")
+    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
     def test_failed_transformation_reports_errors(self, mock_send, source_df, transform_session):
         mock_send.return_value = (
-            "Here's the transformation.",
-            "result_df = pd.DataFrame({'wrong': [1]})",
+            "Here's the transformation.\n\n"
+            "```python\n"
+            "result_df = pd.DataFrame({'wrong': [1]})\n"
+            "```"
         )
 
         result = AIChatWorkflow.handle_transform_message(
@@ -137,25 +139,25 @@ class TestHandleTransformMessage:
         assert len(result.transformation.validation_errors) > 0
         assert "issues" in result.assistant_message.lower()
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.send_message_for_code")
+    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
     def test_session_accumulates_messages(self, mock_send, source_df, transform_session):
-        mock_send.return_value = ("Got it.", "")
+        mock_send.return_value = "Got it."
 
         result1 = AIChatWorkflow.handle_transform_message(
             "First message", transform_session, source_df
         )
         assert len(result1.session.messages) == 2
 
-        mock_send.return_value = ("Sure.", "")
+        mock_send.return_value = "Sure."
         result2 = AIChatWorkflow.handle_transform_message(
             "Second message", result1.session, source_df
         )
         assert len(result2.session.messages) == 4  # 2 from first turn + 2 from second
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.send_message_for_code")
+    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
     def test_code_included_in_assistant_message(self, mock_send, source_df, transform_session):
         code = "result_df = df.rename(columns={'lipid_name': 'LipidMolec'})"
-        mock_send.return_value = ("Renaming columns.", code)
+        mock_send.return_value = f"Renaming columns.\n\n```python\n{code}\n```"
 
         result = AIChatWorkflow.handle_transform_message(
             "Transform", transform_session, source_df
