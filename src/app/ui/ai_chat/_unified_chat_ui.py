@@ -25,11 +25,19 @@ def _render_messages(session) -> None:
         if fig is not None:
             st.plotly_chart(fig, use_container_width=True)
 
-        # Check for stored result table
+        # Check for stored result table (with download)
         table_key = f"chat_table_{i}"
         table = st.session_state.get('chat_result_tables', {}).get(table_key)
         if table is not None:
             st.dataframe(table, use_container_width=True)
+            csv_data = table.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="Download as CSV",
+                data=csv_data,
+                file_name="result_data.csv",
+                mime="text/csv",
+                key=f"chat_download_table_{i}",
+            )
 
 
 def render_unified_chat(source_df) -> None:
@@ -56,24 +64,6 @@ def render_unified_chat(source_df) -> None:
 
     # Render existing messages
     _render_messages(session)
-
-    # Show download button for last successful transformation
-    transform_result_df = st.session_state.get('chat_transform_result')
-    if transform_result_df is not None:
-        with st.expander("Download transformed data", expanded=False):
-            st.dataframe(transform_result_df.head(10), use_container_width=True)
-            st.caption(
-                f"{len(transform_result_df)} rows, "
-                f"{len(transform_result_df.columns)} columns"
-            )
-            csv_data = transform_result_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="Download CSV",
-                data=csv_data,
-                file_name="transformed_data.csv",
-                mime="text/csv",
-                key="chat_download_transform",
-            )
 
     # Rate limit check
     msg_count = st.session_state.get('chat_message_count', 0)
@@ -134,15 +124,15 @@ def render_unified_chat(source_df) -> None:
                             st.session_state.chat_viz_figures = {}
                         st.session_state.chat_viz_figures[fig_key] = result.figure
 
-                    # Store result table if produced (and not a transform)
-                    if result.result_df is not None and not result.is_transformation:
+                    # Store result table if produced (always — for download)
+                    if result.result_df is not None:
                         table_index = len(result.session.messages) - 1
                         table_key = f"chat_table_{table_index}"
                         if 'chat_result_tables' not in st.session_state:
                             st.session_state.chat_result_tables = {}
                         st.session_state.chat_result_tables[table_key] = result.result_df
 
-                    # Store successful transformation for download
+                    # Also store transformation result separately
                     if result.is_transformation and result.result_df is not None:
                         st.session_state.chat_transform_result = result.result_df
 
