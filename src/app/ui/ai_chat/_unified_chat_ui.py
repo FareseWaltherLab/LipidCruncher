@@ -45,7 +45,9 @@ def render_unified_chat(source_df) -> None:
         st.info(
             "I can help you with:\n\n"
             "- **Data questions** — describe your dataset, compute summaries, "
-            "explain LipidCruncher features\n"
+            "explore lipid classes and species\n"
+            "- **LipidCruncher questions** — explain features, normalization "
+            "methods, statistical tests, and analysis options\n"
             "- **Data transformation** — convert your data into LipidCruncher "
             "Generic format\n"
             "- **Custom visualizations** — create plots from your processed data\n\n"
