@@ -4,7 +4,10 @@ AI chat workflow.
 Orchestrates AI-powered data transformation, visualization
 generation, and data questions. Pure logic — no Streamlit dependencies.
 """
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 from typing import Optional
 
 import pandas as pd
@@ -501,6 +504,7 @@ class AIChatWorkflow:
 
         system_prompt = unified_system_prompt()
 
+        logger.info("Calling AI with %d messages", len(messages))
         response_text = AIClientService.execute_tool_loop(
             messages=messages,
             system_prompt=system_prompt,
@@ -508,6 +512,8 @@ class AIChatWorkflow:
             tools=TOOL_DEFINITIONS,
             tool_executor=execute_tool,
         )
+        logger.info("AI response: %d chars, first 200: %s",
+                     len(response_text), response_text[:200])
 
         # 3. Extract and execute code if present
         explanation, code = AIClientService.extract_code_block(response_text)
@@ -545,6 +551,11 @@ class AIChatWorkflow:
         else:
             assistant_text = explanation
             code = ""
+
+        # Guard against empty response
+        if not assistant_text.strip():
+            logger.warning("Empty assistant_text — response_text was: %s", response_text[:500])
+            assistant_text = "I wasn't able to generate a response. Please try rephrasing your question."
 
         # 4. Append assistant message
         assistant_msg = ChatMessage(
