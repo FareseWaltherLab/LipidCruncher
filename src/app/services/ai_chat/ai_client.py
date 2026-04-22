@@ -258,14 +258,22 @@ class AIClientService:
         loop_messages = list(messages)
 
         for iteration in range(max_iterations):
+            logger.info("Tool loop iteration %d/%d", iteration + 1, max_iterations)
             response = AIClientService.send_message_with_tools(
                 loop_messages, system_prompt, config, tools,
             )
 
+            # Log what we got back
+            block_types = [b.type for b in response.content]
+            logger.info("Response blocks: %s, stop_reason: %s",
+                        block_types, response.stop_reason)
+
             # If the AI didn't request any tools, we're done
             tool_calls = AIClientService.extract_tool_use_blocks(response)
             if not tool_calls:
-                return AIClientService.extract_text_from_response(response)
+                text = AIClientService.extract_text_from_response(response)
+                logger.info("Final text response: %d chars", len(text))
+                return text
 
             # Append the assistant's response (with tool_use blocks) to messages
             loop_messages.append({
