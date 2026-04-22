@@ -140,7 +140,8 @@ def render_unified_chat(source_df) -> None:
                         st.session_state.chat_transform_result = result.result_df
 
                 except Exception as e:
-                    # Preserve user message in session even on error
+                    # Preserve user message AND error in session so both
+                    # survive the rerun and are visible in the chat history
                     from app.models.chat import ChatMessage
                     user_msg = ChatMessage(role="user", content=user_input)
                     error_msg = ChatMessage(
@@ -149,6 +150,5 @@ def render_unified_chat(source_df) -> None:
                     )
                     updated = session.add_message(user_msg).add_message(error_msg)
                     st.session_state.chat_unified_session = updated
-                    st.error(f"An error occurred: {e}")
 
         st.rerun()
