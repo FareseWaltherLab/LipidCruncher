@@ -109,7 +109,10 @@ def render_unified_chat(source_df) -> None:
                     )
 
                     # Display response
-                    st.markdown(result.assistant_message)
+                    if result.assistant_message:
+                        st.markdown(result.assistant_message)
+                    else:
+                        st.warning("The AI returned an empty response. Please try again.")
 
                     if result.code:
                         st.session_state.chat_execution_count = (
@@ -137,11 +140,15 @@ def render_unified_chat(source_df) -> None:
                         st.session_state.chat_transform_result = result.result_df
 
                 except Exception as e:
-                    st.session_state.chat_last_error = str(e)
+                    # Preserve user message in session even on error
+                    from app.models.chat import ChatMessage
+                    user_msg = ChatMessage(role="user", content=user_input)
+                    error_msg = ChatMessage(
+                        role="assistant",
+                        content=f"Sorry, I encountered an error: {e}",
+                    )
+                    updated = session.add_message(user_msg).add_message(error_msg)
+                    st.session_state.chat_unified_session = updated
+                    st.error(f"An error occurred: {e}")
 
         st.rerun()
-
-    # Display persistent error from last attempt
-    last_error = st.session_state.pop('chat_last_error', None)
-    if last_error:
-        st.error(f"An error occurred: {last_error}")
