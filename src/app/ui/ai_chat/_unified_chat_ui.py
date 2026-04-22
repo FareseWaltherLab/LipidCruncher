@@ -88,17 +88,28 @@ def render_unified_chat(source_df) -> None:
     )
 
     if user_input:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Preserve user message in session BEFORE the API call
+        # so it survives even if everything else fails
+        from app.models.chat import ChatMessage
+        user_msg = ChatMessage(role="user", content=user_input)
+        session = session.add_message(user_msg)
+        st.session_state.chat_unified_session = session
+
         # Show user message immediately
         with st.chat_message("user"):
             st.markdown(user_input)
 
         # Run AI
+        error_text = None
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
                     result = StreamlitAdapter.run_ai_unified(
                         user_message=user_input,
-                        session=session,
+                        session=st.session_state.chat_unified_session,
                         source_df=source_df,
                     )
 
@@ -140,15 +151,17 @@ def render_unified_chat(source_df) -> None:
                         st.session_state.chat_transform_result = result.result_df
 
                 except Exception as e:
-                    # Preserve user message AND error in session so both
-                    # survive the rerun and are visible in the chat history
-                    from app.models.chat import ChatMessage
-                    user_msg = ChatMessage(role="user", content=user_input)
-                    error_msg = ChatMessage(
-                        role="assistant",
-                        content=f"Sorry, I encountered an error: {e}",
-                    )
-                    updated = session.add_message(user_msg).add_message(error_msg)
-                    st.session_state.chat_unified_session = updated
+                    error_text = str(e)
+                    logger.error("AI Studio error: %s", error_text, exc_info=True)
+
+        # If there was an error, save it as an assistant message
+        # (done OUTSIDE the spinner/chat_message so it definitely persists)
+        if error_text:
+            error_msg = ChatMessage(
+                role="assistant",
+                content=f"Sorry, I encountered an error: {error_text}",
+            )
+            session = st.session_state.chat_unified_session
+            st.session_state.chat_unified_session = session.add_message(error_msg)
 
         st.rerun()
