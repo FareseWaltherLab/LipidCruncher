@@ -47,19 +47,16 @@ def render_viz_chat(analysis_df, experiment) -> None:
     """
     session = st.session_state.chat_viz_session
 
-    # Show introductory message with validation result
+    # Show introductory message if no messages yet
     if len(session.messages) == 0:
         validation = st.session_state.get('chat_viz_validation')
         with st.chat_message("assistant"):
-            if validation and not validation.is_valid:
-                st.markdown(validation.message)
-            else:
-                if validation:
-                    st.markdown(validation.message + "\n\n")
-                st.markdown(
-                    "Describe the visualization you'd like and I'll "
-                    "generate it."
-                )
+            if validation:
+                st.markdown(validation.message + "\n\n")
+            st.markdown(
+                "Describe the visualization you'd like and I'll "
+                "generate it."
+            )
         # Clickable example prompts
         cols = st.columns(len(_EXAMPLE_PROMPTS))
         for i, prompt in enumerate(_EXAMPLE_PROMPTS):

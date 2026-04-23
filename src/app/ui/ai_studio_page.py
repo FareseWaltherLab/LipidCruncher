@@ -226,16 +226,45 @@ def display_ai_studio_page() -> None:
         with tab_viz:
             if studio_df is None:
                 st.info(
-                    "Upload a CSV file above to create custom visualizations. "
-                    "For best results, use data that has been processed through "
-                    "LipidCruncher Module 1."
+                    "Upload a CSV file above to create custom visualizations."
                 )
             else:
-                experiment = st.session_state.get("chat_studio_experiment")
-                if experiment is None:
-                    experiment = _derive_experiment(studio_df)
-                    st.session_state.chat_studio_experiment = experiment
-                display_viz_chat(studio_df, experiment)
+                # Validate Module 1 output before showing viz chat
+                from app.workflows.ai_chat import AIChatWorkflow
+                validation = st.session_state.get('chat_viz_validation')
+                if validation is None:
+                    validation = AIChatWorkflow.validate_module1_output(
+                        studio_df
+                    )
+                    st.session_state.chat_viz_validation = validation
+
+                if not validation.is_valid:
+                    missing = []
+                    if not validation.has_lipid_molec:
+                        missing.append("`LipidMolec`")
+                    if not validation.has_class_key:
+                        missing.append("`ClassKey`")
+                    if (not validation.intensity_columns
+                            and not validation.concentration_columns):
+                        missing.append(
+                            "`intensity[sN]` / `concentration[sN]`"
+                        )
+                    st.warning(
+                        "Custom Visualization requires data processed "
+                        "through LipidCruncher's Module 1 pipeline. "
+                        "Missing columns: " + ", ".join(missing) + ".\n\n"
+                        "Please run your data through the main pipeline "
+                        "first (**Start Crunching** on the home page), "
+                        "then return here."
+                    )
+                else:
+                    experiment = st.session_state.get(
+                        "chat_studio_experiment"
+                    )
+                    if experiment is None:
+                        experiment = _derive_experiment(studio_df)
+                        st.session_state.chat_studio_experiment = experiment
+                    display_viz_chat(studio_df, experiment)
 
         # Navigation
         _display_navigation()

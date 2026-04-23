@@ -56,10 +56,6 @@ def display_viz_chat(analysis_df, experiment) -> None:
 
     # Initialize session if needed
     if st.session_state.get('chat_viz_session') is None:
-        # Validate Module 1 output
-        st.session_state.chat_viz_validation = (
-            AIChatWorkflow.validate_module1_output(analysis_df)
-        )
         st.session_state.chat_viz_session = (
             AIChatWorkflow.start_viz_session(analysis_df, experiment)
         )
