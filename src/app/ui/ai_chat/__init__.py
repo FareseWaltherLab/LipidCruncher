@@ -1,9 +1,11 @@
 """
 AI chat UI components.
 
-Provides the unified AI Studio chat panel and legacy mode-specific panels.
+Provides tab-specific AI Studio chat panels: LipidCruncher Questions,
+Data Questions, Transform to Generic, and Custom Visualization.
 """
 from .chat_panel import (
+    display_lipidcruncher_questions_chat,
     display_transform_chat,
     display_viz_chat,
     display_data_questions_chat,
@@ -11,6 +13,7 @@ from .chat_panel import (
 )
 
 __all__ = [
+    "display_lipidcruncher_questions_chat",
     "display_transform_chat",
     "display_viz_chat",
     "display_data_questions_chat",

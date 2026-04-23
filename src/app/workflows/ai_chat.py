@@ -23,7 +23,11 @@ from ..models.experiment import ExperimentConfig
 from ..services.ai_chat.ai_client import AIClientService
 from ..services.ai_chat.codebase_tools import TOOL_DEFINITIONS, execute_tool
 from ..services.ai_chat.data_transformer import DataTransformerService, TransformationResult
-from ..services.ai_chat.prompt_templates import data_questions_system_prompt, unified_system_prompt
+from ..services.ai_chat.prompt_templates import (
+    data_questions_system_prompt,
+    lipidcruncher_questions_system_prompt,
+    unified_system_prompt,
+)
 from ..services.ai_chat.sandbox import SandboxResult, SandboxService
 from ..services.ai_chat.schema_extractor import SchemaExtractorService
 from ..services.ai_chat.viz_generator import VizGeneratorService
@@ -71,6 +75,18 @@ class DataQuestionsStepResult:
     assistant_message: str = ""
     result_df: Optional[pd.DataFrame] = None
     code: str = ""
+
+
+@dataclass(frozen=True)
+class LCQuestionsStepResult:
+    """Result of a single LipidCruncher questions conversation turn.
+
+    Attributes:
+        session: Updated chat session with new messages appended.
+        assistant_message: The full assistant response text for display.
+    """
+    session: ChatSession
+    assistant_message: str = ""
 
 
 @dataclass(frozen=True)
@@ -442,6 +458,80 @@ class AIChatWorkflow:
             assistant_message=assistant_text,
             result_df=result_df,
             code=code,
+        )
+
+    # ------------------------------------------------------------------
+    # LipidCruncher Questions mode
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def start_lc_questions_session() -> ChatSession:
+        """Initialize a new LipidCruncher questions chat session.
+
+        No DataFrame needed — this tab answers questions about the app itself.
+
+        Returns:
+            A new ChatSession in LIPIDCRUNCHER_QUESTIONS mode.
+        """
+        return ChatSession(
+            mode=ChatMode.LIPIDCRUNCHER_QUESTIONS,
+            schema_context="",
+        )
+
+    @staticmethod
+    def handle_lc_questions_message(
+        user_message: str,
+        session: ChatSession,
+        ai_config: Optional[AIConfig] = None,
+    ) -> LCQuestionsStepResult:
+        """Handle one user message in the LipidCruncher questions chat.
+
+        Purely conversational — no code execution. Uses the tool loop
+        so the AI can search the codebase if needed.
+
+        Args:
+            user_message: The user's latest message.
+            session: Current chat session.
+            ai_config: AI configuration. Uses defaults if None.
+
+        Returns:
+            LCQuestionsStepResult with updated session and response.
+        """
+        if ai_config is None:
+            ai_config = AIConfig()
+
+        # 1. Append user message
+        user_msg = ChatMessage(role="user", content=user_message)
+        session = session.add_message(user_msg)
+
+        # 2. Call AI with tools (for codebase search)
+        history = session.to_api_messages()[:-1]
+        messages = history + [{"role": "user", "content": user_message}]
+
+        system_prompt = lipidcruncher_questions_system_prompt()
+
+        response_text = AIClientService.execute_tool_loop(
+            messages=messages,
+            system_prompt=system_prompt,
+            config=ai_config,
+            tools=TOOL_DEFINITIONS,
+            tool_executor=execute_tool,
+        )
+
+        assistant_text = response_text.strip()
+        if not assistant_text:
+            assistant_text = (
+                "I wasn't able to generate a response. "
+                "Please try rephrasing your question."
+            )
+
+        # 3. Append assistant message
+        assistant_msg = ChatMessage(role="assistant", content=assistant_text)
+        session = session.add_message(assistant_msg)
+
+        return LCQuestionsStepResult(
+            session=session,
+            assistant_message=assistant_text,
         )
 
     # ------------------------------------------------------------------

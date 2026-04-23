@@ -161,12 +161,17 @@ class TestStartVizSession:
 # ---------------------------------------------------------------------------
 
 class TestHandleVizMessage:
+    """Tests mock execute_tool_loop which returns the full response text
+    (including code fences). extract_code_block then splits it into
+    explanation + code."""
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.send_message_for_code")
-    def test_successful_viz(self, mock_send, analysis_df, experiment, viz_session):
-        mock_send.return_value = (
-            "Here's a bar chart of intensities.",
-            "fig = px.bar(df, x='LipidMolec', y='intensity[s1]', title='Intensities')",
+    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    def test_successful_viz(self, mock_loop, analysis_df, experiment, viz_session):
+        mock_loop.return_value = (
+            "Here's a bar chart of intensities.\n\n"
+            "```python\n"
+            "fig = px.bar(df, x='LipidMolec', y='intensity[s1]', title='Intensities')\n"
+            "```"
         )
 
         result = AIChatWorkflow.handle_viz_message(
@@ -182,11 +187,10 @@ class TestHandleVizMessage:
         assert result.sandbox_result.figure is not None
         assert len(result.session.messages) == 2
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.send_message_for_code")
-    def test_ai_asks_clarification(self, mock_send, analysis_df, experiment, viz_session):
-        mock_send.return_value = (
-            "Could you clarify which samples you'd like to compare?",
-            "",
+    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    def test_ai_asks_clarification(self, mock_loop, analysis_df, experiment, viz_session):
+        mock_loop.return_value = (
+            "Could you clarify which samples you'd like to compare?"
         )
 
         result = AIChatWorkflow.handle_viz_message(
@@ -199,11 +203,13 @@ class TestHandleVizMessage:
         assert result.sandbox_result is None
         assert "clarify" in result.assistant_message.lower()
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.send_message_for_code")
-    def test_code_error_reported(self, mock_send, analysis_df, experiment, viz_session):
-        mock_send.return_value = (
-            "Here's the chart.",
-            "fig = px.bar(df, x='nonexistent', y='also_nonexistent')",
+    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    def test_code_error_reported(self, mock_loop, analysis_df, experiment, viz_session):
+        mock_loop.return_value = (
+            "Here's the chart.\n\n"
+            "```python\n"
+            "fig = px.bar(df, x='nonexistent', y='also_nonexistent')\n"
+            "```"
         )
 
         result = AIChatWorkflow.handle_viz_message(
@@ -217,11 +223,13 @@ class TestHandleVizMessage:
         assert result.sandbox_result.success is False
         assert "error" in result.assistant_message.lower()
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.send_message_for_code")
-    def test_code_without_fig_reported(self, mock_send, analysis_df, experiment, viz_session):
-        mock_send.return_value = (
-            "Computing mean.",
-            "x = df['intensity[s1]'].mean()",
+    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    def test_code_without_fig_reported(self, mock_loop, analysis_df, experiment, viz_session):
+        mock_loop.return_value = (
+            "Computing mean.\n\n"
+            "```python\n"
+            "x = df['intensity[s1]'].mean()\n"
+            "```"
         )
 
         result = AIChatWorkflow.handle_viz_message(
@@ -236,12 +244,12 @@ class TestHandleVizMessage:
         assert result.sandbox_result.figure is None
         assert "didn't produce a figure" in result.assistant_message
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.send_message_for_code")
-    def test_session_accumulates(self, mock_send, analysis_df, experiment, viz_session):
-        mock_send.return_value = ("Got it.", "")
+    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    def test_session_accumulates(self, mock_loop, analysis_df, experiment, viz_session):
+        mock_loop.return_value = "Got it."
         r1 = AIChatWorkflow.handle_viz_message("First", viz_session, analysis_df, experiment)
         assert len(r1.session.messages) == 2
 
-        mock_send.return_value = ("Sure.", "")
+        mock_loop.return_value = "Sure."
         r2 = AIChatWorkflow.handle_viz_message("Second", r1.session, analysis_df, experiment)
         assert len(r2.session.messages) == 4

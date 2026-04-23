@@ -924,6 +924,28 @@ class StreamlitAdapter:
         )
 
     @staticmethod
+    def run_ai_lc_questions(
+        user_message: str,
+        session,
+    ):
+        """Run one turn of the LipidCruncher questions chat.
+
+        NOT cached because chat is inherently stateful.
+
+        Args:
+            user_message: The user's message.
+            session: Current ChatSession.
+
+        Returns:
+            LCQuestionsStepResult from the workflow.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.handle_lc_questions_message(
+            user_message=user_message,
+            session=session,
+        )
+
+    @staticmethod
     def run_ai_unified(
         user_message: str,
         session,

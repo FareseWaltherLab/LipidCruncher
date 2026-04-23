@@ -16,6 +16,7 @@ class ChatMode(str, Enum):
     DATA_TRANSFORM = "data_transform"
     VISUALIZATION = "visualization"
     DATA_QUESTIONS = "data_questions"
+    LIPIDCRUNCHER_QUESTIONS = "lipidcruncher_questions"
 
 
 class ChatMessage(BaseModel):

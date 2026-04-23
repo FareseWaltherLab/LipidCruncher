@@ -85,6 +85,25 @@ def display_data_questions_chat(source_df) -> None:
     render_data_questions_chat(source_df)
 
 
+def display_lipidcruncher_questions_chat() -> None:
+    """Display the LipidCruncher Questions chat panel.
+
+    Answers questions about LipidCruncher features, methods,
+    analysis options, and terminology. No data access needed.
+    """
+    from app.workflows.ai_chat import AIChatWorkflow
+    from ._lipidcruncher_questions_ui import render_lc_questions_chat
+
+    # Initialize session if needed
+    if st.session_state.get('chat_lc_questions_session') is None:
+        st.session_state.chat_lc_questions_session = (
+            AIChatWorkflow.start_lc_questions_session()
+        )
+        st.session_state.chat_message_count = 0
+
+    render_lc_questions_chat()
+
+
 def display_unified_chat(source_df) -> None:
     """Display the unified AI Studio chat panel.
 
