@@ -28,8 +28,11 @@ def display_transform_chat(source_df) -> None:
 
     # Initialize session if needed
     if st.session_state.get('chat_transform_session') is None:
+        # Run format diagnostic first
+        diagnostic = AIChatWorkflow.diagnose_format(source_df)
+        st.session_state.chat_transform_diagnostic = diagnostic
         st.session_state.chat_transform_session = (
-            AIChatWorkflow.start_transform_session(source_df)
+            AIChatWorkflow.start_transform_session(source_df, diagnostic)
         )
         st.session_state.chat_message_count = 0
         st.session_state.chat_execution_count = 0

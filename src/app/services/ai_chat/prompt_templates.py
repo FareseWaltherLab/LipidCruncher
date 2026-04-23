@@ -3,6 +3,8 @@ System prompts and context builders for AI chat interactions.
 
 All functions return plain strings — no Streamlit, no side effects.
 """
+from typing import List, Optional
+
 from .knowledge_base import get_app_knowledge
 from .schema_extractor import SchemaExtractorService
 
@@ -128,6 +130,54 @@ def build_transform_context(source_schema: str, target_schema: str) -> str:
         f"## Source Data Schema\n{source_schema}\n\n"
         f"## Target Format\n{target_schema}"
     )
+
+
+def build_diagnostic_context(
+    lipid_name_column: Optional[str],
+    intensity_columns: List[str],
+    metadata_columns: List[str],
+) -> str:
+    """Build diagnostic context to include in the transform system prompt.
+
+    When the format is UNKNOWN, this gives the AI a head start on
+    understanding the data structure.
+
+    Args:
+        lipid_name_column: Detected lipid name column (or None).
+        intensity_columns: Detected numeric intensity columns.
+        metadata_columns: Detected metadata columns to remove.
+
+    Returns:
+        Context string describing the pre-analyzed column structure.
+    """
+    parts = ["## Pre-Analysis of Data Structure\n"]
+    parts.append(
+        "The system has already analyzed this data and identified the "
+        "following column roles. Use this as a starting point — the user "
+        "may correct or refine these assignments.\n"
+    )
+    if lipid_name_column:
+        parts.append(f"- **Lipid names column**: `{lipid_name_column}`")
+    else:
+        parts.append(
+            "- **Lipid names column**: not auto-detected — ask the user"
+        )
+    if intensity_columns:
+        cols_str = ", ".join(f"`{c}`" for c in intensity_columns[:10])
+        if len(intensity_columns) > 10:
+            cols_str += f" ... ({len(intensity_columns)} total)"
+        parts.append(f"- **Sample intensity columns**: {cols_str}")
+    if metadata_columns:
+        cols_str = ", ".join(f"`{c}`" for c in metadata_columns[:10])
+        if len(metadata_columns) > 10:
+            cols_str += f" ... ({len(metadata_columns)} total)"
+        parts.append(f"- **Metadata columns to remove**: {cols_str}")
+
+    parts.append(
+        "\nWhen generating transformation code, use these column "
+        "assignments unless the user specifies otherwise."
+    )
+    return "\n".join(parts)
 
 
 def lipidcruncher_questions_system_prompt() -> str:

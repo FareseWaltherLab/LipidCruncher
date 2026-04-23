@@ -94,6 +94,7 @@ def _clear_data_sessions() -> None:
     # Per-tab sessions
     st.session_state.chat_data_questions_session = None
     st.session_state.chat_transform_session = None
+    st.session_state.chat_transform_diagnostic = None
     st.session_state.chat_viz_session = None
     st.session_state.chat_questions_result_df = None
     st.session_state.chat_transform_result = None

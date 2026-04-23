@@ -31,6 +31,37 @@ from ..services.ai_chat.prompt_templates import (
 from ..services.ai_chat.sandbox import SandboxResult, SandboxService
 from ..services.ai_chat.schema_extractor import SchemaExtractorService
 from ..services.ai_chat.viz_generator import VizGeneratorService
+from ..services.format_detection import FormatDetectionService, DataFormat
+
+
+from typing import List
+
+
+@dataclass(frozen=True)
+class FormatDiagnosticResult:
+    """Result of format diagnostic on uploaded data.
+
+    Attributes:
+        detected_format: The detected DataFormat.
+        is_supported: True if data is already in a supported format.
+        message: User-facing diagnostic message.
+        lipid_name_column: Guessed lipid name column (if UNKNOWN format).
+        intensity_columns: Guessed intensity columns (if UNKNOWN format).
+        metadata_columns: Guessed metadata columns to remove (if UNKNOWN format).
+    """
+    detected_format: DataFormat
+    is_supported: bool
+    message: str
+    lipid_name_column: Optional[str] = None
+    intensity_columns: List[str] = None
+    metadata_columns: List[str] = None
+
+    def __post_init__(self):
+        # Default mutable fields
+        if self.intensity_columns is None:
+            object.__setattr__(self, 'intensity_columns', [])
+        if self.metadata_columns is None:
+            object.__setattr__(self, 'metadata_columns', [])
 
 
 @dataclass(frozen=True)
@@ -116,19 +147,146 @@ class AIChatWorkflow:
     """
 
     @staticmethod
-    def start_transform_session(source_df: pd.DataFrame) -> ChatSession:
+    def diagnose_format(df: pd.DataFrame) -> FormatDiagnosticResult:
+        """Run format diagnostic on uploaded data.
+
+        Checks whether data is already in a supported format. If not,
+        analyzes the schema to guess which columns are lipid names,
+        sample intensities, and metadata.
+
+        Args:
+            df: The user's uploaded DataFrame.
+
+        Returns:
+            FormatDiagnosticResult with detection outcome and column analysis.
+        """
+        detected = FormatDetectionService.detect_format(df)
+
+        if detected != DataFormat.UNKNOWN:
+            return FormatDiagnosticResult(
+                detected_format=detected,
+                is_supported=True,
+                message=(
+                    f"Your data is already in **{detected.value}** format. "
+                    f"No transformation needed — upload it directly to "
+                    f"LipidCruncher using the main pipeline."
+                ),
+            )
+
+        # UNKNOWN format — analyze columns
+        lipid_col = None
+        intensity_cols = []
+        metadata_cols = []
+
+        # Common metadata column name patterns
+        metadata_patterns = {
+            'score', 'grade', 'mass', 'mz', 'm/z', 'rt', 'retention',
+            'adduct', 'formula', 'inchi', 'smiles', 'comment', 'ontology',
+            'annotation', 'id', 'alignment', 'fill', 'assigned', 'spectrum',
+            'isotope', 'similarity', 'dot product', 'reference', 'modified',
+            'curation', 'fragment', 's/n', 'average rt', 'average mz',
+        }
+
+        for i, col in enumerate(df.columns):
+            col_lower = col.lower().strip()
+            series = df[col]
+
+            # First string column with letter content → likely lipid names
+            if lipid_col is None and series.dtype == object:
+                has_letters = series.astype(str).str.contains('[A-Za-z]').any()
+                if has_letters:
+                    lipid_col = col
+                    continue
+
+            # Check if column name matches metadata patterns
+            is_metadata = any(p in col_lower for p in metadata_patterns)
+            if is_metadata:
+                metadata_cols.append(col)
+                continue
+
+            # Non-numeric string columns → likely metadata
+            if series.dtype == object:
+                numeric_ratio = (
+                    pd.to_numeric(series, errors='coerce').notna().sum()
+                    / max(len(series), 1)
+                )
+                if numeric_ratio < 0.5:
+                    metadata_cols.append(col)
+                    continue
+
+            # Numeric columns → likely intensities
+            if pd.api.types.is_numeric_dtype(series):
+                intensity_cols.append(col)
+
+        # Build diagnostic message
+        parts = ["Your data doesn't match any supported format. "
+                 "Here's what I found:\n"]
+        if lipid_col:
+            parts.append(f"- **Lipid names column**: `{lipid_col}`")
+        else:
+            parts.append("- **Lipid names column**: could not determine "
+                         "— please tell me which column has lipid names")
+        parts.append(
+            f"- **Sample intensity columns** ({len(intensity_cols)}): "
+            + (", ".join(f"`{c}`" for c in intensity_cols[:8])
+               + (f" ... and {len(intensity_cols) - 8} more"
+                  if len(intensity_cols) > 8 else "")
+               if intensity_cols else "none detected")
+        )
+        if metadata_cols:
+            parts.append(
+                f"- **Metadata columns to remove** ({len(metadata_cols)}): "
+                + ", ".join(f"`{c}`" for c in metadata_cols[:8])
+                + (f" ... and {len(metadata_cols) - 8} more"
+                   if len(metadata_cols) > 8 else "")
+            )
+
+        parts.append("\nWould you like me to transform this data to "
+                     "Generic format? Let me know if you'd also like any "
+                     "filtering (e.g., remove rows where Score < 20).")
+
+        return FormatDiagnosticResult(
+            detected_format=detected,
+            is_supported=False,
+            message="\n".join(parts),
+            lipid_name_column=lipid_col,
+            intensity_columns=intensity_cols,
+            metadata_columns=metadata_cols,
+        )
+
+    @staticmethod
+    def start_transform_session(
+        source_df: pd.DataFrame,
+        diagnostic: Optional[FormatDiagnosticResult] = None,
+    ) -> ChatSession:
         """Initialize a new data transformation chat session.
 
         Pre-loads the DataFrame schema into the session context so
-        the AI has structural information without raw data.
+        the AI has structural information without raw data. If a
+        diagnostic is provided and the format is UNKNOWN, the
+        pre-analyzed column structure is appended to the schema.
 
         Args:
             source_df: The user's uploaded DataFrame.
+            diagnostic: Optional format diagnostic result.
 
         Returns:
             A new ChatSession in DATA_TRANSFORM mode with schema context.
         """
+        from ..services.ai_chat.prompt_templates import build_diagnostic_context
+
         schema = SchemaExtractorService.extract_schema(source_df)
+
+        # Append diagnostic context if format is unknown
+        if (diagnostic is not None
+                and not diagnostic.is_supported):
+            diag_context = build_diagnostic_context(
+                lipid_name_column=diagnostic.lipid_name_column,
+                intensity_columns=diagnostic.intensity_columns,
+                metadata_columns=diagnostic.metadata_columns,
+            )
+            schema = f"{schema}\n\n{diag_context}"
+
         return ChatSession(
             mode=ChatMode.DATA_TRANSFORM,
             schema_context=schema,

@@ -917,8 +917,8 @@ class TestSessionStateFieldCompleteness:
     def test_total_field_count(self):
         """Test total SessionState field count matches expected."""
         field_names = [f.name for f in fields(SessionState)]
-        # 83 (pre-AI chat) + 7 (chat_*) + 2 (chat_studio_*) = 92
-        assert len(field_names) == 92
+        # 83 (pre-AI chat) + 12 (chat_*) = 95
+        assert len(field_names) == 95
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""

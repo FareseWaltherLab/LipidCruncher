@@ -33,19 +33,25 @@ def render_transform_chat(source_df) -> None:
     """
     session = st.session_state.chat_transform_session
 
-    # Show introductory message if no messages yet
+    # Show introductory message with format diagnostic
     if len(session.messages) == 0:
-        with st.chat_message("assistant"):
-            st.markdown(
-                "I can help you transform your data into LipidCruncher's "
-                "Generic format. For example:\n\n"
-                "- *Transform my data to Generic format*\n"
-                "- *Filter out rows where Score < 20, then transform*\n"
-                "- *Remove the metadata columns and keep only lipid "
-                "names and sample intensities*\n"
-                "- *My lipid names are in column X, samples are columns Y-Z*\n"
-                "- *What columns need to be removed?*"
-            )
+        diagnostic = st.session_state.get('chat_transform_diagnostic')
+        if diagnostic and diagnostic.is_supported:
+            # Data is already in a supported format
+            with st.chat_message("assistant"):
+                st.markdown(diagnostic.message)
+        elif diagnostic and not diagnostic.is_supported:
+            # Unknown format — show analysis
+            with st.chat_message("assistant"):
+                st.markdown(diagnostic.message)
+        else:
+            # No diagnostic (shouldn't happen, but fallback)
+            with st.chat_message("assistant"):
+                st.markdown(
+                    "I can help you transform your data into LipidCruncher's "
+                    "Generic format. Tell me about your data or ask me to "
+                    "transform it."
+                )
 
     # Render existing messages
     _render_messages(session)
