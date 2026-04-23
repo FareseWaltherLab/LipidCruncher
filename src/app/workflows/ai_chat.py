@@ -65,6 +65,26 @@ class FormatDiagnosticResult:
 
 
 @dataclass(frozen=True)
+class Module1ValidationResult:
+    """Result of validating whether data has been through Module 1.
+
+    Attributes:
+        is_valid: True if data has Module 1 pipeline markers.
+        has_lipid_molec: True if LipidMolec column exists.
+        has_class_key: True if ClassKey column exists.
+        intensity_columns: List of intensity[sN] columns found.
+        concentration_columns: List of concentration[sN] columns found.
+        message: User-facing validation message.
+    """
+    is_valid: bool
+    has_lipid_molec: bool
+    has_class_key: bool
+    intensity_columns: List[str]
+    concentration_columns: List[str]
+    message: str
+
+
+@dataclass(frozen=True)
 class TransformStepResult:
     """Result of a single transform conversation turn.
 
@@ -393,6 +413,67 @@ class AIChatWorkflow:
     # ------------------------------------------------------------------
     # Visualization mode
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def validate_module1_output(df: pd.DataFrame) -> Module1ValidationResult:
+        """Check whether data has been processed through Module 1.
+
+        Module 1 output has: LipidMolec, ClassKey, and intensity[sN]
+        or concentration[sN] columns.
+
+        Args:
+            df: The DataFrame to validate.
+
+        Returns:
+            Module1ValidationResult with validation outcome.
+        """
+        cols = set(df.columns)
+        has_lipid_molec = 'LipidMolec' in cols
+        has_class_key = 'ClassKey' in cols
+        intensity_cols = [c for c in df.columns if c.startswith('intensity[')]
+        concentration_cols = [c for c in df.columns
+                             if c.startswith('concentration[')]
+
+        sample_cols = intensity_cols or concentration_cols
+        is_valid = has_lipid_molec and has_class_key and len(sample_cols) > 0
+
+        if is_valid:
+            col_type = "concentration" if concentration_cols else "intensity"
+            message = (
+                f"Data has been processed through Module 1: "
+                f"**{len(df)}** lipid species, "
+                f"**{len(sample_cols)}** {col_type} columns. "
+                f"Ready for custom visualizations."
+            )
+        else:
+            missing = []
+            if not has_lipid_molec:
+                missing.append("`LipidMolec` (standardized lipid names)")
+            if not has_class_key:
+                missing.append("`ClassKey` (lipid class)")
+            if not sample_cols:
+                missing.append(
+                    "`intensity[sN]` or `concentration[sN]` columns"
+                )
+            message = (
+                "Your data doesn't appear to have been processed through "
+                "LipidCruncher's Module 1 pipeline. Missing: "
+                + ", ".join(missing) + ".\n\n"
+                "For best results, run your data through the main pipeline "
+                "first (**Start Crunching** on the home page), then return "
+                "here for custom visualizations.\n\n"
+                "You can still try creating visualizations, but the AI may "
+                "not be able to use LipidCruncher-specific column names."
+            )
+
+        return Module1ValidationResult(
+            is_valid=is_valid,
+            has_lipid_molec=has_lipid_molec,
+            has_class_key=has_class_key,
+            intensity_columns=intensity_cols,
+            concentration_columns=concentration_cols,
+            message=message,
+        )
 
     @staticmethod
     def start_viz_session(

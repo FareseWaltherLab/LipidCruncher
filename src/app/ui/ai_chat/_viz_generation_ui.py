@@ -39,19 +39,27 @@ def render_viz_chat(analysis_df, experiment) -> None:
     """
     session = st.session_state.chat_viz_session
 
-    # Show introductory message if no messages yet
+    # Show introductory message with validation result
     if len(session.messages) == 0:
+        validation = st.session_state.get('chat_viz_validation')
         with st.chat_message("assistant"):
-            st.markdown(
-                "Describe the visualization you'd like and I'll generate it. "
-                "For example:\n\n"
-                "- *Create a bar chart of species count per class*\n"
-                "- *Show a box plot of concentrations across conditions*\n"
-                "- *Make a volcano plot for KO vs WT*\n"
-                "- *Heatmap of the top 20 most variable lipids*\n"
-                "- *Scatter plot of PC vs PE intensities with regression line*\n"
-                "- *Grouped bar chart comparing PC and PE across conditions*"
-            )
+            if validation and not validation.is_valid:
+                st.markdown(validation.message)
+            else:
+                if validation:
+                    st.markdown(validation.message + "\n\n")
+                st.markdown(
+                    "Describe the visualization you'd like and I'll "
+                    "generate it. For example:\n\n"
+                    "- *Create a bar chart of species count per class*\n"
+                    "- *Show a box plot of concentrations across conditions*\n"
+                    "- *Make a volcano plot for KO vs WT*\n"
+                    "- *Heatmap of the top 20 most variable lipids*\n"
+                    "- *Scatter plot of PC vs PE intensities with "
+                    "regression line*\n"
+                    "- *Grouped bar chart comparing PC and PE across "
+                    "conditions*"
+                )
 
     # Render existing messages
     _render_messages(session)

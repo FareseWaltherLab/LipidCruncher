@@ -96,6 +96,7 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_transform_session = None
     st.session_state.chat_transform_diagnostic = None
     st.session_state.chat_viz_session = None
+    st.session_state.chat_viz_validation = None
     st.session_state.chat_questions_result_df = None
     st.session_state.chat_transform_result = None
     st.session_state.chat_viz_figures = {}
