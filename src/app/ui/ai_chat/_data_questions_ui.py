@@ -34,13 +34,15 @@ def render_data_questions_chat(source_df) -> None:
 
     # Show introductory message if no messages yet
     if len(session.messages) == 0:
-        st.info(
-            "Ask questions about your data or about LipidCruncher. "
-            "For example:\n\n"
-            "*'How many lipid species are in this dataset?'*\n\n"
-            "*'What lipid classes are present?'*\n\n"
-            "*'What normalization methods does LipidCruncher offer?'*"
-        )
+        with st.chat_message("assistant"):
+            st.markdown(
+                "Ask questions about your uploaded dataset. For example:\n\n"
+                "- *How many lipid species are in this dataset?*\n"
+                "- *What lipid classes are present?*\n"
+                "- *Are there any missing values?*\n"
+                "- *Give me summary statistics for the sample columns*\n"
+                "- *What does the distribution of intensities look like?*"
+            )
 
     # Render existing messages
     _render_messages(session)

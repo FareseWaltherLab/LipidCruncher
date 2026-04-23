@@ -50,17 +50,18 @@ def render_unified_chat(source_df) -> None:
 
     # Show introductory message if no messages yet
     if len(session.messages) == 0:
-        st.info(
-            "I can help you with:\n\n"
-            "- **Data questions** — describe your dataset, compute summaries, "
-            "explore lipid classes and species\n"
-            "- **LipidCruncher questions** — explain features, normalization "
-            "methods, statistical tests, and analysis options\n"
-            "- **Data transformation** — convert your data into LipidCruncher "
-            "Generic format\n"
-            "- **Custom visualizations** — create plots from your processed data\n\n"
-            "Ask me anything about your lipidomic data!"
-        )
+        with st.chat_message("assistant"):
+            st.markdown(
+                "I can help you with:\n\n"
+                "- **Data questions** — describe your dataset, compute summaries, "
+                "explore lipid classes and species\n"
+                "- **LipidCruncher questions** — explain features, normalization "
+                "methods, statistical tests, and analysis options\n"
+                "- **Data transformation** — convert your data into LipidCruncher "
+                "Generic format\n"
+                "- **Custom visualizations** — create plots from your processed data\n\n"
+                "Ask me anything about your lipidomic data!"
+            )
 
     # Render existing messages
     _render_messages(session)

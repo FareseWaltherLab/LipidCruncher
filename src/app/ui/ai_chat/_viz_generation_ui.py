@@ -41,11 +41,17 @@ def render_viz_chat(analysis_df, experiment) -> None:
 
     # Show introductory message if no messages yet
     if len(session.messages) == 0:
-        st.info(
-            "Describe the visualization you'd like and I'll generate it. "
-            "For example:\n\n"
-            "*'Create a grouped bar chart comparing PC and PE intensities across conditions.'*"
-        )
+        with st.chat_message("assistant"):
+            st.markdown(
+                "Describe the visualization you'd like and I'll generate it. "
+                "For example:\n\n"
+                "- *Create a bar chart of species count per class*\n"
+                "- *Show a box plot of concentrations across conditions*\n"
+                "- *Make a volcano plot for KO vs WT*\n"
+                "- *Heatmap of the top 20 most variable lipids*\n"
+                "- *Scatter plot of PC vs PE intensities with regression line*\n"
+                "- *Grouped bar chart comparing PC and PE across conditions*"
+            )
 
     # Render existing messages
     _render_messages(session)

@@ -28,13 +28,16 @@ def render_lc_questions_chat() -> None:
 
     # Show introductory message if no messages yet
     if len(session.messages) == 0:
-        st.info(
-            "Ask me anything about LipidCruncher — features, methods, "
-            "analysis options, and more. For example:\n\n"
-            "*'What normalization methods are available?'*\n\n"
-            "*'How does LipidCruncher handle missing values?'*\n\n"
-            "*'What statistical tests can I use for 3 conditions?'*"
-        )
+        with st.chat_message("assistant"):
+            st.markdown(
+                "Ask me anything about LipidCruncher — features, methods, "
+                "analysis options, and more. For example:\n\n"
+                "- *What normalization methods are available?*\n"
+                "- *How does LipidCruncher handle missing values?*\n"
+                "- *What statistical tests can I use for 3 conditions?*\n"
+                "- *What is the Generic format?*\n"
+                "- *What lipid nomenclature does LipidCruncher use?*"
+            )
 
     # Render existing messages
     _render_messages(session)
