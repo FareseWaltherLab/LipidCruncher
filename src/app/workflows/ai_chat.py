@@ -529,23 +529,34 @@ class AIChatWorkflow:
                 figure = sandbox_result.figure
                 result_df = sandbox_result.result_df
 
+                # Build the text response
+                parts = []
+                if explanation.strip():
+                    parts.append(explanation)
+
                 if result_df is not None:
                     is_transformation = _looks_like_generic_format(result_df)
                     if is_transformation:
-                        assistant_text = (
-                            f"{explanation}\n\n"
+                        parts.append(
                             f"The transformation was successful! "
                             f"The result has {len(result_df)} rows and "
                             f"{len(result_df.columns)} columns. "
                             f"You can download the transformed file below."
                         )
-                    else:
-                        assistant_text = explanation
-                else:
-                    assistant_text = explanation
+
+                # Include captured print output (e.g., statistics, summaries)
+                if sandbox_result.stdout.strip():
+                    parts.append(sandbox_result.stdout.strip())
+
+                if figure is not None and not parts:
+                    parts.append("Here's the visualization you requested.")
+
+                assistant_text = "\n\n".join(parts) if parts else "Done."
             else:
                 assistant_text = (
                     f"{explanation}\n\n"
+                    f"I encountered an error: {sandbox_result.error_message}"
+                ) if explanation.strip() else (
                     f"I encountered an error: {sandbox_result.error_message}"
                 )
         else:
