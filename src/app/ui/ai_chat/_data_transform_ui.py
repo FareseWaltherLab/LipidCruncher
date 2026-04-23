@@ -14,6 +14,13 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 MAX_MESSAGES = 50
 MAX_EXECUTIONS = 20
 
+# Example prompts for this tab
+_EXAMPLE_PROMPTS = [
+    "Transform my data to Generic format",
+    "What columns need to be removed?",
+    "Filter rows where Score < 20, then transform",
+]
+
 
 def _render_messages(session) -> None:
     """Render all chat messages in the session."""
@@ -41,9 +48,20 @@ def render_transform_chat(source_df) -> None:
             with st.chat_message("assistant"):
                 st.markdown(diagnostic.message)
         elif diagnostic and not diagnostic.is_supported:
-            # Unknown format — show analysis
+            # Unknown format — show analysis + example prompts
             with st.chat_message("assistant"):
                 st.markdown(diagnostic.message)
+            # Clickable example prompts
+            cols = st.columns(len(_EXAMPLE_PROMPTS))
+            for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+                with cols[i]:
+                    if st.button(
+                        prompt,
+                        key=f"tf_example_{i}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.chat_pending_prompt = prompt
+                        st.rerun()
         else:
             # No diagnostic (shouldn't happen, but fallback)
             with st.chat_message("assistant"):
@@ -93,11 +111,13 @@ def render_transform_chat(source_df) -> None:
             st.rerun()
         return
 
-    # Chat input
-    user_input = st.chat_input(
-        "Ask about your data or request a transformation...",
-        key="chat_input_transform",
-    )
+    # Chat input (check for pending example prompt first)
+    user_input = st.session_state.pop('chat_pending_prompt', None)
+    if user_input is None:
+        user_input = st.chat_input(
+            "Ask about your data or request a transformation...",
+            key="chat_input_transform",
+        )
 
     if user_input:
         # Show user message immediately

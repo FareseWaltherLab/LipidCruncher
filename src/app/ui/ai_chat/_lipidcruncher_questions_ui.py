@@ -14,6 +14,15 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
 
+# Example prompts for this tab
+_EXAMPLE_PROMPTS = [
+    "What normalization methods are available?",
+    "How does LipidCruncher handle missing values?",
+    "What statistical tests can I use for 3 conditions?",
+    "What is the Generic format?",
+    "What lipid nomenclature does LipidCruncher use?",
+]
+
 
 def _render_messages(session) -> None:
     """Render all chat messages in the session."""
@@ -26,18 +35,24 @@ def render_lc_questions_chat() -> None:
     """Render the LipidCruncher questions chat interface."""
     session = st.session_state.chat_lc_questions_session
 
-    # Show introductory message if no messages yet
+    # Show introductory message and example prompts if no messages yet
     if len(session.messages) == 0:
         with st.chat_message("assistant"):
             st.markdown(
                 "Ask me anything about LipidCruncher — features, methods, "
-                "analysis options, and more. For example:\n\n"
-                "- *What normalization methods are available?*\n"
-                "- *How does LipidCruncher handle missing values?*\n"
-                "- *What statistical tests can I use for 3 conditions?*\n"
-                "- *What is the Generic format?*\n"
-                "- *What lipid nomenclature does LipidCruncher use?*"
+                "analysis options, and more."
             )
+        # Clickable example prompts
+        cols = st.columns(len(_EXAMPLE_PROMPTS))
+        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+            with cols[i]:
+                if st.button(
+                    prompt,
+                    key=f"lc_example_{i}",
+                    use_container_width=True,
+                ):
+                    st.session_state.chat_pending_prompt = prompt
+                    st.rerun()
 
     # Render existing messages
     _render_messages(session)
@@ -52,11 +67,13 @@ def render_lc_questions_chat() -> None:
             st.rerun()
         return
 
-    # Chat input
-    user_input = st.chat_input(
-        "Ask about LipidCruncher features, methods, or analysis options...",
-        key="chat_input_lc_questions",
-    )
+    # Chat input (check for pending example prompt first)
+    user_input = st.session_state.pop('chat_pending_prompt', None)
+    if user_input is None:
+        user_input = st.chat_input(
+            "Ask about LipidCruncher features, methods, or analysis options...",
+            key="chat_input_lc_questions",
+        )
 
     if user_input:
         # Show user message immediately

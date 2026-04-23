@@ -13,6 +13,14 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 MAX_MESSAGES = 50
 MAX_EXECUTIONS = 20
 
+# Example prompts for this tab
+_EXAMPLE_PROMPTS = [
+    "Bar chart of species per class",
+    "Box plot across conditions",
+    "Volcano plot KO vs WT",
+    "Heatmap of top 20 lipids",
+]
+
 
 def _render_messages(session) -> None:
     """Render all chat messages with inline figures."""
@@ -50,16 +58,19 @@ def render_viz_chat(analysis_df, experiment) -> None:
                     st.markdown(validation.message + "\n\n")
                 st.markdown(
                     "Describe the visualization you'd like and I'll "
-                    "generate it. For example:\n\n"
-                    "- *Create a bar chart of species count per class*\n"
-                    "- *Show a box plot of concentrations across conditions*\n"
-                    "- *Make a volcano plot for KO vs WT*\n"
-                    "- *Heatmap of the top 20 most variable lipids*\n"
-                    "- *Scatter plot of PC vs PE intensities with "
-                    "regression line*\n"
-                    "- *Grouped bar chart comparing PC and PE across "
-                    "conditions*"
+                    "generate it."
                 )
+        # Clickable example prompts
+        cols = st.columns(len(_EXAMPLE_PROMPTS))
+        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+            with cols[i]:
+                if st.button(
+                    prompt,
+                    key=f"viz_example_{i}",
+                    use_container_width=True,
+                ):
+                    st.session_state.chat_pending_prompt = prompt
+                    st.rerun()
 
     # Render existing messages
     _render_messages(session)
@@ -78,11 +89,13 @@ def render_viz_chat(analysis_df, experiment) -> None:
             st.rerun()
         return
 
-    # Chat input
-    user_input = st.chat_input(
-        "Describe the visualization you want...",
-        key="chat_input_viz",
-    )
+    # Chat input (check for pending example prompt first)
+    user_input = st.session_state.pop('chat_pending_prompt', None)
+    if user_input is None:
+        user_input = st.chat_input(
+            "Describe the visualization you want...",
+            key="chat_input_viz",
+        )
 
     if user_input:
         # Show user message immediately

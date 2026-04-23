@@ -3,7 +3,7 @@ Data Questions mode UI for the AI chat.
 
 Renders the chat conversation for asking ad-hoc questions about the
 user's data: describing the dataset, computing summaries, counting
-species, explaining LipidCruncher features, etc.
+species, etc.
 """
 import streamlit as st
 
@@ -12,6 +12,14 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
 MAX_EXECUTIONS = 20
+
+# Example prompts for this tab
+_EXAMPLE_PROMPTS = [
+    "Describe my dataset",
+    "How many species per class?",
+    "Are there missing values?",
+    "Summary statistics",
+]
 
 
 def _render_messages(session) -> None:
@@ -32,17 +40,24 @@ def render_data_questions_chat(source_df) -> None:
     """
     session = st.session_state.chat_data_questions_session
 
-    # Show introductory message if no messages yet
+    # Show introductory message and example prompts if no messages yet
     if len(session.messages) == 0:
         with st.chat_message("assistant"):
             st.markdown(
-                "Ask questions about your uploaded dataset. For example:\n\n"
-                "- *How many lipid species are in this dataset?*\n"
-                "- *What lipid classes are present?*\n"
-                "- *Are there any missing values?*\n"
-                "- *Give me summary statistics for the sample columns*\n"
-                "- *What does the distribution of intensities look like?*"
+                "Ask questions about your uploaded dataset — summaries, "
+                "counts, missing values, and more."
             )
+        # Clickable example prompts
+        cols = st.columns(len(_EXAMPLE_PROMPTS))
+        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+            with cols[i]:
+                if st.button(
+                    prompt,
+                    key=f"dq_example_{i}",
+                    use_container_width=True,
+                ):
+                    st.session_state.chat_pending_prompt = prompt
+                    st.rerun()
 
     # Render existing messages
     _render_messages(session)
@@ -70,11 +85,13 @@ def render_data_questions_chat(source_df) -> None:
             st.rerun()
         return
 
-    # Chat input
-    user_input = st.chat_input(
-        "Ask a question about your data...",
-        key="chat_input_questions",
-    )
+    # Chat input (check for pending example prompt first)
+    user_input = st.session_state.pop('chat_pending_prompt', None)
+    if user_input is None:
+        user_input = st.chat_input(
+            "Ask a question about your data...",
+            key="chat_input_questions",
+        )
 
     if user_input:
         # Show user message immediately
