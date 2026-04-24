@@ -15,10 +15,10 @@ MAX_EXECUTIONS = 20
 
 # Example prompts for this tab
 _EXAMPLE_PROMPTS = [
-    "Bar chart of species per class",
-    "Box plot across conditions",
-    "Volcano plot KO vs WT",
-    "Heatmap of top 20 lipids",
+    "Species count per class",
+    "Top 15 most abundant lipids",
+    "CV distribution across lipids",
+    "Log2 ratio KO/WT per class",
 ]
 
 

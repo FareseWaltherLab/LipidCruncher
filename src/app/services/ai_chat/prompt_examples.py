@@ -220,12 +220,19 @@ print(f"Found {len(classes)} lipid classes: {', '.join(sorted(classes))}")
 
 
 def get_viz_examples() -> str:
-    """Few-shot examples for the Custom Visualization tab."""
+    """Few-shot examples for the Custom Visualization tab.
+
+    NOTE: LipidCruncher Module 3 already provides bar charts (class-level
+    mean ± std), pie charts (class composition), saturation profiles,
+    chain length analysis, FACH, pathway diagrams, volcano plots, and
+    clustered heatmaps. Examples here focus on custom analyses that
+    the built-in pipeline does NOT offer.
+    """
     return """\
 ## Few-Shot Examples
 
-### Example 1: Bar chart of species count per class
-User: "Show me a bar chart of the number of species per class"
+### Example 1: Species count per class
+User: "Plot the total number of species in each lipid class"
 ```python
 species_counts = df.groupby('ClassKey').size().reset_index(name='Count')
 species_counts = species_counts.sort_values('Count', ascending=False)
@@ -235,51 +242,21 @@ fig = px.bar(species_counts, x='ClassKey', y='Count',
 fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Species Count')
 ```
 
-### Example 2: Box plot across conditions
-User: "Box plot of concentrations for PC class across conditions"
+### Example 2: Top N most abundant individual lipids
+User: "Bar chart of the top 15 most abundant lipids by mean concentration"
 ```python
-conc_cols = [c for c in df.columns if c.startswith('concentration[')]
-pc_data = df[df['ClassKey'] == 'PC']
-melted = pc_data.melt(id_vars=['LipidMolec'], value_vars=conc_cols,
-                       var_name='Sample', value_name='Concentration')
-fig = px.box(melted, x='Sample', y='Concentration',
-             title='PC Concentration Distribution per Sample',
+conc_cols = [c for c in df.columns if c.startswith('concentration[') or c.startswith('intensity[')]
+df_plot = df.copy()
+df_plot['_mean'] = df_plot[conc_cols].mean(axis=1)
+top15 = df_plot.nlargest(15, '_mean')
+fig = px.bar(top15, x='LipidMolec', y='_mean',
+             title='Top 15 Most Abundant Lipids',
              color_discrete_sequence=['#1f77b4'])
-fig.update_layout(xaxis_title='Sample', yaxis_title='Concentration')
+fig.update_layout(xaxis_title='Lipid', yaxis_title='Mean Concentration',
+                  xaxis_tickangle=-45)
 ```
 
-### Example 3: Grouped bar chart comparing classes across conditions
-User: "Grouped bar chart of mean intensity for each class, grouped by condition"
-```python
-# Assumes conditions mapped to sample columns
-condition_map = {}
-for cond, samples in zip({conditions}, {sample_lists}):
-    for s in samples:
-        condition_map[f'intensity[{{s}}]'] = cond
-
-intensity_cols = [c for c in df.columns if c.startswith('intensity[')]
-rows = []
-for _, row in df.iterrows():
-    for col in intensity_cols:
-        rows.append({{'ClassKey': row['ClassKey'], 'Condition': condition_map.get(col, col),
-                     'Intensity': row[col]}})
-plot_df = pd.DataFrame(rows)
-means = plot_df.groupby(['ClassKey', 'Condition'])['Intensity'].mean().reset_index()
-fig = px.bar(means, x='ClassKey', y='Intensity', color='Condition', barmode='group',
-             title='Mean Intensity per Class by Condition',
-             color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
-```
-
-### Example 4: Pie chart of class composition
-User: "Pie chart of the lipid class composition"
-```python
-class_counts = df['ClassKey'].value_counts().reset_index()
-class_counts.columns = ['ClassKey', 'Count']
-fig = px.pie(class_counts, values='Count', names='ClassKey',
-             title='Lipid Class Composition')
-```
-
-### Example 5: Scatter plot with regression line
+### Example 3: Scatter plot comparing two samples
 User: "Scatter plot of intensity[s1] vs intensity[s2] with a trend line"
 ```python
 fig = px.scatter(df, x='intensity[s1]', y='intensity[s2]',
@@ -289,55 +266,79 @@ fig = px.scatter(df, x='intensity[s1]', y='intensity[s2]',
 fig.update_layout(xaxis_title='Intensity (s1)', yaxis_title='Intensity (s2)')
 ```
 
-### Example 6: Volcano plot
-User: "Volcano plot comparing KO vs WT"
+### Example 4: Distribution of intensities per class (violin)
+User: "Violin plot showing the distribution of intensities for each lipid class"
 ```python
-from scipy import stats
-ko_cols = [c for c in df.columns if 'KO' in c or c in ['intensity[s1]', 'intensity[s2]']]
-wt_cols = [c for c in df.columns if 'WT' in c or c in ['intensity[s3]', 'intensity[s4]']]
-# Calculate fold change and p-value per lipid
-results = []
-for _, row in df.iterrows():
-    ko_vals = [row[c] for c in ko_cols if pd.notna(row[c])]
-    wt_vals = [row[c] for c in wt_cols if pd.notna(row[c])]
-    if len(ko_vals) >= 2 and len(wt_vals) >= 2:
-        fc = np.log2(np.mean(ko_vals) / np.mean(wt_vals)) if np.mean(wt_vals) > 0 else 0
-        _, pval = stats.ttest_ind(ko_vals, wt_vals)
-        results.append({{'Lipid': row['LipidMolec'], 'log2FC': fc, '-log10p': -np.log10(pval)}})
-plot_df = pd.DataFrame(results)
-fig = px.scatter(plot_df, x='log2FC', y='-log10p', hover_name='Lipid',
-                 title='Volcano Plot: KO vs WT')
-fig.add_hline(y=-np.log10(0.05), line_dash='dash', line_color='red')
-fig.add_vline(x=-1, line_dash='dash', line_color='gray')
-fig.add_vline(x=1, line_dash='dash', line_color='gray')
-```
-
-### Example 7: Heatmap of top variable lipids
-User: "Heatmap of the top 20 most variable lipids"
-```python
-intensity_cols = [c for c in df.columns if c.startswith('intensity[') or c.startswith('concentration[')]
-df['_cv'] = df[intensity_cols].std(axis=1) / df[intensity_cols].mean(axis=1)
-top20 = df.nlargest(20, '_cv')
-heat_data = top20.set_index('LipidMolec')[intensity_cols]
-fig = px.imshow(heat_data, aspect='auto',
-                title='Top 20 Most Variable Lipids',
-                color_continuous_scale='RdBu_r')
-fig.update_layout(xaxis_title='Sample', yaxis_title='Lipid')
-```
-
-### Example 8: Violin plot per condition
-User: "Violin plot of total intensity per condition"
-```python
-intensity_cols = [c for c in df.columns if c.startswith('intensity[')]
-totals = df[intensity_cols].sum()
-# Build condition mapping from experiment context
-rows = []
-for col in intensity_cols:
-    rows.append({{'Sample': col, 'Total Intensity': totals[col]}})
-plot_df = pd.DataFrame(rows)
-fig = px.violin(plot_df, y='Total Intensity', box=True, points='all',
-                title='Total Intensity Distribution per Sample',
+conc_cols = [c for c in df.columns if c.startswith('concentration[') or c.startswith('intensity[')]
+df_plot = df.copy()
+df_plot['_mean'] = df_plot[conc_cols].mean(axis=1)
+fig = px.violin(df_plot, x='ClassKey', y='_mean', box=True, points='outliers',
+                title='Intensity Distribution per Lipid Class',
                 color_discrete_sequence=['#1f77b4'])
+fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Mean Intensity')
+```
+
+### Example 5: Stacked bar of species composition across conditions
+User: "Stacked bar chart showing how many species each class contributes, split by condition"
+```python
+# Count species per class (one bar, stacked by class)
+species_counts = df['ClassKey'].value_counts().reset_index()
+species_counts.columns = ['ClassKey', 'Count']
+species_counts = species_counts.sort_values('Count', ascending=False)
+fig = px.bar(species_counts, x='ClassKey', y='Count',
+             title='Species Count per Class',
+             color='ClassKey')
+fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Number of Species',
+                  showlegend=False)
+```
+
+### Example 6: Ratio plot between two conditions
+User: "Plot the log2 ratio of KO/WT mean intensity for each lipid class"
+```python
+# Adapt column names to your experiment
+ko_cols = [c for c in df.columns if c.startswith('intensity[s1') or c.startswith('intensity[s2')]
+wt_cols = [c for c in df.columns if c.startswith('intensity[s3') or c.startswith('intensity[s4')]
+df_plot = df.copy()
+df_plot['KO_mean'] = df_plot[ko_cols].mean(axis=1)
+df_plot['WT_mean'] = df_plot[wt_cols].mean(axis=1)
+class_ratio = df_plot.groupby('ClassKey')[['KO_mean', 'WT_mean']].mean()
+class_ratio['log2_ratio'] = np.log2(class_ratio['KO_mean'] / class_ratio['WT_mean'])
+class_ratio = class_ratio.reset_index().sort_values('log2_ratio')
+fig = px.bar(class_ratio, x='ClassKey', y='log2_ratio',
+             title='Log2 Fold Change (KO/WT) per Lipid Class',
+             color='log2_ratio', color_continuous_scale='RdBu_r',
+             color_continuous_midpoint=0)
+fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Log2(KO/WT)')
+```
+
+### Example 7: Coefficient of variation across samples
+User: "Plot the CV for each lipid across all samples"
+```python
+conc_cols = [c for c in df.columns if c.startswith('concentration[') or c.startswith('intensity[')]
+df_plot = df.copy()
+df_plot['CV'] = df_plot[conc_cols].std(axis=1) / df_plot[conc_cols].mean(axis=1) * 100
+df_plot = df_plot.sort_values('CV', ascending=False)
+fig = px.histogram(df_plot, x='CV', nbins=50,
+                   title='Distribution of Coefficient of Variation Across Lipids',
+                   color_discrete_sequence=['#1f77b4'])
+fig.update_layout(xaxis_title='CV (%)', yaxis_title='Number of Lipids')
+```
+
+### Example 8: Class-level intensity comparison (dot plot)
+User: "Dot plot comparing mean intensity of each class between two conditions"
+```python
+ko_cols = [c for c in df.columns if c.startswith('intensity[s1') or c.startswith('intensity[s2')]
+wt_cols = [c for c in df.columns if c.startswith('intensity[s3') or c.startswith('intensity[s4')]
+df_plot = df.copy()
+df_plot['KO'] = df_plot[ko_cols].mean(axis=1)
+df_plot['WT'] = df_plot[wt_cols].mean(axis=1)
+class_means = df_plot.groupby('ClassKey')[['KO', 'WT']].mean().reset_index()
+melted = class_means.melt(id_vars='ClassKey', var_name='Condition', value_name='Mean Intensity')
+fig = px.scatter(melted, x='ClassKey', y='Mean Intensity', color='Condition',
+                 title='Class-Level Intensity: KO vs WT',
+                 color_discrete_sequence=['#1f77b4', '#ff7f0e'])
+fig.update_traces(marker_size=12)
+fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Mean Intensity')
 ```
 """
 
