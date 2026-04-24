@@ -351,9 +351,11 @@ def get_lc_questions_examples() -> str:
 ### Example 1: Normalization methods
 User: "What normalization methods does LipidCruncher support?"
 Answer: "LipidCruncher offers 5 normalization options: (1) None — use raw intensities, \
-(2) Internal standard — normalize each class by its internal standard, \
-(3) Protein — divide by protein concentration, (4) Both — internal standard then protein, \
-(5) Total intensity — normalize by total signal per sample."
+(2) Internal standard — normalize each lipid class by a user-assigned internal standard \
+(you map each class to a standard; classes without their own standard can use one from \
+a structurally similar class, e.g., PS can use a PE standard), \
+(3) Protein — divide by protein concentration (BCA assay), (4) Both — internal standard \
+then protein, (5) Total intensity — normalize by total signal per sample."
 
 ### Example 2: Statistical testing
 User: "What statistical test should I use for comparing 3 conditions?"
@@ -375,10 +377,12 @@ pathway, volcano plots, heatmaps)."
 
 ### Example 5: Internal standards
 User: "How does internal standard normalization work?"
-Answer: "LipidCruncher detects internal standards via regex patterns in lipid names \
-(e.g., names containing 'IS' or 'd7'). Each lipid species is normalized by dividing \
-its intensity by the internal standard intensity from the same lipid class. If a class \
-has no IS, the species are left unnormalized."
+Answer: "LipidCruncher auto-detects internal standards in your data via regex patterns \
+(e.g., lipid names containing 'IS' or 'd7'). You then map each lipid class to a standard — \
+this mapping is flexible, so if you don't have a standard for a particular class (e.g., PS), \
+you can assign a structurally similar one (e.g., a PE standard). Each species is normalized \
+by: (intensity / IS_intensity) * IS_concentration. Every class must have a mapping — \
+LipidCruncher will raise an error if any class is unmapped."
 
 ### Example 6: Supported formats
 User: "What data formats can I upload?"
