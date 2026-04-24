@@ -49,7 +49,7 @@ def render_lc_questions_chat() -> None:
                 if st.button(
                     prompt,
                     key=f"lc_example_{i}",
-                    use_container_width=True,
+                    width='stretch',
                 ):
                     st.session_state.chat_pending_prompt = prompt
                     st.rerun()

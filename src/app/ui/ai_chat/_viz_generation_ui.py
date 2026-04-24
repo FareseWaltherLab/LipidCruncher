@@ -35,7 +35,7 @@ def _render_messages(session) -> None:
         fig_key = f"chat_viz_fig_{i}"
         fig = st.session_state.get('chat_viz_figures', {}).get(fig_key)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
 
 def render_viz_chat(analysis_df, experiment) -> None:
@@ -64,7 +64,7 @@ def render_viz_chat(analysis_df, experiment) -> None:
                 if st.button(
                     prompt,
                     key=f"viz_example_{i}",
-                    use_container_width=True,
+                    width='stretch',
                 ):
                     st.session_state.chat_pending_prompt = prompt
                     st.rerun()

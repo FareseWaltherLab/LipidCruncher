@@ -58,7 +58,7 @@ def render_transform_chat(source_df) -> None:
                     if st.button(
                         prompt,
                         key=f"tf_example_{i}",
-                        use_container_width=True,
+                        width='stretch',
                     ):
                         st.session_state.chat_pending_prompt = prompt
                         st.rerun()
@@ -78,7 +78,7 @@ def render_transform_chat(source_df) -> None:
     transform_result_df = st.session_state.get('chat_transform_result')
     if transform_result_df is not None:
         with st.expander("Preview transformed data", expanded=True):
-            st.dataframe(transform_result_df.head(10), use_container_width=True)
+            st.dataframe(transform_result_df.head(10), width='stretch')
             st.caption(
                 f"{len(transform_result_df)} rows, "
                 f"{len(transform_result_df.columns)} columns"

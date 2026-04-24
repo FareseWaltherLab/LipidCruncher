@@ -23,13 +23,13 @@ def _render_messages(session) -> None:
         fig_key = f"chat_fig_{i}"
         fig = st.session_state.get('chat_viz_figures', {}).get(fig_key)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
         # Check for stored result table (with download)
         table_key = f"chat_table_{i}"
         table = st.session_state.get('chat_result_tables', {}).get(table_key)
         if table is not None:
-            st.dataframe(table, use_container_width=True)
+            st.dataframe(table, width='stretch')
             csv_data = table.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label="Download as CSV",

@@ -54,7 +54,7 @@ def render_data_questions_chat(source_df) -> None:
                 if st.button(
                     prompt,
                     key=f"dq_example_{i}",
-                    use_container_width=True,
+                    width='stretch',
                 ):
                     st.session_state.chat_pending_prompt = prompt
                     st.rerun()
@@ -66,7 +66,7 @@ def render_data_questions_chat(source_df) -> None:
     result_df = st.session_state.get('chat_questions_result_df')
     if result_df is not None:
         with st.expander("Result Table", expanded=True):
-            st.dataframe(result_df, use_container_width=True)
+            st.dataframe(result_df, width='stretch')
             st.caption(
                 f"{len(result_df)} rows, {len(result_df.columns)} columns"
             )

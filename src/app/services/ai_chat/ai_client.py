@@ -15,7 +15,7 @@ from .exceptions import AIClientError
 logger = logging.getLogger(__name__)
 
 # Default cap on tool-use round-trips per user message
-_DEFAULT_MAX_TOOL_ITERATIONS = 5
+_DEFAULT_MAX_TOOL_ITERATIONS = 10
 
 
 class AIClientService:
@@ -82,6 +82,8 @@ class AIClientService:
                 system=system_prompt,
                 messages=messages,
             )
+            if not response.content:
+                return ""
             return response.content[0].text
         except AIClientError:
             raise
@@ -307,10 +309,21 @@ class AIClientService:
                 "content": tool_results,
             })
 
-        # If we exhausted iterations, make one final call without tools
-        # to force a text response
+        # If we exhausted iterations, make one final call with tools still
+        # present (required because the conversation contains tool_result
+        # messages) but ask the model to stop using them.
         logger.warning(
             "Tool loop reached %d iterations — forcing final response",
             max_iterations,
         )
-        return AIClientService.send_message(loop_messages, system_prompt, config)
+        loop_messages.append({
+            "role": "user",
+            "content": (
+                "Please provide your final answer now based on what you've "
+                "found so far. Do not make any more tool calls."
+            ),
+        })
+        response = AIClientService.send_message_with_tools(
+            loop_messages, system_prompt, config, tools,
+        )
+        return AIClientService.extract_text_from_response(response)

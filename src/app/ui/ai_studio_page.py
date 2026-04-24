@@ -188,7 +188,7 @@ def display_ai_studio_page() -> None:
         # Show data preview if loaded
         if studio_df is not None:
             with st.expander("Data Preview", expanded=False):
-                st.dataframe(studio_df.head(10), use_container_width=True)
+                st.dataframe(studio_df.head(10), width='stretch')
                 st.caption(
                     f"{len(studio_df)} rows, {len(studio_df.columns)} columns"
                 )
