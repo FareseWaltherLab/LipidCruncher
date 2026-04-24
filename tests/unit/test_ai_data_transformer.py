@@ -160,3 +160,84 @@ class TestExecuteTransformation:
         code = "import os\nresult_df = df"
         result = DataTransformerService.execute_transformation(code, source_df)
         assert result.success is False
+
+
+# ---------------------------------------------------------------------------
+# Metadata Detection
+# ---------------------------------------------------------------------------
+
+class TestDetectMetadataColumns:
+
+    def test_clean_generic_no_metadata(self, valid_generic_df):
+        result = DataTransformerService.detect_metadata_columns(valid_generic_df)
+        assert result == []
+
+    def test_detects_score_column(self):
+        df = pd.DataFrame({
+            "Lipid": ["PC 34:1"],
+            "Score": [95.0],
+            "Sample1": [100.0],
+        })
+        result = DataTransformerService.detect_metadata_columns(df)
+        assert "Score" in result
+
+    def test_detects_mass_and_rt(self):
+        df = pd.DataFrame({
+            "Lipid": ["PC 34:1"],
+            "CalcMass": [758.5],
+            "RetentionTime": [10.1],
+            "Sample1": [100.0],
+        })
+        result = DataTransformerService.detect_metadata_columns(df)
+        assert "CalcMass" in result
+        assert "RetentionTime" in result
+
+    def test_ignores_first_column(self):
+        """First column (lipid names) should never be flagged."""
+        df = pd.DataFrame({
+            "class_name": ["PC 34:1"],
+            "Sample1": [100.0],
+        })
+        result = DataTransformerService.detect_metadata_columns(df)
+        assert "class_name" not in result
+
+    def test_detects_case_insensitive(self):
+        df = pd.DataFrame({
+            "Lipid": ["PC 34:1"],
+            "TOTAL_SCORE": [95.0],
+            "sample1": [100.0],
+        })
+        result = DataTransformerService.detect_metadata_columns(df)
+        assert "TOTAL_SCORE" in result
+
+
+# ---------------------------------------------------------------------------
+# Validation Summary
+# ---------------------------------------------------------------------------
+
+class TestBuildValidationSummary:
+
+    def test_clean_generic_summary(self, valid_generic_df):
+        summary = DataTransformerService.build_validation_summary(valid_generic_df)
+        assert "3 lipid species" in summary
+        assert "2 sample columns" in summary
+        assert "no metadata detected" in summary
+
+    def test_summary_flags_metadata(self):
+        df = pd.DataFrame({
+            "Lipid": ["PC 34:1", "PE 36:2"],
+            "Score": [95, 88],
+            "Sample1": [100.0, 200.0],
+        })
+        summary = DataTransformerService.build_validation_summary(df)
+        assert "2 lipid species" in summary
+        assert "metadata" in summary.lower()
+        assert "Score" in summary
+
+    def test_summary_warns_non_lipid_first_column(self):
+        df = pd.DataFrame({
+            "ID": [1, 2, 3],
+            "Sample1": [100.0, 200.0, 300.0],
+        })
+        summary = DataTransformerService.build_validation_summary(df)
+        assert "may not be lipid names" in summary
