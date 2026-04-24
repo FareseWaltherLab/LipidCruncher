@@ -378,11 +378,13 @@ class AIChatWorkflow:
 
             # Build assistant response text
             if transformation.success:
+                summary = DataTransformerService.build_validation_summary(
+                    transformation.result_df
+                )
                 assistant_text = (
                     f"{explanation}\n\n"
                     f"The transformation was successful! "
-                    f"The result has {len(transformation.result_df)} rows and "
-                    f"{len(transformation.result_df.columns)} columns. "
+                    f"**Result:** {summary}. "
                     f"You can download the transformed file below."
                 )
             else:

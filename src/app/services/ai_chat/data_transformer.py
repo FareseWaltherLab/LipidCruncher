@@ -216,3 +216,69 @@ class DataTransformerService:
             )
 
         return len(errors) == 0, errors
+
+    # Common metadata column name fragments that should not be in Generic format
+    _METADATA_PATTERNS = {
+        'score', 'grade', 'mass', 'mz', 'm/z', 'rt', 'retention',
+        'adduct', 'formula', 'inchi', 'smiles', 'comment', 'ontology',
+        'annotation', 'alignment', 'fill', 'assigned', 'spectrum',
+        'isotope', 'similarity', 'dot product', 'reference', 'modified',
+        'curation', 'fragment', 's/n', 'class', 'category', 'type',
+    }
+
+    @staticmethod
+    def detect_metadata_columns(df: pd.DataFrame) -> List[str]:
+        """Check for columns that look like leftover metadata.
+
+        Scans column names (excluding the first, which is lipid names)
+        for common metadata patterns. These shouldn't be in the Generic
+        format — only lipid names + numeric intensities.
+
+        Args:
+            df: The transformed DataFrame.
+
+        Returns:
+            List of suspicious column names that may be metadata.
+        """
+        suspicious = []
+        for col in df.columns[1:]:
+            col_lower = col.lower().strip()
+            if any(p in col_lower
+                   for p in DataTransformerService._METADATA_PATTERNS):
+                suspicious.append(col)
+        return suspicious
+
+    @staticmethod
+    def build_validation_summary(df: pd.DataFrame) -> str:
+        """Build a validation summary for a successfully transformed DataFrame.
+
+        Args:
+            df: The transformed DataFrame in Generic format.
+
+        Returns:
+            A summary string describing the result.
+        """
+        n_species = len(df)
+        n_samples = len(df.columns) - 1  # exclude lipid name column
+        metadata_cols = DataTransformerService.detect_metadata_columns(df)
+
+        # Check first column looks like lipid names
+        first_col = df.iloc[:, 0]
+        has_letters = first_col.astype(str).str.contains('[A-Za-z]').any()
+
+        parts = []
+        if has_letters:
+            parts.append(f"{n_species} lipid species")
+        else:
+            parts.append(f"{n_species} rows (first column may not be lipid names)")
+        parts.append(f"{n_samples} sample columns")
+
+        if metadata_cols:
+            col_list = ", ".join(f"`{c}`" for c in metadata_cols[:5])
+            if len(metadata_cols) > 5:
+                col_list += f" and {len(metadata_cols) - 5} more"
+            parts.append(f"possible metadata still present: {col_list}")
+        else:
+            parts.append("no metadata detected")
+
+        return ", ".join(parts)
