@@ -6,6 +6,11 @@ All functions return plain strings — no Streamlit, no side effects.
 from typing import List, Optional
 
 from .knowledge_base import get_app_knowledge
+from .prompt_examples import (
+    get_data_questions_examples,
+    get_lc_questions_examples,
+    get_transform_examples,
+)
 from .schema_extractor import SchemaExtractorService
 
 
@@ -43,49 +48,7 @@ so it can be analyzed by the application.
 8. If you need clarification about the user's data (e.g., which column contains lipid names, how samples are organized), ask before generating code.
 9. For questions about the data (e.g., "how many columns?", "what format is this?"), answer directly using the schema information provided — do NOT generate code.
 
-## Few-Shot Examples
-
-### Example 1: Data with extra metadata columns
-User: "My data has columns: lipid_name, lipid_class, mass, rt, sample_1, sample_2, sample_3. Please transform it."
-```python
-def transform(df):
-    # Generic format: column 1 = lipid names, columns 2+ = sample intensities only.
-    # Drop metadata columns (mass, rt, lipid_class) — LipidCruncher extracts ClassKey automatically.
-    result = pd.DataFrame()
-    result['lipid_name'] = df['lipid_name']
-    for col in ['sample_1', 'sample_2', 'sample_3']:
-        result[col] = pd.to_numeric(df[col], errors='coerce')
-    return result
-
-result_df = transform(df)
-```
-
-### Example 2: Data with non-standard layout
-User: "My data has columns: Name (like 'PC(34:1)'), Score, Area_S1, Area_S2. Transform it please."
-```python
-def transform(df):
-    # Keep only lipid names (column 1) and sample intensities (columns 2+).
-    # Drop Score — it's metadata. LipidCruncher handles name standardization.
-    result = pd.DataFrame()
-    result['Name'] = df['Name']
-    sample_cols = [c for c in df.columns if c.startswith('Area_')]
-    for col in sample_cols:
-        result[col] = pd.to_numeric(df[col], errors='coerce')
-    return result
-
-result_df = transform(df)
-```
-
-### Example 3: Pivot from long format
-User: "My data is in long format with columns: lipid, sample_id, value"
-```python
-def transform(df):
-    # Pivot so each sample becomes its own column.
-    pivoted = df.pivot_table(index='lipid', columns='sample_id', values='value', aggfunc='first').reset_index()
-    return pivoted
-
-result_df = transform(df)
-```
+{get_transform_examples()}
 
 ## Important
 - The Generic format is simple: column 1 = lipid names, columns 2+ = sample intensities.
@@ -205,28 +168,7 @@ and any relevant parameters or options.
 redirect them to the Data Questions tab.
 5. Do NOT generate code. This tab is purely conversational.
 
-## Few-Shot Examples
-
-### Example 1: Normalization methods
-User: "What normalization methods does LipidCruncher support?"
-Answer: "LipidCruncher offers 5 normalization options: (1) None — use raw intensities, \
-(2) Internal standard — normalize each class by its internal standard, \
-(3) Protein — divide by protein concentration, (4) Both — internal standard then protein, \
-(5) Total intensity — normalize by total signal per sample."
-
-### Example 2: Statistical testing
-User: "What statistical test should I use for comparing 3 conditions?"
-Answer: "For 3+ conditions, LipidCruncher uses Alexander-Govern ANOVA (parametric) or \
-Kruskal-Wallis (non-parametric), with post-hoc pairwise comparisons using Tukey's HSD \
-or Bonferroni correction. You can also use Auto mode, which selects parametric testing \
-with log10 transformation."
-
-### Example 3: Data format question
-User: "What is the Generic format?"
-Answer: "The Generic format is the simplest input format for LipidCruncher. Column 1 \
-contains lipid names (any notation — LipidCruncher standardizes them automatically), \
-and columns 2+ contain numeric sample intensities. No metadata columns (scores, masses, \
-retention times) should be included."
+{get_lc_questions_examples()}
 
 ## SCOPE — STRICTLY ENFORCED
 
@@ -283,42 +225,7 @@ When you generate code, wrap it in a ```python block. The execution environment 
 - `result_df` — a pandas DataFrame (for tables, summaries). The UI will show a download button.
 - Use `print()` for text-based answers that don't need a table.
 
-## Few-Shot Examples
-
-### Example 1: Simple schema question
-User: "How many columns does my data have?"
-(No code needed — answer from schema: "Your dataset has 15 columns: ...")
-
-### Example 2: Computation needed
-User: "How many lipid species are in each class?"
-```python
-# Count species per class using the first column as lipid names
-lipid_col = df.columns[0]
-# Extract class from lipid name (text before the space)
-classes = df[lipid_col].str.extract(r'^([A-Za-z]+)')[0]
-result_df = classes.value_counts().reset_index()
-result_df.columns = ['Lipid Class', 'Species Count']
-```
-
-### Example 3: Missing value analysis
-User: "Are there any missing values in my data?"
-```python
-missing = df.isnull().sum()
-missing = missing[missing > 0]
-if len(missing) == 0:
-    print("No missing values found in your dataset.")
-else:
-    result_df = missing.reset_index()
-    result_df.columns = ['Column', 'Missing Count']
-```
-
-### Example 4: Summary statistics
-User: "Give me summary statistics for the sample columns"
-```python
-numeric_cols = df.select_dtypes(include='number').columns.tolist()
-result_df = df[numeric_cols].describe().T.reset_index()
-result_df.columns = ['Column'] + list(df[numeric_cols].describe().index)
-```
+{get_data_questions_examples()}
 
 ## SCOPE — STRICTLY ENFORCED
 

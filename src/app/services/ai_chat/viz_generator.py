@@ -13,6 +13,7 @@ from ...models.experiment import ExperimentConfig
 from .ai_client import AIClientService
 from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .knowledge_base import get_app_knowledge
+from .prompt_examples import get_viz_examples
 from .sandbox import SandboxResult, SandboxService
 from .schema_extractor import SchemaExtractorService
 
@@ -68,6 +69,8 @@ Use these colors for consistency with the rest of the application:
 - Always add clear titles, axis labels, and legends
 - Use `fig.update_layout()` for customization (font size, margins, etc.)
 - Handle missing/NaN values gracefully
+
+{get_viz_examples()}
 
 ## Important
 - Always produce a Plotly `fig` variable.
