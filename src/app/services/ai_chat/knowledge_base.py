@@ -55,7 +55,7 @@ Cer(d18:1_24:0) → Cer 18:1;O2/24:0)
 - **BQC assessment** — coefficient of variation across batch quality control samples
 - **Retention time plots** — RT consistency (LipidSearch/MS-DIAL only)
 - **Pairwise correlation** — Pearson correlation heatmaps between replicates
-- **PCA** — principal component analysis colored by condition, with outlier removal
+- **PCA** — principal component analysis colored by condition, with confidence ellipses
 
 ### Module 3: Visualization & Analysis
 - **Bar charts** — mean ± std per condition per lipid class, with optional statistical testing

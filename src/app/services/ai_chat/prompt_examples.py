@@ -355,13 +355,17 @@ Answer: "LipidCruncher offers 5 normalization options: (1) None — use raw inte
 (you map each class to a standard; classes without their own standard can use one from \
 a structurally similar class, e.g., PS can use a PE standard), \
 (3) Protein — divide by protein concentration (BCA assay), (4) Both — internal standard \
-then protein, (5) Total intensity — normalize by total signal per sample."
+then protein, (5) Total intensity — for each sample, divide every lipid intensity by that \
+sample's total, then multiply by the median total across all samples (keeps values in a \
+biologically meaningful range while equalizing total signal)."
 
 ### Example 2: Statistical testing
 User: "What statistical test should I use for comparing 3 conditions?"
 Answer: "For 3+ conditions, LipidCruncher uses Alexander-Govern ANOVA (parametric) or \
-Kruskal-Wallis (non-parametric), with post-hoc pairwise comparisons via Tukey's HSD \
-or Bonferroni. Auto mode selects parametric with log10 transformation."
+Kruskal-Wallis (non-parametric). Post-hoc pairwise comparisons use Tukey's HSD \
+(with parametric) or Bonferroni-corrected Mann-Whitney U (with non-parametric). \
+Multiple testing correction across all lipids is available via FDR (Benjamini-Hochberg) \
+or Bonferroni. Auto mode selects parametric testing with log10 transformation."
 
 ### Example 3: Data format
 User: "What is the Generic format?"
@@ -370,31 +374,43 @@ Answer: "The Generic format is the simplest input for LipidCruncher. Column 1 = 
 
 ### Example 4: Pipeline overview
 User: "What does the LipidCruncher analysis pipeline look like?"
-Answer: "LipidCruncher has 3 modules: Module 1 (data cleaning, filtering, normalization), \
-Module 2 (quality checks — box plots, BQC, retention time, correlation, PCA), and \
-Module 3 (visualizations — bar charts, pie charts, saturation, chain length, FACH, \
-pathway, volcano plots, heatmaps)."
+Answer: "LipidCruncher has 3 modules: Module 1 (format detection, column standardization, \
+data cleaning, zero filtering, internal standards management, normalization), \
+Module 2 (quality checks — box plots, BQC coefficient of variation, retention time \
+consistency, pairwise Pearson correlation, PCA with confidence ellipses), and \
+Module 3 (analysis & visualization — bar charts with statistical testing, pie charts, \
+saturation profiles, chain length, FACH, pathway diagrams, volcano plots, heatmaps)."
 
 ### Example 5: Internal standards
 User: "How does internal standard normalization work?"
 Answer: "LipidCruncher auto-detects internal standards in your data via regex patterns \
-(e.g., lipid names containing 'IS' or 'd7'). You then map each lipid class to a standard — \
-this mapping is flexible, so if you don't have a standard for a particular class (e.g., PS), \
-you can assign a structurally similar one (e.g., a PE standard). Each species is normalized \
-by: (intensity / IS_intensity) * IS_concentration. Every class must have a mapping — \
+in lipid names — it looks for markers like (d7), (d9), (IS), _IS, ISTD, SPLASH, and \
+similar patterns, as well as ClassKey values containing 'ISTD' or 'Internal'. \
+You then map each lipid class to a standard — this mapping is flexible, so if you \
+don't have a standard for a particular class (e.g., PS), you can assign a structurally \
+similar one (e.g., a PE standard). Each species is normalized by: \
+(intensity / IS_intensity) * IS_concentration. Every class must have a mapping — \
 LipidCruncher will raise an error if any class is unmapped."
 
 ### Example 6: Supported formats
 User: "What data formats can I upload?"
-Answer: "LipidCruncher supports 4 formats: (1) LipidSearch 5.0 — with MeanArea columns, \
-(2) MS-DIAL — with Metabolite name and Alignment ID, (3) Generic — lipid names + intensities, \
-(4) Metabolomics Workbench — tab-delimited with START/END markers. Format is auto-detected."
+Answer: "LipidCruncher supports 4 formats: (1) LipidSearch 5.0 — identified by MeanArea \
+columns plus metadata like LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, \
+(2) MS-DIAL — identified by Metabolite name column plus signature columns like \
+Alignment ID, Average Rt(min), Total score, Ontology, \
+(3) Generic — simplest format: lipid names in column 1, numeric intensities in columns 2+, \
+(4) Metabolomics Workbench — tab-delimited with MS_METABOLITE_DATA_START/END markers. \
+Format is auto-detected on upload."
 
 ### Example 7: Quality checks
 User: "What quality checks does LipidCruncher perform?"
-Answer: "Module 2 includes 5 quality checks: box plots (concentration distributions), \
-BQC assessment (coefficient of variation for batch QC samples), retention time consistency \
-(LipidSearch/MS-DIAL only), pairwise correlation heatmaps, and PCA with outlier removal."
+Answer: "Module 2 includes 5 quality checks: (1) Box plots showing concentration \
+distributions per sample, (2) BQC assessment — calculates coefficient of variation \
+for each lipid across BQC replicate samples to assess measurement precision, \
+(3) Retention time plots for RT consistency (available for LipidSearch and MS-DIAL only), \
+(4) Pairwise Pearson correlation heatmaps between replicates, and \
+(5) PCA — 2-component principal component analysis with z-score standardization, \
+colored by condition, with confidence ellipses."
 
 ### Example 8: Lipid nomenclature
 User: "How does LipidCruncher standardize lipid names?"
