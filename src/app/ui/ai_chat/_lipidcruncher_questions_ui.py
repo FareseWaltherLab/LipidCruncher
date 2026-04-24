@@ -35,27 +35,28 @@ def render_lc_questions_chat() -> None:
     """Render the LipidCruncher questions chat interface."""
     session = st.session_state.chat_lc_questions_session
 
-    # Show introductory message and example prompts if no messages yet
+    # Show introductory message if no messages yet
     if len(session.messages) == 0:
         with st.chat_message("assistant"):
             st.markdown(
                 "Ask me anything about LipidCruncher — features, methods, "
                 "analysis options, and more."
             )
-        # Clickable example prompts
-        cols = st.columns(len(_EXAMPLE_PROMPTS))
-        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
-            with cols[i]:
-                if st.button(
-                    prompt,
-                    key=f"lc_example_{i}",
-                    width='stretch',
-                ):
-                    st.session_state.chat_pending_prompt = prompt
-                    st.rerun()
 
     # Render existing messages
     _render_messages(session)
+
+    # Clickable example prompts (always visible)
+    cols = st.columns(len(_EXAMPLE_PROMPTS))
+    for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+        with cols[i]:
+            if st.button(
+                prompt,
+                key=f"lc_example_{i}",
+                width='stretch',
+            ):
+                st.session_state.chat_pending_prompt = prompt
+                st.rerun()
 
     # Rate limit check
     msg_count = st.session_state.get('chat_message_count', 0)

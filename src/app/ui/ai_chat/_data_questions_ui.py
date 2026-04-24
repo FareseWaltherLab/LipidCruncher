@@ -40,27 +40,28 @@ def render_data_questions_chat(source_df) -> None:
     """
     session = st.session_state.chat_data_questions_session
 
-    # Show introductory message and example prompts if no messages yet
+    # Show introductory message if no messages yet
     if len(session.messages) == 0:
         with st.chat_message("assistant"):
             st.markdown(
                 "Ask questions about your uploaded dataset — summaries, "
                 "counts, missing values, and more."
             )
-        # Clickable example prompts
-        cols = st.columns(len(_EXAMPLE_PROMPTS))
-        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
-            with cols[i]:
-                if st.button(
-                    prompt,
-                    key=f"dq_example_{i}",
-                    width='stretch',
-                ):
-                    st.session_state.chat_pending_prompt = prompt
-                    st.rerun()
 
     # Render existing messages
     _render_messages(session)
+
+    # Clickable example prompts (always visible)
+    cols = st.columns(len(_EXAMPLE_PROMPTS))
+    for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+        with cols[i]:
+            if st.button(
+                prompt,
+                key=f"dq_example_{i}",
+                width='stretch',
+            ):
+                st.session_state.chat_pending_prompt = prompt
+                st.rerun()
 
     # Show last result table if available
     result_df = st.session_state.get('chat_questions_result_df')

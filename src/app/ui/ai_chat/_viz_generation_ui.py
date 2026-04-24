@@ -57,20 +57,21 @@ def render_viz_chat(analysis_df, experiment) -> None:
                 "Describe the visualization you'd like and I'll "
                 "generate it."
             )
-        # Clickable example prompts
-        cols = st.columns(len(_EXAMPLE_PROMPTS))
-        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
-            with cols[i]:
-                if st.button(
-                    prompt,
-                    key=f"viz_example_{i}",
-                    width='stretch',
-                ):
-                    st.session_state.chat_pending_prompt = prompt
-                    st.rerun()
 
     # Render existing messages
     _render_messages(session)
+
+    # Clickable example prompts (always visible)
+    cols = st.columns(len(_EXAMPLE_PROMPTS))
+    for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+        with cols[i]:
+            if st.button(
+                prompt,
+                key=f"viz_example_{i}",
+                width='stretch',
+            ):
+                st.session_state.chat_pending_prompt = prompt
+                st.rerun()
 
     # Rate limit check
     msg_count = st.session_state.get('chat_message_count', 0)

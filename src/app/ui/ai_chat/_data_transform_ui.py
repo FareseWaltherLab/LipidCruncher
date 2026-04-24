@@ -44,26 +44,12 @@ def render_transform_chat(source_df) -> None:
     if len(session.messages) == 0:
         diagnostic = st.session_state.get('chat_transform_diagnostic')
         if diagnostic and diagnostic.is_supported:
-            # Data is already in a supported format
             with st.chat_message("assistant"):
                 st.markdown(diagnostic.message)
         elif diagnostic and not diagnostic.is_supported:
-            # Unknown format — show analysis + example prompts
             with st.chat_message("assistant"):
                 st.markdown(diagnostic.message)
-            # Clickable example prompts
-            cols = st.columns(len(_EXAMPLE_PROMPTS))
-            for i, prompt in enumerate(_EXAMPLE_PROMPTS):
-                with cols[i]:
-                    if st.button(
-                        prompt,
-                        key=f"tf_example_{i}",
-                        width='stretch',
-                    ):
-                        st.session_state.chat_pending_prompt = prompt
-                        st.rerun()
         else:
-            # No diagnostic (shouldn't happen, but fallback)
             with st.chat_message("assistant"):
                 st.markdown(
                     "I can help you transform your data into LipidCruncher's "
@@ -73,6 +59,20 @@ def render_transform_chat(source_df) -> None:
 
     # Render existing messages
     _render_messages(session)
+
+    # Clickable example prompts (always visible, only for unsupported formats)
+    diagnostic = st.session_state.get('chat_transform_diagnostic')
+    if not diagnostic or not diagnostic.is_supported:
+        cols = st.columns(len(_EXAMPLE_PROMPTS))
+        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+            with cols[i]:
+                if st.button(
+                    prompt,
+                    key=f"tf_example_{i}",
+                    width='stretch',
+                ):
+                    st.session_state.chat_pending_prompt = prompt
+                    st.rerun()
 
     # Show the last transformation result if successful
     transform_result_df = st.session_state.get('chat_transform_result')
