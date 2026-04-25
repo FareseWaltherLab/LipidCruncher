@@ -40,10 +40,13 @@ _BLOCKED_PATTERNS = [
 ]
 
 # Maximum characters returned by any single tool call
-_MAX_OUTPUT_CHARS = 4000
+_MAX_OUTPUT_CHARS = 8000
 
 # Maximum number of search results returned
-_MAX_SEARCH_RESULTS = 30
+_MAX_SEARCH_RESULTS = 15
+
+# Context lines to show above and below each search match
+_SEARCH_CONTEXT_LINES = 3
 
 # Documentation name → file path mapping
 _DOC_MAP = {
@@ -209,11 +212,16 @@ def execute_tool(name: str, tool_input: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 def _search_codebase(query: str, file_pattern: Optional[str] = None) -> str:
-    """Search for a pattern across allowed project files."""
+    """Search for a pattern across allowed project files.
+
+    Returns matching lines with surrounding context so the AI can
+    understand the match without needing a follow-up read_file_section.
+    """
     if not query.strip():
         return "Error: query must not be empty."
 
     results: list[str] = []
+    n_matches = 0
     try:
         pattern = re.compile(re.escape(query), re.IGNORECASE)
     except re.error:
@@ -234,23 +242,37 @@ def _search_codebase(query: str, file_pattern: Optional[str] = None) -> str:
                 except OSError:
                     continue
                 rel = fpath.relative_to(_PROJECT_ROOT)
-                for lineno, line in enumerate(text.splitlines(), 1):
+                all_lines = text.splitlines()
+                for lineno, line in enumerate(all_lines):
                     if pattern.search(line):
-                        results.append(f"{rel}:{lineno}: {line.rstrip()}")
-                        if len(results) >= _MAX_SEARCH_RESULTS:
+                        n_matches += 1
+                        # Include context lines around the match
+                        start = max(0, lineno - _SEARCH_CONTEXT_LINES)
+                        end = min(len(all_lines), lineno + _SEARCH_CONTEXT_LINES + 1)
+                        context_block = []
+                        for i in range(start, end):
+                            marker = ">>>" if i == lineno else "   "
+                            context_block.append(
+                                f"{marker} {i + 1}: {all_lines[i].rstrip()}"
+                            )
+                        results.append(
+                            f"--- {rel}:{lineno + 1} ---\n"
+                            + "\n".join(context_block)
+                        )
+                        if n_matches >= _MAX_SEARCH_RESULTS:
                             break
-                if len(results) >= _MAX_SEARCH_RESULTS:
+                if n_matches >= _MAX_SEARCH_RESULTS:
                     break
-            if len(results) >= _MAX_SEARCH_RESULTS:
+            if n_matches >= _MAX_SEARCH_RESULTS:
                 break
-        if len(results) >= _MAX_SEARCH_RESULTS:
+        if n_matches >= _MAX_SEARCH_RESULTS:
             break
 
     if not results:
         return f"No matches found for '{query}'."
 
-    header = f"Found {len(results)} match(es) for '{query}':\n"
-    return header + "\n".join(results)
+    header = f"Found {n_matches} match(es) for '{query}':\n\n"
+    return header + "\n\n".join(results)
 
 
 def _read_file_section(
