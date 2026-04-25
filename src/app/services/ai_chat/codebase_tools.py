@@ -23,6 +23,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _ALLOWED_DIRS = [
     _PROJECT_ROOT / "src" / "app",
     _PROJECT_ROOT / "tests",
+    _PROJECT_ROOT / "docs",
 ]
 
 # Individual files the AI is allowed to read
@@ -42,15 +43,21 @@ _BLOCKED_PATTERNS = [
 # Maximum characters returned by any single tool call
 _MAX_OUTPUT_CHARS = 8000
 
+# Higher limit for documentation reads (papers, supplementary methods)
+_MAX_DOC_CHARS = 40000
+
 # Maximum number of search results returned
 _MAX_SEARCH_RESULTS = 15
 
 # Context lines to show above and below each search match
-_SEARCH_CONTEXT_LINES = 3
+_SEARCH_CONTEXT_LINES = 10
 
 # Documentation name → file path mapping
 _DOC_MAP = {
     "CODEBASE": _PROJECT_ROOT / "CODEBASE.md",
+    "paper": _PROJECT_ROOT / "docs" / "lipidcruncher_paper.md",
+    "supplementary_methods": _PROJECT_ROOT / "docs" / "supplementary_methods.md",
+    "release_notes": _PROJECT_ROOT / "src" / "app" / "ui" / "landing_page.py",
     "analysis_docs": _PROJECT_ROOT / "src" / "app" / "ui" / "content" / "analysis_docs.py",
     "normalization_docs": _PROJECT_ROOT / "src" / "app" / "ui" / "content" / "normalization_docs.py",
     "processing_docs": _PROJECT_ROOT / "src" / "app" / "ui" / "content" / "processing_docs.py",
@@ -148,10 +155,21 @@ TOOL_DEFINITIONS = [
         "name": "read_documentation",
         "description": (
             "Read project documentation by name. Available documents: "
-            "CODEBASE (project overview), analysis_docs (visualization & "
-            "analysis features), normalization_docs (normalization methods), "
+            "paper (LipidCruncher publication — authoritative description "
+            "of features, workflow, and scientific context), "
+            "supplementary_methods (detailed technical specifications "
+            "for all processing steps, normalization, statistics, and "
+            "visualizations), "
+            "release_notes (What's New changelogs for each version — "
+            "features added after the paper was written), "
+            "CODEBASE (project architecture overview), "
+            "analysis_docs (visualization & analysis features), "
+            "normalization_docs (normalization methods), "
             "processing_docs (data processing pipeline), "
-            "standards_help (internal standards help)."
+            "standards_help (internal standards help). "
+            "Prefer 'paper' and 'supplementary_methods' for answering "
+            "questions about LipidCruncher features and methods. Use "
+            "'release_notes' for features not covered in the paper."
         ),
         "input_schema": {
             "type": "object",
@@ -159,8 +177,8 @@ TOOL_DEFINITIONS = [
                 "doc_name": {
                     "type": "string",
                     "description": (
-                        "Document name. One of: CODEBASE, analysis_docs, "
-                        "normalization_docs, processing_docs, standards_help."
+                        "Document name. Prefer 'paper' or "
+                        "'supplementary_methods' for feature questions."
                     ),
                     "enum": list(_DOC_MAP.keys()),
                 },
@@ -204,7 +222,8 @@ def execute_tool(name: str, tool_input: dict[str, Any]) -> str:
     except Exception as e:
         raise AIChatError(f"Tool '{name}' failed: {e}") from e
 
-    return _truncate(result)
+    max_chars = _MAX_DOC_CHARS if name == "read_documentation" else _MAX_OUTPUT_CHARS
+    return _truncate(result, max_chars)
 
 
 # ---------------------------------------------------------------------------
@@ -404,8 +423,8 @@ def _is_path_safe(path: Path) -> bool:
     return True
 
 
-def _truncate(text: str) -> str:
-    """Truncate text to _MAX_OUTPUT_CHARS, appending a notice if truncated."""
-    if len(text) <= _MAX_OUTPUT_CHARS:
+def _truncate(text: str, max_chars: int = _MAX_OUTPUT_CHARS) -> str:
+    """Truncate text to max_chars, appending a notice if truncated."""
+    if len(text) <= max_chars:
         return text
-    return text[:_MAX_OUTPUT_CHARS] + "\n\n[Output truncated — use start_line/end_line to read specific sections]"
+    return text[:max_chars] + "\n\n[Output truncated — use start_line/end_line to read specific sections]"

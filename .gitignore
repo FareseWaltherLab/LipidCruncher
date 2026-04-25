@@ -24,6 +24,7 @@ src/.streamlit/secrets.toml
 # Documentation working files
 *.docx
 *.doc
+docs/*.md
 
 # IDE/editor config
 .idea/

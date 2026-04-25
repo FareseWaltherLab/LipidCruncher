@@ -15,7 +15,7 @@ from .exceptions import AIClientError
 logger = logging.getLogger(__name__)
 
 # Default cap on tool-use round-trips per user message
-_DEFAULT_MAX_TOOL_ITERATIONS = 10
+_DEFAULT_MAX_TOOL_ITERATIONS = 4
 
 
 class AIClientService:
