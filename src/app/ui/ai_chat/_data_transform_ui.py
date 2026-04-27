@@ -71,7 +71,7 @@ def render_transform_chat(source_df) -> None:
                     key=f"tf_example_{i}",
                     width='stretch',
                 ):
-                    st.session_state.chat_pending_prompt = prompt
+                    st.session_state.chat_pending_prompt_transform = prompt
                     st.rerun()
 
     # Show the last transformation result if successful
@@ -112,7 +112,7 @@ def render_transform_chat(source_df) -> None:
         return
 
     # Chat input (check for pending example prompt first)
-    user_input = st.session_state.pop('chat_pending_prompt', None)
+    user_input = st.session_state.pop('chat_pending_prompt_transform', None)
     if user_input is None:
         user_input = st.chat_input(
             "Ask about your data or request a transformation...",

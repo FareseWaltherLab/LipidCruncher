@@ -70,7 +70,7 @@ def render_viz_chat(analysis_df, experiment) -> None:
                 key=f"viz_example_{i}",
                 width='stretch',
             ):
-                st.session_state.chat_pending_prompt = prompt
+                st.session_state.chat_pending_prompt_viz = prompt
                 st.rerun()
 
     # Rate limit check
@@ -88,7 +88,7 @@ def render_viz_chat(analysis_df, experiment) -> None:
         return
 
     # Chat input (check for pending example prompt first)
-    user_input = st.session_state.pop('chat_pending_prompt', None)
+    user_input = st.session_state.pop('chat_pending_prompt_viz', None)
     if user_input is None:
         user_input = st.chat_input(
             "Describe the visualization you want...",

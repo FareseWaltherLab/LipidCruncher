@@ -55,7 +55,7 @@ def render_lc_questions_chat() -> None:
                 key=f"lc_example_{i}",
                 width='stretch',
             ):
-                st.session_state.chat_pending_prompt = prompt
+                st.session_state.chat_pending_prompt_lc = prompt
                 st.rerun()
 
     # Rate limit check
@@ -69,7 +69,7 @@ def render_lc_questions_chat() -> None:
         return
 
     # Chat input (check for pending example prompt first)
-    user_input = st.session_state.pop('chat_pending_prompt', None)
+    user_input = st.session_state.pop('chat_pending_prompt_lc', None)
     if user_input is None:
         user_input = st.chat_input(
             "Ask about LipidCruncher features, methods, or analysis options...",

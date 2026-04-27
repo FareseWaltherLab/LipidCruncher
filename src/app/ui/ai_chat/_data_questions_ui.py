@@ -60,7 +60,7 @@ def render_data_questions_chat(source_df) -> None:
                 key=f"dq_example_{i}",
                 width='stretch',
             ):
-                st.session_state.chat_pending_prompt = prompt
+                st.session_state.chat_pending_prompt_dq = prompt
                 st.rerun()
 
     # Show last result table if available
@@ -87,7 +87,7 @@ def render_data_questions_chat(source_df) -> None:
         return
 
     # Chat input (check for pending example prompt first)
-    user_input = st.session_state.pop('chat_pending_prompt', None)
+    user_input = st.session_state.pop('chat_pending_prompt_dq', None)
     if user_input is None:
         user_input = st.chat_input(
             "Ask a question about your data...",
