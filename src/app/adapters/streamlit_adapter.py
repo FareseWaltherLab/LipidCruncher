@@ -373,6 +373,29 @@ class StreamlitAdapter:
         for key in dynamic_keys:
             st.session_state.pop(key, None)
 
+    @staticmethod
+    def reset_format_derived_state() -> None:
+        """Reset all state derived from format-specific standardization.
+
+        Use when the user switches data format mid-session. Preserves the
+        raw uploaded file and sample-data flags, but clears all
+        standardization output (column_mapping, msdial_features, etc.) and
+        all downstream pipeline state (cleaned_df, normalized_df, qc_*, analysis_*).
+        """
+        preserve = _PRESERVE_ON_RESET | {'raw_df', 'using_sample_data', 'sample_data_file'}
+        defaults = SessionState()
+        for f in fields(SessionState):
+            if f.name not in preserve:
+                st.session_state[f.name] = getattr(defaults, f.name)
+        for key in _WIDGET_KEYS:
+            st.session_state.pop(key, None)
+        dynamic_keys = [
+            key for key in list(st.session_state.keys())
+            if isinstance(key, str) and key.startswith(_DYNAMIC_KEY_PREFIXES)
+        ]
+        for key in dynamic_keys:
+            st.session_state.pop(key, None)
+
     # ==================== Widget Preservation ====================
 
     @staticmethod

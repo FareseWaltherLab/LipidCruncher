@@ -85,17 +85,28 @@ def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> Optional[pd
     )
 
     if not result.success:
+        # Clear any stale state from a prior successful standardization so the
+        # UI does not continue showing old column mappings, MS-DIAL features,
+        # or downstream artifacts that no longer correspond to any valid
+        # standardization for this file under this format.
+        for key in (
+            'standardized_df', 'column_mapping', 'n_intensity_cols',
+            'msdial_features', 'msdial_sample_names', '_msdial_override_samples',
+            'format_type',
+        ):
+            st.session_state[key] = None
         st.sidebar.error(result.message)
         return None
 
     st.session_state.format_type = data_format
 
-    # Store standardization outputs in session state
+    # Store standardization outputs in session state. We overwrite
+    # unconditionally because stale state from a different format is cleared
+    # upstream (StreamlitAdapter.reset_format_derived_state) when the format
+    # changes, and on failure (above).
     if result.column_mapping is not None:
-        if st.session_state.get('column_mapping') is None:
-            st.session_state.column_mapping = result.column_mapping
-    if st.session_state.get('n_intensity_cols') is None:
-        st.session_state.n_intensity_cols = result.n_intensity_cols
+        st.session_state.column_mapping = result.column_mapping
+    st.session_state.n_intensity_cols = result.n_intensity_cols
 
     # MS-DIAL specific state
     if result.msdial_features is not None:

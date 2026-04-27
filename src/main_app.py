@@ -120,6 +120,13 @@ def display_app_page() -> None:
                 st.rerun()
         return
 
+    # Detect format change and invalidate stale standardization-derived state.
+    # Without this, switching the dropdown would keep showing the previous
+    # format's column mapping and skip re-standardization entirely.
+    cached_format = st.session_state.get('format_type')
+    if cached_format is not None and cached_format != data_format:
+        StreamlitAdapter.reset_format_derived_state()
+
     # Standardize data if not already done
     if st.session_state.get('standardized_df') is None:
         standardized_df = standardize_uploaded_data(raw_df, data_format)
