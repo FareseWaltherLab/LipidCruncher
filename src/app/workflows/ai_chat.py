@@ -670,12 +670,14 @@ class AIChatWorkflow:
 
         if code:
             sandbox_result = SandboxService.execute(code, source_df, sandbox_config)
-            if sandbox_result.success and sandbox_result.result_df is not None:
+            if sandbox_result.success:
                 result_df = sandbox_result.result_df
-                assistant_text = explanation
-            elif sandbox_result.success:
-                # Code ran but no result_df — just show the explanation
-                assistant_text = explanation
+                parts = []
+                if explanation.strip():
+                    parts.append(explanation.strip())
+                if sandbox_result.stdout.strip():
+                    parts.append(sandbox_result.stdout.strip())
+                assistant_text = "\n\n".join(parts)
             else:
                 assistant_text = (
                     f"{explanation}\n\n"
@@ -685,6 +687,12 @@ class AIChatWorkflow:
         else:
             assistant_text = explanation
             code = ""
+
+        if not assistant_text.strip():
+            assistant_text = (
+                "I wasn't able to generate a response. "
+                "Please try rephrasing your question."
+            )
 
         # 4. Append assistant message
         assistant_msg = ChatMessage(
