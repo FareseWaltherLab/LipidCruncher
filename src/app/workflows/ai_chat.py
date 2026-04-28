@@ -606,10 +606,14 @@ class AIChatWorkflow:
         Returns:
             A new ChatSession in DATA_QUESTIONS mode with schema context.
         """
+        detected = FormatDetectionService.detect_format(df)
         schema = SchemaExtractorService.extract_schema(df)
+        schema_context = (
+            f"Auto-detected format: {detected.value}\n\n{schema}"
+        )
         return ChatSession(
             mode=ChatMode.DATA_QUESTIONS,
-            schema_context=schema,
+            schema_context=schema_context,
         )
 
     @staticmethod
