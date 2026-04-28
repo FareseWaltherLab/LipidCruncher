@@ -14,6 +14,8 @@ from app.services.ai_chat.codebase_tools import (
     _resolve_and_validate,
     _truncate,
     _MAX_OUTPUT_CHARS,
+    _MAX_DOC_CHARS,
+    _MAX_SEARCH_RESULTS,
     _PROJECT_ROOT,
 )
 from app.services.ai_chat.exceptions import AIChatError
@@ -164,15 +166,22 @@ class TestSearchCodebase:
             "query": "import pytest",
             "file_pattern": "test_*.py",
         })
-        # Should only find matches in test files
+        # Search output now includes context lines around each match, so we
+        # only check the file-header lines (--- path:lineno ---) to confirm
+        # the pattern filter was honored.
         if "No matches" not in result:
-            for line in result.strip().split("\n")[1:]:  # skip header
-                assert "test_" in line
+            header_lines = [
+                line for line in result.split("\n")
+                if line.startswith("--- ") and line.endswith(" ---")
+            ]
+            assert header_lines, "Expected at least one match header line"
+            for line in header_lines:
+                assert "test_" in line, f"Pattern filter violated: {line!r}"
 
     def test_results_capped(self):
-        # Search for a very common term — header says at most 30 matches
+        # Search for a very common term — capped at _MAX_SEARCH_RESULTS.
         result = execute_tool("search_codebase", {"query": "import"})
-        assert "Found 30 match(es)" in result
+        assert f"Found {_MAX_SEARCH_RESULTS} match(es)" in result
 
 
 # ---------------------------------------------------------------------------
@@ -292,6 +301,9 @@ class TestExecuteTool:
         assert isinstance(result, str)
 
     def test_result_truncated_if_large(self):
-        # read_documentation on a large doc should be truncated if over limit
+        # read_documentation uses the higher _MAX_DOC_CHARS cap (papers and
+        # supplementary methods need full context); other tools use
+        # _MAX_OUTPUT_CHARS. The result must respect the per-tool cap, with
+        # a small slack for the truncation notice when it triggers.
         result = execute_tool("read_documentation", {"doc_name": "CODEBASE"})
-        assert len(result) <= _MAX_OUTPUT_CHARS + 200  # truncation notice adds some chars
+        assert len(result) <= _MAX_DOC_CHARS + 200
