@@ -31,7 +31,11 @@ from ..services.ai_chat.prompt_templates import (
 from ..services.ai_chat.sandbox import SandboxResult, SandboxService
 from ..services.ai_chat.schema_extractor import SchemaExtractorService
 from ..services.ai_chat.viz_generator import VizGeneratorService
-from ..services.format_detection import FormatDetectionService, DataFormat
+from ..services.format_detection import (
+    FormatDetectionService,
+    DataFormat,
+    GENERIC_METADATA_NAME_PATTERNS,
+)
 
 
 from typing import List
@@ -198,14 +202,9 @@ class AIChatWorkflow:
         intensity_cols = []
         metadata_cols = []
 
-        # Common metadata column name patterns
-        metadata_patterns = {
-            'score', 'grade', 'mass', 'mz', 'm/z', 'rt', 'retention',
-            'adduct', 'formula', 'inchi', 'smiles', 'comment', 'ontology',
-            'annotation', 'id', 'alignment', 'fill', 'assigned', 'spectrum',
-            'isotope', 'similarity', 'dot product', 'reference', 'modified',
-            'curation', 'fragment', 's/n', 'average rt', 'average mz',
-        }
+        # Reuse the shared pattern set from format_detection so the
+        # detector and the diagnostic stay aligned.
+        metadata_patterns = GENERIC_METADATA_NAME_PATTERNS
 
         for i, col in enumerate(df.columns):
             col_lower = col.lower().strip()

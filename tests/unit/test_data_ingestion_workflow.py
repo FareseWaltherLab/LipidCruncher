@@ -932,8 +932,13 @@ class TestDetectFormatOnly:
         assert detected in [DataFormat.UNKNOWN, DataFormat.GENERIC]
 
     def test_lipidsearch_missing_signature_column(self):
-        """Test LipidSearch detection fails without signature columns."""
-        # Has some LipidSearch columns but missing MeanArea
+        """LipidSearch-shaped data without MeanArea[*] and without canonical
+        intensity[s*] columns is reported as UNKNOWN, not silently downgraded
+        to Generic. Generic detection requires either the canonical
+        post-pipeline shape (LipidMolec + intensity[s*]) or a clean
+        first-column-lipid-names + numeric-samples layout — this fixture
+        satisfies neither because CalcMass/BaseRt occupy the intensity range.
+        """
         df = pd.DataFrame({
             'LipidMolec': ['PC(16:0_18:1)'],
             'ClassKey': ['PC'],
@@ -943,8 +948,7 @@ class TestDetectFormatOnly:
             'Sample1': [1e6],  # Not MeanArea format
         })
         detected, confidence = DataIngestionWorkflow.detect_format_only(df)
-        # Should fall back to Generic since LipidMolec exists
-        assert detected == DataFormat.GENERIC
+        assert detected == DataFormat.UNKNOWN
 
 
 class TestDetectFormatOnlyMSDIAL:

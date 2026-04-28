@@ -8,6 +8,23 @@ from typing import Union, List, Set
 import pandas as pd
 
 
+# Metadata-name substrings (case-insensitive) that disqualify a column
+# from being treated as a sample intensity in Generic-format detection,
+# and that also drive the AI's column-role diagnosis. Single source of
+# truth — imported by AIChatWorkflow.diagnose_format.
+#
+# Substring matching is intentional, so e.g. 'PrecursorMZ' matches 'mz'.
+# Patterns must NOT collide with the canonical Generic intensity column
+# name 'intensity[sN]' (so no 'id', no 'in', no 'sit').
+GENERIC_METADATA_NAME_PATTERNS: frozenset = frozenset({
+    'score', 'grade', 'mass', 'mz', 'm/z', 'rt', 'retention',
+    'adduct', 'formula', 'inchi', 'smiles', 'comment', 'note',
+    'ontology', 'annotation', 'alignment', 'fill', 'assigned',
+    'spectrum', 'isotope', 'similarity', 'dot product', 'reference',
+    'modified', 'curation', 'fragment', 's/n', 'average rt', 'average mz',
+})
+
+
 class DataFormat(str, Enum):
     """Supported data formats."""
     LIPIDSEARCH = "LipidSearch 5.0"
@@ -202,29 +219,93 @@ class FormatDetectionService:
         """
         Check if DataFrame is in generic format.
 
-        Generic format:
-        - First column contains lipid names (has letters)
-        - At least 2 columns total (lipid names + at least one intensity column)
-        - Other columns are numeric (intensity values)
+        Two acceptance paths:
+
+        1. Canonical post-pipeline form: BOTH ``LipidMolec`` and at
+           least one ``intensity[sN]`` column present. Together these
+           uniquely identify LipidCruncher's own standardization
+           output — ``intensity[sN]`` is LipidCruncher-specific
+           naming. Real LipidSearch exports have ``MeanArea[*]`` (not
+           ``intensity[*]``) and are caught by the LipidSearch check
+           upstream, so reaching this fast path implies a re-upload
+           of pipeline output, even with preserved metadata
+           (``CalcMass``/``BaseRt``/etc.).
+
+        2. Strict form for arbitrary new uploads:
+           - First column contains lipid names (has letters).
+           - Optional column-1 ClassKey-style column (short, mostly
+             alphabetic).
+           - All remaining columns must be sample intensities — i.e.
+             mostly numeric AND not bear a metadata-suggestive name
+             (RT, m/z, score, notes, ...). Any non-numeric or
+             metadata-named column anywhere in the intensity range
+             disqualifies the dataset from auto-Generic.
+           - At least one column in the intensity range must be numeric.
         """
         if len(df.columns) < 2:
             return False
 
-        # First column should contain letters (lipid names)
-        first_col = df.iloc[:, 0]
-        has_letters = first_col.astype(str).str.contains('[A-Za-z]').any()
+        # Path 1 — canonical LipidCruncher post-pipeline shape:
+        # LipidMolec + at least one intensity[sN] column.
+        if 'LipidMolec' in df.columns and any(
+            str(c).startswith('intensity[') for c in df.columns
+        ):
+            return True
 
-        if not has_letters:
+        # Path 2 — strict checks for new arbitrary uploads
+        first_col = df.iloc[:, 0]
+        if not first_col.astype(str).str.contains('[A-Za-z]').any():
             return False
 
-        # Check if at least one other column appears to be numeric
-        for col_idx in range(1, min(len(df.columns), 5)):  # Check first few columns
+        intensity_start = (
+            2 if FormatDetectionService._looks_like_classkey_column(df, 1) else 1
+        )
+        if len(df.columns) <= intensity_start:
+            return False
+
+        any_numeric = False
+        for col_idx in range(intensity_start, len(df.columns)):
+            col_name_lower = str(df.columns[col_idx]).lower().strip()
+            if any(p in col_name_lower for p in GENERIC_METADATA_NAME_PATTERNS):
+                return False
+
             col = df.iloc[:, col_idx]
             numeric_count = pd.to_numeric(col, errors='coerce').notna().sum()
-            if numeric_count > len(col) * 0.5:  # >50% numeric values
-                return True
+            if numeric_count <= len(col) * 0.5:
+                return False
+            any_numeric = True
 
-        return False
+        return any_numeric
+
+    @staticmethod
+    def _looks_like_classkey_column(df: pd.DataFrame, col_idx: int) -> bool:
+        """Heuristic: does this column look like a ClassKey column?
+
+        Lightweight inline equivalent of
+        DataStandardizationService._is_classkey_column, kept local to avoid
+        a circular import (data_standardization imports from this module).
+        """
+        if col_idx >= len(df.columns):
+            return False
+        if str(df.columns[col_idx]).lower().strip() == 'classkey':
+            return True
+        col = df.iloc[:, col_idx]
+        try:
+            numeric_ratio = pd.to_numeric(col, errors='coerce').notna().sum() / max(len(col), 1)
+            if numeric_ratio > 0.5:
+                return False
+            str_values = col.astype(str)
+            total_len = str_values.str.len().sum()
+            if total_len == 0:
+                return False
+            avg_len = str_values.str.len().mean()
+            alpha_ratio = (
+                str_values.str.replace(r'[^A-Za-z]', '', regex=True).str.len().sum()
+                / total_len
+            )
+            return avg_len < 15 and alpha_ratio > 0.7
+        except (ValueError, TypeError, ZeroDivisionError):
+            return False
 
     @staticmethod
     def get_format_display_name(format_type: DataFormat) -> str:
