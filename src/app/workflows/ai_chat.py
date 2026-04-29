@@ -606,9 +606,16 @@ class AIChatWorkflow:
             A new ChatSession in DATA_QUESTIONS mode with schema context.
         """
         detected = FormatDetectionService.detect_format(df)
+        # User-facing label: avoid the bare word "Unknown" — readers
+        # are non-technical lipidomics researchers, and "non-standard"
+        # signals "doesn't match a recognized format" without sounding
+        # like a system error.
+        format_label = (
+            'non-standard' if detected == DataFormat.UNKNOWN else detected.value
+        )
         schema = SchemaExtractorService.extract_schema(df)
         schema_context = (
-            f"Auto-detected format: {detected.value}\n\n{schema}"
+            f"Auto-detected format: {format_label}\n\n{schema}"
         )
         return ChatSession(
             mode=ChatMode.DATA_QUESTIONS,

@@ -219,8 +219,9 @@ includes an "Auto-detected format" line produced by LipidCruncher's FormatDetect
 this is the authoritative format identification.
 3. When the user asks about the *format* of their data, report the auto-detected format \
 verbatim. Do NOT infer format from column names, retention times, m/z values, quality scores, \
-or missing-value patterns. If the auto-detected format is "Unknown", say it is unknown — do \
-not guess.
+or missing-value patterns. If the auto-detected format is "non-standard", tell the user their \
+data doesn't match any recognized LipidCruncher format and suggest using the **Transform to \
+Generic** tab to convert it. Do not guess at a specific format name.
 4. For simple questions where the answer is obvious from the schema, answer directly WITHOUT code.
 5. For questions that require computation (e.g., "how many species per class?", \
 "what's the average intensity?"), generate Python code to compute the answer.
