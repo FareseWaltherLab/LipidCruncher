@@ -322,22 +322,32 @@ fig.update_layout(title='Top 15 Most Abundant Lipids',
 ```
 
 ### Example 6: Ratio plot between two conditions
-User: "Plot the log2 ratio of KO/WT mean intensity for each lipid class"
+User: "Plot the log2 ratio of Control/Treatment mean intensity for each lipid class"
 ```python
-# Adapt column names to your experiment
-ko_cols = [c for c in df.columns if c.startswith('intensity[s1') or c.startswith('intensity[s2')]
-wt_cols = [c for c in df.columns if c.startswith('intensity[s3') or c.startswith('intensity[s4')]
+# Use the experiment's actual condition names and sample mappings — do
+# NOT hardcode 'KO'/'WT' or sample-number ranges. The condition->samples
+# mapping is provided in the Experiment Structure context. If the user
+# asks for "log2 ratio between two conditions" without naming them, ask
+# which two conditions to compare; otherwise use the names they gave.
+condition_a = 'Control'      # numerator of the ratio
+condition_b = 'Treatment'    # denominator
+samples_a = ['s1', 's2', 's3']  # comes from experiment.individual_samples_list
+samples_b = ['s4', 's5', 's6']
+
+cols_a = [f'intensity[{s}]' for s in samples_a]
+cols_b = [f'intensity[{s}]' for s in samples_b]
 df_plot = df.copy()
-df_plot['KO_mean'] = df_plot[ko_cols].mean(axis=1)
-df_plot['WT_mean'] = df_plot[wt_cols].mean(axis=1)
-class_ratio = df_plot.groupby('ClassKey')[['KO_mean', 'WT_mean']].mean()
-class_ratio['log2_ratio'] = np.log2(class_ratio['KO_mean'] / class_ratio['WT_mean'])
+df_plot['_a_mean'] = df_plot[cols_a].mean(axis=1)
+df_plot['_b_mean'] = df_plot[cols_b].mean(axis=1)
+class_ratio = df_plot.groupby('ClassKey')[['_a_mean', '_b_mean']].mean()
+class_ratio['log2_ratio'] = np.log2(class_ratio['_a_mean'] / class_ratio['_b_mean'])
 class_ratio = class_ratio.reset_index().sort_values('log2_ratio')
 fig = px.bar(class_ratio, x='ClassKey', y='log2_ratio',
-             title='Log2 Fold Change (KO/WT) per Lipid Class',
+             title=f'Log2 Fold Change ({condition_a}/{condition_b}) per Lipid Class',
              color='log2_ratio', color_continuous_scale='RdBu_r',
              color_continuous_midpoint=0)
-fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Log2(KO/WT)')
+fig.update_layout(xaxis_title='Lipid Class',
+                  yaxis_title=f'Log2({condition_a}/{condition_b})')
 # Pin axis order — DataFrame sort is not enough for categorical bars.
 fig.update_xaxes(categoryorder='array',
                  categoryarray=class_ratio['ClassKey'].tolist())
