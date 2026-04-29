@@ -79,22 +79,39 @@ ascending, sorted by category, etc.), pin the axis order explicitly:
 categorical axes alphabetically or by first-appearance. Apply the same \
 to `update_yaxes` for horizontal bar charts.
 
-- **Bar-chart spacing when coloring by category**: when you use \
-`color='SomeCategoricalColumn'` on a bar chart and each x position \
-belongs to exactly ONE category (e.g., top-N lipids colored by \
-ClassKey, or one bar per class), set:
+- **Coloring bars by category — use a SINGLE trace with marker_color, \
+not `color='...'`**: when each x position has exactly ONE bar that \
+needs to be colored by some category (e.g., top-N lipids colored by \
+ClassKey, ratio per class colored by sign), do NOT use \
+`px.bar(..., color='ClassKey')`. That call splits the data into one \
+plotly trace per category, and Plotly's per-trace offsetgroup layout \
+produces uneven bar spacing that no `barmode`/`bargap` setting fully \
+cures.
+
+  Instead, build an explicit per-bar color list and use a single \
+`go.Bar` trace:
   ```
-  fig.update_layout(barmode='overlay', bargap=0)
+  unique_classes = list(df_plot['ClassKey'].drop_duplicates())
+  palette = px.colors.qualitative.Set1
+  class_color_map = dict(zip(unique_classes, palette[:len(unique_classes)]))
+  bar_colors = [class_color_map[c] for c in df_plot['ClassKey']]
+
+  fig = go.Figure([go.Bar(
+      x=df_plot['x_col'], y=df_plot['y_col'],
+      marker_color=bar_colors, showlegend=False,
+  )])
+  # Optional: invisible legend stubs so the legend still shows classes.
+  for cls, color in class_color_map.items():
+      fig.add_trace(go.Bar(
+          x=[None], y=[None], marker_color=color, name=cls, showlegend=True,
+      ))
   ```
-  Two effects:
-    - `barmode='overlay'` stops Plotly from reserving an x-axis slot
-      for every trace at every position (those reservations cause
-      uneven gaps).
-    - `bargap=0` removes inter-bar whitespace so the bars are flush
-      and visually uniform.
-  Do NOT use `barmode='overlay'` when multiple bars genuinely share \
-an x position (use `'stack'` or `'group'` for those, with a non-zero \
-`bargap` if visual separation is desired).
+  This guarantees evenly-spaced bars regardless of how many categories \
+or how they're distributed.
+
+  When multiple bars genuinely share an x position (e.g., grouped/ \
+stacked bars per condition), `px.bar(..., color=...)` is fine — use \
+`barmode='stack'` or `'group'` as appropriate.
 
 {get_viz_examples()}
 
