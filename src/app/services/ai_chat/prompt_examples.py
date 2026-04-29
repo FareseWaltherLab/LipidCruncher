@@ -296,10 +296,10 @@ fig = px.bar(species_counts, x='ClassKey', y='Count',
              color='ClassKey')
 fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Number of Species',
                   showlegend=False,
-                  # Each x has exactly one bar from one trace — overlay
-                  # prevents Plotly from reserving space for absent traces
-                  # (which would look like uneven bar spacing).
-                  barmode='overlay', bargap=0.15)
+                  # Overlay: each x has one bar from one trace, so don't
+                  # reserve per-trace slots. bargap=0 makes bars touch
+                  # (no inter-bar whitespace), giving uniform spacing.
+                  barmode='overlay', bargap=0)
 # Pin axis order — DataFrame sort is not enough for categorical bars.
 fig.update_xaxes(categoryorder='array',
                  categoryarray=species_counts['ClassKey'].tolist())

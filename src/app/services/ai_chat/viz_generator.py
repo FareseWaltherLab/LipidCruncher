@@ -84,13 +84,17 @@ to `update_yaxes` for horizontal bar charts.
 belongs to exactly ONE category (e.g., top-N lipids colored by \
 ClassKey, or one bar per class), set:
   ```
-  fig.update_layout(barmode='overlay', bargap=0.15)
+  fig.update_layout(barmode='overlay', bargap=0)
   ```
-  Without this, Plotly reserves an x-axis slot for every trace at \
-every position — most slots end up invisible but still occupy space, \
-producing uneven bar spacing. Do NOT use `barmode='overlay'` when \
-multiple bars genuinely share an x position (use `'stack'` or \
-`'group'` for those).
+  Two effects:
+    - `barmode='overlay'` stops Plotly from reserving an x-axis slot
+      for every trace at every position (those reservations cause
+      uneven gaps).
+    - `bargap=0` removes inter-bar whitespace so the bars are flush
+      and visually uniform.
+  Do NOT use `barmode='overlay'` when multiple bars genuinely share \
+an x position (use `'stack'` or `'group'` for those, with a non-zero \
+`bargap` if visual separation is desired).
 
 {get_viz_examples()}
 
