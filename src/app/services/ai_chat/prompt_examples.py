@@ -240,6 +240,9 @@ fig = px.bar(species_counts, x='ClassKey', y='Count',
              title='Number of Lipid Species per Class',
              color_discrete_sequence=['#1f77b4'])
 fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Species Count')
+# Pin axis order — DataFrame sort is not enough for categorical bars.
+fig.update_xaxes(categoryorder='array',
+                 categoryarray=species_counts['ClassKey'].tolist())
 ```
 
 ### Example 2: Top N most abundant individual lipids
@@ -254,6 +257,9 @@ fig = px.bar(top15, x='LipidMolec', y='_mean',
              color_discrete_sequence=['#1f77b4'])
 fig.update_layout(xaxis_title='Lipid', yaxis_title='Mean Concentration',
                   xaxis_tickangle=-45)
+# Pin axis order — DataFrame sort is not enough for categorical bars.
+fig.update_xaxes(categoryorder='array',
+                 categoryarray=top15['LipidMolec'].tolist())
 ```
 
 ### Example 3: Scatter plot comparing two samples
@@ -290,6 +296,9 @@ fig = px.bar(species_counts, x='ClassKey', y='Count',
              color='ClassKey')
 fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Number of Species',
                   showlegend=False)
+# Pin axis order — DataFrame sort is not enough for categorical bars.
+fig.update_xaxes(categoryorder='array',
+                 categoryarray=species_counts['ClassKey'].tolist())
 ```
 
 ### Example 6: Ratio plot between two conditions
@@ -309,6 +318,9 @@ fig = px.bar(class_ratio, x='ClassKey', y='log2_ratio',
              color='log2_ratio', color_continuous_scale='RdBu_r',
              color_continuous_midpoint=0)
 fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Log2(KO/WT)')
+# Pin axis order — DataFrame sort is not enough for categorical bars.
+fig.update_xaxes(categoryorder='array',
+                 categoryarray=class_ratio['ClassKey'].tolist())
 ```
 
 ### Example 7: Coefficient of variation across samples

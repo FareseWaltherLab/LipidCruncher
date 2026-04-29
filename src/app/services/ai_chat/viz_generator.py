@@ -69,6 +69,15 @@ Use these colors for consistency with the rest of the application:
 - Always add clear titles, axis labels, and legends
 - Use `fig.update_layout()` for customization (font size, margins, etc.)
 - Handle missing/NaN values gracefully
+- **Bar-chart axis order**: when bar order matters (top-N, descending, \
+ascending, sorted by category, etc.), pin the axis order explicitly:
+  ```
+  fig.update_xaxes(categoryorder='array',
+                   categoryarray=<your ordered list>)
+  ```
+  Sorting the DataFrame alone is NOT sufficient — Plotly may reorder \
+categorical axes alphabetically or by first-appearance. Apply the same \
+to `update_yaxes` for horizontal bar charts.
 
 {get_viz_examples()}
 
