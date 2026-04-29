@@ -32,7 +32,7 @@ def _render_messages(session) -> None:
         fig_key = f"chat_viz_fig_{i}"
         fig = st.session_state.get('chat_viz_figures', {}).get(fig_key)
         if fig is not None:
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
 
 
 def render_viz_chat(analysis_df, experiment) -> None:

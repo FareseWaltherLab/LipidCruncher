@@ -23,7 +23,7 @@ def _render_messages(session) -> None:
         fig_key = f"chat_fig_{i}"
         fig = st.session_state.get('chat_viz_figures', {}).get(fig_key)
         if fig is not None:
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
 
         # Check for stored result table (with download)
         table_key = f"chat_table_{i}"
