@@ -262,7 +262,8 @@ class AIChatWorkflow:
 
         parts.append("\nWould you like me to transform this data to "
                      "Generic format? Let me know if you'd also like any "
-                     "filtering (e.g., remove rows where Score < 20).")
+                     "filtering (e.g., remove low-quality rows by score or "
+                     "grade — you tell me the column and threshold).")
 
         return FormatDiagnosticResult(
             detected_format=detected,

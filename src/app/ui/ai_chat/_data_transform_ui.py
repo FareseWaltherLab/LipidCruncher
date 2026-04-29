@@ -18,7 +18,7 @@ MAX_EXECUTIONS = 20
 _EXAMPLE_PROMPTS = [
     "Transform my data to Generic format",
     "What columns need to be removed?",
-    "Filter rows where Score < 20, then transform",
+    "Filter out low-quality rows, then transform",
 ]
 
 
