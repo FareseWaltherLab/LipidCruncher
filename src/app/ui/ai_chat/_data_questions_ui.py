@@ -27,9 +27,6 @@ def _render_messages(session) -> None:
     for msg in session.messages:
         with st.chat_message(msg.role):
             st.markdown(msg.content)
-            if msg.code:
-                with st.expander("View code"):
-                    st.code(msg.code, language="python")
 
 
 def render_data_questions_chat(source_df) -> None:
@@ -122,8 +119,6 @@ def render_data_questions_chat(source_df) -> None:
                         st.session_state.chat_execution_count = (
                             st.session_state.get('chat_execution_count', 0) + 1
                         )
-                        with st.expander("View code"):
-                            st.code(result.code, language="python")
 
                     # Store result DataFrame if produced
                     if result.result_df is not None:

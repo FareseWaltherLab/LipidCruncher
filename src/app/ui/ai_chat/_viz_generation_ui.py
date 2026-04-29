@@ -27,9 +27,6 @@ def _render_messages(session) -> None:
     for i, msg in enumerate(session.messages):
         with st.chat_message(msg.role):
             st.markdown(msg.content)
-            if msg.code:
-                with st.expander("View code"):
-                    st.code(msg.code, language="python")
 
         # Check if there's a stored figure for this message
         fig_key = f"chat_viz_fig_{i}"
@@ -138,14 +135,6 @@ def render_viz_chat(analysis_df, experiment) -> None:
                         if result.sandbox_result.stdout:
                             with st.expander("Output"):
                                 st.text(result.sandbox_result.stdout)
-
-                    if (result.sandbox_result
-                            and hasattr(result.sandbox_result, 'code')
-                            and result.session.messages):
-                        last_msg = result.session.messages[-1]
-                        if last_msg.code:
-                            with st.expander("View code"):
-                                st.code(last_msg.code, language="python")
 
                 except Exception as e:
                     st.session_state.chat_last_error = str(e)
