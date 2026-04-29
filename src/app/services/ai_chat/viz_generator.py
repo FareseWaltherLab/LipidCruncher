@@ -79,6 +79,19 @@ ascending, sorted by category, etc.), pin the axis order explicitly:
 categorical axes alphabetically or by first-appearance. Apply the same \
 to `update_yaxes` for horizontal bar charts.
 
+- **Bar-chart spacing when coloring by category**: when you use \
+`color='SomeCategoricalColumn'` on a bar chart and each x position \
+belongs to exactly ONE category (e.g., top-N lipids colored by \
+ClassKey, or one bar per class), set:
+  ```
+  fig.update_layout(barmode='overlay', bargap=0.15)
+  ```
+  Without this, Plotly reserves an x-axis slot for every trace at \
+every position — most slots end up invisible but still occupy space, \
+producing uneven bar spacing. Do NOT use `barmode='overlay'` when \
+multiple bars genuinely share an x position (use `'stack'` or \
+`'group'` for those).
+
 {get_viz_examples()}
 
 ## Important
