@@ -66,21 +66,24 @@ def _detect_sample_prefix(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
-def _sample_names_for_prefix(df: pd.DataFrame, prefix: str) -> list:
-    """Return ['s1','s2',...] for the {prefix}[*] columns of df, in order."""
-    head = f'{prefix}['
-    return [
-        c[len(head):-1]
-        for c in df.columns
-        if c.startswith(head) and c.endswith(']')
-    ]
+def _extract_sample_name(col_name: str, prefix: Optional[str]) -> str:
+    """Strip the {prefix}[...] wrapper from col_name if present, otherwise
+    return col_name unchanged. Used to derive a human-readable sample name
+    from either pipeline-shaped columns (e.g. 'intensity[A1]' → 'A1') or
+    raw user-picked columns (e.g. 'S1_treated' → 'S1_treated')."""
+    if prefix is not None:
+        head = f'{prefix}['
+        if col_name.startswith(head) and col_name.endswith(']'):
+            return col_name[len(head):-1]
+    return col_name
 
 
 def _apply_user_experiment(
     df: pd.DataFrame,
     conditions_list: list,
     samples_per_condition: list,
-    prefix: str,
+    sample_to_col: dict,
+    output_prefix: str,
 ) -> tuple:
     """Build an ExperimentConfig and a reordered DataFrame.
 
@@ -88,32 +91,36 @@ def _apply_user_experiment(
     gets s1+s3, condition B gets s2+s4). ExperimentConfig assumes conditions
     occupy contiguous sample blocks (s1..sN), so we rename the sample columns
     so condition A's samples become s1..sX and condition B's become
-    s(X+1)..s(X+Y). The same prefix ('intensity' or 'concentration') is
-    preserved on output. Non-sample columns are left untouched.
+    s(X+1)..s(X+Y). The output uses {output_prefix}[sN] regardless of how the
+    original columns were named, so override-picked raw columns are
+    normalized to the same shape as auto-detected ones. Non-sample columns
+    are left untouched.
 
     Args:
-        df: DataFrame with {prefix}[*] sample columns.
+        df: DataFrame containing the sample columns.
         conditions_list: condition names, in declared order.
         samples_per_condition: list of lists; samples_per_condition[i] is the
-            list of original sample names assigned to conditions_list[i].
-        prefix: 'intensity' or 'concentration'.
+            list of sample names assigned to conditions_list[i].
+        sample_to_col: maps each sample name to its original column in df.
+        output_prefix: 'intensity' or 'concentration' — the prefix used for
+            renamed sample columns.
 
     Returns:
         (reordered_df, experiment).
     """
-    head = f'{prefix}['
     rename_map = {}
     sample_cols_in_order = []
     new_idx = 1
     for samples in samples_per_condition:
         for old_sample in samples:
-            old_col = f'{head}{old_sample}]'
-            new_col = f'{head}s{new_idx}]'
+            old_col = sample_to_col[old_sample]
+            new_col = f'{output_prefix}[s{new_idx}]'
             rename_map[old_col] = new_col
             sample_cols_in_order.append(old_col)
             new_idx += 1
 
-    non_sample = [c for c in df.columns if not c.startswith(head)]
+    sample_col_set = set(sample_cols_in_order)
+    non_sample = [c for c in df.columns if c not in sample_col_set]
     reordered = df[non_sample + sample_cols_in_order].rename(columns=rename_map)
 
     experiment = ExperimentConfig(
@@ -127,7 +134,7 @@ def _handle_file_upload_sidebar() -> None:
     """Render the file uploader in the sidebar. Only processes the file on
     first upload or when the file changes (tracked by name + size)."""
     uploaded = st.sidebar.file_uploader(
-        "Upload a CSV file",
+        "Upload your dataset",
         type=["csv"],
         key="ai_studio_file_uploader",
     )
@@ -148,6 +155,7 @@ def _handle_file_upload_sidebar() -> None:
             return
         _clear_data_sessions()
         st.session_state.chat_studio_df = df
+        st.session_state.chat_studio_df_original = df
         st.session_state.chat_studio_file_id = file_id
     except Exception as e:
         st.sidebar.error(f"Could not read CSV: {e}")
@@ -180,10 +188,9 @@ def _offer_pipeline_import_sidebar() -> None:
         label_visibility="collapsed",
     )
     if st.sidebar.button("Import Pipeline Data", key="ai_studio_import_pipeline"):
-        if "Normalized" in choice:
-            st.session_state.chat_studio_df = normalized_df
-        else:
-            st.session_state.chat_studio_df = raw_df
+        imported = normalized_df if "Normalized" in choice else raw_df
+        st.session_state.chat_studio_df = imported
+        st.session_state.chat_studio_df_original = imported
         st.session_state.chat_studio_file_id = "_pipeline_import"
         # Carry over the pipeline's experiment definition.
         pipeline_experiment = st.session_state.get('experiment')
@@ -211,9 +218,6 @@ def _display_define_experiment_sidebar(sample_names: list) -> tuple:
         (condition_names, sample_counts) when valid, or (None, None).
     """
     st.sidebar.subheader("Define Experiment")
-    st.sidebar.caption(
-        f"Detected **{len(sample_names)}** sample(s) in the data."
-    )
 
     n_conditions = st.sidebar.number_input(
         "Number of conditions",
@@ -334,31 +338,185 @@ def _display_group_samples_sidebar(
     return manual
 
 
+def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
+    """Render the 'Sample Columns' sidebar block: lists the auto-detected
+    sample columns and lets the user override the selection.
+
+    Auto-detection looks for columns named '{prefix}[*]' where prefix is
+    'intensity' or 'concentration'. The detected prefix becomes the output
+    prefix used when applying the experiment (so 'concentration[*]' inputs
+    stay 'concentration[s1..sN]'). When neither prefix is detected, the
+    output prefix defaults to 'intensity' and the user must pick the
+    sample columns manually.
+
+    Returns:
+        (output_prefix, sample_columns) where sample_columns is a list of
+        column names from df. Returns None if the user has not yet picked
+        any columns in the override flow.
+    """
+    st.sidebar.subheader("Sample Columns")
+
+    detected_prefix = _detect_sample_prefix(df)
+    if detected_prefix is not None:
+        head = f'{detected_prefix}['
+        auto_cols = [
+            c for c in df.columns
+            if c.startswith(head) and c.endswith(']')
+        ]
+    else:
+        auto_cols = []
+
+    output_prefix = detected_prefix or 'intensity'
+
+    if not auto_cols:
+        st.sidebar.info(
+            "No `intensity[*]` or `concentration[*]` columns "
+            "auto-detected. Please pick the sample columns below."
+        )
+        selected = st.sidebar.multiselect(
+            "Pick the columns that are samples",
+            options=list(df.columns),
+            key='studio_sample_cols_select',
+        )
+        if not selected:
+            return None
+        return output_prefix, selected
+
+    st.sidebar.caption(
+        f"Auto-detected **{len(auto_cols)}** sample column(s):"
+    )
+    for c in auto_cols:
+        st.sidebar.text(f"• {c}")
+
+    correct_kwargs = {'key': 'studio_sample_cols_radio'}
+    if 'studio_sample_cols_radio' not in st.session_state:
+        correct_kwargs['index'] = 0  # Default to 'Yes'
+    correct = st.sidebar.radio(
+        "Are these the correct sample columns?",
+        ['Yes', 'No'],
+        **correct_kwargs,
+    )
+
+    if correct == 'Yes':
+        return output_prefix, auto_cols
+
+    selected = st.sidebar.multiselect(
+        "Pick the columns that are samples",
+        options=list(df.columns),
+        default=auto_cols,
+        key='studio_sample_cols_select',
+    )
+    if not selected:
+        return None
+    return output_prefix, selected
+
+
+def _display_studio_bqc_sidebar(
+    condition_names: list, sample_counts: list,
+) -> Optional[str]:
+    """Render the 'Specify Label of BQC Samples' sidebar block, mirroring
+    the main app. Returns the chosen condition label, or None if the user
+    answers 'No' (or no condition has 2+ samples)."""
+    st.sidebar.subheader("Specify Label of BQC Samples")
+
+    bqc_kwargs = {'key': 'studio_bqc_radio'}
+    if 'studio_bqc_radio' not in st.session_state:
+        bqc_kwargs['index'] = 1  # Default to 'No'
+    bqc_ans = st.sidebar.radio(
+        'Do you have Batch Quality Control (BQC) samples?',
+        ['Yes', 'No'],
+        **bqc_kwargs,
+    )
+    if bqc_ans != 'Yes':
+        return None
+
+    eligible = [
+        c for c, n in zip(condition_names, sample_counts) if n > 1
+    ]
+    if not eligible:
+        st.sidebar.warning(
+            "No conditions with 2+ samples available for BQC."
+        )
+        return None
+
+    label_kwargs = {'key': 'studio_bqc_label_radio'}
+    if 'studio_bqc_label_radio' not in st.session_state:
+        label_kwargs['index'] = 0
+    return st.sidebar.radio(
+        'Which label corresponds to BQC samples?',
+        eligible,
+        **label_kwargs,
+    )
+
+
+def _display_studio_confirm_inputs_sidebar(
+    condition_names: list, sample_counts: list,
+) -> bool:
+    """Render the 'Confirm Inputs' sidebar block: total-samples line,
+    a per-condition summary of the planned post-apply layout (samples are
+    renamed to contiguous s1..sN per condition when applied), and a
+    confirmation checkbox.
+
+    Returns True if the box is checked.
+    """
+    st.sidebar.subheader("Confirm Inputs")
+
+    total_samples = sum(sample_counts)
+    st.sidebar.write(f"There are a total of {total_samples} samples.")
+
+    idx = 1
+    for cond, count in zip(condition_names, sample_counts):
+        if count > 5:
+            display_text = (
+                f"• s{idx} to s{idx + count - 1} "
+                f"(total {count}) correspond to {cond}"
+            )
+        else:
+            samples_str = '-'.join(f's{idx + j}' for j in range(count))
+            display_text = f"• {samples_str} correspond to {cond}"
+        st.sidebar.text(display_text)
+        idx += count
+
+    confirm_kwargs = {'key': 'studio_confirm_checkbox'}
+    if 'studio_confirm_checkbox' not in st.session_state:
+        confirm_kwargs['value'] = False
+    return st.sidebar.checkbox(
+        "Confirm the inputs by checking this box", **confirm_kwargs,
+    )
+
+
 def _display_studio_sidebar() -> None:
-    """Render the full AI Studio sidebar: upload + pipeline import +
-    experiment definition + sample grouping + apply."""
-    st.sidebar.subheader("Data")
+    """Render the full AI Studio sidebar, mirroring the main app:
+    upload + pipeline import → Define Experiment → Group Samples →
+    Specify Label of BQC Samples → Confirm Inputs."""
     _handle_file_upload_sidebar()
     _offer_pipeline_import_sidebar()
 
-    studio_df = st.session_state.get('chat_studio_df')
+    # Read from the original (un-renamed) df so the sidebar always shows
+    # the user's actual column names. The apply step below renames into
+    # `chat_studio_df` for Custom Viz; reading the original here also makes
+    # re-applies idempotent (we never rename already-renamed columns).
+    studio_df = st.session_state.get('chat_studio_df_original')
     if studio_df is None:
         return
 
     st.sidebar.markdown("---")
 
-    prefix = _detect_sample_prefix(studio_df)
-    if prefix is None:
-        st.sidebar.info(
-            "No `intensity[*]` or `concentration[*]` columns detected — "
-            "Define Experiment is unavailable for this data shape. Use "
-            "the Transform to Generic tab to convert it first."
+    sample_cols_result = _display_sample_columns_sidebar(studio_df)
+    if sample_cols_result is None:
+        return
+    output_prefix, sample_columns = sample_cols_result
+
+    sample_names = [
+        _extract_sample_name(c, output_prefix) for c in sample_columns
+    ]
+    if len(set(sample_names)) != len(sample_names):
+        st.sidebar.error(
+            "Duplicate sample names after stripping the column prefix. "
+            "Please pick uniquely-named sample columns."
         )
         return
-
-    sample_names = _sample_names_for_prefix(studio_df, prefix)
-    if not sample_names:
-        return
+    sample_to_col = dict(zip(sample_names, sample_columns))
 
     condition_names, sample_counts = _display_define_experiment_sidebar(
         sample_names,
@@ -372,40 +530,62 @@ def _display_studio_sidebar() -> None:
     if samples_per_condition is None:
         return
 
-    st.sidebar.markdown("---")
-    if st.sidebar.button("Apply", key='studio_apply_experiment'):
-        try:
-            reordered_df, experiment = _apply_user_experiment(
-                studio_df, condition_names, samples_per_condition, prefix,
-            )
-        except (ValueError, TypeError) as e:
-            st.sidebar.error(str(e))
-            return
+    bqc_label = _display_studio_bqc_sidebar(condition_names, sample_counts)
 
-        st.session_state.chat_studio_df = reordered_df
-        st.session_state.chat_studio_experiment = experiment
-        # Per-tab chat sessions reference the old data shape / experiment
-        # context; invalidate them so they re-init.
-        st.session_state.chat_data_questions_session = None
-        st.session_state.chat_viz_session = None
-        st.session_state.chat_viz_figures = {}
-        st.sidebar.success(
-            f"Applied: {experiment.n_conditions} condition(s) — "
-            + ", ".join(
-                f"{c} ({n})" for c, n in zip(
-                    experiment.conditions_list,
-                    experiment.number_of_samples_list,
-                )
-            )
+    confirmed = _display_studio_confirm_inputs_sidebar(
+        condition_names, sample_counts,
+    )
+    if not confirmed:
+        return
+
+    # Streamlit reruns the script on every interaction. The checkbox stays
+    # True across reruns, so we'd otherwise rebuild the experiment and wipe
+    # per-tab chat sessions on every rerun. Only re-apply when the inputs
+    # actually change by comparing a snapshot.
+    snapshot = (
+        st.session_state.get('chat_studio_file_id'),
+        output_prefix,
+        tuple(sample_columns),
+        tuple(condition_names),
+        tuple(tuple(s) for s in samples_per_condition),
+        bqc_label,
+    )
+    if st.session_state.get('studio_applied_snapshot') == snapshot:
+        return
+
+    try:
+        reordered_df, experiment = _apply_user_experiment(
+            studio_df, condition_names, samples_per_condition,
+            sample_to_col, output_prefix,
         )
-        st.rerun()
+    except (ValueError, TypeError, KeyError) as e:
+        st.sidebar.error(str(e))
+        return
+
+    st.session_state.chat_studio_df = reordered_df
+    st.session_state.chat_studio_experiment = experiment
+    st.session_state.chat_studio_bqc_label = bqc_label
+    # Only Custom Viz reads the renamed df; Data Questions and Transform
+    # read the original (which doesn't change on apply), so their sessions
+    # don't need to be invalidated here. They are still cleared on a fresh
+    # upload via _clear_data_sessions().
+    st.session_state.chat_viz_session = None
+    st.session_state.chat_viz_figures = {}
+    st.session_state.studio_applied_snapshot = snapshot
+    st.rerun()
 
 
 def _clear_data_sessions() -> None:
     """Reset all data-dependent chat sessions when data changes."""
     st.session_state.chat_studio_df = None
+    st.session_state.chat_studio_df_original = None
     st.session_state.chat_studio_file_id = None
     st.session_state.chat_studio_experiment = None
+    st.session_state.chat_studio_bqc_label = None
+    st.session_state.studio_applied_snapshot = None
+    # The 'Sample Columns' override multiselect holds column names from the
+    # previous file; drop it so the next dataset starts clean.
+    st.session_state.pop('studio_sample_cols_select', None)
     # Per-tab sessions
     st.session_state.chat_data_questions_session = None
     st.session_state.chat_transform_session = None
@@ -432,7 +612,12 @@ def display_ai_studio_page() -> None:
     # All data-loading and experiment-definition controls live in the
     # sidebar, mirroring the main app's layout.
     _display_studio_sidebar()
-    studio_df = st.session_state.get("chat_studio_df")
+    # `studio_df_original` keeps the user's column names — used by the
+    # data preview, Data Questions, and Transform tabs.
+    # `studio_df_processed` is the renamed-to-`s1..sN` view used by Custom
+    # Viz, which equals the original until the user confirms an experiment.
+    studio_df_original = st.session_state.get("chat_studio_df_original")
+    studio_df_processed = st.session_state.get("chat_studio_df")
 
     _, center, _ = st.columns([1, 3, 1])
 
@@ -446,18 +631,21 @@ def display_ai_studio_page() -> None:
 
         st.markdown("---")
 
-        # File info + data preview when data is loaded.
-        if studio_df is not None:
+        # File info + data preview when data is loaded. Show the user's
+        # original column names so the preview matches what the user sees
+        # in Data Questions / Transform.
+        if studio_df_original is not None:
             file_id = st.session_state.get("chat_studio_file_id", "")
             file_name = file_id.rsplit("_", 1)[0] if file_id else "data"
             st.success(
-                f"**{file_name}** — {len(studio_df)} rows, "
-                f"{len(studio_df.columns)} columns."
+                f"**{file_name}** — {len(studio_df_original)} rows, "
+                f"{len(studio_df_original.columns)} columns."
             )
             with st.expander("Data Preview", expanded=False):
-                st.dataframe(studio_df.head(10), width='stretch')
+                st.dataframe(studio_df_original.head(10), width='stretch')
                 st.caption(
-                    f"{len(studio_df)} rows, {len(studio_df.columns)} columns"
+                    f"{len(studio_df_original)} rows, "
+                    f"{len(studio_df_original.columns)} columns"
                 )
         else:
             st.info("Upload a CSV in the sidebar to begin.")
@@ -476,24 +664,24 @@ def display_ai_studio_page() -> None:
             display_lipidcruncher_questions_chat()
 
         with tab_data:
-            if studio_df is None:
+            if studio_df_original is None:
                 st.info(
                     "Upload a CSV file above to ask questions about your data."
                 )
             else:
-                display_data_questions_chat(studio_df)
+                display_data_questions_chat(studio_df_original)
 
         with tab_transform:
-            if studio_df is None:
+            if studio_df_original is None:
                 st.info(
                     "Upload a CSV file above to transform it into "
                     "LipidCruncher Generic format."
                 )
             else:
-                display_transform_chat(studio_df)
+                display_transform_chat(studio_df_original)
 
         with tab_viz:
-            if studio_df is None:
+            if studio_df_processed is None:
                 st.info(
                     "Upload a CSV file above to create custom visualizations."
                 )
@@ -503,7 +691,7 @@ def display_ai_studio_page() -> None:
                 validation = st.session_state.get('chat_viz_validation')
                 if validation is None:
                     validation = AIChatWorkflow.validate_module1_output(
-                        studio_df
+                        studio_df_processed
                     )
                     st.session_state.chat_viz_validation = validation
 
@@ -531,9 +719,9 @@ def display_ai_studio_page() -> None:
                         "chat_studio_experiment"
                     )
                     if experiment is None:
-                        experiment = _derive_experiment(studio_df)
+                        experiment = _derive_experiment(studio_df_processed)
                         st.session_state.chat_studio_experiment = experiment
-                    display_viz_chat(studio_df, experiment)
+                    display_viz_chat(studio_df_processed, experiment)
 
         # Navigation
         _display_navigation()

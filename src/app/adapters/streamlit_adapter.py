@@ -205,7 +205,15 @@ class SessionState:
     chat_execution_count: int = 0
 
     # --- AI Studio (owner: ai_studio_page.py) ---
+    # `chat_studio_df_original` holds the dataframe with the user's
+    # original sample column names (what they uploaded / imported). It is
+    # what the data preview, Data Questions, and Transform tabs read.
+    # `chat_studio_df` holds a reordered/renamed copy with sample columns
+    # normalized to `intensity[s1..sN]` per condition — required by the
+    # Custom Visualization tab's plotters because ExperimentConfig
+    # generates its sample labels as s1..sN.
     chat_studio_df: Optional[pd.DataFrame] = None
+    chat_studio_df_original: Optional[pd.DataFrame] = None
     chat_studio_experiment: Optional[Any] = None
 
 
