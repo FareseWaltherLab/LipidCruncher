@@ -629,6 +629,35 @@ def display_ai_studio_page() -> None:
             "tabs below to explore, transform, or visualize it."
         )
 
+        with st.expander("How to use the AI Studio", expanded=False):
+            st.markdown(
+                """
+**Quick start**
+
+1. Upload your CSV in the sidebar (or import from the main pipeline).
+2. Define your experiment in the sidebar — sample columns, conditions,
+   groupings, and BQC label.
+3. Check **Confirm the inputs by checking this box** to unlock the
+   data-dependent tabs.
+
+**Tabs**
+
+- **LipidCruncher Questions** — Ask anything about the app's features,
+  methods, or analyses. **No upload required.**
+- **Data Questions** — Explore your dataset with the AI (summaries,
+  filters, distributions). Requires data + confirm.
+- **Transform to Generic** — Ask the AI to convert non-LipidCruncher
+  data into the Generic format the main pipeline accepts. Requires
+  data + confirm. Use this when your data isn't ready for the main
+  pipeline yet.
+- **Custom Visualization** — Generate custom Plotly charts beyond what
+  the built-in modules offer. Requires data that has been **processed
+  through Module 1** of the main pipeline. Run your data through
+  *Start Crunching* on the home page first, then come back here and
+  use **Import from main pipeline** in the sidebar.
+                """
+            )
+
         st.markdown("---")
 
         # File info + data preview when data is loaded. Show the user's
@@ -652,6 +681,17 @@ def display_ai_studio_page() -> None:
 
         st.markdown("---")
 
+        # The three data-dependent tabs are locked until the user finishes
+        # the sidebar flow and checks "Confirm Inputs". `studio_applied_
+        # snapshot` is set by the apply step the moment the box is first
+        # checked, and persists for the rest of the session unless the
+        # data is cleared. LC Questions is exempt — it doesn't need data.
+        is_confirmed = st.session_state.get('studio_applied_snapshot') is not None
+        not_confirmed_msg = (
+            "Configure your experiment in the sidebar and check "
+            "**Confirm the inputs by checking this box** to unlock this tab."
+        )
+
         # --- 4-Tab Structure ---
         tab_lc, tab_data, tab_transform, tab_viz = st.tabs([
             "LipidCruncher Questions",
@@ -668,6 +708,8 @@ def display_ai_studio_page() -> None:
                 st.info(
                     "Upload a CSV file above to ask questions about your data."
                 )
+            elif not is_confirmed:
+                st.info(not_confirmed_msg)
             else:
                 display_data_questions_chat(studio_df_original)
 
@@ -677,6 +719,8 @@ def display_ai_studio_page() -> None:
                     "Upload a CSV file above to transform it into "
                     "LipidCruncher Generic format."
                 )
+            elif not is_confirmed:
+                st.info(not_confirmed_msg)
             else:
                 display_transform_chat(studio_df_original)
 
@@ -685,6 +729,8 @@ def display_ai_studio_page() -> None:
                 st.info(
                     "Upload a CSV file above to create custom visualizations."
                 )
+            elif not is_confirmed:
+                st.info(not_confirmed_msg)
             else:
                 # Validate Module 1 output before showing viz chat
                 from app.workflows.ai_chat import AIChatWorkflow

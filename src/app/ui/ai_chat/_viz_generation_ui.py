@@ -18,7 +18,6 @@ _EXAMPLE_PROMPTS = [
     "Species count per class",
     "Top 15 most abundant lipids",
     "CV distribution across lipids",
-    "Log2 ratio between two conditions, per class",
 ]
 
 
