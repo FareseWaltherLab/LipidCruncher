@@ -410,6 +410,43 @@ def module2_nav_script():
             st.rerun()
 
 
+def reset_with_overlapping_widget_script():
+    """Renders a widget whose key overlaps a SessionState field, then a
+    Back-to-Home button that calls reset_data_state().
+
+    Reproduces the regression where reset_data_state() raised
+    StreamlitAPIException because it tried to assign to a session_state key
+    (norm_method_selection) after the widget with that key had been
+    instantiated in the same script run.
+
+    The test seeds normalized_df via at.session_state before at.run() —
+    don't re-seed it inside the script, or the post-reset rerun will
+    repopulate it and mask the cleanup.
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    # Render the widget that triggered the bug — its key matches a
+    # SessionState field name. Both norm_method_selection and
+    # protein_input_method are the dangerous overlap pair.
+    st.radio(
+        'Normalization method',
+        options=['None', 'Internal Standard'],
+        key='norm_method_selection',
+    )
+    st.radio(
+        'Protein input method',
+        options=['Upload CSV', 'Manual entry'],
+        key='protein_input_method',
+    )
+
+    if st.button('← Back to Home', key='back_home_reset'):
+        st.session_state.page = 'landing'
+        StreamlitAdapter.reset_data_state()
+        st.rerun()
+
+
 # =============================================================================
 # Module Navigation — Fixtures
 # =============================================================================
