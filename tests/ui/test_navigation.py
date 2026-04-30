@@ -18,6 +18,7 @@ from tests.ui.conftest import (
     DEFAULT_TIMEOUT,
     module1_nav_script,
     module2_nav_script,
+    reset_with_overlapping_widget_script,
 )
 
 from streamlit.testing.v1 import AppTest
@@ -148,3 +149,43 @@ class TestStatePreservation:
         # Back button should be available
         back_buttons = [b for b in at.button if 'back_m1' in (b.key or '')]
         assert len(back_buttons) >= 1
+
+
+class TestResetDataStateWidgetOverlap:
+    """Regression tests for reset_data_state vs widget-instantiated keys.
+
+    The bug: reset_data_state() iterated SessionState fields and assigned
+    defaults via st.session_state[key] = .... Two SessionState fields
+    (norm_method_selection, protein_input_method) double as Streamlit widget
+    keys. If the user reached the normalization UI before clicking
+    Back-to-Home, those widgets had been instantiated in the same script
+    run, and Streamlit raised StreamlitAPIException on the assignment.
+
+    Earlier tests didn't catch this because (a) unit tests stub
+    st.session_state with a plain dict that doesn't enforce the
+    widget-instantiation check, and (b) the existing nav fixtures don't
+    render the normalization UI before clicking Back-to-Home.
+    """
+
+    def test_back_home_does_not_raise_when_widget_keys_overlap(self):
+        """reset_data_state must not raise after widgets with overlapping
+        SessionState keys (norm_method_selection, protein_input_method) have
+        been instantiated in the current script run.
+        """
+        import pandas as pd
+
+        at = AppTest.from_function(
+            reset_with_overlapping_widget_script,
+            default_timeout=DEFAULT_TIMEOUT,
+        )
+        at.session_state['normalized_df'] = pd.DataFrame({'A': [1, 2]})
+        at.run()
+        assert not at.exception
+        assert at.session_state['normalized_df'] is not None
+
+        at.button(key='back_home_reset').click().run()
+
+        # The crux: no StreamlitAPIException raised by reset_data_state.
+        assert not at.exception
+        assert at.session_state['page'] == 'landing'
+        assert at.session_state['normalized_df'] is None

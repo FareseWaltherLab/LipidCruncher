@@ -340,14 +340,23 @@ class StreamlitAdapter:
         (app-level routing). Also removes Streamlit widget keys (both static
         and dynamic) that may hold stale state from the previous dataset.
         """
-        defaults = SessionState()
-        for f in fields(SessionState):
-            if f.name not in _PRESERVE_ON_RESET:
-                st.session_state[f.name] = getattr(defaults, f.name)
-        # Remove static widget keys
+        # Pop static widget keys first. Streamlit forbids assigning to a key
+        # instantiated as a widget during the current run, but allows deletion.
+        # Popped keys are reinitialized to dataclass defaults on the next rerun
+        # by initialize_session_state().
         for key in _WIDGET_KEYS:
             st.session_state.pop(key, None)
-        # Remove dynamic widget keys by prefix (e.g. protein_{sample}, conc_{std})
+        # Reset SessionState fields, skipping fields that are also widget keys
+        # (already popped above — re-assignment would raise if the widget
+        # rendered earlier this run).
+        defaults = SessionState()
+        for f in fields(SessionState):
+            if f.name in _PRESERVE_ON_RESET or f.name in _WIDGET_KEYS:
+                continue
+            st.session_state[f.name] = getattr(defaults, f.name)
+        # Remove dynamic widget keys by prefix (e.g. protein_{sample}, conc_{std}).
+        # Runs after the SessionState reset so prefix-matching SessionState
+        # fields (e.g. protein_df) are also cleared.
         dynamic_keys = [
             key for key in list(st.session_state.keys())
             if isinstance(key, str) and key.startswith(_DYNAMIC_KEY_PREFIXES)
