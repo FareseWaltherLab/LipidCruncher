@@ -215,6 +215,11 @@ class SessionState:
     chat_studio_df: Optional[pd.DataFrame] = None
     chat_studio_df_original: Optional[pd.DataFrame] = None
     chat_studio_experiment: Optional[Any] = None
+    # Tracks where the AI Studio data came from. None for direct upload,
+    # 'normalized' or 'raw' for the two pipeline-import options. Used to
+    # hard-lock Custom Visualization when the source is 'raw' regardless
+    # of whether the columns happen to satisfy the validation check.
+    chat_studio_pipeline_source: Optional[str] = None
 
 
 # Keys that should NOT be reset when starting a fresh analysis
@@ -298,7 +303,31 @@ _DYNAMIC_KEY_PREFIXES = (
     'volcano_label_y_',       # per-lipid label Y position (analysis.py)
     'analysis_svg_',          # analysis SVG download buttons (analysis.py)
     'analysis_csv_',          # analysis CSV download buttons (analysis.py)
+    '_nav_preserved_',  # cross-page widget snapshots (preserve_main_app_widgets)
 )
+
+
+# Sidebar widget keys that need a snapshot when the user navigates to a
+# different page (main app ↔ AI Studio). Without this, Streamlit garbage-
+# collects keys whose widgets did not render in the current run, and the
+# user loses their experiment configuration on every round-trip.
+_MAIN_APP_NAV_WIDGET_KEYS = (
+    'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
+    'grouping_radio', 'manual_sample_override',
+)
+_MAIN_APP_NAV_WIDGET_PREFIXES = (
+    'cond_name_', 'n_samples_', 'select_',
+)
+_AI_STUDIO_NAV_WIDGET_KEYS = (
+    'studio_sample_cols_radio', 'studio_sample_cols_select',
+    'studio_n_conditions', 'studio_grouping_radio',
+    'studio_bqc_radio', 'studio_bqc_label_radio',
+    'studio_confirm_checkbox',
+)
+_AI_STUDIO_NAV_WIDGET_PREFIXES = (
+    'studio_cond_name_', 'studio_n_samples_', 'studio_select_',
+)
+_NAV_PRESERVE_PREFIX = '_nav_preserved_'
 
 
 class StreamlitAdapter:
@@ -453,6 +482,62 @@ class StreamlitAdapter:
         value = st.session_state.get(widget_key)
         if value is not None:
             st.session_state[preserved_key] = value
+
+    @staticmethod
+    def _snapshot_widgets(static_keys, prefixes) -> None:
+        """Copy each named/prefixed widget key into a parallel
+        ``_nav_preserved_*`` key. Shared by the per-page preserve helpers
+        below. Streamlit garbage-collects widget keys whose widgets don't
+        render in the current run, so without this snapshot the user
+        would lose their sidebar configuration on every cross-page hop.
+        """
+        keys = list(static_keys)
+        keys += [
+            k for k in list(st.session_state.keys())
+            if isinstance(k, str) and k.startswith(prefixes)
+        ]
+        for key in keys:
+            if key in st.session_state:
+                st.session_state[f'{_NAV_PRESERVE_PREFIX}{key}'] = (
+                    st.session_state[key]
+                )
+
+    @staticmethod
+    def preserve_main_app_widgets() -> None:
+        """Snapshot main-app sidebar widget keys before the user navigates
+        to a different page. Restored on re-entry by
+        ``restore_navigation_widgets()``."""
+        StreamlitAdapter._snapshot_widgets(
+            _MAIN_APP_NAV_WIDGET_KEYS, _MAIN_APP_NAV_WIDGET_PREFIXES,
+        )
+
+    @staticmethod
+    def preserve_ai_studio_widgets() -> None:
+        """Snapshot AI Studio sidebar widget keys before the user
+        navigates to a different page. Restored on re-entry by
+        ``restore_navigation_widgets()``."""
+        StreamlitAdapter._snapshot_widgets(
+            _AI_STUDIO_NAV_WIDGET_KEYS, _AI_STUDIO_NAV_WIDGET_PREFIXES,
+        )
+
+    @staticmethod
+    def restore_navigation_widgets() -> None:
+        """Restore any widget key that was preserved by either
+        ``preserve_main_app_widgets()`` or ``preserve_ai_studio_widgets()``
+        and is currently absent from session_state. Generic over both
+        pages because each page's widget keys have unique prefixes — keys
+        not matching any rendered widget on the current page are simply
+        unused. If Streamlit kept the widget alive, the live value wins.
+        """
+        prefix_len = len(_NAV_PRESERVE_PREFIX)
+        for key in list(st.session_state.keys()):
+            if not isinstance(key, str):
+                continue
+            if not key.startswith(_NAV_PRESERVE_PREFIX):
+                continue
+            target = key[prefix_len:]
+            if target not in st.session_state:
+                st.session_state[target] = st.session_state[key]
 
     # ==================== Module State Reset ====================
 

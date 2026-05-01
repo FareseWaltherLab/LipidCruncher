@@ -20,7 +20,6 @@ import streamlit as st
 # =============================================================================
 # Configuration
 # =============================================================================
-
 st.set_page_config(
     page_title="LipidCruncher",
     page_icon="🧬",
@@ -96,6 +95,12 @@ def _reset_analysis_state() -> None:
 
 def display_app_page() -> None:
     """Display the main application page with module routing."""
+    # Restore any sidebar widget keys that Streamlit garbage-collected
+    # while the user was on a different page (e.g. AI Studio). Must run
+    # BEFORE any sidebar widget renders, so the widgets see the restored
+    # values when they instantiate.
+    StreamlitAdapter.restore_navigation_widgets()
+
     # Centered layout matching landing page width
     _, center, _ = st.columns([1, 3, 1])
 
@@ -226,6 +231,13 @@ def _display_module1_navigation() -> None:
             st.session_state.module = MODULE_QC_ANALYSIS
             st.rerun()
 
+    # Hop to AI Studio without resetting the data, so the AI Studio's
+    # 'Import from main pipeline' option becomes reachable.
+    if st.button("Open AI Studio →", key="open_studio_module1"):
+        StreamlitAdapter.preserve_main_app_widgets()
+        st.session_state.page = PAGE_AI_STUDIO
+        st.rerun()
+
     if st.button("← Back to Home", key="back_home_module1"):
         st.session_state.page = PAGE_LANDING
         StreamlitAdapter.reset_data_state()
@@ -318,7 +330,7 @@ def _display_module2_and_3(
 
     # Navigation
     st.markdown("---")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("← Back to Data Processing", key="back_processing_module2"):
             _reset_qc_state()
@@ -326,6 +338,13 @@ def _display_module2_and_3(
             st.session_state.module = MODULE_DATA_PROCESSING
             st.rerun()
     with col2:
+        # Hop to AI Studio without resetting the data, so the AI Studio's
+        # 'Import from main pipeline' option becomes reachable.
+        if st.button("Open AI Studio →", key="open_studio_module2"):
+            StreamlitAdapter.preserve_main_app_widgets()
+            st.session_state.page = PAGE_AI_STUDIO
+            st.rerun()
+    with col3:
         if st.button("← Back to Home", key="back_home_module2"):
             st.session_state.page = PAGE_LANDING
             StreamlitAdapter.reset_data_state()
