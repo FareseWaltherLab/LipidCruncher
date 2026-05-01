@@ -17,7 +17,8 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
-from app.constants import PAGE_LANDING
+from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.constants import PAGE_APP, PAGE_LANDING
 from app.models.experiment import ExperimentConfig
 from app.ui.landing_page import display_logo
 from app.ui.ai_chat import (
@@ -140,7 +141,12 @@ def _handle_file_upload_sidebar() -> None:
     )
 
     if uploaded is None:
-        if st.session_state.get("chat_studio_file_id") is not None:
+        # Only treat an empty uploader as "user removed their file" when the
+        # file_id came from a real upload. A pipeline import sets file_id to
+        # "_pipeline_import" but never populates the uploader, so without
+        # this exclusion every rerun would wipe the imported data.
+        file_id = st.session_state.get("chat_studio_file_id")
+        if file_id is not None and not file_id.startswith("_pipeline_import"):
             _clear_data_sessions()
         return
 
@@ -188,23 +194,58 @@ def _offer_pipeline_import_sidebar() -> None:
         label_visibility="collapsed",
     )
     if st.sidebar.button("Import Pipeline Data", key="ai_studio_import_pipeline"):
-        imported = normalized_df if "Normalized" in choice else raw_df
+        is_normalized = "Normalized" in choice
+        imported = normalized_df if is_normalized else raw_df
+        # Read pipeline state BEFORE clearing — _clear_data_sessions() only
+        # touches AI Studio state, but reading first keeps the intent clear.
+        pipeline_experiment = st.session_state.get('experiment')
+        pipeline_bqc_label = st.session_state.get('bqc_label')
+
+        # Reset all studio state + sidebar widgets so the import starts
+        # clean (no stale conditions, sample counts, or BQC selections
+        # leaking from a previous import or upload).
+        _clear_data_sessions()
+
+        # Set the new data + provenance.
         st.session_state.chat_studio_df = imported
         st.session_state.chat_studio_df_original = imported
         st.session_state.chat_studio_file_id = "_pipeline_import"
-        # Carry over the pipeline's experiment definition.
-        pipeline_experiment = st.session_state.get('experiment')
+        st.session_state.chat_studio_pipeline_source = (
+            'normalized' if is_normalized else 'raw'
+        )
         if pipeline_experiment is not None:
             st.session_state.chat_studio_experiment = pipeline_experiment
-        # Reset per-tab sessions since the underlying data changed.
-        st.session_state.chat_data_questions_session = None
-        st.session_state.chat_transform_session = None
-        st.session_state.chat_viz_session = None
-        st.session_state.chat_transform_result = None
-        st.session_state.chat_viz_figures = {}
-        st.session_state.chat_result_tables = {}
-        st.session_state.chat_message_count = 0
-        st.session_state.chat_execution_count = 0
+        if pipeline_bqc_label is not None:
+            st.session_state.chat_studio_bqc_label = pipeline_bqc_label
+
+        # For NORMALIZED imports we know the experiment is defined and the
+        # data has standardized intensity[*]/concentration[*] columns
+        # matching the experiment's sample structure. Pre-populate every
+        # studio_* sidebar widget so the user doesn't have to re-walk the
+        # flow — the next rerun renders the sidebar with these values, the
+        # apply step runs, studio_applied_snapshot is set, and the data
+        # tabs unlock immediately. RAW imports skip this because their
+        # columns may not match (e.g. LipidSearch raw uses MeanArea[*]),
+        # so the user walks through manually.
+        if is_normalized and pipeline_experiment is not None:
+            st.session_state.studio_sample_cols_radio = "Yes"
+            st.session_state.studio_n_conditions = (
+                pipeline_experiment.n_conditions
+            )
+            for i, name in enumerate(pipeline_experiment.conditions_list):
+                st.session_state[f'studio_cond_name_{i}'] = name
+            for i, n in enumerate(
+                pipeline_experiment.number_of_samples_list
+            ):
+                st.session_state[f'studio_n_samples_{i}'] = int(n)
+            st.session_state.studio_grouping_radio = "Yes"
+            st.session_state.studio_bqc_radio = (
+                "Yes" if pipeline_bqc_label else "No"
+            )
+            if pipeline_bqc_label:
+                st.session_state.studio_bqc_label_radio = pipeline_bqc_label
+            st.session_state.studio_confirm_checkbox = True
+
         st.rerun()
 
 
@@ -576,16 +617,38 @@ def _display_studio_sidebar() -> None:
 
 
 def _clear_data_sessions() -> None:
-    """Reset all data-dependent chat sessions when data changes."""
+    """Reset all data-dependent chat sessions and sidebar widget keys when
+    the underlying data changes (new upload, pipeline import, navigation).
+    Widget keys must be popped (not assigned None) — Streamlit refuses
+    direct assignment to a widget's key after the widget has rendered.
+    """
     st.session_state.chat_studio_df = None
     st.session_state.chat_studio_df_original = None
     st.session_state.chat_studio_file_id = None
     st.session_state.chat_studio_experiment = None
+    st.session_state.chat_studio_pipeline_source = None
     st.session_state.chat_studio_bqc_label = None
     st.session_state.studio_applied_snapshot = None
-    # The 'Sample Columns' override multiselect holds column names from the
-    # previous file; drop it so the next dataset starts clean.
-    st.session_state.pop('studio_sample_cols_select', None)
+    # Sidebar widget keys: pop static ones explicitly + dynamic ones by
+    # prefix. Pre-populated values from a pipeline import would otherwise
+    # leak into a subsequent fresh upload or different import.
+    static_widget_keys = (
+        'studio_sample_cols_radio', 'studio_sample_cols_select',
+        'studio_n_conditions', 'studio_grouping_radio',
+        'studio_bqc_radio', 'studio_bqc_label_radio',
+        'studio_confirm_checkbox',
+    )
+    for key in static_widget_keys:
+        st.session_state.pop(key, None)
+    dynamic_widget_prefixes = (
+        'studio_cond_name_', 'studio_n_samples_', 'studio_select_',
+    )
+    dynamic_keys = [
+        key for key in list(st.session_state.keys())
+        if isinstance(key, str) and key.startswith(dynamic_widget_prefixes)
+    ]
+    for key in dynamic_keys:
+        st.session_state.pop(key, None)
     # Per-tab sessions
     st.session_state.chat_data_questions_session = None
     st.session_state.chat_transform_session = None
@@ -609,6 +672,11 @@ def _clear_data_sessions() -> None:
 
 def display_ai_studio_page() -> None:
     """Display the LipidCruncher AI Studio page with 4 tabs."""
+    # Restore any sidebar widget keys that Streamlit garbage-collected
+    # while the user was on the main app page. Must run BEFORE the
+    # sidebar widgets render so they see the restored values.
+    StreamlitAdapter.restore_navigation_widgets()
+
     # All data-loading and experiment-definition controls live in the
     # sidebar, mirroring the main app's layout.
     _display_studio_sidebar()
@@ -725,9 +793,25 @@ def display_ai_studio_page() -> None:
                 display_transform_chat(studio_df_original)
 
         with tab_viz:
+            pipeline_source = st.session_state.get(
+                'chat_studio_pipeline_source'
+            )
             if studio_df_processed is None:
                 st.info(
                     "Upload a CSV file above to create custom visualizations."
+                )
+            elif pipeline_source == 'raw':
+                # Raw pipeline imports haven't been through cleaning, zero
+                # filtering, or normalization, so plotting them would be
+                # misleading even when the columns happen to satisfy the
+                # validation check.
+                st.warning(
+                    "You imported **raw** data from the main pipeline. "
+                    "Custom Visualization requires data that has been "
+                    "processed through Module 1 (cleaning, zero filtering, "
+                    "normalization). Re-import **Normalized data** "
+                    "instead, or run your data through *Start Crunching* "
+                    "first."
                 )
             elif not is_confirmed:
                 st.info(not_confirmed_msg)
@@ -776,6 +860,35 @@ def display_ai_studio_page() -> None:
 def _display_navigation() -> None:
     """Render navigation buttons."""
     st.markdown("---")
+    has_pipeline_data = (
+        st.session_state.get("raw_df") is not None
+        or st.session_state.get("normalized_df") is not None
+    )
+
+    if has_pipeline_data:
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button(
+                "← Back to Main Pipeline", key="ai_studio_back_main"
+            ):
+                # Round-trip: keep both AI Studio state and pipeline state
+                # so the user can hop back without losing work on either side.
+                # Snapshot the studio_* widgets first — Streamlit GCs them
+                # while the AI Studio page is not rendering, so without
+                # this the sidebar would reset on the next return.
+                StreamlitAdapter.preserve_ai_studio_widgets()
+                st.session_state.page = PAGE_APP
+                st.rerun()
+        with col2:
+            _render_back_to_home_button()
+    else:
+        _render_back_to_home_button()
+
+
+def _render_back_to_home_button() -> None:
+    """Render the 'Back to Home' button. Splits clearing logic out so the
+    button can appear in either a 1-col or 2-col layout depending on
+    whether 'Back to Main Pipeline' is also shown."""
     if st.button("Back to Home", key="ai_studio_back_home"):
         # Clear all studio-specific state
         _clear_data_sessions()
