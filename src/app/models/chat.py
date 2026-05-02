@@ -76,10 +76,26 @@ class ChatSession(BaseModel):
     def to_api_messages(self) -> list:
         """Convert message history to Anthropic API format.
 
+        Assistant messages with a stored ``code`` field have the code
+        appended to the content so the AI sees its own previous code on
+        subsequent turns. Without this, the model loses sight of what it
+        wrote and can confabulate ("I haven't tried yet" / "I was waiting
+        for clarification") when in fact a prior attempt errored.
+
         Returns:
             List of dicts with 'role' and 'content' keys.
         """
-        return [{"role": m.role, "content": m.content} for m in self.messages]
+        out = []
+        for m in self.messages:
+            content = m.content
+            if m.role == "assistant" and m.code:
+                content = (
+                    f"{content}\n\n"
+                    f"Code generated in this turn:\n"
+                    f"```python\n{m.code}\n```"
+                )
+            out.append({"role": m.role, "content": content})
+        return out
 
 
 class AIConfig(BaseModel):

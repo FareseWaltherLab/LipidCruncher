@@ -72,6 +72,38 @@ class TestChatSession:
         assert api_msgs[0] == {"role": "user", "content": "Hello"}
         assert api_msgs[1] == {"role": "assistant", "content": "Hi"}
 
+    def test_to_api_messages_includes_assistant_code(self):
+        session = ChatSession(mode=ChatMode.VISUALIZATION)
+        session = session.add_message(ChatMessage(role="user", content="Plot it"))
+        session = session.add_message(ChatMessage(
+            role="assistant",
+            content="Here's the visualization.",
+            code="fig = px.bar(df, x='ClassKey')",
+        ))
+
+        api_msgs = session.to_api_messages()
+        assert "Here's the visualization." in api_msgs[1]["content"]
+        assert "fig = px.bar(df, x='ClassKey')" in api_msgs[1]["content"]
+        assert "```python" in api_msgs[1]["content"]
+
+    def test_to_api_messages_no_code_unchanged(self):
+        session = ChatSession(mode=ChatMode.VISUALIZATION)
+        session = session.add_message(ChatMessage(
+            role="assistant", content="Just text, no code",
+        ))
+        api_msgs = session.to_api_messages()
+        assert api_msgs[0]["content"] == "Just text, no code"
+
+    def test_to_api_messages_user_code_field_ignored(self):
+        # User messages don't normally have code, but if they do (defensive),
+        # the user's content should be sent as-is, not wrapped.
+        session = ChatSession(mode=ChatMode.VISUALIZATION)
+        session = session.add_message(ChatMessage(
+            role="user", content="Question", code="some code",
+        ))
+        api_msgs = session.to_api_messages()
+        assert api_msgs[0]["content"] == "Question"
+
     def test_frozen(self):
         session = ChatSession(mode=ChatMode.DATA_TRANSFORM)
         with pytest.raises(Exception):
