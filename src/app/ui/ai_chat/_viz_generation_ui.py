@@ -21,8 +21,26 @@ _EXAMPLE_PROMPTS = [
 ]
 
 
+def _figure_has_data(fig) -> bool:
+    """True if the figure has at least one trace with non-empty x or y."""
+    if fig is None or not getattr(fig, "data", None):
+        return False
+    for trace in fig.data:
+        x = getattr(trace, "x", None)
+        y = getattr(trace, "y", None)
+        if (x is not None and len(x) > 0) or (y is not None and len(y) > 0):
+            return True
+    return False
+
+
 def _render_messages(session) -> None:
-    """Render all chat messages with inline figures."""
+    """Render all chat messages with inline figures.
+
+    On success the generated code is hidden (commit f17353c — the audience
+    is non-technical). When a turn errors or yields an empty figure, surface
+    the code in a collapsed expander so the user can paste it back to the AI
+    or debug it directly.
+    """
     for i, msg in enumerate(session.messages):
         with st.chat_message(msg.role):
             st.markdown(msg.content)
@@ -32,6 +50,12 @@ def _render_messages(session) -> None:
         fig = st.session_state.get('chat_viz_figures', {}).get(fig_key)
         if fig is not None:
             st.plotly_chart(fig, use_container_width=True)
+
+        # Diagnostic affordance: show generated code when the figure is
+        # missing or empty. Successful plots stay clean.
+        if msg.role == "assistant" and msg.code and not _figure_has_data(fig):
+            with st.expander("Show generated code (for troubleshooting)"):
+                st.code(msg.code, language="python")
 
 
 def render_viz_chat(analysis_df, experiment) -> None:

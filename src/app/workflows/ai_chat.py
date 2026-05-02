@@ -558,10 +558,21 @@ class AIChatWorkflow:
             )
 
             if sandbox_result.success and sandbox_result.figure is not None:
-                assistant_text = (
-                    f"{explanation}\n\n"
-                    f"Here's the visualization you requested."
-                )
+                if _figure_is_empty(sandbox_result.figure):
+                    assistant_text = (
+                        f"{explanation}\n\n"
+                        f"The code ran without errors but produced an empty "
+                        f"figure (no data was plotted). This usually means a "
+                        f"filter, group-by, or column-name mismatch eliminated "
+                        f"all rows before plotting. Expand the code below the "
+                        f"empty plot to see what was generated, then describe "
+                        f"what to fix and I'll adjust."
+                    )
+                else:
+                    assistant_text = (
+                        f"{explanation}\n\n"
+                        f"Here's the visualization you requested."
+                    )
             elif sandbox_result.success and sandbox_result.figure is None:
                 assistant_text = (
                     f"{explanation}\n\n"
@@ -933,6 +944,18 @@ class AIChatWorkflow:
             code=code,
             is_transformation=is_transformation,
         )
+
+
+def _figure_is_empty(fig) -> bool:
+    """True if the figure has no traces or every trace has empty x and y."""
+    if fig is None or not getattr(fig, "data", None):
+        return True
+    for trace in fig.data:
+        x = getattr(trace, "x", None)
+        y = getattr(trace, "y", None)
+        if (x is not None and len(x) > 0) or (y is not None and len(y) > 0):
+            return False
+    return True
 
 
 def _looks_like_generic_format(df: pd.DataFrame) -> bool:
