@@ -231,13 +231,6 @@ def _display_module1_navigation() -> None:
             st.session_state.module = MODULE_QC_ANALYSIS
             st.rerun()
 
-    # Hop to AI Studio without resetting the data, so the AI Studio's
-    # 'Import from main pipeline' option becomes reachable.
-    if st.button("Open AI Studio →", key="open_studio_module1"):
-        StreamlitAdapter.preserve_main_app_widgets()
-        st.session_state.page = PAGE_AI_STUDIO
-        st.rerun()
-
     if st.button("← Back to Home", key="back_home_module1"):
         st.session_state.page = PAGE_LANDING
         StreamlitAdapter.reset_data_state()
