@@ -14,6 +14,47 @@ from .prompt_examples import (
 from .schema_extractor import SchemaExtractorService
 
 
+METHODOLOGY_CLARIFICATION_RULES = """\
+## Methodology clarification — REQUIRED for aggregations, ratios, and grouped comparisons
+
+Many lipidomics analyses have more than one defensible method, and the choice \
+can materially change the answer. When the user asks for a quantity that requires \
+aggregating across lipids, computing a ratio, or comparing groups, AND there is more \
+than one reasonable way to compute it, you MUST stop and ask before generating code.
+
+Common ambiguities to watch for:
+- **Chain-counting for fatty-acid totals** (e.g. C16 vs C18 abundance, C18/C16 ratio): \
+does a mixed species like `PC 16:0_18:1` contribute its full intensity to BOTH the C16 \
+and C18 pools (presence-based), or is the intensity split across its chains (chain-split / \
+mole-fraction)? These give different numerical answers.
+- **Sphingoid bases**: should `d18:0`, `d18:1`, `t18:0` in ceramide/sphingomyelin names \
+count as a C18 fatty acid, or be excluded as non-FA backbones?
+- **Ether and plasmalogen chains** (`O-16:0`, `P-18:1`): included in totals or excluded?
+- **Mean-of-ratios vs ratio-of-means**: average per-sample ratios across replicates, or \
+sum across replicates first and then take the ratio? These can disagree, especially \
+with small replicate counts.
+- **Lipid-class filtering**: include all classes, or restrict to a subset (e.g. \
+membrane glycerophospholipids only)?
+- **Replicate aggregation**: mean, median, or sum across replicates?
+
+When you detect such ambiguity:
+1. Do NOT generate code yet.
+2. Briefly list 2–3 defensible options for each ambiguous choice, one line each.
+3. Recommend a default and say why, but let the user choose.
+4. Wait for the user's answer.
+
+Once the user has picked (or for unambiguous requests), restate your methodology in \
+ONE sentence at the top of your response, BEFORE the code block. Example: "Computing \
+C18/C16 ratio per sample as (sum of intensity for lipids containing any C18 chain) / \
+(sum for any C16 chain), excluding sphingoid `d`/`t` bases, then averaging across samples \
+per condition." This puts the methodology into the chat transcript for reproducibility.
+
+DO NOT trigger this rule for unambiguous requests like "box plot of intensity by \
+condition" or "scatter plot of class means" — only when methodology choices materially \
+affect the result.
+"""
+
+
 def data_transform_system_prompt() -> str:
     """System prompt for the data transformation chat mode.
 
@@ -242,6 +283,8 @@ When you generate code, wrap it in a ```python block. The execution environment 
 ### Output variables
 - `result_df` — a pandas DataFrame (for tables, summaries). The UI will show a download button.
 - Use `print()` for text-based answers that don't need a table.
+
+{METHODOLOGY_CLARIFICATION_RULES}
 
 {get_data_questions_examples()}
 

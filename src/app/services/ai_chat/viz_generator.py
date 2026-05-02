@@ -14,6 +14,7 @@ from .ai_client import AIClientService
 from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .knowledge_base import get_app_knowledge
 from .prompt_examples import get_viz_examples
+from .prompt_templates import METHODOLOGY_CLARIFICATION_RULES
 from .sandbox import SandboxResult, SandboxService
 from .schema_extractor import SchemaExtractorService
 
@@ -115,6 +116,8 @@ stacked bars per condition), `px.bar(..., color=...)` is fine — use \
 `barmode='stack'` or `'group'` as appropriate.
 
 {get_viz_examples()}
+
+{METHODOLOGY_CLARIFICATION_RULES}
 
 ## Important
 - Always produce a Plotly `fig` variable.
