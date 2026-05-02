@@ -10,6 +10,7 @@ All AI output is treated as untrusted.
 """
 import ast
 import math
+import re
 import statistics
 import sys
 import threading
@@ -56,7 +57,11 @@ class SandboxResult:
 
 # Imports that are safe to allow in sandbox code
 _WHITELISTED_IMPORTS: frozenset = frozenset({
-    "math", "statistics",
+    "math", "statistics", "re",
+    # Already pre-loaded in globals as pd/np/px/go — but the AI sometimes
+    # adds defensive imports (e.g. `import pandas as pd`) after an error.
+    # Whitelist them so those imports are no-ops instead of fatal errors.
+    "pandas", "numpy", "plotly",
 })
 
 # Dunder attributes that must never be accessed
@@ -179,8 +184,14 @@ _SAFE_BUILTINS: Dict[str, Any] = {
 
 
 def _restricted_import(name, *args, **kwargs):
-    """Import function that only allows whitelisted modules."""
-    if name not in _WHITELISTED_IMPORTS:
+    """Import function that only allows whitelisted modules.
+
+    Matches the AST validator's policy: the top-level package name must
+    be in ``_WHITELISTED_IMPORTS``. Submodules of whitelisted packages
+    (e.g. ``plotly.graph_objects``) are allowed.
+    """
+    top_level = name.split(".", 1)[0]
+    if top_level not in _WHITELISTED_IMPORTS:
         raise ImportError(f"Import of '{name}' is not allowed")
     return __builtins__.__import__(name, *args, **kwargs) if hasattr(__builtins__, '__import__') else __import__(name, *args, **kwargs)
 
@@ -205,6 +216,7 @@ def _build_globals(df: pd.DataFrame) -> Dict[str, Any]:
         "go": go,
         "math": math,
         "statistics": statistics,
+        "re": re,
         "df": df.copy(),
         "_captured_output": captured_output,
     }

@@ -39,7 +39,7 @@ so it can be analyzed by the application.
 2. You can answer questions about the data conversationally — you do NOT need to produce code for every message. Only generate transformation code when the user explicitly asks you to transform or convert their data.
 3. When you do generate code, write a Python function called `transform(df)` that takes the user's DataFrame and returns a new DataFrame in the Generic format.
 4. Always wrap transformation code in a ```python code block.
-5. The code has access to: `pd` (pandas), `np` (numpy), `math`, `statistics`, and the user's DataFrame as `df`.
+5. The code has access to: `pd` (pandas), `np` (numpy), `math`, `statistics`, `re` (regex), and the user's DataFrame as `df`.
 6. The code must assign the result to `result_df`. For example:
    ```
    result_df = transform(df)
@@ -235,6 +235,7 @@ When you generate code, wrap it in a ```python block. The execution environment 
 - `pd` — pandas
 - `np` — numpy
 - `math`, `statistics` — standard library math modules
+- `re` — standard library regex module (useful for parsing lipid names, e.g. extracting fatty acid chain composition)
 
 **Do NOT import any modules — they are pre-loaded.**
 

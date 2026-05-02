@@ -82,6 +82,26 @@ class TestASTValidation:
         tree = validate_code("import statistics\nx = statistics.mean([1, 2, 3])")
         assert tree is not None
 
+    def test_whitelisted_import_re_allowed(self):
+        tree = validate_code("import re\nx = re.findall(r'\\d+', 'PE 16:0_18:1')")
+        assert tree is not None
+
+    def test_whitelisted_import_pandas_allowed(self):
+        tree = validate_code("import pandas as pd\nx = pd.DataFrame({'a': [1]})")
+        assert tree is not None
+
+    def test_whitelisted_import_numpy_allowed(self):
+        tree = validate_code("import numpy as np\nx = np.array([1, 2])")
+        assert tree is not None
+
+    def test_whitelisted_import_plotly_allowed(self):
+        tree = validate_code("import plotly.express as px\nx = px.bar")
+        assert tree is not None
+
+    def test_whitelisted_from_plotly_allowed(self):
+        tree = validate_code("from plotly.graph_objects import Figure\nx = Figure")
+        assert tree is not None
+
     def test_dunder_class_blocked(self):
         with pytest.raises(SandboxError, match="__class__"):
             validate_code("x = ().__class__")
@@ -223,6 +243,39 @@ class TestSafeExecution:
         result = SandboxService.execute(code, sample_df, default_config)
         assert result.success is True
         assert "12" in result.stdout
+
+    def test_re_module(self, sample_df, default_config):
+        code = "chains = re.findall(r'(\\d+):\\d+', 'PE 16:0_18:1')\nprint(chains)"
+        result = SandboxService.execute(code, sample_df, default_config)
+        assert result.success is True
+        assert "16" in result.stdout and "18" in result.stdout
+
+    def test_redundant_pandas_import_is_no_op(self, sample_df, default_config):
+        # AI sometimes adds defensive `import pandas as pd` even though pd
+        # is already pre-loaded. Should run without error.
+        code = (
+            "import pandas as pd\n"
+            "result_df = pd.DataFrame({'a': [1, 2, 3]})\n"
+        )
+        result = SandboxService.execute(code, sample_df, default_config)
+        assert result.success is True
+        assert result.result_df is not None
+        assert list(result.result_df["a"]) == [1, 2, 3]
+
+    def test_redundant_numpy_import_is_no_op(self, sample_df, default_config):
+        code = "import numpy as np\nprint(np.array([1, 2]).sum())"
+        result = SandboxService.execute(code, sample_df, default_config)
+        assert result.success is True
+        assert "3" in result.stdout
+
+    def test_redundant_plotly_import_is_no_op(self, sample_df, default_config):
+        code = (
+            "import plotly.graph_objects as go\n"
+            "fig = go.Figure()\n"
+        )
+        result = SandboxService.execute(code, sample_df, default_config)
+        assert result.success is True
+        assert result.figure is not None
 
     def test_print_capture(self, sample_df, default_config):
         code = "print('hello')\nprint('world')"

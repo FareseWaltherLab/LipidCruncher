@@ -47,6 +47,7 @@ Only generate visualization code when the user asks you to create, plot, or show
    - `plt` — matplotlib.pyplot (use only if the user specifically requests matplotlib)
    - `sns` — seaborn (use only if needed with matplotlib)
    - `math`, `statistics` — standard library math modules
+   - `re` — standard library regex module (useful for parsing lipid names, e.g. extracting fatty acid chain composition like C16/C18)
 6. Do NOT import any modules — they are pre-loaded.
 7. The result MUST be a Plotly figure assigned to `fig`. For example:
    ```
