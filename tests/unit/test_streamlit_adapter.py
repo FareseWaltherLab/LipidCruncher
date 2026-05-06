@@ -917,8 +917,8 @@ class TestSessionStateFieldCompleteness:
     def test_total_field_count(self):
         """Test total SessionState field count matches expected."""
         field_names = [f.name for f in fields(SessionState)]
-        # 83 (pre-AI chat) + 12 (chat_*) = 95
-        assert len(field_names) == 95
+        # 83 (pre-AI chat) + 14 (chat_*: 10 ai_chat + 4 ai_studio) = 97
+        assert len(field_names) == 97
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""
@@ -940,8 +940,8 @@ class TestSessionStateFieldCompleteness:
 
     def test_dynamic_prefix_count_includes_analysis(self):
         """Test that _DYNAMIC_KEY_PREFIXES count includes analysis prefixes."""
-        # 9 (pre-Module 3) + 4 (analysis) = 13
-        assert len(_DYNAMIC_KEY_PREFIXES) == 13
+        # 9 (pre-Module 3) + 4 (analysis) + 1 (_nav_preserved_ for AI Studio) = 14
+        assert len(_DYNAMIC_KEY_PREFIXES) == 14
 
 
 # =============================================================================
