@@ -230,6 +230,7 @@ _PRESERVE_ON_RESET = {'page', 'module'}
 # Must be removed on reset to prevent stale widget state.
 _WIDGET_KEYS = {
     # Sidebar widgets (file_upload, experiment_config, sample_grouping, confirm_inputs)
+    'data_format_select', 'n_conditions',
     'manual_sample_override', 'grouping_radio',
     'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
     'sample_data_experiment',
@@ -312,6 +313,7 @@ _DYNAMIC_KEY_PREFIXES = (
 # collects keys whose widgets did not render in the current run, and the
 # user loses their experiment configuration on every round-trip.
 _MAIN_APP_NAV_WIDGET_KEYS = (
+    'data_format_select', 'n_conditions',
     'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
     'grouping_radio', 'manual_sample_override',
 )

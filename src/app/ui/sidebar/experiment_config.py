@@ -133,12 +133,17 @@ def _display_manual_experiment(sample_cols: list) -> tuple:
     meta = st.session_state.get('sample_data_experiment')
     default_n = meta['n_conditions'] if meta else 2
 
+    n_kwargs = {
+        'key': 'n_conditions',
+        'min_value': 1,
+        'max_value': 20,
+        'step': 1,
+    }
+    if 'n_conditions' not in st.session_state:
+        n_kwargs['value'] = default_n
     n_conditions = st.sidebar.number_input(
         'Number of conditions',
-        min_value=1,
-        max_value=20,
-        value=default_n,
-        step=1
+        **n_kwargs,
     )
 
     conditions_list = []

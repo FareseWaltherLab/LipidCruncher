@@ -118,6 +118,7 @@ def display_format_selection() -> str:
     return st.sidebar.selectbox(
         'Select Data Format',
         FORMAT_OPTIONS,
+        key='data_format_select',
     )
 
 
@@ -239,5 +240,13 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
                 "If the issue persists after refreshing the app, contact abdih@mskcc.org."
             )
             return None
+
+    # The file_uploader widget loses its uploaded file when the main app
+    # page is unmounted (e.g. while the user is in AI Studio). Fall back
+    # to the previously stored raw_df so a round-trip back to the main
+    # pipeline doesn't appear to drop the dataset.
+    cached_raw = st.session_state.get('raw_df')
+    if cached_raw is not None:
+        return cached_raw
 
     return None
