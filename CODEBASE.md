@@ -2,6 +2,8 @@
 
 A professional lipidomics data analysis application built with Streamlit, developed by the Farese & Walther Lab at Memorial Sloan Kettering Cancer Center. LipidCruncher enables researchers to process, analyze, and visualize lipidomic data from multiple sources without requiring bioinformatics expertise.
 
+The app also includes an **AI Studio** — a standalone page with a Claude-powered chat that lets users ask questions about their data, transform arbitrary CSVs into LipidCruncher's Generic format, and generate custom Plotly visualizations from natural language. AI-generated code runs in a sandboxed execution environment.
+
 ---
 
 ## Table of Contents
@@ -83,6 +85,7 @@ LipidCruncher follows a **layered architecture** with strict dependency rules �
 - **Models are immutable** — Pydantic models with `frozen=True` make them hashable and safe for `@st.cache_data`.
 - **The adapter is the only bridge** — `StreamlitAdapter` is the sole point where Streamlit concerns (caching, session state) meet business logic.
 - **UI modules are thin** — they call adapter/workflow methods and render results; no data processing logic lives here.
+- **AI-generated code is untrusted** — the AI Studio adds an extra security layer: every model output goes through `SandboxService` (AST validation + curated builtins + timeout) before execution. The sandbox is the security boundary, not AI compliance.
 
 ---
 
@@ -98,7 +101,8 @@ LipidCruncher/
 │       ├── models/                          # Pydantic data models
 │       │   ├── experiment.py                #   ExperimentConfig
 │       │   ├── normalization.py             #   NormalizationConfig
-│       │   └── statistics.py                #   StatisticalTestConfig
+│       │   ├── statistics.py                #   StatisticalTestConfig
+│       │   └── chat.py                      #   ChatMessage, ChatSession, ChatMode, AIConfig, SandboxConfig
 │       ├── services/                        # Pure business logic
 │       │   ├── __init__.py                  #   Public API: re-exports services + exceptions
 │       │   ├── exceptions.py                #   Typed exception hierarchy (ServiceError, etc.)
@@ -121,6 +125,18 @@ LipidCruncher/
 │       │   ├── sample_grouping.py           #   Sample assignment to conditions
 │       │   ├── report_generator.py          #   PDF report generation
 │       │   ├── lsi_report.py               #   LSI compliance checklist generation
+│       │   ├── ai_chat/                     #   AI Studio service layer (Anthropic API + sandbox)
+│       │   │   ├── __init__.py              #     Public API: re-exports AI services + exceptions
+│       │   │   ├── exceptions.py            #     AIChatError, AIClientError, SandboxError, TransformationError
+│       │   │   ├── ai_client.py             #     Anthropic SDK wrapper + tool-use loop
+│       │   │   ├── sandbox.py               #     AST-validated sandboxed code execution
+│       │   │   ├── schema_extractor.py      #     DataFrame → schema description for prompts
+│       │   │   ├── codebase_tools.py        #     search_codebase / read_file_section / list_files / read_documentation tools
+│       │   │   ├── knowledge_base.py        #     Condensed app knowledge embedded in system prompts
+│       │   │   ├── prompt_templates.py      #     Per-mode system prompts (transform, viz, data Q, LC Q, unified)
+│       │   │   ├── prompt_examples.py       #     Few-shot example prompts shown in chat UI
+│       │   │   ├── data_transformer.py      #     DataTransformerService (CSV → Generic format)
+│       │   │   └── viz_generator.py         #     VizGeneratorService (NL → Plotly figure)
 │       │   └── plotting/                    #   Visualization services
 │       │       ├── __init__.py              #     Public API: re-exports all plotters + shared utils
 │       │       ├── base.py                  #     PlotterServiceProtocol (interface contract)
@@ -143,7 +159,8 @@ LipidCruncher/
 │       │   ├── data_ingestion.py            #   DataIngestionWorkflow
 │       │   ├── normalization.py             #   NormalizationWorkflow
 │       │   ├── quality_check.py             #   QualityCheckWorkflow
-│       │   └── analysis.py                  #   AnalysisWorkflow
+│       │   ├── analysis.py                  #   AnalysisWorkflow
+│       │   └── ai_chat.py                   #   AIChatWorkflow (transform / viz / data Q / LC Q / unified)
 │       ├── adapters/
 │       │   └── streamlit_adapter.py         #   StreamlitAdapter
 │       └── ui/                              # Streamlit UI components
@@ -153,6 +170,15 @@ LipidCruncher/
 │           ├── standards_plots.py
 │           ├── download_utils.py
 │           ├── st_helpers.py                #   Shared UI helpers (export buttons, section headers)
+│           ├── ai_studio_page.py            #   Standalone AI Studio page (4 tabs + sidebar data controls)
+│           ├── ai_chat/                     #   AI chat panels (per-tab UI)
+│           │   ├── __init__.py              #     Re-exports tab-specific display_* functions
+│           │   ├── chat_panel.py            #     Shared chat-rendering helpers
+│           │   ├── _lipidcruncher_questions_ui.py  # Tab 1: app Q&A
+│           │   ├── _data_questions_ui.py    #     Tab 2: dataset exploration
+│           │   ├── _data_transform_ui.py    #     Tab 3: CSV → Generic transformation
+│           │   ├── _viz_generation_ui.py    #     Tab 4: custom visualization
+│           │   └── _unified_chat_ui.py      #     Single-chat variant (legacy / fallback)
 │           ├── sidebar/                     #   Sidebar input components
 │           │   ├── file_upload.py
 │           │   ├── column_mapping.py
@@ -187,9 +213,9 @@ LipidCruncher/
 │               └── analysis_docs.py         #   Statistical testing & saturation docs
 ├── tests/
 │   ├── conftest.py                          # Shared fixtures
-│   ├── unit/                                # 33 unit test modules
-│   ├── integration/                         # 4 integration test modules
-│   └── ui/                                  # 5 UI test modules
+│   ├── unit/                                # 54 unit test modules (incl. AI chat models, sandbox, codebase tools, transformer, viz generator, schema extractor, scope, validation, adapter, workflow)
+│   ├── integration/                         # 6 integration test modules (incl. test_ai_tool_use.py)
+│   └── ui/                                  # 6 UI test modules (incl. test_navigation.py for AI Studio routing)
 ├── sample_datasets/                         # Test data (one per format)
 │   ├── lipidsearch5_test_dataset.csv
 │   ├── msdial_test_dataset.csv
@@ -206,7 +232,7 @@ LipidCruncher/
 
 ## Application Flow
 
-The app has two pages: a **landing page** and the **main app page**. The main app page has two modules that the user progresses through sequentially.
+The app has three pages: a **landing page**, the **main app page**, and an **AI Studio page**. The main app page has two modules that the user progresses through sequentially. The AI Studio is reachable from the landing page or from the end of Module 2 (so users can take pipeline output into AI-driven exploration); a round-trip back to the main app preserves sidebar widget state via `StreamlitAdapter.preserve_main_app_widgets()` / `restore_navigation_widgets()`.
 
 ### Module 1: Data Cleaning, Filtering, & Normalization
 
@@ -244,6 +270,17 @@ Bar Charts | Pie Charts | Saturation | Chain Length | FACH | Pathway | Volcano |
 
 Each analysis type is independent and user-selectable. All produce interactive plots with export options (SVG, CSV, PDF).
 
+### AI Studio (separate page)
+
+Reached via `Page.AI_STUDIO`. Independent of the main pipeline — users can upload a fresh CSV or import the current pipeline DataFrame (raw or normalized). The page exposes four tabs:
+
+1. **LipidCruncher Questions** — Q&A about the app's features and methods. No data required. The AI may use codebase / documentation tools to ground its answers.
+2. **Data Questions** — explore and summarize the uploaded dataset. AI generates pandas code that runs in the sandbox; results appear as inline tables and printed text.
+3. **Transform to Generic** — convert an arbitrary CSV into LipidCruncher's Generic format. A format diagnostic guesses lipid-name / intensity / metadata columns; the AI iterates on transformation code until the output validates.
+4. **Custom Visualization** — generate Plotly figures from natural-language requests against Module 1 output (gated by `Module1ValidationResult`).
+
+All AI-generated code runs through `SandboxService` (AST validation + curated builtins + timeout), and the AI runs in a tool-use loop (`AIClientService.execute_tool_loop`) so it can `search_codebase`, `read_file_section`, `list_files`, or `read_documentation` before answering.
+
 ---
 
 ## Layer-by-Layer Reference
@@ -257,6 +294,11 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 | `ExperimentConfig` | `experiment.py` | Defines experimental setup: number of conditions, condition labels, sample counts. Auto-derives `n_conditions` from `conditions_list` if omitted. Validates condition label uniqueness. Computed properties generate sample labels (s1, s2, ...) and group them by condition. Provides `without_samples()` for creating configs after sample removal. |
 | `NormalizationConfig` | `normalization.py` | Normalization method (`none`, `internal_standard`, `protein`, `both`, `total_intensity`), selected lipid classes, standard-to-class mappings, concentrations. |
 | `StatisticalTestConfig` | `statistics.py` | Test type (`parametric`, `non_parametric`, `auto`), multiple-testing correction (`fdr_bh`, `bonferroni`), post-hoc method (`tukey`, `bonferroni`), `auto_transform` flag for log10 transformation. |
+| `ChatMessage` | `chat.py` | A single chat message: `role` ("user" / "assistant"), `content`, optional `code`, optional `figure_key`. Implements `__hash__` so `ChatSession` (which holds a tuple of messages) stays hashable for caching. |
+| `ChatSession` | `chat.py` | Immutable chat history: `mode` (`ChatMode` enum), tuple of `ChatMessage`, and `schema_context` (pre-computed DataFrame schema). `add_message()` returns a new session; `to_api_messages()` formats history for the Anthropic API and re-injects each assistant message's stored `code` so the model sees its own previous attempts. |
+| `ChatMode` | `chat.py` | Enum: `DATA_TRANSFORM`, `VISUALIZATION`, `DATA_QUESTIONS`, `LIPIDCRUNCHER_QUESTIONS`. |
+| `AIConfig` | `chat.py` | Anthropic API config: `model`, `max_tokens` (1–8192), `temperature` (0.0–1.0). Defaults to a deterministic Sonnet call. |
+| `SandboxConfig` | `chat.py` | Limits for sandboxed execution: `execution_timeout` (seconds), `max_output_rows`, `max_figure_size_bytes`. |
 
 ### Services
 
@@ -302,6 +344,31 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | `ReportGeneratorService` | `report_generator.py` | Generates PDF reports from collected plots and analysis results. |
 | `LSIReportService` | `lsi_report.py` | Generates Lipidomics Standards Initiative (LSI) compliance checklists with auto-filled fields from the analysis pipeline. Supports PDF and CSV export. |
 
+#### AI Chat Services (`services/ai_chat/`)
+
+All services are stateless static methods. The Anthropic API key is read from `ANTHROPIC_API_KEY` (env var or `st.secrets`) at call time; the service layer never imports Streamlit.
+
+| Service / Module | File | Purpose |
+|---|---|---|
+| `AIClientService` | `ai_client.py` | Anthropic SDK wrapper. `send_message()` for plain calls, `execute_tool_loop()` for tool-use (caps round-trips at 4), `extract_code_block()` to pull ` ```python ` blocks out of responses. |
+| `SandboxService` + `validate_code()` | `sandbox.py` | AST validator + executor for AI-generated Python. Whitelist of imports (`math`, `statistics`, `re`, plus pandas/numpy/plotly that are pre-loaded as `pd`/`np`/`px`/`go`), block-list of dunders (`__class__`, `__globals__`, `__import__`, ...) and dangerous builtins (`exec`, `eval`, `open`, `getattr`, ...). Curated `_SAFE_BUILTINS` map replaces the default builtins. Code runs on a daemon thread with a timeout. Returns `SandboxResult(success, figure, result_df, stdout, error_message, execution_time)`. |
+| `SchemaExtractorService` | `schema_extractor.py` | Builds a compact textual schema (column names, dtypes, example values) for inclusion in prompts — keeps raw data out of the API call. |
+| `DataTransformerService` | `data_transformer.py` | Drives the CSV → Generic format transformation: builds prompt context, calls AI, runs the returned code in the sandbox, validates that the output is Generic-shaped. Returns `TransformationResult(success, result_df, explanation, code, sandbox_result, validation_errors)`. |
+| `VizGeneratorService` | `viz_generator.py` | Generates Plotly figures from natural-language requests using `ExperimentConfig` context. Same loop: prompt → AI → sandbox → result. |
+| `codebase_tools` | `codebase_tools.py` | Tool definitions for the Anthropic tools API plus an `execute_tool` dispatcher. Four read-only tools, each path-validated against an allowlist (`src/app`, `tests`, `docs`, plus `CODEBASE.md`) with output capped at 8 KB (40 KB for documentation): `search_codebase`, `read_file_section`, `list_files`, `read_documentation` (paper, supplementary methods, release notes, CODEBASE, etc.). |
+| `knowledge_base` | `knowledge_base.py` | `get_app_knowledge()` — condensed reference (formats, modules, terminology) injected into system prompts so the assistant doesn't need to query the codebase for basic context. |
+| `prompt_templates` | `prompt_templates.py` | Per-mode system prompts (`data_transform_system_prompt`, `data_questions_system_prompt`, `lipidcruncher_questions_system_prompt`, `unified_system_prompt`) and `build_transform_context` / `build_diagnostic_context` helpers. Includes `METHODOLOGY_CLARIFICATION_RULES` so the AI clarifies methodology before running aggregations or ratios. |
+| `prompt_examples` | `prompt_examples.py` | Few-shot example prompts shown as clickable buttons in each AI Studio tab. |
+
+Exception hierarchy in `ai_chat/exceptions.py`:
+
+```
+AIChatError (base)
+├── AIClientError       — API authentication / SDK / network failures
+├── SandboxError        — code rejected by AST validator or runtime failure
+└── TransformationError — output failed Generic-format validation
+```
+
 #### Plotting Services (`services/plotting/`)
 
 Each module provides a static service class that returns Plotly or Matplotlib figures. All plotters follow the contract documented in `PlotterServiceProtocol` (`base.py`): static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`.
@@ -335,6 +402,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 | `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. Also provides `suggest_standard_mappings()` and `preview_normalization()`. |
 | `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_pca()`, `remove_samples()`. Each step can be run independently. |
 | `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
+| `AIChatWorkflow` | One method per chat mode | Orchestrates the AI Studio chat loop. `diagnose_format()` decides if a CSV needs transformation; `validate_module1_output()` gates the viz tab. Per-mode session starters (`start_transform_session`, `start_viz_session`, `start_data_questions_session`, `start_lc_questions_session`, `start_unified_session`) and message handlers (`handle_transform_message`, `handle_viz_message`, `handle_data_questions_message`, `handle_lc_questions_message`, `handle_unified_message`). Each handler appends user/assistant messages to an immutable `ChatSession`, calls `AIClientService` (with tools where appropriate), runs returned code in the sandbox, and returns a typed result dataclass (`FormatDiagnosticResult`, `Module1ValidationResult`, `TransformStepResult`, `VizStepResult`, `DataQuestionsStepResult`, `LCQuestionsStepResult`, `UnifiedStepResult`). |
 
 ### Adapter
 
@@ -346,6 +414,8 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 - **`reset_module_state(*prefixes)`** — clears keys matching given prefixes (e.g., `'qc_'`, `'analysis_'`).
 - **Widget value preservation** — `restore_widget_value()` / `save_widget_value()` persist widget selections across module navigation.
 - **Cached wrappers** — every workflow/service call that should be cached is wrapped with `@st.cache_data` and custom hash functions for Pydantic models and DataFrames.
+- **AI Studio state** — `chat_studio_df`, `chat_studio_df_original`, `chat_studio_experiment`, `chat_studio_pipeline_source`, plus per-mode session keys `chat_transform_session`, `chat_viz_session`, `chat_data_questions_session`, `chat_unified_session`, and result caches (`chat_transform_result`, `chat_viz_figures`, `chat_result_tables`).
+- **Cross-page widget preservation** — `preserve_main_app_widgets()` / `preserve_ai_studio_widgets()` snapshot widget values into `_nav_preserved_*` keys before navigation; `restore_navigation_widgets()` re-hydrates them on return. Required because Streamlit garbage-collects widget keys when their owning page is not rendered.
 
 ### UI
 
@@ -373,6 +443,17 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 **Static content** (`ui/content/`): Documentation text for processing steps, normalization methods, sample data descriptions, standards help, and analysis methodology (statistical testing guide, saturation profile calculations).
 
 **Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV/PDF export helpers), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
+
+**AI Studio** (`ui/ai_studio_page.py` + `ui/ai_chat/`):
+| File | Responsibility |
+|---|---|
+| `ai_studio_page.py` | Top-level page: data-source sidebar (upload / import from main pipeline), tab routing, round-trip navigation back to the main app. Locks data-dependent tabs behind a "Confirm" step. |
+| `ai_chat/chat_panel.py` | Shared chat-rendering helpers used by every tab (message rendering, code expanders, example-prompt buttons, figure / table display). |
+| `ai_chat/_lipidcruncher_questions_ui.py` | Tab 1 — Q&A about LipidCruncher itself. |
+| `ai_chat/_data_questions_ui.py` | Tab 2 — natural-language exploration of the loaded DataFrame. |
+| `ai_chat/_data_transform_ui.py` | Tab 3 — CSV → Generic format transformation, with download of the result. |
+| `ai_chat/_viz_generation_ui.py` | Tab 4 — natural-language Plotly figure generation. Gated by `Module1ValidationResult`. |
+| `ai_chat/_unified_chat_ui.py` | Single-chat variant (legacy / fallback before tabs were reintroduced). |
 
 ---
 
@@ -410,8 +491,9 @@ All session state is managed through the `SessionState` dataclass in `streamlit_
 
 1. **Single ownership** — each key is owned by exactly one UI file (documented in `SessionState` docstring).
 2. **Prefixed resets** — `reset_module_state('qc_')` clears all QC keys without touching other modules.
-3. **Widget preservation** — when the user navigates between modules, widget values are saved to `_preserved_*` keys and restored on return.
+3. **Widget preservation** — when the user navigates between modules, widget values are saved to `_preserved_*` keys and restored on return. Cross-page navigation between the main app and AI Studio uses a separate `_nav_preserved_*` snapshot via `preserve_main_app_widgets()` / `preserve_ai_studio_widgets()` / `restore_navigation_widgets()`.
 4. **Cascade resets** — navigating back to Module 1 resets both QC and Analysis state. Going home resets everything.
+5. **Page routing** — the active page is controlled by a `Page` enum (`LANDING`, `APP`, `AI_STUDIO`) stored in `st.session_state.page`; aliases `PAGE_LANDING`, `PAGE_APP`, `PAGE_AI_STUDIO` are exported from `constants.py` for backward compatibility.
 
 **Important state keys and their flow:**
 
@@ -521,6 +603,12 @@ The app runs on port 8501 by default.
 
 **PDF report generation fails** — Requires `poppler-utils` system package (installed in Docker). For local dev on macOS: `brew install poppler`.
 
+**AI Studio: "ANTHROPIC_API_KEY environment variable is not set"** — Set the key in your shell (`export ANTHROPIC_API_KEY=...`) or add it to `.streamlit/secrets.toml` as `ANTHROPIC_API_KEY = "..."`. `main_app.py` copies the secret into `os.environ` at startup so the service layer can read it.
+
+**AI Studio: "Import of '...' is not allowed"** — The AI generated code that uses an import outside the sandbox whitelist. Either ask the AI to rewrite without that library, or extend `_WHITELISTED_IMPORTS` in `services/ai_chat/sandbox.py` if the import is genuinely safe.
+
+**AI Studio: empty figure / no result** — `AIChatWorkflow` detects empty Plotly figures and surfaces the generated code below the empty plot for troubleshooting; usually a filter, group-by, or column-name mismatch eliminated all rows before plotting.
+
 ### Debugging Tips
 
 - **Check session state**: In a Streamlit callback or after an error, inspect `st.session_state` to see what data is available at each stage.
@@ -551,6 +639,24 @@ The app runs on port 8501 by default.
 7. **Add a sample dataset** in `sample_datasets/`.
 8. **Add format requirements** in `ui/format_requirements.py`.
 9. **Add tests** covering detection, cleaning, and end-to-end ingestion.
+
+### Adding a New AI Studio Tab
+
+1. **Add a `ChatMode` enum value** in `models/chat.py` if the new tab has its own conversation type.
+2. **Add a system prompt** in `services/ai_chat/prompt_templates.py` that defines scope and tone.
+3. **Add session start + handler methods** to `AIChatWorkflow` in `workflows/ai_chat.py`. Use `AIClientService.execute_tool_loop` if the AI needs codebase / documentation tools, otherwise `send_message`.
+4. **Add a UI module** at `ui/ai_chat/_<tab>_ui.py` calling the workflow methods through the adapter.
+5. **Register the tab** in `ui/ai_studio_page.py` and re-export the display function from `ui/ai_chat/__init__.py`.
+6. **Add session-state keys** with the `chat_*` prefix in `SessionState` in `streamlit_adapter.py`.
+7. **Add tests** under `tests/unit/test_ai_chat_*` for the workflow and `tests/integration/test_ai_tool_use.py` for any new tools.
+
+### Extending the Sandbox
+
+Sandbox changes are security-critical — review carefully.
+
+1. **New safe builtin** — add to `_SAFE_BUILTINS` in `services/ai_chat/sandbox.py`. Avoid anything that touches I/O, threading, or attribute introspection.
+2. **New whitelisted import** — add to `_WHITELISTED_IMPORTS`. Confirm the module has no `eval`/`exec`/`__import__`-style escape hatches.
+3. **Update tests** — `tests/unit/test_ai_sandbox.py` covers AST validation, blocked dunders / builtins, timeout, and output limits. Add cases for any new allowance.
 
 ### Adding a New QC Step
 
@@ -595,3 +701,4 @@ The app runs on port 8501 by default.
 | pillow | 9.5.0 | Image processing |
 | openpyxl | 3.1.2 | Excel export |
 | selenium | 4.10.0 | Browser automation (export fallback) |
+| anthropic | ≥0.52.0 | Claude API SDK for the AI Studio (chat completion + tool use). Reads `ANTHROPIC_API_KEY` from environment or `st.secrets`. |
