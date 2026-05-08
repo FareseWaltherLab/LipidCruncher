@@ -25,8 +25,17 @@ class TransformationResult:
     """Result of a data transformation attempt.
 
     Attributes:
-        success: Whether the transformation produced valid output.
-        result_df: Transformed DataFrame in Generic format (if successful).
+        success: Whether the turn ran cleanly. True for both
+            transformation and info-gathering paths; False on sandbox
+            error or schema-validation failure.
+        result_df: Transformed DataFrame in Generic format. None on
+            info-gathering turns (where the AI printed instead of
+            transforming) and on failures.
+        is_info_only: True when the AI ran code that only printed
+            information (no `result_df` set) — typically because the
+            user asked to see something to plan a transform. The chat
+            UI shows the stdout instead of a "transformation
+            successful" / preview banner.
         explanation: AI's explanation of what the code does.
         code: The generated Python code.
         sandbox_result: Raw sandbox execution result.
@@ -34,6 +43,7 @@ class TransformationResult:
     """
     success: bool
     result_df: Optional[pd.DataFrame] = None
+    is_info_only: bool = False
     explanation: str = ""
     code: str = ""
     sandbox_result: Optional[SandboxResult] = None
@@ -127,6 +137,19 @@ class DataTransformerService:
             )
 
         if sandbox_result.result_df is None:
+            # Info-gathering turn (e.g. "list internal standards" before a
+            # custom normalization): the AI ran code that only printed.
+            # Treat as a success — the print output IS the answer — and
+            # let the handler/UI surface stdout.
+            stdout = sandbox_result.stdout or ""
+            if stdout.strip():
+                return TransformationResult(
+                    success=True,
+                    result_df=None,
+                    is_info_only=True,
+                    code=code,
+                    sandbox_result=sandbox_result,
+                )
             return TransformationResult(
                 success=False,
                 code=code,

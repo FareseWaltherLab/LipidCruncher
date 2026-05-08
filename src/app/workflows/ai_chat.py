@@ -370,6 +370,7 @@ class AIChatWorkflow:
             transformation = TransformationResult(
                 success=transformation.success,
                 result_df=transformation.result_df,
+                is_info_only=transformation.is_info_only,
                 explanation=explanation,
                 code=code,
                 sandbox_result=transformation.sandbox_result,
@@ -377,7 +378,17 @@ class AIChatWorkflow:
             )
 
             # Build assistant response text
-            if transformation.success:
+            if transformation.success and transformation.is_info_only:
+                # Info-gathering turn: surface the printed output. Don't
+                # claim a transformation was produced.
+                stdout = (
+                    transformation.sandbox_result.stdout
+                    if transformation.sandbox_result else ""
+                )
+                assistant_text = (
+                    f"{explanation}\n\n```\n{stdout.rstrip()}\n```"
+                )
+            elif transformation.success:
                 summary = DataTransformerService.build_validation_summary(
                     transformation.result_df
                 )

@@ -154,12 +154,17 @@ def render_transform_chat(source_df) -> None:
                                 result.transformation.code, language="python"
                             )
 
-                    # Store successful transformation result for download
-                    if result.transformation and result.transformation.success:
+                    # Store successful transformation result for download.
+                    # Skip info-gathering turns (no result_df) so they
+                    # don't clear the previous transform's preview.
+                    if (result.transformation
+                            and result.transformation.success
+                            and not result.transformation.is_info_only):
                         st.session_state.chat_transform_result = (
                             result.transformation.result_df
                         )
-                    elif result.transformation and not result.transformation.success:
+                    elif (result.transformation
+                            and not result.transformation.success):
                         # Clear stale result on failed transformation
                         st.session_state.chat_transform_result = None
 
