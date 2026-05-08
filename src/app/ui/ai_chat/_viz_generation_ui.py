@@ -36,10 +36,10 @@ def _figure_has_data(fig) -> bool:
 def _render_messages(session) -> None:
     """Render all chat messages with inline figures.
 
-    On success the generated code is hidden (commit f17353c — the audience
-    is non-technical). When a turn errors or yields an empty figure, surface
-    the code in a collapsed expander so the user can paste it back to the AI
-    or debug it directly.
+    Generated code is shown in a collapsed "View code" expander next to
+    every assistant message that produced code, so the user can verify
+    what was run. Empty / missing figures still surface the code with a
+    troubleshooting-focused label so the user knows where to look.
     """
     for i, msg in enumerate(session.messages):
         with st.chat_message(msg.role):
@@ -51,10 +51,16 @@ def _render_messages(session) -> None:
         if fig is not None:
             st.plotly_chart(fig, use_container_width=True)
 
-        # Diagnostic affordance: show generated code when the figure is
-        # missing or empty. Successful plots stay clean.
-        if msg.role == "assistant" and msg.code and not _figure_has_data(fig):
-            with st.expander("Show generated code (for troubleshooting)"):
+        # Show generated code on every assistant turn. Use a different
+        # label when the figure is missing/empty so it doubles as the
+        # troubleshooting affordance.
+        if msg.role == "assistant" and msg.code:
+            label = (
+                "Show generated code (for troubleshooting)"
+                if not _figure_has_data(fig)
+                else "View code"
+            )
+            with st.expander(label):
                 st.code(msg.code, language="python")
 
 
