@@ -23,6 +23,8 @@ def display_transform_chat(source_df) -> None:
     Args:
         source_df: The user's uploaded DataFrame (pre-standardization).
     """
+    from dataclasses import replace
+
     from app.workflows.ai_chat import AIChatWorkflow
     from ._data_transform_ui import render_transform_chat
 
@@ -30,6 +32,43 @@ def display_transform_chat(source_df) -> None:
     if st.session_state.get('chat_transform_session') is None:
         # Run format diagnostic first
         diagnostic = AIChatWorkflow.diagnose_format(source_df)
+        # Raw pipeline imports trip the Generic-shape detection (LipidMolec +
+        # intensity[*]) but are still unfiltered and un-normalized, so the
+        # default "no transformation needed — upload to LipidCruncher" copy
+        # is misleading. Replace it with a message that points at the main
+        # pipeline for the standard filter/normalize workflow while still
+        # treating the data as transformable (is_supported=False) so the
+        # chat input and example prompts stay enabled.
+        if st.session_state.get('chat_studio_pipeline_source') == 'raw':
+            # The data is Generic-shaped (LipidMolec + intensity[*]).
+            # Surface those column roles so the AI has a head start,
+            # but leave metadata_columns empty — for raw pipeline data
+            # the extra columns (CalcMass, BaseRt, ...) aren't drop
+            # candidates the way they are for arbitrary CSVs.
+            intensity_cols = [
+                c for c in source_df.columns
+                if str(c).startswith('intensity[')
+            ]
+            diagnostic = replace(
+                diagnostic,
+                is_supported=False,
+                message=(
+                    "This is **raw** data imported from the main pipeline "
+                    "— column names are already standardized to "
+                    "`intensity[*]`, but the data hasn't been filtered "
+                    "or normalized.\n\n"
+                    "For the standard workflow, run it through the main "
+                    "pipeline (Cleaning → Zero Filtering → Normalization) "
+                    "and re-import the **Normalized** version. Or, if you "
+                    "want a custom filter/normalization, ask me here and "
+                    "I'll generate the code."
+                ),
+                lipid_name_column=(
+                    'LipidMolec' if 'LipidMolec' in source_df.columns else None
+                ),
+                intensity_columns=intensity_cols,
+                metadata_columns=[],
+            )
         st.session_state.chat_transform_diagnostic = diagnostic
         st.session_state.chat_transform_session = (
             AIChatWorkflow.start_transform_session(source_df, diagnostic)

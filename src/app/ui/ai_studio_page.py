@@ -20,6 +20,7 @@ import streamlit as st
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import PAGE_APP, PAGE_LANDING
 from app.models.experiment import ExperimentConfig
+from app.services.format_detection import DataFormat, FormatDetectionService
 from app.ui.landing_page import display_logo
 from app.ui.ai_chat import (
     display_lipidcruncher_questions_chat,
@@ -29,6 +30,26 @@ from app.ui.ai_chat import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Standard formats that the main pipeline already handles end-to-end
+# (cleaning, zero filtering, normalization). When users upload these
+# directly to AI Studio, we redirect them rather than letting them try
+# to pick sample columns from raw, unfiltered data.
+_AI_STUDIO_BLOCKED_FORMATS: frozenset = frozenset({
+    DataFormat.LIPIDSEARCH.value,
+    DataFormat.MSDIAL.value,
+})
+
+
+def _is_blocked_standard_format() -> bool:
+    """True when the uploaded file is a known standard format that should
+    go through the main pipeline first. Pipeline imports are exempt: the
+    user has already explicitly chosen to bring that data over."""
+    if st.session_state.get('chat_studio_pipeline_source') is not None:
+        return False
+    detected = st.session_state.get('chat_studio_detected_format')
+    return detected in _AI_STUDIO_BLOCKED_FORMATS
 
 
 # =============================================================================
@@ -163,6 +184,9 @@ def _handle_file_upload_sidebar() -> None:
         st.session_state.chat_studio_df = df
         st.session_state.chat_studio_df_original = df
         st.session_state.chat_studio_file_id = file_id
+        st.session_state.chat_studio_detected_format = (
+            FormatDetectionService.detect_format(df).value
+        )
     except Exception as e:
         st.sidebar.error(f"Could not read CSV: {e}")
 
@@ -176,15 +200,25 @@ def _offer_pipeline_import_sidebar() -> None:
         return
 
     normalized_df = st.session_state.get("normalized_df")
-    raw_df = st.session_state.get("raw_df")
-    if normalized_df is None and raw_df is None:
+    # For the "Raw" option we prefer `standardized_df` over `raw_df`:
+    # both contain the same unfiltered, un-normalized values, but the
+    # standardized version has the column rename applied (e.g. LipidSearch
+    # `MeanArea[s1]` → `intensity[s1]`), which lets AI Studio's auto-
+    # detection + experiment pre-populate run end-to-end. Fall back to
+    # `raw_df` only if standardization hasn't happened yet.
+    raw_for_studio = (
+        st.session_state.get("standardized_df")
+        if st.session_state.get("standardized_df") is not None
+        else st.session_state.get("raw_df")
+    )
+    if normalized_df is None and raw_for_studio is None:
         return
 
     st.sidebar.markdown("**Or import from the main pipeline:**")
     options = []
     if normalized_df is not None:
         options.append("Normalized data (from pipeline)")
-    if raw_df is not None:
+    if raw_for_studio is not None:
         options.append("Raw uploaded data (from pipeline)")
 
     choice = st.sidebar.radio(
@@ -195,7 +229,7 @@ def _offer_pipeline_import_sidebar() -> None:
     )
     if st.sidebar.button("Import Pipeline Data", key="ai_studio_import_pipeline"):
         is_normalized = "Normalized" in choice
-        imported = normalized_df if is_normalized else raw_df
+        imported = normalized_df if is_normalized else raw_for_studio
         # Read pipeline state BEFORE clearing — _clear_data_sessions() only
         # touches AI Studio state, but reading first keeps the intent clear.
         pipeline_experiment = st.session_state.get('experiment')
@@ -218,16 +252,18 @@ def _offer_pipeline_import_sidebar() -> None:
         if pipeline_bqc_label is not None:
             st.session_state.chat_studio_bqc_label = pipeline_bqc_label
 
-        # For NORMALIZED imports we know the experiment is defined and the
-        # data has standardized intensity[*]/concentration[*] columns
-        # matching the experiment's sample structure. Pre-populate every
-        # studio_* sidebar widget so the user doesn't have to re-walk the
-        # flow — the next rerun renders the sidebar with these values, the
-        # apply step runs, studio_applied_snapshot is set, and the data
-        # tabs unlock immediately. RAW imports skip this because their
-        # columns may not match (e.g. LipidSearch raw uses MeanArea[*]),
-        # so the user walks through manually.
-        if is_normalized and pipeline_experiment is not None:
+        # Pre-populate every studio_* sidebar widget so the user doesn't
+        # have to re-walk the flow — the next rerun renders the sidebar
+        # with these values, the apply step runs, studio_applied_snapshot
+        # is set, and the data tabs unlock immediately. Works for both
+        # branches because:
+        #   • Normalized imports already have intensity[*]/concentration[*]
+        #     columns matching the experiment.
+        #   • Raw imports use `standardized_df`, which has the same column
+        #     rename applied, so auto-detection finds intensity[*] too.
+        # Custom Viz is still hard-locked for raw via pipeline_source ==
+        # 'raw' (the data hasn't been cleaned/zero-filtered/normalized).
+        if pipeline_experiment is not None:
             st.session_state.studio_sample_cols_radio = "Yes"
             st.session_state.studio_n_conditions = (
                 pipeline_experiment.n_conditions
@@ -526,6 +562,49 @@ def _display_studio_confirm_inputs_sidebar(
     )
 
 
+def _render_standard_format_advisory_sidebar() -> None:
+    """Render the redirect advisory in the sidebar when a standard format
+    is detected on direct upload. Replaces the sample-columns / experiment
+    flow so the only forward paths are 'Go to Main Pipeline' or removing
+    the file from the uploader."""
+    detected = st.session_state.get('chat_studio_detected_format', 'standard')
+    st.sidebar.warning(
+        f"**{detected}** dataset detected.\n\n"
+        "This format is fully supported by the main LipidCruncher "
+        "pipeline. Run it through the main pipeline first (cleaning, "
+        "zero filtering, normalization), then come back here and use "
+        "**Import from main pipeline** to bring the processed data "
+        "into AI Studio."
+    )
+    if st.sidebar.button(
+        "Go to Main Pipeline", key="ai_studio_goto_main_from_advisory"
+    ):
+        # Clear AI Studio state — the user has chosen to take the data
+        # through the main pipeline instead. They'll re-import via the
+        # 'Import from main pipeline' control after Module 1 finishes.
+        _clear_data_sessions()
+        st.session_state.page = PAGE_APP
+        st.rerun()
+
+
+def _render_standard_format_advisory_main(file_name: str) -> None:
+    """Render the redirect advisory in the main content area when a
+    standard format is detected. Replaces the data preview + tab section
+    so the user sees a clear, single message instead of a row of locked
+    tabs."""
+    detected = st.session_state.get('chat_studio_detected_format', 'standard')
+    st.warning(
+        f"**{file_name}** looks like a **{detected}** dataset.\n\n"
+        "AI Studio is designed for *non-standard* CSVs and for exploring "
+        "data that has already been processed by Module 1. Standard "
+        "formats like this one go through the main pipeline first so "
+        "they're properly cleaned, zero-filtered, and normalized before "
+        "any AI-driven analysis.\n\n"
+        "**Next step:** click **Go to Main Pipeline** in the sidebar (or "
+        "remove the file from the uploader and try a different dataset)."
+    )
+
+
 def _display_studio_sidebar() -> None:
     """Render the full AI Studio sidebar, mirroring the main app:
     upload + pipeline import → Define Experiment → Group Samples →
@@ -542,6 +621,15 @@ def _display_studio_sidebar() -> None:
         return
 
     st.sidebar.markdown("---")
+
+    # Standard formats (LipidSearch, MS-DIAL) belong in the main pipeline,
+    # which does grade/score filtering, zero filtering, and normalization
+    # — none of which AI Studio replicates. Block the sidebar flow here
+    # so the user is steered to the main pipeline instead of being asked
+    # to hand-pick sample columns from raw data.
+    if _is_blocked_standard_format():
+        _render_standard_format_advisory_sidebar()
+        return
 
     sample_cols_result = _display_sample_columns_sidebar(studio_df)
     if sample_cols_result is None:
@@ -628,6 +716,7 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_studio_experiment = None
     st.session_state.chat_studio_pipeline_source = None
     st.session_state.chat_studio_bqc_label = None
+    st.session_state.chat_studio_detected_format = None
     st.session_state.studio_applied_snapshot = None
     # Sidebar widget keys: pop static ones explicitly + dynamic ones by
     # prefix. Pre-populated values from a pipeline import would otherwise
@@ -731,19 +820,36 @@ def display_ai_studio_page() -> None:
         # File info + data preview when data is loaded. Show the user's
         # original column names so the preview matches what the user sees
         # in Data Questions / Transform.
+        blocked = _is_blocked_standard_format()
         if studio_df_original is not None:
             file_id = st.session_state.get("chat_studio_file_id", "")
-            file_name = file_id.rsplit("_", 1)[0] if file_id else "data"
-            st.success(
-                f"**{file_name}** — {len(studio_df_original)} rows, "
-                f"{len(studio_df_original.columns)} columns."
+            pipeline_source = st.session_state.get(
+                "chat_studio_pipeline_source"
             )
-            with st.expander("Data Preview", expanded=False):
-                st.dataframe(studio_df_original.head(10), width='stretch')
-                st.caption(
-                    f"{len(studio_df_original)} rows, "
-                    f"{len(studio_df_original.columns)} columns"
+            if pipeline_source == 'normalized':
+                file_label = "Normalized data from main pipeline"
+            elif pipeline_source == 'raw':
+                file_label = (
+                    "Raw data from main pipeline "
+                    "(unfiltered, un-normalized — column names standardized)"
                 )
+            else:
+                file_label = (
+                    file_id.rsplit("_", 1)[0] if file_id else "data"
+                )
+            if blocked:
+                _render_standard_format_advisory_main(file_label)
+            else:
+                st.success(
+                    f"**{file_label}** — {len(studio_df_original)} rows, "
+                    f"{len(studio_df_original.columns)} columns."
+                )
+                with st.expander("Data Preview", expanded=False):
+                    st.dataframe(studio_df_original.head(10), width='stretch')
+                    st.caption(
+                        f"{len(studio_df_original)} rows, "
+                        f"{len(studio_df_original.columns)} columns"
+                    )
         else:
             st.info("Upload a CSV in the sidebar to begin.")
 
@@ -758,6 +864,11 @@ def display_ai_studio_page() -> None:
         not_confirmed_msg = (
             "Configure your experiment in the sidebar and check "
             "**Confirm the inputs by checking this box** to unlock this tab."
+        )
+        blocked_tab_msg = (
+            "This dataset is a known standard format. See the advisory "
+            "above and use the **Go to Main Pipeline** button in the "
+            "sidebar."
         )
 
         # --- 4-Tab Structure ---
@@ -776,16 +887,36 @@ def display_ai_studio_page() -> None:
                 st.info(
                     "Upload a CSV file above to ask questions about your data."
                 )
+            elif blocked:
+                st.info(blocked_tab_msg)
             elif not is_confirmed:
                 st.info(not_confirmed_msg)
             else:
                 display_data_questions_chat(studio_df_original)
 
         with tab_transform:
+            pipeline_source_for_transform = st.session_state.get(
+                'chat_studio_pipeline_source'
+            )
             if studio_df_original is None:
                 st.info(
                     "Upload a CSV file above to transform it into "
                     "LipidCruncher Generic format."
+                )
+            elif blocked:
+                st.info(blocked_tab_msg)
+            elif pipeline_source_for_transform == 'normalized':
+                # Normalized imports are filtered AND normalized — there's
+                # genuinely nothing left to transform. Raw imports, by
+                # contrast, are Generic-shaped but unfiltered/un-normalized,
+                # so the user may legitimately want to ask the AI to filter
+                # or normalize them in custom ways. Don't lock for raw.
+                st.info(
+                    "Transformation isn't needed — your data was imported "
+                    "as **normalized** data from the main pipeline, so "
+                    "it's already filtered and normalized. Use **Data "
+                    "Questions** to explore it, or **Custom "
+                    "Visualization** to plot it."
                 )
             elif not is_confirmed:
                 st.info(not_confirmed_msg)
@@ -800,6 +931,8 @@ def display_ai_studio_page() -> None:
                 st.info(
                     "Upload a CSV file above to create custom visualizations."
                 )
+            elif blocked:
+                st.info(blocked_tab_msg)
             elif pipeline_source == 'raw':
                 # Raw pipeline imports haven't been through cleaning, zero
                 # filtering, or normalization, so plotting them would be

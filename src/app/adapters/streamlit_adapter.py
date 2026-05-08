@@ -220,6 +220,11 @@ class SessionState:
     # hard-lock Custom Visualization when the source is 'raw' regardless
     # of whether the columns happen to satisfy the validation check.
     chat_studio_pipeline_source: Optional[str] = None
+    # Detected format string (DataFormat.value) for the uploaded file.
+    # Used to block the AI Studio flow when a known standard format
+    # (LipidSearch, MS-DIAL) is uploaded directly — those should be
+    # processed through the main pipeline first.
+    chat_studio_detected_format: Optional[str] = None
 
 
 # Keys that should NOT be reset when starting a fresh analysis
