@@ -39,6 +39,34 @@ class SchemaExtractorService:
             non_null = df[col].notna().sum()
             lines.append(f"  - {col} ({df[col].dtype}, {non_null}/{len(df)} non-null)")
 
+        # Flag duplicate lipids when the canonical lipid column is present.
+        # Without this, the AI would assume each row is a unique species
+        # (a wrong default for raw LipidSearch, where multiple grade /
+        # quality candidates per LipidMolec coexist before deduplication).
+        if 'LipidMolec' in df.columns and len(df) > 0:
+            n_unique = df['LipidMolec'].nunique(dropna=True)
+            if n_unique < len(df):
+                lines.extend([
+                    "",
+                    (
+                        f"Row uniqueness: {len(df)} rows but only "
+                        f"{n_unique} unique LipidMolec values — multiple "
+                        f"rows per lipid (e.g. raw LipidSearch keeps every "
+                        f"grade/quality candidate; the main pipeline picks "
+                        f"the best per lipid by grade priority A>B>C>D, "
+                        f"then highest TotalSmpIDRate(%))."
+                    ),
+                ])
+            else:
+                lines.extend([
+                    "",
+                    (
+                        f"Row uniqueness: {len(df)} rows, "
+                        f"{n_unique} unique LipidMolec values "
+                        f"(one row per lipid)."
+                    ),
+                ])
+
         n_sample = min(SchemaExtractorService.SAMPLE_ROWS, len(df))
         if n_sample > 0:
             sample = df.head(n_sample).to_string(index=False, max_colwidth=40)

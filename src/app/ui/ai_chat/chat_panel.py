@@ -118,8 +118,18 @@ def display_data_questions_chat(source_df) -> None:
 
     # Initialize session if needed
     if st.session_state.get('chat_data_questions_session') is None:
+        # Pipeline imports replace the data with the standardized /
+        # normalized version, which matches Generic by structure even when
+        # the user originally uploaded LipidSearch / MS-DIAL. Carry the
+        # main app's format choice through so the AI doesn't tell the user
+        # their LipidSearch dataset is "Generic Format".
+        format_label_override = None
+        if st.session_state.get('chat_studio_pipeline_source') is not None:
+            format_label_override = st.session_state.get('format_type')
         st.session_state.chat_data_questions_session = (
-            AIChatWorkflow.start_data_questions_session(source_df)
+            AIChatWorkflow.start_data_questions_session(
+                source_df, format_label_override=format_label_override,
+            )
         )
         st.session_state.chat_message_count = 0
         st.session_state.chat_execution_count = 0

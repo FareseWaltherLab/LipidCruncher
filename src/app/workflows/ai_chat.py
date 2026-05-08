@@ -608,23 +608,36 @@ class AIChatWorkflow:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def start_data_questions_session(df: pd.DataFrame) -> ChatSession:
+    def start_data_questions_session(
+        df: pd.DataFrame,
+        format_label_override: Optional[str] = None,
+    ) -> ChatSession:
         """Initialize a new data questions chat session.
 
         Args:
             df: The user's uploaded DataFrame.
+            format_label_override: Optional pre-known format label to use
+                instead of re-running detection on `df`. Use this for
+                pipeline imports, where `df` is the standardized /
+                normalized DataFrame and detection on it would lose the
+                user's original format choice (e.g. LipidSearch raw with
+                renamed columns matches Generic by structure).
 
         Returns:
             A new ChatSession in DATA_QUESTIONS mode with schema context.
         """
-        detected = FormatDetectionService.detect_format(df)
-        # User-facing label: avoid the bare word "Unknown" — readers
-        # are non-technical lipidomics researchers, and "non-standard"
-        # signals "doesn't match a recognized format" without sounding
-        # like a system error.
-        format_label = (
-            'non-standard' if detected == DataFormat.UNKNOWN else detected.value
-        )
+        if format_label_override is not None:
+            format_label = format_label_override
+        else:
+            detected = FormatDetectionService.detect_format(df)
+            # User-facing label: avoid the bare word "Unknown" — readers
+            # are non-technical lipidomics researchers, and "non-standard"
+            # signals "doesn't match a recognized format" without sounding
+            # like a system error.
+            format_label = (
+                'non-standard' if detected == DataFormat.UNKNOWN
+                else detected.value
+            )
         schema = SchemaExtractorService.extract_schema(df)
         schema_context = (
             f"Auto-detected format: {format_label}\n\n{schema}"
