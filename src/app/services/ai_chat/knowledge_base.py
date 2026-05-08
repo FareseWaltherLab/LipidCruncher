@@ -13,7 +13,7 @@ def get_app_knowledge() -> str:
     This is appended to AI system prompts so the assistant understands
     the application context without needing access to the full codebase.
     """
-    return """\
+    return r"""\
 ## About LipidCruncher
 
 LipidCruncher is an open-source lipidomics data analysis platform built by the Farese & Walther \
@@ -38,8 +38,34 @@ After uploading data in any supported format, LipidCruncher automatically:
 Cer(d18:1_24:0) → Cer 18:1;O2/24:0)
 - **Extracts ClassKey** (lipid class) from lipid names
 - **Renames sample columns** to intensity[s1], intensity[s2], etc.
-- **Detects internal standards** via regex patterns
+- **Detects internal standards** via regex patterns (see below)
 - **Handles format-specific cleaning** (grade filtering for LipidSearch, score filtering for MS-DIAL)
+
+## Internal Standard Detection — exact rules
+
+LipidCruncher flags a row as an internal standard when **either**:
+
+1. The lipid name (`LipidMolec`) matches *any* of these regex patterns:
+   - `\(d\d+\)`        — explicit deuterium count in parens, e.g. `(d5)`, `(d7)`, `(d9)`. \
+NOT to be confused with the sphingoid backbone notation `d18:1` in lipids like `Cer(d18:1_24:0)` — \
+that is `d` followed by carbon count + colon, NOT `d` followed by digits + closing paren.
+   - `[+-]D\d+`        — `+D7`, `-D7`, etc.
+   - `-d\d+[_\)\s]`    — `-d7_`, `-d9)`, etc.
+   - `\[d\d+\]`        — `[d7]` etc.
+   - `^Ch-D\d+`        — deuterated cholesterol standards
+   - `ISTD`            — explicit ISTD marker
+   - `SPLASH`          — SPLASH lipidomix standards
+   - `:\(s\)`          — `:(s)` notation (LipidSearch standards suffix)
+   - `\(IS\)`          — `(IS)` marker
+   - `_IS$`            — `_IS` suffix
+2. OR the `ClassKey` matches `ISTD|Internal`.
+
+When asked about internal standards, generate sandbox code that applies these *exact* patterns to \
+`LipidMolec` (and `ClassKey` if present) — do not invent looser heuristics. Examples like \
+`Cer(d18:1_24:0)`, `BisMePA(16:1_18:1)`, `SM(d34:1)`, `LPC(17:0)` are NOT internal standards: \
+the sphingoid `d18:1` / `d34:1` notation is a backbone descriptor, and odd-chain fatty acids are \
+not standards either. Examples that ARE standards: `LPC(18:1)+D7:(s)`, `PC(33:1)+D7:(s)`, \
+`SM(d36:2)+D9:(s)`, `Cer(d18:1_15:0)(d7)`, anything with `ISTD`, `SPLASH`, or `_IS` in the name.
 
 ## Analysis Pipeline (3 Modules)
 
