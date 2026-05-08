@@ -60,21 +60,9 @@ def render_transform_chat(source_df) -> None:
     # Render existing messages
     _render_messages(session)
 
-    # Clickable example prompts (always visible, only for unsupported formats)
-    diagnostic = st.session_state.get('chat_transform_diagnostic')
-    if not diagnostic or not diagnostic.is_supported:
-        cols = st.columns(len(_EXAMPLE_PROMPTS))
-        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
-            with cols[i]:
-                if st.button(
-                    prompt,
-                    key=f"tf_example_{i}",
-                    width='stretch',
-                ):
-                    st.session_state.chat_pending_prompt_transform = prompt
-                    st.rerun()
-
-    # Show the last transformation result if successful
+    # Show the last transformation result if successful (renders before
+    # the example tiles so the full AI response — message, code,
+    # preview — sits together; tiles come after as next-step prompts).
     transform_result_df = st.session_state.get('chat_transform_result')
     if transform_result_df is not None:
         with st.expander("Preview transformed data", expanded=True):
@@ -96,6 +84,20 @@ def render_transform_chat(source_df) -> None:
                 "Download this file, then upload it to LipidCruncher as a "
                 "**Generic** format dataset to run it through the analysis pipeline."
             )
+
+    # Clickable example prompts (always visible, only for unsupported formats)
+    diagnostic = st.session_state.get('chat_transform_diagnostic')
+    if not diagnostic or not diagnostic.is_supported:
+        cols = st.columns(len(_EXAMPLE_PROMPTS))
+        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
+            with cols[i]:
+                if st.button(
+                    prompt,
+                    key=f"tf_example_{i}",
+                    width='stretch',
+                ):
+                    st.session_state.chat_pending_prompt_transform = prompt
+                    st.rerun()
 
     # Rate limit check
     msg_count = st.session_state.get('chat_message_count', 0)

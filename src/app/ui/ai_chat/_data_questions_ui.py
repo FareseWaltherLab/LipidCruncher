@@ -51,6 +51,17 @@ def render_data_questions_chat(source_df) -> None:
     # Render existing messages
     _render_messages(session)
 
+    # Show last result table if available (renders before the example
+    # tiles so the full AI response — message, code, result — sits
+    # together; tiles come after as next-step prompts).
+    result_df = st.session_state.get('chat_questions_result_df')
+    if result_df is not None:
+        with st.expander("Result Table", expanded=True):
+            st.dataframe(result_df, width='stretch')
+            st.caption(
+                f"{len(result_df)} rows, {len(result_df.columns)} columns"
+            )
+
     # Clickable example prompts (always visible)
     cols = st.columns(len(_EXAMPLE_PROMPTS))
     for i, prompt in enumerate(_EXAMPLE_PROMPTS):
@@ -62,15 +73,6 @@ def render_data_questions_chat(source_df) -> None:
             ):
                 st.session_state.chat_pending_prompt_dq = prompt
                 st.rerun()
-
-    # Show last result table if available
-    result_df = st.session_state.get('chat_questions_result_df')
-    if result_df is not None:
-        with st.expander("Result Table", expanded=True):
-            st.dataframe(result_df, width='stretch')
-            st.caption(
-                f"{len(result_df)} rows, {len(result_df.columns)} columns"
-            )
 
     # Rate limit check
     msg_count = st.session_state.get('chat_message_count', 0)
