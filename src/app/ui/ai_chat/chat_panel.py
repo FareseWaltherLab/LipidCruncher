@@ -70,9 +70,33 @@ def display_transform_chat(source_df) -> None:
                 metadata_columns=[],
             )
         st.session_state.chat_transform_diagnostic = diagnostic
-        st.session_state.chat_transform_session = (
-            AIChatWorkflow.start_transform_session(source_df, diagnostic)
-        )
+        session = AIChatWorkflow.start_transform_session(source_df, diagnostic)
+        # The Transform tab's system prompt is fixated on "convert to
+        # Generic format" — appropriate for arbitrary CSVs, but
+        # misleading for raw pipeline imports where the data is already
+        # Generic-shaped and the user typically wants filtering /
+        # normalization. Augment the schema_context so the AI doesn't
+        # frame filter/normalize requests as "preprocessing before
+        # Generic conversion".
+        if st.session_state.get('chat_studio_pipeline_source') == 'raw':
+            extra_note = (
+                "\n\n## Important context for this dataset\n"
+                "This data was imported from the LipidCruncher main "
+                "pipeline. It is **already in Generic shape** "
+                "(LipidMolec + intensity[*] columns) — no shape "
+                "transformation is needed. When the user asks for "
+                "filtering, deduplication, normalization, or other "
+                "content-level operations, treat those as standalone "
+                "tasks. Do NOT frame your response as 'preprocessing "
+                "before Generic conversion' — the data is already "
+                "Generic-shaped. The result_df should still be in "
+                "Generic shape (lipid name column + numeric sample "
+                "columns) so the user can download and re-upload it."
+            )
+            session = session.model_copy(update={
+                'schema_context': session.schema_context + extra_note,
+            })
+        st.session_state.chat_transform_session = session
         st.session_state.chat_message_count = 0
         st.session_state.chat_execution_count = 0
 
