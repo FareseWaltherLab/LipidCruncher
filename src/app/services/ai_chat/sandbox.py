@@ -16,7 +16,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
 import pandas as pd
@@ -196,10 +196,17 @@ def _restricted_import(name, *args, **kwargs):
     return __builtins__.__import__(name, *args, **kwargs) if hasattr(__builtins__, '__import__') else __import__(name, *args, **kwargs)
 
 
-def _build_globals(df: pd.DataFrame) -> Dict[str, Any]:
+def _build_globals(
+    df: pd.DataFrame,
+    numeric_columns: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Build the restricted globals dict for exec().
 
-    Includes whitelisted libraries and the user's DataFrame.
+    Includes whitelisted libraries and the user's DataFrame. When
+    ``numeric_columns`` is provided, those columns are coerced to numeric
+    (with ``errors='coerce'``) on the DataFrame copy before exposure, so
+    AI-generated code can do arithmetic on sample intensities without
+    worrying about lingering string dtypes from the raw CSV read.
     """
     captured_output: list = []
 
@@ -207,6 +214,14 @@ def _build_globals(df: pd.DataFrame) -> Dict[str, Any]:
         captured_output.append(" ".join(str(a) for a in args))
 
     builtins = {**_SAFE_BUILTINS, "print": capturing_print, "__import__": _restricted_import}
+
+    df_copy = df.copy()
+    if numeric_columns:
+        present = [c for c in numeric_columns if c in df_copy.columns]
+        if present:
+            df_copy[present] = df_copy[present].apply(
+                pd.to_numeric, errors='coerce',
+            )
 
     return {
         "__builtins__": builtins,
@@ -217,7 +232,7 @@ def _build_globals(df: pd.DataFrame) -> Dict[str, Any]:
         "math": math,
         "statistics": statistics,
         "re": re,
-        "df": df.copy(),
+        "df": df_copy,
         "_captured_output": captured_output,
     }
 
@@ -278,6 +293,7 @@ class SandboxService:
         code: str,
         df: pd.DataFrame,
         config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
     ) -> SandboxResult:
         """Validate and execute code in the sandbox.
 
@@ -285,6 +301,13 @@ class SandboxService:
             code: Python source code to execute.
             df: DataFrame available to the code as ``df``.
             config: Sandbox configuration. Uses defaults if None.
+            numeric_columns: Optional list of column names to coerce to
+                numeric (``errors='coerce'``) on the DataFrame copy
+                before exposing it to user code. Use this to make sample
+                intensity columns reliably numeric so AI-generated
+                arithmetic doesn't fail with ``TypeError: unsupported
+                operand type(s) for /: 'str' and 'float'`` when the raw
+                CSV inferred string dtypes.
 
         Returns:
             SandboxResult with execution outcome.
@@ -302,7 +325,7 @@ class SandboxService:
             )
 
         # Phase 2: Execute in restricted environment
-        exec_globals = _build_globals(df)
+        exec_globals = _build_globals(df, numeric_columns=numeric_columns)
         start_time = time.monotonic()
 
         try:

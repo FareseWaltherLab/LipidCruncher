@@ -225,6 +225,16 @@ class SessionState:
     # (LipidSearch, MS-DIAL) is uploaded directly — those should be
     # processed through the main pipeline first.
     chat_studio_detected_format: Optional[str] = None
+    # Names of the columns in `chat_studio_df_original` that the user
+    # (or pipeline import) marked as sample-intensity columns. Used by
+    # the sandbox to pre-coerce these to numeric before exposing the
+    # DataFrame to AI-generated code, preventing TypeError on
+    # arithmetic when the raw CSV inferred string dtypes.
+    chat_studio_sample_columns_original: Optional[List[str]] = None
+    # Names of the same columns AFTER the apply-step rename to
+    # `{intensity|concentration}[s1..sN]`. Used when the Custom Viz
+    # tab pre-coerces `chat_studio_df` (the renamed copy).
+    chat_studio_sample_columns_renamed: Optional[List[str]] = None
 
 
 # Keys that should NOT be reset when starting a fresh analysis
@@ -1000,6 +1010,9 @@ class StreamlitAdapter:
             user_message=user_message,
             session=session,
             source_df=source_df,
+            numeric_columns=st.session_state.get(
+                'chat_studio_sample_columns_original'
+            ),
         )
 
     @staticmethod
@@ -1028,6 +1041,9 @@ class StreamlitAdapter:
             session=session,
             analysis_df=analysis_df,
             experiment=experiment,
+            numeric_columns=st.session_state.get(
+                'chat_studio_sample_columns_renamed'
+            ),
         )
 
     @staticmethod
@@ -1053,6 +1069,9 @@ class StreamlitAdapter:
             user_message=user_message,
             session=session,
             source_df=source_df,
+            numeric_columns=st.session_state.get(
+                'chat_studio_sample_columns_original'
+            ),
         )
 
     @staticmethod

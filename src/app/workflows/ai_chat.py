@@ -319,6 +319,7 @@ class AIChatWorkflow:
         source_df: pd.DataFrame,
         ai_config: Optional[AIConfig] = None,
         sandbox_config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
     ) -> TransformStepResult:
         """Handle one user message in a data transformation chat.
 
@@ -335,6 +336,9 @@ class AIChatWorkflow:
             source_df: The user's original DataFrame.
             ai_config: AI configuration. Uses defaults if None.
             sandbox_config: Sandbox configuration. Uses defaults if None.
+            numeric_columns: Optional list of columns to pre-coerce to
+                numeric in the sandbox (typically the sample-intensity
+                columns the user specified in the sidebar).
 
         Returns:
             TransformStepResult with updated session and transformation outcome.
@@ -365,6 +369,7 @@ class AIChatWorkflow:
                 code=code,
                 source_df=source_df,
                 sandbox_config=sandbox_config,
+                numeric_columns=numeric_columns,
             )
             # Include explanation in the transformation result
             transformation = TransformationResult(
@@ -518,6 +523,7 @@ class AIChatWorkflow:
         experiment: ExperimentConfig,
         ai_config: Optional[AIConfig] = None,
         sandbox_config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
     ) -> VizStepResult:
         """Handle one user message in a visualization chat.
 
@@ -535,6 +541,10 @@ class AIChatWorkflow:
             experiment: Experiment configuration.
             ai_config: AI configuration. Uses defaults if None.
             sandbox_config: Sandbox configuration. Uses defaults if None.
+            numeric_columns: Optional list of columns to pre-coerce to
+                numeric in the sandbox (typically the renamed
+                intensity[*]/concentration[*] columns produced by the
+                apply step).
 
         Returns:
             VizStepResult with updated session and execution outcome.
@@ -566,6 +576,7 @@ class AIChatWorkflow:
                 code=code,
                 df=analysis_df,
                 sandbox_config=sandbox_config,
+                numeric_columns=numeric_columns,
             )
 
             if sandbox_result.success and sandbox_result.figure is not None:
@@ -665,6 +676,7 @@ class AIChatWorkflow:
         source_df: pd.DataFrame,
         ai_config: Optional[AIConfig] = None,
         sandbox_config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
     ) -> DataQuestionsStepResult:
         """Handle one user message in a data questions chat.
 
@@ -681,6 +693,9 @@ class AIChatWorkflow:
             source_df: The user's DataFrame.
             ai_config: AI configuration. Uses defaults if None.
             sandbox_config: Sandbox configuration. Uses defaults if None.
+            numeric_columns: Optional list of columns to pre-coerce to
+                numeric in the sandbox (typically the sample-intensity
+                columns the user specified in the sidebar).
 
         Returns:
             DataQuestionsStepResult with updated session and answer.
@@ -715,7 +730,10 @@ class AIChatWorkflow:
         result_df = None
 
         if code:
-            sandbox_result = SandboxService.execute(code, source_df, sandbox_config)
+            sandbox_result = SandboxService.execute(
+                code, source_df, sandbox_config,
+                numeric_columns=numeric_columns,
+            )
             if sandbox_result.success:
                 result_df = sandbox_result.result_df
                 parts = []

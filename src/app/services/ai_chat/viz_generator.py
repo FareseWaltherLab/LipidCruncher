@@ -4,7 +4,7 @@ AI-powered visualization generation service.
 Generates custom Plotly/Matplotlib visualizations from natural language
 requests. All methods are stateless static methods — no Streamlit imports.
 """
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import pandas as pd
 
@@ -234,6 +234,7 @@ class VizGeneratorService:
         code: str,
         df: pd.DataFrame,
         sandbox_config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
     ) -> SandboxResult:
         """Execute visualization code in the sandbox.
 
@@ -241,6 +242,8 @@ class VizGeneratorService:
             code: Python code that should produce a ``fig`` variable.
             df: The analysis DataFrame.
             sandbox_config: Sandbox configuration. Uses defaults if None.
+            numeric_columns: Optional list of columns to pre-coerce to
+                numeric before exposing the DataFrame to user code.
 
         Returns:
             SandboxResult — check ``result.figure`` for the generated plot.
@@ -248,4 +251,6 @@ class VizGeneratorService:
         if sandbox_config is None:
             sandbox_config = SandboxConfig()
 
-        return SandboxService.execute(code, df, sandbox_config)
+        return SandboxService.execute(
+            code, df, sandbox_config, numeric_columns=numeric_columns,
+        )

@@ -694,6 +694,15 @@ def _display_studio_sidebar() -> None:
     st.session_state.chat_studio_df = reordered_df
     st.session_state.chat_studio_experiment = experiment
     st.session_state.chat_studio_bqc_label = bqc_label
+    # Persist the sample-column names so the sandbox can pre-coerce
+    # them to numeric before exposing `df` to AI code. Two lists — one
+    # for the original df (used by Transform / Data Questions) and one
+    # for the renamed df (used by Custom Viz). The renamed names are
+    # always `{output_prefix}[s1..sN]` derived from the experiment.
+    st.session_state.chat_studio_sample_columns_original = list(sample_columns)
+    st.session_state.chat_studio_sample_columns_renamed = [
+        f'{output_prefix}[{s}]' for s in experiment.full_samples_list
+    ]
     # Only Custom Viz reads the renamed df; Data Questions and Transform
     # read the original (which doesn't change on apply), so their sessions
     # don't need to be invalidated here. They are still cleared on a fresh
@@ -717,6 +726,8 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_studio_pipeline_source = None
     st.session_state.chat_studio_bqc_label = None
     st.session_state.chat_studio_detected_format = None
+    st.session_state.chat_studio_sample_columns_original = None
+    st.session_state.chat_studio_sample_columns_renamed = None
     st.session_state.studio_applied_snapshot = None
     # Sidebar widget keys: pop static ones explicitly + dynamic ones by
     # prefix. Pre-populated values from a pipeline import would otherwise

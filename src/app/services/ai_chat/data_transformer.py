@@ -112,6 +112,7 @@ class DataTransformerService:
         code: str,
         source_df: pd.DataFrame,
         sandbox_config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
     ) -> TransformationResult:
         """Execute transformation code and validate the output.
 
@@ -119,6 +120,8 @@ class DataTransformerService:
             code: Python code that should produce a ``result_df``.
             source_df: The user's original DataFrame.
             sandbox_config: Sandbox configuration. Uses defaults if None.
+            numeric_columns: Optional list of columns to pre-coerce to
+                numeric before exposing the DataFrame to user code.
 
         Returns:
             TransformationResult with the outcome.
@@ -126,7 +129,9 @@ class DataTransformerService:
         if sandbox_config is None:
             sandbox_config = SandboxConfig()
 
-        sandbox_result = SandboxService.execute(code, source_df, sandbox_config)
+        sandbox_result = SandboxService.execute(
+            code, source_df, sandbox_config, numeric_columns=numeric_columns,
+        )
 
         if not sandbox_result.success:
             return TransformationResult(
