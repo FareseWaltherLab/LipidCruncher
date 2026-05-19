@@ -192,13 +192,21 @@ def _handle_file_upload_sidebar() -> None:
 
 
 def _offer_pipeline_import_sidebar() -> None:
-    """Pipeline-import controls, rendered in the sidebar. Only shows when
-    no Studio data is loaded yet AND the main pipeline has data ready.
-    Carries over the pipeline's experiment definition as well, so the
-    Studio doesn't fall back to a single dummy condition."""
-    if st.session_state.get('chat_studio_df') is not None:
-        return
+    """Pipeline-import controls, rendered in the sidebar.
 
+    Shown when the main pipeline has data available AND the currently-
+    loaded Studio data is either empty or itself a previous pipeline
+    import. Keeping the controls visible after a pipeline import lets
+    users switch sources (raw ↔ normalized) or pull a fresh copy after
+    changing the main pipeline (e.g. swapping the normalization method)
+    — without that, Studio state stays frozen at the first import.
+
+    Skipped when the user has uploaded their own CSV — they picked a
+    different data source on purpose, so don't clutter their sidebar.
+
+    Carries over the pipeline's experiment definition as well, so the
+    Studio doesn't fall back to a single dummy condition.
+    """
     normalized_df = st.session_state.get("normalized_df")
     # For the "Raw" option we prefer `standardized_df` over `raw_df`:
     # both contain the same unfiltered, un-normalized values, but the
@@ -214,7 +222,27 @@ def _offer_pipeline_import_sidebar() -> None:
     if normalized_df is None and raw_for_studio is None:
         return
 
-    st.sidebar.markdown("**Or import from the main pipeline:**")
+    studio_has_data = st.session_state.get('chat_studio_df') is not None
+    current_pipeline_source = st.session_state.get('chat_studio_pipeline_source')
+    if studio_has_data and current_pipeline_source is None:
+        # User uploaded their own CSV — they aren't using pipeline data,
+        # so skip the import block entirely.
+        return
+
+    if studio_has_data:
+        source_label = (
+            "Normalized" if current_pipeline_source == 'normalized' else "Raw"
+        )
+        st.sidebar.markdown(
+            f"**Currently imported: {source_label} data from main pipeline.**"
+        )
+        st.sidebar.caption(
+            "Re-import to switch sources or pull fresh data after "
+            "changing the main pipeline. This resets the AI Studio chat."
+        )
+    else:
+        st.sidebar.markdown("**Or import from the main pipeline:**")
+
     options = []
     if normalized_df is not None:
         options.append("Normalized data (from pipeline)")
@@ -227,7 +255,11 @@ def _offer_pipeline_import_sidebar() -> None:
         key="ai_studio_pipeline_choice",
         label_visibility="collapsed",
     )
-    if st.sidebar.button("Import Pipeline Data", key="ai_studio_import_pipeline"):
+    button_label = (
+        "Re-import Pipeline Data" if studio_has_data
+        else "Import Pipeline Data"
+    )
+    if st.sidebar.button(button_label, key="ai_studio_import_pipeline"):
         is_normalized = "Normalized" in choice
         imported = normalized_df if is_normalized else raw_for_studio
         # Read pipeline state BEFORE clearing — _clear_data_sessions() only
