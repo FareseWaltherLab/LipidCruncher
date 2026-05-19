@@ -741,6 +741,14 @@ class AIChatWorkflow:
                     parts.append(explanation.strip())
                 if sandbox_result.stdout.strip():
                     parts.append(sandbox_result.stdout.strip())
+                # If the AI returned a bare code block (no prose) and the
+                # code only assigns to result_df (no print()), parts ends
+                # up empty even though we have a valid table to show.
+                # Without this lead-in the empty assistant_text triggers
+                # the "I wasn't able to generate a response" fallback,
+                # which contradicts the table rendered alongside it.
+                if not parts and result_df is not None:
+                    parts.append("Here's the result:")
                 assistant_text = "\n\n".join(parts)
             else:
                 assistant_text = (
