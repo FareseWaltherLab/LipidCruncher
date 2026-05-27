@@ -781,6 +781,16 @@ def _clear_data_sessions() -> None:
     ]
     for key in dynamic_keys:
         st.session_state.pop(key, None)
+    # Cross-page snapshots written by preserve_ai_studio_widgets() would
+    # otherwise re-populate the sidebar on the next rerun via
+    # restore_navigation_widgets(), defeating the clear.
+    nav_snapshot_keys = [
+        key for key in list(st.session_state.keys())
+        if isinstance(key, str)
+        and key.startswith('_nav_preserved_studio_')
+    ]
+    for key in nav_snapshot_keys:
+        st.session_state.pop(key, None)
     # Per-tab sessions
     st.session_state.chat_data_questions_session = None
     st.session_state.chat_transform_session = None
@@ -1047,12 +1057,21 @@ def _display_navigation() -> None:
             if st.button(
                 "← Back to Main Pipeline", key="ai_studio_back_main"
             ):
-                # Round-trip: keep both AI Studio state and pipeline state
-                # so the user can hop back without losing work on either side.
-                # Snapshot the studio_* widgets first — Streamlit GCs them
-                # while the AI Studio page is not rendering, so without
-                # this the sidebar would reset on the next return.
-                StreamlitAdapter.preserve_ai_studio_widgets()
+                # When the current Studio data came from a pipeline
+                # import, clear it on exit so the next re-entry shows a
+                # fresh import-choice sidebar (the user can pull raw or
+                # normalized data again). Direct uploads have no
+                # pipeline source and are preserved across the round-
+                # trip via the widget snapshot — Streamlit GCs studio_*
+                # keys while the AI Studio page isn't rendering, and
+                # restore_navigation_widgets() re-hydrates them on the
+                # way back.
+                if st.session_state.get(
+                    'chat_studio_pipeline_source'
+                ) is not None:
+                    _clear_data_sessions()
+                else:
+                    StreamlitAdapter.preserve_ai_studio_widgets()
                 st.session_state.page = PAGE_APP
                 st.rerun()
         with col2:

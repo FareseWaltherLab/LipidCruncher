@@ -27,14 +27,27 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
     """
     st.sidebar.subheader("Specify Label of BQC Samples")
 
+    # Restore from the preserved key when Streamlit GC'd the widget key
+    # because an upstream sidebar section short-circuited (e.g. the user
+    # entered manual regrouping and grouping is mid-edit). Without this,
+    # the bqc_radio widget would silently reset to 'No' on the next
+    # rerun even though the user previously answered 'Yes'.
+    bqc_options = ['Yes', 'No']
+    if 'bqc_radio' not in st.session_state:
+        preserved = st.session_state.get('_preserved_bqc_radio')
+        if preserved in bqc_options:
+            st.session_state['bqc_radio'] = preserved
+
     bqc_kwargs = {'key': 'bqc_radio'}
     if 'bqc_radio' not in st.session_state:
         bqc_kwargs['index'] = 1  # Default to 'No'
     bqc_ans = st.sidebar.radio(
         'Do you have Batch Quality Control (BQC) samples?',
-        ['Yes', 'No'],
+        bqc_options,
         **bqc_kwargs,
     )
+    # Persist for the next widget-GC event (see comment above).
+    st.session_state['_preserved_bqc_radio'] = bqc_ans
 
     bqc_label = None
     if bqc_ans == 'Yes':
@@ -46,6 +59,17 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
         ]
 
         if conditions_with_two_plus:
+            # Same restore-before-render trick as above. Guard against a
+            # stale preserved value that no longer matches the current
+            # condition list (e.g. the user renamed conditions); fall
+            # back to the first option in that case.
+            if 'bqc_label_radio' not in st.session_state:
+                preserved_label = st.session_state.get(
+                    '_preserved_bqc_label_radio'
+                )
+                if preserved_label in conditions_with_two_plus:
+                    st.session_state['bqc_label_radio'] = preserved_label
+
             label_kwargs = {'key': 'bqc_label_radio'}
             if 'bqc_label_radio' not in st.session_state:
                 label_kwargs['index'] = 0
@@ -54,6 +78,7 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
                 conditions_with_two_plus,
                 **label_kwargs,
             )
+            st.session_state['_preserved_bqc_label_radio'] = bqc_label
         else:
             st.sidebar.warning("No conditions with 2+ samples available for BQC.")
 

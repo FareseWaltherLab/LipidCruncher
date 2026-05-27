@@ -24,6 +24,77 @@ from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_i
 # UI Components
 # =============================================================================
 
+def _invalidate_confirmation_if_grouping_changed() -> None:
+    """Detect a user change to the 'samples properly grouped?' radio
+    *or* to any of the per-condition sample multiselects since the
+    previous render. When anything changes, drop the Confirm Inputs
+    checkbox so the user has to re-verify the summary against the new
+    ordering. Uses a post-rerun comparison instead of an ``on_change``
+    callback — pop'ing widget keys inside ``on_change`` causes the
+    radio to need two clicks to commit a toggle in Streamlit 1.50.
+
+    Also drops the cross-page ``_nav_preserved_confirm_checkbox``
+    snapshot. Without that, a later rerun where the confirm widget
+    doesn't render (e.g. mid-edit with grouping_complete=False) lets
+    Streamlit GC the live key, then ``restore_navigation_widgets()``
+    re-installs the stale True value from the snapshot — making the
+    checkbox silently reappear as checked even after invalidation."""
+    current_radio = st.session_state.get('grouping_radio')
+    last_radio = st.session_state.get('_last_seen_grouping_radio')
+    grouping_changed = (
+        current_radio is not None and last_radio is not None
+        and current_radio != last_radio
+    )
+
+    # Multiselect-change detection only makes sense in 'No' (manual
+    # regrouping) mode — in 'Yes' mode the select_* widgets don't
+    # render, so a diff vs. the snapshot just reflects Streamlit's
+    # widget GC rather than a user intent change.
+    selects_changed = False
+    if current_radio == 'No':
+        current_selects = {
+            k: tuple(st.session_state[k] or ())
+            for k in st.session_state
+            if isinstance(k, str) and k.startswith('select_')
+        }
+        last_selects = st.session_state.get('_last_seen_selects')
+        selects_changed = (
+            last_selects is not None
+            and current_selects != last_selects
+        )
+
+    if grouping_changed or selects_changed:
+        # Explicitly assign False rather than pop. Popping + re-creating
+        # the widget with value=False isn't reliable in Streamlit 1.50:
+        # the widget's internal state cache (keyed by widget id) can
+        # still hold the previous True, so the checkbox renders checked
+        # even though session_state was cleared. Direct assignment makes
+        # session_state the single source of truth — the widget reads it
+        # via `key=` and renders unchecked.
+        st.session_state['confirm_checkbox'] = False
+        st.session_state.pop('_nav_preserved_confirm_checkbox', None)
+        st.session_state.confirmed = False
+
+
+def _snapshot_bqc_widgets_to_preserved() -> None:
+    """Copy the live values of the BQC widgets into their ``_preserved_*``
+    shadows. The save line inside ``display_bqc_section`` only runs when
+    grouping is complete; while the user is mid-regroup the BQC section
+    is skipped, Streamlit drops the un-rendered widget keys at the end
+    of the run, and the next render of the BQC section would otherwise
+    fall back to the hard-coded default of 'No'. Calling this at the
+    top of ``display_sample_grouping`` (before any short-circuit return)
+    keeps the shadow in sync with whatever the user last picked."""
+    if 'bqc_radio' in st.session_state:
+        st.session_state['_preserved_bqc_radio'] = (
+            st.session_state['bqc_radio']
+        )
+    if 'bqc_label_radio' in st.session_state:
+        st.session_state['_preserved_bqc_label_radio'] = (
+            st.session_state['bqc_label_radio']
+        )
+
+
 def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_format: str) -> tuple:
     """
     Display group samples section with dataframe and manual regrouping option.
@@ -64,7 +135,12 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
 
     # Manual regrouping option
     st.sidebar.write('Are your samples properly grouped together?')
-    grouping_correct = st.sidebar.radio('', ['Yes', 'No'], key='grouping_radio')
+    grouping_correct = st.sidebar.radio(
+        '', ['Yes', 'No'], key='grouping_radio',
+    )
+    # Record the value the user is now seeing so the NEXT rerun can
+    # detect a toggle and invalidate the Confirm Inputs checkbox.
+    st.session_state['_last_seen_grouping_radio'] = grouping_correct
 
     if grouping_correct == 'No':
         return _handle_manual_regrouping(df, group_df, experiment)
@@ -77,6 +153,15 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
         # underneath differs.
         if st.session_state.get('_pre_regroup_df') is not None:
             df = st.session_state['_pre_regroup_df'].copy()
+            # Commit the restored ordering to standardized_df now, not just
+            # to the local df. The grouping-radio toggle popped
+            # confirm_checkbox, so display_sample_grouping will return
+            # (None, None) this run and skip its usual
+            # `standardized_df = updated_df` write. Without this line the
+            # next rerun reads df = standardized_df (still the regrouped
+            # version), the user's re-check of Confirm Inputs re-commits
+            # the regrouped data, and the original ordering is lost.
+            st.session_state.standardized_df = df
             # Clean up regrouping state so it doesn't persist
             del st.session_state['_pre_regroup_df']
             st.session_state.pop('original_column_order', None)
@@ -119,6 +204,17 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         if len(selected_samples) == expected_samples[condition]:
             remaining_samples = [s for s in remaining_samples if s not in selected_samples]
 
+    # Snapshot the live select_* values so the next rerun's
+    # `_invalidate_confirmation_if_grouping_changed()` can detect any
+    # user-driven change. Taken before the all_correct branch so the
+    # baseline updates on every render of this function, including
+    # mid-edit (invalid-count) runs.
+    st.session_state['_last_seen_selects'] = {
+        k: tuple(st.session_state[k] or ())
+        for k in st.session_state
+        if isinstance(k, str) and k.startswith('select_')
+    }
+
     # Verify all conditions have correct number of samples
     all_correct = all(
         len(selections[condition]) == expected_samples[condition]
@@ -159,6 +255,13 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     Returns:
         Tuple of (experiment, bqc_label) or (None, None) if not confirmed
     """
+    # Run before any short-circuit return below: shadow the BQC widget
+    # values so they survive a rerun where the BQC section is skipped,
+    # and clear the Confirm Inputs checkbox if the grouping radio just
+    # changed.
+    _snapshot_bqc_widgets_to_preserved()
+    _invalidate_confirmation_if_grouping_changed()
+
     # Detect sample columns
     sample_cols = detect_sample_columns(df, data_format)
     sample_names = extract_sample_names(sample_cols, data_format)

@@ -113,6 +113,23 @@ class SessionState:
     confirmed: bool = False
     grouping_complete: bool = True
     original_column_order: Optional[List[str]] = None
+    # Survives transient widget garbage collection when the sidebar
+    # short-circuits before the BQC section renders (e.g. mid-regroup).
+    # Without these, switching grouping to "No" wipes the user's prior
+    # BQC answers because Streamlit drops the widget keys whose widgets
+    # didn't render this run.
+    _preserved_bqc_radio: Optional[str] = None
+    _preserved_bqc_label_radio: Optional[str] = None
+    # Snapshot of grouping_radio from the previous rerun. Used to
+    # detect Yes ↔ No toggles and invalidate the Confirm Inputs
+    # checkbox without an on_change callback (which would otherwise
+    # require two clicks to commit the toggle in Streamlit 1.50).
+    _last_seen_grouping_radio: Optional[str] = None
+    # Snapshot of the per-condition sample multiselects (select_*) from
+    # the previous rerun. Same purpose as _last_seen_grouping_radio but
+    # for the multiselects — toggling samples between conditions also
+    # invalidates a prior Confirm Inputs check.
+    _last_seen_selects: Optional[Dict[str, Tuple[str, ...]]] = None
 
     # --- Data processing (owner: data_processing.py) ---
     cleaned_df: Optional[pd.DataFrame] = None
