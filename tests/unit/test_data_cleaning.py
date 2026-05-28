@@ -696,6 +696,59 @@ class TestLipidSearchCleanerBasic:
         assert 'CalcMass' in cleaned.columns
         assert 'BaseRt' in cleaned.columns
 
+    def test_clean_strips_extended_export_columns(self, simple_experiment_2x2):
+        """Extended LipidSearch exports (Org*/Mean*/Conc*/Std*/Rsd* plus extra
+        metadata columns) must be projected down to canonical metadata +
+        intensity[*]; LipidMolec must be the leftmost column."""
+        samples = simple_experiment_2x2.full_samples_list  # ['s1','s2','s3','s4']
+        data = {
+            'Rej': ['FALSE'] * 3,
+            'ID': [1, 2, 3],
+            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'TG(16:0_18:1_18:2)'],
+            'LipidMolecGroup': ['x', 'y', 'z'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'SubClassKey': ['a', 'b', 'c'],
+            'FAKey': ['16:0_18:1', '18:0_20:4', '16:0_18:1_18:2'],
+            'FAGroupKey': ['g1', 'g2', 'g3'],
+            'CalcMass': [760.5, 768.5, 850.7],
+            'BaseRt': [10.5, 12.3, 15.0],
+            'MolFormula': ['C42', 'C43', 'C55'],
+            'MainIon': ['M+H', 'M+H', 'M+H'],
+            'TotalSmpIDRate(%)': [100.0, 85.0, 95.0],
+            'TotalGrade': ['A', 'B', 'A'],
+        }
+        # Add the noisy per-sample column variants that the standardization
+        # step leaves behind (only MeanArea[*] is renamed to intensity[*]).
+        noise_prefixes = [
+            'OrgMeanArea', 'OrgMeanHeight', 'OrgMaxArea', 'OrgMedArea',
+            'MeanHeight', 'MaxArea', 'MedArea', 'MedSumArea',
+            'AreaStd', 'HeightStd', 'AreaRsd(%)', 'HeightRsd(%)',
+            'MeanConc', 'MaxConc', 'MedConc',
+        ]
+        for s in samples:
+            for prefix in noise_prefixes:
+                data[f'{prefix}[{s}]'] = [1.0, 2.0, 3.0]
+            data[f'intensity[{s}]'] = [1000.0, 2000.0, 3000.0]
+
+        df = pd.DataFrame(data)
+        cleaned, _ = LipidSearchCleaner.clean(df, simple_experiment_2x2)
+
+        # LipidMolec is the leftmost column
+        assert cleaned.columns[0] == 'LipidMolec'
+
+        # Only canonical metadata + intensity[*] survive
+        expected_metadata = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'FAKey', 'TotalGrade']
+        expected_intensity = [f'intensity[{s}]' for s in samples]
+        assert list(cleaned.columns) == expected_metadata + expected_intensity
+
+        # And the noisy columns are gone
+        for prefix in noise_prefixes:
+            for s in samples:
+                assert f'{prefix}[{s}]' not in cleaned.columns
+        for col in ['Rej', 'ID', 'LipidMolecGroup', 'SubClassKey', 'FAGroupKey',
+                    'MolFormula', 'MainIon', 'TotalSmpIDRate(%)']:
+            assert col not in cleaned.columns
+
 
 class TestLipidSearchFAKeyHandling:
     """Tests for FA key handling in LipidSearch."""
