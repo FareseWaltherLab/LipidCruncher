@@ -30,6 +30,7 @@ class Page(str, Enum):
     """Application page identifiers."""
     LANDING = "landing"
     APP = "app"
+    ISOTOPE_TRACING = "isotope_tracing"
 
 
 class Module(str, Enum):
@@ -41,6 +42,7 @@ class Module(str, Enum):
 # Legacy aliases — existing code can still use these; they are now enum values
 PAGE_LANDING = Page.LANDING
 PAGE_APP = Page.APP
+PAGE_ISOTOPE_TRACING = Page.ISOTOPE_TRACING
 MODULE_DATA_PROCESSING = Module.DATA_PROCESSING
 MODULE_QC_ANALYSIS = Module.QC_ANALYSIS
 

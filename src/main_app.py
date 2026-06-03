@@ -34,8 +34,9 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL, Module, Page
+from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, PAGE_ISOTOPE_TRACING, FORMAT_MSDIAL, Module, Page
 from app.ui.landing_page import display_landing_page, display_logo
+from app.ui.isotope_tracing_page import display_isotope_tracing_page
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
 from app.ui.sidebar import (
@@ -323,6 +324,8 @@ def main() -> None:
         display_landing_page()
     elif page == PAGE_APP:
         display_app_page()
+    elif page == PAGE_ISOTOPE_TRACING:
+        display_isotope_tracing_page()
     else:
         logger.error("Unknown page: %s — resetting to landing", page)
         st.session_state.page = PAGE_LANDING

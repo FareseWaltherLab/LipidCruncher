@@ -58,7 +58,10 @@ class IsotopeTracingWorkflow:
             IsotopeTracingResult — success with the correction, or failure with
             validation_errors (bad inputs) or error_message (R runtime failure).
         """
-        validation_errors = validate_inputs(measurement_df, molecule_df, element_df)
+        validation_errors = validate_inputs(
+            measurement_df, molecule_df, element_df,
+            ultra_high_res=config.ultra_high_res,
+        )
         if validation_errors:
             return IsotopeTracingResult(
                 success=False, validation_errors=validation_errors

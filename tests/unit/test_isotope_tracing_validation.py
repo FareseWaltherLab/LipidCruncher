@@ -85,3 +85,37 @@ class TestValidateInputs:
         # "BMP_18:1_18:1_C1" must match molecule "BMP_18:1_18:1" despite underscores.
         measurement, molecule, element = _valid_inputs()
         assert validate_inputs(measurement, molecule, element) == []
+
+
+class TestResolutionModeConsistency:
+    """The UHR setting must match the isotopologue-ID labeling style."""
+
+    def _standard_inputs(self):
+        """Inputs with standard-resolution IDs ('_0', '_1')."""
+        measurement, molecule, element = _valid_inputs()
+        measurement = measurement.copy()
+        measurement["Measurements/Samples"] = [
+            "BMP_18:1_18:1_0", "BMP_18:1_18:1_1", "PC_34:1_0"
+        ]
+        return measurement, molecule, element
+
+    def test_uhr_ids_without_uhr_flag_flagged(self):
+        # Sample IDs are UHR-style ("_C0"); running with UHR off must be caught.
+        errors = validate_inputs(*_valid_inputs(), ultra_high_res=False)
+        assert any("ultra-high-resolution labeling" in e for e in errors)
+        assert any("Enable 'Ultra-high-resolution mode'" in e for e in errors)
+
+    def test_uhr_ids_with_uhr_flag_ok(self):
+        assert validate_inputs(*_valid_inputs(), ultra_high_res=True) == []
+
+    def test_standard_ids_with_uhr_flag_flagged(self):
+        errors = validate_inputs(*self._standard_inputs(), ultra_high_res=True)
+        assert any("standard-resolution labeling" in e for e in errors)
+        assert any("Disable 'Ultra-high-resolution mode'" in e for e in errors)
+
+    def test_standard_ids_without_uhr_flag_ok(self):
+        assert validate_inputs(*self._standard_inputs(), ultra_high_res=False) == []
+
+    def test_mode_check_skipped_when_flag_is_none(self):
+        # Default call (no flag) must not perform the mode check.
+        assert validate_inputs(*_valid_inputs()) == []

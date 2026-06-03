@@ -20,6 +20,7 @@ from ..models.experiment import ExperimentConfig
 from ..services.data_standardization import MSDIALFeatures
 from ..models.normalization import NormalizationConfig
 from ..models.statistics import StatisticalTestConfig
+from ..models.isotope_tracing import IsotopeCorrectionConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
 from ..services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from ..services.plotting.box_plot import BoxPlotService
@@ -42,6 +43,7 @@ from ..workflows.analysis import (
 )
 from ..workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig, IngestionResult
 from ..workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
+from ..workflows.isotope_tracing import IsotopeTracingWorkflow, IsotopeTracingResult
 
 
 @dataclass
@@ -83,6 +85,8 @@ class SessionState:
                              analysis_volcano_fig, analysis_volcano_data,
                              analysis_heatmap_fig, analysis_heatmap_clusters,
                              analysis_all_plots
+      isotope_tracing_page.py → iso_measurement_df, iso_molecule_df, iso_element_df,
+                             iso_config, iso_result
       main_app.py          → page, module
     """
     # --- App-level routing (owner: main_app.py) ---
@@ -191,6 +195,13 @@ class SessionState:
     # --- LSI Compliance Report (owner: lsi_report.py) ---
     lsi_manual_fields: Dict[str, str] = field(default_factory=dict)
     lsi_pdf_bytes: Optional[bytes] = None
+
+    # --- Isotope tracing (owner: isotope_tracing_page.py) ---
+    iso_measurement_df: Optional[pd.DataFrame] = None
+    iso_molecule_df: Optional[pd.DataFrame] = None
+    iso_element_df: Optional[pd.DataFrame] = None
+    iso_config: Optional[IsotopeCorrectionConfig] = None
+    iso_result: Optional[IsotopeTracingResult] = None
 
 
 # Keys that should NOT be reset when starting a fresh analysis
@@ -520,6 +531,38 @@ class StreamlitAdapter:
             df=df,
             config=workflow_config,
             intsta_df=intsta_df
+        )
+
+    # ==================== Cached Isotope Tracing Wrapper ====================
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Running IsoCorrectoR...",
+        hash_funcs={IsotopeCorrectionConfig: hash},
+    )
+    def run_isotope_correction(
+        measurement_df: pd.DataFrame,
+        molecule_df: pd.DataFrame,
+        element_df: pd.DataFrame,
+        config: IsotopeCorrectionConfig,
+    ) -> IsotopeTracingResult:
+        """Cached isotope tracing workflow wrapper.
+
+        Keyed on the three input DataFrames and the config, so re-running with
+        unchanged inputs skips the (slow) R subprocess.
+
+        Args:
+            measurement_df: Measurement file.
+            molecule_df: Molecule file.
+            element_df: Element file.
+            config: IsoCorrectoR settings.
+
+        Returns:
+            IsotopeTracingResult — success with the correction, or failure with
+            validation_errors / error_message.
+        """
+        return IsotopeTracingWorkflow.run(
+            measurement_df, molecule_df, element_df, config
         )
 
     # ==================== Cached QC Wrappers ====================

@@ -13,7 +13,7 @@ from typing import Optional
 import streamlit as st
 from PIL import Image
 
-from app.constants import PAGE_APP
+from app.constants import PAGE_APP, PAGE_ISOTOPE_TRACING
 
 
 try:
@@ -176,13 +176,20 @@ def _display_modules_overview() -> None:
 
 
 def _display_call_to_action() -> None:
-    """Display the Start Crunching button."""
+    """Display the data-type choice: general lipidomics vs stable isotope tracing."""
     st.subheader("🎯 Ready to Crunch?")
-    btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
-    with btn_col2:
-        if st.button("🚀 Start Crunching", use_container_width=True, type="primary"):
+    st.markdown("**What type of data do you want to process?**")
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("🧬 General Lipidomics", use_container_width=True, type="primary"):
             st.session_state.page = PAGE_APP
             st.rerun()
+        st.caption("Filter, normalize, QC, visualize, and analyze lipidomics data.")
+    with btn_col2:
+        if st.button("🧪 Stable Isotope Tracing", use_container_width=True):
+            st.session_state.page = PAGE_ISOTOPE_TRACING
+            st.rerun()
+        st.caption("Natural-isotope-abundance correction via IsoCorrectoR.")
 
     st.markdown("---")
 

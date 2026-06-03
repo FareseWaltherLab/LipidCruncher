@@ -34,19 +34,25 @@ from tests.ui.conftest import (
 # =============================================================================
 
 class TestLandingPageNavigation:
-    """Tests for the landing page and Start Crunching button."""
+    """Tests for the landing page data-type choice buttons."""
 
-    def test_start_crunching_button_renders(self, landing_app):
-        """Start Crunching button is visible on landing page."""
+    def test_general_lipidomics_button_renders(self, landing_app):
+        """General Lipidomics button is visible on landing page."""
         at = landing_app
-        assert len(at.button) >= 1
-        assert "Start Crunching" in at.button[0].label
+        assert len(at.button) >= 2
+        assert "General Lipidomics" in at.button[0].label
 
-    def test_start_crunching_sets_page_to_app(self, landing_app):
-        """Clicking Start Crunching navigates to app page."""
+    def test_general_lipidomics_sets_page_to_app(self, landing_app):
+        """Clicking General Lipidomics navigates to the app page."""
         at = landing_app
         at.button[0].click().run()
         assert at.session_state['page'] == 'app'
+
+    def test_isotope_tracing_sets_page(self, landing_app):
+        """Clicking Stable Isotope Tracing navigates to the isotope page."""
+        at = landing_app
+        at.button[1].click().run()
+        assert at.session_state['page'] == 'isotope_tracing'
 
     def test_landing_page_initial_state(self, landing_app):
         """Landing page starts with page='landing'."""
