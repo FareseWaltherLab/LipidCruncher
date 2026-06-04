@@ -1,0 +1,45 @@
+# Dockerfile.isotope — image for the SEPARATE stable-isotope-tracing TEST
+# deployment (2nd ECS service). It is the full LipidCruncher app PLUS the R
+# runtime + IsoCorrectoR that the isotope module needs.
+#
+# The production image still builds from the unchanged `Dockerfile` (off
+# `main`), so this file never affects the all-users deployment. Build it
+# explicitly:  docker build -f Dockerfile.isotope -t <ecr>/lipidcruncher-isotope:<tag> .
+#
+# Reproducibility note: dev was validated on R 4.6 / IsoCorrectoR 1.30.0.
+# Debian's r-base may install a slightly older IsoCorrectoR; outputs reproduce
+# within tolerance (1.28 <-> 1.30 verified). If an exact version is required,
+# add the CRAN apt repo to install a newer R before installing IsoCorrectoR.
+
+FROM python:3.11-slim
+WORKDIR /app
+
+# System deps:
+#   poppler-utils                      -> pdf2image (existing app dependency)
+#   r-base r-base-dev gfortran ...     -> R + toolchain to compile R packages
+#   lib*-dev                           -> headers some Bioconductor deps need
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        poppler-utils \
+        r-base r-base-dev \
+        gfortran build-essential \
+        libcurl4-openssl-dev libssl-dev libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# R packages: IsoCorrectoR (Bioconductor) + jsonlite (our wrapper reads JSON
+# config). This is the slow, heavy layer — kept before the app COPY so it
+# stays cached across app changes.
+RUN Rscript -e 'install.packages(c("BiocManager", "jsonlite"), repos="https://cloud.r-project.org"); \
+                BiocManager::install("IsoCorrectoR", ask=FALSE, update=FALSE)' \
+    && Rscript -e 'stopifnot(requireNamespace("IsoCorrectoR", quietly=TRUE), requireNamespace("jsonlite", quietly=TRUE)); \
+                   cat("IsoCorrectoR", as.character(packageVersion("IsoCorrectoR")), "OK\n")'
+
+# Python deps (unchanged from the production image).
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Application.
+COPY . .
+
+EXPOSE 8501
+ENTRYPOINT ["streamlit", "run"]
+CMD ["src/main_app.py"]
