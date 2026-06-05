@@ -23,6 +23,88 @@ from app.ui.landing_page import display_logo
 # Golden sample dataset shipped with the repo (this file: src/app/ui/...).
 _SAMPLE_DIR = Path(__file__).parents[3] / "sample_datasets" / "isotope_tracing"
 
+
+# =============================================================================
+# In-app documentation (mirrors format_requirements.py / data-processing docs)
+# =============================================================================
+
+_INPUT_REQUIREMENTS_DOC = """
+### 🧪 IsoCorrectoR Input Files
+
+Stable isotope tracing needs **three CSV files** in the IsoCorrectoR format.
+
+**1. Measurement file** — the measured isotopologue intensities
+
+| Position | Content |
+|----------|---------|
+| Column 1 | Isotopologue IDs: `<Molecule>_<label>` |
+| Columns 2+ | One column per sample, with the measured intensity |
+
+The label suffix must match your **resolution mode**:
+- **Standard resolution** — total mass shift: `_0`, `_1`, `_2`, …
+- **Ultra-high resolution** — element-specific: `_C0`, `_C1`, … (turn on *Ultra-high-resolution mode*)
+
+```
+Measurements/Samples,Sample_A,Sample_B
+BMP_18:1_18:1_C0,26588314,24796338
+BMP_18:1_18:1_C1,11962732,10856478
+PC_34:1_C0,85698314,77001200
+```
+
+**2. Molecule file** — one row per molecule
+
+| Column | Content |
+|--------|---------|
+| `Molecule` | Name — must match the **prefix** of the measurement IDs |
+| `MS ion or MS/MS product ion` | Elemental formula of the measured ion (e.g. `C42H79O10P1LabC6`) |
+| `MS/MS neutral loss` | Neutral-loss formula for MS/MS data (leave blank for MS) |
+
+**3. Element file** — one row per element
+
+| Column | Content |
+|--------|---------|
+| `Element` | Symbol (`C`, `H`, `N`, `O`, `P`, …) |
+| `Isotope abundance_Mass shift` | Natural abundances, e.g. `0.0107_1/0.9893_0` |
+| `Tracer isotope mass shift` | Mass shift of the tracer (blank for non-tracer elements) |
+| `Tracer purity` | Label purity, e.g. `0.99` (blank for non-tracer elements) |
+
+💡 **No files?** Click **Load sample data** for a bundled example (a ¹³C HepG2 tracing dataset).
+"""
+
+_ABOUT_CORRECTION_DOC = """
+### 📖 About Natural Isotope Abundance Correction
+
+Stable isotope tracing feeds cells a nutrient labeled with a heavy but **stable**
+(non-radioactive) isotope — e.g. ¹³C — and measures how much label ends up in each
+lipid. The catch: nature already contains a little heavy isotope (~1.1% of all
+carbon is ¹³C), so part of every "heavy" signal is background, not your tracer.
+
+This module runs the real **IsoCorrectoR** package to remove that natural-abundance
+background, leaving the signal that reflects **only the label you fed in**.
+
+**Settings**
+- **Correct tracer impurity** — accounts for the label reagent not being 100% pure.
+- **Correct tracer element in core molecule** — corrects natural heavy atoms of the
+  tracer element elsewhere in the molecule.
+- **Calculate mean enrichment** — also reports the average degree of labeling per molecule.
+- **Ultra-high-resolution mode** — ON for high-resolution instruments (Orbitrap,
+  FT-ICR) whose IDs label the specific element (`_C0`); OFF for standard resolution
+  (`_0`). **The ID format must match this setting.**
+- **Also correct monoisotopic peak** / **UHR calculation limit** — advanced; the
+  defaults are appropriate for most data.
+
+**Outputs** — corrected intensities, corrected fractions, mean enrichment, residuals,
+and raw data, each downloadable as CSV.
+"""
+
+
+def _display_docs() -> None:
+    """Render the input-requirements and about-correction help expanders."""
+    with st.expander("📋 Input File Requirements", expanded=False):
+        st.markdown(_INPUT_REQUIREMENTS_DOC)
+    with st.expander("📖 About Isotope Correction", expanded=False):
+        st.markdown(_ABOUT_CORRECTION_DOC)
+
 # (CorrectionResult attribute, display label) for the output tables, corrected first.
 _OUTPUT_TABLES = [
     ("corrected", "Corrected"),
@@ -204,6 +286,8 @@ def display_isotope_tracing_page() -> None:
             "using the IsoCorrectoR package. Upload the **Measurement**, **Molecule**, "
             "and **Element** files in the sidebar, or load the sample dataset."
         )
+
+        _display_docs()
 
         if not r_available:
             st.warning(

@@ -98,7 +98,8 @@ LipidCruncher/
 │       ├── models/                          # Pydantic data models
 │       │   ├── experiment.py                #   ExperimentConfig
 │       │   ├── normalization.py             #   NormalizationConfig
-│       │   └── statistics.py                #   StatisticalTestConfig
+│       │   ├── statistics.py                #   StatisticalTestConfig
+│       │   └── isotope_tracing.py           #   IsotopeCorrectionConfig
 │       ├── services/                        # Pure business logic
 │       │   ├── __init__.py                  #   Public API: re-exports services + exceptions
 │       │   ├── exceptions.py                #   Typed exception hierarchy (ServiceError, etc.)
@@ -121,6 +122,12 @@ LipidCruncher/
 │       │   ├── sample_grouping.py           #   Sample assignment to conditions
 │       │   ├── report_generator.py          #   PDF report generation
 │       │   ├── lsi_report.py               #   LSI compliance checklist generation
+│       │   ├── isotope_correction/          #   Stable isotope tracing (IsoCorrectoR)
+│       │   │   ├── service.py               #     IsotopeCorrectionService (Rscript subprocess)
+│       │   │   ├── run_isocorrector.R       #     Bundled trusted R wrapper
+│       │   │   ├── validation.py            #     Pure-Python input validation
+│       │   │   ├── r_runtime.py             #     R/IsoCorrectoR availability detection
+│       │   │   └── exceptions.py            #     IsotopeError hierarchy
 │       │   └── plotting/                    #   Visualization services
 │       │       ├── __init__.py              #     Public API: re-exports all plotters + shared utils
 │       │       ├── base.py                  #     PlotterServiceProtocol (interface contract)
@@ -143,11 +150,13 @@ LipidCruncher/
 │       │   ├── data_ingestion.py            #   DataIngestionWorkflow
 │       │   ├── normalization.py             #   NormalizationWorkflow
 │       │   ├── quality_check.py             #   QualityCheckWorkflow
-│       │   └── analysis.py                  #   AnalysisWorkflow
+│       │   ├── analysis.py                  #   AnalysisWorkflow
+│       │   └── isotope_tracing.py           #   IsotopeTracingWorkflow
 │       ├── adapters/
 │       │   └── streamlit_adapter.py         #   StreamlitAdapter
 │       └── ui/                              # Streamlit UI components
 │           ├── landing_page.py
+│           ├── isotope_tracing_page.py      #   Stable isotope tracing page
 │           ├── format_requirements.py
 │           ├── zero_filtering.py
 │           ├── standards_plots.py
@@ -194,11 +203,13 @@ LipidCruncher/
 │   ├── lipidsearch5_test_dataset.csv
 │   ├── msdial_test_dataset.csv
 │   ├── generic_test_dataset.csv
-│   └── mw_test_dataset.csv
+│   ├── mw_test_dataset.csv
+│   └── isotope_tracing/                     # IsoCorrectoR inputs + golden output
 ├── images/                                  # UI assets (logo, module PDFs)
 ├── requirements.txt
 ├── pytest.ini
 ├── Dockerfile
+├── Dockerfile.isotope                       # R-enabled image (isotope test deploy)
 └── README.md
 ```
 
@@ -206,7 +217,7 @@ LipidCruncher/
 
 ## Application Flow
 
-The app has two pages: a **landing page** and the **main app page**. The main app page has two modules that the user progresses through sequentially.
+The app has three pages: a **landing page**, the **main app page**, and the **isotope tracing page**. The landing page asks *what type of data?* and routes to either the main lipidomics app (`Page.APP`) or the stable isotope tracing workflow (`Page.ISOTOPE_TRACING`). The main app page has two modules that the user progresses through sequentially.
 
 ### Module 1: Data Cleaning, Filtering, & Normalization
 
@@ -244,6 +255,22 @@ Bar Charts | Pie Charts | Saturation | Chain Length | FACH | Pathway | Volcano |
 
 Each analysis type is independent and user-selectable. All produce interactive plots with export options (SVG, CSV, PDF).
 
+### Stable Isotope Tracing (separate workflow)
+
+Reached from the landing-page mode choice (`Page.ISOTOPE_TRACING`); fully independent of Modules 1–2.
+
+```
+Upload 3 files (Measurement, Molecule, Element) → Validate → IsoCorrectoR (Rscript) → Corrected tables + CSV download
+```
+
+1. **Upload / sample data** — three IsoCorrectoR CSVs, or the bundled example.
+2. **Settings** — `IsotopeCorrectionConfig` (tracer-impurity, UHR mode, etc.).
+3. **Validation** — pure-Python structural checks before R is invoked.
+4. **Correction** — `IsotopeCorrectionService` runs the real IsoCorrectoR via an `Rscript` subprocess.
+5. **Results** — corrected intensities, fractions, mean enrichment, residuals, raw data — viewed and downloaded as CSV; run log shown.
+
+Requires R + IsoCorrectoR; degrades gracefully (clear notice) where R is absent.
+
 ---
 
 ## Layer-by-Layer Reference
@@ -257,6 +284,7 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 | `ExperimentConfig` | `experiment.py` | Defines experimental setup: number of conditions, condition labels, sample counts. Auto-derives `n_conditions` from `conditions_list` if omitted. Validates condition label uniqueness. Computed properties generate sample labels (s1, s2, ...) and group them by condition. Provides `without_samples()` for creating configs after sample removal. |
 | `NormalizationConfig` | `normalization.py` | Normalization method (`none`, `internal_standard`, `protein`, `both`, `total_intensity`), selected lipid classes, standard-to-class mappings, concentrations. |
 | `StatisticalTestConfig` | `statistics.py` | Test type (`parametric`, `non_parametric`, `auto`), multiple-testing correction (`fdr_bh`, `bonferroni`), post-hoc method (`tukey`, `bonferroni`), `auto_transform` flag for log10 transformation. |
+| `IsotopeCorrectionConfig` | `isotope_tracing.py` | One field per IsoCorrectoR `IsoCorrection()` setting (`correct_tracer_impurity`, `correct_tracer_element_core`, `calculate_mean_enrichment`, `ultra_high_res`, `correct_also_monoisotopic`, `calculation_threshold_uhr`). Used by the stable isotope tracing workflow. |
 
 ### Services
 
@@ -302,6 +330,18 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | `ReportGeneratorService` | `report_generator.py` | Generates PDF reports from collected plots and analysis results. |
 | `LSIReportService` | `lsi_report.py` | Generates Lipidomics Standards Initiative (LSI) compliance checklists with auto-filled fields from the analysis pipeline. Supports PDF and CSV export. |
 
+#### Isotope Correction (`services/isotope_correction/`)
+
+The stable isotope tracing module. Runs the real **IsoCorrectoR** R/Bioconductor package via an `Rscript` subprocess (no `rpy2`) — the app is Python, IsoCorrectoR is R.
+
+| File | Purpose |
+|---|---|
+| `service.py` | `IsotopeCorrectionService.run_correction()` — writes the three input DataFrames + a JSON config to a temp dir, invokes the R wrapper, parses the CSV outputs back into a `CorrectionResult` (corrected intensities, fractions, mean enrichment, residuals, raw data, run log). |
+| `run_isocorrector.R` | **Bundled, trusted** R wrapper: reads the JSON config, calls `IsoCorrection()`, writes outputs. The executed R is *ours*; the user supplies data files, not code (so the AI-sandbox boundary does not apply). Passed file-path **arguments**, never shell-interpolated. |
+| `validation.py` | Pure-Python structural validation of the three files *before* R runs (molecule-name consistency, numeric intensities, and a resolution-mode/ID-format check that catches UHR-vs-standard mismatches with an actionable message). |
+| `r_runtime.py` | `find_rscript()` / `check_isocorrector_available()` / `require_isocorrector()` — graceful detection so the rest of the app runs where R is absent. |
+| `exceptions.py` | `IsotopeError` → `RRuntimeError` (R missing/crashed) and `IsotopeInputError` (bad inputs). |
+
 #### Plotting Services (`services/plotting/`)
 
 Each module provides a static service class that returns Plotly or Matplotlib figures. All plotters follow the contract documented in `PlotterServiceProtocol` (`base.py`): static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`.
@@ -335,6 +375,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 | `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. Also provides `suggest_standard_mappings()` and `preview_normalization()`. |
 | `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_pca()`, `remove_samples()`. Each step can be run independently. |
 | `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
+| `IsotopeTracingWorkflow` | `run()` → `IsotopeTracingResult` | Validate the three input files → run `IsotopeCorrectionService` → typed result (success + `CorrectionResult`, or `validation_errors` / `error_message`). Separate from the lipidomics pipeline. |
 
 ### Adapter
 
@@ -373,6 +414,8 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 **Static content** (`ui/content/`): Documentation text for processing steps, normalization methods, sample data descriptions, standards help, and analysis methodology (statistical testing guide, saturation profile calculations).
 
 **Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV/PDF export helpers), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
+
+**Isotope tracing page** (`isotope_tracing_page.py`): a standalone page (route `Page.ISOTOPE_TRACING`, reached from the landing-page mode choice) for the stable isotope tracing workflow — three file uploaders + sample-data loader, a settings panel mapping 1:1 to `IsotopeCorrectionConfig`, in-app help expanders (input-file requirements, about-correction), run button, result tables with per-table CSV download, run-log expander, and a graceful "R runtime unavailable" notice.
 
 ---
 
@@ -420,6 +463,8 @@ raw_df → standardized_df → cleaned_df → normalized_df → qc_continuation_
 ```
 
 Each DataFrame flows forward through the pipeline. If the user changes something upstream (e.g., re-uploads data), downstream state is automatically cleared.
+
+The isotope tracing page owns the `iso_`-prefixed keys (`iso_measurement_df`, `iso_molecule_df`, `iso_element_df`, `iso_config`, `iso_result`), cleared together via `reset_module_state('iso_')` when leaving the page.
 
 ---
 
@@ -472,7 +517,7 @@ pytest tests/ --cov=src/app --cov-report=term-missing
 
 ### Sample Datasets
 
-`sample_datasets/` contains one test CSV per format, used by both the test suite and the app's "Load Sample Data" feature.
+`sample_datasets/` contains one test CSV per format, used by both the test suite and the app's "Load Sample Data" feature. The `isotope_tracing/` subfolder holds the IsoCorrectoR golden dataset (the three input files plus `golden_output/`), used by the sample-data loader and the R-gated parity test.
 
 ---
 
@@ -489,6 +534,8 @@ docker run -p 8501:8501 lipidcruncher
 ```
 
 The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for PDF generation), and runs `streamlit run src/main_app.py`.
+
+**Isotope tracing image (`Dockerfile.isotope`):** a separate image that adds R + Bioconductor + IsoCorrectoR + `jsonlite` on top of the app, for deployments that need the isotope module. Built explicitly (`docker build -f Dockerfile.isotope ...`), so the production image is unaffected. See `docs/isotope_deployment.md` for the standalone-deploy guide.
 
 ### Local Development
 

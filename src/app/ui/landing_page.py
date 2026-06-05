@@ -174,6 +174,18 @@ def _display_modules_overview() -> None:
 
     st.markdown("---")
 
+    # Stable Isotope Tracing — separate, parallel workflow
+    st.markdown("#### 🧪 Plus: Stable Isotope Tracing")
+    st.markdown("""
+    **A separate workflow for stable isotope (e.g. ¹³C) tracing experiments.** Upload IsoCorrectoR's three
+    input files (Measurement, Molecule, Element) and run natural-isotope-abundance correction with the real
+    IsoCorrectoR package—removing the naturally-occurring heavy-isotope background so the remaining signal
+    reflects only the label you fed in. View and download the corrected intensities, fractions, mean
+    enrichment, and residuals. Choose **Stable Isotope Tracing** below to start.
+    """)
+
+    st.markdown("---")
+
 
 def _display_call_to_action() -> None:
     """Display the data-type choice: general lipidomics vs stable isotope tracing."""
