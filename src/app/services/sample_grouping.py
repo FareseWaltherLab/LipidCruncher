@@ -300,19 +300,33 @@ class SampleGroupingService:
         df = df.copy()
 
         static_cols = [c for c in df.columns if not c.startswith('intensity[')]
-        intensity_cols = sorted(
-            [c for c in df.columns if c.startswith('intensity[')]
-        )
+        intensity_cols = [c for c in df.columns if c.startswith('intensity[')]
 
         result_df = pd.DataFrame(index=df.index)
         for col in static_cols:
             result_df[col] = df[col]
 
-        new_intensity_cols = [old_to_new.get(col, col) for col in intensity_cols]
-        for new_col, old_col in zip(new_intensity_cols, intensity_cols):
+        # Order output columns by the *new* name in natural numeric order
+        # (s1, s2, ..., s10, s11) rather than lexicographically, so the
+        # renamed columns display as s1..sN instead of s1, s10, s11, s2, ...
+        renamed = [(old_to_new.get(col, col), col) for col in intensity_cols]
+        renamed.sort(key=lambda pair: SampleGroupingService._sample_sort_key(pair[0]))
+        for new_col, old_col in renamed:
             result_df[new_col] = df[old_col]
 
         return result_df
+
+    @staticmethod
+    def _sample_sort_key(col: str) -> Tuple[int, object]:
+        """Natural sort key for intensity[sN] column names.
+
+        Standard intensity[sN] columns sort numerically by N; any other
+        column name sorts after them, preserving its lexical order.
+        """
+        match = re.match(r"intensity\[s(\d+)\]$", col)
+        if match:
+            return (0, int(match.group(1)))
+        return (1, col)
 
     @staticmethod
     def _build_name_mapping(
