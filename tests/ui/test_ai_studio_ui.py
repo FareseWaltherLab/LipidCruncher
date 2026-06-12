@@ -1,0 +1,80 @@
+"""
+UI tests for the AI Studio sidebar.
+
+Uses Streamlit's AppTest to drive the Confirm Inputs flow and assert that
+the data-dependent tabs lock/unlock in lockstep with the checkbox.
+"""
+from streamlit.testing.v1 import AppTest
+
+DEFAULT_TIMEOUT = 15
+
+
+def studio_confirm_flow_script():
+    """Render the AI Studio sidebar with pre-seeded data so the flow reaches
+    the Confirm Inputs checkbox using all default selections.
+
+    Emits `snapshot_set:<bool>` where the bool mirrors whether
+    `studio_applied_snapshot` is set — i.e. whether the data tabs are unlocked.
+    """
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('chat_studio_df_original') is None:
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1', 'PE 36:2'],
+            'intensity[s1]': [1.0, 2.0],
+            'intensity[s2]': [3.0, 4.0],
+            'intensity[s3]': [5.0, 6.0],
+            'intensity[s4]': [7.0, 8.0],
+            'intensity[s5]': [9.0, 10.0],
+            'intensity[s6]': [11.0, 12.0],
+        })
+        st.session_state.chat_studio_df = df
+        st.session_state.chat_studio_df_original = df
+        # Prefix '_pipeline_import' so the empty file_uploader on rerun isn't
+        # mistaken for a user removing their file (which would wipe state).
+        st.session_state.chat_studio_file_id = '_pipeline_import_test'
+
+    from app.ui.ai_studio_page import _display_studio_sidebar
+    _display_studio_sidebar()
+
+    is_unlocked = st.session_state.get('studio_applied_snapshot') is not None
+    st.text(f"snapshot_set:{is_unlocked}")
+
+
+def _snapshot_set(at):
+    for t in at.text:
+        if t.value.startswith('snapshot_set:'):
+            return t.value.endswith('True')
+    raise AssertionError("snapshot_set marker not rendered")
+
+
+class TestAIStudioConfirmInputs:
+    """Confirm Inputs checkbox gates the data-dependent tabs."""
+
+    def test_tabs_locked_before_confirm(self):
+        at = AppTest.from_function(
+            studio_confirm_flow_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        assert _snapshot_set(at) is False
+
+    def test_checking_confirm_unlocks_tabs(self):
+        at = AppTest.from_function(
+            studio_confirm_flow_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+        assert _snapshot_set(at) is True
+
+    def test_unchecking_confirm_relocks_tabs(self):
+        """Regression: unchecking the box must clear studio_applied_snapshot
+        so the data tabs turn inactive again."""
+        at = AppTest.from_function(
+            studio_confirm_flow_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+        assert _snapshot_set(at) is True
+
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(False).run()
+        assert _snapshot_set(at) is False

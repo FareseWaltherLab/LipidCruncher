@@ -478,10 +478,6 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
     output_prefix = detected_prefix or 'intensity'
 
     if not auto_cols:
-        st.sidebar.info(
-            "No `intensity[*]` or `concentration[*]` columns "
-            "auto-detected. Please pick the sample columns below."
-        )
         selected = st.sidebar.multiselect(
             "Pick the columns that are samples",
             options=list(df.columns),
@@ -697,6 +693,10 @@ def _display_studio_sidebar() -> None:
         condition_names, sample_counts,
     )
     if not confirmed:
+        # Unchecking the box must re-lock the data-dependent tabs, which gate
+        # on `studio_applied_snapshot`. Clear it so the tabs turn inactive;
+        # re-checking re-applies because the stored snapshot is now None.
+        st.session_state.studio_applied_snapshot = None
         return
 
     # Streamlit reruns the script on every interaction. The checkbox stays
