@@ -447,6 +447,36 @@ def _display_group_samples_sidebar(
     return manual
 
 
+def _non_numeric_sample_columns(df: pd.DataFrame, columns: list) -> list:
+    """Return picked columns that hold no numeric values.
+
+    Sample columns must carry intensity/concentration measurements. The
+    sandbox later coerces them with ``pd.to_numeric(errors='coerce')``, so a
+    fully non-numeric pick (e.g. the lipid-names column) would silently
+    become all-NaN instead of erroring. Flag those columns here so the user
+    can correct the selection.
+    """
+    offenders = []
+    for c in columns:
+        if pd.to_numeric(df[c], errors='coerce').notna().sum() == 0:
+            offenders.append(c)
+    return offenders
+
+
+def _warn_non_numeric_sample_columns(df: pd.DataFrame, columns: list) -> bool:
+    """Render a sidebar error for any non-numeric picks. Returns True when
+    the selection is valid (all columns numeric), False otherwise."""
+    offenders = _non_numeric_sample_columns(df, columns)
+    if not offenders:
+        return True
+    st.sidebar.error(
+        "These columns have no numeric values and can't be sample "
+        f"columns: {', '.join(offenders)}. Pick columns that hold "
+        "intensity or concentration measurements."
+    )
+    return False
+
+
 def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
     """Render the 'Sample Columns' sidebar block: lists the auto-detected
     sample columns and lets the user override the selection.
@@ -485,6 +515,8 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
         )
         if not selected:
             return None
+        if not _warn_non_numeric_sample_columns(df, selected):
+            return None
         return output_prefix, selected
 
     st.sidebar.caption(
@@ -512,6 +544,8 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
         key='studio_sample_cols_select',
     )
     if not selected:
+        return None
+    if not _warn_non_numeric_sample_columns(df, selected):
         return None
     return output_prefix, selected
 

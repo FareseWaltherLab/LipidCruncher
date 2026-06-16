@@ -78,3 +78,60 @@ class TestAIStudioConfirmInputs:
 
         at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(False).run()
         assert _snapshot_set(at) is False
+
+
+def sample_columns_picker_script():
+    """Render only the Sample Columns block over a generic-format frame whose
+    first column ('lipids') is text. No intensity[*]/concentration[*] columns
+    exist, so the manual multiselect renders immediately.
+
+    Emits `result:<bool>` reflecting whether the block returned a selection.
+    """
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    df = pd.DataFrame({
+        'lipids': ['PC 34:1', 'PE 36:2', 'SM 42:1'],
+        'Sample1': [1.0, 2.0, 3.0],
+        'Sample2': [4.0, 5.0, 6.0],
+    })
+    from app.ui.ai_studio_page import _display_sample_columns_sidebar
+    result = _display_sample_columns_sidebar(df)
+    st.text(f"result:{result is not None}")
+
+
+def _returned_selection(at):
+    for t in at.text:
+        if t.value.startswith('result:'):
+            return t.value.endswith('True')
+    raise AssertionError("result marker not rendered")
+
+
+class TestSampleColumnNumericValidation:
+    """Picking a non-numeric column as a sample must be rejected."""
+
+    def test_non_numeric_pick_is_rejected(self):
+        """Regression: selecting the text 'lipids' column produced no error
+        and was accepted as a sample column."""
+        at = AppTest.from_function(
+            sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.multiselect(
+            key='studio_sample_cols_select',
+        ).set_value(['lipids']).run()
+
+        assert len(at.sidebar.error) > 0
+        assert _returned_selection(at) is False
+
+    def test_numeric_picks_are_accepted(self):
+        at = AppTest.from_function(
+            sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.multiselect(
+            key='studio_sample_cols_select',
+        ).set_value(['Sample1', 'Sample2']).run()
+
+        assert len(at.sidebar.error) == 0
+        assert _returned_selection(at) is True
