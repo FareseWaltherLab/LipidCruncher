@@ -93,7 +93,8 @@ def sample_columns_picker_script():
     StreamlitAdapter.initialize_session_state()
 
     df = pd.DataFrame({
-        'lipids': ['PC 34:1', 'PE 36:2', 'SM 42:1'],
+        'lipids': ['PC 34:1', 'PE 36:2', 'SM 42:1'],   # text → not a sample
+        'CalcMass': [758.5, 744.5, 700.5],             # numeric metadata name
         'Sample1': [1.0, 2.0, 3.0],
         'Sample2': [4.0, 5.0, 6.0],
     })
@@ -135,3 +136,25 @@ class TestSampleColumnNumericValidation:
 
         assert len(at.sidebar.error) == 0
         assert _returned_selection(at) is True
+
+
+class TestSampleColumnPreselection:
+    """Numeric columns are pre-selected so the user needn't hand-pick all."""
+
+    def test_numeric_columns_are_preselected(self):
+        at = AppTest.from_function(
+            sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        ms = at.sidebar.multiselect(key='studio_sample_cols_select')
+        # Numeric, non-metadata columns pre-checked; text 'lipids' and the
+        # lipidomics-named numeric 'CalcMass' are not.
+        assert ms.value == ['Sample1', 'Sample2']
+
+    def test_metadata_named_column_stays_selectable(self):
+        """The lipidomics name list only nudges the default — it must not
+        remove a column from the options (AI Studio accepts any input)."""
+        at = AppTest.from_function(
+            sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        ms = at.sidebar.multiselect(key='studio_sample_cols_select')
+        assert 'CalcMass' in ms.options

@@ -20,7 +20,11 @@ import streamlit as st
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import PAGE_APP, PAGE_LANDING
 from app.models.experiment import ExperimentConfig
-from app.services.format_detection import DataFormat, FormatDetectionService
+from app.services.format_detection import (
+    DataFormat,
+    FormatDetectionService,
+    GENERIC_METADATA_NAME_PATTERNS,
+)
 from app.ui.landing_page import display_logo
 from app.ui.ai_chat import (
     display_lipidcruncher_questions_chat,
@@ -477,6 +481,30 @@ def _warn_non_numeric_sample_columns(df: pd.DataFrame, columns: list) -> bool:
     return False
 
 
+def _guess_sample_columns(df: pd.DataFrame) -> list:
+    """Best-effort pre-selection of sample columns for arbitrary input.
+
+    A column is guessed to be a sample when it is mostly numeric — the
+    universal, format-agnostic signal (>50% of values coerce to numbers),
+    matching the threshold the Generic-format detector uses.
+
+    Columns whose names match the lipidomics metadata patterns (m/z, RT,
+    score, ...) are dropped from the *guess* so they aren't pre-checked, but
+    they stay selectable in the multiselect: those patterns are lipidomics-
+    specific, and AI Studio accepts any input, so the name list only nudges
+    the default — it never forbids a column.
+    """
+    guesses = []
+    for c in df.columns:
+        name = str(c).lower().strip()
+        if any(p in name for p in GENERIC_METADATA_NAME_PATTERNS):
+            continue
+        col = df[c]
+        if pd.to_numeric(col, errors='coerce').notna().sum() > len(col) * 0.5:
+            guesses.append(c)
+    return guesses
+
+
 def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
     """Render the 'Sample Columns' sidebar block: lists the auto-detected
     sample columns and lets the user override the selection.
@@ -508,9 +536,16 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
     output_prefix = detected_prefix or 'intensity'
 
     if not auto_cols:
+        guessed = _guess_sample_columns(df)
+        if guessed:
+            st.sidebar.caption(
+                f"Pre-selected **{len(guessed)}** likely sample column(s) "
+                "(numeric). Review and adjust below."
+            )
         selected = st.sidebar.multiselect(
             "Pick the columns that are samples",
             options=list(df.columns),
+            default=guessed,
             key='studio_sample_cols_select',
         )
         if not selected:
