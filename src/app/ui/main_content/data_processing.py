@@ -172,6 +172,13 @@ Your MS-DIAL export contains both raw and pre-normalized intensity values:
             # (otherwise the stale override mapping causes incorrect column lookups)
             st.session_state.column_mapping = None
             st.session_state.n_intensity_cols = None
+            # Drop the sample-regroup snapshot. If the user previously reordered
+            # samples, this snapshot was captured under the old raw/normalized
+            # selection; leaving it stale would make the regroup step re-apply
+            # the old data and silently revert this toggle (showing raw values).
+            # Clearing it forces a re-snapshot from the freshly standardized data.
+            st.session_state.pop('_pre_regroup_df', None)
+            st.session_state.pop('original_column_order', None)
 
         data_type = st.radio(
             "Select which data to use:",

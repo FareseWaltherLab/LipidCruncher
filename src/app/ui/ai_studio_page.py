@@ -428,26 +428,44 @@ def _display_group_samples_sidebar(
         f"needs exactly the count you set above."
     )
     manual = []
+    remaining = list(sample_names)
     for i, (cond, count) in enumerate(zip(condition_names, sample_counts)):
         selected = st.sidebar.multiselect(
             f"Pick {count} sample(s) for **{cond}**",
-            options=sample_names,
+            options=remaining,
             key=f'studio_select_{i}',
         )
         manual.append(selected)
+        # Once a condition is fully assigned, drop its samples from the
+        # options offered to later conditions — mirrors the main pipeline,
+        # so a sample can't be picked twice (no duplicate-error needed).
+        if len(selected) == count:
+            remaining = [s for s in remaining if s not in selected]
 
     flat = [s for group in manual for s in group]
-    duplicates = {s for s in flat if flat.count(s) > 1}
-    if duplicates:
-        st.sidebar.error(
-            f"Sample(s) in more than one condition: "
-            f"{', '.join(sorted(duplicates))}"
-        )
-        return None
+    if len(set(flat)) != len(flat):
+        return None  # mid-edit duplicate; resolves as options shrink
     if len(flat) != len(sample_names):
         return None  # mid-edit; don't show errors yet
     if any(len(g) != c for g, c in zip(manual, sample_counts)):
         return None
+
+    # Show the old → new sample-name mapping, mirroring the main pipeline's
+    # "New sample order after regrouping:" table. Samples are renamed to
+    # s1..sN walking the conditions in order, then samples within each.
+    new_order = [s for group in manual for s in group]
+    name_df = pd.DataFrame({
+        'old name': new_order,
+        'updated name': [f's{i + 1}' for i in range(len(new_order))],
+        'condition': [
+            cond
+            for cond, group in zip(condition_names, manual)
+            for _ in group
+        ],
+    })
+    st.sidebar.write("New sample order after regrouping:")
+    st.sidebar.dataframe(name_df, use_container_width=True, hide_index=True)
+
     return manual
 
 
@@ -939,9 +957,15 @@ def display_ai_studio_page() -> None:
 
         st.markdown("---")
 
-        # File info + data preview when data is loaded. Show the user's
-        # original column names so the preview matches what the user sees
-        # in Data Questions / Transform.
+        # File info + data preview when data is loaded. Preview the processed
+        # df (reordered + renamed to s1..sN once an experiment is applied) so
+        # sample-reordering in the sidebar is reflected here. Before apply,
+        # the processed df equals the original, so the preview is unchanged.
+        preview_df = (
+            studio_df_processed
+            if studio_df_processed is not None
+            else studio_df_original
+        )
         blocked = _is_blocked_standard_format()
         if studio_df_original is not None:
             file_id = st.session_state.get("chat_studio_file_id", "")
@@ -967,10 +991,10 @@ def display_ai_studio_page() -> None:
                     f"{len(studio_df_original.columns)} columns."
                 )
                 with st.expander("Data Preview", expanded=False):
-                    st.dataframe(studio_df_original.head(10), width='stretch')
+                    st.dataframe(preview_df.head(10), width='stretch')
                     st.caption(
-                        f"{len(studio_df_original)} rows, "
-                        f"{len(studio_df_original.columns)} columns"
+                        f"{len(preview_df)} rows, "
+                        f"{len(preview_df.columns)} columns"
                     )
         else:
             st.info("Upload a CSV in the sidebar to begin.")

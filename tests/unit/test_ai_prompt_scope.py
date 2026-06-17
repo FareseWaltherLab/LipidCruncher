@@ -18,9 +18,11 @@ from app.services.ai_chat.viz_generator import _viz_system_prompt
 class TestPromptScopeEnforcement:
 
     def test_transform_prompt_has_scope_section(self):
+        # The Transform prompt intentionally states its scope without the
+        # "STRICTLY ENFORCED" wording (it allows info-gathering turns), so
+        # assert the section header exists rather than a specific phrase.
         prompt = data_transform_system_prompt()
-        assert "SCOPE" in prompt
-        assert "STRICTLY ENFORCED" in prompt
+        assert "## SCOPE" in prompt
 
     def test_transform_prompt_redirects_to_viz(self):
         prompt = data_transform_system_prompt()

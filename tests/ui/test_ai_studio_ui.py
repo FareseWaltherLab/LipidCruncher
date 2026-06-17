@@ -158,3 +158,104 @@ class TestSampleColumnPreselection:
         ).run()
         ms = at.sidebar.multiselect(key='studio_sample_cols_select')
         assert 'CalcMass' in ms.options
+
+
+def group_samples_script():
+    """Render only the Group Samples block (manual reassignment path) over a
+    4-sample / 2-condition setup."""
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    from app.ui.ai_studio_page import _display_group_samples_sidebar
+    result = _display_group_samples_sidebar(
+        ['s1', 's2', 's3', 's4'], ['A', 'B'], [2, 2],
+    )
+    st.text(f"group_result:{result}")
+
+
+class TestGroupSamplesNoDuplicates:
+    """A fully-assigned sample drops out of the other conditions' options,
+    so it can't be picked twice (no duplicate-error needed)."""
+
+    def test_assigned_samples_leave_later_options(self):
+        at = AppTest.from_function(
+            group_samples_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='studio_grouping_radio').set_value('No').run()
+        # Fully assign condition A; its samples must vanish from B's options.
+        at.sidebar.multiselect(
+            key='studio_select_0',
+        ).set_value(['s1', 's2']).run()
+
+        assert at.sidebar.multiselect(key='studio_select_1').options == [
+            's3', 's4',
+        ]
+        # No duplicate-error is rendered for the manual flow.
+        assert len(at.sidebar.error) == 0
+
+    def test_regrouping_shows_old_to_new_name_table(self):
+        """A completed manual regroup renders an old → new name table,
+        mirroring the main pipeline's 'New sample order after regrouping:'."""
+        at = AppTest.from_function(
+            group_samples_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='studio_grouping_radio').set_value('No').run()
+        at.sidebar.multiselect(
+            key='studio_select_0',
+        ).set_value(['s2', 's1']).run()
+        at.sidebar.multiselect(
+            key='studio_select_1',
+        ).set_value(['s4', 's3']).run()
+
+        name_tables = [
+            t.value for t in at.sidebar.dataframe
+            if 'updated name' in t.value.columns
+        ]
+        assert len(name_tables) == 1
+        name_df = name_tables[0]
+        assert list(name_df.columns) == ['old name', 'updated name', 'condition']
+        assert list(name_df['updated name']) == ['s1', 's2', 's3', 's4']
+        assert list(name_df['condition']) == ['A', 'A', 'B', 'B']
+        assert set(name_df['old name']) == {'s1', 's2', 's3', 's4'}
+
+
+def studio_preview_script():
+    """Render the full AI Studio page with a processed df whose sample columns
+    are renamed (intensity[s1..s2]) relative to the original (intensity[A..B]).
+    """
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('chat_studio_df_original') is None:
+        original = pd.DataFrame({
+            'lipids': ['PC 34:1'],
+            'intensity[A]': [1.0],
+            'intensity[B]': [2.0],
+        })
+        processed = original.rename(columns={
+            'intensity[A]': 'intensity[s1]',
+            'intensity[B]': 'intensity[s2]',
+        })
+        st.session_state.chat_studio_df_original = original
+        st.session_state.chat_studio_df = processed
+        st.session_state.chat_studio_file_id = '_pipeline_import_test'
+
+    from app.ui.ai_studio_page import display_ai_studio_page
+    display_ai_studio_page()
+
+
+class TestDataPreviewReflectsReorder:
+    """The Data Preview shows the processed (reordered + renamed) df."""
+
+    def test_preview_uses_processed_columns(self):
+        at = AppTest.from_function(
+            studio_preview_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        all_columns = [
+            col for d in at.dataframe for col in list(d.value.columns)
+        ]
+        assert 'intensity[s1]' in all_columns
+        assert 'intensity[A]' not in all_columns
