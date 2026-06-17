@@ -21,6 +21,9 @@ src/.streamlit/secrets.toml
 *.swp
 *.log
 
+# Data CSV files (sample_datasets/ and test fixtures are already tracked and unaffected)
+*.csv
+
 # Documentation working files
 *.docx
 *.doc
