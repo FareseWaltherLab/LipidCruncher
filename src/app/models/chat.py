@@ -108,7 +108,7 @@ class AIConfig(BaseModel):
     """
     model_config = {"frozen": True}
 
-    model: str = Field(default="claude-sonnet-4-20250514", description="Anthropic model ID")
+    model: str = Field(default="claude-sonnet-4-6", description="Anthropic model ID")
     max_tokens: int = Field(default=4096, ge=1, le=8192, description="Max response tokens")
     temperature: float = Field(default=0.0, ge=0.0, le=1.0, description="Sampling temperature")
 

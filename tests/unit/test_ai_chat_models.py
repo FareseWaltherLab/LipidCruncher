@@ -118,7 +118,7 @@ class TestAIConfig:
 
     def test_defaults(self):
         config = AIConfig()
-        assert config.model == "claude-sonnet-4-20250514"
+        assert config.model == "claude-sonnet-4-6"
         assert config.max_tokens == 4096
         assert config.temperature == 0.0
 

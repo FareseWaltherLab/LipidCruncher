@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(
 
 # Use a smaller/cheaper model config for integration tests
 TEST_CONFIG = AIConfig(
-    model="claude-sonnet-4-20250514",
+    model="claude-sonnet-4-6",
     max_tokens=1024,
     temperature=0.0,
 )
