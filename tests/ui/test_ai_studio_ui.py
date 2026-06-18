@@ -259,3 +259,65 @@ class TestDataPreviewReflectsReorder:
         ]
         assert 'intensity[s1]' in all_columns
         assert 'intensity[A]' not in all_columns
+
+
+def mw_block_script():
+    """Seed the detected format to Metabolomics Workbench and report whether
+    the standard-format block fires."""
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    from app.services.format_detection import DataFormat
+    from app.ui.ai_studio_page import _is_blocked_standard_format
+    st.session_state.chat_studio_detected_format = (
+        DataFormat.METABOLOMICS_WORKBENCH.value
+    )
+    st.text(f"blocked:{_is_blocked_standard_format()}")
+
+
+class TestMetabolomicsWorkbenchBlocked:
+    """A raw Metabolomics Workbench upload is recognized as MW and blocked,
+    steering the user to the main pipeline.
+
+    Regression: AI Studio passed a DataFrame to detect_format(), which only
+    recognizes MW from its raw text (a plain read_csv of the multi-section
+    file yields a garbage 'Unnamed' frame). MW was therefore misclassified as
+    'Unknown', slipped past the block, and offered no usable sample columns.
+    """
+
+    def test_raw_mw_text_detects_as_mw_not_dataframe(self):
+        import os
+        import pandas as pd
+        from app.services.format_detection import (
+            DataFormat, FormatDetectionService,
+        )
+        from app.ui.ai_studio_page import _AI_STUDIO_BLOCKED_FORMATS
+
+        mw_path = os.path.join(
+            os.path.dirname(__file__), '..', '..',
+            'sample_datasets', 'mw_test_dataset.csv',
+        )
+        with open(mw_path, encoding='utf-8', errors='replace') as fh:
+            text = fh.read()
+
+        # The fix: detect from the raw text → MW.
+        assert (
+            FormatDetectionService.detect_format(text)
+            == DataFormat.METABOLOMICS_WORKBENCH
+        )
+        # The old behavior: detecting from the DataFrame → Unknown (not blocked).
+        df = pd.read_csv(mw_path)
+        assert (
+            FormatDetectionService.detect_format(df) == DataFormat.UNKNOWN
+        )
+        # MW now belongs to the blocked set, so the advisory fires.
+        assert (
+            DataFormat.METABOLOMICS_WORKBENCH.value in _AI_STUDIO_BLOCKED_FORMATS
+        )
+
+    def test_mw_format_triggers_block(self):
+        at = AppTest.from_function(
+            mw_block_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        assert any(t.value == 'blocked:True' for t in at.text)

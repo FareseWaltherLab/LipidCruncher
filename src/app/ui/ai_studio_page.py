@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 _AI_STUDIO_BLOCKED_FORMATS: frozenset = frozenset({
     DataFormat.LIPIDSEARCH.value,
     DataFormat.MSDIAL.value,
+    DataFormat.METABOLOMICS_WORKBENCH.value,
 })
 
 
@@ -180,6 +181,17 @@ def _handle_file_upload_sidebar() -> None:
         return
 
     try:
+        # Metabolomics Workbench files are multi-section text documents whose
+        # real table only the main pipeline's MW parser can recover.
+        # detect_format() recognizes them by scanning the raw text for the
+        # MS_METABOLITE_DATA markers — it cannot see them from a DataFrame
+        # (a plain read_csv yields a garbage "Unnamed" frame). Detect from the
+        # text first so an MW upload is flagged as MW (and thus blocked) rather
+        # than mis-read as a table the user is asked to hand-pick columns from.
+        text_format = FormatDetectionService.detect_format(
+            uploaded.getvalue().decode("utf-8", errors="replace")
+        )
+        uploaded.seek(0)
         df = pd.read_csv(uploaded)
         if df.empty:
             st.sidebar.error("The uploaded file is empty.")
@@ -188,9 +200,12 @@ def _handle_file_upload_sidebar() -> None:
         st.session_state.chat_studio_df = df
         st.session_state.chat_studio_df_original = df
         st.session_state.chat_studio_file_id = file_id
-        st.session_state.chat_studio_detected_format = (
-            FormatDetectionService.detect_format(df).value
+        detected = (
+            text_format
+            if text_format == DataFormat.METABOLOMICS_WORKBENCH
+            else FormatDetectionService.detect_format(df)
         )
+        st.session_state.chat_studio_detected_format = detected.value
     except Exception as e:
         st.sidebar.error(f"Could not read CSV: {e}")
 
@@ -1116,12 +1131,18 @@ def display_ai_studio_page() -> None:
                             "`intensity[sN]` / `concentration[sN]`"
                         )
                     st.warning(
-                        "Custom Visualization requires data processed "
-                        "through LipidCruncher's Module 1 pipeline. "
-                        "Missing columns: " + ", ".join(missing) + ".\n\n"
-                        "Please run your data through the main pipeline "
-                        "first (**Start Crunching** on the home page), "
-                        "then return here."
+                        "Custom Visualization needs data that has already "
+                        "been filtered and normalized by LipidCruncher's "
+                        "Module 1 pipeline. Missing columns: "
+                        + ", ".join(missing) + ".\n\n"
+                        "To get there:\n"
+                        "1. Use the **Transform to Generic** tab to convert "
+                        "your file into LipidCruncher's generic format.\n"
+                        "2. Take that generic file to the main pipeline on "
+                        "the home page and run **Start Crunching** to filter "
+                        "and normalize it.\n"
+                        "3. Come back here with the filtered/normalized data "
+                        "to build custom visualizations."
                     )
                 else:
                     experiment = st.session_state.get(
