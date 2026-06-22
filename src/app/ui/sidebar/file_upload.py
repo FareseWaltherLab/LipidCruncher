@@ -7,9 +7,10 @@ This module contains:
 - display_file_upload: File uploader with sample data option
 """
 
+import io
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import streamlit as st
 import pandas as pd
@@ -22,8 +23,31 @@ from app.constants import (
     FORMAT_OPTIONS,
 )
 from app.services.data_standardization import DataStandardizationService
-from app.services.format_detection import DataFormat
+from app.services.format_detection import DataFormat, FormatDetectionService
 from app.ui.content import get_sample_data_info
+
+
+def _read_tabular(source: Union[str, Path, "io.IOBase"]) -> pd.DataFrame:
+    """Read an uploaded CSV/TXT dataset, auto-detecting the delimiter.
+
+    LipidSearch 5.2 exports are tab-delimited despite the .csv extension, while
+    older exports (and the other formats) are comma-delimited. Sniff the header
+    so both parse correctly.
+
+    Args:
+        source: A file path or a Streamlit UploadedFile (BytesIO-like).
+
+    Returns:
+        Parsed DataFrame.
+    """
+    if hasattr(source, 'getvalue'):
+        raw = source.getvalue()
+        text = raw.decode('utf-8') if isinstance(raw, bytes) else raw
+    else:
+        with open(source, 'r', encoding='utf-8') as fh:
+            text = fh.read()
+    delimiter = FormatDetectionService.sniff_delimiter(text)
+    return pd.read_csv(io.StringIO(text), sep=delimiter)
 
 
 # =============================================================================
@@ -145,7 +169,7 @@ def load_sample_dataset(data_format: str) -> Optional[pd.DataFrame]:
                 )
                 return _store_workbench_result(result)
             else:
-                return pd.read_csv(filepath)
+                return _read_tabular(filepath)
     return None
 
 
@@ -207,7 +231,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
                     st.session_state.raw_df = df
                 return df
             else:
-                df = pd.read_csv(uploaded_file)
+                df = _read_tabular(uploaded_file)
                 st.sidebar.success("File uploaded successfully!")
                 st.session_state.raw_df = df
                 return df

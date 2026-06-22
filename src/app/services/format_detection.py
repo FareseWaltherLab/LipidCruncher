@@ -55,6 +55,27 @@ class FormatDetectionService:
     MW_END_MARKER: str = 'MS_METABOLITE_DATA_END'
 
     @staticmethod
+    def sniff_delimiter(text: str) -> str:
+        """
+        Detect the column delimiter (tab or comma) from a sample of file text.
+
+        LipidSearch 5.2 exports tab-delimited data with a .csv extension, while
+        older LipidSearch and the other supported formats are comma-delimited.
+        Compare the counts in the header line and default to comma so existing
+        comma-separated files keep parsing exactly as before.
+
+        Args:
+            text: File contents (or at least the first line).
+
+        Returns:
+            '\\t' if the header has more tabs than commas, otherwise ','.
+        """
+        header = text.split('\n', 1)[0]
+        if header.count('\t') > header.count(','):
+            return '\t'
+        return ','
+
+    @staticmethod
     def detect_format(data: Union[pd.DataFrame, str]) -> DataFormat:
         """
         Detect the format of the input data.
