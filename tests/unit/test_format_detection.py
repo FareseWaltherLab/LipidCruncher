@@ -1575,3 +1575,32 @@ class TestServiceClassStructure:
             'Sample1': [1000.0],
         })
         assert FormatDetectionService.detect_format(df) == DataFormat.GENERIC
+
+
+class TestSniffDelimiter:
+    """Tests for delimiter detection (LipidSearch 5.2 ships tab-delimited .csv)."""
+
+    def test_comma_header_returns_comma(self):
+        """Comma-separated header (legacy LipidSearch 5.0) returns comma."""
+        header = "LipidMolec,ClassKey,CalcMass,BaseRt,TotalGrade,FAKey,MeanArea[s1]\n"
+        assert FormatDetectionService.sniff_delimiter(header) == ','
+
+    def test_tab_header_returns_tab(self):
+        """Tab-separated header (LipidSearch 5.2) returns tab."""
+        header = "LipidMolec\tClassKey\tCalcMass\tBaseRt\tTotalGrade\tFAKey\tMeanArea[s1]\n"
+        assert FormatDetectionService.sniff_delimiter(header) == '\t'
+
+    def test_tab_header_with_paren_commas_returns_tab(self):
+        """Tab delimiter wins even when cell names contain commas."""
+        # TotalSmpIDRate(%) and ratio columns contain no commas, but guard anyway.
+        header = "LipidMolec\tTotalSmpIDRate(%)\tAratio[A/B]\tMeanArea[s1]\n"
+        assert FormatDetectionService.sniff_delimiter(header) == '\t'
+
+    def test_only_first_line_is_inspected(self):
+        """Delimiter is decided from the header, ignoring data rows."""
+        text = "a\tb\tc\n1,2,3\n4,5,6\n"
+        assert FormatDetectionService.sniff_delimiter(text) == '\t'
+
+    def test_empty_text_defaults_to_comma(self):
+        """Empty input defaults to comma (backward-compatible)."""
+        assert FormatDetectionService.sniff_delimiter("") == ','
