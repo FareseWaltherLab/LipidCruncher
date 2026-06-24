@@ -187,11 +187,13 @@ def _handle_file_upload_sidebar() -> None:
         # (a plain read_csv yields a garbage "Unnamed" frame). Detect from the
         # text first so an MW upload is flagged as MW (and thus blocked) rather
         # than mis-read as a table the user is asked to hand-pick columns from.
-        text_format = FormatDetectionService.detect_format(
-            uploaded.getvalue().decode("utf-8", errors="replace")
-        )
+        text = uploaded.getvalue().decode("utf-8", errors="replace")
+        text_format = FormatDetectionService.detect_format(text)
+        # LipidSearch 5.2 exports are tab-delimited with a .csv extension; sniff
+        # the delimiter so they don't collapse into a single column.
+        delimiter = FormatDetectionService.sniff_delimiter(text)
         uploaded.seek(0)
-        df = pd.read_csv(uploaded)
+        df = pd.read_csv(uploaded, sep=delimiter)
         if df.empty:
             st.sidebar.error("The uploaded file is empty.")
             return
