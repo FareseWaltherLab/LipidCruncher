@@ -7,7 +7,12 @@ users to the correct tab.
 """
 import pytest
 
+from app.models.experiment import ExperimentConfig
+from app.services.ai_chat import data_transformer as dt
+from app.services.ai_chat import viz_generator as viz
+from app.services.ai_chat.ai_client import AIClientService
 from app.services.ai_chat.prompt_templates import (
+    build_transform_context,
     data_questions_system_prompt,
     data_transform_system_prompt,
     lipidcruncher_questions_system_prompt,
@@ -95,3 +100,87 @@ class TestPromptExamplesIncluded:
         assert "Few-Shot Examples" in prompt
         assert "Example 1" in prompt
         assert "Example 8" in prompt
+
+
+class TestPromptExamplesXmlWrapped:
+    """Few-shot examples must be wrapped in <examples> tags so the model
+    can distinguish them from instructions (Anthropic prompt guidance)."""
+
+    @pytest.mark.parametrize("prompt_fn", [
+        data_transform_system_prompt,
+        data_questions_system_prompt,
+        lipidcruncher_questions_system_prompt,
+        _viz_system_prompt,
+    ])
+    def test_examples_block_is_xml_tagged(self, prompt_fn):
+        prompt = prompt_fn()
+        assert "<examples>" in prompt
+        assert "</examples>" in prompt
+
+
+class TestDataContextStructure:
+    """The data schema appended to each user message is XML-tagged and placed
+    above the user's question (Anthropic long-context guidance)."""
+
+    def test_transform_context_is_xml_tagged(self):
+        ctx = build_transform_context("SRC_MARKER", "TGT_MARKER")
+        assert "<source_data_schema>" in ctx and "</source_data_schema>" in ctx
+        assert "<target_format>" in ctx and "</target_format>" in ctx
+        assert "SRC_MARKER" in ctx and "TGT_MARKER" in ctx
+
+    def test_transform_message_puts_schema_before_question(self, monkeypatch):
+        captured = {}
+
+        def fake_loop(messages, system_prompt, config, tools,
+                      tool_executor, on_tool_call=None):
+            captured["messages"] = messages
+            return "ok\n```python\nresult_df = df\n```"
+
+        monkeypatch.setattr(
+            AIClientService, "execute_tool_loop", staticmethod(fake_loop)
+        )
+        dt.DataTransformerService.generate_transformation_code(
+            source_schema="SRC_SCHEMA_MARKER",
+            user_message="USER_QUESTION_MARKER",
+            history=[],
+        )
+        content = captured["messages"][-1]["content"]
+        assert "<source_data_schema>" in content
+        assert content.index("SRC_SCHEMA_MARKER") < content.index("USER_QUESTION_MARKER")
+
+    def test_viz_message_puts_schema_before_question(self, monkeypatch):
+        captured = {}
+
+        def fake_loop(messages, system_prompt, config, tools,
+                      tool_executor, on_tool_call=None):
+            captured["messages"] = messages
+            return "ok\n```python\nfig = None\n```"
+
+        monkeypatch.setattr(
+            AIClientService, "execute_tool_loop", staticmethod(fake_loop)
+        )
+        experiment = ExperimentConfig(
+            conditions_list=["Control", "Treatment"],
+            number_of_samples_list=[2, 2],
+        )
+        viz.VizGeneratorService.generate_viz_code(
+            user_request="USER_REQUEST_MARKER",
+            schema_context="SCHEMA_MARKER",
+            experiment=experiment,
+            history=[],
+        )
+        content = captured["messages"][-1]["content"]
+        assert "<dataframe_schema>" in content
+        assert content.index("SCHEMA_MARKER") < content.index("USER_REQUEST_MARKER")
+
+
+class TestSystemPromptCaching:
+    """The static system prefix is sent as a cache-enabled content block."""
+
+    def test_system_blocks_marks_ephemeral_cache(self):
+        blocks = AIClientService._system_blocks("SYSTEM_TEXT")
+        assert blocks == [{
+            "type": "text",
+            "text": "SYSTEM_TEXT",
+            "cache_control": {"type": "ephemeral"},
+        }]

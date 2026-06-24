@@ -709,9 +709,10 @@ class AIChatWorkflow:
         user_msg = ChatMessage(role="user", content=user_message)
         session = session.add_message(user_msg)
 
-        # 2. Build context and call AI with tools
-        context = f"## DataFrame Schema\n{session.schema_context}"
-        augmented_message = f"{user_message}\n\n{context}"
+        # 2. Build context and call AI with tools — long-form data above the
+        # question (Anthropic long-context guidance).
+        context = f"<dataframe_schema>\n{session.schema_context}\n</dataframe_schema>"
+        augmented_message = f"{context}\n\n{user_message}"
         history = session.to_api_messages()[:-1]
         messages = history + [{"role": "user", "content": augmented_message}]
 
@@ -907,9 +908,10 @@ class AIChatWorkflow:
         user_msg = ChatMessage(role="user", content=user_message)
         session = session.add_message(user_msg)
 
-        # 2. Build context and call AI with tools
-        context = f"## DataFrame Schema\n{session.schema_context}"
-        augmented_message = f"{user_message}\n\n{context}"
+        # 2. Build context and call AI with tools — long-form data above the
+        # question (Anthropic long-context guidance).
+        context = f"<dataframe_schema>\n{session.schema_context}\n</dataframe_schema>"
+        augmented_message = f"{context}\n\n{user_message}"
         history = session.to_api_messages()[:-1]
         messages = history + [{"role": "user", "content": augmented_message}]
 

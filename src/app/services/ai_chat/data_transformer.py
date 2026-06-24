@@ -91,8 +91,9 @@ class DataTransformerService:
 
         system_prompt = data_transform_system_prompt()
 
-        # Append context to the user's message
-        augmented_message = f"{user_message}\n\n{context}"
+        # Prepend context to the user's message — long-form data goes above
+        # the question (Anthropic long-context guidance).
+        augmented_message = f"{context}\n\n{user_message}"
         messages = history + [{"role": "user", "content": augmented_message}]
 
         # Use the tool loop so the AI can look up implementation details

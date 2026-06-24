@@ -50,6 +50,21 @@ class AIClientService:
                 "Install it with: pip install anthropic"
             )
 
+    @staticmethod
+    def _system_blocks(system_prompt: str) -> list:
+        """Wrap the system prompt in a cache-enabled content block.
+
+        The system prompt (role + app knowledge + few-shot examples) is a
+        large static prefix reused across every turn and every tool-loop
+        round-trip, so we mark it for prompt caching to cut latency and cost.
+        The breakpoint also caches the preceding tool definitions.
+        """
+        return [{
+            "type": "text",
+            "text": system_prompt,
+            "cache_control": {"type": "ephemeral"},
+        }]
+
     # ------------------------------------------------------------------
     # Original (non-tool) methods — kept for backward compatibility
     # ------------------------------------------------------------------
@@ -79,7 +94,7 @@ class AIClientService:
                 model=config.model,
                 max_tokens=config.max_tokens,
                 temperature=config.temperature,
-                system=system_prompt,
+                system=AIClientService._system_blocks(system_prompt),
                 messages=messages,
             )
             if not response.content:
@@ -173,7 +188,7 @@ class AIClientService:
                 model=config.model,
                 max_tokens=config.max_tokens,
                 temperature=config.temperature,
-                system=system_prompt,
+                system=AIClientService._system_blocks(system_prompt),
                 messages=messages,
                 tools=tools,
             )

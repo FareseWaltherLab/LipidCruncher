@@ -100,7 +100,9 @@ so it can be analyzed by the application.
    - `src/app/lipid_nomenclature.py` (class extraction, chain parsing, sphingolipid handling)
    Cap codebase use at one search + one targeted read per turn so we don't slow down obvious transforms. Skip the codebase for trivial shape transforms (column renames, pivots, dtype coercion) — only consult when the operation has a methodology component.
 
+<examples>
 {get_transform_examples()}
+</examples>
 
 ## Important
 - The Generic format is simple: column 1 = lipid names, columns 2+ = sample intensities.
@@ -158,8 +160,8 @@ def build_transform_context(source_schema: str, target_schema: str) -> str:
         Context string for the AI.
     """
     return (
-        f"## Source Data Schema\n{source_schema}\n\n"
-        f"## Target Format\n{target_schema}"
+        f"<source_data_schema>\n{source_schema}\n</source_data_schema>\n\n"
+        f"<target_format>\n{target_schema}\n</target_format>"
     )
 
 
@@ -246,7 +248,9 @@ redirect them to the Data Questions tab.
 7. Do NOT generate executable code for the user. Your responses should be conversational \
 explanations.
 
+<examples>
 {get_lc_questions_examples()}
+</examples>
 
 ## SCOPE — STRICTLY ENFORCED
 
@@ -331,7 +335,9 @@ When you generate code, wrap it in a ```python block. The execution environment 
 
 {METHODOLOGY_CLARIFICATION_RULES}
 
+<examples>
 {get_data_questions_examples()}
+</examples>
 
 ## SCOPE — STRICTLY ENFORCED
 

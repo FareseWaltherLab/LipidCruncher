@@ -115,7 +115,9 @@ or how they're distributed.
 stacked bars per condition), `px.bar(..., color=...)` is fine — use \
 `barmode='stack'` or `'group'` as appropriate.
 
+<examples>
 {get_viz_examples()}
+</examples>
 
 {METHODOLOGY_CLARIFICATION_RULES}
 
@@ -211,11 +213,12 @@ class VizGeneratorService:
 
         experiment_context = _build_experiment_context(experiment)
         context = (
-            f"## DataFrame Schema\n{schema_context}\n\n"
-            f"## Experiment Structure\n{experiment_context}"
+            f"<dataframe_schema>\n{schema_context}\n</dataframe_schema>\n\n"
+            f"<experiment_structure>\n{experiment_context}\n</experiment_structure>"
         )
 
-        augmented_message = f"{user_request}\n\n{context}"
+        # Long-form data above the question (Anthropic long-context guidance).
+        augmented_message = f"{context}\n\n{user_request}"
         messages = history + [{"role": "user", "content": augmented_message}]
 
         response_text = AIClientService.execute_tool_loop(
