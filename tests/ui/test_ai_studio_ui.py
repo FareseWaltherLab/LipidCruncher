@@ -139,25 +139,24 @@ class TestSampleColumnNumericValidation:
 
 
 class TestSampleColumnPreselection:
-    """Numeric columns are pre-selected so the user needn't hand-pick all."""
+    """The picker starts empty — the user hand-picks every sample column."""
 
-    def test_numeric_columns_are_preselected(self):
+    def test_no_columns_are_preselected(self):
         at = AppTest.from_function(
             sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
         ).run()
         ms = at.sidebar.multiselect(key='studio_sample_cols_select')
-        # Numeric, non-metadata columns pre-checked; text 'lipids' and the
-        # lipidomics-named numeric 'CalcMass' are not.
-        assert ms.value == ['Sample1', 'Sample2']
+        # Nothing pre-checked: the default is an empty selection.
+        assert ms.value == []
 
-    def test_metadata_named_column_stays_selectable(self):
-        """The lipidomics name list only nudges the default — it must not
-        remove a column from the options (AI Studio accepts any input)."""
+    def test_all_columns_stay_selectable(self):
+        """Every column remains an option (AI Studio accepts any input)."""
         at = AppTest.from_function(
             sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
         ).run()
         ms = at.sidebar.multiselect(key='studio_sample_cols_select')
         assert 'CalcMass' in ms.options
+        assert 'Sample1' in ms.options
 
 
 def group_samples_script():
