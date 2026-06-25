@@ -342,3 +342,147 @@ class AIClientService:
             loop_messages, system_prompt, config, tools,
         )
         return AIClientService.extract_text_from_response(response)
+
+    @staticmethod
+    def stream_tool_loop(
+        messages: list,
+        system_prompt: str,
+        config: AIConfig,
+        tools: List[dict],
+        tool_executor: Callable[[str, dict], str],
+        max_iterations: int = _DEFAULT_MAX_TOOL_ITERATIONS,
+        on_tool_call: Optional[Callable[[str, dict], None]] = None,
+    ):
+        """Streaming variant of ``execute_tool_loop``.
+
+        Runs the same tool-use loop, but streams each model turn and yields
+        text chunks as they arrive (suitable for ``st.write_stream``). Tool
+        calls between turns are executed locally via ``tool_executor`` and
+        appended, then the loop continues. Yields only ``str`` chunks — no
+        Streamlit, no session state — so the layer boundary is preserved.
+
+        Yields:
+            Text fragments from the assistant as they are generated.
+        """
+        client = AIClientService.create_client()
+        loop_messages = list(messages)
+
+        def _stream_turn():
+            with client.messages.stream(
+                model=config.model,
+                max_tokens=config.max_tokens,
+                temperature=config.temperature,
+                system=AIClientService._system_blocks(system_prompt),
+                messages=loop_messages,
+                tools=tools,
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+                _stream_turn.final = stream.get_final_message()
+
+        for iteration in range(max_iterations):
+            logger.info(
+                "Streaming tool loop iteration %d/%d", iteration + 1, max_iterations
+            )
+            yield from _stream_turn()
+            final = _stream_turn.final
+
+            loop_messages.append({"role": "assistant", "content": final.content})
+
+            tool_calls = AIClientService.extract_tool_use_blocks(final)
+            if not tool_calls:
+                return
+
+            tool_results = []
+            for tool_call in tool_calls:
+                if on_tool_call is not None:
+                    on_tool_call(tool_call["name"], tool_call["input"])
+                try:
+                    result_text = tool_executor(
+                        tool_call["name"], tool_call["input"]
+                    )
+                except Exception as e:
+                    logger.warning("Tool %s failed: %s", tool_call["name"], e)
+                    result_text = f"Error executing tool: {e}"
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_call["id"],
+                    "content": result_text,
+                })
+            loop_messages.append({"role": "user", "content": tool_results})
+
+        # Iterations exhausted with tools still pending — force a final answer.
+        logger.warning(
+            "Streaming tool loop reached %d iterations — forcing final response",
+            max_iterations,
+        )
+        loop_messages.append({
+            "role": "user",
+            "content": (
+                "Please provide your final answer now based on what you've "
+                "found so far. Do not make any more tool calls."
+            ),
+        })
+        yield from _stream_turn()
+
+    @staticmethod
+    def _filter_to_explanation(chunks, holder: dict):
+        """Yield only the prose before the first ``` code fence.
+
+        Consumes raw text ``chunks`` and accumulates the COMPLETE raw text
+        (explanation + code) into ``holder['full']`` for later code
+        extraction, while yielding only the explanation portion for live
+        display. Once a code fence appears, nothing more is yielded.
+        """
+        yielded = 0
+        stopped = False
+        for chunk in chunks:
+            holder["full"] += chunk
+            if stopped:
+                continue
+            text = holder["full"]
+            fence = text.find("```")
+            if fence != -1:
+                if fence > yielded:
+                    yield text[yielded:fence]
+                yielded = fence
+                stopped = True
+            else:
+                # Hold back a trailing run of backticks — it may be the
+                # start of a fence split across chunk boundaries.
+                end = len(text)
+                while end > yielded and text[end - 1] == "`":
+                    end -= 1
+                if end > yielded:
+                    yield text[yielded:end]
+                    yielded = end
+        if not stopped and len(holder["full"]) > yielded:
+            yield holder["full"][yielded:]
+
+    @staticmethod
+    def stream_explanation(
+        messages: list,
+        system_prompt: str,
+        config: AIConfig,
+        tools: List[dict],
+        tool_executor: Callable[[str, dict], str],
+        holder: dict,
+        on_tool_call: Optional[Callable[[str, dict], None]] = None,
+    ):
+        """Stream a tool-loop response, yielding only the explanation prose.
+
+        Wraps ``stream_tool_loop`` and filters its output so the caller sees
+        only the text before the code block (suitable for ``st.write_stream``).
+        The complete raw response (explanation + code) is accumulated into
+        ``holder['full']`` so the caller can extract and execute the code
+        after streaming finishes.
+        """
+        raw = AIClientService.stream_tool_loop(
+            messages=messages,
+            system_prompt=system_prompt,
+            config=config,
+            tools=tools,
+            tool_executor=tool_executor,
+            on_tool_call=on_tool_call,
+        )
+        yield from AIClientService._filter_to_explanation(raw, holder)

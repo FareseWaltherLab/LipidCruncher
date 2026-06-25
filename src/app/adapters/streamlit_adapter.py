@@ -1092,6 +1092,72 @@ class StreamlitAdapter:
         )
 
     @staticmethod
+    def stream_ai_transform(
+        user_message: str,
+        session,
+        source_df: pd.DataFrame,
+    ):
+        """Stream one turn of the AI data transformation chat.
+
+        Returns (explanation_generator, finalize). The UI streams the
+        explanation (st.write_stream), then calls finalize() to execute the
+        code and obtain a TransformStepResult.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.stream_transform_message(
+            user_message=user_message,
+            session=session,
+            source_df=source_df,
+            numeric_columns=st.session_state.get(
+                'chat_studio_sample_columns_original'
+            ),
+        )
+
+    @staticmethod
+    def stream_ai_viz(
+        user_message: str,
+        session,
+        analysis_df: pd.DataFrame,
+        experiment: ExperimentConfig,
+    ):
+        """Stream one turn of the AI visualization chat.
+
+        Returns (explanation_generator, finalize). The UI streams the
+        explanation, then calls finalize() for a VizStepResult.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.stream_viz_message(
+            user_message=user_message,
+            session=session,
+            analysis_df=analysis_df,
+            experiment=experiment,
+            numeric_columns=st.session_state.get(
+                'chat_studio_sample_columns_renamed'
+            ),
+        )
+
+    @staticmethod
+    def stream_ai_data_questions(
+        user_message: str,
+        session,
+        source_df: pd.DataFrame,
+    ):
+        """Stream one turn of the AI data questions chat.
+
+        Returns (explanation_generator, finalize). The UI streams the
+        explanation, then calls finalize() for a DataQuestionsStepResult.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.stream_data_questions_message(
+            user_message=user_message,
+            session=session,
+            source_df=source_df,
+            numeric_columns=st.session_state.get(
+                'chat_studio_sample_columns_original'
+            ),
+        )
+
+    @staticmethod
     def run_ai_lc_questions(
         user_message: str,
         session,
@@ -1109,6 +1175,23 @@ class StreamlitAdapter:
         """
         from ..workflows.ai_chat import AIChatWorkflow
         return AIChatWorkflow.handle_lc_questions_message(
+            user_message=user_message,
+            session=session,
+        )
+
+    @staticmethod
+    def stream_ai_lc_questions(
+        user_message: str,
+        session,
+    ):
+        """Stream one turn of the LipidCruncher questions chat.
+
+        Returns (session_with_user_message, text_chunk_generator). The UI
+        consumes the generator (e.g. via st.write_stream) and appends the
+        assistant message from the accumulated text.
+        """
+        from ..workflows.ai_chat import AIChatWorkflow
+        return AIChatWorkflow.stream_lc_questions_message(
             user_message=user_message,
             session=session,
         )

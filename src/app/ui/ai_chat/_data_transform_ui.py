@@ -126,50 +126,45 @@ def render_transform_chat(source_df) -> None:
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # Run AI transformation
+        # Run AI transformation (explanation streamed; code/preview render
+        # canonically after the rerun below)
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    result = StreamlitAdapter.run_ai_transform(
+            try:
+                with st.spinner("Thinking..."):
+                    gen, finalize = StreamlitAdapter.stream_ai_transform(
                         user_message=user_input,
                         session=session,
                         source_df=source_df,
                     )
+                    st.write_stream(gen)
+                result = finalize()
 
-                    # Update session state
-                    st.session_state.chat_transform_session = result.session
-                    st.session_state.chat_message_count = (
-                        st.session_state.get('chat_message_count', 0) + 1
+                # Update session state
+                st.session_state.chat_transform_session = result.session
+                st.session_state.chat_message_count = (
+                    st.session_state.get('chat_message_count', 0) + 1
+                )
+                if result.transformation and result.transformation.code:
+                    st.session_state.chat_execution_count = (
+                        st.session_state.get('chat_execution_count', 0) + 1
                     )
 
-                    # Display response
-                    st.markdown(result.assistant_message)
+                # Store successful transformation result for download.
+                # Skip info-gathering turns (no result_df) so they
+                # don't clear the previous transform's preview.
+                if (result.transformation
+                        and result.transformation.success
+                        and not result.transformation.is_info_only):
+                    st.session_state.chat_transform_result = (
+                        result.transformation.result_df
+                    )
+                elif (result.transformation
+                        and not result.transformation.success):
+                    # Clear stale result on failed transformation
+                    st.session_state.chat_transform_result = None
 
-                    if result.transformation and result.transformation.code:
-                        st.session_state.chat_execution_count = (
-                            st.session_state.get('chat_execution_count', 0) + 1
-                        )
-                        with st.expander("View code"):
-                            st.code(
-                                result.transformation.code, language="python"
-                            )
-
-                    # Store successful transformation result for download.
-                    # Skip info-gathering turns (no result_df) so they
-                    # don't clear the previous transform's preview.
-                    if (result.transformation
-                            and result.transformation.success
-                            and not result.transformation.is_info_only):
-                        st.session_state.chat_transform_result = (
-                            result.transformation.result_df
-                        )
-                    elif (result.transformation
-                            and not result.transformation.success):
-                        # Clear stale result on failed transformation
-                        st.session_state.chat_transform_result = None
-
-                except Exception as e:
-                    st.session_state.chat_last_error = str(e)
+            except Exception as e:
+                st.session_state.chat_last_error = str(e)
 
         st.rerun()
 

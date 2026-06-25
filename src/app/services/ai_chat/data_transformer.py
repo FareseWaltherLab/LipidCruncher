@@ -109,6 +109,40 @@ class DataTransformerService:
         return AIClientService.extract_code_block(response_text)
 
     @staticmethod
+    def stream_transformation_code(
+        source_schema: str,
+        user_message: str,
+        history: list,
+        config: AIConfig,
+        holder: dict,
+        on_tool_call: Optional[Callable[[str, dict], None]] = None,
+    ):
+        """Streaming variant of ``generate_transformation_code``.
+
+        Returns a generator that yields the explanation prose as it streams.
+        The complete raw response (explanation + code) is accumulated into
+        ``holder['full']`` so the caller can extract and execute the code
+        once streaming completes. Mirrors the message assembly of the
+        non-streaming method exactly.
+        """
+        target_schema = SchemaExtractorService.extract_generic_format_spec()
+        context = build_transform_context(source_schema, target_schema)
+        system_prompt = data_transform_system_prompt()
+
+        augmented_message = f"{context}\n\n{user_message}"
+        messages = history + [{"role": "user", "content": augmented_message}]
+
+        return AIClientService.stream_explanation(
+            messages=messages,
+            system_prompt=system_prompt,
+            config=config,
+            tools=TOOL_DEFINITIONS,
+            tool_executor=execute_tool,
+            holder=holder,
+            on_tool_call=on_tool_call,
+        )
+
+    @staticmethod
     def execute_transformation(
         code: str,
         source_df: pd.DataFrame,

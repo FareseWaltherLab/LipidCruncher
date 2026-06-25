@@ -362,7 +362,27 @@ class AIChatWorkflow:
             config=ai_config,
         )
 
-        # 3. If code was generated, execute and validate
+        # 3-4. Execute (if any) and append assistant message
+        return AIChatWorkflow._finalize_transform(
+            session, explanation, code, source_df,
+            sandbox_config, numeric_columns,
+        )
+
+    @staticmethod
+    def _finalize_transform(
+        session: ChatSession,
+        explanation: str,
+        code: str,
+        source_df: pd.DataFrame,
+        sandbox_config: SandboxConfig,
+        numeric_columns: Optional[List[str]],
+    ) -> TransformStepResult:
+        """Execute generated transform code (if any), build the assistant
+        message, append it to the session, and return the step result.
+
+        Shared by the blocking and streaming transform paths so the
+        post-AI logic lives in exactly one place.
+        """
         transformation = None
         if code:
             transformation = DataTransformerService.execute_transformation(
@@ -414,7 +434,6 @@ class AIChatWorkflow:
             # AI responded with a question or explanation, no code
             assistant_text = explanation
 
-        # 4. Append assistant message
         assistant_msg = ChatMessage(
             role="assistant",
             content=assistant_text,
@@ -427,6 +446,49 @@ class AIChatWorkflow:
             transformation=transformation,
             assistant_message=assistant_text,
         )
+
+    @staticmethod
+    def stream_transform_message(
+        user_message: str,
+        session: ChatSession,
+        source_df: pd.DataFrame,
+        ai_config: Optional[AIConfig] = None,
+        sandbox_config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
+    ):
+        """Streaming variant of ``handle_transform_message``.
+
+        Appends the user message, then returns ``(explanation_generator,
+        finalize)``. The caller streams the explanation (e.g. via
+        ``st.write_stream``), then calls ``finalize()`` to execute the code
+        and obtain a ``TransformStepResult``.
+        """
+        if ai_config is None:
+            ai_config = AIConfig()
+        if sandbox_config is None:
+            sandbox_config = SandboxConfig()
+
+        user_msg = ChatMessage(role="user", content=user_message)
+        session = session.add_message(user_msg)
+        history = session.to_api_messages()[:-1]
+
+        holder = {"full": ""}
+        generator = DataTransformerService.stream_transformation_code(
+            source_schema=session.schema_context,
+            user_message=user_message,
+            history=history,
+            config=ai_config,
+            holder=holder,
+        )
+
+        def finalize() -> TransformStepResult:
+            explanation, code = AIClientService.extract_code_block(holder["full"])
+            return AIChatWorkflow._finalize_transform(
+                session, explanation, code, source_df,
+                sandbox_config, numeric_columns,
+            )
+
+        return generator, finalize
 
     # ------------------------------------------------------------------
     # Visualization mode
@@ -569,7 +631,26 @@ class AIChatWorkflow:
             config=ai_config,
         )
 
-        # 3. If code was generated, execute in sandbox
+        # 3-4. Execute (if any) and append assistant message
+        return AIChatWorkflow._finalize_viz(
+            session, explanation, code, analysis_df,
+            sandbox_config, numeric_columns,
+        )
+
+    @staticmethod
+    def _finalize_viz(
+        session: ChatSession,
+        explanation: str,
+        code: str,
+        analysis_df: pd.DataFrame,
+        sandbox_config: SandboxConfig,
+        numeric_columns: Optional[List[str]],
+    ) -> VizStepResult:
+        """Execute generated viz code (if any), build the assistant message,
+        append it to the session, and return the step result.
+
+        Shared by the blocking and streaming viz paths.
+        """
         sandbox_result = None
         if code:
             sandbox_result = VizGeneratorService.execute_viz_code(
@@ -611,7 +692,6 @@ class AIChatWorkflow:
         else:
             assistant_text = explanation
 
-        # 4. Append assistant message
         assistant_msg = ChatMessage(
             role="assistant",
             content=assistant_text,
@@ -624,6 +704,50 @@ class AIChatWorkflow:
             sandbox_result=sandbox_result,
             assistant_message=assistant_text,
         )
+
+    @staticmethod
+    def stream_viz_message(
+        user_message: str,
+        session: ChatSession,
+        analysis_df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        ai_config: Optional[AIConfig] = None,
+        sandbox_config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
+    ):
+        """Streaming variant of ``handle_viz_message``.
+
+        Appends the user message, then returns ``(explanation_generator,
+        finalize)``. The caller streams the explanation, then calls
+        ``finalize()`` to execute the code and obtain a ``VizStepResult``.
+        """
+        if ai_config is None:
+            ai_config = AIConfig()
+        if sandbox_config is None:
+            sandbox_config = SandboxConfig()
+
+        user_msg = ChatMessage(role="user", content=user_message)
+        session = session.add_message(user_msg)
+        history = session.to_api_messages()[:-1]
+
+        holder = {"full": ""}
+        generator = VizGeneratorService.stream_viz_code(
+            user_request=user_message,
+            schema_context=session.schema_context,
+            experiment=experiment,
+            history=history,
+            config=ai_config,
+            holder=holder,
+        )
+
+        def finalize() -> VizStepResult:
+            explanation, code = AIClientService.extract_code_block(holder["full"])
+            return AIChatWorkflow._finalize_viz(
+                session, explanation, code, analysis_df,
+                sandbox_config, numeric_columns,
+            )
+
+        return generator, finalize
 
     # ------------------------------------------------------------------
     # Data Questions mode
@@ -726,7 +850,25 @@ class AIChatWorkflow:
             tool_executor=execute_tool,
         )
 
-        # 3. Extract and execute code if present
+        # 3-4. Extract/execute code (if any) and append assistant message
+        return AIChatWorkflow._finalize_data_questions(
+            session, response_text, source_df,
+            sandbox_config, numeric_columns,
+        )
+
+    @staticmethod
+    def _finalize_data_questions(
+        session: ChatSession,
+        response_text: str,
+        source_df: pd.DataFrame,
+        sandbox_config: SandboxConfig,
+        numeric_columns: Optional[List[str]],
+    ) -> DataQuestionsStepResult:
+        """Extract/execute any code in the AI response, build the assistant
+        message, append it to the session, and return the step result.
+
+        Shared by the blocking and streaming data-questions paths.
+        """
         explanation, code = AIClientService.extract_code_block(response_text)
         result_df = None
 
@@ -767,7 +909,6 @@ class AIChatWorkflow:
                 "Please try rephrasing your question."
             )
 
-        # 4. Append assistant message
         assistant_msg = ChatMessage(
             role="assistant",
             content=assistant_text,
@@ -781,6 +922,54 @@ class AIChatWorkflow:
             result_df=result_df,
             code=code,
         )
+
+    @staticmethod
+    def stream_data_questions_message(
+        user_message: str,
+        session: ChatSession,
+        source_df: pd.DataFrame,
+        ai_config: Optional[AIConfig] = None,
+        sandbox_config: Optional[SandboxConfig] = None,
+        numeric_columns: Optional[List[str]] = None,
+    ):
+        """Streaming variant of ``handle_data_questions_message``.
+
+        Appends the user message, then returns ``(explanation_generator,
+        finalize)``. The caller streams the explanation, then calls
+        ``finalize()`` to execute any code and obtain a
+        ``DataQuestionsStepResult``.
+        """
+        if ai_config is None:
+            ai_config = AIConfig()
+        if sandbox_config is None:
+            sandbox_config = SandboxConfig()
+
+        user_msg = ChatMessage(role="user", content=user_message)
+        session = session.add_message(user_msg)
+
+        context = f"<dataframe_schema>\n{session.schema_context}\n</dataframe_schema>"
+        augmented_message = f"{context}\n\n{user_message}"
+        history = session.to_api_messages()[:-1]
+        messages = history + [{"role": "user", "content": augmented_message}]
+        system_prompt = data_questions_system_prompt()
+
+        holder = {"full": ""}
+        generator = AIClientService.stream_explanation(
+            messages=messages,
+            system_prompt=system_prompt,
+            config=ai_config,
+            tools=TOOL_DEFINITIONS,
+            tool_executor=execute_tool,
+            holder=holder,
+        )
+
+        def finalize() -> DataQuestionsStepResult:
+            return AIChatWorkflow._finalize_data_questions(
+                session, holder["full"], source_df,
+                sandbox_config, numeric_columns,
+            )
+
+        return generator, finalize
 
     # ------------------------------------------------------------------
     # LipidCruncher Questions mode
@@ -855,6 +1044,41 @@ class AIChatWorkflow:
             session=session,
             assistant_message=assistant_text,
         )
+
+    @staticmethod
+    def stream_lc_questions_message(
+        user_message: str,
+        session: ChatSession,
+        ai_config: Optional[AIConfig] = None,
+    ):
+        """Streaming variant of ``handle_lc_questions_message``.
+
+        Appends the user message to the session, then returns a generator
+        that streams the assistant's answer token-by-token. The caller (UI)
+        consumes the generator — e.g. via ``st.write_stream`` — and appends
+        the assistant message to the session from the accumulated text.
+
+        Returns:
+            Tuple of (session_with_user_message, text_chunk_generator).
+        """
+        if ai_config is None:
+            ai_config = AIConfig()
+
+        user_msg = ChatMessage(role="user", content=user_message)
+        session = session.add_message(user_msg)
+
+        history = session.to_api_messages()[:-1]
+        messages = history + [{"role": "user", "content": user_message}]
+        system_prompt = lipidcruncher_questions_system_prompt()
+
+        generator = AIClientService.stream_tool_loop(
+            messages=messages,
+            system_prompt=system_prompt,
+            config=ai_config,
+            tools=TOOL_DEFINITIONS,
+            tool_executor=execute_tool,
+        )
+        return session, generator
 
     # ------------------------------------------------------------------
     # Unified mode (single chat for all capabilities)

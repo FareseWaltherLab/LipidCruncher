@@ -233,6 +233,43 @@ class VizGeneratorService:
         return AIClientService.extract_code_block(response_text)
 
     @staticmethod
+    def stream_viz_code(
+        user_request: str,
+        schema_context: str,
+        experiment: ExperimentConfig,
+        history: list,
+        config: AIConfig,
+        holder: dict,
+        on_tool_call: Optional[Callable[[str, dict], None]] = None,
+    ):
+        """Streaming variant of ``generate_viz_code``.
+
+        Returns a generator that yields the explanation prose as it streams.
+        The complete raw response (explanation + code) is accumulated into
+        ``holder['full']`` so the caller can extract and execute the code
+        once streaming completes. Mirrors the message assembly of the
+        non-streaming method exactly.
+        """
+        experiment_context = _build_experiment_context(experiment)
+        context = (
+            f"<dataframe_schema>\n{schema_context}\n</dataframe_schema>\n\n"
+            f"<experiment_structure>\n{experiment_context}\n</experiment_structure>"
+        )
+
+        augmented_message = f"{context}\n\n{user_request}"
+        messages = history + [{"role": "user", "content": augmented_message}]
+
+        return AIClientService.stream_explanation(
+            messages=messages,
+            system_prompt=_viz_system_prompt(),
+            config=config,
+            tools=TOOL_DEFINITIONS,
+            tool_executor=execute_tool,
+            holder=holder,
+            on_tool_call=on_tool_call,
+        )
+
+    @staticmethod
     def execute_viz_code(
         code: str,
         df: pd.DataFrame,

@@ -101,40 +101,37 @@ def render_data_questions_chat(source_df) -> None:
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # Run AI data questions
+        # Run AI data questions (explanation streamed; code/table render
+        # canonically after the rerun below)
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    result = StreamlitAdapter.run_ai_data_questions(
+            try:
+                with st.spinner("Thinking..."):
+                    gen, finalize = StreamlitAdapter.stream_ai_data_questions(
                         user_message=user_input,
                         session=session,
                         source_df=source_df,
                     )
+                    st.write_stream(gen)
+                result = finalize()
 
-                    # Update session state
-                    st.session_state.chat_data_questions_session = result.session
-                    st.session_state.chat_message_count = (
-                        st.session_state.get('chat_message_count', 0) + 1
+                # Update session state
+                st.session_state.chat_data_questions_session = result.session
+                st.session_state.chat_message_count = (
+                    st.session_state.get('chat_message_count', 0) + 1
+                )
+                if result.code:
+                    st.session_state.chat_execution_count = (
+                        st.session_state.get('chat_execution_count', 0) + 1
                     )
 
-                    # Display response
-                    st.markdown(result.assistant_message)
+                # Store result DataFrame if produced
+                if result.result_df is not None:
+                    st.session_state.chat_questions_result_df = result.result_df
+                else:
+                    st.session_state.chat_questions_result_df = None
 
-                    if result.code:
-                        st.session_state.chat_execution_count = (
-                            st.session_state.get('chat_execution_count', 0) + 1
-                        )
-                        with st.expander("View code"):
-                            st.code(result.code, language="python")
-
-                    # Store result DataFrame if produced
-                    if result.result_df is not None:
-                        st.session_state.chat_questions_result_df = result.result_df
-                    else:
-                        st.session_state.chat_questions_result_df = None
-
-                except Exception as e:
-                    st.session_state.chat_last_error = str(e)
+            except Exception as e:
+                st.session_state.chat_last_error = str(e)
 
         st.rerun()
 

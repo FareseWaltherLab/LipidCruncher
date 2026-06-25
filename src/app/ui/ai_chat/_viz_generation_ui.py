@@ -138,60 +138,59 @@ def render_viz_chat(analysis_df, experiment) -> None:
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # Run AI visualization
+        # Run AI visualization (explanation streamed; figure/code render
+        # canonically after the rerun below)
         with st.chat_message("assistant"):
-            with st.spinner("Generating visualization..."):
-                try:
-                    result = StreamlitAdapter.run_ai_viz(
+            try:
+                with st.spinner("Generating visualization..."):
+                    gen, finalize = StreamlitAdapter.stream_ai_viz(
                         user_message=user_input,
                         session=session,
                         analysis_df=analysis_df,
                         experiment=experiment,
                     )
-                    print(
-                        f"[VIZ-UI] result: msg_len={len(result.assistant_message)}, "
-                        f"sandbox_success={result.sandbox_result.success if result.sandbox_result else None}, "
-                        f"has_fig={result.sandbox_result.figure is not None if result.sandbox_result else None}, "
-                        f"sandbox_err={(result.sandbox_result.error_message[:200] if result.sandbox_result else '')!r}, "
-                        f"session_msgs_after={len(result.session.messages)}",
-                        flush=True,
+                    st.write_stream(gen)
+                result = finalize()
+                print(
+                    f"[VIZ-UI] result: msg_len={len(result.assistant_message)}, "
+                    f"sandbox_success={result.sandbox_result.success if result.sandbox_result else None}, "
+                    f"has_fig={result.sandbox_result.figure is not None if result.sandbox_result else None}, "
+                    f"sandbox_err={(result.sandbox_result.error_message[:200] if result.sandbox_result else '')!r}, "
+                    f"session_msgs_after={len(result.session.messages)}",
+                    flush=True,
+                )
+
+                # Update session state
+                st.session_state.chat_viz_session = result.session
+                st.session_state.chat_message_count = (
+                    st.session_state.get('chat_message_count', 0) + 1
+                )
+
+                if result.sandbox_result and result.sandbox_result.success:
+                    st.session_state.chat_execution_count = (
+                        st.session_state.get('chat_execution_count', 0) + 1
                     )
-                    print(f"[VIZ-UI] msg preview: {result.assistant_message[:200]!r}", flush=True)
 
-                    # Update session state
-                    st.session_state.chat_viz_session = result.session
-                    st.session_state.chat_message_count = (
-                        st.session_state.get('chat_message_count', 0) + 1
-                    )
-
-                    # Display response
-                    st.markdown(result.assistant_message)
-
-                    if result.sandbox_result and result.sandbox_result.success:
-                        st.session_state.chat_execution_count = (
-                            st.session_state.get('chat_execution_count', 0) + 1
+                    if result.sandbox_result.figure is not None:
+                        # Store figure for replay on rerun
+                        fig_index = len(result.session.messages) - 1
+                        fig_key = f"chat_viz_fig_{fig_index}"
+                        print(f"[VIZ-UI] storing fig at key={fig_key}", flush=True)
+                        if 'chat_viz_figures' not in st.session_state:
+                            st.session_state.chat_viz_figures = {}
+                        st.session_state.chat_viz_figures[fig_key] = (
+                            result.sandbox_result.figure
                         )
 
-                        if result.sandbox_result.figure is not None:
-                            # Store figure for replay on rerun
-                            fig_index = len(result.session.messages) - 1
-                            fig_key = f"chat_viz_fig_{fig_index}"
-                            print(f"[VIZ-UI] storing fig at key={fig_key}", flush=True)
-                            if 'chat_viz_figures' not in st.session_state:
-                                st.session_state.chat_viz_figures = {}
-                            st.session_state.chat_viz_figures[fig_key] = (
-                                result.sandbox_result.figure
-                            )
+                    if result.sandbox_result.stdout:
+                        with st.expander("Output"):
+                            st.text(result.sandbox_result.stdout)
 
-                        if result.sandbox_result.stdout:
-                            with st.expander("Output"):
-                                st.text(result.sandbox_result.stdout)
-
-                except Exception as e:
-                    import traceback
-                    print(f"[VIZ-UI] EXCEPTION: {type(e).__name__}: {e}", flush=True)
-                    print(traceback.format_exc(), flush=True)
-                    st.session_state.chat_last_error = str(e)
+            except Exception as e:
+                import traceback
+                print(f"[VIZ-UI] EXCEPTION: {type(e).__name__}: {e}", flush=True)
+                print(traceback.format_exc(), flush=True)
+                st.session_state.chat_last_error = str(e)
 
         print("[VIZ-UI] calling st.rerun()", flush=True)
         st.rerun()

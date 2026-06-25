@@ -81,27 +81,41 @@ def render_lc_questions_chat() -> None:
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # Run AI
+        # Run AI (streamed token-by-token)
         error_text = None
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    result = StreamlitAdapter.run_ai_lc_questions(
-                        user_message=user_input,
-                        session=session,
+            try:
+                # The spinner covers the gap before the first token (e.g.
+                # while the agent runs a codebase/doc tool call); once text
+                # starts arriving, st.write_stream renders it live.
+                with st.spinner("Thinking..."):
+                    session_with_user, stream = (
+                        StreamlitAdapter.stream_ai_lc_questions(
+                            user_message=user_input,
+                            session=session,
+                        )
                     )
+                    full_text = st.write_stream(stream)
 
-                    # Update session state
-                    st.session_state.chat_lc_questions_session = result.session
-                    st.session_state.chat_message_count = (
-                        st.session_state.get('chat_message_count', 0) + 1
+                if not (full_text or "").strip():
+                    full_text = (
+                        "I wasn't able to generate a response. "
+                        "Please try rephrasing your question."
                     )
+                    st.markdown(full_text)
 
-                    # Display response
-                    st.markdown(result.assistant_message)
+                # Persist the accumulated answer to the session.
+                from app.models.chat import ChatMessage
+                assistant_msg = ChatMessage(role="assistant", content=full_text)
+                st.session_state.chat_lc_questions_session = (
+                    session_with_user.add_message(assistant_msg)
+                )
+                st.session_state.chat_message_count = (
+                    st.session_state.get('chat_message_count', 0) + 1
+                )
 
-                except Exception as e:
-                    error_text = str(e)
+            except Exception as e:
+                error_text = str(e)
 
         # If there was an error, save both msgs to session
         if error_text:
