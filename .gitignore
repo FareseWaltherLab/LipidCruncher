@@ -46,3 +46,8 @@ AI_STUDIO_TOOL_USE_PLAN.md
 # AI Studio schematics (working files)
 ai_studio_schematic.png
 ai_studio_schematic.tiff
+
+# LipidSearch 5.2 test data (super-user datasets, not for VCS)
+LS5.2 - Fumonisin B1 Mouse Liver.csv
+Alignment.txt
+LipidMol.txt

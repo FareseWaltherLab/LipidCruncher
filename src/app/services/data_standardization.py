@@ -21,6 +21,9 @@ from app.constants import (
     get_chain_separator, format_lipid_name,
 )
 from app.services.format_detection import DataFormat, FormatDetectionService
+from app.services.lipidsearch_alignment import (
+    AlignmentError, parse_alignment_file, merge_dual_polarity,
+)
 
 
 # =============================================================================
@@ -52,6 +55,10 @@ class StandardizationResult:
     msdial_sample_names: Optional[Dict[str, str]] = None
     workbench_conditions: Optional[Dict[str, str]] = None
     workbench_samples: Optional[Dict[str, str]] = None
+    # LipidSearch 5.2 dual-polarity alignment: experiment metadata read from
+    # the Alignment Setting file so the UI can pre-populate the experiment.
+    lipidsearch_conditions: Optional[List[str]] = None
+    lipidsearch_samples_per_condition: Optional[List[int]] = None
 
 
 @dataclass
@@ -452,6 +459,55 @@ class DataStandardizationService:
             standardized_df=result_df,
             column_mapping=mapping_df,
             n_intensity_cols=len(meanarea_cols),
+        )
+
+    @staticmethod
+    def standardize_lipidsearch_with_alignment(
+        df: pd.DataFrame, alignment_text: str,
+    ) -> StandardizationResult:
+        """Standardize a dual-polarity LipidSearch 5.2 export via its Alignment
+        Setting file.
+
+        Parses the alignment to pair each biological sample's positive/negative
+        files, merges them into flat intensity[s1..sN] columns, and returns the
+        experiment layout (conditions and per-condition sample counts) read from
+        the alignment so the UI can pre-populate the experiment.
+        """
+        if not isinstance(df, pd.DataFrame):
+            return StandardizationResult(False, "Expected a DataFrame for LipidSearch format")
+
+        required_cols = [
+            'LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt',
+            'TotalGrade', 'TotalSmpIDRate(%)', 'FAKey',
+        ]
+        missing = [c for c in required_cols if c not in df.columns]
+        if missing:
+            return StandardizationResult(
+                False, f"Missing required columns: {', '.join(missing)}"
+            )
+
+        try:
+            alignment = parse_alignment_file(alignment_text)
+            merged = merge_dual_polarity(df, alignment)
+        except AlignmentError as e:
+            return StandardizationResult(False, str(e))
+
+        # Column mapping: each merged intensity[sN] <- its per-file tokens.
+        mapping_rows = [
+            {'standardized_name': f'intensity[s{i}]',
+             'original_name': ' + '.join(f'OriginalArea[{d}]' for d in s.dataids)}
+            for i, s in enumerate(alignment.samples, start=1)
+        ]
+        mapping_df = pd.DataFrame(mapping_rows) if mapping_rows else None
+
+        return StandardizationResult(
+            success=True,
+            message="Data successfully standardized",
+            standardized_df=merged,
+            column_mapping=mapping_df,
+            n_intensity_cols=len(alignment.samples),
+            lipidsearch_conditions=alignment.conditions,
+            lipidsearch_samples_per_condition=alignment.samples_per_condition,
         )
 
     # ------------------------------------------------------------------
