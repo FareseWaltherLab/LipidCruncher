@@ -44,6 +44,23 @@ from ..workflows.data_ingestion import DataIngestionWorkflow, IngestionConfig, I
 from ..workflows.normalization import NormalizationWorkflow, NormalizationWorkflowConfig, NormalizationWorkflowResult
 
 
+def _normalize_lc_question(question: str) -> str:
+    """Canonical cache key for a LipidCruncher-questions prompt."""
+    return " ".join(question.split()).lower()
+
+
+@st.cache_resource
+def _lc_answer_cache() -> Dict[str, str]:
+    """Process-wide cache of canonical answers to LipidCruncher app questions.
+
+    Keyed by normalized question text. Shared across sessions because these
+    answers describe the application itself and do not depend on user data,
+    so reuse is both correct and desirable. Doubles as a fallback when the
+    AI service is unavailable.
+    """
+    return {}
+
+
 @dataclass
 class SessionState:
     """
@@ -1195,6 +1212,16 @@ class StreamlitAdapter:
             user_message=user_message,
             session=session,
         )
+
+    @staticmethod
+    def get_cached_lc_answer(question: str) -> Optional[str]:
+        """Return a cached answer for a LipidCruncher-questions prompt, if any."""
+        return _lc_answer_cache().get(_normalize_lc_question(question))
+
+    @staticmethod
+    def set_cached_lc_answer(question: str, answer: str) -> None:
+        """Store a canonical answer for a LipidCruncher-questions prompt."""
+        _lc_answer_cache()[_normalize_lc_question(question)] = answer
 
     @staticmethod
     def run_ai_unified(

@@ -149,8 +149,18 @@ def render_viz_chat(analysis_df, experiment) -> None:
                         analysis_df=analysis_df,
                         experiment=experiment,
                     )
-                    st.write_stream(gen)
+                    streamed = st.write_stream(gen)
                 result = finalize()
+
+                # If the turn produced neither text nor a figure, say so
+                # rather than leaving a blank assistant bubble.
+                if (not (streamed or "").strip()
+                        and (result.sandbox_result is None
+                             or result.sandbox_result.figure is None)):
+                    st.info(
+                        "I couldn't produce a visualization for that. "
+                        "Please try rephrasing your request."
+                    )
                 print(
                     f"[VIZ-UI] result: msg_len={len(result.assistant_message)}, "
                     f"sandbox_success={result.sandbox_result.success if result.sandbox_result else None}, "
@@ -191,11 +201,19 @@ def render_viz_chat(analysis_df, experiment) -> None:
                 print(f"[VIZ-UI] EXCEPTION: {type(e).__name__}: {e}", flush=True)
                 print(traceback.format_exc(), flush=True)
                 st.session_state.chat_last_error = str(e)
+                st.session_state.chat_last_failed_input = user_input
 
         print("[VIZ-UI] calling st.rerun()", flush=True)
         st.rerun()
 
-    # Display persistent error from last attempt
+    # Display persistent error from last attempt, with a one-click retry.
     last_error = st.session_state.pop('chat_last_error', None)
     if last_error:
         st.error(f"An error occurred: {last_error}")
+        failed_input = st.session_state.get('chat_last_failed_input')
+        if failed_input and st.button("Retry", key="chat_retry_viz"):
+            st.session_state.pop('chat_last_failed_input', None)
+            st.session_state.chat_pending_prompt_viz = failed_input
+            st.rerun()
+    else:
+        st.session_state.pop('chat_last_failed_input', None)

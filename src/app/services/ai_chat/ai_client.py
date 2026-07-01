@@ -17,6 +17,66 @@ logger = logging.getLogger(__name__)
 # Default cap on tool-use round-trips per user message
 _DEFAULT_MAX_TOOL_ITERATIONS = 4
 
+# Client tuning. The SDK already retries 429/5xx/connection errors with
+# exponential backoff; we bump the default (2) slightly and cap the per-request
+# wait so a hung call surfaces as an error instead of blocking the UI forever.
+_MAX_RETRIES = 4
+_REQUEST_TIMEOUT_SECONDS = 120.0
+
+
+def _friendly_error(exc: Exception, context: str = "") -> AIClientError:
+    """Map a low-level Anthropic SDK exception to a user-friendly AIClientError.
+
+    Recognized failure modes (rate limit, timeout, connection, auth, server
+    error) get a short, actionable message suitable for display. Unrecognized
+    exceptions fall back to the raw error text (with an optional ``context``
+    prefix) so debugging detail is never lost.
+    """
+    try:
+        import anthropic
+    except ImportError:
+        anthropic = None
+
+    if anthropic is not None:
+        # Subclass order matters: AuthenticationError / RateLimitError are
+        # APIStatusError subclasses, and APITimeoutError is an
+        # APIConnectionError subclass — check the specific types first.
+        if isinstance(exc, anthropic.AuthenticationError):
+            return AIClientError(
+                "The AI service rejected the API key. Please check that "
+                "ANTHROPIC_API_KEY is set correctly."
+            )
+        if isinstance(exc, anthropic.RateLimitError):
+            return AIClientError(
+                "The AI is busy right now (rate limit reached). Please wait a "
+                "few seconds and try again."
+            )
+        if isinstance(exc, anthropic.APITimeoutError):
+            return AIClientError(
+                "The AI took too long to respond. Please try again."
+            )
+        if isinstance(exc, anthropic.APIConnectionError):
+            return AIClientError(
+                "Couldn't reach the AI service. Please check your internet "
+                "connection and try again."
+            )
+        if isinstance(exc, anthropic.APIStatusError):
+            status = getattr(exc, "status_code", None)
+            if status is not None and status >= 500:
+                return AIClientError(
+                    "The AI service is temporarily unavailable. Please try "
+                    "again in a moment."
+                )
+            return AIClientError(
+                f"The AI service returned an error (HTTP {status}). "
+                "Please try again."
+            )
+
+    prefix = f"{context}: " if context else ""
+    return AIClientError(
+        f"{prefix}Unexpected error contacting the AI service: {exc}"
+    )
+
 
 class AIClientService:
     """Static wrapper around the Anthropic Python SDK.
@@ -43,7 +103,11 @@ class AIClientService:
             )
         try:
             import anthropic
-            return anthropic.Anthropic(api_key=api_key)
+            return anthropic.Anthropic(
+                api_key=api_key,
+                max_retries=_MAX_RETRIES,
+                timeout=_REQUEST_TIMEOUT_SECONDS,
+            )
         except ImportError:
             raise AIClientError(
                 "The 'anthropic' package is not installed. "
@@ -103,7 +167,7 @@ class AIClientService:
         except AIClientError:
             raise
         except Exception as e:
-            raise AIClientError(f"API call failed: {e}") from e
+            raise _friendly_error(e) from e
 
     @staticmethod
     def send_message_for_code(
@@ -198,7 +262,7 @@ class AIClientService:
         except AIClientError:
             raise
         except Exception as e:
-            raise AIClientError(f"API call with tools failed: {e}") from e
+            raise _friendly_error(e) from e
 
     @staticmethod
     def extract_tool_use_blocks(response) -> List[dict]:
@@ -368,17 +432,22 @@ class AIClientService:
         loop_messages = list(messages)
 
         def _stream_turn():
-            with client.messages.stream(
-                model=config.model,
-                max_tokens=config.max_tokens,
-                temperature=config.temperature,
-                system=AIClientService._system_blocks(system_prompt),
-                messages=loop_messages,
-                tools=tools,
-            ) as stream:
-                for text in stream.text_stream:
-                    yield text
-                _stream_turn.final = stream.get_final_message()
+            try:
+                with client.messages.stream(
+                    model=config.model,
+                    max_tokens=config.max_tokens,
+                    temperature=config.temperature,
+                    system=AIClientService._system_blocks(system_prompt),
+                    messages=loop_messages,
+                    tools=tools,
+                ) as stream:
+                    for text in stream.text_stream:
+                        yield text
+                    _stream_turn.final = stream.get_final_message()
+            except AIClientError:
+                raise
+            except Exception as e:
+                raise _friendly_error(e, context="streaming") from e
 
         for iteration in range(max_iterations):
             logger.info(

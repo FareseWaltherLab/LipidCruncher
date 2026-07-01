@@ -46,6 +46,13 @@ def render_lc_questions_chat() -> None:
     # Render existing messages
     _render_messages(session)
 
+    # Offer a one-click retry if the previous attempt failed.
+    retry_input = st.session_state.get('chat_lc_retry_input')
+    if retry_input and st.button("Retry last question", key="chat_retry_lc"):
+        st.session_state.pop('chat_lc_retry_input', None)
+        st.session_state.chat_pending_prompt_lc = retry_input
+        st.rerun()
+
     # Clickable example prompts (always visible)
     cols = st.columns(len(_EXAMPLE_PROMPTS))
     for i, prompt in enumerate(_EXAMPLE_PROMPTS):
@@ -77,9 +84,35 @@ def render_lc_questions_chat() -> None:
         )
 
     if user_input:
+        from app.models.chat import ChatMessage
+
         # Show user message immediately
         with st.chat_message("user"):
             st.markdown(user_input)
+
+        # The example questions describe the app (not the user's data), so
+        # their answers are cached and reused across sessions — instant on
+        # repeat, and a fallback if the API is unavailable. Free-typed
+        # questions always go live (they may depend on conversation context).
+        is_example = user_input in _EXAMPLE_PROMPTS
+        cached_answer = (
+            StreamlitAdapter.get_cached_lc_answer(user_input)
+            if is_example else None
+        )
+
+        if cached_answer is not None:
+            with st.chat_message("assistant"):
+                st.markdown(cached_answer)
+            st.session_state.chat_lc_questions_session = (
+                session
+                .add_message(ChatMessage(role="user", content=user_input))
+                .add_message(ChatMessage(role="assistant", content=cached_answer))
+            )
+            st.session_state.chat_message_count = (
+                st.session_state.get('chat_message_count', 0) + 1
+            )
+            st.session_state.pop('chat_lc_retry_input', None)
+            st.rerun()
 
         # Run AI (streamed token-by-token)
         error_text = None
@@ -103,9 +136,11 @@ def render_lc_questions_chat() -> None:
                         "Please try rephrasing your question."
                     )
                     st.markdown(full_text)
+                elif is_example:
+                    # Cache the canonical answer for instant reuse / fallback.
+                    StreamlitAdapter.set_cached_lc_answer(user_input, full_text)
 
                 # Persist the accumulated answer to the session.
-                from app.models.chat import ChatMessage
                 assistant_msg = ChatMessage(role="assistant", content=full_text)
                 st.session_state.chat_lc_questions_session = (
                     session_with_user.add_message(assistant_msg)
@@ -113,21 +148,48 @@ def render_lc_questions_chat() -> None:
                 st.session_state.chat_message_count = (
                     st.session_state.get('chat_message_count', 0) + 1
                 )
+                st.session_state.pop('chat_lc_retry_input', None)
 
             except Exception as e:
                 error_text = str(e)
 
-        # If there was an error, save both msgs to session
         if error_text:
-            from app.models.chat import ChatMessage
-            user_msg = ChatMessage(role="user", content=user_input)
-            error_msg = ChatMessage(
-                role="assistant",
-                content=f"Sorry, I encountered an error: {error_text}",
+            # If the API failed but we have a cached answer for this example
+            # question, serve it instead of an error.
+            fallback = (
+                StreamlitAdapter.get_cached_lc_answer(user_input)
+                if is_example else None
             )
-            current = st.session_state.chat_lc_questions_session
-            st.session_state.chat_lc_questions_session = (
-                current.add_message(user_msg).add_message(error_msg)
-            )
+            if fallback is not None:
+                fallback_text = (
+                    fallback
+                    + "\n\n_(The AI service is unavailable right now — "
+                    "showing a previously cached answer.)_"
+                )
+                with st.chat_message("assistant"):
+                    st.markdown(fallback_text)
+                st.session_state.chat_lc_questions_session = (
+                    session
+                    .add_message(ChatMessage(role="user", content=user_input))
+                    .add_message(
+                        ChatMessage(role="assistant", content=fallback_text)
+                    )
+                )
+                st.session_state.chat_message_count = (
+                    st.session_state.get('chat_message_count', 0) + 1
+                )
+                st.session_state.pop('chat_lc_retry_input', None)
+            else:
+                user_msg = ChatMessage(role="user", content=user_input)
+                error_msg = ChatMessage(
+                    role="assistant",
+                    content=f"Sorry, I encountered an error: {error_text}",
+                )
+                current = st.session_state.chat_lc_questions_session
+                st.session_state.chat_lc_questions_session = (
+                    current.add_message(user_msg).add_message(error_msg)
+                )
+                # Remember the failed input so the Retry button can re-fire it.
+                st.session_state.chat_lc_retry_input = user_input
 
         st.rerun()

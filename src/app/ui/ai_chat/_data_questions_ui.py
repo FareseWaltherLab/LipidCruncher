@@ -111,8 +111,18 @@ def render_data_questions_chat(source_df) -> None:
                         session=session,
                         source_df=source_df,
                     )
-                    st.write_stream(gen)
+                    streamed = st.write_stream(gen)
                 result = finalize()
+
+                # If the turn produced nothing at all (no text, no code, no
+                # table), say so rather than leaving a blank assistant bubble.
+                if (not (streamed or "").strip()
+                        and result.result_df is None
+                        and not result.code):
+                    st.info(
+                        "I couldn't produce a result for that. "
+                        "Please try rephrasing your question."
+                    )
 
                 # Update session state
                 st.session_state.chat_data_questions_session = result.session
@@ -132,10 +142,18 @@ def render_data_questions_chat(source_df) -> None:
 
             except Exception as e:
                 st.session_state.chat_last_error = str(e)
+                st.session_state.chat_last_failed_input = user_input
 
         st.rerun()
 
-    # Display persistent error from last attempt
+    # Display persistent error from last attempt, with a one-click retry.
     last_error = st.session_state.pop('chat_last_error', None)
     if last_error:
         st.error(f"An error occurred: {last_error}")
+        failed_input = st.session_state.get('chat_last_failed_input')
+        if failed_input and st.button("Retry", key="chat_retry_dq"):
+            st.session_state.pop('chat_last_failed_input', None)
+            st.session_state.chat_pending_prompt_dq = failed_input
+            st.rerun()
+    else:
+        st.session_state.pop('chat_last_failed_input', None)
