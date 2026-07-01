@@ -24,6 +24,9 @@ from app.constants import (
 )
 from app.services.data_standardization import DataStandardizationService
 from app.services.format_detection import DataFormat, FormatDetectionService
+from app.services.lipidsearch_alignment import (
+    AlignmentError, has_grouped_per_file_columns, parse_alignment_file,
+)
 from app.ui.content import get_sample_data_info
 
 
@@ -133,6 +136,67 @@ def _clear_sample_experiment() -> None:
     st.session_state.pop('sample_data_experiment', None)
 
 
+def _populate_experiment_from_alignment(conditions: list, samples_per_condition: list) -> None:
+    """Pre-populate experiment widget keys from a parsed alignment, mirroring
+    the sample-data pre-fill so the conditions and per-condition sample counts
+    are ready for the user to review and confirm."""
+    st.session_state.sample_data_experiment = {
+        'n_conditions': len(conditions),
+        'conditions': list(conditions),
+        'samples_per_condition': list(samples_per_condition),
+    }
+    for i, cond in enumerate(conditions):
+        st.session_state[f'cond_name_{i}'] = cond
+    for i, n in enumerate(samples_per_condition):
+        st.session_state[f'n_samples_{i}'] = n
+
+
+def _handle_lipidsearch_alignment_upload(df: pd.DataFrame) -> None:
+    """Show the mandatory Alignment Setting uploader for a LipidSearch 5.2
+    dual-polarity export and stash its text.
+
+    5.2 condition-grouped exports carry one column per raw file, so each sample's
+    positive/negative runs must be paired via the Alignment Setting file. The
+    experiment (conditions + sample counts) is pre-filled the first time a given
+    alignment is provided. Flat 5.0 exports have no per-file columns, so this is
+    a no-op and any stale alignment state is cleared.
+    """
+    if not has_grouped_per_file_columns(df):
+        st.session_state.pop('lipidsearch_alignment_text', None)
+        st.session_state.pop('_ls_align_prefilled_for', None)
+        return
+
+    st.sidebar.info(
+        "LipidSearch 5.2 dual-polarity export detected — upload its "
+        "**Alignment Setting file** to pair positive/negative runs per sample."
+    )
+    aln = st.sidebar.file_uploader(
+        "Alignment Setting file (required)",
+        type=['txt', 'csv'],
+        key='lipidsearch_alignment_uploader',
+    )
+    if aln is None:
+        st.session_state.pop('lipidsearch_alignment_text', None)
+        return
+
+    text = aln.getvalue().decode('utf-8', errors='replace')
+    st.session_state.lipidsearch_alignment_text = text
+
+    # Pre-fill the experiment once per distinct alignment (not every rerun, so
+    # the user's edits are preserved). A parse error here is surfaced later by
+    # standardize_uploaded_data.
+    if st.session_state.get('_ls_align_prefilled_for') != text:
+        try:
+            alignment = parse_alignment_file(text)
+        except AlignmentError:
+            return
+        _populate_experiment_from_alignment(
+            alignment.conditions, alignment.samples_per_condition
+        )
+        st.session_state['_ls_align_prefilled_for'] = text
+        st.rerun()
+
+
 # =============================================================================
 # UI Components
 # =============================================================================
@@ -234,6 +298,8 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
                 df = _read_tabular(uploaded_file)
                 st.sidebar.success("File uploaded successfully!")
                 st.session_state.raw_df = df
+                if data_format == FORMAT_LIPIDSEARCH:
+                    _handle_lipidsearch_alignment_upload(df)
                 return df
         except UnicodeDecodeError as e:
             logger.error("File encoding error: %s", e)

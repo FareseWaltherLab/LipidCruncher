@@ -14,6 +14,7 @@ import pandas as pd
 from app.constants import FORMAT_METABOLOMICS_WORKBENCH, FORMAT_MSDIAL, resolve_format_enum
 from app.services.data_standardization import DataStandardizationService
 from app.services.format_detection import DataFormat, FormatDetectionService
+from app.services.lipidsearch_alignment import has_grouped_per_file_columns
 
 
 # =============================================================================
@@ -56,6 +57,36 @@ def _apply_msdial_sample_override(
     return result.standardized_df
 
 
+def _standardize_lipidsearch_dual_polarity(
+    df: pd.DataFrame, data_format: str
+) -> Optional[pd.DataFrame]:
+    """Merge a LipidSearch 5.2 dual-polarity export using its Alignment Setting
+    file. Returns None (with a sidebar error) when the alignment is missing or
+    invalid, so the flow blocks until the user provides a valid one."""
+    alignment_text = st.session_state.get('lipidsearch_alignment_text')
+    if not alignment_text:
+        st.sidebar.error(
+            "This is a LipidSearch 5.2 dual-polarity export. Upload its "
+            "Alignment Setting file (in the sidebar above) to pair each "
+            "sample's positive/negative runs."
+        )
+        return None
+
+    result = DataStandardizationService.standardize_lipidsearch_with_alignment(
+        df, alignment_text
+    )
+    if not result.success:
+        st.sidebar.error(result.message)
+        return None
+
+    st.session_state.format_type = data_format
+    if result.column_mapping is not None and st.session_state.get('column_mapping') is None:
+        st.session_state.column_mapping = result.column_mapping
+    if st.session_state.get('n_intensity_cols') is None:
+        st.session_state.n_intensity_cols = result.n_intensity_cols
+    return result.standardized_df
+
+
 # =============================================================================
 # UI Components
 # =============================================================================
@@ -78,6 +109,13 @@ def standardize_uploaded_data(df: pd.DataFrame, data_format: str) -> Optional[pd
         return df
 
     format_enum = resolve_format_enum(data_format)
+
+    # LipidSearch 5.2 dual-polarity exports (one column per raw file) must be
+    # merged per biological sample using the mandatory Alignment Setting file.
+    # Flat 5.0 exports have no per-file columns and fall through unchanged.
+    if format_enum == DataFormat.LIPIDSEARCH and has_grouped_per_file_columns(df):
+        return _standardize_lipidsearch_dual_polarity(df, data_format)
+
     use_normalized = st.session_state.get('msdial_data_type_index', 0) == 1
 
     result = DataStandardizationService.validate_and_standardize(
