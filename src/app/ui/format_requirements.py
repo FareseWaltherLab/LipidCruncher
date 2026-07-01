@@ -48,9 +48,12 @@ MS_METABOLITE_DATA_END
 """
 
 LIPIDSEARCH_REQUIREMENTS = """
-### 🔬 LipidSearch 5.0 Format
+### 🔬 LipidSearch Format
 
-**Required Columns:**
+Supports both LipidSearch **5.0** and **5.2** exports. The layout is
+auto-detected from the columns — you don't pick a version.
+
+**Required Columns (both layouts):**
 
 | Column | Description |
 |--------|-------------|
@@ -61,14 +64,31 @@ LIPIDSEARCH_REQUIREMENTS = """
 | `TotalGrade` | Quality grade (A/B/C/D) |
 | `TotalSmpIDRate(%)` | Sample identification rate |
 | `FAKey` | Fatty acid key |
-| `MeanArea[s1]`, `MeanArea[s2]`, ... | Intensity per sample |
 
-**Example column structure:**
+**Layout A — flat (one column per sample):**
 ```
-LipidMolec | ClassKey | CalcMass | BaseRt | TotalGrade | ... | MeanArea[s1] | MeanArea[s2] | ...
+LipidMolec | ClassKey | ... | MeanArea[s1] | MeanArea[s2] | ...
 ```
+Each `MeanArea[s*]` is one sample. This is the classic export (files grouped by
+biological sample). Nothing extra is needed.
 
-**💡 Tip:** Export directly from LipidSearch — column names should match automatically.
+**Layout B — 5.2 dual-polarity (grouped by condition):**
+```
+LipidMolec | ClassKey | ... | OriginalArea[s1-1] | OriginalArea[s1-2] | ...
+```
+Here each `OriginalArea[s{condition}-{file}]` is a single raw file, and every
+sample was acquired in **both** positive and negative ion mode. LipidCruncher
+merges each sample's positive/negative pair into one intensity column.
+
+**📎 Layout B requires the Alignment Setting file.** Export it from LipidSearch
+(it lists every raw filename with its sample and condition). When you upload a
+dual-polarity dataset, a second uploader appears — the file is **required** so
+the correct positive/negative files are paired per sample, and the conditions
+are read from it automatically to pre-fill your experiment.
+
+**💡 Tip:** Export directly from LipidSearch — column names should match
+automatically. For a 5.2 condition-grouped export, also grab the Alignment
+Setting file.
 
 ---
 
@@ -90,7 +110,8 @@ LipidMolec | ClassKey | CalcMass | BaseRt | TotalGrade | ... | MeanArea[s1] | Me
 - Hydroxyl notation normalized (`;2O` → `;O2`)
 - Phantom chains removed from lyso-species (`LPC(20:0_0:0)` → `LPC 20:0`)
 - Chains sorted by carbon count, then double bond count (sphingolipids keep positional order)
-- `MeanArea[s*]` columns renamed to `intensity[s*]`
+- `MeanArea[s*]` columns renamed to `intensity[s*]` (flat layout); dual-polarity
+  `OriginalArea[s*-*]` pairs merged into one `intensity[s*]` per sample
 - Grade-based quality filtering (A/B/C/D per class)
 - Internal standards detected: `(d5)`, `(d7)`, `(d9)`, `ISTD`, `SPLASH`
 """

@@ -1,5 +1,5 @@
 """
-LipidSearch 5.0 format data cleaning.
+LipidSearch format data cleaning.
 Pure logic - no Streamlit dependencies.
 """
 import pandas as pd
@@ -18,7 +18,7 @@ from .exceptions import EmptyDataError, ConfigurationError
 
 class LipidSearchCleaner(BaseDataCleaner):
     """
-    Cleaner for LipidSearch 5.0 format data.
+    Cleaner for LipidSearch format data.
 
     Handles:
     - Grade filtering (A/B/C/D)
@@ -41,7 +41,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         grade_config: Optional[GradeFilterConfig] = None
     ) -> Tuple[pd.DataFrame, List[str]]:
         """
-        Clean LipidSearch 5.0 format data.
+        Clean LipidSearch format data.
 
         Args:
             df: Raw LipidSearch DataFrame.

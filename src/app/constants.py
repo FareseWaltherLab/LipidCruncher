@@ -51,7 +51,7 @@ MODULE_QC_ANALYSIS = Module.QC_ANALYSIS
 
 # Display names used in UI selectboxes, content dicts, and session state.
 # Always use these constants instead of raw strings.
-FORMAT_LIPIDSEARCH: str = 'LipidSearch 5.0'
+FORMAT_LIPIDSEARCH: str = 'LipidSearch'
 FORMAT_MSDIAL: str = 'MS-DIAL'
 FORMAT_GENERIC: str = 'Generic Format'
 FORMAT_METABOLOMICS_WORKBENCH: str = 'Metabolomics Workbench'
@@ -86,7 +86,7 @@ def get_format_display_to_enum() -> Dict:
 def resolve_format_enum(format_type: str) -> 'DataFormat':
     """Resolve a format display string or DataFormat to a DataFormat enum.
 
-    Accepts either a display string (e.g., 'LipidSearch 5.0') or a DataFormat
+    Accepts either a display string (e.g., 'LipidSearch') or a DataFormat
     enum value. Returns DataFormat.GENERIC as fallback.
 
     Args:
@@ -98,6 +98,8 @@ def resolve_format_enum(format_type: str) -> 'DataFormat':
     from app.services.format_detection import DataFormat
     if isinstance(format_type, DataFormat):
         return format_type
+    if format_type == 'LipidSearch 5.0':  # backward-compat: renamed to 'LipidSearch'
+        format_type = FORMAT_LIPIDSEARCH
     return get_format_display_to_enum().get(format_type, DataFormat.GENERIC)
 
 
@@ -127,7 +129,7 @@ INTERNAL_STANDARD_CLASS_PATTERN: str = r'ISTD|Internal'
 # Default Thresholds
 # =============================================================================
 
-# LipidSearch 5.0 noise floor — values at or below this are treated as zero
+# LipidSearch noise floor — values at or below this are treated as zero
 LIPIDSEARCH_DETECTION_THRESHOLD: float = 30000.0
 
 # Coefficient of variation threshold for BQC quality assessment (%)
@@ -142,7 +144,7 @@ ZERO_FILTER_BQC_DEFAULT: int = 50       # 50% → 0.50 proportion
 # LipidSearch Grade Filtering
 # =============================================================================
 
-# All possible grade values for LipidSearch 5.0
+# All possible grade values for LipidSearch
 LIPIDSEARCH_GRADE_OPTIONS: Tuple[str, ...] = ('A', 'B', 'C', 'D')
 
 # Default grades per class (classes not listed default to LIPIDSEARCH_DEFAULT_GRADES)

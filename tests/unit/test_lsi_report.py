@@ -59,7 +59,7 @@ def stat_config():
 @pytest.fixture
 def auto_fields(experiment, norm_config, stat_config, cleaned_df, intsta_df):
     return LSIReportService.collect_auto_fields(
-        format_type="LipidSearch 5.0",
+        format_type="LipidSearch",
         experiment=experiment,
         normalization_config=norm_config,
         stat_config=stat_config,
@@ -80,7 +80,7 @@ class TestCollectAutoFields:
         """All expected fields are populated with valid inputs."""
         assert auto_fields["Software"] == "LipidCruncher"
         assert "LIPID MAPS" in auto_fields["Lipid nomenclature"]
-        assert auto_fields["Data format / identification software"] == "LipidSearch 5.0"
+        assert auto_fields["Data format / identification software"] == "LipidSearch"
         assert auto_fields["Number of conditions"] == 2
         assert "Control" in auto_fields["Condition labels"]
         assert auto_fields["Total samples"] == 6

@@ -149,7 +149,7 @@ class DataIngestionWorkflow:
             result.validation_errors.append(
                 f"Could not detect data format. Found columns: [{available_cols}]. "
                 "Please ensure your file matches one of the supported formats "
-                "(LipidSearch 5.0, MS-DIAL, Generic, or Metabolomics Workbench)."
+                "(LipidSearch, MS-DIAL, Generic, or Metabolomics Workbench)."
             )
             return result
 

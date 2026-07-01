@@ -781,7 +781,7 @@ def zero_filter_lipidsearch_app():
         number_of_samples_list=[3, 3],
     )
     at.session_state['_test_bqc_label'] = None
-    at.session_state['_test_data_format'] = 'LipidSearch 5.0'
+    at.session_state['_test_data_format'] = 'LipidSearch'
     return at.run()
 
 
@@ -955,7 +955,7 @@ def qc_lipidsearch_app():
         number_of_samples_list=[3, 3],
     )
     at.session_state['_test_bqc_label'] = None
-    at.session_state['_test_format_type'] = 'LipidSearch 5.0'
+    at.session_state['_test_format_type'] = 'LipidSearch'
     return at.run()
 
 

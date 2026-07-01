@@ -2031,7 +2031,7 @@ class TestLSIReportEndToEnd:
         from app.services.lsi_report import LSIReportService
 
         fields = LSIReportService.collect_auto_fields(
-            format_type="LipidSearch 5.0",
+            format_type="LipidSearch",
             experiment=lipidsearch_experiment,
             normalization_config=NormalizationConfig(method='none'),
             stat_config=None,
@@ -2043,7 +2043,7 @@ class TestLSIReportEndToEnd:
         )
 
         assert fields["Software"] == "LipidCruncher"
-        assert fields["Data format / identification software"] == "LipidSearch 5.0"
+        assert fields["Data format / identification software"] == "LipidSearch"
         assert fields["Number of conditions"] == 3
         assert "WT" in fields["Condition labels"]
         assert fields["Total samples"] == 12
@@ -2107,7 +2107,7 @@ class TestLSIReportEndToEnd:
         from app.services.lsi_report import LSIReportService, _MANUAL_FIELDS
 
         fields = LSIReportService.collect_auto_fields(
-            format_type="LipidSearch 5.0",
+            format_type="LipidSearch",
             experiment=lipidsearch_experiment,
             normalization_config=NormalizationConfig(method='none'),
             stat_config=StatisticalTestConfig.create_manual(),

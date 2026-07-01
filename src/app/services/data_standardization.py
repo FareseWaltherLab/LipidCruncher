@@ -415,12 +415,12 @@ class DataStandardizationService:
             return "Unknown"
 
     # ------------------------------------------------------------------
-    # LipidSearch 5.0
+    # LipidSearch
     # ------------------------------------------------------------------
 
     @staticmethod
     def _process_lipidsearch(df: pd.DataFrame) -> StandardizationResult:
-        """Validate and standardize LipidSearch 5.0 data."""
+        """Validate and standardize LipidSearch data."""
         if not isinstance(df, pd.DataFrame):
             return StandardizationResult(False, "Expected a DataFrame for LipidSearch format")
 

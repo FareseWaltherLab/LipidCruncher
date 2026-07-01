@@ -65,7 +65,7 @@ class TestFormatSelection:
         """Format selectbox offers all 4 supported formats."""
         at = format_upload_app
         options = at.sidebar.selectbox[0].options
-        assert options == ['Generic Format', 'Metabolomics Workbench', 'LipidSearch 5.0', 'MS-DIAL']
+        assert options == ['Generic Format', 'Metabolomics Workbench', 'LipidSearch', 'MS-DIAL']
 
     def test_format_default_is_generic(self, format_upload_app):
         """Default format selection is Generic."""
@@ -96,7 +96,7 @@ class TestSampleDataLoading:
     def test_load_lipidsearch_sample_data(self, format_upload_app):
         """Loading LipidSearch sample data produces valid DataFrame."""
         at = format_upload_app
-        at.sidebar.selectbox[0].set_value('LipidSearch 5.0').run()
+        at.sidebar.selectbox[0].set_value('LipidSearch').run()
         at.sidebar.button(key='load_sample').click().run()
         raw_df = at.session_state['raw_df']
         assert raw_df is not None

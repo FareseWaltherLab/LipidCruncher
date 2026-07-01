@@ -10,7 +10,7 @@ import pandas as pd
 
 class DataFormat(str, Enum):
     """Supported data formats."""
-    LIPIDSEARCH = "LipidSearch 5.0"
+    LIPIDSEARCH = "LipidSearch"
     MSDIAL = "MS-DIAL"
     METABOLOMICS_WORKBENCH = "Metabolomics Workbench"
     GENERIC = "Generic Format"
@@ -25,7 +25,7 @@ class FormatDetectionService:
     All methods are stateless static methods for easy testing.
     """
 
-    # LipidSearch 5.0 required columns
+    # LipidSearch required columns
     LIPIDSEARCH_REQUIRED_COLUMNS: Set[str] = {
         'LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt',
         'TotalGrade', 'TotalSmpIDRate(%)', 'FAKey'
@@ -140,7 +140,7 @@ class FormatDetectionService:
     @staticmethod
     def _is_lipidsearch(df: pd.DataFrame) -> bool:
         """
-        Check if DataFrame is in LipidSearch 5.0 format.
+        Check if DataFrame is in LipidSearch format.
 
         LipidSearch format requires:
         - All required columns present
@@ -287,7 +287,8 @@ class FormatDetectionService:
             Corresponding DataFormat enum value, or UNKNOWN if not recognized
         """
         format_mapping = {
-            'LipidSearch 5.0': DataFormat.LIPIDSEARCH,
+            'LipidSearch': DataFormat.LIPIDSEARCH,
+            'LipidSearch 5.0': DataFormat.LIPIDSEARCH,  # backward-compat alias
             'lipidsearch': DataFormat.LIPIDSEARCH,
             'MS-DIAL': DataFormat.MSDIAL,
             'msdial': DataFormat.MSDIAL,

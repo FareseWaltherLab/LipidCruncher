@@ -42,7 +42,7 @@ class DataCleaningService:
     All methods are stateless static methods.
 
     Supported formats:
-    - LipidSearch 5.0 (grade filtering, AUC selection)
+    - LipidSearch (grade filtering, AUC selection)
     - MS-DIAL (quality filtering, score-based deduplication)
     - Generic (basic cleaning)
     - Metabolomics Workbench (same as Generic)
@@ -105,7 +105,7 @@ class DataCleaningService:
         grade_config: Optional[GradeFilterConfig] = None
     ) -> CleaningResult:
         """
-        Clean LipidSearch 5.0 format data.
+        Clean LipidSearch format data.
 
         Convenience method for direct LipidSearch cleaning.
         """
