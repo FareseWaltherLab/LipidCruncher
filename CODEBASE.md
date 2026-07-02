@@ -104,6 +104,7 @@ LipidCruncher/
 │       │   ├── exceptions.py                #   Typed exception hierarchy (ServiceError, etc.)
 │       │   ├── format_detection.py          #   DataFormat enum + detection
 │       │   ├── data_standardization.py      #   Column name standardization
+│       │   ├── lipidsearch_alignment.py     #   LipidSearch 5.2 dual-polarity pairing + merge
 │       │   ├── data_cleaning/               #   Format-specific cleaning
 │       │   │   ├── __init__.py              #     Registry dispatch (DataCleaningService)
 │       │   │   ├── exceptions.py            #     Domain-specific cleaning exceptions
@@ -293,7 +294,8 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | Service | File | Purpose |
 |---|---|---|
 | `FormatDetectionService` | `format_detection.py` | Auto-detects `DataFormat` enum from column signatures. Checks most-specific format first (LipidSearch → MS-DIAL → Metabolomics Workbench → Generic). |
-| `DataStandardizationService` | `data_standardization.py` | Converts format-specific column names to standard `intensity[*]` naming. |
+| `DataStandardizationService` | `data_standardization.py` | Converts format-specific column names to standard `intensity[*]` naming. For LipidSearch 5.2 dual-polarity exports, merges each sample's positive/negative files via the alignment map. |
+| `lipidsearch_alignment` | `lipidsearch_alignment.py` | Parses the LipidSearch Alignment Setting file, pairs each biological sample's positive/negative runs by raw-filename base, and merges their per-file `OriginalArea[s{cond}-{file}]` columns into flat `intensity[s1..sN]`. |
 | `NormalizationService` | `normalization.py` | Four methods: internal standard (divide by standard intensity), protein (divide by protein concentration), internal standards + protein (standard then protein), total intensity (divide by per-sample total, scale by median). |
 | `QualityCheckService` | `quality_check.py` | Box plot data prep, BQC CoV calculation, RT availability check, pairwise Pearson correlation, PCA (via scikit-learn). |
 | `StatisticalTestingService` | `statistical_testing.py` | Parametric (Welch's t-test, Alexander-Govern ANOVA) and non-parametric (Mann-Whitney, Kruskal-Wallis) tests with two-level correction (between-class and post-hoc). Auto mode selects parametric with log10 transform, FDR for 2+ classes, Tukey for 3+ conditions. Uses dataset-wide zero replacement for consistent detection-floor handling. |
@@ -380,7 +382,7 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 
 | Format | Enum Value | Detection Signature | Key Columns |
 |---|---|---|---|
-| LipidSearch 5.0 | `LIPIDSEARCH` | `MeanArea[*]` columns + required metadata | `LipidMolec`, `ClassKey`, `BaseRt`, `CalcMass`, `Grade`, `MeanArea[s1]`... |
+| LipidSearch | `LIPIDSEARCH` | Flat `MeanArea[*]` (5.0 / sample-grouped 5.2) **or** per-file `OriginalArea[s{cond}-{file}]` (5.2 dual-polarity, condition-grouped — requires the Alignment Setting file) + required metadata | `LipidMolec`, `ClassKey`, `BaseRt`, `CalcMass`, `TotalGrade`, `MeanArea[s1]`… / `OriginalArea[s1-1]`… |
 | MS-DIAL | `MSDIAL` | `Metabolite name` + signature columns OR `Alignment ID` | `Metabolite name`, `Ontology`, `Total score`, sample columns auto-detected |
 | Generic | `GENERIC` | Lipid names in first column + numeric data | `LipidMolec`, `ClassKey`, numeric sample columns |
 | Metabolomics Workbench | `METABOLOMICS_WORKBENCH` | `START`/`END` text markers | Tab-delimited with metadata headers |
