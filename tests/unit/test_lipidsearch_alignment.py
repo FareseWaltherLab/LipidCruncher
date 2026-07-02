@@ -203,3 +203,35 @@ class TestStandardizeWithAlignment:
         )
         assert result.success is False
         assert 'Target search job' in result.message
+
+
+class TestDualPolarityEndToEnd:
+    """Merge -> clean: the standardized dual-polarity frame flows through the
+    real LipidSearch cleaner and yields the expected per-sample layout."""
+
+    def test_merge_then_clean(self):
+        from app.services.data_cleaning import DataCleaningService
+        from app.services.format_detection import DataFormat
+        from app.models.experiment import ExperimentConfig
+
+        result = DataStandardizationService.standardize_lipidsearch_with_alignment(
+            _full_lipidmol_df(), _alignment_text(_ROWS),
+        )
+        exp = ExperimentConfig(
+            n_conditions=len(result.lipidsearch_conditions),
+            conditions_list=result.lipidsearch_conditions,
+            number_of_samples_list=result.lipidsearch_samples_per_condition,
+        )
+        cleaned = DataCleaningService.clean_data(
+            result.standardized_df, exp, DataFormat.LIPIDSEARCH,
+        ).cleaned_df
+
+        # 3 merged samples (Control x2, Treated x1); cleaner projects to the
+        # canonical metadata + intensity schema and drops per-file columns.
+        assert [c for c in cleaned.columns if c.startswith('intensity[')] == [
+            'intensity[s1]', 'intensity[s2]', 'intensity[s3]'
+        ]
+        assert not any(c.startswith('OriginalArea[') for c in cleaned.columns)
+        assert {'LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'FAKey',
+                'TotalGrade'}.issubset(cleaned.columns)
+        assert len(cleaned) > 0

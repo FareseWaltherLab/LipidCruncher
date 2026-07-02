@@ -95,3 +95,36 @@ class TestDualPolarityUpload:
         # with no alignment required and no error.
         assert _marker(at) == "2"
         assert len(at.sidebar.error) == 0
+
+
+def _prefill_script():
+    """Pre-populate the experiment from an alignment's conditions/counts and
+    emit the resulting widget-key values."""
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    from app.ui.sidebar.file_upload import _populate_experiment_from_alignment
+    _populate_experiment_from_alignment(['Control', 'Fumonisin B1'], [3, 3])
+
+    st.text(f"c0:{st.session_state.get('cond_name_0')}")
+    st.text(f"c1:{st.session_state.get('cond_name_1')}")
+    st.text(f"n0:{st.session_state.get('n_samples_0')}")
+    st.text(f"n1:{st.session_state.get('n_samples_1')}")
+    meta = st.session_state.get('sample_data_experiment') or {}
+    st.text(f"nc:{meta.get('n_conditions')}")
+
+
+class TestExperimentPrefill:
+    """Uploading an alignment pre-fills the experiment (conditions + counts)."""
+
+    def test_prefills_condition_and_sample_widget_keys(self):
+        at = AppTest.from_function(_prefill_script, default_timeout=DEFAULT_TIMEOUT).run()
+        vals = {t.value.split(':', 1)[0]: t.value.split(':', 1)[1] for t in at.text}
+        assert vals['c0'] == 'Control'
+        assert vals['c1'] == 'Fumonisin B1'
+        assert vals['n0'] == '3'
+        assert vals['n1'] == '3'
+        assert vals['nc'] == '2'
+        # No StreamlitAPIException from setting widget-backed keys pre-render.
+        assert len(at.exception) == 0
