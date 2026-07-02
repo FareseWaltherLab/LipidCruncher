@@ -45,13 +45,6 @@ UI (src/main_app.py, src/app/ui/)
 - **Services, workflows, and models have zero Streamlit imports.** They use only static methods (services/workflows) or frozen Pydantic (models). This is what makes them unit-testable. If you find yourself wanting `st.something` in those layers, stop — the work belongs in the UI layer or the adapter.
 - **`StreamlitAdapter` is the only bridge** between Streamlit (session state, `@st.cache_data`) and business logic. UI modules call adapter/workflow methods and render results; data manipulation does not live in UI files.
 - **Models are frozen Pydantic** (`ConfigDict(frozen=True)`) so they're hashable and safe to pass to `@st.cache_data`. Don't add mutable fields; use `.model_copy(update=...)` or builder methods like `ExperimentConfig.without_samples()`.
-- **AI-generated code is untrusted.** Everything from the AI Studio runs through `SandboxService` (AST validator + curated builtins + timeout) in `src/app/services/ai_chat/sandbox.py`. The sandbox is the security boundary — never bypass it, and never widen its allowlists without justification.
-
-## AI Studio specifics
-
-- The AI Studio (`src/app/ui/ai_studio_page.py`) is a separate page with four tabs (LipidCruncher Questions, Data Questions, Transform to Generic, Custom Visualization). Each tab has its own chat panel under `src/app/ui/ai_chat/_*_ui.py` and a corresponding service under `src/app/services/ai_chat/`.
-- AI chat tabs should **defer to LipidCruncher's main pipeline services** for analytic choices (normalization rules, zero-filter thresholds, statistical defaults) rather than re-inventing looser heuristics. If you need a rule, look in `src/app/services/` first.
-- The Anthropic API key is read from `ANTHROPIC_API_KEY` (env var, or `st.secrets["ANTHROPIC_API_KEY"]` which `main_app.py` promotes into the env). The AI service layer itself never touches Streamlit.
 
 ## Supported data formats
 
@@ -63,4 +56,4 @@ LipidSearch uploads (the `LipidSearch` format — handles both 5.0 and 5.2) auto
 
 - `CODEBASE.md` — full layer-by-layer reference (services, workflows, adapter contract, session-state keys, troubleshooting, extension guide).
 - `README.md` — user-facing overview, install, citation.
-- `docs/lipidcruncher_paper.md`, `docs/supplementary_methods.md` — scientific methodology; consult these (or have the AI Studio's `read_documentation` tool read them) before changing statistical or normalization defaults.
+- `docs/lipidcruncher_paper.md`, `docs/supplementary_methods.md` — scientific methodology; consult these before changing statistical or normalization defaults.
