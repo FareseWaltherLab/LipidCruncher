@@ -27,15 +27,18 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
     """
     st.sidebar.subheader("Specify Label of BQC Samples")
 
-    # Always pass `index` (rather than only on first render): when a widget's
-    # initial value is set via `index` and the user never interacts with it,
-    # Streamlit does not reliably preserve that value across reruns — without
-    # `index` on the rerun it snaps back to the default (index=0 = 'Yes').
+    # Pass `index` only when the key is absent. The pre-fill helpers (sample
+    # data / alignment) may set `bqc_radio` in session state; passing `index`
+    # as well makes Streamlit warn that a keyed widget has both a default and a
+    # session-state value. Once the key exists, session state preserves the
+    # selection across reruns, so the default is only needed on first render.
+    bqc_kwargs = {'key': 'bqc_radio'}
+    if 'bqc_radio' not in st.session_state:
+        bqc_kwargs['index'] = 1
     bqc_ans = st.sidebar.radio(
         'Do you have Batch Quality Control (BQC) samples?',
         ['Yes', 'No'],
-        index=1,
-        key='bqc_radio',
+        **bqc_kwargs,
     )
 
     bqc_label = None
@@ -48,11 +51,16 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
         ]
 
         if conditions_with_two_plus:
+            # Same guard as bqc_radio: the pre-fill helpers may set
+            # 'bqc_label_radio' in session state, so only supply `index` when
+            # the key is absent to avoid the default-plus-session-state warning.
+            label_kwargs = {'key': 'bqc_label_radio'}
+            if 'bqc_label_radio' not in st.session_state:
+                label_kwargs['index'] = 0
             bqc_label = st.sidebar.radio(
                 'Which label corresponds to BQC samples?',
                 conditions_with_two_plus,
-                index=0,
-                key='bqc_label_radio',
+                **label_kwargs,
             )
         else:
             st.sidebar.warning("No conditions with 2+ samples available for BQC.")

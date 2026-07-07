@@ -195,6 +195,22 @@ class TestConfirmInputsBQC:
         bqc_label_radio = at.sidebar.radio(key='bqc_label_radio')
         assert bqc_label_radio is not None
 
+    def test_prefilled_bqc_radio_emits_no_default_value_warning(self, generic_sidebar_app):
+        """A pre-filled BQC radio must not also be given an index default.
+
+        Sample-data/alignment pre-fill sets 'bqc_radio' in session state; if the
+        widget is also created with `index`, Streamlit warns that a keyed widget
+        has both a default and a session-state value. The radio should render its
+        pre-filled value with no such warning.
+        """
+        at = generic_sidebar_app
+        offending = [
+            w.value for w in at.warning
+            if 'was created with a default value but also had its value set'
+            in w.value
+        ]
+        assert offending == []
+
 
 # =============================================================================
 # Group 6: MS-DIAL Data Type Selection (3 tests)
