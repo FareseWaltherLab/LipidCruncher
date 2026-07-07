@@ -14,6 +14,13 @@ lipidcruncher_env/
 # Environment variables (secrets)
 .env
 
+# Streamlit secrets (config.toml is safe to track; secrets.toml is not)
+.streamlit/secrets.toml
+src/.streamlit/
+
+# Claude Code local state (machine-specific, not shareable)
+.claude/
+
 # Temporary files and logs
 *.tmp
 *.swp
