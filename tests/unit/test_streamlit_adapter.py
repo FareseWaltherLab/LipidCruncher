@@ -714,7 +714,9 @@ class TestSessionStateIntegration:
         assert mock_st.session_state['normalized_df'] is None
         assert mock_st.session_state['qc_continuation_df'] is None
         assert 'select_A' not in mock_st.session_state
-        assert 'confirm_checkbox' not in mock_st.session_state
+        # Confirm checkbox is forced off (not merely popped) so a pre-fill rerun
+        # that re-creates the widget cannot restore its cached 'checked' value.
+        assert mock_st.session_state['confirm_checkbox'] is False
 
         # Returned to Module 1 (Define Experiment step) and cache cleared.
         assert mock_st.session_state['module'] == MODULE_DATA_PROCESSING

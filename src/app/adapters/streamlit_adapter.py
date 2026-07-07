@@ -398,6 +398,15 @@ class StreamlitAdapter:
         StreamlitAdapter.reset_data_state()
         for key, value in preserved.items():
             st.session_state[key] = value
+        # Force the confirm checkbox off. Popping its key (via reset_data_state)
+        # is not enough: the reset button renders before the confirm checkbox,
+        # and formats that pre-fill the experiment (LipidSearch 5.2 alignment,
+        # Metabolomics Workbench auto-detect) fire an extra st.rerun() in which
+        # Streamlit re-creates the checkbox with identical parameters and
+        # restores its cached 'checked' value. An explicit False in session
+        # state overrides that. Safe to set: the widget is not instantiated yet
+        # this run.
+        st.session_state['confirm_checkbox'] = False
         # Start from Module 1 so a re-confirmed experiment runs the pipeline
         # from the top rather than jumping into a stale QC/Analysis view.
         st.session_state.module = MODULE_DATA_PROCESSING
