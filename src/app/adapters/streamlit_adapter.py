@@ -200,6 +200,20 @@ class SessionState:
 # (they control app-level routing, not data-specific state)
 _PRESERVE_ON_RESET = {'page', 'module'}
 
+# Keys kept by reset_to_experiment_setup(): the uploaded data plus the
+# standardization outputs derived from it. Everything else (experiment config,
+# grouping, processing, normalization, QC, analysis) is cleared so the user
+# restarts from the Define Experiment step without having to re-upload.
+_SOFT_RESET_PRESERVE = frozenset({
+    # Upload
+    'raw_df', 'using_sample_data', 'sample_data_file',
+    # Standardization outputs (so column mapping need not be redone)
+    'standardized_df', 'column_mapping', 'n_intensity_cols', 'format_type',
+    'msdial_features', 'msdial_sample_names', '_msdial_override_samples',
+    'msdial_use_normalized', 'msdial_data_type_index',
+    'workbench_conditions', 'workbench_samples',
+})
+
 # Widget keys created by Streamlit widgets (not in SessionState dataclass).
 # Must be removed on reset to prevent stale widget state.
 _WIDGET_KEYS = {
@@ -366,6 +380,29 @@ class StreamlitAdapter:
         ]
         for key in dynamic_keys:
             st.session_state.pop(key, None)
+
+    @staticmethod
+    def reset_to_experiment_setup() -> None:
+        """Soft reset: keep the uploaded/standardized data, clear everything else.
+
+        Clears experiment config, grouping, processing, normalization, QC and
+        analysis state plus the ``@st.cache_data`` cache, then returns the user
+        to the Define Experiment step — all via a rerun, so no page refresh is
+        needed. Unlike ``reset_data_state()`` (a full wipe back to landing),
+        this preserves the upload and standardization outputs so the user does
+        not have to re-upload the file or re-map columns.
+        """
+        preserved = {
+            key: st.session_state.get(key) for key in _SOFT_RESET_PRESERVE
+        }
+        StreamlitAdapter.reset_data_state()
+        for key, value in preserved.items():
+            st.session_state[key] = value
+        # Start from Module 1 so a re-confirmed experiment runs the pipeline
+        # from the top rather than jumping into a stale QC/Analysis view.
+        st.session_state.module = MODULE_DATA_PROCESSING
+        # Drop cached computations (box plots, PCA, heatmaps, ...).
+        st.cache_data.clear()
 
     # ==================== Widget Preservation ====================
 

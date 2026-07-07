@@ -270,6 +270,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
             st.session_state.sample_data_file = None
             _clear_sample_experiment()
             StreamlitAdapter.reset_data_state()
+            st.cache_data.clear()
             st.rerun()
         return st.session_state.raw_df
 

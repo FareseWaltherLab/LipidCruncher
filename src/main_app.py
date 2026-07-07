@@ -80,6 +80,24 @@ def _reset_analysis_state() -> None:
     StreamlitAdapter.reset_module_state('analysis_')
 
 
+def _display_session_reset_button() -> None:
+    """Sidebar control that soft-resets the session while keeping the upload.
+
+    Clears experiment setup, processing, QC/analysis state and the cache, then
+    returns the user to the Define Experiment step (via rerun, no page refresh).
+    """
+    if st.sidebar.button(
+        "🔄 Reset session (keep uploaded data)",
+        key="reset_session",
+        help="Clear experiment setup, processing, and cached results, then "
+             "return to the Define Experiment step. Your uploaded data is kept.",
+        use_container_width=True,
+    ):
+        StreamlitAdapter.reset_to_experiment_setup()
+        st.rerun()
+    st.sidebar.markdown("---")
+
+
 def display_app_page() -> None:
     """Display the main application page with module routing."""
     # Centered layout matching landing page width
@@ -105,6 +123,9 @@ def display_app_page() -> None:
                 st.session_state.page = PAGE_LANDING
                 st.rerun()
         return
+
+    # Sidebar: session reset — available from any step once data is loaded.
+    _display_session_reset_button()
 
     # Standardize data if not already done
     if st.session_state.get('standardized_df') is None:

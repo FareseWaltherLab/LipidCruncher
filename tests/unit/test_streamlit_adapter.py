@@ -20,6 +20,7 @@ from app.adapters.streamlit_adapter import (
     _DYNAMIC_KEY_PREFIXES,
     _PRESERVE_ON_RESET,
 )
+from app.constants import MODULE_DATA_PROCESSING
 from app.models.experiment import ExperimentConfig
 from app.services.format_detection import DataFormat
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
@@ -669,6 +670,55 @@ class TestSessionStateIntegration:
         assert mock_st.session_state['cleaned_df'] is None
         assert mock_st.session_state['experiment'] is None
         assert mock_st.session_state['confirmed'] is False
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_to_experiment_setup_keeps_upload_clears_downstream(self, mock_st):
+        """Soft reset keeps the upload/standardization, clears everything else."""
+        mock_st.session_state = MockSessionState({
+            # Upload + standardization — must be preserved.
+            'raw_df': pd.DataFrame({'A': [1]}),
+            'standardized_df': pd.DataFrame({'intensity[s1]': [1]}),
+            'column_mapping': pd.DataFrame({'standardized_name': ['intensity[s1]']}),
+            'format_type': 'MS-DIAL',
+            'using_sample_data': True,
+            # Downstream state — must be cleared.
+            'experiment': ExperimentConfig(
+                n_conditions=1, conditions_list=['A'], number_of_samples_list=[1],
+            ),
+            'confirmed': True,
+            'grouping_complete': True,
+            'sample_names': {'s1': 'liver'},
+            'cleaned_df': pd.DataFrame({'B': [2]}),
+            'normalized_df': pd.DataFrame({'C': [3]}),
+            'qc_continuation_df': pd.DataFrame({'D': [4]}),
+            'module': 'Quality Check & Analysis',
+            # Widget/dynamic keys that should be popped.
+            'select_A': ['s1'],
+            'confirm_checkbox': True,
+        })
+
+        StreamlitAdapter.reset_to_experiment_setup()
+
+        # Preserved: upload + standardization.
+        assert mock_st.session_state['raw_df'] is not None
+        assert mock_st.session_state['standardized_df'] is not None
+        assert mock_st.session_state['column_mapping'] is not None
+        assert mock_st.session_state['format_type'] == 'MS-DIAL'
+        assert mock_st.session_state['using_sample_data'] is True
+
+        # Cleared: experiment + all downstream.
+        assert mock_st.session_state['experiment'] is None
+        assert mock_st.session_state['confirmed'] is False
+        assert mock_st.session_state['sample_names'] is None
+        assert mock_st.session_state['cleaned_df'] is None
+        assert mock_st.session_state['normalized_df'] is None
+        assert mock_st.session_state['qc_continuation_df'] is None
+        assert 'select_A' not in mock_st.session_state
+        assert 'confirm_checkbox' not in mock_st.session_state
+
+        # Returned to Module 1 (Define Experiment step) and cache cleared.
+        assert mock_st.session_state['module'] == MODULE_DATA_PROCESSING
+        mock_st.cache_data.clear.assert_called_once()
 
     @patch('app.adapters.streamlit_adapter.st')
     def test_initialize_creates_analysis_keys(self, mock_st):
