@@ -17,8 +17,11 @@ import pandas as pd
 
 # Matches a standardized intensity column, e.g. "intensity[s3]".
 _INTENSITY_LABEL_RE = re.compile(r"^intensity\[(s\d+)\]$")
-# Matches a wrapped header, e.g. "MeanArea[SampleA]" -> "SampleA".
-_WRAPPED_HEADER_RE = re.compile(r"^\w+\[(.+)\]$")
+# Matches a single wrapped header, e.g. "MeanArea[SampleA]" -> "SampleA". The
+# content excludes ']' so a composite header (a merged dual-polarity token
+# expression like "OriginalArea[s1-1] + OriginalArea[s1-2]") does not match and
+# is left intact rather than mangled by a greedy capture.
+_WRAPPED_HEADER_RE = re.compile(r"^\w+\[([^\]]+)\]$")
 # Matches a standardized intensity column in a regroup rename map key/value.
 _INTENSITY_ANY_RE = re.compile(r"^intensity\[(s\d+)\]$")
 

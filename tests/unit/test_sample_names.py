@@ -33,6 +33,19 @@ class TestBuildNamesFromMapping:
         })
         assert build_names_from_mapping(cm) == {'s1': 'SampleA'}
 
+    def test_composite_dual_polarity_header_left_intact(self):
+        # LipidSearch 5.2 dual-polarity merges two per-file tokens into one
+        # header; a greedy wrapper strip would mangle it to
+        # "s1-1] + OriginalArea[s1-2". It must stay whole and match the
+        # column-standardization table.
+        cm = pd.DataFrame({
+            'standardized_name': ['intensity[s1]'],
+            'original_name': ['OriginalArea[s1-1] + OriginalArea[s1-2]'],
+        })
+        assert build_names_from_mapping(cm) == {
+            's1': 'OriginalArea[s1-1] + OriginalArea[s1-2]'
+        }
+
     def test_omits_names_identical_to_label(self):
         # LipidSearch flat exports often carry MeanArea[s1] -> inner == label.
         cm = pd.DataFrame({
