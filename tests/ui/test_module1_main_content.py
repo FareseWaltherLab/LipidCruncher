@@ -201,13 +201,24 @@ class TestGradeFiltering:
         text_values = [t.value for t in at.text]
         assert any("default_config" in v for v in text_values)
 
-    def test_grade_filter_has_two_modes(self, grade_filtering_app):
-        """Grade filtering radio has two mode options."""
+    def test_grade_filter_has_three_modes(self, grade_filtering_app):
+        """Grade filtering radio has three mode options."""
         at = grade_filtering_app
         radio = at.radio(key='grade_filter_mode_radio')
-        assert len(radio.options) == 2
+        assert len(radio.options) == 3
         assert 'Use Default Settings' in radio.options
+        assert 'Allow C for all classes' in radio.options
         assert 'Customize by Class' in radio.options
+
+    def test_grade_filter_blanket_c_applies_abc_to_all_classes(self, grade_filtering_app):
+        """'Allow C for all classes' returns A/B/C for every class."""
+        at = grade_filtering_app
+        at.radio(key='grade_filter_mode_radio').set_value('Allow C for all classes').run()
+        text_values = [t.value for t in at.text]
+        # One config entry per class (LPC, PC, PE, SM = 4 classes)
+        assert any("custom_config:4" in v for v in text_values)
+        # PC (a normally strict class) now includes grade C
+        assert any(v == "pc_grades:A,B,C" for v in text_values)
 
     def test_grade_filter_custom_shows_multiselects(self, grade_filtering_app):
         """Switching to custom mode shows per-class grade multiselects."""

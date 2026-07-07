@@ -83,6 +83,84 @@ def full_sidebar_script():
         st.text("no_data")
 
 
+def sample_name_editor_script():
+    """Seed + render the sidebar sample display-name editor.
+
+    Mirrors the seeding done in display_sample_grouping (from column_mapping)
+    followed by the editable-names table, so tests can assert that meaningful
+    file headers carry into st.session_state.sample_names.
+    """
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.models.experiment import ExperimentConfig
+    from app.ui.sample_names import build_names_from_mapping
+    from app.ui.sidebar.sample_grouping import _display_sample_name_editor
+
+    st.session_state.column_mapping = pd.DataFrame({
+        'standardized_name': ['LipidMolec', 'intensity[s1]', 'intensity[s2]'],
+        'original_name': ['Lipid', 'mouse liver #5', 'mouse liver #2'],
+    })
+    experiment = ExperimentConfig(
+        n_conditions=1, conditions_list=['WT'], number_of_samples_list=[2],
+    )
+    # Seeding step (as in display_sample_grouping).
+    if st.session_state.get('sample_names') is None:
+        st.session_state.sample_names = build_names_from_mapping(
+            st.session_state.get('column_mapping')
+        )
+    _display_sample_name_editor(experiment)
+    st.text(f"sample_names:{st.session_state.get('sample_names')}")
+
+
+def msdial_override_sample_names_script():
+    """Reproduce the MS-DIAL sample-override + display-name seeding path.
+
+    Regression for the stale-names bug: sample_names is seeded from the
+    original (blank-included) mapping, then an override drops the blank. The
+    override must invalidate sample_names so display_sample_grouping re-seeds
+    from the corrected mapping instead of keeping the shifted, blank-first map.
+    """
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    from app.services.data_standardization import MSDIALFeatures
+    from app.ui.sample_names import build_names_from_mapping
+    from app.ui.sidebar.column_mapping import _apply_msdial_sample_override
+
+    original_samples = [
+        'Blank', 'fads2_1', 'fads2_2', 'fads2_3', 'WT_1', 'WT_2', 'WT_3',
+    ]
+    data = {'LipidMolec': ['PC 16:0_18:1', 'PE 18:0_20:4'], 'ClassKey': ['PC', 'PE']}
+    for i in range(1, len(original_samples) + 1):
+        data[f'intensity[s{i}]'] = [1000.0 * i, 2000.0 * i]
+    df = pd.DataFrame(data)
+
+    mapping_rows = [{'standardized_name': 'LipidMolec', 'original_name': 'Metabolite name'}]
+    for i, orig in enumerate(original_samples, 1):
+        mapping_rows.append({'standardized_name': f'intensity[s{i}]', 'original_name': orig})
+    st.session_state.column_mapping = pd.DataFrame(mapping_rows)
+    st.session_state.msdial_features = MSDIALFeatures(
+        raw_sample_columns=list(original_samples),
+        normalized_sample_columns=list(original_samples),
+        actual_columns=list(original_samples),
+    )
+
+    # Seed stale names from the original (blank-included) mapping.
+    st.session_state.sample_names = build_names_from_mapping(st.session_state.column_mapping)
+
+    # User drops the blank via the override.
+    _apply_msdial_sample_override(df, original_samples[1:], st.session_state.msdial_features)
+
+    # Re-seed exactly as display_sample_grouping does.
+    if st.session_state.get('sample_names') is None:
+        st.session_state.sample_names = build_names_from_mapping(st.session_state.column_mapping)
+
+    st.text(f"sample_names:{st.session_state.get('sample_names')}")
+
+
 def app_page_script():
     """Full app page without set_page_config (for Back to Home tests)."""
     import streamlit as st
@@ -164,6 +242,20 @@ def format_upload_app():
 def full_sidebar_app():
     """Full sidebar rendered (no data loaded)."""
     return AppTest.from_function(full_sidebar_script, default_timeout=DEFAULT_TIMEOUT).run()
+
+
+@pytest.fixture
+def sample_name_editor_app():
+    """Sidebar sample-name editor seeded from meaningful column headers."""
+    return AppTest.from_function(sample_name_editor_script, default_timeout=DEFAULT_TIMEOUT).run()
+
+
+@pytest.fixture
+def msdial_override_sample_names_app():
+    """MS-DIAL sample override drops the blank; names re-seed from new mapping."""
+    return AppTest.from_function(
+        msdial_override_sample_names_script, default_timeout=DEFAULT_TIMEOUT
+    ).run()
 
 
 @pytest.fixture
@@ -593,6 +685,8 @@ def grade_filtering_script():
     config = display_grade_filtering_config(df)
     if config is not None:
         st.text(f"custom_config:{len(config)}")
+        if 'PC' in config:
+            st.text("pc_grades:" + ",".join(config['PC']))
     else:
         st.text("default_config")
 

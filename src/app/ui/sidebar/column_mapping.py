@@ -53,6 +53,10 @@ def _apply_msdial_sample_override(
     st.session_state.column_mapping = result.column_mapping
     st.session_state.msdial_sample_names = result.sample_names
     st.session_state['_msdial_override_samples'] = list(manual_samples)
+    # The override changes which sample each s-label maps to, so any previously
+    # seeded display names are stale. Clear them; display_sample_grouping
+    # re-seeds from the updated column_mapping.
+    st.session_state.sample_names = None
 
     return result.standardized_df
 

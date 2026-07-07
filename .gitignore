@@ -51,3 +51,10 @@ ai_studio_schematic.tiff
 LS5.2 - Fumonisin B1 Mouse Liver.csv
 Alignment.txt
 LipidMol.txt
+
+# Data/report files — keep stray CSV/PDF out of VCS.
+# Sample datasets and bundled UI assets are whitelisted below.
+*.csv
+*.pdf
+!sample_datasets/*.csv
+!src/images/*.pdf

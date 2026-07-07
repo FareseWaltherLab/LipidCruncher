@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 from app.models.experiment import ExperimentConfig
 from app.services.sample_grouping import SampleGroupingService
+from app.ui.sample_names import (
+    build_names_from_mapping,
+    remap_names_after_regroup,
+)
 from app.ui.sidebar.experiment_config import detect_sample_columns, extract_sample_names, display_experiment_definition
 from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_inputs
 
@@ -60,7 +64,14 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
 
     group_df = result.group_df
 
-    st.sidebar.dataframe(group_df, use_container_width=True)
+    # Show the user-facing sample names alongside the internal s-labels.
+    names = st.session_state.get('sample_names') or {}
+    display_group = group_df.copy()
+    if names:
+        display_group.insert(
+            1, 'name', [names.get(s, '') for s in group_df['sample name']]
+        )
+    st.sidebar.dataframe(display_group, use_container_width=True)
 
     # Manual regrouping option
     st.sidebar.write('Are your samples properly grouped together?')
@@ -80,6 +91,11 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
             # Clean up regrouping state so it doesn't persist
             del st.session_state['_pre_regroup_df']
             st.session_state.pop('original_column_order', None)
+            # Restore the pre-regroup display names to match the restored order.
+            if '_pre_regroup_sample_names' in st.session_state:
+                st.session_state.sample_names = st.session_state.pop(
+                    '_pre_regroup_sample_names'
+                )
 
     return group_df, df
 
@@ -96,6 +112,11 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         # re-run re-applies the swap to already-swapped data, corrupting the
         # column assignments.
         st.session_state['_pre_regroup_df'] = df.copy()
+        # Snapshot the pre-regroup display names too, so the remap below is
+        # always computed from this stable base rather than compounding on
+        # already-remapped names each rerun (which would churn sample_names,
+        # change the multiselect option labels, and reset the widgets).
+        st.session_state['_pre_regroup_sample_names'] = st.session_state.get('sample_names')
 
     # Always regroup from the original data to make the operation idempotent
     base_df = st.session_state.get('_pre_regroup_df', df)
@@ -108,10 +129,14 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
     for condition in experiment.conditions_list:
         st.sidebar.write(f"Select {expected_samples[condition]} samples for {condition}")
 
+        # NOTE: no format_func here. The picker's options are the same s-labels
+        # shown (with names) in the Group Samples table above. Deriving option
+        # labels from sample_names would reset this widget whenever the regroup
+        # updates sample_names mid-run, wiping the user's selections.
         selected_samples = st.sidebar.multiselect(
             f'Pick the samples that belong to condition {condition}',
             remaining_samples,
-            key=f'select_{condition}'
+            key=f'select_{condition}',
         )
 
         selections[condition] = selected_samples
@@ -133,6 +158,13 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         regroup_result = SampleGroupingService.regroup_samples(
             base_df, group_df, selections, experiment,
         )
+        # Keep display names in sync with the renumbered/reordered samples.
+        # Remap from the stable pre-regroup snapshot (not the live, possibly
+        # already-remapped map) so the result is identical on every rerun.
+        st.session_state.sample_names = remap_names_after_regroup(
+            st.session_state.get('_pre_regroup_sample_names'),
+            regroup_result.old_to_new,
+        )
         st.session_state.grouping_complete = True
         st.sidebar.write("New sample order after regrouping:")
         st.sidebar.dataframe(regroup_result.name_df, use_container_width=True)
@@ -145,6 +177,43 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         )
         st.session_state.grouping_complete = False
         return group_df, df
+
+
+def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
+    """Let the user review/edit the display name for each sample.
+
+    Names are auto-seeded from the uploaded column headers and stored in
+    ``st.session_state.sample_names`` keyed by internal label (s1, s2, ...).
+    They appear in the sample selectors and all sample-facing plots.
+    """
+    labels = experiment.full_samples_list
+    names = st.session_state.get('sample_names') or {}
+
+    with st.sidebar.expander('✏️ Sample Names (optional)', expanded=False):
+        st.caption(
+            "These names carry over to the sample selectors and every "
+            "sample-facing plot (box plots, correlation, PCA, heatmap). "
+            "Auto-filled from your file's column headers — edit as needed."
+        )
+        editor_df = pd.DataFrame({
+            'sample': labels,
+            'name': [names.get(label, '') for label in labels],
+        })
+        edited = st.data_editor(
+            editor_df,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                'sample': st.column_config.TextColumn('Sample', disabled=True),
+                'name': st.column_config.TextColumn('Display name'),
+            },
+            key='sample_names_editor',
+        )
+        st.session_state.sample_names = {
+            row['sample']: str(row['name']).strip()
+            for _, row in edited.iterrows()
+            if str(row['name']).strip()
+        }
 
 
 def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optional[ExperimentConfig], Optional[str]]:
@@ -189,6 +258,12 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
         )
         return None, None
 
+    # Seed display names from the uploaded column headers on first run.
+    if st.session_state.get('sample_names') is None:
+        st.session_state.sample_names = build_names_from_mapping(
+            st.session_state.get('column_mapping')
+        )
+
     # Step 2: Group Samples (with manual regrouping option)
     group_df, updated_df = display_group_samples(df, experiment, data_format)
 
@@ -199,6 +274,9 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     if not st.session_state.get('grouping_complete', False):
         st.sidebar.error("Please complete sample grouping before proceeding.")
         return None, None
+
+    # Step 2b: Optional sample display-name editing
+    _display_sample_name_editor(experiment)
 
     # Step 3: BQC Section
     bqc_label = display_bqc_section(experiment)

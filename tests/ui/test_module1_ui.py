@@ -4,7 +4,7 @@ UI tests for Module 1: Filter and Normalize.
 Tests use Streamlit's AppTest framework with wrapper functions from conftest.py
 to avoid importing main_app.py (which has st.set_page_config() at module level).
 
-26 tests across 8 groups covering:
+Tests across 10 groups covering:
 1. Landing page navigation
 2. Format selection
 3. Sample data loading
@@ -13,6 +13,9 @@ to avoid importing main_app.py (which has st.set_page_config() at module level).
 6. MS-DIAL data type selection
 7. MS-DIAL override preservation (regression for d9451cf)
 8. Back to Home navigation
+9. Sample display names (sidebar-only feature)
+10. MS-DIAL override + sample names (stale-names regression)
+11. Regroup + confirm with sample names (blank-selection regression)
 """
 
 from streamlit.testing.v1 import AppTest
@@ -300,3 +303,95 @@ class TestBackToHome:
         back_button = [b for b in at.button if "Back to Home" in b.label][0]
         back_button.click().run()
         assert at.session_state['page'] == 'landing'
+
+
+# =============================================================================
+# Group 9: Sample Display Names (sidebar-only feature)
+# =============================================================================
+
+class TestSampleNameEditor:
+    """The sidebar seeds sample names from column headers and lets users edit them."""
+
+    def test_seeds_names_from_column_headers(self, sample_name_editor_app):
+        """Meaningful headers in column_mapping carry into session sample_names."""
+        at = sample_name_editor_app
+        assert not at.exception
+        names = at.session_state['sample_names']
+        assert names == {'s1': 'mouse liver #5', 's2': 'mouse liver #2'}
+
+    def test_editor_round_trips_names_into_session(self, sample_name_editor_app):
+        """The data editor writes the (seeded) names back to session on render."""
+        at = sample_name_editor_app
+        text_values = [t.value for t in at.text]
+        assert any("mouse liver #5" in v for v in text_values)
+
+    def test_editor_caption_present(self, sample_name_editor_app):
+        """The editor explains the names carry to selectors/plots."""
+        at = sample_name_editor_app
+        captions = [c.value for c in at.caption]
+        assert any("sample selectors" in c for c in captions)
+
+
+# =============================================================================
+# Group 10: MS-DIAL Override + Sample Names (regression)
+# =============================================================================
+
+class TestMSDIALOverrideSampleNames:
+    """Dropping the blank via MS-DIAL override must refresh display names.
+
+    Regression: sample_names was seeded once from the original mapping and not
+    invalidated by the override, so the group table showed a stale, shifted map
+    (blank still s1) even though the column mapping was correct.
+    """
+
+    def test_override_reseeds_names_without_blank(self, msdial_override_sample_names_app):
+        at = msdial_override_sample_names_app
+        assert not at.exception
+        names = at.session_state['sample_names']
+        # After dropping the blank, s1 is the first real sample, not "Blank".
+        assert names['s1'] == 'fads2_1'
+        assert 'Blank' not in names.values()
+        assert names['s6'] == 'WT_3'
+
+
+# =============================================================================
+# Group 11: Regroup + confirm with sample names (blank-selection regression)
+# =============================================================================
+
+class TestRegroupConfirmWithNames:
+    """Shuffling samples then confirming must advance, not reset the pickers.
+
+    Regression: when sample display names were populated (e.g. MS-DIAL), the
+    regroup multiselect's format_func read sample_names, which the regroup
+    mutated mid-run. That reset the multiselects to empty and flipped
+    grouping_complete/confirmed back to False, trapping the user in the
+    reshuffle step instead of advancing.
+    """
+
+    def test_shuffle_then_confirm_advances(self):
+        at = AppTest.from_function(full_sidebar_script, default_timeout=60)
+        at.run()
+        at.sidebar.selectbox[0].set_value('MS-DIAL').run()
+        at.sidebar.button(key='load_sample').click().run()
+
+        nconds = at.sidebar.number_input[0].value
+        conds = [at.text_input(key=f'cond_name_{i}').value for i in range(nconds)]
+        counts = [at.sidebar.number_input[i + 1].value for i in range(nconds)]
+        ntot = sum(counts)
+        # Reverse-order shuffle across all samples.
+        shuffled = [f's{i}' for i in range(ntot, 0, -1)]
+
+        at.sidebar.radio(key='grouping_radio').set_value('No').run()
+        idx = 0
+        for c, n in zip(conds, counts):
+            at.sidebar.multiselect(key=f'select_{c}').set_value(shuffled[idx:idx + n]).run()
+            idx += n
+        assert at.session_state['grouping_complete'] is True
+
+        at.sidebar.checkbox(key='confirm_checkbox').set_value(True).run()
+        # The grouping must stick and the app must advance.
+        assert at.session_state['confirmed'] is True
+        assert at.session_state['grouping_complete'] is True
+        # Selections retained (not blanked).
+        for c in conds:
+            assert len(at.sidebar.multiselect(key=f'select_{c}').value) > 0

@@ -113,6 +113,9 @@ class SessionState:
     confirmed: bool = False
     grouping_complete: bool = True
     original_column_order: Optional[List[str]] = None
+    # Maps internal sample label (s1, s2, ...) → user-facing display name,
+    # auto-seeded from the uploaded column headers and editable in the sidebar.
+    sample_names: Optional[Dict[str, str]] = None
 
     # --- Data processing (owner: data_processing.py) ---
     cleaned_df: Optional[pd.DataFrame] = None
@@ -203,7 +206,7 @@ _WIDGET_KEYS = {
     # Sidebar widgets (file_upload, experiment_config, sample_grouping, confirm_inputs)
     'manual_sample_override', 'grouping_radio',
     'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
-    'sample_data_experiment',
+    'sample_data_experiment', 'sample_names_editor',
     # Data processing widgets (data_processing.py)
     'grade_filter_mode', 'grade_selections',
     'grade_filter_mode_radio',
