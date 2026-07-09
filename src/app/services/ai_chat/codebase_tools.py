@@ -72,10 +72,18 @@ TOOL_DEFINITIONS = [
     {
         "name": "search_codebase",
         "description": (
-            "Search for keywords or patterns across the LipidCruncher codebase. "
-            "Returns matching lines with file paths and line numbers. "
-            "Use this to find where specific functions, classes, or concepts "
-            "are implemented."
+            "Search the LipidCruncher source code for an exact keyword or "
+            "identifier (case-insensitive literal match — not semantic). "
+            "Returns matching lines with file paths, line numbers, and "
+            "surrounding context. Call this when you need to find WHERE "
+            "something is implemented or verify HOW it behaves in code (a "
+            "specific function, class, config option, or default value) and "
+            "the answer isn't already covered by your built-in knowledge or "
+            "the documentation. Because matching is literal, pick a "
+            "distinctive term (a function/class name or an exact option "
+            "string); if a search returns nothing, retry with a synonym or a "
+            "shorter, more specific keyword. For conceptual questions about "
+            "features or methods, prefer read_documentation instead."
         ),
         "input_schema": {
             "type": "object",
@@ -98,9 +106,12 @@ TOOL_DEFINITIONS = [
     {
         "name": "read_file_section",
         "description": (
-            "Read a specific file or section of a file from the project. "
-            "Returns file contents with line numbers. Use this after "
-            "search_codebase to read the full context around a match."
+            "Read a specific file, or a line range within it, from the "
+            "project. Returns contents with line numbers. Call this when you "
+            "already know which file you need — typically to read the full "
+            "context around a search_codebase hit, or to inspect a file whose "
+            "path you already know. Do not use it to discover where something "
+            "lives (use search_codebase for that)."
         ),
         "input_schema": {
             "type": "object",
@@ -127,8 +138,11 @@ TOOL_DEFINITIONS = [
     {
         "name": "list_files",
         "description": (
-            "List files in the project directory tree. Use this to explore "
-            "the project structure before searching or reading specific files."
+            "List files under a project directory. Call this only when you "
+            "don't yet know where relevant code lives and need to discover the "
+            "project structure before searching or reading. If you already "
+            "have a keyword to look for, prefer search_codebase; if you "
+            "already know the file path, prefer read_file_section."
         ),
         "input_schema": {
             "type": "object",
@@ -154,7 +168,12 @@ TOOL_DEFINITIONS = [
     {
         "name": "read_documentation",
         "description": (
-            "Read project documentation by name. Available documents: "
+            "Read a full LipidCruncher documentation file by name. This is the "
+            "PREFERRED source for conceptual questions about features, "
+            "methods, scientific rationale, normalization, statistics, "
+            "visualizations, and workflow — reach for it before "
+            "search_codebase, which is for source-level details. "
+            "Available documents: "
             "paper (LipidCruncher publication — authoritative description "
             "of features, workflow, and scientific context), "
             "supplementary_methods (detailed technical specifications "
