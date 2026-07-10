@@ -29,6 +29,11 @@ src/.streamlit/secrets.toml
 *.doc
 docs/*.md
 
+# Vendor / reference material (LipidSearch docs, sample inputs)
+*.pdf
+Alignment.txt
+LipidMol.txt
+
 # IDE/editor config
 .idea/
 .vscode/
