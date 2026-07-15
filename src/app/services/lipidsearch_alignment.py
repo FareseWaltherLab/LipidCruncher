@@ -1,17 +1,30 @@
 """
-LipidSearch 5.2 dual-polarity alignment support.
+LipidSearch 5.2 condition-grouped alignment support.
 
-LipidSearch 5.2 can acquire each biological sample in both positive and
-negative ion mode and, when files are grouped by condition, exports one column
-set per raw file — the per-file tokens ``OriginalArea[s{cond}-{file}]``. Each
-lipid is detected in only one polarity, so a single per-file column is mostly
-empty on its own; the two polarity files of one sample must be merged.
+When LipidSearch 5.2 groups files by condition it exports one column set per
+raw file — the per-file tokens ``OriginalArea[s{cond}-{file}]`` — rather than a
+flat ``MeanArea[sN]`` per sample. Turning those into per-sample intensities
+requires the **Alignment Setting file**, a LipidSearch export mapping every
+per-file token to its raw filename and condition/group.
 
-The **Alignment Setting file** (a LipidSearch export) maps every per-file token
-to its raw filename and condition/group. The raw filename encodes both the
-biological sample (a shared base, e.g. ``140509_FT_01``) and the polarity marker
-(``...n``/``...p``). We pair files by that shared base — deterministic, and not
-reliant on column adjacency (which the acquisition operator can reorder).
+Three acquisition layouts occur in practice, and one run can mix them:
+
+1. **Separate positive/negative files** — one biological sample acquired twice,
+   the polarity marked in the filename (``..._01n.raw`` / ``..._01p.raw``).
+   Each lipid is detected in only one polarity, so the pair must be merged.
+2. **Polarity switching** — pos and neg are embedded in a *single* acquisition,
+   so the sample has one per-file token and needs no merging. This is the
+   common case for the study samples of a run.
+3. **One raw file, several search jobs** — e.g. a pooled QC ("ID") run acquired
+   in both modes separately, which LipidSearch stores under a single filename
+   with one token per job. The jobs are complementary and must be merged.
+   Such runs exist to build the peak annotations that are then applied to the
+   rest of the sample set; users typically drop them before analysis.
+
+Samples are therefore grouped by raw-filename base (the name with any polarity
+marker removed), which handles all three: (1) groups by the shared base, (2) is
+a group of one, (3) groups by the identical filename. Grouping by name rather
+than by column adjacency is deterministic — the operator can reorder columns.
 
 Pure logic — no Streamlit dependencies.
 """
@@ -76,18 +89,23 @@ def _sample_base(filename: str) -> str:
 def parse_alignment_file(text: str) -> AlignmentMap:
     """Parse a LipidSearch Alignment Setting file into an AlignmentMap.
 
-    The file is tab-delimited with a ``*Target search job`` section whose rows
-    are: job name, raw filename, per-file token (s1-1, ...), condition/group,
-    UUID. The condition may be prefixed with ``*`` (LipidSearch marks the
-    reference group); the marker is stripped from the label.
+    The file has a ``*Target search job`` section whose rows are: job name, raw
+    filename, per-file token (s1-1, ...), condition/group, UUID. It may be tab-
+    or comma-delimited (LipidSearch varies by export); the delimiter is sniffed
+    from the file. The condition may be prefixed with ``*`` (LipidSearch marks
+    the reference group); the marker is stripped from the label.
 
     Files are grouped into biological samples by their filename base (the name
     with the polarity marker removed). Ordering follows first appearance.
 
     Raises:
-        AlignmentError: if no job rows are found, or a sample's files do not
-            pair cleanly (e.g. two files with the same polarity marker).
+        AlignmentError: if no job rows are found, or a sample's files cannot be
+            grouped unambiguously (see ``_validate_pairing``).
     """
+    # The file is uniformly tab- or comma-delimited; pick whichever character
+    # dominates the whole file (the header rows carry no delimiter, so a
+    # first-line sniff is unreliable). Default to comma on a tie.
+    delimiter = '\t' if text.count('\t') > text.count(',') else ','
     rows = []
     in_jobs = False
     for line in text.splitlines():
@@ -95,10 +113,11 @@ def parse_alignment_file(text: str) -> AlignmentMap:
             in_jobs = True
             continue
         if in_jobs:
-            # Section ends at a blank line or the next '*'-prefixed header.
-            if not line.strip() or line.startswith('*'):
+            parts = line.split(delimiter)
+            # Section ends at the next '*'-prefixed header or a blank line —
+            # which, in a comma export, is padded with empty cells (",,,,").
+            if line.startswith('*') or all(not p.strip() for p in parts):
                 break
-            parts = line.split('\t')
             if len(parts) < 4:
                 continue
             filename, dataid, condition = parts[1].strip(), parts[2].strip(), parts[3]
@@ -140,31 +159,38 @@ def parse_alignment_file(text: str) -> AlignmentMap:
 
 
 def _validate_pairing(samples: List[BiologicalSample], rows) -> None:
-    """Guard against a filename convention that groups incorrectly.
+    """Guard against a filename convention that groups unrelated files.
 
-    Every biological sample must have the same number of files, and within a
-    multi-file sample the polarity markers must be distinct (so we never merge
-    two files of the same polarity).
+    A biological sample may carry a single per-file token (single-polarity
+    acquisition — most conditions in a run) or several. Sample counts need not
+    be uniform across conditions: a run can mix single-polarity samples with
+    dual-polarity ones.
+
+    When a sample carries several tokens they must form an unambiguous group:
+    either every token is the *same* raw filename (one raw file searched by
+    multiple jobs, e.g. a positive and a negative product search that
+    LipidSearch stores under one filename), or the filenames differ only by a
+    distinct polarity marker (a positive/negative file pair). A sample whose
+    files share a polarity marker but differ in name cannot be paired.
     """
-    sizes = {len(s.dataids) for s in samples}
-    if len(sizes) != 1:
-        raise AlignmentError(
-            "Alignment files did not pair evenly: biological samples have "
-            f"differing file counts {sorted(sizes)}. Check the raw filenames "
-            "follow a consistent positive/negative naming convention."
-        )
-
     fname_by_dataid = {dataid: filename for dataid, filename, _ in rows}
     for s in samples:
+        if len(s.dataids) < 2:
+            continue
+        fnames = [fname_by_dataid[d].strip() for d in s.dataids]
+        if len(set(fnames)) == 1:
+            continue  # one raw file, multiple search jobs — merge is unambiguous
         markers = []
-        for d in s.dataids:
-            stem = re.sub(r'\.[^.]+$', '', fname_by_dataid[d].strip())
+        for fn in fnames:
+            stem = re.sub(r'\.[^.]+$', '', fn)
             m = _POLARITY_SUFFIX_RE.search(stem)
             markers.append(m.group(1).lower() if m else '')
         if len(set(markers)) != len(markers):
             raise AlignmentError(
-                f"Sample '{s.base}' ({s.condition}) has files with duplicate "
-                f"polarity markers {markers}; cannot pair positive/negative."
+                f"Sample '{s.base}' ({s.condition}) groups files {fnames} that "
+                f"cannot be paired: their polarity markers {markers} are not "
+                "distinct. Check the raw filenames follow a consistent "
+                "positive/negative naming convention."
             )
 
 

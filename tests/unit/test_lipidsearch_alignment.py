@@ -89,22 +89,65 @@ class TestParseAlignment:
         with pytest.raises(AlignmentError, match="Target search job"):
             parse_alignment_file("*Parameters setting\nJob Name\tX\n")
 
-    def test_uneven_pairing_raises(self):
+    def test_mixed_cardinality_is_allowed(self):
+        # A run may mix a dual-polarity sample (a01) with a single-polarity one
+        # (a02); sample counts need not be uniform across a condition.
         rows = [
             ("a01n.raw", "s1-1", "A"),
             ("a01p.raw", "s1-2", "A"),
-            ("a02n.raw", "s1-3", "A"),   # unpaired singleton
+            ("a02n.raw", "s1-3", "A"),   # lone single-polarity sample
         ]
-        with pytest.raises(AlignmentError, match="differing file counts"):
-            parse_alignment_file(_alignment_text(rows))
+        m = parse_alignment_file(_alignment_text(rows))
+        assert [len(s.dataids) for s in m.samples] == [2, 1]
+        assert m.samples_per_condition == [2]
 
     def test_duplicate_polarity_marker_raises(self):
         rows = [
             ("s01n.raw", "s1-1", "A"),
-            ("s01_n.raw", "s1-2", "A"),   # same base, same polarity marker
+            ("s01_n.raw", "s1-2", "A"),   # same base, differing name, same marker
         ]
-        with pytest.raises(AlignmentError, match="duplicate"):
+        with pytest.raises(AlignmentError, match="not.*distinct"):
             parse_alignment_file(_alignment_text(rows))
+
+    def test_comma_delimited_alignment_parses(self):
+        # LipidSearch also exports the Alignment Setting file comma-delimited
+        # (single-polarity condition-grouped runs). Regression for the
+        # "No '*Target search job' rows found" error on such files.
+        head = (
+            "*Parameters setting,,,\n"
+            "Job Name,TestJob,,\n"
+            "NormalizeType,NONE,,\n"
+            ",,,\n"
+            "*Target search job,,,\n"
+        )
+        body = "".join(
+            f"TestJob,{fname},{dataid},{cond},uuid-{i}\n"
+            for i, (fname, dataid, cond) in enumerate([
+                ("A_01.raw", "s1-1", "Ctrl"),
+                ("A_02.raw", "s1-2", "Ctrl"),
+                ("B_01.raw", "s2-1", "Trt"),
+            ])
+        )
+        # Trailing padded-empty rows, as real exports contain.
+        tail = ",,,\n,,,\n"
+        m = parse_alignment_file(head + body + tail)
+        assert m.conditions == ["Ctrl", "Trt"]
+        assert m.samples_per_condition == [2, 1]
+        assert [len(s.dataids) for s in m.samples] == [1, 1, 1]
+
+    def test_same_raw_file_multiple_jobs_group_into_one_sample(self):
+        # One raw file searched by two jobs (two complementary polarity product
+        # searches) is stored under the same filename with two per-file tokens;
+        # they must merge into a single biological sample.
+        rows = [
+            ("ID_01.raw", "s1-1", "ID"),   # main polarity job
+            ("ID_01.raw", "s1-2", "ID"),   # other polarity job, same raw file
+            ("Blank_01.raw", "s2-1", "Blank"),
+        ]
+        m = parse_alignment_file(_alignment_text(rows))
+        assert [len(s.dataids) for s in m.samples] == [2, 1]
+        assert m.samples[0].dataids == ["s1-1", "s1-2"]
+        assert m.samples_per_condition == [1, 1]
 
 
 def _lipidmol_df():
@@ -150,6 +193,27 @@ class TestMergeDualPolarity:
         df = _lipidmol_df().drop(columns=['OriginalArea[s2-2]'])
         with pytest.raises(AlignmentError, match="not present in the data"):
             merge_dual_polarity(df, m)
+
+    def test_mixed_single_and_dual_polarity_merge(self):
+        # A run mixing a same-raw dual-job sample (ID) with a single-polarity
+        # sample (Blank): the ID pair coalesces, the single column passes
+        # through unchanged (NaN preserved).
+        rows = [
+            ("ID_01.raw", "s1-1", "ID"),
+            ("ID_01.raw", "s1-2", "ID"),
+            ("Blank_01.raw", "s2-1", "Blank"),
+        ]
+        m = parse_alignment_file(_alignment_text(rows))
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'FA(15:0)'],
+            'OriginalArea[s1-1]': [100.0, np.nan, 300.0],   # main polarity
+            'OriginalArea[s1-2]': [np.nan, 200.0, np.nan],  # other polarity
+            'OriginalArea[s2-1]': [10.0, np.nan, 30.0],     # single polarity
+        })
+        out = merge_dual_polarity(df, m)
+        assert out['intensity[s1]'].tolist() == [100.0, 200.0, 300.0]
+        # Single-polarity sample passes through, NaN preserved (not zero-filled).
+        assert out['intensity[s2]'].fillna(-1).tolist() == [10.0, -1.0, 30.0]
 
 
 class TestHasGroupedPerFileColumns:
