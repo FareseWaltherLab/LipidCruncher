@@ -539,7 +539,11 @@ def _display_pca_analysis(
             'Exclude Samples (optional)',
             experiment.full_samples_list,
             default=valid_restored if valid_restored else [],
-            help="Exclude suspected outliers from analysis.",
+            help=(
+                "Exclude suspected outliers, or technical runs you don't want "
+                "in the analysis (e.g. pooled QC, blanks). Excluded samples "
+                "are dropped from all downstream analyses."
+            ),
             key='pca_samples_remove'
         )
         StreamlitAdapter.save_widget_value('pca_samples_remove', '_preserved_pca_samples_remove')

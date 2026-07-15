@@ -167,8 +167,9 @@ def _handle_lipidsearch_alignment_upload(df: pd.DataFrame) -> None:
         return
 
     st.sidebar.info(
-        "LipidSearch 5.2 dual-polarity export detected — upload its "
-        "**Alignment Setting file** to pair positive/negative runs per sample."
+        "LipidSearch 5.2 condition-grouped export detected — upload its "
+        "**Alignment Setting file** to map each per-file column to its sample "
+        "and condition (and to pair positive/negative runs when present)."
     )
     aln = st.sidebar.file_uploader(
         "Alignment Setting file (required)",
