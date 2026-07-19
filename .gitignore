@@ -23,6 +23,7 @@ src/.streamlit/secrets.toml
 
 # Data CSV files (sample_datasets/ and test fixtures are already tracked and unaffected)
 *.csv
+!tests/fixtures/*.csv
 
 # Documentation working files
 *.docx
