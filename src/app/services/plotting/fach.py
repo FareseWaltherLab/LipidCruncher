@@ -260,8 +260,8 @@ class FACHPlotterService:
                 zmax=vmax,
                 colorbar=dict(
                     title='Proportion (%)',
-                    titlefont=dict(color='black'),
-                    tickfont=dict(color='black'),
+                    titlefont=dict(color='black', size=15),
+                    tickfont=dict(color='black', size=13),
                 ),
                 hovertemplate=(
                     'Double Bonds: %{x}<br>Carbon: %{y}'
@@ -285,8 +285,8 @@ class FACHPlotterService:
                 ticktext=db_values,
                 tickangle=0,
                 title_text='Double Bonds',
-                titlefont=dict(color='black'),
-                tickfont=dict(color='black'),
+                titlefont=dict(color='black', size=15),
+                tickfont=dict(color='black', size=13),
                 range=[-0.5, max_db + 1.5],
                 row=1,
                 col=col_idx,
@@ -294,12 +294,12 @@ class FACHPlotterService:
 
             # Y-axis: title only on first subplot
             y_kwargs = dict(
-                tickfont=dict(color='black'),
+                tickfont=dict(color='black', size=13),
                 range=[min_carbon - 0.5, max_carbon + 2.5],
             )
             if col_idx == 1:
                 y_kwargs['title_text'] = 'Carbon Chain Length'
-                y_kwargs['titlefont'] = dict(color='black')
+                y_kwargs['titlefont'] = dict(color='black', size=15)
             fig.update_yaxes(row=1, col=col_idx, **y_kwargs)
 
             col_idx += 1
@@ -307,7 +307,7 @@ class FACHPlotterService:
         # Style subplot titles
         for annotation in fig.layout.annotations:
             if annotation.text in data_dict:
-                annotation.font = dict(color='black', size=12)
+                annotation.font = dict(color='black', size=15)
 
         fig.update_layout(
             title='Fatty Acid Composition Heatmaps',

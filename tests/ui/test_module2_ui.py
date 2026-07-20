@@ -227,6 +227,24 @@ class TestPCA:
         at = qc_generic_app
         assert at.session_state['qc_pca_plot'] is not None
 
+    def test_pca_group_multiselect_exists(self, qc_generic_app):
+        """PCA whole-group exclusion multiselect exists with condition options."""
+        at = qc_generic_app
+        ms = at.multiselect(key='pca_groups_remove')
+        assert ms is not None
+        assert 'Control' in ms.options
+        assert 'Treatment' in ms.options
+
+    def test_pca_exclude_group_removes_all_its_samples(self, qc_generic_app):
+        """Excluding a whole group drops all its samples from downstream analyses."""
+        at = qc_generic_app
+        at.multiselect(key='pca_groups_remove').set_value(['Control']).run()
+        assert not at.exception
+        # Control = s1-s3, so all three are excluded.
+        assert set(at.session_state['qc_samples_removed']) == {'s1', 's2', 's3'}
+        text_values = [t.value for t in at.text]
+        assert any("qc_samples:3" in v for v in text_values)
+
     def test_pca_remove_samples_updates_state(self, qc_generic_app):
         """Removing samples updates qc_samples_removed in session state."""
         at = qc_generic_app

@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.services.plotting.standards_plotter import StandardsPlotterService, _COLORS
+from app.services.plotting._shared import generate_condition_color_mapping
 
 
 # =============================================================================
@@ -138,6 +139,10 @@ class TestSingleStandardPerClass:
         figs = StandardsPlotterService.create_consistency_plots(single_pc, SAMPLES_3)
         assert 'PC' in figs[0].layout.title.text
 
+    def test_layout_title_contains_full_standard_name(self, single_pc):
+        figs = StandardsPlotterService.create_consistency_plots(single_pc, SAMPLES_3)
+        assert 'PC(15:0)+D7:(s)' in figs[0].layout.title.text
+
     def test_layout_height(self, single_pc):
         figs = StandardsPlotterService.create_consistency_plots(single_pc, SAMPLES_3)
         assert figs[0].layout.height == 400
@@ -189,6 +194,13 @@ class TestMultipleStandardsPerClass:
         figs = StandardsPlotterService.create_consistency_plots(multi_pe, SAMPLES_3)
         names = [t.name for t in figs[0].data]
         assert names == ['PE(15:0)+D7:(s)', 'PE(17:0)+D7:(s)']
+
+    def test_subplot_titles_are_full_standard_names(self, multi_pe):
+        """Each standard's full name appears as its subplot title."""
+        figs = StandardsPlotterService.create_consistency_plots(multi_pe, SAMPLES_3)
+        annotation_texts = [a.text for a in figs[0].layout.annotations]
+        assert 'PE(15:0)+D7:(s)' in annotation_texts
+        assert 'PE(17:0)+D7:(s)' in annotation_texts
 
     def test_trace_colors_differ(self, multi_pe):
         figs = StandardsPlotterService.create_consistency_plots(multi_pe, SAMPLES_3)
@@ -370,6 +382,67 @@ class TestFontStyling:
 
     def test_yaxis_tickfont_color(self, single_fig):
         assert single_fig.layout.yaxis.tickfont.color == 'black'
+
+
+# =============================================================================
+# TestConditionColoring
+# =============================================================================
+
+
+class TestConditionColoring:
+    """Tests for grouping/coloring bars by condition (sample_conditions arg)."""
+
+    def test_single_standard_grouped_by_condition(self):
+        df = make_standards_df(
+            [('PC(15:0)+D7:(s)', 'PC', [100, 200, 300, 400])],
+            ['s1', 's2', 's3', 's4'],
+        )
+        conds = ['A', 'A', 'B', 'B']
+        figs = StandardsPlotterService.create_consistency_plots(
+            df, ['s1', 's2', 's3', 's4'], sample_conditions=conds,
+        )
+        fig = figs[0]
+        # One trace per unique condition, in first-seen order.
+        assert len(fig.data) == 2
+        assert [t.name for t in fig.data] == ['A', 'B']
+        # Bars grouped by condition, values aligned.
+        assert list(fig.data[0].x) == ['s1', 's2']
+        assert list(fig.data[0].y) == [100, 200]
+        assert list(fig.data[1].x) == ['s3', 's4']
+        # Colored by the shared condition palette.
+        cmap = generate_condition_color_mapping(['A', 'B'])
+        assert fig.data[0].marker.color == cmap['A']
+        assert fig.data[1].marker.color == cmap['B']
+        # Legend now labels conditions.
+        assert fig.layout.legend.title.text == 'Condition'
+
+    def test_multi_standard_legend_only_on_first_row(self):
+        df = make_standards_df(
+            [
+                ('PE(15:0)+D7:(s)', 'PE', [500, 600, 700, 800]),
+                ('PE(17:0)+D7:(s)', 'PE', [1, 2, 3, 4]),
+            ],
+            ['s1', 's2', 's3', 's4'],
+        )
+        conds = ['A', 'A', 'B', 'B']
+        figs = StandardsPlotterService.create_consistency_plots(
+            df, ['s1', 's2', 's3', 's4'], sample_conditions=conds,
+        )
+        fig = figs[0]
+        # 2 standards x 2 conditions = 4 traces.
+        assert len(fig.data) == 4
+        legend_flags = [t.showlegend for t in fig.data]
+        # First standard's condition traces show in legend; second's do not.
+        assert legend_flags == [True, True, False, False]
+
+    def test_default_path_still_uses_standard_legend(self):
+        df = make_standards_df(
+            [('PC(15:0)+D7:(s)', 'PC', [100, 200])],
+            SAMPLES_2,
+        )
+        figs = StandardsPlotterService.create_consistency_plots(df, SAMPLES_2)
+        assert figs[0].data[0].name == 'PC(15:0)+D7:(s)'
+        assert figs[0].layout.legend.title.text == 'Internal Standard'
 
 
 # =============================================================================

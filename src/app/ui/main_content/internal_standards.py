@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
-from app.ui.content import STANDARDS_EXTRACT_HELP, STANDARDS_COMPLETE_HELP
+from app.ui.content import STANDARDS_COMPLETE_HELP
 from app.ui.download_utils import csv_download_button
 
 
@@ -26,6 +26,11 @@ from app.ui.download_utils import csv_download_button
 def _fallback_standards(auto_detected_df: pd.DataFrame) -> pd.DataFrame:
     """Return auto-detected standards or empty DataFrame as fallback."""
     return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
+
+
+def _latch_expander_open() -> None:
+    """Keep the Manage Internal Standards expander open once the source changes."""
+    st.session_state._intsta_expander_open = True
 
 
 # =============================================================================
@@ -53,43 +58,87 @@ def _display_auto_detected_standards(auto_detected_df: pd.DataFrame) -> pd.DataF
         return pd.DataFrame()
 
 
+def _display_select_from_dataset(
+    cleaned_df: pd.DataFrame,
+    auto_detected_df: pd.DataFrame
+) -> pd.DataFrame:
+    """Pick lipids already present in the dataset to use as internal standards.
+
+    Reuses the extract-from-dataset logic (intensities are pulled directly from
+    the main dataset), but lets the user choose from a list instead of uploading
+    a CSV of names.
+
+    Returns the active standards DataFrame.
+    """
+    st.markdown("---")
+    st.markdown(
+        "Select one or more lipids already present in your dataset to use as "
+        "internal standards — useful for unlabeled spiked standards (e.g. "
+        "`PG 14:0_14:0`). Intensities are pulled directly from the data."
+    )
+
+    if cleaned_df is None or cleaned_df.empty or 'LipidMolec' not in cleaned_df.columns:
+        st.warning("No dataset available to select standards from.")
+        return pd.DataFrame()
+
+    all_lipids = sorted(cleaned_df['LipidMolec'].dropna().unique().tolist())
+
+    # Pre-select any previously chosen lipids that still exist
+    preserved = st.session_state.get('selected_dataset_standards', [])
+    default = [lip for lip in preserved if lip in all_lipids]
+
+    selected = st.multiselect(
+        "Lipids to use as internal standards:",
+        options=all_lipids,
+        default=default,
+        key='dataset_standards_select',
+    )
+    st.session_state.selected_dataset_standards = selected
+
+    if not selected:
+        st.info("Select at least one lipid to use as an internal standard.")
+        return pd.DataFrame()
+
+    try:
+        result = StandardsService.process_standards_file(
+            uploaded_df=pd.DataFrame({'LipidMolec': selected}),
+            cleaned_df=cleaned_df,
+            standards_in_dataset=True,
+        )
+    except ValueError as ve:
+        logger.error("Select-from-dataset standards error: %s", ve)
+        st.error(str(ve))
+        return _fallback_standards(auto_detected_df)
+
+    st.session_state.custom_standards_df = result.standards_df
+    st.session_state.custom_standards_mode = 'extract'
+
+    st.success(f"✓ Using {result.standards_count} selected standard(s) from the dataset.")
+    st.dataframe(result.standards_df, use_container_width=True)
+    csv_download_button(
+        result.standards_df, "selected_standards.csv", key="download_selected_standards"
+    )
+
+    return result.standards_df
+
+
 def _display_custom_upload(
     cleaned_df: pd.DataFrame,
     auto_detected_df: pd.DataFrame
 ) -> pd.DataFrame:
-    """Display custom standards upload UI (extract from dataset or external).
+    """Display external custom standards upload UI.
+
+    Uploads complete external standards (with their own intensity values).
+    To use standards already in the dataset, use the "Select from Dataset"
+    source instead.
 
     Returns the active standards DataFrame.
     """
     st.markdown("---")
 
-    # Mode selection: standards in dataset or external
-    st.markdown("**Are standards present in your main dataset?**")
+    current_mode = "complete"
 
-    # Restore widget value from preserved session state (lost during module navigation)
-    location_options = [
-        "Yes — Extract from dataset",
-        "No — Uploading complete standards data"
-    ]
-    if 'standards_location_radio' not in st.session_state:
-        preserved_mode = st.session_state.get('custom_standards_mode')
-        if preserved_mode == 'extract':
-            st.session_state.standards_location_radio = location_options[0]
-        elif preserved_mode == 'complete':
-            st.session_state.standards_location_radio = location_options[1]
-
-    standards_location = st.radio(
-        "Standards location:",
-        options=location_options,
-        key="standards_location_radio",
-        horizontal=True,
-        label_visibility="collapsed"
-    )
-
-    use_extract_mode = "Yes" in standards_location
-    current_mode = "extract" if use_extract_mode else "complete"
-
-    # Clear custom standards if user switched between upload modes
+    # Clear standards carried over from a different source/mode (e.g. extract)
     if (st.session_state.custom_standards_mode is not None and
         st.session_state.custom_standards_mode != current_mode and
         st.session_state.custom_standards_df is not None):
@@ -97,11 +146,7 @@ def _display_custom_upload(
         st.session_state.custom_standards_mode = None
 
     # Format guidance
-    st.markdown("---")
-    if use_extract_mode:
-        st.markdown(STANDARDS_EXTRACT_HELP)
-    else:
-        st.markdown(STANDARDS_COMPLETE_HELP)
+    st.markdown(STANDARDS_COMPLETE_HELP)
 
     # File uploader
     uploaded_file = st.file_uploader(
@@ -118,16 +163,14 @@ def _display_custom_upload(
     if uploaded_file is not None:
         return _process_uploaded_standards(
             uploaded_file, cleaned_df, auto_detected_df,
-            use_extract_mode, current_mode
+            use_extract_mode=False, current_mode=current_mode,
         )
 
-    # No file uploaded yet, use auto-detected as fallback
-    if auto_detected_df is not None and not auto_detected_df.empty:
-        st.info("Upload a CSV file or switch to Automatic Detection.")
-        return auto_detected_df
-    else:
-        st.warning("No standards available. Please upload a standards file.")
-        return pd.DataFrame()
+    # No file uploaded yet — do not fall back to auto-detected standards.
+    # In this mode the user is providing their own standards, so nothing is
+    # active until they upload (or switch back to Automatic Detection).
+    st.info("Upload a standards CSV, or switch to Automatic Detection to use detected standards.")
+    return pd.DataFrame()
 
 
 def _display_preserved_custom_standards() -> pd.DataFrame:
@@ -244,7 +287,14 @@ def display_manage_internal_standards(
     """
     active_standards_df = pd.DataFrame()
 
-    with st.expander("⚙️ Manage Internal Standards", expanded=False):
+    # Keep the expander open once the user starts configuring standards, so the
+    # rerun from changing the source (in either direction) doesn't collapse it
+    # mid-task. Latched by the source radio's on_change (see below); starts
+    # collapsed on first load.
+    with st.expander(
+        "⚙️ Manage Internal Standards",
+        expanded=st.session_state.get('_intsta_expander_open', False),
+    ):
         st.markdown("""
 Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
 `ISTD`/`IS` markers in class names, and SPLASH LIPIDOMIX® patterns.
@@ -264,7 +314,11 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
         st.markdown("##### 🏷️ Standards Source")
 
         # Restore widget value from preserved session state (lost during module navigation)
-        standards_options = ["Automatic Detection", "Upload Custom Standards"]
+        standards_options = [
+            "Automatic Detection",
+            "Select from Dataset",
+            "Upload Custom Standards",
+        ]
         if 'standards_source_radio' not in st.session_state:
             preserved_source = st.session_state.get('standards_source')
             if preserved_source in standards_options:
@@ -275,12 +329,15 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
             standards_options,
             horizontal=True,
             key="standards_source_radio",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            on_change=_latch_expander_open,
         )
         st.session_state.standards_source = standards_source
 
         if standards_source == "Automatic Detection":
             active_standards_df = _display_auto_detected_standards(auto_detected_df)
+        elif standards_source == "Select from Dataset":
+            active_standards_df = _display_select_from_dataset(cleaned_df, auto_detected_df)
         else:
             active_standards_df = _display_custom_upload(cleaned_df, auto_detected_df)
 

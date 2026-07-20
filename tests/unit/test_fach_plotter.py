@@ -627,6 +627,15 @@ class TestCreateFachHeatmapLayout:
         fig = FACHPlotterService.create_fach_heatmap(fach_data)
         assert fig.layout.xaxis.title.text == 'Double Bonds'
 
+    def test_axis_title_fonts_enlarged(self, simple_df, experiment_2x3):
+        """Axis titles use enlarged fonts for readability."""
+        fach_data = FACHPlotterService.prepare_fach_data(
+            simple_df, experiment_2x3, 'PC', ['Control'],
+        )
+        fig = FACHPlotterService.create_fach_heatmap(fach_data)
+        assert fig.layout.xaxis.title.font.size == 15
+        assert fig.layout.yaxis.title.font.size == 15
+
     def test_yaxis_title_only_on_first(self, simple_df, experiment_2x3):
         fach_data = FACHPlotterService.prepare_fach_data(
             simple_df, experiment_2x3, 'PC', ['Control', 'Treatment'],

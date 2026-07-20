@@ -60,10 +60,19 @@ def display_standards_consistency_plots(
         st.warning("No samples available for selected conditions.")
         return
 
+    # Condition label per selected sample (index-aligned) so bars can be
+    # grouped and colored by condition/group.
+    cond_by_sample = {}
+    for cond, samps in zip(conditions, experiment.individual_samples_list):
+        for s in samps:
+            cond_by_sample[s] = cond
+    sample_conditions = [cond_by_sample[s] for s in selected_samples_ordered]
+
     # Generate and display plots
     plots = StandardsPlotterService.create_consistency_plots(
         intsta_df,
-        selected_samples_ordered
+        selected_samples_ordered,
+        sample_conditions=sample_conditions,
     )
 
     if plots:

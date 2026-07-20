@@ -69,13 +69,14 @@ class TestZeroFiltering:
 class TestInternalStandards:
     """Tests for internal standards management UI."""
 
-    def test_standards_source_radio_has_two_options(self, intsta_with_standards_app):
-        """Standards source radio has Automatic Detection and Upload Custom options."""
+    def test_standards_source_radio_has_three_options(self, intsta_with_standards_app):
+        """Standards source radio has Automatic, Select from Dataset, and Upload options."""
         at = intsta_with_standards_app
         radio = at.radio(key='standards_source_radio')
         assert radio is not None
-        assert len(radio.options) == 2
+        assert len(radio.options) == 3
         assert 'Automatic Detection' in radio.options
+        assert 'Select from Dataset' in radio.options
         assert 'Upload Custom Standards' in radio.options
 
     def test_auto_detection_default_selected(self, intsta_with_standards_app):
@@ -83,6 +84,29 @@ class TestInternalStandards:
         at = intsta_with_standards_app
         radio = at.radio(key='standards_source_radio')
         assert radio.value == 'Automatic Detection'
+
+    def test_select_from_dataset_extracts_chosen_lipid(self, intsta_with_standards_app):
+        """Selecting an existing dataset lipid uses it as a standard (no CSV upload)."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        # Names in standardized form, as produced by data ingestion.
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+
+        at.radio(key='standards_source_radio').set_value('Select from Dataset').run()
+        ms = at.multiselect(key='dataset_standards_select')
+        assert ms is not None
+        assert 'PC 32:1' in ms.options
+
+        ms.set_value(['PC 32:1']).run()
+        assert not at.exception
+        text_values = [t.value for t in at.text]
+        assert any('standards_count:1' in v for v in text_values)
 
     def test_auto_detected_standards_displayed(self, intsta_with_standards_app):
         """Auto-detected standards are displayed with count."""
@@ -101,14 +125,36 @@ class TestInternalStandards:
         warning_values = [w.value for w in at.warning]
         assert any("No internal standards" in v for v in warning_values)
 
-    def test_switch_to_custom_upload(self, intsta_with_standards_app):
-        """Switching to Upload Custom Standards shows location radio."""
+    def test_switch_to_custom_upload_no_extract_mode(self, intsta_with_standards_app):
+        """Upload Custom Standards no longer offers the extract-from-dataset mode.
+
+        Extract-from-dataset is now handled by the separate "Select from Dataset"
+        source, so the location radio should be gone.
+        """
         at = intsta_with_standards_app
         at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
-        # Standards location radio should now appear
-        radio = at.radio(key='standards_location_radio')
-        assert radio is not None
-        assert len(radio.options) == 2
+        assert not at.exception
+        location_radios = [r for r in at.radio if r.key == 'standards_location_radio']
+        assert location_radios == []
+
+    def test_upload_custom_no_file_defaults_to_empty(self, intsta_with_standards_app):
+        """Upload Custom Standards does not fall back to auto-detected standards."""
+        at = intsta_with_standards_app
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        assert not at.exception
+        text_values = [t.value for t in at.text]
+        # No active standards until the user uploads a file.
+        assert any('no_standards' in v for v in text_values)
+        assert not any('standards_count' in v for v in text_values)
+
+    def test_expander_latches_open_across_source_switches(self, intsta_with_standards_app):
+        """Changing the source (either direction) keeps the expander open."""
+        at = intsta_with_standards_app
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        assert at.session_state['_intsta_expander_open'] is True
+        # Switching back to Automatic Detection must not collapse it.
+        at.radio(key='standards_source_radio').set_value('Automatic Detection').run()
+        assert at.session_state['_intsta_expander_open'] is True
 
 
 # =============================================================================

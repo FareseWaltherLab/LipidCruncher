@@ -28,7 +28,9 @@ from app.services.statistical_testing import (
 
 CHART_HEIGHT = 600
 CHART_WIDTH = 800
-MARKER_SIZE = 5
+MARKER_SIZE = 7
+MARKER_LINE = dict(width=1, color='black')
+LEGEND_FONT_SIZE = 14
 THRESHOLD_LINE_WIDTH = 2
 THRESHOLD_LINE_COLOR = 'red'
 THRESHOLD_LINE_DASH = 'dash'
@@ -228,7 +230,7 @@ class VolcanoPlotterService:
                 y=class_df[p_col],
                 mode='markers',
                 name=class_name,
-                marker=dict(color=color, size=MARKER_SIZE),
+                marker=dict(color=color, size=MARKER_SIZE, line=MARKER_LINE),
                 text=class_df['LipidMolec'],
                 customdata=np.column_stack((
                     class_df[p_raw_col],
@@ -294,7 +296,7 @@ class VolcanoPlotterService:
             ),
             plot_bgcolor='white',
             paper_bgcolor='white',
-            legend=dict(font=dict(size=10, color='black')),
+            legend=dict(font=dict(size=LEGEND_FONT_SIZE, color='black')),
             height=CHART_HEIGHT,
             margin=dict(t=80, r=50, b=50, l=50),
         )
@@ -348,7 +350,7 @@ class VolcanoPlotterService:
                 y=class_df['Log10MeanControl'],
                 mode='markers',
                 name=class_name,
-                marker=dict(color=color, size=MARKER_SIZE),
+                marker=dict(color=color, size=MARKER_SIZE, line=MARKER_LINE),
                 text=class_df['LipidMolec'],
                 hovertemplate=(
                     '<b>Lipid:</b> %{text}<br>'
@@ -380,7 +382,7 @@ class VolcanoPlotterService:
             ),
             plot_bgcolor='white',
             paper_bgcolor='white',
-            legend=dict(font=dict(size=10, color='black')),
+            legend=dict(font=dict(size=LEGEND_FONT_SIZE, color='black')),
             height=CHART_HEIGHT,
             margin=dict(t=50, r=50, b=50, l=50),
         )

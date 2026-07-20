@@ -225,6 +225,14 @@ class TestPlotPCA:
         fig, _ = PCAPlotterService.plot_pca(pca_df, samples, conditions_list)
         assert 'PCA' in fig.layout.title.text
 
+    def test_sample_markers_have_black_outline(self, pca_df, samples, conditions_list):
+        fig, _ = PCAPlotterService.plot_pca(pca_df, samples, conditions_list)
+        scatter_traces = [t for t in fig.data if t.mode == 'markers']
+        assert scatter_traces
+        for t in scatter_traces:
+            assert t.marker.line.color == 'black'
+            assert t.marker.line.width == 1
+
     def test_white_background(self, pca_df, samples, conditions_list):
         fig, _ = PCAPlotterService.plot_pca(pca_df, samples, conditions_list)
         assert fig.layout.plot_bgcolor == 'white'

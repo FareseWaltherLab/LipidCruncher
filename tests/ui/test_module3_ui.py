@@ -514,7 +514,14 @@ class TestVolcanoUI:
         assert p_input is not None
         assert fc_input is not None
         assert p_input.value == 0.05
-        assert fc_input.value == 2.0
+        assert fc_input.value == 1.5
+
+    def test_volcano_correction_default_uncorrected(self, analysis_generic_app):
+        """Multiple-testing correction defaults to uncorrected (relaxed default)."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        correction = at.selectbox(key='volcano_correction')
+        assert correction is not None
+        assert correction.value == 'uncorrected'
 
     def test_volcano_stores_figure_in_session(self, analysis_generic_app):
         """Volcano plot figure is stored in session state."""
