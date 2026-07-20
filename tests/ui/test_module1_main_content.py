@@ -137,6 +137,51 @@ class TestInternalStandards:
         location_radios = [r for r in at.radio if r.key == 'standards_location_radio']
         assert location_radios == []
 
+    def test_additive_picker_shown_under_auto_detection(self, intsta_with_standards_app):
+        """Automatic Detection offers an additive dataset-standards picker."""
+        at = intsta_with_standards_app
+        ms = at.multiselect(key='additional_istd_select')
+        assert ms is not None
+
+    def test_additional_standards_add_to_auto_detected(self, intsta_with_standards_app):
+        """Dataset standards supplement (not replace) the auto-detected ones."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        # Names in standardized form, as produced by data ingestion.
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.run()
+
+        # Fixture auto-detects 2 standards; adding 1 more should give 3.
+        at.multiselect(key='additional_istd_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        text_values = [t.value for t in at.text]
+        assert any('standards_count:3' in v for v in text_values)
+
+    def test_added_standard_removed_from_main_dataset(self, intsta_with_standards_app):
+        """A lipid promoted to a standard is dropped from the analysed species."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.run()
+
+        at.multiselect(key='additional_istd_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        remaining = at.session_state['cleaned_df']['LipidMolec'].tolist()
+        assert 'PC 32:1' not in remaining
+        assert 'PC 30:0' in remaining and 'PE 34:2' in remaining
+
     def test_upload_custom_no_file_defaults_to_empty(self, intsta_with_standards_app):
         """Upload Custom Standards does not fall back to auto-detected standards."""
         at = intsta_with_standards_app
@@ -147,6 +192,91 @@ class TestInternalStandards:
         assert any('no_standards' in v for v in text_values)
         assert not any('standards_count' in v for v in text_values)
 
+    def test_additive_picker_latches_expander_open(self, intsta_with_standards_app):
+        """Adding standards from within Automatic Detection must not collapse it.
+
+        Regression: the latch previously only fired on the source radio, so
+        using the additive picker (without ever changing source) collapsed the
+        expander.
+        """
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.run()
+        # Source radio untouched — the latch must still be unset here.
+        assert '_intsta_expander_open' not in at.session_state
+
+        at.multiselect(key='additional_istd_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        assert at.session_state['_intsta_expander_open'] is True
+
+    def test_exclusive_picker_latches_expander_open(self, intsta_with_standards_app):
+        """The Select-from-Dataset picker also latches the expander open."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1'],
+            'ClassKey': ['PC', 'PC'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.radio(key='standards_source_radio').set_value('Select from Dataset').run()
+        # Reset the latch so we prove the picker itself sets it.
+        at.session_state['_intsta_expander_open'] = False
+        at.multiselect(key='dataset_standards_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        assert at.session_state['_intsta_expander_open'] is True
+
+    def test_conditions_multiselect_latches_expander_open(self, intsta_with_standards_app):
+        """The consistency-plot condition filter renders inside the expander too."""
+        at = intsta_with_standards_app
+        ms = at.multiselect(key='standards_conditions_select')
+        assert ms is not None
+        assert '_intsta_expander_open' not in at.session_state
+        ms.set_value(['Control']).run()
+        assert not at.exception
+        assert at.session_state['_intsta_expander_open'] is True
+
+    def test_select_from_dataset_removes_lipid_from_main_dataset(self, intsta_with_standards_app):
+        """Exclusive Select-from-Dataset also drops the lipid from analysed species."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.radio(key='standards_source_radio').set_value('Select from Dataset').run()
+        at.multiselect(key='dataset_standards_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        remaining = at.session_state['cleaned_df']['LipidMolec'].tolist()
+        assert 'PC 32:1' not in remaining
+        assert 'PC 30:0' in remaining and 'PE 34:2' in remaining
+
+    def test_clear_custom_standards_button_latches_expander_open(self, intsta_with_standards_app):
+        """The Clear Custom Standards button latches the expander open."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        at.session_state['custom_standards_df'] = pd.DataFrame({
+            'LipidMolec': ['STD 1'], 'ClassKey': ['PC'], 'intensity[s1]': [1.0],
+        })
+        at.session_state['custom_standards_mode'] = 'complete'
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        at.session_state['_intsta_expander_open'] = False
+        at.button(key='clear_custom_standards').click().run()
+        assert not at.exception
+        assert at.session_state['_intsta_expander_open'] is True
+
     def test_expander_latches_open_across_source_switches(self, intsta_with_standards_app):
         """Changing the source (either direction) keeps the expander open."""
         at = intsta_with_standards_app
@@ -155,6 +285,46 @@ class TestInternalStandards:
         # Switching back to Automatic Detection must not collapse it.
         at.radio(key='standards_source_radio').set_value('Automatic Detection').run()
         assert at.session_state['_intsta_expander_open'] is True
+
+
+# =============================================================================
+# Standards Combination Tests
+# =============================================================================
+
+class TestCombineStandards:
+    """Unit tests for merging auto-detected and dataset-picked standards."""
+
+    @staticmethod
+    def _df(names):
+        import pandas as pd
+        return pd.DataFrame({
+            'LipidMolec': names,
+            'ClassKey': ['PC'] * len(names),
+            'intensity[s1]': [1.0] * len(names),
+        })
+
+    def test_union_of_both_sets(self):
+        from app.ui.main_content.internal_standards import _combine_standards
+        out = _combine_standards(self._df(['A', 'B']), self._df(['C']))
+        assert out['LipidMolec'].tolist() == ['A', 'B', 'C']
+
+    def test_deduplicates_overlapping_standard(self):
+        from app.ui.main_content.internal_standards import _combine_standards
+        out = _combine_standards(self._df(['A', 'B']), self._df(['B', 'C']))
+        assert out['LipidMolec'].tolist() == ['A', 'B', 'C']
+        assert len(out) == 3
+
+    def test_empty_base_returns_added(self):
+        import pandas as pd
+        from app.ui.main_content.internal_standards import _combine_standards
+        out = _combine_standards(pd.DataFrame(), self._df(['A']))
+        assert out['LipidMolec'].tolist() == ['A']
+
+    def test_empty_added_returns_base(self):
+        import pandas as pd
+        from app.ui.main_content.internal_standards import _combine_standards
+        out = _combine_standards(self._df(['A']), pd.DataFrame())
+        assert out['LipidMolec'].tolist() == ['A']
 
 
 # =============================================================================

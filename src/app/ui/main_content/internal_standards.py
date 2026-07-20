@@ -17,6 +17,7 @@ from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_COMPLETE_HELP
 from app.ui.download_utils import csv_download_button
+from app.ui.st_helpers import keep_intsta_expander_open, INTSTA_EXPANDER_KEY
 
 
 # =============================================================================
@@ -28,19 +29,123 @@ def _fallback_standards(auto_detected_df: pd.DataFrame) -> pd.DataFrame:
     return auto_detected_df if auto_detected_df is not None else pd.DataFrame()
 
 
-def _latch_expander_open() -> None:
-    """Keep the Manage Internal Standards expander open once the source changes."""
-    st.session_state._intsta_expander_open = True
+# Every interactive widget inside the Manage Internal Standards expander uses
+# this as its on_change/on_click, so working in the section never collapses it.
+_latch_expander_open = keep_intsta_expander_open
+
+
+# =============================================================================
+# Dataset-sourced standards helpers
+# =============================================================================
+
+def _extract_dataset_standards(cleaned_df: pd.DataFrame, selected_lipids: list):
+    """Build a standards DataFrame from lipids already in the dataset.
+
+    Returns (standards_df, error_message). Exactly one is non-None.
+    """
+    try:
+        result = StandardsService.process_standards_file(
+            uploaded_df=pd.DataFrame({'LipidMolec': selected_lipids}),
+            cleaned_df=cleaned_df,
+            standards_in_dataset=True,
+        )
+        return result.standards_df, None
+    except ValueError as ve:
+        logger.error("Dataset standards extraction error: %s", ve)
+        return None, str(ve)
+
+
+def _remove_dataset_standards_from_main(
+    cleaned_df: pd.DataFrame,
+    standards_df: pd.DataFrame,
+) -> list:
+    """Drop dataset-sourced standards from the main dataset.
+
+    A lipid used as an internal standard should not also be analysed as a
+    regular species, so it is removed from ``cleaned_df``. Safe to re-run:
+    ``cleaned_df`` is rebuilt from the zero-filtering step on every rerun.
+
+    Returns the list of removed lipid names.
+    """
+    if standards_df is None or standards_df.empty:
+        return []
+    if cleaned_df is None or cleaned_df.empty:
+        return []
+
+    filtered_df, removed = StandardsService.remove_standards_from_dataset(
+        cleaned_df, standards_df
+    )
+    if removed:
+        st.session_state.cleaned_df = filtered_df
+    return removed
+
+
+def _combine_standards(base_df: pd.DataFrame, added_df: pd.DataFrame) -> pd.DataFrame:
+    """Union two standards DataFrames, de-duplicating on LipidMolec."""
+    if base_df is None or base_df.empty:
+        return added_df if added_df is not None else pd.DataFrame()
+    if added_df is None or added_df.empty:
+        return base_df
+
+    combined = pd.concat([base_df, added_df], ignore_index=True)
+    return combined.drop_duplicates(subset=['LipidMolec'], keep='first').reset_index(drop=True)
+
+
+def _display_additional_dataset_standards(cleaned_df: pd.DataFrame) -> pd.DataFrame:
+    """Optional picker to add extra standards from the dataset.
+
+    Additive: these supplement whatever standards are already active.
+    Returns the added standards DataFrame (empty if none selected).
+    """
+    st.markdown("---")
+    st.markdown("**➕ Add additional internal standards from the dataset**")
+    st.caption(
+        "For standards spiked into your samples that auto-detection can't "
+        "recognize (e.g. unlabeled standards like `PG 14:0_14:0`). Selected "
+        "lipids are used as standards and removed from the analysed species."
+    )
+
+    if cleaned_df is None or cleaned_df.empty or 'LipidMolec' not in cleaned_df.columns:
+        st.info("No dataset available to select additional standards from.")
+        return pd.DataFrame()
+
+    all_lipids = sorted(cleaned_df['LipidMolec'].dropna().unique().tolist())
+
+    preserved = st.session_state.get('additional_dataset_standards', [])
+    default = [lip for lip in preserved if lip in all_lipids]
+
+    selected = st.multiselect(
+        "Additional standards from dataset:",
+        options=all_lipids,
+        default=default,
+        key='additional_istd_select',
+        on_change=_latch_expander_open,
+    )
+    st.session_state.additional_dataset_standards = selected
+
+    if not selected:
+        return pd.DataFrame()
+
+    added_df, error = _extract_dataset_standards(cleaned_df, selected)
+    if error:
+        st.error(error)
+        return pd.DataFrame()
+
+    st.success(f"✓ Added {len(added_df)} standard(s) from the dataset.")
+    return added_df
 
 
 # =============================================================================
 # Sub-Components
 # =============================================================================
 
-def _display_auto_detected_standards(auto_detected_df: pd.DataFrame) -> pd.DataFrame:
-    """Display auto-detected standards with download button.
+def _display_auto_detected_standards(
+    auto_detected_df: pd.DataFrame,
+    cleaned_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Display auto-detected standards, plus an optional additive picker.
 
-    Returns the active standards DataFrame.
+    Returns the active standards DataFrame (auto-detected + any added).
     """
     # Clear custom standards when switching to automatic
     if st.session_state.custom_standards_df is not None:
@@ -51,11 +156,37 @@ def _display_auto_detected_standards(auto_detected_df: pd.DataFrame) -> pd.DataF
         st.success(f"✓ Found {len(auto_detected_df)} standards")
         st.dataframe(auto_detected_df, use_container_width=True)
 
-        csv_download_button(auto_detected_df, "detected_standards.csv", key="download_auto_standards")
-        return auto_detected_df
+        csv_download_button(
+            auto_detected_df, "detected_standards.csv",
+            key="download_auto_standards", on_click=_latch_expander_open,
+        )
+        base_df = auto_detected_df
     else:
         st.warning("No internal standards automatically detected in dataset.")
-        return pd.DataFrame()
+        base_df = pd.DataFrame()
+
+    # Additional standards picked from the dataset (additive)
+    added_df = _display_additional_dataset_standards(cleaned_df)
+    if added_df is None or added_df.empty:
+        return base_df
+
+    removed = _remove_dataset_standards_from_main(cleaned_df, added_df)
+    if removed:
+        preview = ', '.join(removed[:5])
+        more = f" and {len(removed) - 5} more" if len(removed) > 5 else ""
+        st.info(
+            f"Removed {len(removed)} lipid(s) from the analysed species "
+            f"(now used as standards): {preview}{more}"
+        )
+
+    combined_df = _combine_standards(base_df, added_df)
+    st.markdown("###### Active internal standards")
+    st.dataframe(combined_df, use_container_width=True)
+    csv_download_button(
+        combined_df, "active_standards.csv",
+        key="download_combined_standards", on_click=_latch_expander_open,
+    )
+    return combined_df
 
 
 def _display_select_from_dataset(
@@ -92,6 +223,7 @@ def _display_select_from_dataset(
         options=all_lipids,
         default=default,
         key='dataset_standards_select',
+        on_change=_latch_expander_open,
     )
     st.session_state.selected_dataset_standards = selected
 
@@ -99,27 +231,31 @@ def _display_select_from_dataset(
         st.info("Select at least one lipid to use as an internal standard.")
         return pd.DataFrame()
 
-    try:
-        result = StandardsService.process_standards_file(
-            uploaded_df=pd.DataFrame({'LipidMolec': selected}),
-            cleaned_df=cleaned_df,
-            standards_in_dataset=True,
-        )
-    except ValueError as ve:
-        logger.error("Select-from-dataset standards error: %s", ve)
-        st.error(str(ve))
+    standards_df, error = _extract_dataset_standards(cleaned_df, selected)
+    if error:
+        st.error(error)
         return _fallback_standards(auto_detected_df)
 
-    st.session_state.custom_standards_df = result.standards_df
+    st.session_state.custom_standards_df = standards_df
     st.session_state.custom_standards_mode = 'extract'
 
-    st.success(f"✓ Using {result.standards_count} selected standard(s) from the dataset.")
-    st.dataframe(result.standards_df, use_container_width=True)
+    removed = _remove_dataset_standards_from_main(cleaned_df, standards_df)
+    if removed:
+        preview = ', '.join(removed[:5])
+        more = f" and {len(removed) - 5} more" if len(removed) > 5 else ""
+        st.info(
+            f"Removed {len(removed)} lipid(s) from the analysed species "
+            f"(now used as standards): {preview}{more}"
+        )
+
+    st.success(f"✓ Using {len(standards_df)} selected standard(s) from the dataset.")
+    st.dataframe(standards_df, use_container_width=True)
     csv_download_button(
-        result.standards_df, "selected_standards.csv", key="download_selected_standards"
+        standards_df, "selected_standards.csv",
+        key="download_selected_standards", on_click=_latch_expander_open,
     )
 
-    return result.standards_df
+    return standards_df
 
 
 def _display_custom_upload(
@@ -152,7 +288,8 @@ def _display_custom_upload(
     uploaded_file = st.file_uploader(
         "Upload standards CSV",
         type=['csv'],
-        key="standards_file_uploader"
+        key="standards_file_uploader",
+        on_change=_latch_expander_open,
     )
 
     # Show preserved custom standards if file uploader is empty
@@ -178,7 +315,11 @@ def _display_preserved_custom_standards() -> pd.DataFrame:
     st.success(f"✓ Using {len(st.session_state.custom_standards_df)} custom standards")
     st.dataframe(st.session_state.custom_standards_df, use_container_width=True)
 
-    if st.button("Clear Custom Standards", key="clear_custom_standards"):
+    if st.button(
+        "Clear Custom Standards",
+        key="clear_custom_standards",
+        on_click=_latch_expander_open,
+    ):
         st.session_state.custom_standards_df = None
         st.session_state.custom_standards_mode = None
         st.session_state.standards_source = "Automatic Detection"
@@ -234,7 +375,10 @@ def _process_uploaded_standards(
         st.success(f"✓ Loaded {result.standards_count} custom standards (mode: {result.source_mode})")
         st.dataframe(result.standards_df, use_container_width=True)
 
-        csv_download_button(result.standards_df, "custom_standards.csv", key="download_custom_standards")
+        csv_download_button(
+            result.standards_df, "custom_standards.csv",
+            key="download_custom_standards", on_click=_latch_expander_open,
+        )
 
         return result.standards_df
 
@@ -287,13 +431,12 @@ def display_manage_internal_standards(
     """
     active_standards_df = pd.DataFrame()
 
-    # Keep the expander open once the user starts configuring standards, so the
-    # rerun from changing the source (in either direction) doesn't collapse it
-    # mid-task. Latched by the source radio's on_change (see below); starts
-    # collapsed on first load.
+    # Keep the expander open once the user starts configuring standards, so a
+    # rerun from any widget in this section doesn't collapse it mid-task.
+    # Latched by each widget's on_change/on_click; starts collapsed on first load.
     with st.expander(
         "⚙️ Manage Internal Standards",
-        expanded=st.session_state.get('_intsta_expander_open', False),
+        expanded=st.session_state.get(INTSTA_EXPANDER_KEY, False),
     ):
         st.markdown("""
 Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
@@ -335,7 +478,9 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
         st.session_state.standards_source = standards_source
 
         if standards_source == "Automatic Detection":
-            active_standards_df = _display_auto_detected_standards(auto_detected_df)
+            active_standards_df = _display_auto_detected_standards(
+                auto_detected_df, cleaned_df
+            )
         elif standards_source == "Select from Dataset":
             active_standards_df = _display_select_from_dataset(cleaned_df, auto_detected_df)
         else:

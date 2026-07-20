@@ -19,6 +19,18 @@ from app.ui.download_utils import (
 )
 
 
+# Session key controlling whether the "Manage Internal Standards" expander
+# stays open. Streamlit re-applies `expanded=` on every rerun, so every widget
+# inside that expander must latch this flag (via on_change/on_click) or the
+# expander collapses mid-task. New widgets added there need it too.
+INTSTA_EXPANDER_KEY = '_intsta_expander_open'
+
+
+def keep_intsta_expander_open() -> None:
+    """Latch the Manage Internal Standards expander open across reruns."""
+    st.session_state[INTSTA_EXPANDER_KEY] = True
+
+
 def display_export_buttons(
     fig,
     df: pd.DataFrame,

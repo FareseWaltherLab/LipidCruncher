@@ -6,6 +6,7 @@ import streamlit as st
 
 from ..models.experiment import ExperimentConfig
 from ..services.plotting.standards_plotter import StandardsPlotterService
+from .st_helpers import keep_intsta_expander_open
 
 
 def display_standards_consistency_plots(
@@ -39,7 +40,10 @@ def display_standards_consistency_plots(
         'Select conditions:',
         conditions,
         default=conditions,
-        key='standards_conditions_select'
+        key='standards_conditions_select',
+        # This renders inside the Manage Internal Standards expander; latch it
+        # open so filtering conditions doesn't collapse the section.
+        on_change=keep_intsta_expander_open,
     )
 
     if not selected_conditions:
