@@ -496,7 +496,7 @@ def _display_normalization_results(result) -> None:
     if result and result.success:
         st.markdown("##### 📊 Final Normalized Data")
         if result.normalized_df is not None:
-            st.dataframe(result.normalized_df, use_container_width=True)
+            st.dataframe(result.normalized_df, width='stretch')
             csv_download_button(result.normalized_df, "normalized_data.csv", key="download_normalized_data")
     elif result:
         for error in result.validation_errors:

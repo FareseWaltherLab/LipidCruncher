@@ -139,7 +139,7 @@ def _display_cluster_composition(
     )
 
     if composition_df is not None:
-        st.dataframe(composition_df, use_container_width=True)
+        st.dataframe(composition_df, width='stretch')
         st.session_state.analysis_heatmap_clusters = composition_df
 
         csv_download_button(

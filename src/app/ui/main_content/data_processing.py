@@ -436,5 +436,5 @@ def display_final_filtered_data(cleaned_df: pd.DataFrame):
         st.session_state.continuation_df = cleaned_df
 
     st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
-    st.dataframe(cleaned_df, use_container_width=True)
+    st.dataframe(cleaned_df, width='stretch')
     csv_download_button(cleaned_df, "final_filtered_data.csv", key="download_filtered_data")

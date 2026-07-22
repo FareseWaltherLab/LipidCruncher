@@ -76,7 +76,7 @@ def _display_consolidated_lipids(
 
     summary_df = pd.DataFrame(summary_rows)
     summary_df = summary_df.sort_values('Consolidated', ascending=False)
-    st.dataframe(summary_df, use_container_width=True)
+    st.dataframe(summary_df, width='stretch')
 
     st.caption(
         "Note: True single-chain classes (LPC, LPE, LPA, LPG, LPI, LPS, "

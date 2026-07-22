@@ -138,7 +138,7 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> Tuple[bool, Op
     mapping_df = st.session_state.column_mapping.copy()
     st.sidebar.dataframe(
         mapping_df.reset_index(drop=True),
-        use_container_width=True
+        width='stretch'
     )
 
     # MS-DIAL: Optional override for sample column detection
@@ -171,7 +171,7 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> Tuple[bool, Op
                 st.write("**Updated column mapping:**")
                 st.dataframe(
                     st.session_state.column_mapping.reset_index(drop=True),
-                    use_container_width=True
+                    width='stretch'
                 )
 
                 return True, new_df

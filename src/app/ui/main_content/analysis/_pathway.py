@@ -157,4 +157,4 @@ def _display_pathway_viz(
 
         st.markdown(f"**Data Summary:** Comparing {experimental} to {control}")
         if summary_rows:
-            st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
+            st.dataframe(pd.DataFrame(summary_rows), width='stretch')

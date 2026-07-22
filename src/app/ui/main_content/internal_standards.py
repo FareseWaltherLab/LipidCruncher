@@ -44,7 +44,7 @@ def _display_auto_detected_standards(auto_detected_df: pd.DataFrame) -> pd.DataF
 
     if auto_detected_df is not None and not auto_detected_df.empty:
         st.success(f"✓ Found {len(auto_detected_df)} standards")
-        st.dataframe(auto_detected_df, use_container_width=True)
+        st.dataframe(auto_detected_df, width='stretch')
 
         csv_download_button(auto_detected_df, "detected_standards.csv", key="download_auto_standards")
         return auto_detected_df
@@ -133,7 +133,7 @@ def _display_custom_upload(
 def _display_preserved_custom_standards() -> pd.DataFrame:
     """Display previously uploaded custom standards with clear button."""
     st.success(f"✓ Using {len(st.session_state.custom_standards_df)} custom standards")
-    st.dataframe(st.session_state.custom_standards_df, use_container_width=True)
+    st.dataframe(st.session_state.custom_standards_df, width='stretch')
 
     if st.button("Clear Custom Standards", key="clear_custom_standards"):
         st.session_state.custom_standards_df = None
@@ -189,7 +189,7 @@ def _process_uploaded_standards(
             st.info(f"Removed {result.duplicates_removed} duplicate standard(s).")
 
         st.success(f"✓ Loaded {result.standards_count} custom standards (mode: {result.source_mode})")
-        st.dataframe(result.standards_df, use_container_width=True)
+        st.dataframe(result.standards_df, width='stretch')
 
         csv_download_button(result.standards_df, "custom_standards.csv", key="download_custom_standards")
 

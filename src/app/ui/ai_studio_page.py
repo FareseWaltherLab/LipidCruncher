@@ -427,7 +427,7 @@ def _display_group_samples_sidebar(
             for _ in samples
         ],
     })
-    st.sidebar.dataframe(group_df, use_container_width=True, hide_index=True)
+    st.sidebar.dataframe(group_df, width='stretch', hide_index=True)
 
     grouping_correct = st.sidebar.radio(
         "Are your samples properly grouped together?",
@@ -480,7 +480,7 @@ def _display_group_samples_sidebar(
         ],
     })
     st.sidebar.write("New sample order after regrouping:")
-    st.sidebar.dataframe(name_df, use_container_width=True, hide_index=True)
+    st.sidebar.dataframe(name_df, width='stretch', hide_index=True)
 
     return manual
 

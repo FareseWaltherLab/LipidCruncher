@@ -131,7 +131,7 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
 
     group_df = result.group_df
 
-    st.sidebar.dataframe(group_df, use_container_width=True)
+    st.sidebar.dataframe(group_df, width='stretch')
 
     # Manual regrouping option
     st.sidebar.write('Are your samples properly grouped together?')
@@ -231,7 +231,7 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         )
         st.session_state.grouping_complete = True
         st.sidebar.write("New sample order after regrouping:")
-        st.sidebar.dataframe(regroup_result.name_df, use_container_width=True)
+        st.sidebar.dataframe(regroup_result.name_df, width='stretch')
         return regroup_result.group_df, regroup_result.reordered_df
     except ValueError as e:
         logger.error("Error updating groups: %s", e)

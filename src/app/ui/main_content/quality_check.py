@@ -300,7 +300,7 @@ def _render_bqc_filtering(
         cov_filtered_df['mean'] = cov_filtered_df['mean'].round(4)
 
         st.markdown("###### Lipids Above Threshold")
-        st.dataframe(cov_filtered_df, use_container_width=True)
+        st.dataframe(cov_filtered_df, width='stretch')
 
         lipids_to_keep = st.multiselect(
             "Keep despite high CoV:",
@@ -337,7 +337,7 @@ def _render_bqc_filtering(
 
     # Show filtered dataset
     st.markdown("###### Filtered Dataset")
-    st.dataframe(result.filtered_df, use_container_width=True)
+    st.dataframe(result.filtered_df, width='stretch')
 
     csv_download_button(result.filtered_df, "filtered_data.csv", key="bqc_filtered_download")
 
@@ -501,7 +501,7 @@ def _display_correlation_analysis(
 
         # Correlation matrix table
         st.markdown("###### Correlation Coefficients")
-        st.dataframe(correlation_df, use_container_width=True)
+        st.dataframe(correlation_df, width='stretch')
 
 
 # =============================================================================

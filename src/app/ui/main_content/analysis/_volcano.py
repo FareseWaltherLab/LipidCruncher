@@ -425,7 +425,7 @@ def _display_excluded_lipids(
 
     st.markdown("---")
     st.markdown("#### Excluded Lipids")
-    st.dataframe(removed_df, use_container_width=True)
+    st.dataframe(removed_df, width='stretch')
 
     csv_download_button(
         removed_df,

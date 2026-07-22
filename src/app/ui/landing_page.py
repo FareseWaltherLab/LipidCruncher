@@ -82,7 +82,7 @@ def load_module_image(filename: str, caption: str = None) -> bool:
 
     png_bytes = _convert_pdf_to_png(str(pdf_path))
     if png_bytes is not None:
-        st.image(png_bytes, caption=caption, use_container_width=True)
+        st.image(png_bytes, caption=caption, width='stretch')
         return True
 
     st.warning(f"Could not load {filename}")
@@ -103,7 +103,7 @@ def display_logo(centered: bool = False):
                 logo = logo.convert('RGB')
             if centered:
                 # Fill full available width of container
-                st.image(logo, use_container_width=True)
+                st.image(logo, width='stretch')
             else:
                 st.image(logo, width=720)
         else:
@@ -187,7 +187,7 @@ def _display_call_to_action() -> None:
 
     btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
     with btn_col2:
-        if st.button("🚀 Start Crunching", use_container_width=True, type="primary"):
+        if st.button("🚀 Start Crunching", width='stretch', type="primary"):
             st.session_state.page = PAGE_APP
             st.rerun()
 
@@ -203,7 +203,7 @@ def _display_call_to_action() -> None:
 
     btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
     with btn_col2:
-        if st.button("🤖 Open AI Studio", use_container_width=True):
+        if st.button("🤖 Open AI Studio", width='stretch'):
             st.session_state.page = PAGE_AI_STUDIO
             st.rerun()
 
