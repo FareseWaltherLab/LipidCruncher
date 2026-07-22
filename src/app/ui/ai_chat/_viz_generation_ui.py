@@ -8,6 +8,7 @@ inline with export buttons.
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from ._interaction_log import record_turn, render_feedback
 
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
@@ -44,6 +45,7 @@ def _render_messages(session) -> None:
     for i, msg in enumerate(session.messages):
         with st.chat_message(msg.role):
             st.markdown(msg.content)
+            render_feedback(msg)
 
         # Check if there's a stored figure for this message
         fig_key = f"chat_viz_fig_{i}"
@@ -71,15 +73,6 @@ def render_viz_chat(analysis_df, experiment) -> None:
         analysis_df: The analysis-ready DataFrame.
         experiment: Experiment configuration.
     """
-    print(
-        f"[VIZ-UI] render ENTER: "
-        f"pending={st.session_state.get('chat_pending_prompt_viz')!r}, "
-        f"msg_count={st.session_state.get('chat_message_count', 0)}, "
-        f"exec_count={st.session_state.get('chat_execution_count', 0)}, "
-        f"session_msgs={len(st.session_state.chat_viz_session.messages) if st.session_state.get('chat_viz_session') else 'NO_SESSION'}, "
-        f"stored_figs={list((st.session_state.get('chat_viz_figures') or {}).keys())}",
-        flush=True,
-    )
     session = st.session_state.chat_viz_session
 
     # Show introductory message if no messages yet
@@ -105,7 +98,6 @@ def render_viz_chat(analysis_df, experiment) -> None:
                 key=f"viz_example_{i}",
                 width='stretch',
             ):
-                print(f"[VIZ-UI] BUTTON CLICKED: {prompt!r}", flush=True)
                 st.session_state.chat_pending_prompt_viz = prompt
                 st.rerun()
 
@@ -125,7 +117,6 @@ def render_viz_chat(analysis_df, experiment) -> None:
 
     # Chat input (check for pending example prompt first)
     user_input = st.session_state.pop('chat_pending_prompt_viz', None)
-    print(f"[VIZ-UI] after pop: user_input={user_input!r}", flush=True)
     if user_input is None:
         user_input = st.chat_input(
             "Describe the visualization you want...",
@@ -133,7 +124,6 @@ def render_viz_chat(analysis_df, experiment) -> None:
         )
 
     if user_input:
-        print(f"[VIZ-UI] processing user_input: {user_input!r}, df shape={analysis_df.shape}", flush=True)
         # Show user message immediately
         with st.chat_message("user"):
             st.markdown(user_input)
@@ -161,14 +151,6 @@ def render_viz_chat(analysis_df, experiment) -> None:
                         "I couldn't produce a visualization for that. "
                         "Please try rephrasing your request."
                     )
-                print(
-                    f"[VIZ-UI] result: msg_len={len(result.assistant_message)}, "
-                    f"sandbox_success={result.sandbox_result.success if result.sandbox_result else None}, "
-                    f"has_fig={result.sandbox_result.figure is not None if result.sandbox_result else None}, "
-                    f"sandbox_err={(result.sandbox_result.error_message[:200] if result.sandbox_result else '')!r}, "
-                    f"session_msgs_after={len(result.session.messages)}",
-                    flush=True,
-                )
 
                 # Update session state
                 st.session_state.chat_viz_session = result.session
@@ -185,7 +167,6 @@ def render_viz_chat(analysis_df, experiment) -> None:
                         # Store figure for replay on rerun
                         fig_index = len(result.session.messages) - 1
                         fig_key = f"chat_viz_fig_{fig_index}"
-                        print(f"[VIZ-UI] storing fig at key={fig_key}", flush=True)
                         if 'chat_viz_figures' not in st.session_state:
                             st.session_state.chat_viz_figures = {}
                         st.session_state.chat_viz_figures[fig_key] = (
@@ -196,14 +177,21 @@ def render_viz_chat(analysis_df, experiment) -> None:
                         with st.expander("Output"):
                             st.text(result.sandbox_result.stdout)
 
+                _sr = result.sandbox_result
+                record_turn(
+                    "visualization",
+                    user_input,
+                    result.assistant_message,
+                    assistant_msg=result.session.messages[-1],
+                    code=result.session.messages[-1].code,
+                    produced_figure=bool(_sr and _sr.figure is not None),
+                )
+
             except Exception as e:
-                import traceback
-                print(f"[VIZ-UI] EXCEPTION: {type(e).__name__}: {e}", flush=True)
-                print(traceback.format_exc(), flush=True)
                 st.session_state.chat_last_error = str(e)
                 st.session_state.chat_last_failed_input = user_input
+                record_turn("visualization", user_input, "", error=str(e))
 
-        print("[VIZ-UI] calling st.rerun()", flush=True)
         st.rerun()
 
     # Display persistent error from last attempt, with a one-click retry.

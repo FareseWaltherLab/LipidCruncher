@@ -10,6 +10,7 @@ Purely conversational — no code execution, no data access.
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from ._interaction_log import record_turn, render_feedback
 
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
@@ -29,6 +30,7 @@ def _render_messages(session) -> None:
     for msg in session.messages:
         with st.chat_message(msg.role):
             st.markdown(msg.content)
+            render_feedback(msg)
 
 
 def render_lc_questions_chat() -> None:
@@ -112,6 +114,12 @@ def render_lc_questions_chat() -> None:
                 st.session_state.get('chat_message_count', 0) + 1
             )
             st.session_state.pop('chat_lc_retry_input', None)
+            record_turn(
+                "lc_questions", user_input, cached_answer,
+                assistant_msg=(
+                    st.session_state.chat_lc_questions_session.messages[-1]
+                ),
+            )
             st.rerun()
 
         # Run AI (streamed token-by-token)
@@ -149,6 +157,12 @@ def render_lc_questions_chat() -> None:
                     st.session_state.get('chat_message_count', 0) + 1
                 )
                 st.session_state.pop('chat_lc_retry_input', None)
+                record_turn(
+                    "lc_questions", user_input, full_text,
+                    assistant_msg=(
+                        st.session_state.chat_lc_questions_session.messages[-1]
+                    ),
+                )
 
             except Exception as e:
                 error_text = str(e)
@@ -179,6 +193,12 @@ def render_lc_questions_chat() -> None:
                     st.session_state.get('chat_message_count', 0) + 1
                 )
                 st.session_state.pop('chat_lc_retry_input', None)
+                record_turn(
+                    "lc_questions", user_input, fallback_text,
+                    assistant_msg=(
+                        st.session_state.chat_lc_questions_session.messages[-1]
+                    ),
+                )
             else:
                 user_msg = ChatMessage(role="user", content=user_input)
                 error_msg = ChatMessage(
@@ -191,5 +211,8 @@ def render_lc_questions_chat() -> None:
                 )
                 # Remember the failed input so the Retry button can re-fire it.
                 st.session_state.chat_lc_retry_input = user_input
+                record_turn(
+                    "lc_questions", user_input, "", error=error_text
+                )
 
         st.rerun()

@@ -6,6 +6,7 @@ This module contains all Streamlit-specific code that wraps the pure business lo
 """
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -1246,4 +1247,60 @@ class StreamlitAdapter:
             user_message=user_message,
             session=session,
             source_df=source_df,
+        )
+
+    # ------------------------------------------------------------------
+    # AI Studio interaction logging (super-user preview)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _ai_log_session_id() -> str:
+        """Return an anonymous per-Streamlit-session id, creating it once.
+
+        Groups all turns from one browser session together in the logs
+        without identifying the user.
+        """
+        sid = st.session_state.get("ai_log_session_id")
+        if sid is None:
+            sid = uuid.uuid4().hex
+            st.session_state["ai_log_session_id"] = sid
+        return sid
+
+    @staticmethod
+    def log_ai_turn(
+        *,
+        tab: str,
+        question: str,
+        answer: str,
+        code: Optional[str] = None,
+        produced_table: bool = False,
+        produced_figure: bool = False,
+        error: Optional[str] = None,
+    ) -> str:
+        """Log one completed AI Studio turn. Returns the turn_id so the UI
+        can attach a later 👍/👎 feedback record to it."""
+        from ..services.ai_chat.interaction_logger import InteractionLoggingService
+        turn_id = InteractionLoggingService.new_turn_id()
+        InteractionLoggingService.log_turn(
+            turn_id=turn_id,
+            session_id=StreamlitAdapter._ai_log_session_id(),
+            tab=tab,
+            question=question,
+            answer=answer,
+            code=code,
+            produced_table=produced_table,
+            produced_figure=produced_figure,
+            error=error,
+        )
+        return turn_id
+
+    @staticmethod
+    def log_ai_feedback(*, turn_id: str, verdict: str, note: str = "") -> None:
+        """Log a 👍/👎 signal for a previously-logged turn."""
+        from ..services.ai_chat.interaction_logger import InteractionLoggingService
+        InteractionLoggingService.log_feedback(
+            turn_id=turn_id,
+            session_id=StreamlitAdapter._ai_log_session_id(),
+            verdict=verdict,
+            note=note,
         )

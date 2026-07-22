@@ -9,6 +9,7 @@ and upload it to the main pipeline.
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from ._interaction_log import record_turn, render_feedback
 
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
@@ -30,6 +31,7 @@ def _render_messages(session) -> None:
             if msg.code:
                 with st.expander("View code"):
                     st.code(msg.code, language="python")
+            render_feedback(msg)
 
 
 def render_transform_chat(source_df) -> None:
@@ -172,9 +174,22 @@ def render_transform_chat(source_df) -> None:
                     # Clear stale result on failed transformation
                     st.session_state.chat_transform_result = None
 
+                _t = result.transformation
+                record_turn(
+                    "transform",
+                    user_input,
+                    result.assistant_message,
+                    assistant_msg=result.session.messages[-1],
+                    code=(_t.code if _t else None) or None,
+                    produced_table=bool(
+                        _t and _t.success and not _t.is_info_only
+                    ),
+                )
+
             except Exception as e:
                 st.session_state.chat_last_error = str(e)
                 st.session_state.chat_last_failed_input = user_input
+                record_turn("transform", user_input, "", error=str(e))
 
         st.rerun()
 
