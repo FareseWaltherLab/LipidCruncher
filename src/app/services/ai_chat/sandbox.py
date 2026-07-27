@@ -62,6 +62,13 @@ _WHITELISTED_IMPORTS: frozenset = frozenset({
     # adds defensive imports (e.g. `import pandas as pd`) after an error.
     # Whitelist them so those imports are no-ops instead of fatal errors.
     "pandas", "numpy", "plotly",
+    # Analysis libraries for questions the pipeline doesn't already cover.
+    # All are existing app dependencies. Prefer the `lc` namespace for
+    # anything LipidCruncher already implements — these are the fallback
+    # for genuinely novel analyses. They are compute-only (no filesystem,
+    # network, or process access), and the AST validator + restricted
+    # builtins still apply to any code that uses them.
+    "scipy", "statsmodels", "sklearn",
 })
 
 # Dunder attributes that must never be accessed
@@ -199,6 +206,7 @@ def _restricted_import(name, *args, **kwargs):
 def _build_globals(
     df: pd.DataFrame,
     numeric_columns: Optional[List[str]] = None,
+    experiment: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Build the restricted globals dict for exec().
 
@@ -207,6 +215,10 @@ def _build_globals(
     (with ``errors='coerce'``) on the DataFrame copy before exposure, so
     AI-generated code can do arithmetic on sample intensities without
     worrying about lingering string dtypes from the raw CSV read.
+
+    Also exposes ``lc`` — LipidCruncher's own pipeline capabilities — so
+    generated code defers to the app's documented methods (statistics,
+    summaries) instead of re-deriving them with ad-hoc formulas.
     """
     captured_output: list = []
 
@@ -223,6 +235,10 @@ def _build_globals(
                 pd.to_numeric, errors='coerce',
             )
 
+    # Imported here to keep the module import graph flat (pipeline_api
+    # pulls in the statistics services).
+    from .pipeline_api import PipelineAPI
+
     return {
         "__builtins__": builtins,
         "pd": pd,
@@ -233,6 +249,7 @@ def _build_globals(
         "statistics": statistics,
         "re": re,
         "df": df_copy,
+        "lc": PipelineAPI(df_copy, experiment),
         "_captured_output": captured_output,
     }
 
@@ -294,6 +311,7 @@ class SandboxService:
         df: pd.DataFrame,
         config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
+        experiment: Optional[Any] = None,
     ) -> SandboxResult:
         """Validate and execute code in the sandbox.
 
@@ -308,6 +326,10 @@ class SandboxService:
                 arithmetic doesn't fail with ``TypeError: unsupported
                 operand type(s) for /: 'str' and 'float'`` when the raw
                 CSV inferred string dtypes.
+            experiment: Optional ExperimentConfig. Enables the
+                condition-aware parts of the ``lc`` namespace (statistical
+                comparisons); without it those raise a message telling the
+                user to define the experiment first.
 
         Returns:
             SandboxResult with execution outcome.
@@ -325,7 +347,9 @@ class SandboxService:
             )
 
         # Phase 2: Execute in restricted environment
-        exec_globals = _build_globals(df, numeric_columns=numeric_columns)
+        exec_globals = _build_globals(
+            df, numeric_columns=numeric_columns, experiment=experiment,
+        )
         start_time = time.monotonic()
 
         try:

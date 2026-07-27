@@ -634,7 +634,7 @@ class AIChatWorkflow:
         # 3-4. Execute (if any) and append assistant message
         return AIChatWorkflow._finalize_viz(
             session, explanation, code, analysis_df,
-            sandbox_config, numeric_columns,
+            sandbox_config, numeric_columns, experiment,
         )
 
     @staticmethod
@@ -645,6 +645,7 @@ class AIChatWorkflow:
         analysis_df: pd.DataFrame,
         sandbox_config: SandboxConfig,
         numeric_columns: Optional[List[str]],
+        experiment: Optional[ExperimentConfig] = None,
     ) -> VizStepResult:
         """Execute generated viz code (if any), build the assistant message,
         append it to the session, and return the step result.
@@ -658,6 +659,7 @@ class AIChatWorkflow:
                 df=analysis_df,
                 sandbox_config=sandbox_config,
                 numeric_columns=numeric_columns,
+                experiment=experiment,
             )
 
             if sandbox_result.success and sandbox_result.figure is not None:
@@ -744,7 +746,7 @@ class AIChatWorkflow:
             explanation, code = AIClientService.extract_code_block(holder["full"])
             return AIChatWorkflow._finalize_viz(
                 session, explanation, code, analysis_df,
-                sandbox_config, numeric_columns,
+                sandbox_config, numeric_columns, experiment,
             )
 
         return generator, finalize
@@ -801,6 +803,7 @@ class AIChatWorkflow:
         ai_config: Optional[AIConfig] = None,
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
+        experiment: Optional[ExperimentConfig] = None,
     ) -> DataQuestionsStepResult:
         """Handle one user message in a data questions chat.
 
@@ -853,7 +856,7 @@ class AIChatWorkflow:
         # 3-4. Extract/execute code (if any) and append assistant message
         return AIChatWorkflow._finalize_data_questions(
             session, response_text, source_df,
-            sandbox_config, numeric_columns,
+            sandbox_config, numeric_columns, experiment,
         )
 
     @staticmethod
@@ -863,6 +866,7 @@ class AIChatWorkflow:
         source_df: pd.DataFrame,
         sandbox_config: SandboxConfig,
         numeric_columns: Optional[List[str]],
+        experiment: Optional[ExperimentConfig] = None,
     ) -> DataQuestionsStepResult:
         """Extract/execute any code in the AI response, build the assistant
         message, append it to the session, and return the step result.
@@ -876,6 +880,7 @@ class AIChatWorkflow:
             sandbox_result = SandboxService.execute(
                 code, source_df, sandbox_config,
                 numeric_columns=numeric_columns,
+                experiment=experiment,
             )
             if sandbox_result.success:
                 result_df = sandbox_result.result_df
@@ -931,6 +936,7 @@ class AIChatWorkflow:
         ai_config: Optional[AIConfig] = None,
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
+        experiment: Optional[ExperimentConfig] = None,
     ):
         """Streaming variant of ``handle_data_questions_message``.
 
@@ -966,7 +972,7 @@ class AIChatWorkflow:
         def finalize() -> DataQuestionsStepResult:
             return AIChatWorkflow._finalize_data_questions(
                 session, holder["full"], source_df,
-                sandbox_config, numeric_columns,
+                sandbox_config, numeric_columns, experiment,
             )
 
         return generator, finalize

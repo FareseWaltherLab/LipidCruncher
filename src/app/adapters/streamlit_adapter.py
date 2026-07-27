@@ -1107,6 +1107,7 @@ class StreamlitAdapter:
             numeric_columns=st.session_state.get(
                 'chat_studio_sample_columns_original'
             ),
+            experiment=st.session_state.get('chat_studio_experiment'),
         )
 
     @staticmethod
@@ -1173,6 +1174,7 @@ class StreamlitAdapter:
             numeric_columns=st.session_state.get(
                 'chat_studio_sample_columns_original'
             ),
+            experiment=st.session_state.get('chat_studio_experiment'),
         )
 
     @staticmethod

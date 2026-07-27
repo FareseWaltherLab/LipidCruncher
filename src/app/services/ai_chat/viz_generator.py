@@ -14,7 +14,10 @@ from .ai_client import AIClientService
 from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .knowledge_base import get_app_knowledge
 from .prompt_examples import get_viz_examples
-from .prompt_templates import METHODOLOGY_CLARIFICATION_RULES
+from .prompt_templates import (
+    METHODOLOGY_CLARIFICATION_RULES,
+    PIPELINE_FIRST_RULES,
+)
 from .sandbox import SandboxResult, SandboxService
 from .schema_extractor import SchemaExtractorService
 
@@ -41,6 +44,7 @@ Only generate visualization code when the user asks you to create, plot, or show
 4. Always wrap visualization code in a ```python code block.
 5. Available variables in the execution environment:
    - `df` — the user's analyzed DataFrame (pandas)
+   - `lc` — LipidCruncher's own analysis pipeline (see "Pipeline first" below — check this before writing your own analysis)
    - `pd` — pandas
    - `np` — numpy
    - `px` — plotly.express
@@ -49,7 +53,7 @@ Only generate visualization code when the user asks you to create, plot, or show
    - `sns` — seaborn (use only if needed with matplotlib)
    - `math`, `statistics` — standard library math modules
    - `re` — standard library regex module (useful for parsing lipid names, e.g. extracting fatty acid chain composition like C16/C18)
-6. Do NOT import any modules — they are pre-loaded.
+6. Modules are pre-loaded; `scipy`, `statsmodels` and `sklearn` may also be imported when you genuinely need an analysis `lc` does not cover. Nothing else is importable.
 7. The result MUST be a Plotly figure assigned to `fig`. For example:
    ```
    fig = px.bar(df, x='ClassKey', y='intensity[s1]')
@@ -118,6 +122,8 @@ stacked bars per condition), `px.bar(..., color=...)` is fine — use \
 <examples>
 {get_viz_examples()}
 </examples>
+
+{PIPELINE_FIRST_RULES}
 
 {METHODOLOGY_CLARIFICATION_RULES}
 
@@ -275,6 +281,7 @@ class VizGeneratorService:
         df: pd.DataFrame,
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
+        experiment=None,
     ) -> SandboxResult:
         """Execute visualization code in the sandbox.
 
@@ -284,6 +291,8 @@ class VizGeneratorService:
             sandbox_config: Sandbox configuration. Uses defaults if None.
             numeric_columns: Optional list of columns to pre-coerce to
                 numeric before exposing the DataFrame to user code.
+            experiment: Optional ExperimentConfig, enabling the
+                condition-aware ``lc`` statistics helpers.
 
         Returns:
             SandboxResult — check ``result.figure`` for the generated plot.
@@ -293,4 +302,5 @@ class VizGeneratorService:
 
         return SandboxService.execute(
             code, df, sandbox_config, numeric_columns=numeric_columns,
+            experiment=experiment,
         )

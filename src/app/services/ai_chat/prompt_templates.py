@@ -14,6 +14,43 @@ from .prompt_examples import (
 from .schema_extractor import SchemaExtractorService
 
 
+PIPELINE_FIRST_RULES = """\
+## Pipeline first — use LipidCruncher's own methods before writing your own
+
+The sandbox exposes `lc`, LipidCruncher's real analysis pipeline. **Before writing \
+analysis code, check whether `lc` already answers the question.** If it does, call it \
+and write only the presentation code (plot, table, summary) around the result. Only \
+write an analysis from scratch when nothing in `lc` fits.
+
+This matters: `lc` runs the *same documented methods the main app reports*, so answers \
+stay consistent with the rest of LipidCruncher. Hand-rolled statistics (your own \
+t-test loop, your own FDR correction, your own zero handling) will silently disagree \
+with what the app shows the user for the same data. Do not do that.
+
+### The `lc` catalog
+
+- `lc.conditions()` → list of condition names in the experiment.
+- `lc.samples_for(condition)` → sample names for one condition.
+- `lc.compare_species(control, experimental, alpha=0.05)` → per-lipid comparison of two \
+conditions, as a DataFrame with `LipidMolec`, `ClassKey`, `p_value`, `adj_p_value`, \
+`log2FC` (experimental / control), `significant`, sorted most-significant first. This is \
+LipidCruncher's documented species-level method (Welch's t-test on zero-replaced, \
+log10-transformed concentrations, Benjamini-Hochberg FDR) — the engine behind the \
+volcano plot. Use it for *any* "which lipids differ / are significant / changed most \
+between conditions" question.
+- `lc.compare_classes(conditions=None, classes=None, alpha=0.05)` → the same, at lipid \
+*class* level (sums species per class first). DataFrame with `ClassKey`, `p_value`, \
+`adj_p_value`, `significant`.
+- `lc.class_summary()` → per-class `n_species` and `mean_abundance`.
+
+Pass **condition names**, not column lists: `lc.compare_species('WT', 'ADGAT-DKO')`. \
+Call `lc.conditions()` first if you are unsure of the names.
+
+Statistical comparisons need a defined experiment. If none is defined, `lc` raises a \
+clear message — relay it rather than falling back to your own statistics.
+"""
+
+
 METHODOLOGY_CLARIFICATION_RULES = """\
 ## Methodology clarification — REQUIRED for aggregations, ratios, and grouped comparisons
 
@@ -322,16 +359,19 @@ intensity[s1]") — only consult it when the question hinges on a LipidCruncher 
 
 When you generate code, wrap it in a ```python block. The execution environment provides:
 - `df` — the user's DataFrame (pandas)
+- `lc` — LipidCruncher's own analysis pipeline (see "Pipeline first" below — check this before writing your own analysis)
 - `pd` — pandas
 - `np` — numpy
 - `math`, `statistics` — standard library math modules
 - `re` — standard library regex module (useful for parsing lipid names, e.g. extracting fatty acid chain composition)
 
-**Do NOT import any modules — they are pre-loaded.**
+Pandas, numpy, plotly, `scipy`, `statsmodels` and `sklearn` may be imported if you genuinely need them for an analysis `lc` does not cover. Nothing else is importable.
 
 ### Output variables
 - `result_df` — a pandas DataFrame (for tables, summaries). The UI will show a download button.
 - Use `print()` for text-based answers that don't need a table.
+
+{PIPELINE_FIRST_RULES}
 
 {METHODOLOGY_CLARIFICATION_RULES}
 
