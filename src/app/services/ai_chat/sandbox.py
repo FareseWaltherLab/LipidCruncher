@@ -65,9 +65,18 @@ _WHITELISTED_IMPORTS: frozenset = frozenset({
     # Analysis libraries for questions the pipeline doesn't already cover.
     # All are existing app dependencies. Prefer the `lc` namespace for
     # anything LipidCruncher already implements — these are the fallback
-    # for genuinely novel analyses. They are compute-only (no filesystem,
-    # network, or process access), and the AST validator + restricted
-    # builtins still apply to any code that uses them.
+    # for genuinely novel analyses.
+    #
+    # NOTE: this allowlist is matched on the TOP-LEVEL package only, so
+    # every submodule comes with it (`scipy.io`, `sklearn.datasets`,
+    # `statsmodels.api.load` → pickle, ...). Do not read these entries as
+    # "compute-only". That is not a regression introduced here — `pd`/`np`
+    # are pre-bound in the exec globals below and already reach the same
+    # capabilities (`pd.read_pickle`, `pd.read_csv(<url>)`,
+    # `pd.compat.os`), because the AST validator restricts imports and
+    # dunder access but not ordinary attribute chains. Treat the sandbox
+    # as a guardrail against accidents, NOT as a boundary that contains a
+    # determined attacker; real isolation needs a separate process.
     "scipy", "statsmodels", "sklearn",
 })
 
