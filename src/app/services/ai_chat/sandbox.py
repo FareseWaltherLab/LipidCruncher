@@ -10,9 +10,14 @@ All AI output is treated as untrusted.
 """
 import ast
 import math
+import os
+import pickle
 import re
+import shutil
 import statistics
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
@@ -244,10 +249,6 @@ def _build_globals(
                 pd.to_numeric, errors='coerce',
             )
 
-    # Imported here to keep the module import graph flat (pipeline_api
-    # pulls in the statistics services).
-    from .pipeline_api import PipelineAPI
-
     return {
         "__builtins__": builtins,
         "pd": pd,
@@ -258,14 +259,165 @@ def _build_globals(
         "statistics": statistics,
         "re": re,
         "df": df_copy,
-        "lc": PipelineAPI(df_copy, experiment),
+        "lc": _LazyPipelineAPI(df_copy, experiment),
         "_captured_output": captured_output,
     }
 
 
+class _LazyPipelineAPI:
+    """Defers building ``PipelineAPI`` until the code actually touches ``lc``.
+
+    ``pipeline_api`` pulls in the statistics services, and through them scipy
+    and statsmodels — roughly a second of import time in a cold child process.
+    Most turns never call ``lc``, so paying that on every execution is waste.
+    """
+
+    __slots__ = ("_df", "_experiment", "_api")
+
+    def __init__(self, df, experiment):
+        object.__setattr__(self, "_df", df)
+        object.__setattr__(self, "_experiment", experiment)
+        object.__setattr__(self, "_api", None)
+
+    def __getattr__(self, name):
+        api = object.__getattribute__(self, "_api")
+        if api is None:
+            from .pipeline_api import PipelineAPI
+            api = PipelineAPI(
+                object.__getattribute__(self, "_df"),
+                object.__getattribute__(self, "_experiment"),
+            )
+            object.__setattr__(self, "_api", api)
+        return getattr(api, name)
+
+
+def build_sandbox_globals(
+    df: pd.DataFrame,
+    numeric_columns: Optional[List[str]] = None,
+    experiment: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Public entry to ``_build_globals`` for the child runner process."""
+    return _build_globals(
+        df, numeric_columns=numeric_columns, experiment=experiment,
+    )
+
+
 # ---------------------------------------------------------------------------
-# Thread-based timeout execution
+# Out-of-process execution
 # ---------------------------------------------------------------------------
+
+# Environment handed to the child. Deliberately minimal: secrets such as
+# ANTHROPIC_API_KEY must never be readable by AI-generated code, so the
+# child is given a fresh environment rather than an inherited one.
+def _child_env() -> Dict[str, str]:
+    src_root = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))
+    )))
+    return {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": src_root,
+        "PYTHONHASHSEED": "0",
+        "HOME": tempfile.gettempdir(),
+        "MPLCONFIGDIR": tempfile.gettempdir(),
+    }
+
+
+def _run_in_subprocess(
+    code: str,
+    df: pd.DataFrame,
+    numeric_columns: Optional[List[str]],
+    experiment: Optional[Any],
+    config: SandboxConfig,
+) -> Dict[str, Any]:
+    """Execute code in a separate, hardened process and return its response.
+
+    The child cannot outlive ``config.execution_timeout``: if the result
+    pipe has not closed by then the process is killed outright. Unlike the
+    previous in-thread approach, a hung or runaway execution cannot survive
+    in the app process.
+
+    Raises:
+        _SandboxTimeout: if the child overran its timeout.
+        _SandboxCrash: if the child died without returning a response.
+    """
+    read_fd, write_fd = os.pipe()
+    workdir = tempfile.mkdtemp(prefix="lc_sandbox_")
+
+    request = pickle.dumps({
+        "code": code,
+        "df": df,
+        "numeric_columns": numeric_columns,
+        "experiment": experiment,
+        "max_output_rows": config.max_output_rows,
+        "cpu_seconds": max(1, config.execution_timeout),
+    }, protocol=pickle.HIGHEST_PROTOCOL)
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "app.services.ai_chat.sandbox_runner",
+         str(write_fd)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        pass_fds=(write_fd,),
+        env=_child_env(),
+        cwd=workdir,
+        close_fds=True,
+    )
+    os.close(write_fd)
+
+    chunks: List[bytes] = []
+
+    def _drain():
+        with os.fdopen(read_fd, "rb") as pipe:
+            while True:
+                block = pipe.read(65536)
+                if not block:
+                    break
+                chunks.append(block)
+
+    reader = threading.Thread(target=_drain, daemon=True)
+    reader.start()
+
+    try:
+        proc.stdin.write(request)
+        proc.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass  # child died early; handled below
+
+    reader.join(timeout=config.execution_timeout)
+
+    if reader.is_alive():
+        proc.kill()
+        proc.wait(timeout=5)
+        raise _SandboxTimeout(
+            f"Execution timed out after {config.execution_timeout} seconds"
+        )
+
+    proc.wait(timeout=5)
+    shutil.rmtree(workdir, ignore_errors=True)
+
+    if not chunks:
+        # A negative return code means the child was killed by a signal.
+        # The CPU rlimit (SIGXCPU) fires slightly before the parent's
+        # wall-clock deadline, so report that as a timeout rather than a
+        # crash — to the user it is the same situation.
+        if proc.returncode is not None and proc.returncode < 0:
+            raise _SandboxTimeout(
+                f"Execution timed out after {config.execution_timeout} seconds"
+            )
+        stderr = (proc.stderr.read() or b"").decode("utf-8", "replace")
+        raise _SandboxCrash(stderr.strip()[-500:] or "no output")
+
+    return pickle.loads(b"".join(chunks))
+
+
+class _SandboxTimeout(Exception):
+    pass
+
+
+class _SandboxCrash(Exception):
+    pass
+
 
 class _TimeoutError(Exception):
     pass
@@ -355,19 +507,26 @@ class SandboxService:
                 error_message=str(e),
             )
 
-        # Phase 2: Execute in restricted environment
-        exec_globals = _build_globals(
-            df, numeric_columns=numeric_columns, experiment=experiment,
-        )
+        # Phase 2: Execute out-of-process. The AST validation above is
+        # defense-in-depth, not the boundary — the boundary is the
+        # hardened child process (no filesystem writes, no network, no
+        # subprocesses, no inherited secrets, killable).
         start_time = time.monotonic()
 
         try:
-            compiled = compile(tree, "<sandbox>", "exec")
-            _exec_with_timeout(compiled, exec_globals, config.execution_timeout)
-        except _TimeoutError:
+            response = _run_in_subprocess(
+                code, df, numeric_columns, experiment, config,
+            )
+        except _SandboxTimeout as e:
             return SandboxResult(
                 success=False,
-                error_message=f"Execution timed out after {config.execution_timeout} seconds",
+                error_message=str(e),
+                execution_time=time.monotonic() - start_time,
+            )
+        except _SandboxCrash as e:
+            return SandboxResult(
+                success=False,
+                error_message=f"Execution failed: {e}",
                 execution_time=time.monotonic() - start_time,
             )
         except Exception as e:
@@ -378,24 +537,19 @@ class SandboxService:
             )
 
         elapsed = time.monotonic() - start_time
-        stdout = "\n".join(exec_globals.get("_captured_output", []))
 
-        # Extract results
-        figure = exec_globals.get("fig")
-        if figure is not None and not isinstance(figure, go.Figure):
-            figure = None
-
-        result_df = exec_globals.get("result_df")
-        if result_df is not None and isinstance(result_df, pd.DataFrame):
-            if len(result_df) > config.max_output_rows:
-                result_df = result_df.head(config.max_output_rows)
-        else:
-            result_df = None
+        if not response.get("ok"):
+            return SandboxResult(
+                success=False,
+                error_message=f"Runtime error: {response.get('error', '')}",
+                stdout=response.get("stdout", ""),
+                execution_time=elapsed,
+            )
 
         return SandboxResult(
             success=True,
-            figure=figure,
-            result_df=result_df,
-            stdout=stdout,
+            figure=response.get("figure"),
+            result_df=response.get("result_df"),
+            stdout=response.get("stdout", ""),
             execution_time=elapsed,
         )
