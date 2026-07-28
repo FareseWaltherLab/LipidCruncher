@@ -892,7 +892,13 @@ class AIChatWorkflow:
                 if explanation.strip():
                     parts.append(explanation.strip())
                 if sandbox_result.stdout.strip():
-                    parts.append(sandbox_result.stdout.strip())
+                    # Fence it: printed output is rendered as markdown, which
+                    # collapses the newlines and column padding a printed
+                    # DataFrame depends on, turning a table into one mangled
+                    # line. Matches how the transform tab shows stdout.
+                    parts.append(
+                        f"```\n{sandbox_result.stdout.strip()}\n```"
+                    )
                 # If the AI returned a bare code block (no prose) and the
                 # code only assigns to result_df (no print()), parts ends
                 # up empty even though we have a valid table to show.

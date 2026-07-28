@@ -272,3 +272,52 @@ class TestExperimentContextReachesTheModel:
         prompt = data_questions_system_prompt()
         assert "never see its output" in prompt.lower()
         assert "Never end a turn on an inspection step" in prompt
+
+
+class TestResultPresentation:
+    """A correct answer the user cannot read is not a usable answer."""
+
+    def test_printed_output_is_fenced_so_tables_keep_their_shape(
+        self, df, experiment, monkeypatch
+    ):
+        """Printed DataFrames render as markdown, which collapses the
+        column padding into one unreadable line unless fenced."""
+        from app.workflows.ai_chat import AIChatWorkflow
+        from app.services.ai_chat import ai_client
+
+        response = (
+            "Comparing WT vs KO.\n\n"
+            "```python\n"
+            "res = lc.compare_species('WT', 'KO')\n"
+            "print(res.head(2).to_string())\n"
+            "```"
+        )
+        monkeypatch.setattr(
+            ai_client.AIClientService, "execute_tool_loop",
+            lambda *a, **k: response,
+        )
+        session = AIChatWorkflow.start_data_questions_session(df)
+        result = AIChatWorkflow.handle_data_questions_message(
+            user_message="top lipids", session=session, source_df=df,
+            experiment=experiment,
+        )
+        assert "```" in result.assistant_message
+        # the table body must sit inside the fence
+        body = result.assistant_message.split("```")[1]
+        assert "LipidMolec" in body
+
+    def test_prompt_requires_stating_the_method(self):
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        prompt = data_questions_system_prompt()
+        assert "Always say what method produced the numbers" in prompt
+        assert "Benjamini-Hochberg" in prompt
+
+    def test_prompt_prefers_returned_tables_over_printed_ones(self):
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        assert "Return tables, don't print them" in (
+            data_questions_system_prompt()
+        )
