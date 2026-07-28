@@ -213,3 +213,62 @@ class TestPromptsAdvertisePipelineFirst:
                        unified_system_prompt(), _viz_system_prompt()):
             assert "Pipeline first" in prompt
             assert "lc.compare_species" in prompt
+
+
+class TestExperimentContextReachesTheModel:
+    """The model must be told the condition names, not have to ask.
+
+    A turn ends when its code runs and the model never sees that output, so
+    a turn spent printing `lc.conditions()` produces no answer. Regression
+    test for exactly that failure in the Data Questions tab.
+    """
+
+    def test_context_lists_conditions_and_samples(self, experiment):
+        from app.services.ai_chat.prompt_templates import (
+            build_experiment_context,
+        )
+        ctx = build_experiment_context(experiment)
+        assert "WT" in ctx and "KO" in ctx
+        assert "s1, s2, s3" in ctx
+        assert "do not call lc.conditions()" in ctx
+
+    def test_no_experiment_yields_empty_context(self):
+        from app.services.ai_chat.prompt_templates import (
+            build_experiment_context,
+        )
+        assert build_experiment_context(None) == ""
+
+    def test_data_questions_turn_includes_the_experiment_block(
+        self, df, experiment, monkeypatch
+    ):
+        """The block must actually reach the API call, not just exist."""
+        from app.workflows.ai_chat import AIChatWorkflow
+        from app.services.ai_chat import ai_client
+
+        captured = {}
+
+        def fake_tool_loop(messages, **kwargs):
+            captured["messages"] = messages
+            return "ok"
+
+        monkeypatch.setattr(
+            ai_client.AIClientService, "execute_tool_loop", fake_tool_loop
+        )
+        session = AIChatWorkflow.start_data_questions_session(df)
+        AIChatWorkflow.handle_data_questions_message(
+            user_message="top 10 most significant lipids WT vs KO",
+            session=session,
+            source_df=df,
+            experiment=experiment,
+        )
+        sent = captured["messages"][-1]["content"]
+        assert "<experiment>" in sent
+        assert "WT" in sent and "KO" in sent
+
+    def test_prompt_forbids_ending_a_turn_on_introspection(self):
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        prompt = data_questions_system_prompt()
+        assert "never see its output" in prompt.lower()
+        assert "Never end a turn on an inspection step" in prompt

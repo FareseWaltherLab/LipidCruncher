@@ -14,6 +14,31 @@ from .prompt_examples import (
 from .schema_extractor import SchemaExtractorService
 
 
+def build_experiment_context(experiment) -> str:
+    """Describe the experiment's conditions and their samples for the prompt.
+
+    Supplied with every message so the model can name conditions directly.
+    Without it the model has to *ask* the sandbox what the conditions are —
+    and since a turn ends when its code runs, that burns the whole turn
+    printing condition names instead of answering the question.
+
+    Returns an empty string when no experiment is defined.
+    """
+    if experiment is None:
+        return ""
+    lines = ["<experiment>",
+             f"Conditions: {', '.join(experiment.conditions_list)}"]
+    for condition, samples in zip(experiment.conditions_list,
+                                  experiment.individual_samples_list):
+        lines.append(f"- {condition}: {', '.join(samples)}")
+    lines.append(
+        "Use these condition names directly in lc.* calls — do not call "
+        "lc.conditions() to look them up."
+    )
+    lines.append("</experiment>")
+    return "\n".join(lines)
+
+
 PIPELINE_FIRST_RULES = """\
 ## Pipeline first — use LipidCruncher's own methods before writing your own
 
@@ -43,8 +68,19 @@ between conditions" question.
 `adj_p_value`, `significant`.
 - `lc.class_summary()` → per-class `n_species` and `mean_abundance`.
 
-Pass **condition names**, not column lists: `lc.compare_species('WT', 'ADGAT-DKO')`. \
-Call `lc.conditions()` first if you are unsure of the names.
+Pass **condition names**, not column lists: `lc.compare_species('WT', 'ADGAT-DKO')`. The \
+available condition names are given to you in the `<experiment>` block with every message — \
+use them directly.
+
+### One code block per turn — make it the answer
+
+Your code runs *after* your turn ends, and **you never see its output**. So a turn that only \
+inspects something (printing `lc.conditions()`, listing columns, checking dtypes) is a wasted \
+turn: the user sees a fragment and no answer. Never end a turn on an inspection step. Write \
+the code that produces the actual answer, in one block. If a name might not match exactly, \
+handle it defensively inside that same block rather than asking first — e.g. match the \
+condition case-insensitively, or wrap the call and print a clear message listing \
+`lc.conditions()` if it fails.
 
 Statistical comparisons need a defined experiment. If none is defined, `lc` raises a \
 clear message — relay it rather than falling back to your own statistics.

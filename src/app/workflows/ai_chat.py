@@ -24,6 +24,7 @@ from ..services.ai_chat.ai_client import AIClientService
 from ..services.ai_chat.codebase_tools import TOOL_DEFINITIONS, execute_tool
 from ..services.ai_chat.data_transformer import DataTransformerService, TransformationResult
 from ..services.ai_chat.prompt_templates import (
+    build_experiment_context,
     data_questions_system_prompt,
     lipidcruncher_questions_system_prompt,
     unified_system_prompt,
@@ -839,6 +840,9 @@ class AIChatWorkflow:
         # 2. Build context and call AI with tools — long-form data above the
         # question (Anthropic long-context guidance).
         context = f"<dataframe_schema>\n{session.schema_context}\n</dataframe_schema>"
+        exp_context = build_experiment_context(experiment)
+        if exp_context:
+            context = f"{context}\n\n{exp_context}"
         augmented_message = f"{context}\n\n{user_message}"
         history = session.to_api_messages()[:-1]
         messages = history + [{"role": "user", "content": augmented_message}]
@@ -954,6 +958,9 @@ class AIChatWorkflow:
         session = session.add_message(user_msg)
 
         context = f"<dataframe_schema>\n{session.schema_context}\n</dataframe_schema>"
+        exp_context = build_experiment_context(experiment)
+        if exp_context:
+            context = f"{context}\n\n{exp_context}"
         augmented_message = f"{context}\n\n{user_message}"
         history = session.to_api_messages()[:-1]
         messages = history + [{"role": "user", "content": augmented_message}]
