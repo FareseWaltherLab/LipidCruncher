@@ -365,6 +365,25 @@ class TestAnalysisPlotsUseTheAppsOwnCode:
         assert set(out) <= set(df["ClassKey"].unique())
         assert out
 
+    def test_every_helper_exposes_figure_uniformly(self, lc):
+        """One shape for all of them. An exception here cost a real turn:
+        the model wrote `lc.saturation(...)['TG'].figure` — correct by
+        analogy with every other helper — and hit an AttributeError."""
+        singles = [lc.volcano("WT", "KO"), lc.bar_chart(), lc.heatmap(),
+                   lc.chain_length(), lc.pathway("WT", "KO"),
+                   lc.fatty_acid_composition("PC")]
+        for res in singles:
+            assert res.figure is not None
+
+        for mapping in (lc.pie_charts(), lc.saturation()):
+            for key, res in mapping.items():
+                assert hasattr(res, "figure"), f"{key} is not an LCResult"
+                assert res.figure is not None
+
+    def test_saturation_percentage_mode(self, lc):
+        out = lc.saturation(classes=["PC"], plot_type="percentage")
+        assert out["PC"].figure is not None
+
     def test_fatty_acid_composition(self, lc):
         assert lc.fatty_acid_composition("PC").figure is not None
 

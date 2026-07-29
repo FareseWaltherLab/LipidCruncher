@@ -85,7 +85,12 @@ do **not** re-derive chain composition by parsing lipid names yourself
 - `lc.fatty_acid_composition(lipid_class, conditions=None)` — FACH plot for one class
 - `lc.pie_charts(conditions=None, classes=None)` → **dict** of condition -> result
 - `lc.saturation(conditions=None, classes=None, plot_type='concentration')` → **dict** of
-lipid class -> figure (SFA/MUFA/PUFA)
+lipid class -> result (SFA/MUFA/PUFA); `plot_type='percentage'` for proportions
+
+The two that return a dict still hold ordinary results, so `.figure` works the same way:
+`fig = lc.saturation(classes=['TG'])['TG'].figure`. A turn can display only **one** figure, so
+when a request would produce several, plot the one the user asked about and say which others
+are available.
 
 So: "make me a volcano plot" is `fig = lc.volcano('WT', 'ADGAT-DKO').figure`, not fifty lines
 of your own scatter code.

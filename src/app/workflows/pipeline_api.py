@@ -347,11 +347,17 @@ class PipelineAPI:
         classes: Optional[List[str]] = None,
         plot_type: str = 'concentration',
         show_significance: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, LCResult]:
         """Saturation profile (SFA/MUFA/PUFA) per lipid class.
 
+        Args:
+            plot_type: 'concentration' or 'percentage'.
+
         Returns:
-            Dict of lipid class -> Plotly figure, as the app renders them.
+            Dict of lipid class -> LCResult, matching every other plot
+            helper — so ``lc.saturation(classes=['TG'])['TG'].figure`` works
+            the same way as ``lc.volcano(...).figure``. The shared
+            statistical summary is on each result's ``raw``.
         """
         res = self._analysis().run_saturation(
             df=_as_concentration_frame(self._df),
@@ -363,7 +369,10 @@ class PipelineAPI:
             show_significance=show_significance,
         )
         self._check(res, "Saturation plot")
-        return res.plots
+        return {
+            lipid_class: LCResult(figure, None, res)
+            for lipid_class, figure in res.plots.items()
+        }
 
     def chain_length(
         self,
