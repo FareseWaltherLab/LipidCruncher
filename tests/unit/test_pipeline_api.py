@@ -421,3 +421,40 @@ class TestPlotsReachTheSandbox:
                    "lc.chain_length", "lc.pathway", "lc.saturation",
                    "lc.pie_charts", "lc.fatty_acid_composition"):
             assert fn in prompt, f"{fn} missing from prompt catalog"
+
+
+class TestEveryPathSuppliesThePipeline:
+    """Regression tests for two wiring bugs found during the layer move."""
+
+    def test_unified_path_passes_lc_to_the_sandbox(self, df, monkeypatch):
+        """handle_unified_message called the sandbox without `lc`, so that
+        tab silently had no access to LipidCruncher's pipeline."""
+        from app.workflows.ai_chat import AIChatWorkflow
+        from app.services.ai_chat import ai_client, sandbox
+
+        seen = {}
+        real_execute = sandbox.SandboxService.execute
+
+        def spy(code, df_, config=None, **kwargs):
+            seen["lc"] = kwargs.get("lc")
+            return real_execute(code, df_, config, **kwargs)
+
+        monkeypatch.setattr(sandbox.SandboxService, "execute", spy)
+        monkeypatch.setattr(
+            ai_client.AIClientService, "execute_tool_loop",
+            lambda *a, **k: "```python\nresult_df = df.head(1)\n```",
+        )
+        session = AIChatWorkflow.start_unified_session(df)
+        AIChatWorkflow.handle_unified_message(
+            user_message="show one row", session=session, source_df=df,
+        )
+        assert seen["lc"] is not None, "unified path lost the lc namespace"
+
+    def test_missing_lc_explains_itself(self, df):
+        """Binding None surfaced as \"'NoneType' object has no attribute
+        'volcano'\", which told nobody anything."""
+        from app.services.ai_chat.sandbox import SandboxService
+        res = SandboxService.execute("fig = lc.volcano('a', 'b').figure", df)
+        assert not res.success
+        assert "lc.volcano is unavailable" in res.error_message
+        assert "pipeline was not supplied" in res.error_message
