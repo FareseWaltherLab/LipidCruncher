@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from app.models.experiment import ExperimentConfig
-from app.services.ai_chat.pipeline_api import PipelineAPI
+from app.workflows.pipeline_api import PipelineAPI
 
 from tests.evals import reference_analysis as ref
 
@@ -161,7 +161,10 @@ class TestSandboxIntegration:
 
     def _run(self, code, df, experiment=None):
         from app.services.ai_chat.sandbox import SandboxService
-        return SandboxService.execute(code, df, experiment=experiment)
+        return SandboxService.execute(
+            code, df, experiment=experiment,
+            lc=PipelineAPI(df, experiment),
+        )
 
     def test_lc_is_available_to_generated_code(self, df, experiment):
         res = self._run(
@@ -321,3 +324,81 @@ class TestResultPresentation:
         assert "Return tables, don't print them" in (
             data_questions_system_prompt()
         )
+
+
+class TestAnalysisPlotsUseTheAppsOwnCode:
+    """Every plot helper must delegate to AnalysisWorkflow, so a figure the
+    AI produces is the same figure the app's analysis pages produce."""
+
+    def test_volcano(self, lc):
+        res = lc.volcano("WT", "KO")
+        assert res.figure is not None and len(res.figure.data) > 0
+        assert res.data is not None
+
+    def test_bar_chart(self, lc):
+        res = lc.bar_chart()
+        assert res.figure is not None
+        assert not res.data.empty
+
+    def test_bar_chart_log_scale(self, lc):
+        assert lc.bar_chart(scale="log10").figure is not None
+
+    def test_heatmap(self, lc):
+        assert lc.heatmap().figure is not None
+
+    def test_clustered_heatmap(self, lc):
+        assert lc.heatmap(heatmap_type="clustered", n_clusters=2).figure
+
+    def test_chain_length(self, lc):
+        assert lc.chain_length().figure is not None
+
+    def test_pathway(self, lc):
+        assert lc.pathway("WT", "KO").figure is not None
+
+    def test_pie_charts_keyed_by_condition(self, lc):
+        out = lc.pie_charts()
+        assert set(out) == {"WT", "KO"}
+        assert all(r.figure is not None for r in out.values())
+
+    def test_saturation_keyed_by_class(self, lc, df):
+        out = lc.saturation()
+        assert set(out) <= set(df["ClassKey"].unique())
+        assert out
+
+    def test_fatty_acid_composition(self, lc):
+        assert lc.fatty_acid_composition("PC").figure is not None
+
+    def test_available_classes(self, lc, df):
+        assert set(lc.available_classes()) == set(df["ClassKey"].unique())
+
+    def test_class_and_condition_subsetting(self, lc):
+        res = lc.bar_chart(conditions=["WT"], classes=["PC"])
+        assert res.figure is not None
+
+    def test_plots_need_an_experiment(self, df):
+        bare = PipelineAPI(df, experiment=None)
+        with pytest.raises(ValueError, match="No experiment is defined"):
+            bare.volcano("WT", "KO")
+
+
+class TestPlotsReachTheSandbox:
+    def test_volcano_figure_crosses_the_process_boundary(
+        self, df, experiment, lc
+    ):
+        from app.services.ai_chat.sandbox import SandboxService
+        res = SandboxService.execute(
+            "fig = lc.volcano('WT', 'KO').figure",
+            df, experiment=experiment, lc=lc,
+        )
+        assert res.success, res.error_message
+        assert res.figure is not None
+
+    def test_prompt_lists_the_plot_catalog(self):
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        prompt = data_questions_system_prompt()
+        for fn in ("lc.volcano", "lc.bar_chart", "lc.heatmap",
+                   "lc.chain_length", "lc.pathway", "lc.saturation",
+                   "lc.pie_charts", "lc.fatty_acid_composition"):
+            assert fn in prompt, f"{fn} missing from prompt catalog"

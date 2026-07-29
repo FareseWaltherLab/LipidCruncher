@@ -30,6 +30,7 @@ from ..services.ai_chat.prompt_templates import (
     unified_system_prompt,
 )
 from ..services.ai_chat.sandbox import SandboxResult, SandboxService
+from .pipeline_api import PipelineAPI
 from ..services.ai_chat.schema_extractor import SchemaExtractorService
 from ..services.ai_chat.viz_generator import VizGeneratorService
 from ..services.format_detection import (
@@ -661,6 +662,7 @@ class AIChatWorkflow:
                 sandbox_config=sandbox_config,
                 numeric_columns=numeric_columns,
                 experiment=experiment,
+                lc=PipelineAPI(analysis_df, experiment),
             )
 
             if sandbox_result.success and sandbox_result.figure is not None:
@@ -885,6 +887,7 @@ class AIChatWorkflow:
                 code, source_df, sandbox_config,
                 numeric_columns=numeric_columns,
                 experiment=experiment,
+                lc=PipelineAPI(source_df, experiment),
             )
             if sandbox_result.success:
                 result_df = sandbox_result.result_df
@@ -1178,7 +1181,10 @@ class AIChatWorkflow:
         is_transformation = False
 
         if code:
-            sandbox_result = SandboxService.execute(code, source_df, sandbox_config)
+            sandbox_result = SandboxService.execute(
+                code, source_df, sandbox_config,
+                lc=PipelineAPI(source_df, None),
+            )
 
             if sandbox_result.success:
                 # Collect all outputs (figure and result_df can coexist)

@@ -67,6 +67,28 @@ between conditions" question.
 *class* level (sums species per class first). DataFrame with `ClassKey`, `p_value`, \
 `adj_p_value`, `significant`.
 - `lc.class_summary()` → per-class `n_species` and `mean_abundance`.
+- `lc.available_classes()` → lipid classes present in the data.
+
+**Standard plots — these return LipidCruncher's *own* figures**, identical to the app's
+analysis pages, so prefer them over drawing your own. Each returns an object with `.figure`
+(assign it to `fig`) and `.data` (the frame behind it); `conditions=` and `classes=` default to
+all:
+
+- `lc.volcano(control, experimental, classes=None, p_threshold=0.05, fc_threshold=1.0)`
+- `lc.bar_chart(conditions=None, classes=None, scale='linear')` — class abundance, with
+significance annotation
+- `lc.heatmap(conditions=None, classes=None, heatmap_type='regular', n_clusters=3)` —
+`'clustered'` for clustering
+- `lc.chain_length(conditions=None, classes=None)` — uses LipidCruncher's chain-parsing rules;
+do **not** re-derive chain composition by parsing lipid names yourself
+- `lc.pathway(control, experimental)` — lipid pathway visualization
+- `lc.fatty_acid_composition(lipid_class, conditions=None)` — FACH plot for one class
+- `lc.pie_charts(conditions=None, classes=None)` → **dict** of condition -> result
+- `lc.saturation(conditions=None, classes=None, plot_type='concentration')` → **dict** of
+lipid class -> figure (SFA/MUFA/PUFA)
+
+So: "make me a volcano plot" is `fig = lc.volcano('WT', 'ADGAT-DKO').figure`, not fifty lines
+of your own scatter code.
 
 Pass **condition names**, not column lists: `lc.compare_species('WT', 'ADGAT-DKO')`. The \
 available condition names are given to you in the `<experiment>` block with every message — \

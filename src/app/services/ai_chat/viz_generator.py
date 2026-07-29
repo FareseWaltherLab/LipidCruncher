@@ -282,6 +282,7 @@ class VizGeneratorService:
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
         experiment=None,
+        lc=None,
     ) -> SandboxResult:
         """Execute visualization code in the sandbox.
 
@@ -302,5 +303,5 @@ class VizGeneratorService:
 
         return SandboxService.execute(
             code, df, sandbox_config, numeric_columns=numeric_columns,
-            experiment=experiment,
+            experiment=experiment, lc=lc,
         )

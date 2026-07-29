@@ -217,10 +217,27 @@ def _restricted_import(name, *args, **kwargs):
     return __builtins__.__import__(name, *args, **kwargs) if hasattr(__builtins__, '__import__') else __import__(name, *args, **kwargs)
 
 
+class _UnavailablePipelineAPI:
+    """Stands in for ``lc`` when no instance was supplied.
+
+    Binding ``None`` instead would surface as a bare ``'NoneType' object has
+    no attribute 'volcano'``, which tells neither the model nor the user
+    what actually went wrong.
+    """
+
+    def __getattr__(self, name):
+        raise RuntimeError(
+            f"lc.{name} is unavailable: LipidCruncher's pipeline was not "
+            f"supplied to this execution context. Compute the answer "
+            f"directly from `df` instead."
+        )
+
+
 def _build_globals(
     df: pd.DataFrame,
     numeric_columns: Optional[List[str]] = None,
     experiment: Optional[Any] = None,
+    lc: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Build the restricted globals dict for exec().
 
@@ -232,7 +249,10 @@ def _build_globals(
 
     Also exposes ``lc`` — LipidCruncher's own pipeline capabilities — so
     generated code defers to the app's documented methods (statistics,
-    summaries) instead of re-deriving them with ad-hoc formulas.
+    plots, summaries) instead of re-deriving them with ad-hoc formulas.
+    ``lc`` is supplied by the caller rather than constructed here: it lives
+    in the workflows layer (it delegates to ``AnalysisWorkflow``), and a
+    service must not import a workflow.
     """
     captured_output: list = []
 
@@ -259,46 +279,22 @@ def _build_globals(
         "statistics": statistics,
         "re": re,
         "df": df_copy,
-        "lc": _LazyPipelineAPI(df_copy, experiment),
+        # Rebind to the prepared copy so lc and df see identical data.
+        "lc": lc.with_dataframe(df_copy) if lc is not None
+              else _UnavailablePipelineAPI(),
         "_captured_output": captured_output,
     }
-
-
-class _LazyPipelineAPI:
-    """Defers building ``PipelineAPI`` until the code actually touches ``lc``.
-
-    ``pipeline_api`` pulls in the statistics services, and through them scipy
-    and statsmodels — roughly a second of import time in a cold child process.
-    Most turns never call ``lc``, so paying that on every execution is waste.
-    """
-
-    __slots__ = ("_df", "_experiment", "_api")
-
-    def __init__(self, df, experiment):
-        object.__setattr__(self, "_df", df)
-        object.__setattr__(self, "_experiment", experiment)
-        object.__setattr__(self, "_api", None)
-
-    def __getattr__(self, name):
-        api = object.__getattribute__(self, "_api")
-        if api is None:
-            from .pipeline_api import PipelineAPI
-            api = PipelineAPI(
-                object.__getattribute__(self, "_df"),
-                object.__getattribute__(self, "_experiment"),
-            )
-            object.__setattr__(self, "_api", api)
-        return getattr(api, name)
 
 
 def build_sandbox_globals(
     df: pd.DataFrame,
     numeric_columns: Optional[List[str]] = None,
     experiment: Optional[Any] = None,
+    lc: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Public entry to ``_build_globals`` for the child runner process."""
     return _build_globals(
-        df, numeric_columns=numeric_columns, experiment=experiment,
+        df, numeric_columns=numeric_columns, experiment=experiment, lc=lc,
     )
 
 
@@ -328,6 +324,7 @@ def _run_in_subprocess(
     numeric_columns: Optional[List[str]],
     experiment: Optional[Any],
     config: SandboxConfig,
+    lc: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Execute code in a separate, hardened process and return its response.
 
@@ -348,6 +345,7 @@ def _run_in_subprocess(
         "df": df,
         "numeric_columns": numeric_columns,
         "experiment": experiment,
+        "lc": lc,
         "max_output_rows": config.max_output_rows,
         "cpu_seconds": max(1, config.execution_timeout),
     }, protocol=pickle.HIGHEST_PROTOCOL)
@@ -473,6 +471,7 @@ class SandboxService:
         config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
         experiment: Optional[Any] = None,
+        lc: Optional[Any] = None,
     ) -> SandboxResult:
         """Validate and execute code in the sandbox.
 
@@ -515,7 +514,7 @@ class SandboxService:
 
         try:
             response = _run_in_subprocess(
-                code, df, numeric_columns, experiment, config,
+                code, df, numeric_columns, experiment, config, lc=lc,
             )
         except _SandboxTimeout as e:
             return SandboxResult(

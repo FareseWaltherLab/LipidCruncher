@@ -95,6 +95,7 @@ def main() -> int:
         df=request["df"],
         numeric_columns=request.get("numeric_columns"),
         experiment=request.get("experiment"),
+        lc=request.get("lc"),
     )
 
     _harden(cpu_seconds=int(request.get("cpu_seconds", 10)))
