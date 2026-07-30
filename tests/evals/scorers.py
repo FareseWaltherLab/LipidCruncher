@@ -23,12 +23,21 @@ _METHOD_MARKERS = (
     "log10", "log2", "false discovery",
 )
 
-# Signals that the model declined and explained why, rather than inventing
-# a number it cannot support.
-_REFUSAL_MARKERS = (
+# A refusal has to decline *and* pin the blame on the data. Checking only
+# for "cannot" would pass a methodology question ("I cannot proceed until
+# you choose a convention"), which is the opposite behaviour: it implies
+# the question is answerable once the user picks.
+_DECLINE_MARKERS = (
     "cannot", "can't", "unable", "not possible", "isn't possible",
-    "does not allow", "doesn't allow", "no way to", "cannot be determined",
-    "not resolvable", "would need", "ambiguous",
+    "does not allow", "doesn't allow", "no way to", "not recoverable",
+    "not resolvable",
+)
+_DATA_LIMIT_MARKERS = (
+    "sum composition", "sum-composition", "individual chain",
+    "individual fatty acid", "molecular species", "not resolvable",
+    "not recoverable", "cannot be determined", "cannot be resolved",
+    "does not identify", "doesn't identify", "only the total",
+    "total carbon",
 )
 
 
@@ -143,8 +152,11 @@ def _states_method(answer: str) -> bool:
 
 
 def _is_refusal(answer: str) -> bool:
+    """True only if the answer declines *and* names the data as the reason."""
     lowered = answer.lower()
-    return any(marker in lowered for marker in _REFUSAL_MARKERS)
+    declines = any(m in lowered for m in _DECLINE_MARKERS)
+    blames_data = any(m in lowered for m in _DATA_LIMIT_MARKERS)
+    return declines and blames_data
 
 
 def score_case(

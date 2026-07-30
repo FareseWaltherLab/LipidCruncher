@@ -37,7 +37,15 @@ class TestRouting:
         assert any("hand-rolled" in f for f in failures)
 
     def test_accepts_any_listed_alternative(self):
-        case = C.by_id("class_abundance")
+        """expect_lc is a set of acceptable routes, not a single required one.
+
+        Uses a synthetic case: no real case currently lists alternatives,
+        but the scorer supports it and the behaviour should stay pinned.
+        """
+        case = C.EvalCase(
+            id="synthetic", question="q", dataset=C.CANONICAL,
+            expect_lc=("lc.class_summary", "lc.bar_chart"), note="test only",
+        )
         assert score_routing("x = lc.bar_chart()", case) == []
         assert score_routing("x = lc.class_summary()", case) == []
         assert score_routing("x = df.groupby('ClassKey').sum()", case) != []
@@ -171,3 +179,32 @@ class TestCaseSet:
     def test_by_id_rejects_unknown(self):
         with pytest.raises(KeyError):
             C.by_id("nope")
+
+
+class TestRefusalIsNotJustAnyDecline:
+    """A methodology question must not count as a refusal.
+
+    The first eval run produced exactly this: on sum-composition data the
+    model offered presence-vs-chain-split options instead of saying the
+    chains are unrecoverable. Offering options implies the question is
+    answerable once the user chooses — it isn't.
+    """
+
+    def test_methodology_question_is_not_a_refusal(self):
+        answer = (
+            "Before I compute this I need to clarify the methodology. "
+            "I cannot proceed until you choose: presence-based, where "
+            "PC 16:0_18:1 counts in both pools, or chain-split."
+        )
+        failures = score_usability("", answer, REFUSAL)
+        assert any("cannot answer this" in f for f in failures)
+
+    def test_naming_the_data_limitation_is_a_refusal(self):
+        answer = (
+            "These lipids are annotated at sum-composition level, e.g. "
+            "PC(32:0), which gives only the total carbons across chains. "
+            "The individual fatty acids cannot be resolved from this data, "
+            "so a C18-vs-C16 total isn't recoverable. You'd need "
+            "molecular species identifications."
+        )
+        assert score_usability("", answer, REFUSAL) == []

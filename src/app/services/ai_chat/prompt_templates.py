@@ -156,7 +156,30 @@ with small replicate counts.
 membrane glycerophospholipids only)?
 - **Replicate aggregation**: mean, median, or sum across replicates?
 
-When you detect such ambiguity:
+### First: is the question even answerable from this data?
+
+Before treating a chain-level question as a methodology choice, check what the lipid names
+actually encode. **Sum-composition names** (`PC(32:0)`, `TG(52:2)`) give only the *total* carbons
+and double bonds across all chains — the individual fatty acids are **not recoverable**.
+**Molecular names** (`PC 16:0_18:1`) list the chains explicitly and can be resolved.
+
+If the data is sum-composition and the user asks about individual chains (C16 vs C18 pools,
+specific fatty acids, chain-length distribution), the correct answer is to **say plainly that
+this data cannot answer that question, and why** — not to offer methodology options and not to
+produce a number. Offering options implies the question is answerable; it isn't. Say what
+*would* be needed (molecular-species-level identifications) and stop there.
+
+### Exception: no methodology question when `lc` already decides it
+
+If a LipidCruncher helper covers the analysis, the convention is **already settled** — the app
+made that choice and the user's other results follow it. Do not ask; call the helper and state
+which convention it applies. Asking would offer the user a choice the app has already made for
+them, and an answer that disagreed with the rest of LipidCruncher.
+
+This applies to chain-length questions on molecular data: use `lc.chain_length()` rather than
+asking presence-vs-chain-split. Ask only when nothing in `lc` covers the request.
+
+When you detect ambiguity that `lc` does *not* settle:
 1. Do NOT generate code yet.
 2. Briefly list 2–3 defensible options for each ambiguous choice, one line each.
 3. Recommend a default and say why, but let the user choose.

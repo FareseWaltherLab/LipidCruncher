@@ -114,8 +114,15 @@ CASES = (
         id="class_abundance",
         question="Which lipid classes are most abundant?",
         dataset=CANONICAL,
-        expect_lc=("lc.class_summary", "lc.bar_chart"),
-        note="Either helper is acceptable; both defer to the pipeline.",
+        note=(
+            "Deliberately has NO routing expectation. The first run failed "
+            "this for using df.groupby('ClassKey').sum() instead of "
+            "lc.class_summary — but a group-and-sum is not a contested "
+            "method and cannot diverge from the app in any way that matters. "
+            "Requiring lc here would train the eval to flag harmless "
+            "behaviour, which costs more than it catches. Routing is "
+            "enforced where divergence is real: statistics and chain rules."
+        ),
     ),
 
     # ---- Usability: plain questions must still answer cleanly ----------
