@@ -19,7 +19,10 @@ import pytest
 
 from app.services.plotting.lipidomic_heatmap import (
     CELL_SIZE_PX,
+    GROUPED_PAGE_SIZE,
+    MARGIN_TOP,
     MAX_CELL_SIZE_PX,
+    STRIP_HEIGHT_PX,
     ClusteringResult,
     LipidomicHeatmapPlotterService,
     _compute_concentration_percentages,
@@ -1574,3 +1577,137 @@ class TestConditionStrip:
     def test_figure_serializes(self):
         """Catches invalid Plotly specs that only surface on render."""
         assert self._fig().to_json()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TestSpeciesPaging
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestCountSpecies:
+    @staticmethod
+    def _df():
+        return pd.DataFrame({
+            'LipidMolec': ['a', 'b', 'c', 'd'],
+            'ClassKey': ['PC', 'PC', 'PE', 'TG'],
+        })
+
+    def test_counts_selected_classes(self):
+        assert LipidomicHeatmapPlotterService.count_species(
+            self._df(), ['PC'],
+        ) == 2
+
+    def test_counts_across_several_classes(self):
+        assert LipidomicHeatmapPlotterService.count_species(
+            self._df(), ['PC', 'TG'],
+        ) == 3
+
+    def test_unknown_class_counts_zero(self):
+        assert LipidomicHeatmapPlotterService.count_species(
+            self._df(), ['NOPE'],
+        ) == 0
+
+    def test_empty_selection_counts_zero(self):
+        assert LipidomicHeatmapPlotterService.count_species(self._df(), []) == 0
+
+    def test_empty_frame_is_safe(self):
+        assert LipidomicHeatmapPlotterService.count_species(
+            pd.DataFrame(), ['PC'],
+        ) == 0
+
+    def test_missing_classkey_column_is_safe(self):
+        df = pd.DataFrame({'LipidMolec': ['a']})
+        assert LipidomicHeatmapPlotterService.count_species(df, ['PC']) == 0
+
+
+class TestPageBounds:
+    def test_first_page(self):
+        assert LipidomicHeatmapPlotterService.page_bounds(
+            GROUPED_PAGE_SIZE * 3, 0,
+        ) == (0, GROUPED_PAGE_SIZE)
+
+    def test_middle_page(self):
+        assert LipidomicHeatmapPlotterService.page_bounds(
+            GROUPED_PAGE_SIZE * 3, 1,
+        ) == (GROUPED_PAGE_SIZE, GROUPED_PAGE_SIZE * 2)
+
+    def test_last_page_is_truncated_to_the_total(self):
+        total = GROUPED_PAGE_SIZE + 10
+        assert LipidomicHeatmapPlotterService.page_bounds(total, 1) == (
+            GROUPED_PAGE_SIZE, total,
+        )
+
+    def test_page_past_the_end_clamps_to_the_last(self):
+        total = GROUPED_PAGE_SIZE + 10
+        assert LipidomicHeatmapPlotterService.page_bounds(total, 50) == (
+            GROUPED_PAGE_SIZE, total,
+        )
+
+    def test_negative_page_clamps_to_the_first(self):
+        assert LipidomicHeatmapPlotterService.page_bounds(
+            GROUPED_PAGE_SIZE * 2, -3,
+        ) == (0, GROUPED_PAGE_SIZE)
+
+    def test_total_smaller_than_a_page(self):
+        assert LipidomicHeatmapPlotterService.page_bounds(20, 0) == (0, 20)
+        assert LipidomicHeatmapPlotterService.page_bounds(20, 9) == (0, 20)
+
+    def test_exact_multiple_has_no_trailing_empty_page(self):
+        total = GROUPED_PAGE_SIZE * 2
+        assert LipidomicHeatmapPlotterService.page_bounds(total, 2) == (
+            GROUPED_PAGE_SIZE, total,
+        )
+
+    def test_zero_total(self):
+        assert LipidomicHeatmapPlotterService.page_bounds(0, 0) == (0, 0)
+
+    def test_bounds_never_exceed_the_total(self):
+        for total in (1, 7, 150, 151, 999):
+            for page in range(0, 12):
+                start, end = LipidomicHeatmapPlotterService.page_bounds(total, page)
+                assert 0 <= start <= end <= total
+                assert end - start <= GROUPED_PAGE_SIZE
+
+
+class TestStripGeometry:
+    """The strip is positioned in pixels, not as a fraction of plot height.
+
+    As a fixed paper fraction it thickened with the plot and pushed its own
+    labels out of the top margin, so a tall heatmap showed condition colours
+    with no condition names.
+    """
+
+    @staticmethod
+    def _fig(n_rows):
+        index = pd.MultiIndex.from_arrays(
+            [[f'L{i}' for i in range(n_rows)], ['PC'] * n_rows],
+            names=['LipidMolec', 'ClassKey'],
+        )
+        z = pd.DataFrame(
+            np.zeros((n_rows, 4)), index=index,
+            columns=['s1', 's2', 's3', 's4'],
+        )
+        return LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            z, ['s1', 's2', 's3', 's4'],
+            sample_conditions=['A', 'A', 'B', 'B'],
+        )
+
+    @pytest.mark.parametrize('n_rows', [2, 10, 60, 150])
+    def test_strip_thickness_is_constant_in_pixels(self, n_rows):
+        fig = self._fig(n_rows)
+        plot_height = n_rows * cell_size(n_rows)
+        rect = [s for s in fig.layout.shapes if s.type == 'rect'][0]
+        assert (rect.y1 - rect.y0) * plot_height == pytest.approx(
+            STRIP_HEIGHT_PX, abs=0.01,
+        )
+
+    @pytest.mark.parametrize('n_rows', [2, 10, 60, 150])
+    def test_labels_stay_inside_the_top_margin(self, n_rows):
+        fig = self._fig(n_rows)
+        plot_height = n_rows * cell_size(n_rows)
+        for annotation in fig.layout.annotations:
+            above_plot = (annotation.y - 1) * plot_height
+            assert above_plot < MARGIN_TOP
+
+    def test_tall_heatmap_still_labels_every_block(self):
+        labels = [a.text for a in self._fig(150).layout.annotations]
+        assert 'A' in labels and 'B' in labels

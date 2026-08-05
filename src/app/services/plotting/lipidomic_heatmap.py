@@ -37,9 +37,12 @@ CELL_SIZE_PX = 18
 # Solid separators between condition columns and lipid class blocks.
 BLOCK_LINE_STYLE = dict(color='black', width=2)
 
-# Condition strip position, in paper coordinates above the plot area.
-STRIP_Y0 = 1.012
-STRIP_Y1 = 1.05
+# Condition strip geometry, in px above the plot area. Held in pixels and
+# converted to paper coordinates per figure: as a fixed paper fraction the
+# strip would thicken with the plot and push its own labels out of the top
+# margin, which is how a tall heatmap ended up showing colours but no names.
+STRIP_GAP_PX = 6
+STRIP_HEIGHT_PX = 18
 
 # Margin budget (px). Left/bottom also grow with the longest tick label.
 MARGIN_RIGHT = 130
@@ -54,9 +57,11 @@ MAX_CELL_SIZE_PX = 46
 TARGET_PLOT_HEIGHT = 380
 
 # One row per species at a fixed cell size means the figure grows without
-# bound: a 3,500-species dataset would be ~64,000px tall. Past this count the
-# class-grouped mode declines to draw and asks for a narrower class selection.
-MAX_GROUPED_SPECIES = 150
+# bound: a 3,500-species dataset would be ~64,000px tall. The class-grouped
+# mode therefore shows one page of species at a time. Narrowing the class
+# selection is not a workaround here — a single class can hold far more than
+# this (TG alone has 1,903 species in the bundled LipidSearch dataset).
+GROUPED_PAGE_SIZE = 150
 
 
 @dataclass
@@ -153,6 +158,45 @@ class LipidomicHeatmapPlotterService:
                 [condition] * len(experiment.individual_samples_list[cond_idx])
             )
         return labels
+
+    @staticmethod
+    def count_species(df: pd.DataFrame, selected_classes: List[str]) -> int:
+        """Count the lipid species belonging to the selected classes.
+
+        Lets a caller size the class-grouped mode's species pager without
+        running the whole heatmap pipeline first.
+
+        Args:
+            df: DataFrame with a ClassKey column.
+            selected_classes: Lipid classes to count.
+
+        Returns:
+            Number of matching species, or 0 if the frame has no ClassKey.
+        """
+        if df is None or df.empty or 'ClassKey' not in df.columns:
+            return 0
+        return int(df['ClassKey'].isin(selected_classes).sum())
+
+    @staticmethod
+    def page_bounds(total: int, page: int) -> Tuple[int, int]:
+        """Resolve a species page to (start, end) row offsets.
+
+        The page index is clamped into range, so a stale selection left over
+        from a wider class selection cannot produce an empty heatmap.
+
+        Args:
+            total: Total number of species available.
+            page: Zero-based page index.
+
+        Returns:
+            (start, end) offsets suitable for ``iloc`` slicing.
+        """
+        if total <= 0:
+            return 0, 0
+        last_page = max(0, (total - 1) // GROUPED_PAGE_SIZE)
+        page = min(max(0, page), last_page)
+        start = page * GROUPED_PAGE_SIZE
+        return start, min(start + GROUPED_PAGE_SIZE, total)
 
     @staticmethod
     def order_by_class(z_scores_df: pd.DataFrame) -> pd.DataFrame:
@@ -451,7 +495,7 @@ class LipidomicHeatmapPlotterService:
             ordered_df.to_numpy(), selected_samples, [classes, species],
         )
 
-        _add_condition_strip(fig, sample_conditions)
+        _add_condition_strip(fig, sample_conditions, len(species))
         _apply_square_layout(
             fig, 'Lipidomic Heatmap Grouped by Class',
             n_rows=len(species), n_cols=len(selected_samples),
@@ -498,7 +542,7 @@ class LipidomicHeatmapPlotterService:
             class_z_scores_df.to_numpy(), selected_samples, classes,
         )
 
-        _add_condition_strip(fig, sample_conditions)
+        _add_condition_strip(fig, sample_conditions, len(classes))
         _apply_square_layout(
             fig, 'Lipidomic Heatmap Aggregated by Class',
             n_rows=len(classes), n_cols=len(selected_samples),
@@ -606,6 +650,7 @@ def _condition_blocks(
 def _add_condition_strip(
     fig: go.Figure,
     sample_conditions: Optional[List[str]],
+    n_rows: int,
 ) -> None:
     """Draw a colour-coded condition strip above the columns.
 
@@ -613,10 +658,20 @@ def _add_condition_strip(
     and a solid separator between adjacent conditions. Each block is labelled
     directly rather than through a legend, which keeps the figure readable at
     any row count. Does nothing when no conditions are supplied.
+
+    Args:
+        fig: Figure to annotate.
+        sample_conditions: Condition label per sample, or None for no strip.
+        n_rows: Heatmap row count, used to convert the strip's pixel geometry
+            into paper coordinates so it keeps a constant thickness.
     """
     blocks = _condition_blocks(sample_conditions or [])
     if not blocks:
         return
+
+    plot_height = max(1, n_rows * cell_size(n_rows))
+    strip_y0 = 1 + STRIP_GAP_PX / plot_height
+    strip_y1 = strip_y0 + STRIP_HEIGHT_PX / plot_height
 
     color_map = generate_condition_color_mapping(
         list(dict.fromkeys(cond for cond, _, _ in blocks))
@@ -627,14 +682,14 @@ def _add_condition_strip(
             type='rect',
             xref='x', yref='paper',
             x0=start - 0.5, x1=end + 0.5,
-            y0=STRIP_Y0, y1=STRIP_Y1,
+            y0=strip_y0, y1=strip_y1,
             fillcolor=color_map[condition],
             line=dict(width=0),
             layer='above',
         )
         fig.add_annotation(
             xref='x', yref='paper',
-            x=(start + end) / 2, y=STRIP_Y1,
+            x=(start + end) / 2, y=strip_y1,
             text=condition,
             showarrow=False, yanchor='bottom',
             font=dict(size=12, color='black'),

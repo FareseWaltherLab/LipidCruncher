@@ -31,7 +31,7 @@ from app.workflows.analysis import (
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.services.format_detection import DataFormat
-from app.services.plotting.lipidomic_heatmap import MAX_GROUPED_SPECIES
+from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
 from app.services.statistical_testing import StatisticalTestSummary
 
 
@@ -1288,56 +1288,88 @@ class TestRunHeatmap:
             },
         })
 
-    def test_class_grouped_declines_above_the_species_limit(self, exp_2x3):
-        """One row per species is unbounded in height, so it must refuse
-        rather than emit a figure tens of thousands of pixels tall."""
-        df = self._many_species_df(MAX_GROUPED_SPECIES + 1, exp_2x3)
-        result = AnalysisWorkflow.run_heatmap(
-            df, exp_2x3,
+    def _grouped(self, df, exp, page=0):
+        return AnalysisWorkflow.run_heatmap(
+            df, exp,
             selected_conditions=['Control', 'Treatment'],
             selected_classes=['PC'],
             heatmap_type='class_grouped',
+            species_page=page,
         )
-        assert result.success is False
-        assert result.figure is None
-        assert len(result.validation_errors) == 1
 
-    def test_decline_message_names_the_count_and_the_way_out(self, exp_2x3):
-        df = self._many_species_df(MAX_GROUPED_SPECIES + 7, exp_2x3)
-        result = AnalysisWorkflow.run_heatmap(
-            df, exp_2x3,
-            selected_conditions=['Control', 'Treatment'],
-            selected_classes=['PC'],
-            heatmap_type='class_grouped',
-        )
-        message = result.validation_errors[0]
-        assert str(MAX_GROUPED_SPECIES + 7) in message
-        assert 'Aggregated by Class' in message
+    @staticmethod
+    def _rows(result):
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        return list(heatmap.y[1])
 
-    def test_class_grouped_draws_at_the_limit(self, exp_2x3):
-        """The boundary itself is allowed, not rejected."""
-        df = self._many_species_df(MAX_GROUPED_SPECIES, exp_2x3)
-        result = AnalysisWorkflow.run_heatmap(
-            df, exp_2x3,
-            selected_conditions=['Control', 'Treatment'],
-            selected_classes=['PC'],
-            heatmap_type='class_grouped',
-            )
+    def test_oversized_selection_draws_a_full_page(self, exp_2x3):
+        """A selection larger than one page still plots, one page at a time,
+        instead of emitting a figure tens of thousands of pixels tall."""
+        df = self._many_species_df(GROUPED_PAGE_SIZE * 3, exp_2x3)
+        result = self._grouped(df, exp_2x3)
         assert result.success is True
-        assert isinstance(result.figure, go.Figure)
+        assert len(self._rows(result)) == GROUPED_PAGE_SIZE
 
-    def test_limit_does_not_apply_to_the_other_modes(self, exp_2x3):
-        """Only class_grouped is height-unbounded; the rest must still draw."""
-        df = self._many_species_df(MAX_GROUPED_SPECIES + 50, exp_2x3)
+    def test_pages_are_disjoint_and_cover_everything(self, exp_2x3):
+        """Every species must be reachable on exactly one page — the whole
+        point of paging rather than truncating."""
+        total = GROUPED_PAGE_SIZE * 2 + 40
+        df = self._many_species_df(total, exp_2x3)
+        seen = []
+        for page in range(3):
+            seen.extend(self._rows(self._grouped(df, exp_2x3, page=page)))
+        assert len(seen) == total
+        assert len(set(seen)) == total
+
+    def test_last_page_holds_the_remainder(self, exp_2x3):
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 25, exp_2x3)
+        assert len(self._rows(self._grouped(df, exp_2x3, page=1))) == 25
+
+    def test_page_beyond_the_end_is_clamped(self, exp_2x3):
+        """A stale page left over from a wider class selection must not
+        produce an empty heatmap."""
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 10, exp_2x3)
+        result = self._grouped(df, exp_2x3, page=99)
+        assert result.success is True
+        assert self._rows(result) == self._rows(self._grouped(df, exp_2x3, page=1))
+
+    def test_negative_page_is_clamped(self, exp_2x3):
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 10, exp_2x3)
+        result = self._grouped(df, exp_2x3, page=-5)
+        assert self._rows(result) == self._rows(self._grouped(df, exp_2x3, page=0))
+
+    def test_single_page_selection_ignores_the_page(self, exp_2x3):
+        df = self._many_species_df(20, exp_2x3)
+        assert len(self._rows(self._grouped(df, exp_2x3, page=0))) == 20
+        assert len(self._rows(self._grouped(df, exp_2x3, page=3))) == 20
+
+    def test_export_carries_every_species_not_just_the_page(self, exp_2x3):
+        """The CSV download must not silently shrink to the visible page."""
+        total = GROUPED_PAGE_SIZE + 30
+        df = self._many_species_df(total, exp_2x3)
+        result = self._grouped(df, exp_2x3, page=1)
+        assert len(result.z_scores_df) == total
+
+    def test_paging_does_not_apply_to_the_other_modes(self, exp_2x3):
+        """Only class_grouped is height-unbounded; the rest draw everything."""
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 50, exp_2x3)
         for mode in ('regular', 'clustered', 'class_aggregated'):
             result = AnalysisWorkflow.run_heatmap(
                 df, exp_2x3,
                 selected_conditions=['Control', 'Treatment'],
                 selected_classes=['PC'],
-                heatmap_type=mode, n_clusters=2,
+                heatmap_type=mode, n_clusters=2, species_page=1,
             )
             assert result.success is True, f'{mode} was wrongly rejected'
             assert isinstance(result.figure, go.Figure)
+
+    def test_a_single_class_larger_than_a_page_is_still_viewable(self, exp_2x3):
+        """The case that motivated paging: one class with far more species
+        than fit, where narrowing the class selection cannot help."""
+        df = self._many_species_df(400, exp_2x3)
+        assert df['ClassKey'].nunique() == 1
+        rows = self._rows(self._grouped(df, exp_2x3, page=2))
+        assert len(rows) == 100
 
     def test_class_aggregated_heatmap(self, multi_species_df, exp_2x3):
         result = AnalysisWorkflow.run_heatmap(

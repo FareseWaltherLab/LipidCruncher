@@ -1,12 +1,14 @@
 """Feature 7: Lipidomic Heatmap analysis."""
 
+import math
+
 import pandas as pd
 import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.plotting.lipidomic_heatmap import (
-    MAX_GROUPED_SPECIES,
+    GROUPED_PAGE_SIZE,
     LipidomicHeatmapPlotterService,
 )
 from app.workflows.analysis import AnalysisWorkflow
@@ -66,8 +68,7 @@ def _display_lipidomic_heatmap(
                     "clustering. "
                     "Regular: one row per species, in input order. "
                     "Grouped by Class: one row per species, grouped into lipid "
-                    f"class blocks; for up to {MAX_GROUPED_SPECIES} species, so "
-                    "narrow the class selection first. "
+                    f"class blocks, {GROUPED_PAGE_SIZE} species per page. "
                     "Aggregated by Class: one row per lipid class, summing the "
                     "concentrations of its species."
                 ),
@@ -92,12 +93,20 @@ def _display_lipidomic_heatmap(
             "Aggregated by Class": 'class_aggregated',
         }[heatmap_type]
 
+        species_total = LipidomicHeatmapPlotterService.count_species(
+            df, selected_classes,
+        )
+        species_page = 0
+        if heatmap_type_value == 'class_grouped':
+            species_page = _select_species_page(species_total)
+
         section_header("📈 Results")
 
         result = StreamlitAdapter.run_heatmap(
             df, experiment, selected_conditions, selected_classes,
             heatmap_type=heatmap_type_value,
             n_clusters=n_clusters,
+            species_page=species_page,
         )
 
         if not result.success:
@@ -114,6 +123,16 @@ def _display_lipidomic_heatmap(
         # their original stretched layout.
         square_celled = heatmap_type_value in ('class_grouped', 'class_aggregated')
         st.plotly_chart(result.figure, use_container_width=not square_celled)
+
+        if heatmap_type_value == 'class_grouped' and species_total > GROUPED_PAGE_SIZE:
+            start, end = LipidomicHeatmapPlotterService.page_bounds(
+                species_total, species_page,
+            )
+            st.caption(
+                f"Showing species {start + 1}–{end} of {species_total}, "
+                f"ordered by lipid class. The CSV download below contains "
+                f"all {species_total}."
+            )
         st.session_state.analysis_heatmap_fig = result.figure
         st.session_state.analysis_all_plots['heatmap'] = result.figure
 
@@ -131,6 +150,37 @@ def _display_lipidomic_heatmap(
                 result, df, experiment, selected_conditions, selected_classes,
                 n_clusters,
             )
+
+
+def _select_species_page(species_total: int) -> int:
+    """Show a species-range picker and return the chosen zero-based page.
+
+    One row per species would make a tall selection unreadable, so the species
+    are paged. Returns 0 without rendering anything when they all fit on one
+    page. Narrowing the class selection is not an alternative here: a single
+    class can hold far more species than fit.
+    """
+    if species_total <= GROUPED_PAGE_SIZE:
+        return 0
+
+    n_pages = math.ceil(species_total / GROUPED_PAGE_SIZE)
+    pages = list(range(n_pages))
+
+    def _label(page: int) -> str:
+        start = page * GROUPED_PAGE_SIZE
+        return f"{start + 1}–{min(start + GROUPED_PAGE_SIZE, species_total)}"
+
+    return st.selectbox(
+        f"Species range ({species_total} species, {n_pages} pages)",
+        pages,
+        format_func=_label,
+        key='heatmap_species_page',
+        help=(
+            "One row per species, so the species are shown a page at a time "
+            "in lipid class order. Use 'Aggregated by Class' to see every "
+            "class at once instead."
+        ),
+    )
 
 
 def _display_cluster_composition(

@@ -56,7 +56,6 @@ from ..services.plotting.volcano_plot import (
     VolcanoData,
 )
 from ..services.plotting.lipidomic_heatmap import (
-    MAX_GROUPED_SPECIES,
     LipidomicHeatmapPlotterService,
     ClusteringResult,
 )
@@ -926,6 +925,7 @@ class AnalysisWorkflow:
         selected_classes: List[str],
         heatmap_type: str = 'regular',
         n_clusters: int = 3,
+        species_page: int = 0,
     ) -> HeatmapResult:
         """Run lipidomic heatmap analysis.
 
@@ -940,9 +940,13 @@ class AnalysisWorkflow:
             heatmap_type: 'regular', 'clustered', 'class_grouped', or
                 'class_aggregated'.
             n_clusters: Number of clusters (only for clustered type).
+            species_page: Zero-based page of species to draw, for the
+                class_grouped type only. Clamped into range.
 
         Returns:
             HeatmapResult with figure, Z-scores, and optional cluster info.
+            For class_grouped, the figure shows one page of species while
+            z_scores_df still holds every selected species.
 
         Raises:
             ValueError: If inputs are invalid.
@@ -996,21 +1000,16 @@ class AnalysisWorkflow:
             )
         elif heatmap_type == 'class_grouped':
             # One row per species at a fixed cell size, so the figure height is
-            # unbounded. Decline rather than emit a plot no one can read.
-            if len(z_scores_df) > MAX_GROUPED_SPECIES:
-                return HeatmapResult(
-                    z_scores_df=z_scores_df,
-                    success=False,
-                    validation_errors=[
-                        f"{len(z_scores_df)} lipid species selected — too many "
-                        f"to draw one row each. Narrow the lipid class "
-                        f"selection to about {MAX_GROUPED_SPECIES} species or "
-                        f"fewer, or use the 'Aggregated by Class' mode to see "
-                        f"every class at once."
-                    ],
-                )
+            # unbounded. Show one page of species at a time, in class order, so
+            # every species stays reachable however many there are.
+            ordered_df = LipidomicHeatmapPlotterService.order_by_class(
+                z_scores_df,
+            )
+            start, end = LipidomicHeatmapPlotterService.page_bounds(
+                len(ordered_df), species_page,
+            )
             figure = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
-                z_scores_df, selected_samples,
+                ordered_df.iloc[start:end], selected_samples,
                 sample_conditions=sample_conditions,
             )
         else:
