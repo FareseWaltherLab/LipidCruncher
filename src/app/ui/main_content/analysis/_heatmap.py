@@ -55,13 +55,17 @@ def _display_lipidomic_heatmap(
         with col1:
             heatmap_type = st.radio(
                 "Heatmap Type",
-                ["Clustered", "Regular", "Grouped by Class"],
+                ["Clustered", "Regular", "Grouped by Class", "Aggregated by Class"],
                 index=0,
                 key='heatmap_type',
                 help=(
-                    "Clustered: rows ordered by hierarchical clustering. "
-                    "Regular: rows in input order. "
-                    "Grouped by Class: rows grouped into lipid class blocks."
+                    "Clustered: one row per species, ordered by hierarchical "
+                    "clustering. "
+                    "Regular: one row per species, in input order. "
+                    "Grouped by Class: one row per species, grouped into lipid "
+                    "class blocks. "
+                    "Aggregated by Class: one row per lipid class, summing the "
+                    "concentrations of its species."
                 ),
             )
         with col2:
@@ -81,6 +85,7 @@ def _display_lipidomic_heatmap(
             "Clustered": 'clustered',
             "Regular": 'regular',
             "Grouped by Class": 'class_grouped',
+            "Aggregated by Class": 'class_aggregated',
         }[heatmap_type]
 
         section_header("📈 Results")
@@ -95,9 +100,11 @@ def _display_lipidomic_heatmap(
             st.warning("Could not generate heatmap.")
             return
 
-        # Rendered at its natural size, not stretched: the figure is sized so
-        # every cell is a square, which container-width stretching would undo.
-        st.plotly_chart(result.figure, use_container_width=False)
+        # The class modes size themselves so every cell is a square, which
+        # container-width stretching would undo. Clustered and Regular keep
+        # their original stretched layout.
+        square_celled = heatmap_type_value in ('class_grouped', 'class_aggregated')
+        st.plotly_chart(result.figure, use_container_width=not square_celled)
         st.session_state.analysis_heatmap_fig = result.figure
         st.session_state.analysis_all_plots['heatmap'] = result.figure
 

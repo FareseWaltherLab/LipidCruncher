@@ -1246,17 +1246,66 @@ class TestRunHeatmap:
         runs = [key for key, _ in itertools.groupby(classes)]
         assert len(runs) == len(set(runs))
 
-    def test_all_modes_colour_code_the_sample_axis(self, multi_species_df, exp_2x3):
-        """The workflow must pass condition labels through to every mode."""
-        for mode in ('regular', 'clustered', 'class_grouped'):
+    def test_class_modes_colour_code_the_sample_axis(self, multi_species_df, exp_2x3):
+        """The workflow must pass condition labels to the two class modes."""
+        for mode in ('class_grouped', 'class_aggregated'):
+            result = AnalysisWorkflow.run_heatmap(
+                multi_species_df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC', 'PE'],
+                heatmap_type=mode,
+            )
+            rects = [s for s in result.figure.layout.shapes if s.type == 'rect']
+            assert len(rects) == 2, f'{mode} is missing the condition strip'
+
+    def test_original_modes_are_unchanged(self, multi_species_df, exp_2x3):
+        """Clustered and Regular were reverted to their original rendering."""
+        for mode in ('regular', 'clustered'):
             result = AnalysisWorkflow.run_heatmap(
                 multi_species_df, exp_2x3,
                 selected_conditions=['Control', 'Treatment'],
                 selected_classes=['PC', 'PE'],
                 heatmap_type=mode, n_clusters=2,
             )
-            rects = [s for s in result.figure.layout.shapes if s.type == 'rect']
-            assert len(rects) == 2, f'{mode} is missing the condition strip'
+            assert not [
+                s for s in result.figure.layout.shapes if s.type == 'rect'
+            ], f'{mode} should not have a condition strip'
+            assert not [
+                t for t in result.figure.data if isinstance(t, go.Scatter)
+            ], f'{mode} should not have legend proxies'
+
+    def test_class_aggregated_heatmap(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_aggregated',
+        )
+        assert isinstance(result, HeatmapResult)
+        assert isinstance(result.figure, go.Figure)
+        assert result.cluster_composition is None
+
+    def test_class_aggregated_has_one_row_per_class(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_aggregated',
+        )
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        assert sorted(heatmap.y) == ['PC', 'PE']
+
+    def test_class_aggregated_exports_class_level_z_scores(
+        self, multi_species_df, exp_2x3,
+    ):
+        """The CSV export must carry the class-level Z-scores, not species."""
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_aggregated',
+        )
+        assert sorted(result.z_scores_df.index) == ['PC', 'PE']
 
     def test_empty_conditions_raises(self, multi_species_df, exp_2x3):
         with pytest.raises(ValueError, match='condition'):

@@ -19,10 +19,12 @@ import pytest
 
 from app.services.plotting.lipidomic_heatmap import (
     CELL_SIZE_PX,
+    MAX_CELL_SIZE_PX,
     ClusteringResult,
     LipidomicHeatmapPlotterService,
     _compute_concentration_percentages,
     _compute_species_percentages,
+    cell_size,
 )
 from tests.conftest import make_experiment
 
@@ -548,17 +550,12 @@ class TestClusteredHeatmapLayout:
         )
         assert fig.layout.yaxis.title.text == 'Lipid Molecules'
 
-    def test_dimensions_follow_the_grid(self, z_scores_df, sample_names):
-        """Size is derived from the cell count, not a fixed 900x600 canvas,
-        so that every cell renders as a square."""
+    def test_dimensions(self, z_scores_df, sample_names):
         fig = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
             z_scores_df, sample_names, 2,
         )
-        layout = fig.layout
-        plot_width = layout.width - layout.margin.l - layout.margin.r
-        plot_height = layout.height - layout.margin.t - layout.margin.b
-        assert plot_width == len(sample_names) * CELL_SIZE_PX
-        assert plot_height == len(z_scores_df) * CELL_SIZE_PX
+        assert fig.layout.width == 900
+        assert fig.layout.height == 600
 
     def test_xaxis_tickangle(self, z_scores_df, sample_names):
         fig = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
@@ -1217,7 +1214,190 @@ class TestClassGroupedHeatmap:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════
+# TestClassAggregatedZScores
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestClassAggregatedZScores:
+    @staticmethod
+    def _filtered():
+        """Two PC species and one PE species across four samples."""
+        return pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(18:1)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            'concentration[s1]': [10.0, 20.0, 5.0],
+            'concentration[s2]': [20.0, 40.0, 5.0],
+            'concentration[s3]': [30.0, 60.0, 5.0],
+            'concentration[s4]': [40.0, 80.0, 5.0],
+        })
+
+    def test_one_row_per_class(self):
+        result = LipidomicHeatmapPlotterService.compute_class_z_scores(
+            self._filtered(),
+        )
+        assert list(result.index) == ['PC', 'PE']
+
+    def test_species_are_summed_within_class(self):
+        """PC row must standardise 30/60/90/120, i.e. the summed species."""
+        result = LipidomicHeatmapPlotterService.compute_class_z_scores(
+            self._filtered(),
+        )
+        totals = pd.Series([30.0, 60.0, 90.0, 120.0])
+        expected = (totals - totals.mean()) / totals.std()
+        assert result.loc['PC'].to_numpy() == pytest.approx(expected.to_numpy())
+
+    def test_rows_have_zero_mean(self):
+        result = LipidomicHeatmapPlotterService.compute_class_z_scores(
+            self._filtered(),
+        )
+        assert result.loc['PC'].mean() == pytest.approx(0.0)
+
+    def test_rows_have_unit_std(self):
+        result = LipidomicHeatmapPlotterService.compute_class_z_scores(
+            self._filtered(),
+        )
+        assert result.loc['PC'].std() == pytest.approx(1.0)
+
+    def test_constant_class_produces_nan(self):
+        """PE is flat across samples, so its Z-scores are undefined."""
+        result = LipidomicHeatmapPlotterService.compute_class_z_scores(
+            self._filtered(),
+        )
+        assert result.loc['PE'].isna().all()
+
+    def test_differs_from_species_level_z_scores(self):
+        """Aggregating then standardising is not the same as standardising
+        each species, which is the whole point of this mode."""
+        filtered = self._filtered()
+        class_z = LipidomicHeatmapPlotterService.compute_class_z_scores(filtered)
+        species_z = LipidomicHeatmapPlotterService.compute_z_scores(filtered)
+        assert len(class_z) == 2
+        assert len(species_z) == 3
+
+    def test_columns_preserved(self):
+        result = LipidomicHeatmapPlotterService.compute_class_z_scores(
+            self._filtered(),
+        )
+        assert list(result.columns) == [
+            'concentration[s1]', 'concentration[s2]',
+            'concentration[s3]', 'concentration[s4]',
+        ]
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError, match="empty"):
+            LipidomicHeatmapPlotterService.compute_class_z_scores(pd.DataFrame())
+
+    def test_no_concentration_columns_raises(self):
+        df = pd.DataFrame({'LipidMolec': ['A'], 'ClassKey': ['PC']})
+        with pytest.raises(ValueError, match="No concentration columns"):
+            LipidomicHeatmapPlotterService.compute_class_z_scores(df)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TestClassAggregatedHeatmap
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestClassAggregatedHeatmap:
+    @staticmethod
+    def _class_z(classes=('PC', 'PE', 'TG')):
+        return pd.DataFrame(
+            np.arange(len(classes) * 3, dtype=float).reshape(-1, 3),
+            index=pd.Index(list(classes), name='ClassKey'),
+            columns=['s1', 's2', 's3'],
+        )
+
+    def test_returns_figure_with_heatmap(self):
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'],
+        )
+        assert isinstance(fig, go.Figure)
+        assert [t for t in fig.data if isinstance(t, go.Heatmap)]
+
+    def test_one_row_per_class(self):
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'],
+        )
+        heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
+        assert list(heatmap.y) == ['PC', 'PE', 'TG']
+        assert np.asarray(heatmap.z).shape == (3, 3)
+
+    def test_y_axis_titled_for_classes(self):
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'],
+        )
+        assert fig.layout.yaxis.title.text == 'Lipid Classes'
+
+    def test_cells_are_square(self):
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'],
+        )
+        layout = fig.layout
+        width = (layout.width - layout.margin.l - layout.margin.r) / 3
+        height = (layout.height - layout.margin.t - layout.margin.b) / 3
+        assert width == height == cell_size(3)
+
+    def test_condition_strip_drawn(self):
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'],
+            sample_conditions=['A', 'A', 'B'],
+        )
+        assert len([s for s in fig.layout.shapes if s.type == 'rect']) == 2
+
+    def test_symmetric_colorscale(self):
+        z = self._class_z()
+        z.iloc[0, 0] = -9.0
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            z, ['s1', 's2', 's3'],
+        )
+        heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
+        assert heatmap.zmin == -heatmap.zmax
+
+    def test_figure_serializes(self):
+        assert LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'],
+        ).to_json()
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError, match="empty"):
+            LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+                pd.DataFrame(), ['s1'],
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════
+# TestCellSize
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestCellSize:
+    def test_species_sized_heatmaps_use_the_base_cell(self):
+        assert cell_size(40) == CELL_SIZE_PX
+        assert cell_size(200) == CELL_SIZE_PX
+
+    def test_short_heatmaps_get_larger_cells(self):
+        """A 6-class aggregated map would be a sliver at 18px."""
+        assert cell_size(6) > CELL_SIZE_PX
+
+    def test_growth_is_capped(self):
+        assert cell_size(1) == MAX_CELL_SIZE_PX
+        assert cell_size(2) == MAX_CELL_SIZE_PX
+
+    def test_never_below_the_base_cell(self):
+        assert all(cell_size(n) >= CELL_SIZE_PX for n in range(1, 500))
+
+    def test_monotonically_non_increasing(self):
+        sizes = [cell_size(n) for n in range(1, 100)]
+        assert all(a >= b for a, b in zip(sizes, sizes[1:]))
+
+    def test_zero_rows_is_safe(self):
+        assert cell_size(0) == CELL_SIZE_PX
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # TestSquareCells
+#
+# Only the two class-oriented modes are square-celled. Clustered and Regular
+# keep their original fixed-canvas layout.
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestSquareCells:
@@ -1233,50 +1413,70 @@ class TestSquareCells:
         )
 
     @staticmethod
-    def _cell_size(fig, n_rows, n_cols):
+    def _plot_area(fig):
         layout = fig.layout
-        width = (layout.width - layout.margin.l - layout.margin.r) / n_cols
-        height = (layout.height - layout.margin.t - layout.margin.b) / n_rows
-        return width, height
+        return (
+            layout.width - layout.margin.l - layout.margin.r,
+            layout.height - layout.margin.t - layout.margin.b,
+        )
 
-    def test_regular_heatmap_cells_are_square(self):
+    @pytest.mark.parametrize('n_rows', [2, 6, 20, 60])
+    def test_class_grouped_cells_are_square(self, n_rows):
+        samples = ['s1', 's2', 's3']
+        fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            self._z(n_rows=n_rows), samples,
+        )
+        width, height = self._plot_area(fig)
+        assert width / len(samples) == height / n_rows == cell_size(n_rows)
+
+    @pytest.mark.parametrize('n_rows', [2, 6, 20])
+    def test_class_aggregated_cells_are_square(self, n_rows):
+        classes = [f'C{i}' for i in range(n_rows)]
+        class_z = pd.DataFrame(
+            np.arange(n_rows * 3, dtype=float).reshape(n_rows, 3),
+            index=pd.Index(classes, name='ClassKey'),
+            columns=['s1', 's2', 's3'],
+        )
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            class_z, ['s1', 's2', 's3'],
+        )
+        width, height = self._plot_area(fig)
+        assert width / 3 == height / n_rows == cell_size(n_rows)
+
+    def test_height_scales_with_species_count(self):
+        """At a fixed cell size, twice the rows is twice the plot height."""
+        small = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            self._z(n_rows=40), ['s1', 's2', 's3'],
+        )
+        large = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            self._z(n_rows=80), ['s1', 's2', 's3'],
+        )
+        assert self._plot_area(large)[1] == 2 * self._plot_area(small)[1]
+
+    def test_width_scales_with_sample_count(self):
+        narrow = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            self._z(n_cols=3), ['s1', 's2', 's3'],
+        )
+        wide = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            self._z(n_cols=9), [f's{i+1}' for i in range(9)],
+        )
+        assert wide.layout.width - narrow.layout.width == 6 * cell_size(4)
+
+    def test_regular_keeps_original_fixed_layout(self):
+        """Regular mode was deliberately left alone."""
         fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(
             self._z(), ['s1', 's2', 's3'],
         )
-        width, height = self._cell_size(fig, 4, 3)
-        assert width == height == CELL_SIZE_PX
+        assert fig.layout.width is None
+        assert fig.layout.height is None
+        assert fig.layout.margin.l == 10
 
-    def test_clustered_heatmap_cells_are_square(self):
+    def test_clustered_keeps_original_fixed_canvas(self):
         fig = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
             self._z(), ['s1', 's2', 's3'], 2,
         )
-        width, height = self._cell_size(fig, 4, 3)
-        assert width == height == CELL_SIZE_PX
-
-    def test_class_grouped_cells_are_square(self):
-        fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
-            self._z(), ['s1', 's2', 's3'],
-        )
-        width, height = self._cell_size(fig, 4, 3)
-        assert width == height == CELL_SIZE_PX
-
-    def test_height_scales_with_species_count(self):
-        small = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-            self._z(n_rows=4), ['s1', 's2', 's3'],
-        )
-        large = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-            self._z(n_rows=40), ['s1', 's2', 's3'],
-        )
-        assert large.layout.height - small.layout.height == 36 * CELL_SIZE_PX
-
-    def test_width_scales_with_sample_count(self):
-        narrow = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-            self._z(n_cols=3), ['s1', 's2', 's3'],
-        )
-        wide = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-            self._z(n_cols=9), [f's{i+1}' for i in range(9)],
-        )
-        assert wide.layout.width - narrow.layout.width == 6 * CELL_SIZE_PX
+        assert fig.layout.width == 900
+        assert fig.layout.height == 600
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1297,9 +1497,10 @@ class TestConditionStrip:
     SAMPLES = ['s1', 's2', 's3', 's4', 's5', 's6']
     CONDITIONS = ['Control', 'Control', 'Control', 'Treat', 'Treat', 'Treat']
 
-    def _fig(self, **kwargs):
-        return LipidomicHeatmapPlotterService.generate_regular_heatmap(
-            self._z(), self.SAMPLES, sample_conditions=self.CONDITIONS, **kwargs
+    def _fig(self, conditions=None):
+        return LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            self._z(), self.SAMPLES,
+            sample_conditions=self.CONDITIONS if conditions is None else conditions,
         )
 
     def test_one_block_per_condition(self):
@@ -1312,8 +1513,7 @@ class TestConditionStrip:
         assert (rects[1].x0, rects[1].x1) == (2.5, 5.5)
 
     def test_blocks_sit_above_the_plot_area(self):
-        rects = [s for s in self._fig().layout.shapes if s.type == 'rect']
-        for rect in rects:
+        for rect in [s for s in self._fig().layout.shapes if s.type == 'rect']:
             assert rect.yref == 'paper'
             assert rect.y0 > 1.0
 
@@ -1325,42 +1525,51 @@ class TestConditionStrip:
         assert len(lines) == 1
         assert lines[0].x0 == 2.5
 
-    def test_legend_entry_per_condition(self):
-        proxies = [t for t in self._fig().data if isinstance(t, go.Scatter)]
-        assert [t.name for t in proxies] == ['Control', 'Treat']
+    def test_each_block_is_labelled_directly(self):
+        """Blocks are named in place rather than through a legend, so the
+        figure stays readable however few rows it has."""
+        fig = self._fig()
+        labels = [a.text for a in fig.layout.annotations]
+        assert 'Control' in labels
+        assert 'Treat' in labels
+        assert fig.layout.showlegend is False
 
-    def test_conditions_use_shared_palette(self):
+    def test_blocks_use_shared_condition_palette(self):
         from app.services.plotting._shared import generate_condition_color_mapping
         expected = generate_condition_color_mapping(['Control', 'Treat'])
-        proxies = [t for t in self._fig().data if isinstance(t, go.Scatter)]
-        for trace in proxies:
-            assert trace.marker.color == expected[trace.name]
+        rects = [s for s in self._fig().layout.shapes if s.type == 'rect']
+        assert rects[0].fillcolor == expected['Control']
+        assert rects[1].fillcolor == expected['Treat']
 
     def test_absent_when_conditions_not_supplied(self):
-        fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(
+        fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
             self._z(), self.SAMPLES,
         )
         assert not [s for s in fig.layout.shapes if s.type == 'rect']
-        assert not [t for t in fig.data if isinstance(t, go.Scatter)]
 
     def test_non_contiguous_conditions_get_separate_blocks(self):
         """A condition split across the axis must not be merged into one block."""
-        fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-            self._z(), self.SAMPLES,
-            sample_conditions=['A', 'A', 'B', 'B', 'A', 'A'],
-        )
-        rects = [s for s in fig.layout.shapes if s.type == 'rect']
-        assert len(rects) == 3
+        fig = self._fig(conditions=['A', 'A', 'B', 'B', 'A', 'A'])
+        assert len([s for s in fig.layout.shapes if s.type == 'rect']) == 3
 
     def test_single_condition_has_no_separator(self):
-        fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-            self._z(), self.SAMPLES, sample_conditions=['A'] * 6,
-        )
-        lines = [
+        fig = self._fig(conditions=['A'] * 6)
+        assert not [
             s for s in fig.layout.shapes
             if s.type == 'line' and s.y0 == 0 and s.y1 == 1
         ]
-        assert lines == []
+
+    def test_never_added_to_the_untouched_modes(self):
+        """Clustered and Regular were reverted, so they must stay strip-free."""
+        for fig in (
+            LipidomicHeatmapPlotterService.generate_regular_heatmap(
+                self._z(), self.SAMPLES,
+            ),
+            LipidomicHeatmapPlotterService.generate_clustered_heatmap(
+                self._z(), self.SAMPLES, 2,
+            ),
+        ):
+            assert not [s for s in fig.layout.shapes if s.type == 'rect']
 
     def test_figure_serializes(self):
         """Catches invalid Plotly specs that only surface on render."""

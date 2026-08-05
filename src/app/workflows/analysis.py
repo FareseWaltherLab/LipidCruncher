@@ -936,7 +936,8 @@ class AnalysisWorkflow:
             experiment: Experiment configuration.
             selected_conditions: Conditions to include.
             selected_classes: Lipid classes to include.
-            heatmap_type: 'regular', 'clustered', or 'class_grouped'.
+            heatmap_type: 'regular', 'clustered', 'class_grouped', or
+                'class_aggregated'.
             n_clusters: Number of clusters (only for clustered type).
 
         Returns:
@@ -949,29 +950,44 @@ class AnalysisWorkflow:
             raise ValueError("At least one condition must be selected")
         if not selected_classes:
             raise ValueError("At least one lipid class must be selected")
-        if heatmap_type not in ('regular', 'clustered', 'class_grouped'):
+        if heatmap_type not in (
+            'regular', 'clustered', 'class_grouped', 'class_aggregated',
+        ):
             raise ValueError(
-                f"Invalid heatmap_type '{heatmap_type}'. "
-                "Must be 'regular', 'clustered', or 'class_grouped'"
+                f"Invalid heatmap_type '{heatmap_type}'. Must be 'regular', "
+                "'clustered', 'class_grouped', or 'class_aggregated'"
             )
 
         filtered_df, selected_samples = LipidomicHeatmapPlotterService.filter_data(
             df, selected_conditions, selected_classes, experiment,
         )
 
-        z_scores_df = LipidomicHeatmapPlotterService.compute_z_scores(
-            filtered_df,
-        )
-
         sample_conditions = LipidomicHeatmapPlotterService.sample_condition_labels(
             selected_conditions, experiment,
+        )
+
+        # The class-aggregated mode standardises class totals, not species, so
+        # it needs its own Z-scores rather than the species-level ones.
+        if heatmap_type == 'class_aggregated':
+            class_z_scores_df = LipidomicHeatmapPlotterService.compute_class_z_scores(
+                filtered_df,
+            )
+            return HeatmapResult(
+                figure=LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+                    class_z_scores_df, selected_samples,
+                    sample_conditions=sample_conditions,
+                ),
+                z_scores_df=class_z_scores_df,
+            )
+
+        z_scores_df = LipidomicHeatmapPlotterService.compute_z_scores(
+            filtered_df,
         )
 
         cluster_composition = None
         if heatmap_type == 'clustered':
             figure = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
                 z_scores_df, selected_samples, n_clusters,
-                sample_conditions=sample_conditions,
             )
             cluster_composition = LipidomicHeatmapPlotterService.get_cluster_composition(
                 z_scores_df, n_clusters, mode='species_count',
@@ -985,7 +1001,6 @@ class AnalysisWorkflow:
         else:
             figure = LipidomicHeatmapPlotterService.generate_regular_heatmap(
                 z_scores_df, selected_samples,
-                sample_conditions=sample_conditions,
             )
 
         return HeatmapResult(

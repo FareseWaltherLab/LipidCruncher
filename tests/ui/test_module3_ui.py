@@ -588,6 +588,25 @@ class TestHeatmapUI:
         assert radio is not None
         assert radio.value == "Clustered"
 
+    def test_heatmap_type_radio_has_four_modes(self, analysis_generic_app):
+        """Two original modes plus the two class-oriented ones."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        assert at.radio(key='heatmap_type').options == [
+            "Clustered", "Regular", "Grouped by Class", "Aggregated by Class",
+        ]
+
+    def test_heatmap_grouped_by_class_renders(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    def test_heatmap_aggregated_by_class_renders(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
     def test_heatmap_cluster_slider_defaults(self, analysis_generic_app):
         """Cluster slider defaults to 5 in Clustered mode."""
         at = self._switch_to_heatmap(analysis_generic_app)
