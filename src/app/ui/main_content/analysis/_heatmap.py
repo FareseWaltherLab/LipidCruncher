@@ -55,9 +55,14 @@ def _display_lipidomic_heatmap(
         with col1:
             heatmap_type = st.radio(
                 "Heatmap Type",
-                ["Clustered", "Regular"],
+                ["Clustered", "Regular", "Grouped by Class"],
                 index=0,
                 key='heatmap_type',
+                help=(
+                    "Clustered: rows ordered by hierarchical clustering. "
+                    "Regular: rows in input order. "
+                    "Grouped by Class: rows grouped into lipid class blocks."
+                ),
             )
         with col2:
             if heatmap_type == "Clustered":
@@ -72,7 +77,11 @@ def _display_lipidomic_heatmap(
                 n_clusters = 3
                 st.markdown("")  # Alignment placeholder
 
-        heatmap_type_value = 'clustered' if heatmap_type == "Clustered" else 'regular'
+        heatmap_type_value = {
+            "Clustered": 'clustered',
+            "Regular": 'regular',
+            "Grouped by Class": 'class_grouped',
+        }[heatmap_type]
 
         section_header("📈 Results")
 
@@ -86,7 +95,9 @@ def _display_lipidomic_heatmap(
             st.warning("Could not generate heatmap.")
             return
 
-        st.plotly_chart(result.figure, use_container_width=True)
+        # Rendered at its natural size, not stretched: the figure is sized so
+        # every cell is a square, which container-width stretching would undo.
+        st.plotly_chart(result.figure, use_container_width=False)
         st.session_state.analysis_heatmap_fig = result.figure
         st.session_state.analysis_all_plots['heatmap'] = result.figure
 

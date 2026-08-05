@@ -390,6 +390,52 @@ class TestNormalization:
         assert radio is not None
         assert radio.value == 'Manual Input'
 
+    def test_apply_to_all_fills_every_sample(self, norm_no_standards_app):
+        """The bulk button must overwrite all six per-sample inputs at once."""
+        at = norm_no_standards_app
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        at.number_input(key='protein_bulk_amount').set_value(200.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        for sample in samples:
+            assert at.session_state[f'protein_{sample}'] == 200.0
+
+    def test_apply_to_all_takes_effect_in_the_same_run(self, norm_no_standards_app):
+        """The bulk fill renders before the grid, so the visible per-sample
+        widgets must already show the new value without a second interaction."""
+        at = norm_no_standards_app
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        at.number_input(key='protein_bulk_amount').set_value(150.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        rendered = [at.number_input(key=f'protein_{s}').value for s in samples]
+        assert rendered == [150.0] * len(samples)
+
+    def test_individual_values_editable_after_apply_to_all(self, norm_no_standards_app):
+        """Bulk fill is a starting point, not a lock: one sample can differ."""
+        at = norm_no_standards_app
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        at.number_input(key='protein_bulk_amount').set_value(100.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        at.number_input(key=f'protein_{samples[0]}').set_value(250.0).run()
+
+        assert at.session_state[f'protein_{samples[0]}'] == 250.0
+        assert at.session_state[f'protein_{samples[1]}'] == 100.0
+
+    def test_protein_values_unchanged_until_button_clicked(self, norm_no_standards_app):
+        """Typing an amount without clicking must not touch the per-sample inputs."""
+        at = norm_no_standards_app
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        at.number_input(key='protein_bulk_amount').set_value(500.0).run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        for sample in samples:
+            assert at.session_state[f'protein_{sample}'] == 1.0
+
     def test_protein_input_method_has_two_options(self, norm_no_standards_app):
         """Protein input method has Manual Input and Upload CSV options."""
         at = norm_no_standards_app

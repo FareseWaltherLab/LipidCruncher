@@ -13,6 +13,11 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+from app.services.plotting._shared import MARKER_LINE
+
+
+MARKER_SIZE = 6
+
 
 class BQCPlotterService:
     """Creates CoV scatter plots for BQC quality assessment."""
@@ -186,13 +191,15 @@ class BQCPlotterService:
         if len(below) > 0:
             fig.add_trace(go.Scatter(
                 x=below['Mean_concentration'], y=below['CoV'],
-                mode='markers', marker=dict(size=5, color='blue'),
+                mode='markers',
+                marker=dict(size=MARKER_SIZE, color='blue', line=MARKER_LINE),
                 text=below['Species'], hovertemplate=hover_tpl,
             ))
         if len(above) > 0:
             fig.add_trace(go.Scatter(
                 x=above['Mean_concentration'], y=above['CoV'],
-                mode='markers', marker=dict(size=5, color='red'),
+                mode='markers',
+                marker=dict(size=MARKER_SIZE, color='red', line=MARKER_LINE),
                 text=above['Species'], hovertemplate=hover_tpl,
             ))
 

@@ -7,6 +7,8 @@ pathway → volcano → heatmap
 
 Comprehensive test coverage matching QualityCheckWorkflow depth.
 """
+import itertools
+
 import pytest
 import pandas as pd
 import numpy as np
@@ -1220,6 +1222,41 @@ class TestRunHeatmap:
         assert isinstance(result.figure, go.Figure)
         assert result.cluster_composition is not None
         assert isinstance(result.cluster_composition, pd.DataFrame)
+
+    def test_class_grouped_heatmap(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_grouped',
+        )
+        assert isinstance(result, HeatmapResult)
+        assert isinstance(result.figure, go.Figure)
+        assert result.cluster_composition is None
+
+    def test_class_grouped_groups_rows_by_class(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_grouped',
+        )
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        classes = list(heatmap.y[0])
+        runs = [key for key, _ in itertools.groupby(classes)]
+        assert len(runs) == len(set(runs))
+
+    def test_all_modes_colour_code_the_sample_axis(self, multi_species_df, exp_2x3):
+        """The workflow must pass condition labels through to every mode."""
+        for mode in ('regular', 'clustered', 'class_grouped'):
+            result = AnalysisWorkflow.run_heatmap(
+                multi_species_df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC', 'PE'],
+                heatmap_type=mode, n_clusters=2,
+            )
+            rects = [s for s in result.figure.layout.shapes if s.type == 'rect']
+            assert len(rects) == 2, f'{mode} is missing the condition strip'
 
     def test_empty_conditions_raises(self, multi_species_df, exp_2x3):
         with pytest.raises(ValueError, match='condition'):

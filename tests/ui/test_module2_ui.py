@@ -97,6 +97,14 @@ class TestBQCAssessment:
         assert len(bqc_thresholds) == 0
         assert len(bqc_filters) == 0
 
+    def test_bqc_section_is_open_by_default(self, qc_bqc_app):
+        """The CoV filter is the first thing users must consider on this page,
+        so its section must not start collapsed."""
+        at = qc_bqc_app
+        bqc = [e for e in at.expander if 'BQC' in e.label]
+        assert len(bqc) == 1
+        assert bqc[0].proto.expanded is True
+
     def test_bqc_threshold_default_30(self, qc_bqc_app):
         """BQC CoV threshold input defaults to 30."""
         at = qc_bqc_app

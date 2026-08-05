@@ -936,7 +936,7 @@ class AnalysisWorkflow:
             experiment: Experiment configuration.
             selected_conditions: Conditions to include.
             selected_classes: Lipid classes to include.
-            heatmap_type: 'regular' or 'clustered'.
+            heatmap_type: 'regular', 'clustered', or 'class_grouped'.
             n_clusters: Number of clusters (only for clustered type).
 
         Returns:
@@ -949,10 +949,10 @@ class AnalysisWorkflow:
             raise ValueError("At least one condition must be selected")
         if not selected_classes:
             raise ValueError("At least one lipid class must be selected")
-        if heatmap_type not in ('regular', 'clustered'):
+        if heatmap_type not in ('regular', 'clustered', 'class_grouped'):
             raise ValueError(
                 f"Invalid heatmap_type '{heatmap_type}'. "
-                "Must be 'regular' or 'clustered'"
+                "Must be 'regular', 'clustered', or 'class_grouped'"
             )
 
         filtered_df, selected_samples = LipidomicHeatmapPlotterService.filter_data(
@@ -963,18 +963,29 @@ class AnalysisWorkflow:
             filtered_df,
         )
 
+        sample_conditions = LipidomicHeatmapPlotterService.sample_condition_labels(
+            selected_conditions, experiment,
+        )
+
         cluster_composition = None
         if heatmap_type == 'clustered':
             figure = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
                 z_scores_df, selected_samples, n_clusters,
+                sample_conditions=sample_conditions,
             )
             cluster_composition = LipidomicHeatmapPlotterService.get_cluster_composition(
                 z_scores_df, n_clusters, mode='species_count',
                 filtered_df=filtered_df,
             )
+        elif heatmap_type == 'class_grouped':
+            figure = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+                z_scores_df, selected_samples,
+                sample_conditions=sample_conditions,
+            )
         else:
             figure = LipidomicHeatmapPlotterService.generate_regular_heatmap(
                 z_scores_df, selected_samples,
+                sample_conditions=sample_conditions,
             )
 
         return HeatmapResult(

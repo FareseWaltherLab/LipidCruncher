@@ -43,6 +43,11 @@ CLASS_COLORS = (
 )
 
 
+# Scatter marker outline shared by the volcano, PCA, CoV and retention time
+# plots so every scatter in the app reads as one family.
+MARKER_LINE = dict(width=1, color='black')
+
+
 # ── Significance markers ──────────────────────────────────────────────
 
 

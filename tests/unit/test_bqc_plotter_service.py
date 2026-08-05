@@ -547,3 +547,41 @@ class TestBoundary:
             df, ['concentration[bqc1]', 'concentration[bqc2]']
         )
         assert result.iloc[0]['cov'] is not None
+
+
+# =============================================================================
+# TestMarkerStyling
+#
+# The CoV scatter had bare 5px markers. It now shares the volcano plot's
+# outlined marker so every scatter in the app reads as one family.
+# =============================================================================
+
+class TestMarkerStyling:
+    @staticmethod
+    def _cov_figure():
+        fig, _ = BQCPlotterService.create_cov_scatter_plot_with_threshold(
+            np.array([1.0, 2.0, 3.0, 4.0]),
+            np.array([10.0, 20.0, 40.0, 50.0]),
+            np.array(['a', 'b', 'c', 'd']),
+            30.0,
+        )
+        return fig
+
+    def test_both_traces_have_black_border(self):
+        fig = self._cov_figure()
+        assert len(fig.data) == 2  # below and above threshold
+        for trace in fig.data:
+            assert trace.marker.line.color == 'black'
+            assert trace.marker.line.width == 1
+
+    def test_border_matches_volcano_plot(self):
+        """The outline must be the shared one, not a local copy that can drift."""
+        from app.services.plotting._shared import MARKER_LINE
+        fig = self._cov_figure()
+        for trace in fig.data:
+            assert trace.marker.line.color == MARKER_LINE['color']
+            assert trace.marker.line.width == MARKER_LINE['width']
+
+    def test_threshold_coloring_preserved(self):
+        fig = self._cov_figure()
+        assert [t.marker.color for t in fig.data] == ['blue', 'red']
