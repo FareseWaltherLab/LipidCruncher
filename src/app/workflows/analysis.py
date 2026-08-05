@@ -56,6 +56,7 @@ from ..services.plotting.volcano_plot import (
     VolcanoData,
 )
 from ..services.plotting.lipidomic_heatmap import (
+    MAX_GROUPED_SPECIES,
     LipidomicHeatmapPlotterService,
     ClusteringResult,
 )
@@ -994,6 +995,20 @@ class AnalysisWorkflow:
                 filtered_df=filtered_df,
             )
         elif heatmap_type == 'class_grouped':
+            # One row per species at a fixed cell size, so the figure height is
+            # unbounded. Decline rather than emit a plot no one can read.
+            if len(z_scores_df) > MAX_GROUPED_SPECIES:
+                return HeatmapResult(
+                    z_scores_df=z_scores_df,
+                    success=False,
+                    validation_errors=[
+                        f"{len(z_scores_df)} lipid species selected — too many "
+                        f"to draw one row each. Narrow the lipid class "
+                        f"selection to about {MAX_GROUPED_SPECIES} species or "
+                        f"fewer, or use the 'Aggregated by Class' mode to see "
+                        f"every class at once."
+                    ],
+                )
             figure = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
                 z_scores_df, selected_samples,
                 sample_conditions=sample_conditions,

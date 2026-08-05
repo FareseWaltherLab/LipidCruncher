@@ -53,6 +53,11 @@ PX_PER_CHAR = 7
 MAX_CELL_SIZE_PX = 46
 TARGET_PLOT_HEIGHT = 380
 
+# One row per species at a fixed cell size means the figure grows without
+# bound: a 3,500-species dataset would be ~64,000px tall. Past this count the
+# class-grouped mode declines to draw and asks for a narrower class selection.
+MAX_GROUPED_SPECIES = 150
+
 
 @dataclass
 class ClusteringResult:

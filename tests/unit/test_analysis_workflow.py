@@ -31,6 +31,7 @@ from app.workflows.analysis import (
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.services.format_detection import DataFormat
+from app.services.plotting.lipidomic_heatmap import MAX_GROUPED_SPECIES
 from app.services.statistical_testing import StatisticalTestSummary
 
 
@@ -1273,6 +1274,70 @@ class TestRunHeatmap:
             assert not [
                 t for t in result.figure.data if isinstance(t, go.Scatter)
             ], f'{mode} should not have legend proxies'
+
+    @staticmethod
+    def _many_species_df(n_species, exp):
+        """A frame with n_species lipids across the experiment's samples."""
+        rng = np.random.default_rng(0)
+        return pd.DataFrame({
+            'LipidMolec': [f'PC({i}:0)' for i in range(n_species)],
+            'ClassKey': ['PC'] * n_species,
+            **{
+                f'concentration[{s}]': rng.random(n_species) * 100
+                for s in exp.full_samples_list
+            },
+        })
+
+    def test_class_grouped_declines_above_the_species_limit(self, exp_2x3):
+        """One row per species is unbounded in height, so it must refuse
+        rather than emit a figure tens of thousands of pixels tall."""
+        df = self._many_species_df(MAX_GROUPED_SPECIES + 1, exp_2x3)
+        result = AnalysisWorkflow.run_heatmap(
+            df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            heatmap_type='class_grouped',
+        )
+        assert result.success is False
+        assert result.figure is None
+        assert len(result.validation_errors) == 1
+
+    def test_decline_message_names_the_count_and_the_way_out(self, exp_2x3):
+        df = self._many_species_df(MAX_GROUPED_SPECIES + 7, exp_2x3)
+        result = AnalysisWorkflow.run_heatmap(
+            df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            heatmap_type='class_grouped',
+        )
+        message = result.validation_errors[0]
+        assert str(MAX_GROUPED_SPECIES + 7) in message
+        assert 'Aggregated by Class' in message
+
+    def test_class_grouped_draws_at_the_limit(self, exp_2x3):
+        """The boundary itself is allowed, not rejected."""
+        df = self._many_species_df(MAX_GROUPED_SPECIES, exp_2x3)
+        result = AnalysisWorkflow.run_heatmap(
+            df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            heatmap_type='class_grouped',
+            )
+        assert result.success is True
+        assert isinstance(result.figure, go.Figure)
+
+    def test_limit_does_not_apply_to_the_other_modes(self, exp_2x3):
+        """Only class_grouped is height-unbounded; the rest must still draw."""
+        df = self._many_species_df(MAX_GROUPED_SPECIES + 50, exp_2x3)
+        for mode in ('regular', 'clustered', 'class_aggregated'):
+            result = AnalysisWorkflow.run_heatmap(
+                df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC'],
+                heatmap_type=mode, n_clusters=2,
+            )
+            assert result.success is True, f'{mode} was wrongly rejected'
+            assert isinstance(result.figure, go.Figure)
 
     def test_class_aggregated_heatmap(self, multi_species_df, exp_2x3):
         result = AnalysisWorkflow.run_heatmap(

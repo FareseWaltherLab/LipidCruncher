@@ -607,6 +607,54 @@ class TestHeatmapUI:
         assert not at.exception
         assert at.session_state['analysis_heatmap_fig'] is not None
 
+    @staticmethod
+    def _big_analysis_app(n_lipids):
+        """An analysis app carrying more species than the grouped mode allows."""
+        from streamlit.testing.v1 import AppTest
+        from app.models.experiment import ExperimentConfig
+        from tests.ui.conftest import (
+            DEFAULT_TIMEOUT, analysis_module_script, make_analysis_dataframe,
+        )
+
+        at = AppTest.from_function(
+            analysis_module_script, default_timeout=DEFAULT_TIMEOUT,
+        )
+        at.session_state['_test_df'] = make_analysis_dataframe(
+            n_lipids=n_lipids, n_samples=6,
+        )
+        at.session_state['_test_experiment'] = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[3, 3],
+        )
+        at.session_state['_test_bqc_label'] = None
+        at.session_state['_test_format_type'] = 'Generic Format'
+        return at.run()
+
+    def test_grouped_by_class_warns_instead_of_giant_figure(self):
+        """With every class selected the species count is far past the limit,
+        so the user gets an actionable warning rather than a huge plot."""
+        from app.services.plotting.lipidomic_heatmap import MAX_GROUPED_SPECIES
+
+        at = self._big_analysis_app(MAX_GROUPED_SPECIES + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+
+        assert not at.exception
+        warnings = [w.value for w in at.warning]
+        assert any('too many' in w for w in warnings), warnings
+
+    def test_aggregated_by_class_still_works_at_that_size(self):
+        """The escape hatch the warning points at must actually work."""
+        from app.services.plotting.lipidomic_heatmap import MAX_GROUPED_SPECIES
+
+        at = self._big_analysis_app(MAX_GROUPED_SPECIES + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
     def test_heatmap_cluster_slider_defaults(self, analysis_generic_app):
         """Cluster slider defaults to 5 in Clustered mode."""
         at = self._switch_to_heatmap(analysis_generic_app)

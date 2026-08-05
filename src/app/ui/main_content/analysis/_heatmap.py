@@ -5,7 +5,10 @@ import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.services.plotting.lipidomic_heatmap import LipidomicHeatmapPlotterService
+from app.services.plotting.lipidomic_heatmap import (
+    MAX_GROUPED_SPECIES,
+    LipidomicHeatmapPlotterService,
+)
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
@@ -63,7 +66,8 @@ def _display_lipidomic_heatmap(
                     "clustering. "
                     "Regular: one row per species, in input order. "
                     "Grouped by Class: one row per species, grouped into lipid "
-                    "class blocks. "
+                    f"class blocks; for up to {MAX_GROUPED_SPECIES} species, so "
+                    "narrow the class selection first. "
                     "Aggregated by Class: one row per lipid class, summing the "
                     "concentrations of its species."
                 ),
@@ -95,6 +99,11 @@ def _display_lipidomic_heatmap(
             heatmap_type=heatmap_type_value,
             n_clusters=n_clusters,
         )
+
+        if not result.success:
+            for message in result.validation_errors:
+                st.warning(message)
+            return
 
         if result.figure is None:
             st.warning("Could not generate heatmap.")
