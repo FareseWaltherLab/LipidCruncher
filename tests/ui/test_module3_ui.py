@@ -674,6 +674,34 @@ class TestHeatmapUI:
         assert not at.exception
         assert at.session_state['analysis_heatmap_fig'] is not None
 
+    def test_aggregated_mode_explains_the_aggregation(self, analysis_generic_app):
+        """Summing species into class totals is a real analytic choice, so it
+        must be stated where the plot is, not only in the docs."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        formulas = ' '.join(c.value for c in at.code)
+        assert 'Class total' in formulas
+        assert 'sum of the concentrations' in formulas
+
+    def test_aggregated_mode_states_the_abundance_caveat(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        captions = ' '.join(c.value for c in at.caption)
+        assert 'abundant species dominate' in captions
+        assert 'S6.3' in captions
+
+    def test_species_modes_keep_the_per_species_formula(self, analysis_generic_app):
+        """The per-species wording would be wrong for the aggregated mode, so
+        it must appear only for the species-level ones."""
+        for mode in ("Clustered", "Regular", "Grouped by Class"):
+            at = self._switch_to_heatmap(analysis_generic_app)
+            at.radio(key='heatmap_type').set_value(mode).run()
+            formulas = ' '.join(c.value for c in at.code)
+            assert 'computed per lipid species' in formulas, mode
+            assert 'Class total' not in formulas, mode
+
     def test_heatmap_cluster_slider_defaults(self, analysis_generic_app):
         """Cluster slider defaults to 5 in Clustered mode."""
         at = self._switch_to_heatmap(analysis_generic_app)

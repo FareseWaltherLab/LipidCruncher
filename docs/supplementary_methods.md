@@ -304,11 +304,19 @@ For lipidomic heatmaps, hierarchical clustering is performed using Ward's method
 
 For heatmap visualization, z-scores are calculated row-wise (per lipid) by subtracting the row mean and dividing by the row standard deviation. This enables comparison across samples by standardizing each lipid's concentration profile. The color scale is symmetric around zero, with the range set to plus or minus the maximum absolute z-score value to ensure balanced representation of increases and decreases.
 
-## S6.3 Fatty Acid Composition Heatmaps
+## S6.3 Class-Level Aggregation in Lipidomic Heatmaps
+
+Lipidomic heatmaps can be displayed at species level, where each row is one lipid species, or at class level, where each row is one lipid class. Class-level rows are computed in two steps. First, for each lipid class and each sample, the concentrations of all selected species belonging to that class are summed to give a class total for that sample. Second, each class total is standardized across samples using the same row-wise z-score defined in S6.2, so that the color scale retains its meaning. Aggregation is therefore applied to concentrations before standardization, not to the species-level z-scores.
+
+This ordering matters for interpretation. Because class totals are sums of raw concentrations, a class profile is weighted by the abundance of its member species: highly abundant species dominate the class signal, and a change confined to a low-abundance species within an otherwise abundant class may not be visible at class level. Species-level heatmaps should be used when such changes are of interest. The summation is the same class-level aggregation used for the lipid class bar charts, pie charts, and pathway visualizations, so class abundances are consistent across all four views.
+
+Because only species belonging to the classes selected by the user are summed, class totals depend on the current class selection. The selection does not, however, affect the z-scores of any individual class, since each class row is standardized independently across samples.
+
+## S6.4 Fatty Acid Composition Heatmaps
 
 Fatty acid composition heatmaps display lipid distribution within a selected class. The x-axis shows the number of double bonds, the y-axis shows total carbon chain length, and color intensity represents the proportion of each species relative to total class abundance (percentage). Average markers are calculated as weighted means, where each lipid's double bond count or chain length is weighted by its proportional abundance in the class.
 
-S6.4 Saturation Profile Analysis
+S6.5 Saturation Profile Analysis
 
 Fatty acid chain parsing: For each lipid species, individual fatty acid chains are extracted from the lipid name. For example, PC 16:0_18:1 is parsed into two chains: 16:0 and 18:1. The number of double bonds in each chain determines its classification:
 
@@ -332,7 +340,7 @@ PC 16:0_20:2: 50 µM SFA + 50 µM PUFA
 
 The same total composition yields completely different saturation profiles. LipidCruncher automatically detects lipids in consolidated format within selected classes and prompts users to either include them (classification based only on total double bonds, which may be inaccurate) or exclude them (accurate classification for remaining lipids, but reduced total abundance). Single-chain lipid classes (e.g., lysophospholipids, cholesteryl esters, monoacylglycerols) are exempted from this check as they inherently contain only one fatty acid chain.
 
-S6.5 Metabolomic Pathway Visualization
+S6.6 Metabolomic Pathway Visualization
 
 The pathway visualization displays lipid classes as nodes in a metabolic network, connected by 23 edges representing known metabolic relationships (e.g., Kennedy pathway: DG→PC, DG→PE; sphingolipid biosynthesis: LCB→dhCer→Cer→SM; cardiolipin synthesis: PG→CL). Three starting presets are available: the default 18-class pathway, all 28 curated classes, or an empty canvas for building a custom network.
 

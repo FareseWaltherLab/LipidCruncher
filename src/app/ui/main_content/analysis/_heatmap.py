@@ -22,12 +22,9 @@ def _display_lipidomic_heatmap(
     """Display lipidomic heatmap analysis."""
     with st.expander("Species Level Breakdown - Lipidomic Heatmap", expanded=True):
         st.markdown(
-            "Visualize concentration patterns across all lipid species using "
-            "Z-score normalized heatmaps."
+            "Visualize concentration patterns across lipid species, or across "
+            "whole lipid classes, using Z-score normalized heatmaps."
         )
-
-        st.markdown("**Z-score** (color scale):")
-        st.code("Z = (Value - Mean) / Std Dev  (computed per lipid species)", language=None)
 
         all_conditions = AnalysisWorkflow.get_all_conditions(experiment)
         all_classes = AnalysisWorkflow.get_available_classes(df)
@@ -93,6 +90,8 @@ def _display_lipidomic_heatmap(
             "Aggregated by Class": 'class_aggregated',
         }[heatmap_type]
 
+        _display_method_explanation(heatmap_type_value)
+
         species_total = LipidomicHeatmapPlotterService.count_species(
             df, selected_classes,
         )
@@ -150,6 +149,37 @@ def _display_lipidomic_heatmap(
                 result, df, experiment, selected_conditions, selected_classes,
                 n_clusters,
             )
+
+
+def _display_method_explanation(heatmap_type_value: str) -> None:
+    """Explain how the colour scale is computed for the selected mode.
+
+    Rendered after the mode is chosen because the class-aggregated mode
+    standardises class totals rather than individual species.
+    """
+    if heatmap_type_value == 'class_aggregated':
+        st.markdown("**How each row is computed** (one row per lipid class):")
+        st.code(
+            "1. Class total = sum of the concentrations of every selected\n"
+            "                 species in that class, for each sample\n"
+            "2. Z-score     = (Class total - Mean) / Std Dev, across samples",
+            language=None,
+        )
+        st.caption(
+            "Concentrations are summed before standardizing, so a class is "
+            "weighted by the abundance of its species: abundant species "
+            "dominate their class's profile, and a change confined to a "
+            "low-abundance species may not show up here — use a species-level "
+            "mode for that. The summation is the same one behind the class bar "
+            "charts, pie charts and pathway views, so class abundances agree "
+            "across all four. See Supplementary Methods S6.3."
+        )
+    else:
+        st.markdown("**Z-score** (color scale):")
+        st.code(
+            "Z = (Value - Mean) / Std Dev  (computed per lipid species)",
+            language=None,
+        )
 
 
 def _select_species_page(species_total: int) -> int:
