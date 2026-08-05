@@ -436,6 +436,51 @@ class TestNormalization:
         for sample in samples:
             assert at.session_state[f'protein_{sample}'] == 1.0
 
+    def test_apply_to_all_available_with_standards_plus_protein(
+        self, norm_with_standards_app,
+    ):
+        """The combined method collects protein amounts too, so the bulk fill
+        must be there as well, not just under Protein-based."""
+        at = norm_with_standards_app
+        at.radio(key='norm_method_selection').set_value(
+            'Internal Standards + Protein',
+        ).run()
+
+        assert at.number_input(key='protein_bulk_amount') is not None
+        assert at.button(key='protein_apply_all') is not None
+
+    def test_apply_to_all_fills_samples_with_standards_plus_protein(
+        self, norm_with_standards_app,
+    ):
+        at = norm_with_standards_app
+        at.radio(key='norm_method_selection').set_value(
+            'Internal Standards + Protein',
+        ).run()
+        at.number_input(key='protein_bulk_amount').set_value(200.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        for sample in samples:
+            assert at.session_state[f'protein_{sample}'] == 200.0
+
+    def test_standards_plus_protein_keeps_standard_concentrations(
+        self, norm_with_standards_app,
+    ):
+        """Bulk-filling protein must not disturb the internal standard side
+        of the combined method."""
+        at = norm_with_standards_app
+        at.radio(key='norm_method_selection').set_value(
+            'Internal Standards + Protein',
+        ).run()
+        before = dict(at.session_state['standard_concentrations'])
+
+        at.number_input(key='protein_bulk_amount').set_value(150.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        assert not at.exception
+        assert dict(at.session_state['standard_concentrations']) == before
+        assert before  # the standards side really was populated
+
     def test_protein_input_method_has_two_options(self, norm_no_standards_app):
         """Protein input method has Manual Input and Upload CSV options."""
         at = norm_no_standards_app
