@@ -29,6 +29,8 @@ src/.streamlit/
 # Documentation working files
 *.docx
 *.doc
+docs/isotope_deployment.md
+docs/isotope_tracing_plan.md
 
 # IDE/editor config
 .idea/
@@ -49,6 +51,7 @@ paper_review_plan.md
 AI_CHAT_LAYER_PLAN.md
 AI_STUDIO_IMPROVEMENT_PLAN.md
 AI_STUDIO_TOOL_USE_PLAN.md
+AI_STUDIO_EVAL_PLAN.md
 
 # AI Studio schematics (working files)
 ai_studio_schematic.png
