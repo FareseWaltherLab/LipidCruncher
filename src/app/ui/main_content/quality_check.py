@@ -181,7 +181,9 @@ def _display_bqc_assessment(
     if bqc_label is None or bqc_label not in experiment.conditions_list:
         return df
 
-    with st.expander("Quality Check Using BQC Samples"):
+    # Expanded by default so the CoV filter is the first thing users see
+    # on this page and have to consciously act on.
+    with st.expander("Quality Check Using BQC Samples", expanded=True):
         st.markdown(
             "Evaluate measurement reliability using Batch Quality Control (BQC) samples. "
             "Lower CoV = more consistent measurements."

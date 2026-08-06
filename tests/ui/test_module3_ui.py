@@ -588,6 +588,120 @@ class TestHeatmapUI:
         assert radio is not None
         assert radio.value == "Clustered"
 
+    def test_heatmap_type_radio_has_four_modes(self, analysis_generic_app):
+        """Two original modes plus the two class-oriented ones."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        assert at.radio(key='heatmap_type').options == [
+            "Clustered", "Regular", "Grouped by Class", "Aggregated by Class",
+        ]
+
+    def test_heatmap_grouped_by_class_renders(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    def test_heatmap_aggregated_by_class_renders(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    @staticmethod
+    def _big_analysis_app(n_lipids):
+        """An analysis app carrying more species than the grouped mode allows."""
+        from streamlit.testing.v1 import AppTest
+        from app.models.experiment import ExperimentConfig
+        from tests.ui.conftest import (
+            DEFAULT_TIMEOUT, analysis_module_script, make_analysis_dataframe,
+        )
+
+        at = AppTest.from_function(
+            analysis_module_script, default_timeout=DEFAULT_TIMEOUT,
+        )
+        at.session_state['_test_df'] = make_analysis_dataframe(
+            n_lipids=n_lipids, n_samples=6,
+        )
+        at.session_state['_test_experiment'] = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[3, 3],
+        )
+        at.session_state['_test_bqc_label'] = None
+        at.session_state['_test_format_type'] = 'Generic Format'
+        return at.run()
+
+    def test_grouped_by_class_offers_a_species_pager_when_oversized(self):
+        """Too many species to draw at once must page, not refuse."""
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._big_analysis_app(GROUPED_PAGE_SIZE + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+
+        assert not at.exception
+        pager = at.selectbox(key='heatmap_species_page')
+        assert len(pager.options) == 2
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    def test_species_pager_switches_pages(self):
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._big_analysis_app(GROUPED_PAGE_SIZE + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+        at.selectbox(key='heatmap_species_page').set_value(1).run()
+
+        assert not at.exception
+        heatmap = at.session_state['analysis_heatmap_fig']
+        assert len(heatmap.data[0].y[1]) == 40  # the remainder page
+
+    def test_no_pager_when_species_fit_on_one_page(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+
+        assert not at.exception
+        assert not [s for s in at.selectbox if s.key == 'heatmap_species_page']
+
+    def test_aggregated_by_class_still_works_at_that_size(self):
+        """The alternative offered for seeing everything at once."""
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._big_analysis_app(GROUPED_PAGE_SIZE + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    def test_aggregated_mode_explains_the_aggregation(self, analysis_generic_app):
+        """Summing species into class totals is a real analytic choice, so it
+        must be stated where the plot is, not only in the docs."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        formulas = ' '.join(c.value for c in at.code)
+        assert 'Class total' in formulas
+        assert 'sum of the concentrations' in formulas
+
+    def test_aggregated_mode_states_the_abundance_caveat(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        captions = ' '.join(c.value for c in at.caption)
+        assert 'abundant species dominate' in captions
+        assert 'S6.3' in captions
+
+    def test_species_modes_keep_the_per_species_formula(self, analysis_generic_app):
+        """The per-species wording would be wrong for the aggregated mode, so
+        it must appear only for the species-level ones."""
+        for mode in ("Clustered", "Regular", "Grouped by Class"):
+            at = self._switch_to_heatmap(analysis_generic_app)
+            at.radio(key='heatmap_type').set_value(mode).run()
+            formulas = ' '.join(c.value for c in at.code)
+            assert 'computed per lipid species' in formulas, mode
+            assert 'Class total' not in formulas, mode
+
     def test_heatmap_cluster_slider_defaults(self, analysis_generic_app):
         """Cluster slider defaults to 5 in Clustered mode."""
         at = self._switch_to_heatmap(analysis_generic_app)

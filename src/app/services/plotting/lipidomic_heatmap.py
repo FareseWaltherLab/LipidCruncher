@@ -16,6 +16,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
+from app.services.plotting._shared import generate_condition_color_mapping
 from scipy.cluster.hierarchy import fcluster, leaves_list, linkage
 from scipy.spatial.distance import pdist
 
@@ -26,6 +27,41 @@ HEATMAP_WIDTH = 900
 HEATMAP_HEIGHT = 600
 COLORSCALE = 'RdBu_r'
 CLUSTER_LINE_STYLE = dict(color='black', width=2, dash='dash')
+
+# The class-grouped and class-aggregated modes draw cells as true squares: the
+# plot area is sized from the number of rows and columns rather than stretched
+# to the container. The Clustered and Regular modes keep their original
+# fixed-canvas layout.
+CELL_SIZE_PX = 18
+
+# Solid separators between condition columns and lipid class blocks.
+BLOCK_LINE_STYLE = dict(color='black', width=2)
+
+# Condition strip geometry, in px above the plot area. Held in pixels and
+# converted to paper coordinates per figure: as a fixed paper fraction the
+# strip would thicken with the plot and push its own labels out of the top
+# margin, which is how a tall heatmap ended up showing colours but no names.
+STRIP_GAP_PX = 6
+STRIP_HEIGHT_PX = 18
+
+# Margin budget (px). Left/bottom also grow with the longest tick label.
+MARGIN_RIGHT = 130
+MARGIN_TOP = 90
+CLASS_LABEL_WIDTH = 95
+PX_PER_CHAR = 7
+
+# A class-aggregated heatmap can be only a handful of rows tall, where 18px
+# cells would leave a sliver of a plot. Cells grow (staying square) until the
+# plot area is reasonably tall, up to a ceiling so a 2-class map is not absurd.
+MAX_CELL_SIZE_PX = 46
+TARGET_PLOT_HEIGHT = 380
+
+# One row per species at a fixed cell size means the figure grows without
+# bound: a 3,500-species dataset would be ~64,000px tall. The class-grouped
+# mode therefore shows one page of species at a time. Narrowing the class
+# selection is not a workaround here — a single class can hold far more than
+# this (TG alone has 1,903 species in the bundled LipidSearch dataset).
+GROUPED_PAGE_SIZE = 150
 
 
 @dataclass
@@ -84,16 +120,152 @@ class LipidomicHeatmapPlotterService:
             raise ValueError("No valid samples found for selected conditions")
 
         abundance_cols = [f'concentration[{s}]' for s in selected_samples]
-        available_cols = [c for c in abundance_cols if c in df.columns]
 
-        if not available_cols:
-            raise ValueError("No concentration columns found for selected samples")
+        # Every selected sample must have its column. Dropping the missing ones
+        # and still returning the full sample list would leave the column
+        # labels shifted against the data — a silently mislabelled heatmap
+        # rather than an error.
+        missing = [
+            sample for sample, col in zip(selected_samples, abundance_cols)
+            if col not in df.columns
+        ]
+        if missing:
+            raise ValueError(
+                "No concentration columns found for selected samples: "
+                f"{', '.join(missing)}. The data and the experiment "
+                "configuration are out of sync."
+            )
 
         filtered_df = df[df['ClassKey'].isin(selected_classes)][
-            ['LipidMolec', 'ClassKey'] + available_cols
+            ['LipidMolec', 'ClassKey'] + abundance_cols
         ].copy()
 
         return filtered_df, selected_samples
+
+    @staticmethod
+    def sample_condition_labels(
+        selected_conditions: List[str],
+        experiment: ExperimentConfig,
+    ) -> List[str]:
+        """Build the condition label of each sample returned by filter_data.
+
+        Index-aligned with ``filter_data``'s ``selected_samples``, so it can be
+        used to colour the sample axis by condition.
+
+        Args:
+            selected_conditions: Conditions to include, same list passed to
+                ``filter_data``.
+            experiment: Experiment configuration.
+
+        Returns:
+            One condition label per selected sample, in sample order.
+        """
+        labels: List[str] = []
+        for condition in selected_conditions:
+            if condition not in experiment.conditions_list:
+                continue
+            cond_idx = experiment.conditions_list.index(condition)
+            labels.extend(
+                [condition] * len(experiment.individual_samples_list[cond_idx])
+            )
+        return labels
+
+    @staticmethod
+    def count_species(df: pd.DataFrame, selected_classes: List[str]) -> int:
+        """Count the lipid species belonging to the selected classes.
+
+        Lets a caller size the class-grouped mode's species pager without
+        running the whole heatmap pipeline first.
+
+        Args:
+            df: DataFrame with a ClassKey column.
+            selected_classes: Lipid classes to count.
+
+        Returns:
+            Number of matching species, or 0 if the frame has no ClassKey.
+        """
+        if df is None or df.empty or 'ClassKey' not in df.columns:
+            return 0
+        return int(df['ClassKey'].isin(selected_classes).sum())
+
+    @staticmethod
+    def page_bounds(total: int, page: int) -> Tuple[int, int]:
+        """Resolve a species page to (start, end) row offsets.
+
+        The page index is clamped into range, so a stale selection left over
+        from a wider class selection cannot produce an empty heatmap.
+
+        Args:
+            total: Total number of species available.
+            page: Zero-based page index.
+
+        Returns:
+            (start, end) offsets suitable for ``iloc`` slicing.
+        """
+        if total <= 0:
+            return 0, 0
+        last_page = max(0, (total - 1) // GROUPED_PAGE_SIZE)
+        page = min(max(0, page), last_page)
+        start = page * GROUPED_PAGE_SIZE
+        return start, min(start + GROUPED_PAGE_SIZE, total)
+
+    @staticmethod
+    def order_by_class(z_scores_df: pd.DataFrame) -> pd.DataFrame:
+        """Reorder rows so each lipid class forms one contiguous block.
+
+        Classes keep the order in which they first appear, so the block order
+        follows the input data rather than being alphabetised.
+
+        Args:
+            z_scores_df: Z-score DataFrame indexed by (LipidMolec, ClassKey).
+
+        Returns:
+            The same DataFrame with rows grouped by class.
+
+        Raises:
+            ValueError: If the DataFrame is empty.
+        """
+        if z_scores_df is None or z_scores_df.empty:
+            raise ValueError("Z-scores DataFrame is empty")
+
+        classes = list(z_scores_df.index.get_level_values('ClassKey'))
+        rank = {c: i for i, c in enumerate(dict.fromkeys(classes))}
+        order = np.argsort([rank[c] for c in classes], kind='stable')
+        return z_scores_df.iloc[order]
+
+    @staticmethod
+    def compute_class_z_scores(filtered_df: pd.DataFrame) -> pd.DataFrame:
+        """Aggregate species to class level and Z-score each class row.
+
+        Concentrations are summed within each lipid class per sample — the same
+        class-level aggregation the abundance bar chart, pie chart and pathway
+        visualisations use — and each class row is then standardised across
+        samples with the same Z-score definition as ``compute_z_scores``.
+
+        Args:
+            filtered_df: DataFrame with LipidMolec, ClassKey, and
+                concentration columns (output of filter_data).
+
+        Returns:
+            DataFrame indexed by ClassKey, one row per class, holding Z-scores.
+
+        Raises:
+            ValueError: If the DataFrame is empty or has no concentration columns.
+        """
+        if filtered_df is None or filtered_df.empty:
+            raise ValueError("Filtered DataFrame is empty")
+
+        abundance_cols = [
+            c for c in filtered_df.columns if c.startswith('concentration[')
+        ]
+        if not abundance_cols:
+            raise ValueError("No concentration columns found")
+
+        class_totals = filtered_df.groupby('ClassKey')[abundance_cols].sum()
+
+        return class_totals.apply(
+            lambda x: (x - x.mean(skipna=True)) / x.std(skipna=True), axis=1,
+        )
 
     @staticmethod
     def compute_z_scores(filtered_df: pd.DataFrame) -> pd.DataFrame:
@@ -296,6 +468,104 @@ class LipidomicHeatmapPlotterService:
         return fig
 
     @staticmethod
+    def generate_class_grouped_heatmap(
+        z_scores_df: pd.DataFrame,
+        selected_samples: List[str],
+        sample_conditions: Optional[List[str]] = None,
+    ) -> go.Figure:
+        """Create a heatmap with species grouped into lipid class blocks.
+
+        Rows are reordered so each lipid class is contiguous, and the class name
+        is drawn as a group label to the left of the species names with a
+        divider between blocks.
+
+        Args:
+            z_scores_df: Z-score DataFrame (output of compute_z_scores).
+            selected_samples: Sample names for column labels.
+            sample_conditions: Optional condition label per sample, index-aligned
+                with selected_samples. When given, a colour-coded condition strip
+                is drawn above the columns.
+
+        Returns:
+            Plotly Figure with class-grouped heatmap.
+
+        Raises:
+            ValueError: If inputs are invalid.
+        """
+        if z_scores_df is None or z_scores_df.empty:
+            raise ValueError("Z-scores DataFrame is empty")
+
+        ordered_df = LipidomicHeatmapPlotterService.order_by_class(z_scores_df)
+
+        species = list(ordered_df.index.get_level_values('LipidMolec'))
+        classes = list(ordered_df.index.get_level_values('ClassKey'))
+
+        # A two-level y axis renders the class as a group label to the left of
+        # the species names, with dividers between blocks.
+        fig = _build_heatmap_figure(
+            ordered_df.to_numpy(), selected_samples, [classes, species],
+        )
+
+        _add_condition_strip(fig, sample_conditions, len(species))
+        _apply_square_layout(
+            fig, 'Lipidomic Heatmap Grouped by Class',
+            n_rows=len(species), n_cols=len(selected_samples),
+            y_labels=species, x_labels=selected_samples,
+            grouped=True,
+        )
+
+        fig.update_yaxes(
+            autorange='reversed',
+            showdividers=True,
+            dividercolor=BLOCK_LINE_STYLE['color'],
+            dividerwidth=BLOCK_LINE_STYLE['width'],
+        )
+
+        return fig
+
+    @staticmethod
+    def generate_class_aggregated_heatmap(
+        class_z_scores_df: pd.DataFrame,
+        selected_samples: List[str],
+        sample_conditions: Optional[List[str]] = None,
+    ) -> go.Figure:
+        """Create a heatmap with one row per lipid class.
+
+        Args:
+            class_z_scores_df: Class-level Z-scores indexed by ClassKey
+                (output of compute_class_z_scores).
+            selected_samples: Sample names for column labels.
+            sample_conditions: Optional condition label per sample, index-aligned
+                with selected_samples. When given, a colour-coded condition strip
+                is drawn above the columns.
+
+        Returns:
+            Plotly Figure with one row per lipid class.
+
+        Raises:
+            ValueError: If inputs are invalid.
+        """
+        if class_z_scores_df is None or class_z_scores_df.empty:
+            raise ValueError("Z-scores DataFrame is empty")
+
+        classes = list(class_z_scores_df.index)
+        fig = _build_heatmap_figure(
+            class_z_scores_df.to_numpy(), selected_samples, classes,
+        )
+
+        _add_condition_strip(fig, sample_conditions, len(classes))
+        _apply_square_layout(
+            fig, 'Lipidomic Heatmap Aggregated by Class',
+            n_rows=len(classes), n_cols=len(selected_samples),
+            y_labels=classes, x_labels=selected_samples,
+            y_title='Lipid Classes',
+        )
+
+        fig.update_yaxes(tickmode='array', autorange='reversed')
+
+        return fig
+
+    @staticmethod
     def get_cluster_composition(
         z_scores_df: pd.DataFrame,
         n_clusters: int,
@@ -343,6 +613,160 @@ class LipidomicHeatmapPlotterService:
 
 
 # ── Private helpers ────────────────────────────────────────────────────
+
+
+def _build_heatmap_figure(
+    z_array: np.ndarray,
+    x_labels: List[str],
+    y_labels,
+) -> go.Figure:
+    """Create the base heatmap trace with a symmetric diverging colour scale."""
+    if z_array.ndim == 1:
+        z_array = z_array.reshape(-1, 1)
+
+    abs_max = max(abs(np.nanmin(z_array)), abs(np.nanmax(z_array)))
+
+    return go.Figure(data=go.Heatmap(
+        z=z_array,
+        x=x_labels,
+        y=y_labels,
+        colorscale=COLORSCALE,
+        zmin=-abs_max,
+        zmax=abs_max,
+        colorbar=dict(title='Z-score'),
+        xgap=1,
+        ygap=1,
+    ))
+
+
+def _condition_blocks(
+    sample_conditions: List[str],
+) -> List[Tuple[str, int, int]]:
+    """Group consecutive samples of the same condition into (name, start, end)."""
+    blocks: List[Tuple[str, int, int]] = []
+    if not sample_conditions:
+        return blocks
+
+    start = 0
+    for i in range(1, len(sample_conditions) + 1):
+        if (
+            i == len(sample_conditions)
+            or sample_conditions[i] != sample_conditions[start]
+        ):
+            blocks.append((sample_conditions[start], start, i - 1))
+            start = i
+    return blocks
+
+
+def _add_condition_strip(
+    fig: go.Figure,
+    sample_conditions: Optional[List[str]],
+    n_rows: int,
+) -> None:
+    """Draw a colour-coded condition strip above the columns.
+
+    Adds one filled block per condition, the condition name above each block,
+    and a solid separator between adjacent conditions. Each block is labelled
+    directly rather than through a legend, which keeps the figure readable at
+    any row count. Does nothing when no conditions are supplied.
+
+    Args:
+        fig: Figure to annotate.
+        sample_conditions: Condition label per sample, or None for no strip.
+        n_rows: Heatmap row count, used to convert the strip's pixel geometry
+            into paper coordinates so it keeps a constant thickness.
+    """
+    blocks = _condition_blocks(sample_conditions or [])
+    if not blocks:
+        return
+
+    plot_height = max(1, n_rows * cell_size(n_rows))
+    strip_y0 = 1 + STRIP_GAP_PX / plot_height
+    strip_y1 = strip_y0 + STRIP_HEIGHT_PX / plot_height
+
+    color_map = generate_condition_color_mapping(
+        list(dict.fromkeys(cond for cond, _, _ in blocks))
+    )
+
+    for condition, start, end in blocks:
+        fig.add_shape(
+            type='rect',
+            xref='x', yref='paper',
+            x0=start - 0.5, x1=end + 0.5,
+            y0=strip_y0, y1=strip_y1,
+            fillcolor=color_map[condition],
+            line=dict(width=0),
+            layer='above',
+        )
+        fig.add_annotation(
+            xref='x', yref='paper',
+            x=(start + end) / 2, y=strip_y1,
+            text=condition,
+            showarrow=False, yanchor='bottom',
+            font=dict(size=12, color='black'),
+        )
+
+    # Separator between adjacent condition blocks
+    for _, _, end in blocks[:-1]:
+        fig.add_shape(
+            type='line',
+            xref='x', yref='paper',
+            x0=end + 0.5, x1=end + 0.5,
+            y0=0, y1=1,
+            line=BLOCK_LINE_STYLE,
+        )
+
+
+def _apply_square_layout(
+    fig: go.Figure,
+    title: str,
+    n_rows: int,
+    n_cols: int,
+    y_labels: List[str],
+    x_labels: List[str],
+    grouped: bool = False,
+    y_title: str = 'Lipid Molecules',
+) -> None:
+    """Size the figure so every cell renders as a square.
+
+    The plot area is fixed at n_cols x n_rows cells and the margins are sized
+    from the longest tick label, so the caller must render the figure at its
+    natural size rather than stretching it to the container width.
+    """
+    cell = cell_size(n_rows)
+    left = _label_extent(y_labels) + (CLASS_LABEL_WIDTH if grouped else 0)
+    bottom = _label_extent(x_labels)
+
+    fig.update_layout(
+        title=title,
+        xaxis_title='Samples',
+        yaxis_title=y_title,
+        margin=dict(l=left, r=MARGIN_RIGHT, t=MARGIN_TOP, b=bottom),
+        width=left + MARGIN_RIGHT + n_cols * cell,
+        height=MARGIN_TOP + bottom + n_rows * cell,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        showlegend=False,
+    )
+    fig.update_xaxes(tickangle=45, tickfont=dict(color='black'))
+    fig.update_yaxes(tickfont=dict(color='black'))
+
+
+def cell_size(n_rows: int) -> int:
+    """Square cell edge, in px, for a heatmap with n_rows rows.
+
+    CELL_SIZE_PX for anything species-sized; larger for the handful of rows a
+    class-aggregated heatmap has, so the plot does not collapse to a sliver.
+    """
+    if n_rows <= 0:
+        return CELL_SIZE_PX
+    return int(min(MAX_CELL_SIZE_PX, max(CELL_SIZE_PX, TARGET_PLOT_HEIGHT / n_rows)))
+
+
+def _label_extent(labels: List[str]) -> int:
+    """Approximate the margin, in px, needed to fit the longest tick label."""
+    longest = max((len(str(label)) for label in labels), default=0)
+    return 45 + longest * PX_PER_CHAR
 
 
 def _compute_species_percentages(

@@ -876,9 +876,11 @@ class StreamlitAdapter:
         selected_classes: List[str],
         heatmap_type: str = 'regular',
         n_clusters: int = 3,
+        species_page: int = 0,
     ) -> HeatmapResult:
         """Cached lipidomic heatmap analysis."""
         return AnalysisWorkflow.run_heatmap(
             df, experiment, selected_conditions, selected_classes,
             heatmap_type=heatmap_type, n_clusters=n_clusters,
+            species_page=species_page,
         )

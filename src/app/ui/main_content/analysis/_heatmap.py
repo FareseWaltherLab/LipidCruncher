@@ -1,11 +1,16 @@
 """Feature 7: Lipidomic Heatmap analysis."""
 
+import math
+
 import pandas as pd
 import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.services.plotting.lipidomic_heatmap import LipidomicHeatmapPlotterService
+from app.services.plotting.lipidomic_heatmap import (
+    GROUPED_PAGE_SIZE,
+    LipidomicHeatmapPlotterService,
+)
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
@@ -17,12 +22,9 @@ def _display_lipidomic_heatmap(
     """Display lipidomic heatmap analysis."""
     with st.expander("Species Level Breakdown - Lipidomic Heatmap", expanded=True):
         st.markdown(
-            "Visualize concentration patterns across all lipid species using "
-            "Z-score normalized heatmaps."
+            "Visualize concentration patterns across lipid species, or across "
+            "whole lipid classes, using Z-score normalized heatmaps."
         )
-
-        st.markdown("**Z-score** (color scale):")
-        st.code("Z = (Value - Mean) / Std Dev  (computed per lipid species)", language=None)
 
         all_conditions = AnalysisWorkflow.get_all_conditions(experiment)
         all_classes = AnalysisWorkflow.get_available_classes(df)
@@ -55,9 +57,18 @@ def _display_lipidomic_heatmap(
         with col1:
             heatmap_type = st.radio(
                 "Heatmap Type",
-                ["Clustered", "Regular"],
+                ["Clustered", "Regular", "Grouped by Class", "Aggregated by Class"],
                 index=0,
                 key='heatmap_type',
+                help=(
+                    "Clustered: one row per species, ordered by hierarchical "
+                    "clustering. "
+                    "Regular: one row per species, in input order. "
+                    "Grouped by Class: one row per species, grouped into lipid "
+                    f"class blocks, {GROUPED_PAGE_SIZE} species per page. "
+                    "Aggregated by Class: one row per lipid class, summing the "
+                    "concentrations of its species."
+                ),
             )
         with col2:
             if heatmap_type == "Clustered":
@@ -72,7 +83,21 @@ def _display_lipidomic_heatmap(
                 n_clusters = 3
                 st.markdown("")  # Alignment placeholder
 
-        heatmap_type_value = 'clustered' if heatmap_type == "Clustered" else 'regular'
+        heatmap_type_value = {
+            "Clustered": 'clustered',
+            "Regular": 'regular',
+            "Grouped by Class": 'class_grouped',
+            "Aggregated by Class": 'class_aggregated',
+        }[heatmap_type]
+
+        _display_method_explanation(heatmap_type_value)
+
+        species_total = LipidomicHeatmapPlotterService.count_species(
+            df, selected_classes,
+        )
+        species_page = 0
+        if heatmap_type_value == 'class_grouped':
+            species_page = _select_species_page(species_total)
 
         section_header("📈 Results")
 
@@ -80,13 +105,33 @@ def _display_lipidomic_heatmap(
             df, experiment, selected_conditions, selected_classes,
             heatmap_type=heatmap_type_value,
             n_clusters=n_clusters,
+            species_page=species_page,
         )
+
+        if not result.success:
+            for message in result.validation_errors:
+                st.warning(message)
+            return
 
         if result.figure is None:
             st.warning("Could not generate heatmap.")
             return
 
-        st.plotly_chart(result.figure, use_container_width=True)
+        # The class modes size themselves so every cell is a square, which
+        # container-width stretching would undo. Clustered and Regular keep
+        # their original stretched layout.
+        square_celled = heatmap_type_value in ('class_grouped', 'class_aggregated')
+        st.plotly_chart(result.figure, use_container_width=not square_celled)
+
+        if heatmap_type_value == 'class_grouped' and species_total > GROUPED_PAGE_SIZE:
+            start, end = LipidomicHeatmapPlotterService.page_bounds(
+                species_total, species_page,
+            )
+            st.caption(
+                f"Showing species {start + 1}–{end} of {species_total}, "
+                f"ordered by lipid class. The CSV download below contains "
+                f"all {species_total}."
+            )
         st.session_state.analysis_heatmap_fig = result.figure
         st.session_state.analysis_all_plots['heatmap'] = result.figure
 
@@ -104,6 +149,68 @@ def _display_lipidomic_heatmap(
                 result, df, experiment, selected_conditions, selected_classes,
                 n_clusters,
             )
+
+
+def _display_method_explanation(heatmap_type_value: str) -> None:
+    """Explain how the colour scale is computed for the selected mode.
+
+    Rendered after the mode is chosen because the class-aggregated mode
+    standardises class totals rather than individual species.
+    """
+    if heatmap_type_value == 'class_aggregated':
+        st.markdown("**How each row is computed** (one row per lipid class):")
+        st.code(
+            "1. Class total = sum of the concentrations of every selected\n"
+            "                 species in that class, for each sample\n"
+            "2. Z-score     = (Class total - Mean) / Std Dev, across samples",
+            language=None,
+        )
+        st.caption(
+            "Concentrations are summed before standardizing, so a class is "
+            "weighted by the abundance of its species: abundant species "
+            "dominate their class's profile, and a change confined to a "
+            "low-abundance species may not show up here — use a species-level "
+            "mode for that. The summation is the same one behind the class bar "
+            "charts, pie charts and pathway views, so class abundances agree "
+            "across all four. See Supplementary Methods S6.3."
+        )
+    else:
+        st.markdown("**Z-score** (color scale):")
+        st.code(
+            "Z = (Value - Mean) / Std Dev  (computed per lipid species)",
+            language=None,
+        )
+
+
+def _select_species_page(species_total: int) -> int:
+    """Show a species-range picker and return the chosen zero-based page.
+
+    One row per species would make a tall selection unreadable, so the species
+    are paged. Returns 0 without rendering anything when they all fit on one
+    page. Narrowing the class selection is not an alternative here: a single
+    class can hold far more species than fit.
+    """
+    if species_total <= GROUPED_PAGE_SIZE:
+        return 0
+
+    n_pages = math.ceil(species_total / GROUPED_PAGE_SIZE)
+    pages = list(range(n_pages))
+
+    def _label(page: int) -> str:
+        start = page * GROUPED_PAGE_SIZE
+        return f"{start + 1}–{min(start + GROUPED_PAGE_SIZE, species_total)}"
+
+    return st.selectbox(
+        f"Species range ({species_total} species, {n_pages} pages)",
+        pages,
+        format_func=_label,
+        key='heatmap_species_page',
+        help=(
+            "One row per species, so the species are shown a page at a time "
+            "in lipid class order. Use 'Aggregated by Class' to see every "
+            "class at once instead."
+        ),
+    )
 
 
 def _display_cluster_composition(

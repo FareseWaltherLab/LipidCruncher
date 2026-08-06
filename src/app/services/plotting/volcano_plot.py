@@ -19,7 +19,10 @@ import plotly.graph_objects as go
 import seaborn as sns
 
 from app.models.experiment import ExperimentConfig
-from app.services.plotting._shared import generate_class_color_mapping
+from app.services.plotting._shared import (
+    MARKER_LINE,
+    generate_class_color_mapping,
+)
 from app.services.statistical_testing import (
     StatisticalTestResult,
     StatisticalTestSummary,
@@ -29,7 +32,6 @@ from app.services.statistical_testing import (
 CHART_HEIGHT = 600
 CHART_WIDTH = 800
 MARKER_SIZE = 7
-MARKER_LINE = dict(width=1, color='black')
 LEGEND_FONT_SIZE = 14
 THRESHOLD_LINE_WIDTH = 2
 THRESHOLD_LINE_COLOR = 'red'

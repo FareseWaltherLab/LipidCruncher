@@ -7,6 +7,8 @@ pathway → volcano → heatmap
 
 Comprehensive test coverage matching QualityCheckWorkflow depth.
 """
+import itertools
+
 import pytest
 import pandas as pd
 import numpy as np
@@ -29,6 +31,7 @@ from app.workflows.analysis import (
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.services.format_detection import DataFormat
+from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
 from app.services.statistical_testing import StatisticalTestSummary
 
 
@@ -1220,6 +1223,186 @@ class TestRunHeatmap:
         assert isinstance(result.figure, go.Figure)
         assert result.cluster_composition is not None
         assert isinstance(result.cluster_composition, pd.DataFrame)
+
+    def test_class_grouped_heatmap(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_grouped',
+        )
+        assert isinstance(result, HeatmapResult)
+        assert isinstance(result.figure, go.Figure)
+        assert result.cluster_composition is None
+
+    def test_class_grouped_groups_rows_by_class(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_grouped',
+        )
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        classes = list(heatmap.y[0])
+        runs = [key for key, _ in itertools.groupby(classes)]
+        assert len(runs) == len(set(runs))
+
+    def test_class_modes_colour_code_the_sample_axis(self, multi_species_df, exp_2x3):
+        """The workflow must pass condition labels to the two class modes."""
+        for mode in ('class_grouped', 'class_aggregated'):
+            result = AnalysisWorkflow.run_heatmap(
+                multi_species_df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC', 'PE'],
+                heatmap_type=mode,
+            )
+            rects = [s for s in result.figure.layout.shapes if s.type == 'rect']
+            assert len(rects) == 2, f'{mode} is missing the condition strip'
+
+    def test_original_modes_are_unchanged(self, multi_species_df, exp_2x3):
+        """Clustered and Regular were reverted to their original rendering."""
+        for mode in ('regular', 'clustered'):
+            result = AnalysisWorkflow.run_heatmap(
+                multi_species_df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC', 'PE'],
+                heatmap_type=mode, n_clusters=2,
+            )
+            assert not [
+                s for s in result.figure.layout.shapes if s.type == 'rect'
+            ], f'{mode} should not have a condition strip'
+            assert not [
+                t for t in result.figure.data if isinstance(t, go.Scatter)
+            ], f'{mode} should not have legend proxies'
+
+    @staticmethod
+    def _many_species_df(n_species, exp):
+        """A frame with n_species lipids across the experiment's samples."""
+        rng = np.random.default_rng(0)
+        return pd.DataFrame({
+            'LipidMolec': [f'PC({i}:0)' for i in range(n_species)],
+            'ClassKey': ['PC'] * n_species,
+            **{
+                f'concentration[{s}]': rng.random(n_species) * 100
+                for s in exp.full_samples_list
+            },
+        })
+
+    def _grouped(self, df, exp, page=0):
+        return AnalysisWorkflow.run_heatmap(
+            df, exp,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            heatmap_type='class_grouped',
+            species_page=page,
+        )
+
+    @staticmethod
+    def _rows(result):
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        return list(heatmap.y[1])
+
+    def test_oversized_selection_draws_a_full_page(self, exp_2x3):
+        """A selection larger than one page still plots, one page at a time,
+        instead of emitting a figure tens of thousands of pixels tall."""
+        df = self._many_species_df(GROUPED_PAGE_SIZE * 3, exp_2x3)
+        result = self._grouped(df, exp_2x3)
+        assert result.success is True
+        assert len(self._rows(result)) == GROUPED_PAGE_SIZE
+
+    def test_pages_are_disjoint_and_cover_everything(self, exp_2x3):
+        """Every species must be reachable on exactly one page — the whole
+        point of paging rather than truncating."""
+        total = GROUPED_PAGE_SIZE * 2 + 40
+        df = self._many_species_df(total, exp_2x3)
+        seen = []
+        for page in range(3):
+            seen.extend(self._rows(self._grouped(df, exp_2x3, page=page)))
+        assert len(seen) == total
+        assert len(set(seen)) == total
+
+    def test_last_page_holds_the_remainder(self, exp_2x3):
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 25, exp_2x3)
+        assert len(self._rows(self._grouped(df, exp_2x3, page=1))) == 25
+
+    def test_page_beyond_the_end_is_clamped(self, exp_2x3):
+        """A stale page left over from a wider class selection must not
+        produce an empty heatmap."""
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 10, exp_2x3)
+        result = self._grouped(df, exp_2x3, page=99)
+        assert result.success is True
+        assert self._rows(result) == self._rows(self._grouped(df, exp_2x3, page=1))
+
+    def test_negative_page_is_clamped(self, exp_2x3):
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 10, exp_2x3)
+        result = self._grouped(df, exp_2x3, page=-5)
+        assert self._rows(result) == self._rows(self._grouped(df, exp_2x3, page=0))
+
+    def test_single_page_selection_ignores_the_page(self, exp_2x3):
+        df = self._many_species_df(20, exp_2x3)
+        assert len(self._rows(self._grouped(df, exp_2x3, page=0))) == 20
+        assert len(self._rows(self._grouped(df, exp_2x3, page=3))) == 20
+
+    def test_export_carries_every_species_not_just_the_page(self, exp_2x3):
+        """The CSV download must not silently shrink to the visible page."""
+        total = GROUPED_PAGE_SIZE + 30
+        df = self._many_species_df(total, exp_2x3)
+        result = self._grouped(df, exp_2x3, page=1)
+        assert len(result.z_scores_df) == total
+
+    def test_paging_does_not_apply_to_the_other_modes(self, exp_2x3):
+        """Only class_grouped is height-unbounded; the rest draw everything."""
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 50, exp_2x3)
+        for mode in ('regular', 'clustered', 'class_aggregated'):
+            result = AnalysisWorkflow.run_heatmap(
+                df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC'],
+                heatmap_type=mode, n_clusters=2, species_page=1,
+            )
+            assert result.success is True, f'{mode} was wrongly rejected'
+            assert isinstance(result.figure, go.Figure)
+
+    def test_a_single_class_larger_than_a_page_is_still_viewable(self, exp_2x3):
+        """The case that motivated paging: one class with far more species
+        than fit, where narrowing the class selection cannot help."""
+        df = self._many_species_df(400, exp_2x3)
+        assert df['ClassKey'].nunique() == 1
+        rows = self._rows(self._grouped(df, exp_2x3, page=2))
+        assert len(rows) == 100
+
+    def test_class_aggregated_heatmap(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_aggregated',
+        )
+        assert isinstance(result, HeatmapResult)
+        assert isinstance(result.figure, go.Figure)
+        assert result.cluster_composition is None
+
+    def test_class_aggregated_has_one_row_per_class(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_aggregated',
+        )
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        assert sorted(heatmap.y) == ['PC', 'PE']
+
+    def test_class_aggregated_exports_class_level_z_scores(
+        self, multi_species_df, exp_2x3,
+    ):
+        """The CSV export must carry the class-level Z-scores, not species."""
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_aggregated',
+        )
+        assert sorted(result.z_scores_df.index) == ['PC', 'PE']
 
     def test_empty_conditions_raises(self, multi_species_df, exp_2x3):
         with pytest.raises(ValueError, match='condition'):
