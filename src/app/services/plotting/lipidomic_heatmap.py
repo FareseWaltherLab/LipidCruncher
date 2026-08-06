@@ -120,13 +120,24 @@ class LipidomicHeatmapPlotterService:
             raise ValueError("No valid samples found for selected conditions")
 
         abundance_cols = [f'concentration[{s}]' for s in selected_samples]
-        available_cols = [c for c in abundance_cols if c in df.columns]
 
-        if not available_cols:
-            raise ValueError("No concentration columns found for selected samples")
+        # Every selected sample must have its column. Dropping the missing ones
+        # and still returning the full sample list would leave the column
+        # labels shifted against the data — a silently mislabelled heatmap
+        # rather than an error.
+        missing = [
+            sample for sample, col in zip(selected_samples, abundance_cols)
+            if col not in df.columns
+        ]
+        if missing:
+            raise ValueError(
+                "No concentration columns found for selected samples: "
+                f"{', '.join(missing)}. The data and the experiment "
+                "configuration are out of sync."
+            )
 
         filtered_df = df[df['ClassKey'].isin(selected_classes)][
-            ['LipidMolec', 'ClassKey'] + available_cols
+            ['LipidMolec', 'ClassKey'] + abundance_cols
         ].copy()
 
         return filtered_df, selected_samples

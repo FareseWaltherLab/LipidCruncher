@@ -1711,3 +1711,92 @@ class TestStripGeometry:
     def test_tall_heatmap_still_labels_every_block(self):
         labels = [a.text for a in self._fig(150).layout.annotations]
         assert 'A' in labels and 'B' in labels
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TestMissingSampleColumns
+#
+# filter_data used to drop concentration columns it could not find while
+# still returning every selected sample. The heatmap then received more x
+# labels than data columns, and Plotly silently shifted them: with s2's
+# column absent, column 1 was labelled "s2" but held s3's data, and so on
+# down the axis. A desync between the data and the experiment config must
+# fail loudly instead.
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestMissingSampleColumns:
+    @staticmethod
+    def _experiment():
+        return make_experiment(n_conditions=1, samples_per_condition=4)
+
+    @staticmethod
+    def _df_without(sample):
+        experiment = make_experiment(n_conditions=1, samples_per_condition=4)
+        data = {'LipidMolec': ['PC(16:0)', 'PE(18:0)'], 'ClassKey': ['PC', 'PE']}
+        for s in experiment.full_samples_list:
+            if s != sample:
+                data[f'concentration[{s}]'] = [10.0, 20.0]
+        return pd.DataFrame(data)
+
+    def test_missing_middle_sample_raises(self):
+        with pytest.raises(ValueError, match="out of sync"):
+            LipidomicHeatmapPlotterService.filter_data(
+                self._df_without('s2'), ['Control'], ['PC', 'PE'],
+                self._experiment(),
+            )
+
+    def test_error_names_the_missing_sample(self):
+        with pytest.raises(ValueError, match="s3"):
+            LipidomicHeatmapPlotterService.filter_data(
+                self._df_without('s3'), ['Control'], ['PC', 'PE'],
+                self._experiment(),
+            )
+
+    def test_missing_last_sample_raises(self):
+        """The truncating case: without the check the column count merely
+        shrinks, so nothing looks wrong at a glance."""
+        with pytest.raises(ValueError, match="out of sync"):
+            LipidomicHeatmapPlotterService.filter_data(
+                self._df_without('s4'), ['Control'], ['PC', 'PE'],
+                self._experiment(),
+            )
+
+    def test_all_columns_missing_still_raises(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'], 'ClassKey': ['PC'],
+            'concentration[other]': [1.0],
+        })
+        with pytest.raises(ValueError, match="No concentration columns"):
+            LipidomicHeatmapPlotterService.filter_data(
+                df, ['Control'], ['PC'], self._experiment(),
+            )
+
+    def test_complete_data_is_unaffected(self):
+        """The happy path must not change: all four samples, in order."""
+        experiment = self._experiment()
+        data = {'LipidMolec': ['PC(16:0)'], 'ClassKey': ['PC']}
+        for s in experiment.full_samples_list:
+            data[f'concentration[{s}]'] = [1.0]
+
+        filtered, samples = LipidomicHeatmapPlotterService.filter_data(
+            pd.DataFrame(data), ['Control'], ['PC'], experiment,
+        )
+        assert samples == experiment.full_samples_list
+        assert [c for c in filtered.columns if c.startswith('concentration[')] == [
+            f'concentration[{s}]' for s in experiment.full_samples_list
+        ]
+
+    def test_labels_can_no_longer_outnumber_the_data(self):
+        """The invariant the bug broke: one x label per data column."""
+        experiment = self._experiment()
+        data = {'LipidMolec': ['PC(16:0)', 'PE(18:0)'], 'ClassKey': ['PC', 'PE']}
+        for s in experiment.full_samples_list:
+            data[f'concentration[{s}]'] = [10.0, 20.0]
+
+        filtered, samples = LipidomicHeatmapPlotterService.filter_data(
+            pd.DataFrame(data), ['Control'], ['PC', 'PE'], experiment,
+        )
+        z = LipidomicHeatmapPlotterService.compute_z_scores(filtered)
+        fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(z, samples)
+        heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
+        assert np.asarray(heatmap.z).shape[1] == len(heatmap.x)
