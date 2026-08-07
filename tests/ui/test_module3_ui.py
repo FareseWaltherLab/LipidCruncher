@@ -774,6 +774,73 @@ class TestHeatmapUI:
         captions = ' '.join(c.value for c in at.caption)
         assert 'Clustering runs on the fold changes' in captions
 
+    def test_log2fc_falls_back_without_a_comparison(self, analysis_generic_app):
+        """Fold change needs something to divide by. With a single condition
+        selected there is no comparison, so it must say so and revert rather
+        than plot a heatmap that is zero everywhere."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        at.multiselect(key='heatmap_conditions').set_value(['Control']).run()
+
+        assert not at.exception
+        warnings = ' '.join(w.value for w in at.warning)
+        assert 'needs a control condition' in warnings
+        fig = at.session_state['analysis_heatmap_fig']
+        assert fig.data[0].colorbar.title.text == 'Z-score'
+
+    def test_fallback_hides_the_control_selector(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        at.multiselect(key='heatmap_conditions').set_value(['Control']).run()
+
+        assert not [
+            s for s in at.selectbox if s.key == 'heatmap_control_condition'
+        ]
+
+    def test_recovers_when_a_condition_is_added_back(self, analysis_generic_app):
+        """The fallback must not be sticky once a comparison exists again."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        at.multiselect(key='heatmap_conditions').set_value(['Control']).run()
+        at.multiselect(key='heatmap_conditions').set_value(
+            ['Control', 'Treatment'],
+        ).run()
+
+        assert not at.exception
+        fig = at.session_state['analysis_heatmap_fig']
+        assert fig.data[0].colorbar.title.text == 'log2FC'
+
+    @pytest.mark.parametrize(
+        "mode", ["Clustered", "Regular", "Grouped by Class"],
+    )
+    def test_single_step_formula_is_not_numbered(
+        self, analysis_generic_app, mode,
+    ):
+        """One step, so no "1." — numbering it implies a missing step two."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value(mode).run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        formula = [c.value for c in at.code if 'log2FC' in c.value][0]
+        assert formula.startswith('log2FC =')
+        assert '1.' not in formula
+        assert '2.' not in formula
+
+    def test_aggregated_formula_keeps_its_two_steps_numbered(
+        self, analysis_generic_app,
+    ):
+        """Aggregation really is two steps, so numbering belongs there."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        formula = [c.value for c in at.code if 'log2FC' in c.value][0]
+        assert formula.startswith('1. Class total')
+        assert '2. log2FC' in formula
+
     def test_log2fc_explains_the_formula(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
         at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
