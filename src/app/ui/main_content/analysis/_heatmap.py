@@ -20,7 +20,7 @@ def _display_lipidomic_heatmap(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display lipidomic heatmap analysis."""
-    with st.expander("Species Level Breakdown - Lipidomic Heatmap", expanded=True):
+    with st.expander("Species Level Breakdown - Lipidomic Heatmap", expanded=False):
         st.markdown(
             "Visualize concentration patterns across lipid species, or across "
             "whole lipid classes, using Z-score normalized heatmaps."

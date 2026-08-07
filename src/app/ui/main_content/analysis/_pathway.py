@@ -31,7 +31,7 @@ def _display_pathway_viz(
     init_pathway_state()
 
     with st.expander(
-        "Class Level Breakdown - Pathway Visualization", expanded=True
+        "Class Level Breakdown - Pathway Visualization", expanded=False
     ):
         st.markdown(
             "Visualize lipid class relationships on a metabolic pathway diagram."

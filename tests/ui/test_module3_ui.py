@@ -19,6 +19,7 @@ to test different data scenarios without importing main_app.py.
 """
 
 import numpy as np
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from tests.ui.conftest import (
@@ -32,6 +33,41 @@ from tests.ui.conftest import (
 # =============================================================================
 # Group 1: Analysis Radio Selection (3 tests)
 # =============================================================================
+
+class TestAnalysisSectionsCollapsed:
+    """Landing on Visualize and Analyze must not open a section on its own."""
+
+    # (radio option fragment, expander label fragment)
+    SECTIONS = [
+        ("Bar Chart", "Bar Chart"),
+        ("Pie", "Pie Chart"),
+        ("Saturation", "Saturation"),
+        ("Pathway", "Pathway"),
+        ("Volcano", "Volcano"),
+        ("Lipidomic Heatmap", "Lipidomic Heatmap"),
+    ]
+
+    def test_default_section_is_collapsed_on_landing(self, analysis_generic_app):
+        at = analysis_generic_app
+        charts = [e for e in at.expander if 'Bar Chart' in e.label]
+        assert len(charts) == 1
+        assert charts[0].proto.expanded is False
+
+    @pytest.mark.parametrize("option,label", SECTIONS)
+    def test_every_section_starts_collapsed(
+        self, analysis_generic_app, option, label,
+    ):
+        at = analysis_generic_app
+        radio = at.radio(key='analysis_radio')
+        match = [o for o in radio.options if option in o]
+        if not match:
+            pytest.skip(f"{option} not offered for this dataset")
+        at.radio(key='analysis_radio').set_value(match[0]).run()
+
+        target = [e for e in at.expander if label in e.label]
+        assert target, f"no expander labelled {label}"
+        assert all(e.proto.expanded is False for e in target)
+
 
 class TestAnalysisRadioSelection:
     """Tests for the main analysis type radio selector."""

@@ -11,7 +11,7 @@ from app.ui.st_helpers import display_export_buttons, section_header
 
 def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
     """Display abundance pie chart analysis."""
-    with st.expander("Class Concentration Pie Chart", expanded=True):
+    with st.expander("Class Concentration Pie Chart", expanded=False):
         st.markdown(
             "View the proportional distribution of lipid classes per condition."
         )

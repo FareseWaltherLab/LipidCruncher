@@ -21,7 +21,7 @@ def _display_volcano_plot(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display volcano plot analysis."""
-    with st.expander("Species Level Breakdown - Volcano Plot", expanded=True):
+    with st.expander("Species Level Breakdown - Volcano Plot", expanded=False):
         st.markdown(
             "Identify differentially abundant lipid species between two conditions."
         )

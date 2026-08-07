@@ -17,7 +17,7 @@ def _display_chain_length_plots(
 ) -> None:
     """Display chain length and double bond distribution bubble charts."""
     with st.expander(
-        "Class Level Breakdown - Chain Length Distribution", expanded=True
+        "Class Level Breakdown - Chain Length Distribution", expanded=False
     ):
         st.markdown(
             "Bubble charts showing the distribution of total carbon chain "
