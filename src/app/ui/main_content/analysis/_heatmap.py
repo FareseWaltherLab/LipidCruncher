@@ -11,10 +11,6 @@ from app.services.plotting.lipidomic_heatmap import (
     GROUPED_PAGE_SIZE,
     LipidomicHeatmapPlotterService,
 )
-
-# Fold change needs a control condition to divide by, and is offered for the
-# two class-oriented modes only.
-LOG2FC_MODES = ('class_grouped', 'class_aggregated')
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
@@ -55,8 +51,6 @@ def _display_lipidomic_heatmap(
             st.warning("Please select at least one condition and one lipid class.")
             return
 
-        color_scale, control_condition = _select_color_scale(selected_conditions)
-
         section_header("⚙️ Heatmap Settings")
 
         col1, col2 = st.columns(2)
@@ -96,15 +90,9 @@ def _display_lipidomic_heatmap(
             "Aggregated by Class": 'class_aggregated',
         }[heatmap_type]
 
-        # Fold change is defined against a control condition and is offered for
-        # the two class-oriented modes; the species modes keep Z-scores.
-        if color_scale == 'log2fc' and heatmap_type_value not in LOG2FC_MODES:
-            st.info(
-                "Log2 fold change is available for the 'Grouped by Class' and "
-                "'Aggregated by Class' modes. Showing Z-scores here."
-            )
-            color_scale = 'zscore'
-            control_condition = None
+        color_scale, control_condition = _select_color_scale(
+            selected_conditions, heatmap_type_value,
+        )
 
         _display_method_explanation(heatmap_type_value, color_scale)
 
@@ -169,7 +157,9 @@ def _display_lipidomic_heatmap(
             )
 
 
-def _select_color_scale(selected_conditions: list) -> tuple:
+def _select_color_scale(
+    selected_conditions: list, heatmap_type_value: str,
+) -> tuple:
     """Choose what the colours represent, and the control for fold change.
 
     Returns (color_scale, control_condition). The control is None unless log2
@@ -221,6 +211,11 @@ def _select_color_scale(selected_conditions: list) -> tuple:
         f"Fold change against **{control_condition}** for: "
         f"{', '.join(experimental)}."
     )
+    if heatmap_type_value == 'clustered':
+        st.caption(
+            "Clustering runs on the fold changes, so species group by how "
+            "they respond to the control rather than by abundance profile."
+        )
     return 'log2fc', control_condition
 
 

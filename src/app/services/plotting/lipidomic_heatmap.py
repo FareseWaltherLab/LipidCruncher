@@ -437,13 +437,17 @@ class LipidomicHeatmapPlotterService:
         z_scores_df: pd.DataFrame,
         selected_samples: List[str],
         n_clusters: int,
+        value_label: str = 'Z-score',
     ) -> go.Figure:
         """Create a heatmap reordered by hierarchical clustering with cluster boundaries.
 
         Args:
-            z_scores_df: Z-score DataFrame (output of compute_z_scores).
+            z_scores_df: Per-species value DataFrame, either Z-scores
+                (compute_z_scores) or log2 fold changes (compute_log2fc).
+                Clustering runs on whichever is given.
             selected_samples: Sample names for column labels.
             n_clusters: Number of clusters.
+            value_label: Name of the plotted quantity, used for the colour bar.
 
         Returns:
             Plotly Figure with clustered heatmap and dashed cluster boundary lines.
@@ -478,7 +482,7 @@ class LipidomicHeatmapPlotterService:
             colorscale=COLORSCALE,
             zmin=-abs_max,
             zmax=abs_max,
-            colorbar=dict(title='Z-score'),
+            colorbar=dict(title=value_label),
         ))
 
         # Add cluster boundary lines
@@ -496,7 +500,7 @@ class LipidomicHeatmapPlotterService:
             )
 
         fig.update_layout(
-            title='Clustered Lipidomic Heatmap',
+            title=_titled('Clustered Lipidomic Heatmap', value_label),
             xaxis_title='Samples',
             yaxis_title='Lipid Molecules',
             margin=dict(l=100, r=100, t=50, b=50),
@@ -513,6 +517,7 @@ class LipidomicHeatmapPlotterService:
     def generate_regular_heatmap(
         z_scores_df: pd.DataFrame,
         selected_samples: List[str],
+        value_label: str = 'Z-score',
     ) -> go.Figure:
         """Create a regular heatmap without clustering.
 
@@ -543,11 +548,11 @@ class LipidomicHeatmapPlotterService:
             colorscale=COLORSCALE,
             zmin=-abs_max,
             zmax=abs_max,
-            colorbar=dict(title='Z-score'),
+            colorbar=dict(title=value_label),
         ))
 
         fig.update_layout(
-            title='Regular Lipidomic Heatmap',
+            title=_titled('Regular Lipidomic Heatmap', value_label),
             xaxis_title='Samples',
             yaxis_title='Lipid Molecules',
             margin=dict(l=10, r=10, t=25, b=20),
@@ -714,6 +719,14 @@ class LipidomicHeatmapPlotterService:
 
 
 # ── Private helpers ────────────────────────────────────────────────────
+
+
+def _titled(base: str, value_label: str) -> str:
+    """Figure title, naming the quantity only when it is not the default.
+
+    Keeps the Clustered and Regular titles byte-identical under Z-scores.
+    """
+    return base if value_label == 'Z-score' else f'{base} ({value_label})'
 
 
 def _log2fc_frame(

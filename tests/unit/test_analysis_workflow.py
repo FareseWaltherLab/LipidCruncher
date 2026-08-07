@@ -1380,14 +1380,60 @@ class TestRunHeatmap:
             control_condition=control, **kw
         )
 
-    def test_log2fc_renders_for_both_class_modes(self, multi_species_df, exp_2x3):
-        for mode in ('class_grouped', 'class_aggregated'):
-            result = self._fc(multi_species_df, exp_2x3, mode=mode)
-            assert result.success is True
+    def test_log2fc_renders_for_every_mode(self, multi_species_df, exp_2x3):
+        for mode in ('regular', 'clustered', 'class_grouped', 'class_aggregated'):
+            result = self._fc(multi_species_df, exp_2x3, mode=mode, n_clusters=2)
+            assert result.success is True, mode
             heatmap = [
                 t for t in result.figure.data if isinstance(t, go.Heatmap)
             ][0]
-            assert heatmap.colorbar.title.text == 'log2FC'
+            assert heatmap.colorbar.title.text == 'log2FC', mode
+
+    def test_species_mode_titles_unchanged_under_zscore(
+        self, multi_species_df, exp_2x3,
+    ):
+        """Adding the option must not alter the Z-score output of the two
+        modes that were deliberately left as they were."""
+        expected = {
+            'regular': 'Regular Lipidomic Heatmap',
+            'clustered': 'Clustered Lipidomic Heatmap',
+        }
+        for mode, title in expected.items():
+            result = AnalysisWorkflow.run_heatmap(
+                multi_species_df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC', 'PE'],
+                heatmap_type=mode, n_clusters=2,
+            )
+            assert result.figure.layout.title.text == title
+            heatmap = [
+                t for t in result.figure.data if isinstance(t, go.Heatmap)
+            ][0]
+            assert heatmap.colorbar.title.text == 'Z-score'
+
+    def test_species_mode_titles_name_fold_change(self, multi_species_df, exp_2x3):
+        for mode, title in (
+            ('regular', 'Regular Lipidomic Heatmap (log2FC)'),
+            ('clustered', 'Clustered Lipidomic Heatmap (log2FC)'),
+        ):
+            result = self._fc(multi_species_df, exp_2x3, mode=mode, n_clusters=2)
+            assert result.figure.layout.title.text == title
+
+    def test_clustered_log2fc_clusters_on_fold_changes(
+        self, multi_species_df, exp_2x3,
+    ):
+        """Clustering consumes whichever matrix is plotted, so the two scales
+        can legitimately produce different groupings."""
+        z = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='clustered', n_clusters=2,
+        )
+        fc = self._fc(multi_species_df, exp_2x3, mode='clustered', n_clusters=2)
+        z_hm = [t for t in z.figure.data if isinstance(t, go.Heatmap)][0]
+        fc_hm = [t for t in fc.figure.data if isinstance(t, go.Heatmap)][0]
+        assert not np.allclose(np.asarray(z_hm.z), np.asarray(fc_hm.z))
 
     def test_log2fc_control_is_the_reference(self, multi_species_df, exp_2x3):
         """The control condition is plotted and centres on no change.
@@ -1436,11 +1482,6 @@ class TestRunHeatmap:
         )
         heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
         assert heatmap.colorbar.title.text == 'Z-score'
-
-    def test_log2fc_rejected_for_species_modes(self, multi_species_df, exp_2x3):
-        for mode in ('regular', 'clustered'):
-            with pytest.raises(ValueError, match='class_grouped'):
-                self._fc(multi_species_df, exp_2x3, mode=mode)
 
     def test_log2fc_requires_a_control(self, multi_species_df, exp_2x3):
         with pytest.raises(ValueError, match='control condition is required'):

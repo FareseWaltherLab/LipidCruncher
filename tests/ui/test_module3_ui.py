@@ -718,19 +718,25 @@ class TestHeatmapUI:
         assert not at.exception
         assert not np.allclose(np.asarray(first), np.asarray(second))
 
-    def test_log2fc_falls_back_on_species_modes(self, analysis_generic_app):
-        """Fold change is offered for the class modes; picking it with a
-        species mode must explain itself, not error."""
-        at = self._switch_to_heatmap(analysis_generic_app)
-        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
-        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
-        at.radio(key='heatmap_type').set_value("Clustered").run()
+    def test_log2fc_available_for_every_mode(self, analysis_generic_app):
+        """The colour scale is independent of how the rows are organised."""
+        for mode in ("Clustered", "Regular", "Grouped by Class",
+                     "Aggregated by Class"):
+            at = self._switch_to_heatmap(analysis_generic_app)
+            at.radio(key='heatmap_type').set_value(mode).run()
+            at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
 
-        assert not at.exception
-        infos = ' '.join(i.value for i in at.info)
-        assert 'Log2 fold change is available' in infos
-        fig = at.session_state['analysis_heatmap_fig']
-        assert fig.data[0].colorbar.title.text == 'Z-score'
+            assert not at.exception, mode
+            fig = at.session_state['analysis_heatmap_fig']
+            assert fig.data[0].colorbar.title.text == 'log2FC', mode
+
+    def test_clustered_log2fc_notes_what_it_clusters_on(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Clustered").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        captions = ' '.join(c.value for c in at.caption)
+        assert 'Clustering runs on the fold changes' in captions
 
     def test_log2fc_explains_the_formula(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)

@@ -946,8 +946,10 @@ class AnalysisWorkflow:
                 class_grouped type only. Clamped into range.
             color_scale: 'zscore' to standardise each row across samples, or
                 'log2fc' to express every sample as a log2 fold change against
-                the control condition's mean. 'log2fc' is available for the
-                class_grouped and class_aggregated types only.
+                the control condition's mean. Applies to every heatmap type;
+                under 'clustered', clustering runs on the fold changes, so
+                species group by response to the control rather than by
+                abundance profile.
             control_condition: Condition to use as the log2fc denominator.
                 Required when color_scale is 'log2fc', and must be one of
                 selected_conditions so that it is also drawn.
@@ -978,11 +980,6 @@ class AnalysisWorkflow:
                 "Must be 'zscore' or 'log2fc'"
             )
         if color_scale == 'log2fc':
-            if heatmap_type not in ('class_grouped', 'class_aggregated'):
-                raise ValueError(
-                    "color_scale 'log2fc' is only available for the "
-                    "'class_grouped' and 'class_aggregated' heatmap types"
-                )
             if not control_condition:
                 raise ValueError(
                     "A control condition is required for the log2fc color scale"
@@ -1042,6 +1039,7 @@ class AnalysisWorkflow:
         if heatmap_type == 'clustered':
             figure = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
                 z_scores_df, selected_samples, n_clusters,
+                value_label=value_label,
             )
             cluster_composition = LipidomicHeatmapPlotterService.get_cluster_composition(
                 z_scores_df, n_clusters, mode='species_count',
@@ -1064,7 +1062,7 @@ class AnalysisWorkflow:
             )
         else:
             figure = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-                z_scores_df, selected_samples,
+                z_scores_df, selected_samples, value_label=value_label,
             )
 
         return HeatmapResult(
