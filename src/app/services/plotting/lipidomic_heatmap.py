@@ -8,6 +8,7 @@ renders regular or clustered Plotly heatmaps.
 Pure logic — no Streamlit dependencies.
 """
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -17,6 +18,10 @@ import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
 from app.services.plotting._shared import generate_condition_color_mapping
+from app.services.statistical_testing import (
+    MIN_POSITIVE_FALLBACK,
+    ZERO_REPLACEMENT_DIVISOR,
+)
 from scipy.cluster.hierarchy import fcluster, leaves_list, linkage
 from scipy.spatial.distance import pdist
 
@@ -171,6 +176,25 @@ class LipidomicHeatmapPlotterService:
         return labels
 
     @staticmethod
+    def samples_for_condition(
+        condition: Optional[str],
+        experiment: ExperimentConfig,
+    ) -> List[str]:
+        """Return the sample names belonging to one condition.
+
+        Args:
+            condition: Condition label, or None.
+            experiment: Experiment configuration.
+
+        Returns:
+            The condition's samples, or an empty list if it is unknown.
+        """
+        if not condition or condition not in experiment.conditions_list:
+            return []
+        cond_idx = experiment.conditions_list.index(condition)
+        return list(experiment.individual_samples_list[cond_idx])
+
+    @staticmethod
     def count_species(df: pd.DataFrame, selected_classes: List[str]) -> int:
         """Count the lipid species belonging to the selected classes.
 
@@ -232,6 +256,73 @@ class LipidomicHeatmapPlotterService:
         rank = {c: i for i, c in enumerate(dict.fromkeys(classes))}
         order = np.argsort([rank[c] for c in classes], kind='stable')
         return z_scores_df.iloc[order]
+
+    @staticmethod
+    def compute_log2fc(
+        filtered_df: pd.DataFrame,
+        control_samples: List[str],
+    ) -> pd.DataFrame:
+        """Compute per-sample log2 fold change against the control mean.
+
+        Each species' values are expressed relative to the mean of that
+        species across the control samples, so control columns sit near zero
+        and a colour scale centred on zero reads directly as up or down versus
+        control. Zeros are floored using the same adjustment as the statistical
+        tests before the ratio is taken.
+
+        Args:
+            filtered_df: DataFrame with LipidMolec, ClassKey, and
+                concentration columns (output of filter_data).
+            control_samples: Sample names forming the control condition.
+
+        Returns:
+            DataFrame indexed by (LipidMolec, ClassKey) holding log2 fold
+            changes, one column per sample.
+
+        Raises:
+            ValueError: If the frame is empty, has no concentration columns,
+                or none of the control samples are present.
+        """
+        if filtered_df is None or filtered_df.empty:
+            raise ValueError("Filtered DataFrame is empty")
+
+        working_df = filtered_df.set_index(['LipidMolec', 'ClassKey'])
+        return _log2fc_frame(working_df, control_samples)
+
+    @staticmethod
+    def compute_class_log2fc(
+        filtered_df: pd.DataFrame,
+        control_samples: List[str],
+    ) -> pd.DataFrame:
+        """Aggregate species to class level, then log2 fold change vs control.
+
+        Concentrations are summed within each class per sample — the same
+        aggregation as ``compute_class_z_scores`` — and each class total is
+        then expressed relative to that class's control mean.
+
+        Args:
+            filtered_df: DataFrame with LipidMolec, ClassKey, and
+                concentration columns (output of filter_data).
+            control_samples: Sample names forming the control condition.
+
+        Returns:
+            DataFrame indexed by ClassKey holding log2 fold changes.
+
+        Raises:
+            ValueError: If the frame is empty, has no concentration columns,
+                or none of the control samples are present.
+        """
+        if filtered_df is None or filtered_df.empty:
+            raise ValueError("Filtered DataFrame is empty")
+
+        abundance_cols = [
+            c for c in filtered_df.columns if c.startswith('concentration[')
+        ]
+        if not abundance_cols:
+            raise ValueError("No concentration columns found")
+
+        class_totals = filtered_df.groupby('ClassKey')[abundance_cols].sum()
+        return _log2fc_frame(class_totals, control_samples)
 
     @staticmethod
     def compute_class_z_scores(filtered_df: pd.DataFrame) -> pd.DataFrame:
@@ -472,6 +563,7 @@ class LipidomicHeatmapPlotterService:
         z_scores_df: pd.DataFrame,
         selected_samples: List[str],
         sample_conditions: Optional[List[str]] = None,
+        value_label: str = 'Z-score',
     ) -> go.Figure:
         """Create a heatmap with species grouped into lipid class blocks.
 
@@ -480,11 +572,14 @@ class LipidomicHeatmapPlotterService:
         divider between blocks.
 
         Args:
-            z_scores_df: Z-score DataFrame (output of compute_z_scores).
+            z_scores_df: Per-species value DataFrame, either Z-scores
+                (compute_z_scores) or log2 fold changes (compute_log2fc).
             selected_samples: Sample names for column labels.
             sample_conditions: Optional condition label per sample, index-aligned
                 with selected_samples. When given, a colour-coded condition strip
                 is drawn above the columns.
+            value_label: Name of the plotted quantity, used for the colour bar
+                and the figure title.
 
         Returns:
             Plotly Figure with class-grouped heatmap.
@@ -504,11 +599,12 @@ class LipidomicHeatmapPlotterService:
         # the species names, with dividers between blocks.
         fig = _build_heatmap_figure(
             ordered_df.to_numpy(), selected_samples, [classes, species],
+            value_label=value_label,
         )
 
         _add_condition_strip(fig, sample_conditions, len(species))
         _apply_square_layout(
-            fig, 'Lipidomic Heatmap Grouped by Class',
+            fig, f'Lipidomic Heatmap Grouped by Class ({value_label})',
             n_rows=len(species), n_cols=len(selected_samples),
             y_labels=species, x_labels=selected_samples,
             grouped=True,
@@ -528,16 +624,20 @@ class LipidomicHeatmapPlotterService:
         class_z_scores_df: pd.DataFrame,
         selected_samples: List[str],
         sample_conditions: Optional[List[str]] = None,
+        value_label: str = 'Z-score',
     ) -> go.Figure:
         """Create a heatmap with one row per lipid class.
 
         Args:
-            class_z_scores_df: Class-level Z-scores indexed by ClassKey
-                (output of compute_class_z_scores).
+            class_z_scores_df: Class-level values indexed by ClassKey, either
+                Z-scores (compute_class_z_scores) or log2 fold changes
+                (compute_class_log2fc).
             selected_samples: Sample names for column labels.
             sample_conditions: Optional condition label per sample, index-aligned
                 with selected_samples. When given, a colour-coded condition strip
                 is drawn above the columns.
+            value_label: Name of the plotted quantity, used for the colour bar
+                and the figure title.
 
         Returns:
             Plotly Figure with one row per lipid class.
@@ -551,11 +651,12 @@ class LipidomicHeatmapPlotterService:
         classes = list(class_z_scores_df.index)
         fig = _build_heatmap_figure(
             class_z_scores_df.to_numpy(), selected_samples, classes,
+            value_label=value_label,
         )
 
         _add_condition_strip(fig, sample_conditions, len(classes))
         _apply_square_layout(
-            fig, 'Lipidomic Heatmap Aggregated by Class',
+            fig, f'Lipidomic Heatmap Aggregated by Class ({value_label})',
             n_rows=len(classes), n_cols=len(selected_samples),
             y_labels=classes, x_labels=selected_samples,
             y_title='Lipid Classes',
@@ -615,10 +716,60 @@ class LipidomicHeatmapPlotterService:
 # ── Private helpers ────────────────────────────────────────────────────
 
 
+def _log2fc_frame(
+    values_df: pd.DataFrame,
+    control_samples: List[str],
+) -> pd.DataFrame:
+    """Express every value as log2(value / control mean), row by row.
+
+    Zeros are floored at the smallest positive value in the row divided by
+    ZERO_REPLACEMENT_DIVISOR, matching how the statistical tests handle zeros
+    before taking a ratio, so a single zero cannot send a row to -infinity.
+    """
+    abundance_cols = [
+        c for c in values_df.columns if c.startswith('concentration[')
+    ]
+    if not abundance_cols:
+        raise ValueError("No concentration columns found")
+
+    control_cols = [
+        f'concentration[{s}]' for s in control_samples
+        if f'concentration[{s}]' in abundance_cols
+    ]
+    if not control_cols:
+        raise ValueError(
+            "No concentration columns found for the control condition"
+        )
+
+    values = values_df[abundance_cols].to_numpy(dtype=float)
+
+    # Row-wise floor for zeros and negatives, as in the statistical tests.
+    with np.errstate(invalid='ignore'):
+        positive = np.where(values > 0, values, np.nan)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=RuntimeWarning)
+        min_positive = np.nanmin(positive, axis=1)
+    min_positive = np.where(
+        np.isnan(min_positive), MIN_POSITIVE_FALLBACK, min_positive,
+    )
+    small = (min_positive / ZERO_REPLACEMENT_DIVISOR).reshape(-1, 1)
+    adjusted = np.maximum(values, small)
+
+    control_idx = [abundance_cols.index(c) for c in control_cols]
+    control_mean = np.nanmean(adjusted[:, control_idx], axis=1).reshape(-1, 1)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        log2fc = np.log2(adjusted / control_mean)
+    log2fc = np.where(np.isfinite(log2fc), log2fc, np.nan)
+
+    return pd.DataFrame(log2fc, index=values_df.index, columns=abundance_cols)
+
+
 def _build_heatmap_figure(
     z_array: np.ndarray,
     x_labels: List[str],
     y_labels,
+    value_label: str = 'Z-score',
 ) -> go.Figure:
     """Create the base heatmap trace with a symmetric diverging colour scale."""
     if z_array.ndim == 1:
@@ -633,7 +784,7 @@ def _build_heatmap_figure(
         colorscale=COLORSCALE,
         zmin=-abs_max,
         zmax=abs_max,
-        colorbar=dict(title='Z-score'),
+        colorbar=dict(title=value_label),
         xgap=1,
         ygap=1,
     ))

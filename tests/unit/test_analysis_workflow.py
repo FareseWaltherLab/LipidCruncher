@@ -1371,6 +1371,109 @@ class TestRunHeatmap:
         rows = self._rows(self._grouped(df, exp_2x3, page=2))
         assert len(rows) == 100
 
+    def _fc(self, df, exp, mode='class_aggregated', control='Control', **kw):
+        return AnalysisWorkflow.run_heatmap(
+            df, exp,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type=mode, color_scale='log2fc',
+            control_condition=control, **kw
+        )
+
+    def test_log2fc_renders_for_both_class_modes(self, multi_species_df, exp_2x3):
+        for mode in ('class_grouped', 'class_aggregated'):
+            result = self._fc(multi_species_df, exp_2x3, mode=mode)
+            assert result.success is True
+            heatmap = [
+                t for t in result.figure.data if isinstance(t, go.Heatmap)
+            ][0]
+            assert heatmap.colorbar.title.text == 'log2FC'
+
+    def test_log2fc_control_is_the_reference(self, multi_species_df, exp_2x3):
+        """The control condition is plotted and centres on no change.
+
+        Individual control replicates are not each zero — every replicate has
+        its own fold change against the control mean, which is why the control
+        block reads near-white rather than flat white. The exact invariant is
+        that their fold changes average to 1x, i.e. no change.
+        """
+        result = self._fc(multi_species_df, exp_2x3)
+        control_cols = [
+            f'concentration[{s}]'
+            for s in exp_2x3.individual_samples_list[0]
+        ]
+        ratios = 2 ** result.z_scores_df[control_cols].to_numpy()
+        assert ratios.mean(axis=1) == pytest.approx(1.0)
+
+    def test_log2fc_control_is_flat_when_replicates_agree(self, exp_2x3):
+        """With identical control replicates the control cells are exactly 0."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)'],
+            'ClassKey': ['PC', 'PE'],
+            **{f'concentration[{s}]': [100.0, 80.0]
+               for s in exp_2x3.individual_samples_list[0]},
+            **{f'concentration[{s}]': [50.0, 160.0]
+               for s in exp_2x3.individual_samples_list[1]},
+        })
+        result = self._fc(df, exp_2x3)
+        control_cols = [
+            f'concentration[{s}]' for s in exp_2x3.individual_samples_list[0]
+        ]
+        assert result.z_scores_df[control_cols].to_numpy() == pytest.approx(0.0)
+        assert result.z_scores_df.loc['PC'].iloc[-1] == pytest.approx(-1.0)
+        assert result.z_scores_df.loc['PE'].iloc[-1] == pytest.approx(1.0)
+
+    def test_log2fc_export_carries_fold_changes(self, multi_species_df, exp_2x3):
+        result = self._fc(multi_species_df, exp_2x3)
+        assert sorted(result.z_scores_df.index) == ['PC', 'PE']
+
+    def test_zscore_remains_the_default(self, multi_species_df, exp_2x3):
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_aggregated',
+        )
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        assert heatmap.colorbar.title.text == 'Z-score'
+
+    def test_log2fc_rejected_for_species_modes(self, multi_species_df, exp_2x3):
+        for mode in ('regular', 'clustered'):
+            with pytest.raises(ValueError, match='class_grouped'):
+                self._fc(multi_species_df, exp_2x3, mode=mode)
+
+    def test_log2fc_requires_a_control(self, multi_species_df, exp_2x3):
+        with pytest.raises(ValueError, match='control condition is required'):
+            self._fc(multi_species_df, exp_2x3, control=None)
+
+    def test_control_must_be_among_selected_conditions(
+        self, multi_species_df, exp_2x3,
+    ):
+        """Otherwise the denominator would come from columns not on the plot."""
+        with pytest.raises(ValueError, match='must be among'):
+            self._fc(multi_species_df, exp_2x3, control='Vehicle')
+
+    def test_invalid_color_scale_rejected(self, multi_species_df, exp_2x3):
+        with pytest.raises(ValueError, match='color_scale'):
+            AnalysisWorkflow.run_heatmap(
+                multi_species_df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC', 'PE'],
+                heatmap_type='class_aggregated', color_scale='bogus',
+            )
+
+    def test_log2fc_composes_with_species_paging(self, exp_2x3):
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 20, exp_2x3)
+        result = AnalysisWorkflow.run_heatmap(
+            df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            heatmap_type='class_grouped', color_scale='log2fc',
+            control_condition='Control', species_page=1,
+        )
+        assert result.success is True
+        assert len(self._rows(result)) == 20
+
     def test_class_aggregated_heatmap(self, multi_species_df, exp_2x3):
         result = AnalysisWorkflow.run_heatmap(
             multi_species_df, exp_2x3,

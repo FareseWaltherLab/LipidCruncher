@@ -1800,3 +1800,223 @@ class TestMissingSampleColumns:
         fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(z, samples)
         heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
         assert np.asarray(heatmap.z).shape[1] == len(heatmap.x)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TestLog2FoldChange
+#
+# Z-scores place each sample within its own row's spread, so a class that
+# is merely higher than its row mean reads red even when it is unchanged —
+# the confusion this mode exists to remove. Fold change is taken against
+# the control condition, so control reads zero and colour is direction of
+# change versus control.
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestLog2FoldChange:
+    CONTROL = ['s1', 's2']
+
+    @staticmethod
+    def _filtered():
+        """CL halves, PC doubles, PE is unchanged, across 2 control + 2 test."""
+        return pd.DataFrame({
+            'LipidMolec': ['CL 70:6', 'PC 34:1', 'PE 34:1'],
+            'ClassKey': ['CL', 'PC', 'PE'],
+            'concentration[s1]': [100.0, 10.0, 50.0],
+            'concentration[s2]': [100.0, 10.0, 50.0],
+            'concentration[s3]': [50.0, 20.0, 50.0],
+            'concentration[s4]': [50.0, 20.0, 50.0],
+        })
+
+    def test_control_columns_are_zero(self):
+        """The whole point: control must read as no change, not as red."""
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(
+            self._filtered(), self.CONTROL,
+        )
+        control_cols = ['concentration[s1]', 'concentration[s2]']
+        assert fc[control_cols].to_numpy() == pytest.approx(0.0)
+
+    def test_halving_is_minus_one(self):
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(
+            self._filtered(), self.CONTROL,
+        )
+        assert fc.loc[('CL 70:6', 'CL'), 'concentration[s3]'] == pytest.approx(-1.0)
+
+    def test_doubling_is_plus_one(self):
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(
+            self._filtered(), self.CONTROL,
+        )
+        assert fc.loc[('PC 34:1', 'PC'), 'concentration[s4]'] == pytest.approx(1.0)
+
+    def test_unchanged_is_zero(self):
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(
+            self._filtered(), self.CONTROL,
+        )
+        assert fc.loc[('PE 34:1', 'PE'), 'concentration[s3]'] == pytest.approx(0.0)
+
+    def test_differs_from_z_scores_on_the_confusing_case(self):
+        """A row that is flat in control but lower in test is positive under
+        Z-scores and zero under fold change."""
+        filtered = self._filtered()
+        z = LipidomicHeatmapPlotterService.compute_z_scores(filtered)
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(filtered, self.CONTROL)
+        assert z.loc[('CL 70:6', 'CL'), 'concentration[s1]'] > 0.5
+        assert fc.loc[('CL 70:6', 'CL'), 'concentration[s1]'] == pytest.approx(0.0)
+
+    def test_zeros_do_not_produce_infinity(self):
+        """A species dropping to zero must stay plottable."""
+        df = pd.DataFrame({
+            'LipidMolec': ['X 1:0'], 'ClassKey': ['X'],
+            'concentration[s1]': [100.0], 'concentration[s2]': [100.0],
+            'concentration[s3]': [0.0], 'concentration[s4]': [0.0],
+        })
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(df, self.CONTROL)
+        assert np.isfinite(fc.to_numpy()).all()
+        assert fc['concentration[s3]'].iloc[0] < 0
+
+    def test_all_zero_row_is_finite(self):
+        df = pd.DataFrame({
+            'LipidMolec': ['X 1:0'], 'ClassKey': ['X'],
+            'concentration[s1]': [0.0], 'concentration[s2]': [0.0],
+            'concentration[s3]': [0.0], 'concentration[s4]': [0.0],
+        })
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(df, self.CONTROL)
+        assert np.isfinite(fc.to_numpy()).all()
+
+    def test_shape_and_index_preserved(self):
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(
+            self._filtered(), self.CONTROL,
+        )
+        assert fc.shape == (3, 4)
+        assert list(fc.index.get_level_values('LipidMolec')) == [
+            'CL 70:6', 'PC 34:1', 'PE 34:1',
+        ]
+
+    def test_unknown_control_samples_raise(self):
+        with pytest.raises(ValueError, match="control condition"):
+            LipidomicHeatmapPlotterService.compute_log2fc(
+                self._filtered(), ['nope'],
+            )
+
+    def test_empty_frame_raises(self):
+        with pytest.raises(ValueError, match="empty"):
+            LipidomicHeatmapPlotterService.compute_log2fc(
+                pd.DataFrame(), self.CONTROL,
+            )
+
+    def test_each_row_uses_its_own_control_mean(self):
+        """Rows are independent: one row's scale must not affect another's."""
+        df = pd.DataFrame({
+            'LipidMolec': ['big', 'small'], 'ClassKey': ['A', 'B'],
+            'concentration[s1]': [1000.0, 2.0],
+            'concentration[s2]': [1000.0, 2.0],
+            'concentration[s3]': [2000.0, 4.0],
+            'concentration[s4]': [2000.0, 4.0],
+        })
+        fc = LipidomicHeatmapPlotterService.compute_log2fc(df, self.CONTROL)
+        assert fc['concentration[s3]'].to_numpy() == pytest.approx([1.0, 1.0])
+
+
+class TestClassLog2FoldChange:
+    CONTROL = ['s1', 's2']
+
+    @staticmethod
+    def _filtered():
+        """Two PC species that both double, one PE species that halves."""
+        return pd.DataFrame({
+            'LipidMolec': ['PC a', 'PC b', 'PE a'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            'concentration[s1]': [10.0, 30.0, 80.0],
+            'concentration[s2]': [10.0, 30.0, 80.0],
+            'concentration[s3]': [20.0, 60.0, 40.0],
+            'concentration[s4]': [20.0, 60.0, 40.0],
+        })
+
+    def test_one_row_per_class(self):
+        fc = LipidomicHeatmapPlotterService.compute_class_log2fc(
+            self._filtered(), self.CONTROL,
+        )
+        assert list(fc.index) == ['PC', 'PE']
+
+    def test_control_is_zero(self):
+        fc = LipidomicHeatmapPlotterService.compute_class_log2fc(
+            self._filtered(), self.CONTROL,
+        )
+        assert fc[['concentration[s1]', 'concentration[s2]']].to_numpy() == (
+            pytest.approx(0.0)
+        )
+
+    def test_class_totals_drive_the_fold_change(self):
+        """PC totals 40 -> 80, so the class row is +1 even though the two
+        member species differ in size."""
+        fc = LipidomicHeatmapPlotterService.compute_class_log2fc(
+            self._filtered(), self.CONTROL,
+        )
+        assert fc.loc['PC', 'concentration[s3]'] == pytest.approx(1.0)
+        assert fc.loc['PE', 'concentration[s3]'] == pytest.approx(-1.0)
+
+    def test_matches_summing_then_folding(self):
+        """Aggregation must happen on concentrations, before the ratio."""
+        filtered = self._filtered()
+        fc = LipidomicHeatmapPlotterService.compute_class_log2fc(
+            filtered, self.CONTROL,
+        )
+        totals = filtered.groupby('ClassKey')[
+            [c for c in filtered.columns if c.startswith('concentration[')]
+        ].sum()
+        expected = np.log2(
+            totals['concentration[s3]']
+            / totals[['concentration[s1]', 'concentration[s2]']].mean(axis=1)
+        )
+        assert fc['concentration[s3]'].to_numpy() == pytest.approx(
+            expected.to_numpy()
+        )
+
+    def test_unknown_control_samples_raise(self):
+        with pytest.raises(ValueError, match="control condition"):
+            LipidomicHeatmapPlotterService.compute_class_log2fc(
+                self._filtered(), ['nope'],
+            )
+
+
+class TestValueLabel:
+    @staticmethod
+    def _class_z():
+        return pd.DataFrame(
+            np.arange(9, dtype=float).reshape(3, 3),
+            index=pd.Index(['PC', 'PE', 'TG'], name='ClassKey'),
+            columns=['s1', 's2', 's3'],
+        )
+
+    def test_colorbar_defaults_to_z_score(self):
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'],
+        )
+        heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
+        assert heatmap.colorbar.title.text == 'Z-score'
+
+    def test_colorbar_follows_the_value_label(self):
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'], value_label='log2FC',
+        )
+        heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
+        assert heatmap.colorbar.title.text == 'log2FC'
+
+    def test_title_names_the_quantity(self):
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            self._class_z(), ['s1', 's2', 's3'], value_label='log2FC',
+        )
+        assert 'log2FC' in fig.layout.title.text
+
+    def test_grouped_mode_takes_the_label_too(self):
+        index = pd.MultiIndex.from_arrays(
+            [['L0', 'L1'], ['PC', 'PE']], names=['LipidMolec', 'ClassKey'],
+        )
+        z = pd.DataFrame(
+            np.zeros((2, 3)), index=index, columns=['s1', 's2', 's3'],
+        )
+        fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            z, ['s1', 's2', 's3'], value_label='log2FC',
+        )
+        heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
+        assert heatmap.colorbar.title.text == 'log2FC'
+        assert 'log2FC' in fig.layout.title.text

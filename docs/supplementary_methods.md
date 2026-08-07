@@ -312,11 +312,20 @@ This ordering matters for interpretation. Because class totals are sums of raw c
 
 Because only species belonging to the classes selected by the user are summed, class totals depend on the current class selection. The selection does not, however, affect the z-scores of any individual class, since each class row is standardized independently across samples.
 
-## S6.4 Fatty Acid Composition Heatmaps
+## S6.4 Fold-Change Color Scale in Lipidomic Heatmaps
+
+Class-level and class-grouped heatmaps can be colored by log2 fold change against a control condition instead of by z-score. The user selects one of the displayed conditions as the control. For each row, the control mean is the mean of that row's values across the control replicates, and every sample, including the control replicates themselves, is expressed as the base-2 logarithm of its value divided by that control mean. Before the ratio is taken, values are floored at the smallest positive value in the row divided by ten, the same zero adjustment used for fold changes in the statistical tests (S5), so that a single zero cannot drive a row to negative infinity. The color scale remains symmetric about zero.
+
+The two color scales answer different questions and are not interchangeable. A z-score states where a sample sits within the spread of its own row, so a row that is constant in the control condition and reduced in the treated condition shows positive z-scores, and therefore warm colors, in the control samples. This is a correct statement about the row's internal distribution but is easily misread as an increase in the control. Under the fold-change scale the same row is near zero in the control and negative in the treated condition, which states the comparison directly. Fold change is therefore preferred when the question is the direction and magnitude of change relative to a reference condition, and z-score when the question is the relative pattern across samples without a designated reference.
+
+Control replicates do not each equal zero. Each replicate is expressed against the mean of its own condition, so the control replicates vary around zero to the extent that the condition itself varies; their fold changes average to unity by construction. The visible spread within the control block is therefore a direct read-out of control variability.
+
+## S6.5 Fatty Acid Composition Heatmaps
+
 
 Fatty acid composition heatmaps display lipid distribution within a selected class. The x-axis shows the number of double bonds, the y-axis shows total carbon chain length, and color intensity represents the proportion of each species relative to total class abundance (percentage). Average markers are calculated as weighted means, where each lipid's double bond count or chain length is weighted by its proportional abundance in the class.
 
-S6.5 Saturation Profile Analysis
+S6.6 Saturation Profile Analysis
 
 Fatty acid chain parsing: For each lipid species, individual fatty acid chains are extracted from the lipid name. For example, PC 16:0_18:1 is parsed into two chains: 16:0 and 18:1. The number of double bonds in each chain determines its classification:
 
@@ -340,7 +349,7 @@ PC 16:0_20:2: 50 µM SFA + 50 µM PUFA
 
 The same total composition yields completely different saturation profiles. LipidCruncher automatically detects lipids in consolidated format within selected classes and prompts users to either include them (classification based only on total double bonds, which may be inaccurate) or exclude them (accurate classification for remaining lipids, but reduced total abundance). Single-chain lipid classes (e.g., lysophospholipids, cholesteryl esters, monoacylglycerols) are exempted from this check as they inherently contain only one fatty acid chain.
 
-S6.6 Metabolomic Pathway Visualization
+S6.7 Metabolomic Pathway Visualization
 
 The pathway visualization displays lipid classes as nodes in a metabolic network, connected by 23 edges representing known metabolic relationships (e.g., Kennedy pathway: DG→PC, DG→PE; sphingolipid biosynthesis: LCB→dhCer→Cer→SM; cardiolipin synthesis: PG→CL). Three starting presets are available: the default 18-class pathway, all 28 curated classes, or an empty canvas for building a custom network.
 

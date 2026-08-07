@@ -18,6 +18,7 @@ to test different data scenarios without importing main_app.py.
 10. Edge cases — single condition volcano warning, three-condition analysis
 """
 
+import numpy as np
 from streamlit.testing.v1 import AppTest
 
 from tests.ui.conftest import (
@@ -673,6 +674,72 @@ class TestHeatmapUI:
 
         assert not at.exception
         assert at.session_state['analysis_heatmap_fig'] is not None
+
+    def test_color_scale_defaults_to_zscore(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        radio = at.radio(key='heatmap_color_scale')
+        assert radio.options == ["Z-score", "Log2 Fold Change"]
+        assert radio.value == "Z-score"
+
+    def test_no_control_selector_under_zscore(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        assert not [
+            s for s in at.selectbox if s.key == 'heatmap_control_condition'
+        ]
+
+    def test_log2fc_reveals_the_control_selector(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        assert not at.exception
+        control = at.selectbox(key='heatmap_control_condition')
+        assert control.options == ['Control', 'Treatment']
+        assert control.value == 'Control'
+
+    def test_log2fc_renders_a_fold_change_heatmap(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        assert not at.exception
+        fig = at.session_state['analysis_heatmap_fig']
+        assert fig.data[0].colorbar.title.text == 'log2FC'
+
+    def test_switching_control_changes_the_reference(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        first = at.session_state['analysis_heatmap_fig'].data[0].z
+
+        at.selectbox(key='heatmap_control_condition').set_value('Treatment').run()
+        second = at.session_state['analysis_heatmap_fig'].data[0].z
+
+        assert not at.exception
+        assert not np.allclose(np.asarray(first), np.asarray(second))
+
+    def test_log2fc_falls_back_on_species_modes(self, analysis_generic_app):
+        """Fold change is offered for the class modes; picking it with a
+        species mode must explain itself, not error."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        at.radio(key='heatmap_type').set_value("Clustered").run()
+
+        assert not at.exception
+        infos = ' '.join(i.value for i in at.info)
+        assert 'Log2 fold change is available' in infos
+        fig = at.session_state['analysis_heatmap_fig']
+        assert fig.data[0].colorbar.title.text == 'Z-score'
+
+    def test_log2fc_explains_the_formula(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        formulas = ' '.join(c.value for c in at.code)
+        assert 'log2FC' in formulas
+        assert 'control samples' in formulas
 
     def test_aggregated_mode_explains_the_aggregation(self, analysis_generic_app):
         """Summing species into class totals is a real analytic choice, so it

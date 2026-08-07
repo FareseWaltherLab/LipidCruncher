@@ -926,6 +926,8 @@ class AnalysisWorkflow:
         heatmap_type: str = 'regular',
         n_clusters: int = 3,
         species_page: int = 0,
+        color_scale: str = 'zscore',
+        control_condition: Optional[str] = None,
     ) -> HeatmapResult:
         """Run lipidomic heatmap analysis.
 
@@ -942,6 +944,13 @@ class AnalysisWorkflow:
             n_clusters: Number of clusters (only for clustered type).
             species_page: Zero-based page of species to draw, for the
                 class_grouped type only. Clamped into range.
+            color_scale: 'zscore' to standardise each row across samples, or
+                'log2fc' to express every sample as a log2 fold change against
+                the control condition's mean. 'log2fc' is available for the
+                class_grouped and class_aggregated types only.
+            control_condition: Condition to use as the log2fc denominator.
+                Required when color_scale is 'log2fc', and must be one of
+                selected_conditions so that it is also drawn.
 
         Returns:
             HeatmapResult with figure, Z-scores, and optional cluster info.
@@ -963,6 +972,27 @@ class AnalysisWorkflow:
                 "'clustered', 'class_grouped', or 'class_aggregated'"
             )
 
+        if color_scale not in ('zscore', 'log2fc'):
+            raise ValueError(
+                f"Invalid color_scale '{color_scale}'. "
+                "Must be 'zscore' or 'log2fc'"
+            )
+        if color_scale == 'log2fc':
+            if heatmap_type not in ('class_grouped', 'class_aggregated'):
+                raise ValueError(
+                    "color_scale 'log2fc' is only available for the "
+                    "'class_grouped' and 'class_aggregated' heatmap types"
+                )
+            if not control_condition:
+                raise ValueError(
+                    "A control condition is required for the log2fc color scale"
+                )
+            if control_condition not in selected_conditions:
+                raise ValueError(
+                    f"Control condition '{control_condition}' must be among "
+                    "the selected conditions"
+                )
+
         filtered_df, selected_samples = LipidomicHeatmapPlotterService.filter_data(
             df, selected_conditions, selected_classes, experiment,
         )
@@ -971,23 +1001,42 @@ class AnalysisWorkflow:
             selected_conditions, experiment,
         )
 
-        # The class-aggregated mode standardises class totals, not species, so
-        # it needs its own Z-scores rather than the species-level ones.
-        if heatmap_type == 'class_aggregated':
-            class_z_scores_df = LipidomicHeatmapPlotterService.compute_class_z_scores(
-                filtered_df,
+        control_samples = (
+            LipidomicHeatmapPlotterService.samples_for_condition(
+                control_condition, experiment,
             )
+            if color_scale == 'log2fc' else []
+        )
+        value_label = 'log2FC' if color_scale == 'log2fc' else 'Z-score'
+
+        # The class-aggregated mode works on class totals, not species, so it
+        # needs its own values rather than the species-level ones.
+        if heatmap_type == 'class_aggregated':
+            if color_scale == 'log2fc':
+                class_values_df = LipidomicHeatmapPlotterService.compute_class_log2fc(
+                    filtered_df, control_samples,
+                )
+            else:
+                class_values_df = LipidomicHeatmapPlotterService.compute_class_z_scores(
+                    filtered_df,
+                )
             return HeatmapResult(
                 figure=LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
-                    class_z_scores_df, selected_samples,
+                    class_values_df, selected_samples,
                     sample_conditions=sample_conditions,
+                    value_label=value_label,
                 ),
-                z_scores_df=class_z_scores_df,
+                z_scores_df=class_values_df,
             )
 
-        z_scores_df = LipidomicHeatmapPlotterService.compute_z_scores(
-            filtered_df,
-        )
+        if color_scale == 'log2fc':
+            z_scores_df = LipidomicHeatmapPlotterService.compute_log2fc(
+                filtered_df, control_samples,
+            )
+        else:
+            z_scores_df = LipidomicHeatmapPlotterService.compute_z_scores(
+                filtered_df,
+            )
 
         cluster_composition = None
         if heatmap_type == 'clustered':
@@ -1011,6 +1060,7 @@ class AnalysisWorkflow:
             figure = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
                 ordered_df.iloc[start:end], selected_samples,
                 sample_conditions=sample_conditions,
+                value_label=value_label,
             )
         else:
             figure = LipidomicHeatmapPlotterService.generate_regular_heatmap(

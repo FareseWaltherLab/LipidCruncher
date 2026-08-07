@@ -11,6 +11,10 @@ from app.services.plotting.lipidomic_heatmap import (
     GROUPED_PAGE_SIZE,
     LipidomicHeatmapPlotterService,
 )
+
+# Fold change needs a control condition to divide by, and is offered for the
+# two class-oriented modes only.
+LOG2FC_MODES = ('class_grouped', 'class_aggregated')
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
@@ -51,6 +55,8 @@ def _display_lipidomic_heatmap(
             st.warning("Please select at least one condition and one lipid class.")
             return
 
+        color_scale, control_condition = _select_color_scale(selected_conditions)
+
         section_header("⚙️ Heatmap Settings")
 
         col1, col2 = st.columns(2)
@@ -90,7 +96,17 @@ def _display_lipidomic_heatmap(
             "Aggregated by Class": 'class_aggregated',
         }[heatmap_type]
 
-        _display_method_explanation(heatmap_type_value)
+        # Fold change is defined against a control condition and is offered for
+        # the two class-oriented modes; the species modes keep Z-scores.
+        if color_scale == 'log2fc' and heatmap_type_value not in LOG2FC_MODES:
+            st.info(
+                "Log2 fold change is available for the 'Grouped by Class' and "
+                "'Aggregated by Class' modes. Showing Z-scores here."
+            )
+            color_scale = 'zscore'
+            control_condition = None
+
+        _display_method_explanation(heatmap_type_value, color_scale)
 
         species_total = LipidomicHeatmapPlotterService.count_species(
             df, selected_classes,
@@ -106,6 +122,8 @@ def _display_lipidomic_heatmap(
             heatmap_type=heatmap_type_value,
             n_clusters=n_clusters,
             species_page=species_page,
+            color_scale=color_scale,
+            control_condition=control_condition,
         )
 
         if not result.success:
@@ -151,12 +169,97 @@ def _display_lipidomic_heatmap(
             )
 
 
-def _display_method_explanation(heatmap_type_value: str) -> None:
+def _select_color_scale(selected_conditions: list) -> tuple:
+    """Choose what the colours represent, and the control for fold change.
+
+    Returns (color_scale, control_condition). The control is None unless log2
+    fold change is chosen. Falls back to Z-scores when fold change is asked for
+    but there is nothing to compare against.
+    """
+    col_scale, col_control = st.columns(2)
+
+    with col_scale:
+        choice = st.radio(
+            "Color Scale",
+            ["Z-score", "Log2 Fold Change"],
+            index=0,
+            horizontal=True,
+            key='heatmap_color_scale',
+            help=(
+                "Z-score: each row standardized across samples, showing where "
+                "each sample sits relative to that row's own mean. "
+                "Log2 Fold Change: every sample expressed against the control "
+                "condition, so the control reads as zero (white) and the sign "
+                "is the direction of change versus control."
+            ),
+        )
+
+    if choice != "Log2 Fold Change":
+        return 'zscore', None
+
+    if len(selected_conditions) < 2:
+        st.warning(
+            "Log2 fold change needs a control condition and at least one "
+            "other condition to compare against. Showing Z-scores."
+        )
+        return 'zscore', None
+
+    with col_control:
+        control_condition = st.selectbox(
+            "Control Condition",
+            selected_conditions,
+            index=0,
+            key='heatmap_control_condition',
+            help=(
+                "Every condition, including this one, is plotted as a fold "
+                "change against this condition's mean."
+            ),
+        )
+
+    experimental = [c for c in selected_conditions if c != control_condition]
+    st.caption(
+        f"Fold change against **{control_condition}** for: "
+        f"{', '.join(experimental)}."
+    )
+    return 'log2fc', control_condition
+
+
+def _display_method_explanation(
+    heatmap_type_value: str, color_scale: str = 'zscore',
+) -> None:
     """Explain how the colour scale is computed for the selected mode.
 
     Rendered after the mode is chosen because the class-aggregated mode
-    standardises class totals rather than individual species.
+    aggregates class totals rather than working on individual species.
     """
+    if color_scale == 'log2fc':
+        aggregation = (
+            "1. Class total = sum of the concentrations of every selected\n"
+            "                 species in that class, for each sample\n"
+            if heatmap_type_value == 'class_aggregated' else ""
+        )
+        subject = (
+            "Class total" if heatmap_type_value == 'class_aggregated'
+            else "Value"
+        )
+        step = "2." if aggregation else "1."
+        st.markdown("**How each cell is computed**:")
+        st.code(
+            f"{aggregation}"
+            f"{step} log2FC     = log2({subject} / mean of that row's\n"
+            f"                        control samples)",
+            language=None,
+        )
+        st.caption(
+            "The control condition is plotted too and reads as zero (white), "
+            "so colour is the direction and size of change against control "
+            "rather than a position within each row's own spread. Zeros are "
+            "floored at a small positive value before the ratio is taken, the "
+            "same adjustment the statistical tests use, so one zero cannot "
+            "send a row to negative infinity."
+        )
+        return
+
     if heatmap_type_value == 'class_aggregated':
         st.markdown("**How each row is computed** (one row per lipid class):")
         st.code(
