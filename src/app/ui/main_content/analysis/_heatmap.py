@@ -228,23 +228,20 @@ def _display_method_explanation(
     aggregates class totals rather than working on individual species.
     """
     if color_scale == 'log2fc':
-        aggregation = (
-            "1. Class total = sum of the concentrations of every selected\n"
-            "                 species in that class, for each sample\n"
-            if heatmap_type_value == 'class_aggregated' else ""
-        )
-        subject = (
-            "Class total" if heatmap_type_value == 'class_aggregated'
-            else "Value"
-        )
-        step = "2." if aggregation else "1."
+        # Only the aggregated mode has two steps, so only it gets numbered.
+        if heatmap_type_value == 'class_aggregated':
+            formula = (
+                "1. Class total = sum of the concentrations of every selected\n"
+                "                 species in that class, for each sample\n"
+                "2. log2FC      = log2(Class total / mean of that class's\n"
+                "                      control samples)"
+            )
+        else:
+            formula = (
+                "log2FC = log2(Value / mean of that row's control samples)"
+            )
         st.markdown("**How each cell is computed**:")
-        st.code(
-            f"{aggregation}"
-            f"{step} log2FC     = log2({subject} / mean of that row's\n"
-            f"                        control samples)",
-            language=None,
-        )
+        st.code(formula, language=None)
         st.caption(
             "The control condition is plotted too and reads as zero (white), "
             "so colour is the direction and size of change against control "
