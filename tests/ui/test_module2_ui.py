@@ -263,6 +263,22 @@ class TestPCA:
         text_values = [t.value for t in at.text]
         assert any("qc_samples:5" in v for v in text_values)
 
+    def test_pca_removal_persists_the_updated_experiment(self, qc_generic_app):
+        """The QC module stores the post-removal ExperimentConfig alongside
+        qc_continuation_df. Consumers outside Module 3 (the AI Studio's
+        pipeline import) read it from session state; Module 3 gets it as a
+        return value, so without this it was never persisted and the pre-QC
+        experiment would claim samples the QC frame no longer has."""
+        at = qc_generic_app
+        at.multiselect(key='pca_samples_remove').set_value(['s1']).run()
+        assert not at.exception
+        qc_experiment = at.session_state['qc_experiment']
+        assert sum(qc_experiment.number_of_samples_list) == 5
+        # And it agrees with the frame it is stored beside.
+        qc_df = at.session_state['qc_continuation_df']
+        conc_cols = [c for c in qc_df.columns if c.startswith('concentration[')]
+        assert len(conc_cols) == 5
+
     def test_pca_min_2_error(self, qc_small_app):
         """Removing all but 1 sample shows min-2 error."""
         at = qc_small_app

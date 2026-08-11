@@ -91,7 +91,8 @@ class SessionState:
                              _preserved_norm_method_selection, normalization_result,
                              class_standard_map, standard_concentrations, protein_df,
                              protein_input_method, protein_input_method_prev
-      quality_check.py     → qc_continuation_df, qc_bqc_plot, qc_cov_threshold,
+      quality_check.py     → qc_continuation_df, qc_experiment, qc_bqc_plot,
+                             qc_cov_threshold,
                              qc_correlation_plots, qc_pca_plot, qc_samples_removed,
                              _preserved_bqc_filter_choice, _preserved_rt_viewing_mode,
                              _preserved_pca_samples_remove
@@ -195,6 +196,11 @@ class SessionState:
 
     # --- Quality Check (owner: quality_check.py) ---
     qc_continuation_df: Optional[pd.DataFrame] = None
+    # The experiment as of the end of QC. Differs from `experiment` when the
+    # user removed samples in the PCA step, which drops sample columns and
+    # renumbers the survivors. Pair it with qc_continuation_df, never the
+    # pre-QC `experiment`.
+    qc_experiment: Optional[ExperimentConfig] = None
     qc_box_plot_fig1: Optional[go.Figure] = None
     qc_box_plot_fig2: Optional[go.Figure] = None
     qc_bqc_plot: Optional[go.Figure] = None

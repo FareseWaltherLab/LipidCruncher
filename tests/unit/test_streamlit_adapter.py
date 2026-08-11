@@ -964,7 +964,9 @@ class TestSessionStateFieldCompleteness:
         """Test that QC fields count hasn't changed (no regression)."""
         field_names = [f.name for f in fields(SessionState)]
         qc_fields = [f for f in field_names if f.startswith('qc_')]
-        assert len(qc_fields) == 9
+        # 9 original + qc_experiment (the post-QC ExperimentConfig, needed
+        # because PCA sample removal renumbers the surviving samples).
+        assert len(qc_fields) == 10
 
     def test_total_field_count(self):
         """Guard against accidental field deletion and duplicate names.

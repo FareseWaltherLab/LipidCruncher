@@ -217,9 +217,9 @@ def _offer_pipeline_import_sidebar() -> None:
     Shown when the main pipeline has data available AND the currently-
     loaded Studio data is either empty or itself a previous pipeline
     import. Keeping the controls visible after a pipeline import lets
-    users switch sources (raw ↔ normalized) or pull a fresh copy after
-    changing the main pipeline (e.g. swapping the normalization method)
-    — without that, Studio state stays frozen at the first import.
+    users switch sources (raw ↔ normalized ↔ QC-filtered) or pull a fresh
+    copy after changing the main pipeline (e.g. swapping the normalization
+    method) — without that, Studio state stays frozen at the first import.
 
     Skipped when the user has uploaded their own CSV — they picked a
     different data source on purpose, so don't clutter their sidebar.
@@ -228,6 +228,11 @@ def _offer_pipeline_import_sidebar() -> None:
     Studio doesn't fall back to a single dummy condition.
     """
     normalized_df = st.session_state.get("normalized_df")
+    # The Quality Check module's output: normalized data with high-CoV lipids
+    # dropped and any PCA-flagged samples removed. Only present once the user
+    # has visited Module 2. It carries its own experiment because sample
+    # removal renumbers the survivors (see SessionState.qc_experiment).
+    qc_df = st.session_state.get("qc_continuation_df")
     # For the "Raw" option we prefer `standardized_df` over `raw_df`:
     # both contain the same unfiltered, un-normalized values, but the
     # standardized version has the column rename applied (e.g. LipidSearch
@@ -239,7 +244,7 @@ def _offer_pipeline_import_sidebar() -> None:
         if st.session_state.get("standardized_df") is not None
         else st.session_state.get("raw_df")
     )
-    if normalized_df is None and raw_for_studio is None:
+    if normalized_df is None and raw_for_studio is None and qc_df is None:
         return
 
     studio_has_data = st.session_state.get('chat_studio_df') is not None
@@ -250,9 +255,12 @@ def _offer_pipeline_import_sidebar() -> None:
         return
 
     if studio_has_data:
-        source_label = (
-            "Normalized" if current_pipeline_source == 'normalized' else "Raw"
-        )
+        if current_pipeline_source == 'qc_filtered':
+            source_label = "QC-filtered"
+        elif current_pipeline_source == 'normalized':
+            source_label = "Normalized"
+        else:
+            source_label = "Raw"
         st.sidebar.markdown(
             f"**Currently imported: {source_label} data from main pipeline.**"
         )
@@ -263,7 +271,11 @@ def _offer_pipeline_import_sidebar() -> None:
     else:
         st.sidebar.markdown("**Or import from the main pipeline:**")
 
+    # Most-processed first, so the default selection is the furthest along
+    # the pipeline the user has actually got.
     options = []
+    if qc_df is not None:
+        options.append("QC-filtered data (from pipeline)")
     if normalized_df is not None:
         options.append("Normalized data (from pipeline)")
     if raw_for_studio is not None:
@@ -280,11 +292,22 @@ def _offer_pipeline_import_sidebar() -> None:
         else "Import Pipeline Data"
     )
     if st.sidebar.button(button_label, key="ai_studio_import_pipeline"):
-        is_normalized = "Normalized" in choice
-        imported = normalized_df if is_normalized else raw_for_studio
+        if choice.startswith("QC-filtered"):
+            source_key, imported = 'qc_filtered', qc_df
+        elif choice.startswith("Normalized"):
+            source_key, imported = 'normalized', normalized_df
+        else:
+            source_key, imported = 'raw', raw_for_studio
         # Read pipeline state BEFORE clearing — _clear_data_sessions() only
         # touches AI Studio state, but reading first keeps the intent clear.
+        # QC output must pair with the QC-updated experiment: PCA sample
+        # removal drops sample columns and renumbers the survivors, so the
+        # pre-QC experiment would claim samples the data no longer has.
         pipeline_experiment = st.session_state.get('experiment')
+        if source_key == 'qc_filtered':
+            qc_experiment = st.session_state.get('qc_experiment')
+            if qc_experiment is not None:
+                pipeline_experiment = qc_experiment
         pipeline_bqc_label = st.session_state.get('bqc_label')
 
         # Reset all studio state + sidebar widgets so the import starts
@@ -296,9 +319,7 @@ def _offer_pipeline_import_sidebar() -> None:
         st.session_state.chat_studio_df = imported
         st.session_state.chat_studio_df_original = imported
         st.session_state.chat_studio_file_id = "_pipeline_import"
-        st.session_state.chat_studio_pipeline_source = (
-            'normalized' if is_normalized else 'raw'
-        )
+        st.session_state.chat_studio_pipeline_source = source_key
         if pipeline_experiment is not None:
             st.session_state.chat_studio_experiment = pipeline_experiment
         if pipeline_bqc_label is not None:
@@ -307,10 +328,13 @@ def _offer_pipeline_import_sidebar() -> None:
         # Pre-populate every studio_* sidebar widget so the user doesn't
         # have to re-walk the flow — the next rerun renders the sidebar
         # with these values, the apply step runs, studio_applied_snapshot
-        # is set, and the data tabs unlock immediately. Works for both
-        # branches because:
+        # is set, and the data tabs unlock immediately. Works for every
+        # branch because:
         #   • Normalized imports already have intensity[*]/concentration[*]
         #     columns matching the experiment.
+        #   • QC-filtered imports are the normalized frame minus high-CoV
+        #     lipids and PCA-removed samples, and pipeline_experiment is the
+        #     QC-updated config, so the columns still match.
         #   • Raw imports use `standardized_df`, which has the same column
         #     rename applied, so auto-detection finds intensity[*] too.
         # Custom Viz is still hard-locked for raw via pipeline_source ==
@@ -958,7 +982,13 @@ def display_ai_studio_page() -> None:
             pipeline_source = st.session_state.get(
                 "chat_studio_pipeline_source"
             )
-            if pipeline_source == 'normalized':
+            if pipeline_source == 'qc_filtered':
+                file_label = (
+                    "QC-filtered data from main pipeline "
+                    "(normalized, high-CoV lipids and PCA-removed samples "
+                    "excluded)"
+                )
+            elif pipeline_source == 'normalized':
                 file_label = "Normalized data from main pipeline"
             elif pipeline_source == 'raw':
                 file_label = (
@@ -1037,15 +1067,21 @@ def display_ai_studio_page() -> None:
                 )
             elif blocked:
                 st.info(blocked_tab_msg)
-            elif pipeline_source_for_transform == 'normalized':
-                # Normalized imports are filtered AND normalized — there's
-                # genuinely nothing left to transform. Raw imports, by
-                # contrast, are Generic-shaped but unfiltered/un-normalized,
-                # so the user may legitimately want to ask the AI to filter
-                # or normalize them in custom ways. Don't lock for raw.
+            elif pipeline_source_for_transform in ('normalized', 'qc_filtered'):
+                # Normalized and QC-filtered imports are filtered AND
+                # normalized — there's genuinely nothing left to transform.
+                # Raw imports, by contrast, are Generic-shaped but
+                # unfiltered/un-normalized, so the user may legitimately want
+                # to ask the AI to filter or normalize them in custom ways.
+                # Don't lock for raw.
+                source_word = (
+                    "QC-filtered"
+                    if pipeline_source_for_transform == 'qc_filtered'
+                    else "normalized"
+                )
                 st.info(
-                    "Transformation isn't needed — your data was imported "
-                    "as **normalized** data from the main pipeline, so "
+                    f"Transformation isn't needed — your data was imported "
+                    f"as **{source_word}** data from the main pipeline, so "
                     "it's already filtered and normalized. Use **Data "
                     "Questions** to explore it, or **Custom "
                     "Visualization** to plot it."

@@ -88,8 +88,12 @@ def display_quality_check_module(
     # Section 5: PCA (may remove samples)
     qc_df, experiment = _display_pca_analysis(qc_df, experiment)
 
-    # Store final state
+    # Store final state. The experiment is stored alongside the DataFrame
+    # because PCA removal drops sample columns and renumbers the survivors —
+    # consumers outside Module 3 (e.g. the AI Studio's pipeline import) need
+    # the matching config, not the pre-QC one.
     st.session_state.qc_continuation_df = qc_df
+    st.session_state.qc_experiment = experiment
 
     return qc_df, experiment
 

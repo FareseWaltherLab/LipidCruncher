@@ -320,3 +320,149 @@ class TestMetabolomicsWorkbenchBlocked:
             mw_block_script, default_timeout=DEFAULT_TIMEOUT,
         ).run()
         assert any(t.value == 'blocked:True' for t in at.text)
+
+
+def pipeline_import_script():
+    """Render the pipeline-import sidebar with all three pipeline stages
+    seeded, and report the resulting Studio provenance.
+
+    The QC frame deliberately differs from the normalized one: one lipid is
+    dropped (high CoV) and sample s4 is removed (PCA outlier), which renumbers
+    the survivors to s1..s3. `qc_experiment` reflects that; the pre-QC
+    `experiment` still claims 4 samples.
+    """
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.models.experiment import ExperimentConfig
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('normalized_df') is None:
+        st.session_state.standardized_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1', 'PE 36:2'],
+            'intensity[s1]': [1.0, 2.0], 'intensity[s2]': [3.0, 4.0],
+            'intensity[s3]': [5.0, 6.0], 'intensity[s4]': [7.0, 8.0],
+        })
+        st.session_state.normalized_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1', 'PE 36:2'],
+            'concentration[s1]': [1.0, 2.0], 'concentration[s2]': [3.0, 4.0],
+            'concentration[s3]': [5.0, 6.0], 'concentration[s4]': [7.0, 8.0],
+        })
+        st.session_state.qc_continuation_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1'],
+            'concentration[s1]': [1.0], 'concentration[s2]': [3.0],
+            'concentration[s3]': [5.0],
+        })
+        st.session_state.experiment = ExperimentConfig(
+            conditions_list=['WT', 'KO'], number_of_samples_list=[2, 2],
+        )
+        st.session_state.qc_experiment = ExperimentConfig(
+            conditions_list=['WT', 'KO'], number_of_samples_list=[2, 1],
+        )
+
+    from app.ui.ai_studio_page import _offer_pipeline_import_sidebar
+    _offer_pipeline_import_sidebar()
+
+    imported = st.session_state.get('chat_studio_df')
+    st.text(f"source:{st.session_state.get('chat_studio_pipeline_source')}")
+    st.text(f"rows:{len(imported) if imported is not None else -1}")
+    studio_exp = st.session_state.get('chat_studio_experiment')
+    st.text(
+        "samples:"
+        f"{studio_exp.number_of_samples_list if studio_exp else None}"
+    )
+    st.text(f"n_samples_1:{st.session_state.get('studio_n_samples_1')}")
+
+
+def _marker(at, prefix):
+    for t in at.text:
+        if t.value.startswith(prefix):
+            return t.value[len(prefix):]
+    raise AssertionError(f"{prefix} marker not rendered")
+
+
+class TestQCFilteredPipelineImport:
+    """AI Studio can import the Quality Check module's output, not just the
+    raw and normalized frames."""
+
+    def test_qc_option_offered_when_qc_data_exists(self):
+        at = AppTest.from_function(
+            pipeline_import_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        options = at.sidebar.radio(key='ai_studio_pipeline_choice').options
+        assert options[0].startswith('QC-filtered')
+        assert any(o.startswith('Normalized') for o in options)
+        assert any(o.startswith('Raw') for o in options)
+
+    def test_importing_qc_data_sets_qc_provenance(self):
+        at = AppTest.from_function(
+            pipeline_import_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.button(key='ai_studio_import_pipeline').click().run()
+        assert _marker(at, 'source:') == 'qc_filtered'
+        # The QC frame has one lipid; the normalized frame has two.
+        assert _marker(at, 'rows:') == '1'
+
+    def test_qc_import_pairs_with_the_qc_updated_experiment(self):
+        """Regression: PCA sample removal drops columns and renumbers the
+        survivors. Pairing the QC frame with the pre-QC `experiment` would
+        tell the Studio there are 4 samples when the data holds 3, so the
+        sample-column mapping silently misaligns."""
+        at = AppTest.from_function(
+            pipeline_import_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.button(key='ai_studio_import_pipeline').click().run()
+        # qc_experiment is [2, 1]; the stale pre-QC experiment is [2, 2].
+        assert _marker(at, 'samples:') == '[2, 1]'
+        # The sidebar prefill must agree with it.
+        assert _marker(at, 'n_samples_1:') == '1'
+
+    def test_normalized_import_keeps_the_pre_qc_experiment(self):
+        """The QC-updated experiment must not leak into the other sources —
+        the normalized frame still has all 4 samples."""
+        at = AppTest.from_function(
+            pipeline_import_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='ai_studio_pipeline_choice').set_value(
+            'Normalized data (from pipeline)'
+        ).run()
+        at.sidebar.button(key='ai_studio_import_pipeline').click().run()
+        assert _marker(at, 'source:') == 'normalized'
+        assert _marker(at, 'samples:') == '[2, 2]'
+
+    def test_raw_import_still_works(self):
+        at = AppTest.from_function(
+            pipeline_import_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='ai_studio_pipeline_choice').set_value(
+            'Raw uploaded data (from pipeline)'
+        ).run()
+        at.sidebar.button(key='ai_studio_import_pipeline').click().run()
+        assert _marker(at, 'source:') == 'raw'
+
+
+def pipeline_import_no_qc_script():
+    """Same as `pipeline_import_script` but the user never visited Module 2,
+    so there is no QC frame to offer."""
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('normalized_df') is None:
+        st.session_state.normalized_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1'],
+            'concentration[s1]': [1.0], 'concentration[s2]': [3.0],
+        })
+
+    from app.ui.ai_studio_page import _offer_pipeline_import_sidebar
+    _offer_pipeline_import_sidebar()
+
+
+class TestQCOptionHiddenWithoutQCData:
+    def test_no_qc_option_before_module2_runs(self):
+        at = AppTest.from_function(
+            pipeline_import_no_qc_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        options = at.sidebar.radio(key='ai_studio_pipeline_choice').options
+        assert not any(o.startswith('QC-filtered') for o in options)
