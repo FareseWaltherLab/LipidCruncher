@@ -181,7 +181,9 @@ def _display_bqc_assessment(
     if bqc_label is None or bqc_label not in experiment.conditions_list:
         return df
 
-    with st.expander("Quality Check Using BQC Samples"):
+    # Expanded by default so the CoV filter is the first thing users see
+    # on this page and have to consciously act on.
+    with st.expander("Quality Check Using BQC Samples", expanded=True):
         st.markdown(
             "Evaluate measurement reliability using Batch Quality Control (BQC) samples. "
             "Lower CoV = more consistent measurements."
@@ -530,6 +532,31 @@ def _display_pca_analysis(
         # --- Settings ---
         settings_header()
 
+        # Exclude whole groups/conditions
+        restored_groups = StreamlitAdapter.restore_widget_value(
+            'pca_groups_remove', '_preserved_pca_groups_remove', []
+        )
+        valid_restored_groups = [
+            c for c in restored_groups if c in experiment.conditions_list
+        ]
+        groups_to_remove = st.multiselect(
+            'Exclude Groups (optional)',
+            experiment.conditions_list,
+            default=valid_restored_groups if valid_restored_groups else [],
+            help=(
+                "Exclude an entire condition/group (e.g. Blanks, a control "
+                "condition) from all downstream analyses."
+            ),
+            key='pca_groups_remove'
+        )
+        StreamlitAdapter.save_widget_value('pca_groups_remove', '_preserved_pca_groups_remove')
+
+        # Expand selected groups to their sample names
+        group_samples = []
+        for cond in groups_to_remove:
+            idx = experiment.conditions_list.index(cond)
+            group_samples.extend(experiment.individual_samples_list[idx])
+
         restored_pca = StreamlitAdapter.restore_widget_value(
             'pca_samples_remove', '_preserved_pca_samples_remove', []
         )
@@ -539,27 +566,37 @@ def _display_pca_analysis(
             'Exclude Samples (optional)',
             experiment.full_samples_list,
             default=valid_restored if valid_restored else [],
-            help="Exclude suspected outliers from analysis.",
+            help=(
+                "Exclude suspected outliers, or technical runs you don't want "
+                "in the analysis (e.g. pooled QC, blanks). Excluded samples "
+                "are dropped from all downstream analyses."
+            ),
             key='pca_samples_remove'
         )
         StreamlitAdapter.save_widget_value('pca_samples_remove', '_preserved_pca_samples_remove')
 
-        if samples_to_remove:
-            remaining_count = len(experiment.full_samples_list) - len(samples_to_remove)
+        # Combine group- and sample-level exclusions (order-preserving union)
+        combined_removal = list(group_samples)
+        for s in samples_to_remove:
+            if s not in combined_removal:
+                combined_removal.append(s)
+
+        if combined_removal:
+            remaining_count = len(experiment.full_samples_list) - len(combined_removal)
             if remaining_count < 2:
                 st.error('At least two samples required for PCA.')
                 return df, experiment
 
             # Apply removal via workflow
             removal_result = QualityCheckWorkflow.remove_samples(
-                df, experiment, samples_to_remove
+                df, experiment, combined_removal
             )
             df = removal_result.updated_df
             experiment = removal_result.updated_experiment
-            st.session_state.qc_samples_removed = samples_to_remove
+            st.session_state.qc_samples_removed = combined_removal
 
             st.warning(
-                f"⚠️ {len(samples_to_remove)} sample(s) excluded from "
+                f"⚠️ {len(combined_removal)} sample(s) excluded from "
                 f"**all downstream analyses**, not just PCA."
             )
             st.success(f"Proceeding with {remaining_count} samples.")

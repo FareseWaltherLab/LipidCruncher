@@ -21,7 +21,7 @@ def _display_volcano_plot(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display volcano plot analysis."""
-    with st.expander("Species Level Breakdown - Volcano Plot", expanded=True):
+    with st.expander("Species Level Breakdown - Volcano Plot", expanded=False):
         st.markdown(
             "Identify differentially abundant lipid species between two conditions."
         )
@@ -97,7 +97,7 @@ def _display_volcano_plot(
                 "Fold change threshold",
                 min_value=1.1,
                 max_value=5.0,
-                value=2.0,
+                value=1.5,
                 step=0.1,
                 format="%.1f",
                 key='volcano_fc_threshold',
@@ -133,7 +133,7 @@ def _display_volcano_statistical_options() -> StatisticalTestConfig:
         correction = st.selectbox(
             "Multiple Testing Correction",
             ["uncorrected", "fdr_bh", "bonferroni"],
-            index=1,
+            index=0,
             key='volcano_correction',
         )
 

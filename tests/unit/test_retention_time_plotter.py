@@ -4,9 +4,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
+from app.services.plotting._shared import CLASS_COLORS
 from app.services.plotting.retention_time import (
     RetentionTimePlotterService,
-    _get_distinct_colors,
     _get_unique_colors,
 )
 
@@ -147,23 +147,6 @@ class TestPlotMultiRetention:
 # =============================================================================
 
 class TestColorGeneration:
-    def test_distinct_colors_returns_n(self):
-        colors = _get_distinct_colors(5)
-        assert len(colors) == 5
-
-    def test_distinct_colors_are_tuples(self):
-        colors = _get_distinct_colors(3)
-        for c in colors:
-            assert isinstance(c, tuple)
-            assert len(c) == 3
-
-    def test_distinct_colors_rgb_range(self):
-        colors = _get_distinct_colors(5)
-        for r, g, b in colors:
-            assert 0 <= r <= 1
-            assert 0 <= g <= 1
-            assert 0 <= b <= 1
-
     def test_unique_colors_returns_n(self):
         colors = _get_unique_colors(5)
         assert len(colors) == 5
@@ -177,13 +160,65 @@ class TestColorGeneration:
         colors = _get_unique_colors(20)
         assert len(colors) == 20
 
-    def test_distinct_colors_single(self):
-        colors = _get_distinct_colors(1)
-        assert len(colors) == 1
-
     def test_unique_colors_zero(self):
         colors = _get_unique_colors(0)
         assert len(colors) == 0
+
+
+# =============================================================================
+# TestMarkerStyling
+#
+# The multi-class plot used to recolour points with fully saturated HSV
+# (colorsys.hsv_to_rgb(h, 1.0, 1.0)), which read as neon next to the volcano
+# and PCA plots. It must use the shared soft CLASS_COLORS palette instead,
+# with the same black marker outline as the volcano plot.
+# =============================================================================
+
+class TestMarkerStyling:
+    def test_multi_plot_uses_shared_class_palette(self, rt_df):
+        fig, _ = RetentionTimePlotterService.plot_multi_retention(
+            rt_df, ['PC', 'PE', 'TG'],
+        )
+        for trace in fig.data:
+            assert trace.marker.color in CLASS_COLORS
+
+    def test_multi_plot_emits_no_saturated_rgb(self, rt_df):
+        """Guards against a regression to the full-saturation HSV palette."""
+        fig, _ = RetentionTimePlotterService.plot_multi_retention(
+            rt_df, ['PC', 'PE', 'TG'],
+        )
+        for trace in fig.data:
+            assert not str(trace.marker.color).startswith('rgb(')
+
+    def test_multi_plot_colors_match_data_column(self, rt_df):
+        """Trace colour must be the colour assigned to that class in the data."""
+        fig, rdf = RetentionTimePlotterService.plot_multi_retention(
+            rt_df, ['PC', 'PE', 'TG'],
+        )
+        for trace in fig.data:
+            expected = rdf[rdf['Class'] == trace.name]['Color'].iloc[0]
+            assert trace.marker.color == expected
+
+    def test_multi_plot_markers_have_black_border(self, rt_df):
+        fig, _ = RetentionTimePlotterService.plot_multi_retention(
+            rt_df, ['PC', 'PE', 'TG'],
+        )
+        for trace in fig.data:
+            assert trace.marker.line.color == 'black'
+            assert trace.marker.line.width == 1
+
+    def test_single_plot_markers_have_black_border(self, rt_df):
+        plots = RetentionTimePlotterService.plot_single_retention(rt_df)
+        for fig, _ in plots:
+            assert fig.data[0].marker.line.color == 'black'
+            assert fig.data[0].marker.line.width == 1
+
+    def test_each_class_keeps_a_distinct_color(self, rt_df):
+        fig, _ = RetentionTimePlotterService.plot_multi_retention(
+            rt_df, ['PC', 'PE', 'TG'],
+        )
+        colors = [t.marker.color for t in fig.data]
+        assert len(set(colors)) == len(colors)
 
 
 # =============================================================================

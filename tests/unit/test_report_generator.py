@@ -117,8 +117,8 @@ class TestBuildMetadataFromExperiment:
                                         ["s4", "s5", "s6"]]
         exp.full_samples_list = ["s1", "s2", "s3", "s4", "s5", "s6"]
 
-        m = build_metadata_from_experiment(exp, "LipidSearch 5.0")
-        assert m.format_type == "LipidSearch 5.0"
+        m = build_metadata_from_experiment(exp, "LipidSearch")
+        assert m.format_type == "LipidSearch"
         assert m.n_conditions == 2
         assert m.total_samples == 6
         assert len(m.conditions_detail) == 2

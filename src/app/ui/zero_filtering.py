@@ -32,7 +32,7 @@ def display_zero_filtering_config(
         cleaned_df: Cleaned DataFrame to filter.
         experiment: Experiment configuration with sample/condition info.
         bqc_label: Label for BQC condition (if any).
-        data_format: Data format string (e.g., 'LipidSearch 5.0') for default detection threshold.
+        data_format: Data format string (e.g., 'LipidSearch') for default detection threshold.
 
     Returns:
         tuple: (filtered_df, removed_species list, config dict)

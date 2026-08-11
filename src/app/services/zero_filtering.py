@@ -16,7 +16,7 @@ class ZeroFilterConfig:
 
     Attributes:
         detection_threshold: Values <= this are considered "zero" (default 0.0).
-            For LipidSearch 5.0, a value of 30000 is recommended to account for noise floor.
+            For LipidSearch, a value of 30000 is recommended to account for noise floor.
         bqc_threshold: Proportion threshold for BQC condition (default 0.5 = 50%).
             If >= this proportion of BQC samples are zeros, lipid is flagged.
         non_bqc_threshold: Proportion threshold for non-BQC conditions (default 0.75 = 75%).
@@ -37,7 +37,7 @@ class ZeroFilterConfig:
 
     @classmethod
     def for_lipidsearch(cls) -> "ZeroFilterConfig":
-        """Create config optimized for LipidSearch 5.0 data (higher noise floor)."""
+        """Create config optimized for LipidSearch data (higher noise floor)."""
         return cls(detection_threshold=LIPIDSEARCH_DETECTION_THRESHOLD)
 
     @classmethod

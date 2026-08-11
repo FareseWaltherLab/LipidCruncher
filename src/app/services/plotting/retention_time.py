@@ -7,14 +7,16 @@ for lipid class identification quality checks.
 Pure logic — no Streamlit dependencies.
 """
 
-import colorsys
 import itertools
 from typing import List, Tuple
 
 import pandas as pd
 import plotly.graph_objects as go
 
-from app.services.plotting._shared import CLASS_COLORS
+from app.services.plotting._shared import CLASS_COLORS, MARKER_LINE
+
+
+MARKER_SIZE = 7
 
 
 class RetentionTimePlotterService:
@@ -110,7 +112,8 @@ def _render_single_plot(retention_df: pd.DataFrame, lipid_class: str) -> go.Figu
 
     fig.add_trace(go.Scatter(
         x=retention_df['Mass'], y=retention_df['Retention'],
-        mode='markers', marker=dict(size=6),
+        mode='markers',
+        marker=dict(size=MARKER_SIZE, color=CLASS_COLORS[0], line=MARKER_LINE),
         text=retention_df['Species'],
         hovertemplate=(
             '<b>Mass</b>: %{x:.4f}<br>'
@@ -139,15 +142,16 @@ def _render_multi_plot(retention_df: pd.DataFrame) -> go.Figure:
     """Create a multi-class retention time comparison plot."""
     fig = go.Figure()
 
-    num_classes = len(retention_df['Class'].unique())
-    colors = _get_distinct_colors(num_classes)
-    color_palette = [f'rgb({int(r*255)},{int(g*255)},{int(b*255)})' for r, g, b in colors]
-
-    for i, lipid_class in enumerate(retention_df['Class'].unique()):
+    for lipid_class in retention_df['Class'].unique():
         class_df = retention_df[retention_df['Class'] == lipid_class]
         fig.add_trace(go.Scatter(
             x=class_df['Mass'], y=class_df['Retention'],
-            mode='markers', marker=dict(size=6, color=color_palette[i]),
+            mode='markers',
+            marker=dict(
+                size=MARKER_SIZE,
+                color=class_df['Color'].iloc[0],
+                line=MARKER_LINE,
+            ),
             name=lipid_class,
             text=class_df['LipidMolec'],
             hovertemplate=(
@@ -175,12 +179,6 @@ def _render_multi_plot(retention_df: pd.DataFrame) -> go.Figure:
     fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
 
     return fig
-
-
-def _get_distinct_colors(n: int) -> List[tuple]:
-    """Generate n visually distinct colors using HSV."""
-    hue_partition = 1.0 / (n + 1)
-    return [colorsys.hsv_to_rgb(hue_partition * i, 1.0, 1.0) for i in range(n)]
 
 
 def _get_unique_colors(n_classes: int) -> List[str]:

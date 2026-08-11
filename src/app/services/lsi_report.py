@@ -101,7 +101,7 @@ class LSIReportService:
         """Collect all auto-fillable fields into a structured dict.
 
         Args:
-            format_type: Data format string (e.g., "LipidSearch 5.0").
+            format_type: Data format string (e.g., "LipidSearch").
             experiment: Experiment configuration.
             normalization_config: Normalization settings, or None.
             stat_config: Statistical test config, or None.

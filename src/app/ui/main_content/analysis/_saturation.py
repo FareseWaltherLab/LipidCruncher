@@ -27,7 +27,7 @@ def _display_saturation_plots(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display SFA/MUFA/PUFA saturation analysis."""
-    with st.expander("Class Level Breakdown - Saturation Plots", expanded=True):
+    with st.expander("Class Level Breakdown - Saturation Plots", expanded=False):
         st.markdown(
             "Analyze the distribution of saturated (SFA), monounsaturated (MUFA), "
             "and polyunsaturated (PUFA) fatty acids per lipid class."

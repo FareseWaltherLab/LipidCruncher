@@ -77,13 +77,14 @@ def convert_df(df):
     return df.to_csv(index=False).encode('utf-8')
 
 
-def csv_download_button(df, filename, key=None):
+def csv_download_button(df, filename, key=None, on_click=None):
     """Create a download button for a DataFrame as CSV.
 
     Args:
         df: DataFrame to download.
         filename: Name for the downloaded file.
         key: Optional unique widget key.
+        on_click: Optional callback fired on download (clicking reruns the app).
     """
     st.download_button(
         label="Download CSV",
@@ -91,4 +92,5 @@ def csv_download_button(df, filename, key=None):
         file_name=filename,
         mime="text/csv",
         key=key,
+        on_click=on_click,
     )

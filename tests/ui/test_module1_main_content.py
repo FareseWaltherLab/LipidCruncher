@@ -69,13 +69,14 @@ class TestZeroFiltering:
 class TestInternalStandards:
     """Tests for internal standards management UI."""
 
-    def test_standards_source_radio_has_two_options(self, intsta_with_standards_app):
-        """Standards source radio has Automatic Detection and Upload Custom options."""
+    def test_standards_source_radio_has_three_options(self, intsta_with_standards_app):
+        """Standards source radio has Automatic, Select from Dataset, and Upload options."""
         at = intsta_with_standards_app
         radio = at.radio(key='standards_source_radio')
         assert radio is not None
-        assert len(radio.options) == 2
+        assert len(radio.options) == 3
         assert 'Automatic Detection' in radio.options
+        assert 'Select from Dataset' in radio.options
         assert 'Upload Custom Standards' in radio.options
 
     def test_auto_detection_default_selected(self, intsta_with_standards_app):
@@ -83,6 +84,29 @@ class TestInternalStandards:
         at = intsta_with_standards_app
         radio = at.radio(key='standards_source_radio')
         assert radio.value == 'Automatic Detection'
+
+    def test_select_from_dataset_extracts_chosen_lipid(self, intsta_with_standards_app):
+        """Selecting an existing dataset lipid uses it as a standard (no CSV upload)."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        # Names in standardized form, as produced by data ingestion.
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+
+        at.radio(key='standards_source_radio').set_value('Select from Dataset').run()
+        ms = at.multiselect(key='dataset_standards_select')
+        assert ms is not None
+        assert 'PC 32:1' in ms.options
+
+        ms.set_value(['PC 32:1']).run()
+        assert not at.exception
+        text_values = [t.value for t in at.text]
+        assert any('standards_count:1' in v for v in text_values)
 
     def test_auto_detected_standards_displayed(self, intsta_with_standards_app):
         """Auto-detected standards are displayed with count."""
@@ -101,14 +125,206 @@ class TestInternalStandards:
         warning_values = [w.value for w in at.warning]
         assert any("No internal standards" in v for v in warning_values)
 
-    def test_switch_to_custom_upload(self, intsta_with_standards_app):
-        """Switching to Upload Custom Standards shows location radio."""
+    def test_switch_to_custom_upload_no_extract_mode(self, intsta_with_standards_app):
+        """Upload Custom Standards no longer offers the extract-from-dataset mode.
+
+        Extract-from-dataset is now handled by the separate "Select from Dataset"
+        source, so the location radio should be gone.
+        """
         at = intsta_with_standards_app
         at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
-        # Standards location radio should now appear
-        radio = at.radio(key='standards_location_radio')
-        assert radio is not None
-        assert len(radio.options) == 2
+        assert not at.exception
+        location_radios = [r for r in at.radio if r.key == 'standards_location_radio']
+        assert location_radios == []
+
+    def test_additive_picker_shown_under_auto_detection(self, intsta_with_standards_app):
+        """Automatic Detection offers an additive dataset-standards picker."""
+        at = intsta_with_standards_app
+        ms = at.multiselect(key='additional_istd_select')
+        assert ms is not None
+
+    def test_additional_standards_add_to_auto_detected(self, intsta_with_standards_app):
+        """Dataset standards supplement (not replace) the auto-detected ones."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        # Names in standardized form, as produced by data ingestion.
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.run()
+
+        # Fixture auto-detects 2 standards; adding 1 more should give 3.
+        at.multiselect(key='additional_istd_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        text_values = [t.value for t in at.text]
+        assert any('standards_count:3' in v for v in text_values)
+
+    def test_added_standard_removed_from_main_dataset(self, intsta_with_standards_app):
+        """A lipid promoted to a standard is dropped from the analysed species."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.run()
+
+        at.multiselect(key='additional_istd_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        remaining = at.session_state['cleaned_df']['LipidMolec'].tolist()
+        assert 'PC 32:1' not in remaining
+        assert 'PC 30:0' in remaining and 'PE 34:2' in remaining
+
+    def test_upload_custom_no_file_defaults_to_empty(self, intsta_with_standards_app):
+        """Upload Custom Standards does not fall back to auto-detected standards."""
+        at = intsta_with_standards_app
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        assert not at.exception
+        text_values = [t.value for t in at.text]
+        # No active standards until the user uploads a file.
+        assert any('no_standards' in v for v in text_values)
+        assert not any('standards_count' in v for v in text_values)
+
+    def test_additive_picker_latches_expander_open(self, intsta_with_standards_app):
+        """Adding standards from within Automatic Detection must not collapse it.
+
+        Regression: the latch previously only fired on the source radio, so
+        using the additive picker (without ever changing source) collapsed the
+        expander.
+        """
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.run()
+        # Source radio untouched — the latch must still be unset here.
+        assert '_intsta_expander_open' not in at.session_state
+
+        at.multiselect(key='additional_istd_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        assert at.session_state['_intsta_expander_open'] is True
+
+    def test_exclusive_picker_latches_expander_open(self, intsta_with_standards_app):
+        """The Select-from-Dataset picker also latches the expander open."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1'],
+            'ClassKey': ['PC', 'PC'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.radio(key='standards_source_radio').set_value('Select from Dataset').run()
+        # Reset the latch so we prove the picker itself sets it.
+        at.session_state['_intsta_expander_open'] = False
+        at.multiselect(key='dataset_standards_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        assert at.session_state['_intsta_expander_open'] is True
+
+    def test_conditions_multiselect_latches_expander_open(self, intsta_with_standards_app):
+        """The consistency-plot condition filter renders inside the expander too."""
+        at = intsta_with_standards_app
+        ms = at.multiselect(key='standards_conditions_select')
+        assert ms is not None
+        assert '_intsta_expander_open' not in at.session_state
+        ms.set_value(['Control']).run()
+        assert not at.exception
+        assert at.session_state['_intsta_expander_open'] is True
+
+    def test_select_from_dataset_removes_lipid_from_main_dataset(self, intsta_with_standards_app):
+        """Exclusive Select-from-Dataset also drops the lipid from analysed species."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        cleaned = pd.DataFrame({
+            'LipidMolec': ['PC 30:0', 'PC 32:1', 'PE 34:2'],
+            'ClassKey': ['PC', 'PC', 'PE'],
+            **{f'intensity[s{i}]': [1.0 * i, 2.0 * i, 3.0 * i] for i in range(1, 7)},
+        })
+        at.session_state['_test_cleaned_df'] = cleaned
+        at.radio(key='standards_source_radio').set_value('Select from Dataset').run()
+        at.multiselect(key='dataset_standards_select').set_value(['PC 32:1']).run()
+        assert not at.exception
+        remaining = at.session_state['cleaned_df']['LipidMolec'].tolist()
+        assert 'PC 32:1' not in remaining
+        assert 'PC 30:0' in remaining and 'PE 34:2' in remaining
+
+    def test_clear_custom_standards_button_latches_expander_open(self, intsta_with_standards_app):
+        """The Clear Custom Standards button latches the expander open."""
+        import pandas as pd
+
+        at = intsta_with_standards_app
+        at.session_state['custom_standards_df'] = pd.DataFrame({
+            'LipidMolec': ['STD 1'], 'ClassKey': ['PC'], 'intensity[s1]': [1.0],
+        })
+        at.session_state['custom_standards_mode'] = 'complete'
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        at.session_state['_intsta_expander_open'] = False
+        at.button(key='clear_custom_standards').click().run()
+        assert not at.exception
+        assert at.session_state['_intsta_expander_open'] is True
+
+    def test_expander_latches_open_across_source_switches(self, intsta_with_standards_app):
+        """Changing the source (either direction) keeps the expander open."""
+        at = intsta_with_standards_app
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        assert at.session_state['_intsta_expander_open'] is True
+        # Switching back to Automatic Detection must not collapse it.
+        at.radio(key='standards_source_radio').set_value('Automatic Detection').run()
+        assert at.session_state['_intsta_expander_open'] is True
+
+
+# =============================================================================
+# Standards Combination Tests
+# =============================================================================
+
+class TestCombineStandards:
+    """Unit tests for merging auto-detected and dataset-picked standards."""
+
+    @staticmethod
+    def _df(names):
+        import pandas as pd
+        return pd.DataFrame({
+            'LipidMolec': names,
+            'ClassKey': ['PC'] * len(names),
+            'intensity[s1]': [1.0] * len(names),
+        })
+
+    def test_union_of_both_sets(self):
+        from app.ui.main_content.internal_standards import _combine_standards
+        out = _combine_standards(self._df(['A', 'B']), self._df(['C']))
+        assert out['LipidMolec'].tolist() == ['A', 'B', 'C']
+
+    def test_deduplicates_overlapping_standard(self):
+        from app.ui.main_content.internal_standards import _combine_standards
+        out = _combine_standards(self._df(['A', 'B']), self._df(['B', 'C']))
+        assert out['LipidMolec'].tolist() == ['A', 'B', 'C']
+        assert len(out) == 3
+
+    def test_empty_base_returns_added(self):
+        import pandas as pd
+        from app.ui.main_content.internal_standards import _combine_standards
+        out = _combine_standards(pd.DataFrame(), self._df(['A']))
+        assert out['LipidMolec'].tolist() == ['A']
+
+    def test_empty_added_returns_base(self):
+        import pandas as pd
+        from app.ui.main_content.internal_standards import _combine_standards
+        out = _combine_standards(self._df(['A']), pd.DataFrame())
+        assert out['LipidMolec'].tolist() == ['A']
 
 
 # =============================================================================
@@ -174,6 +390,97 @@ class TestNormalization:
         assert radio is not None
         assert radio.value == 'Manual Input'
 
+    def test_apply_to_all_fills_every_sample(self, norm_no_standards_app):
+        """The bulk button must overwrite all six per-sample inputs at once."""
+        at = norm_no_standards_app
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        at.number_input(key='protein_bulk_amount').set_value(200.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        for sample in samples:
+            assert at.session_state[f'protein_{sample}'] == 200.0
+
+    def test_apply_to_all_takes_effect_in_the_same_run(self, norm_no_standards_app):
+        """The bulk fill renders before the grid, so the visible per-sample
+        widgets must already show the new value without a second interaction."""
+        at = norm_no_standards_app
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        at.number_input(key='protein_bulk_amount').set_value(150.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        rendered = [at.number_input(key=f'protein_{s}').value for s in samples]
+        assert rendered == [150.0] * len(samples)
+
+    def test_individual_values_editable_after_apply_to_all(self, norm_no_standards_app):
+        """Bulk fill is a starting point, not a lock: one sample can differ."""
+        at = norm_no_standards_app
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        at.number_input(key='protein_bulk_amount').set_value(100.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        at.number_input(key=f'protein_{samples[0]}').set_value(250.0).run()
+
+        assert at.session_state[f'protein_{samples[0]}'] == 250.0
+        assert at.session_state[f'protein_{samples[1]}'] == 100.0
+
+    def test_protein_values_unchanged_until_button_clicked(self, norm_no_standards_app):
+        """Typing an amount without clicking must not touch the per-sample inputs."""
+        at = norm_no_standards_app
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        at.number_input(key='protein_bulk_amount').set_value(500.0).run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        for sample in samples:
+            assert at.session_state[f'protein_{sample}'] == 1.0
+
+    def test_apply_to_all_available_with_standards_plus_protein(
+        self, norm_with_standards_app,
+    ):
+        """The combined method collects protein amounts too, so the bulk fill
+        must be there as well, not just under Protein-based."""
+        at = norm_with_standards_app
+        at.radio(key='norm_method_selection').set_value(
+            'Internal Standards + Protein',
+        ).run()
+
+        assert at.number_input(key='protein_bulk_amount') is not None
+        assert at.button(key='protein_apply_all') is not None
+
+    def test_apply_to_all_fills_samples_with_standards_plus_protein(
+        self, norm_with_standards_app,
+    ):
+        at = norm_with_standards_app
+        at.radio(key='norm_method_selection').set_value(
+            'Internal Standards + Protein',
+        ).run()
+        at.number_input(key='protein_bulk_amount').set_value(200.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        samples = at.session_state['_test_experiment'].full_samples_list
+        for sample in samples:
+            assert at.session_state[f'protein_{sample}'] == 200.0
+
+    def test_standards_plus_protein_keeps_standard_concentrations(
+        self, norm_with_standards_app,
+    ):
+        """Bulk-filling protein must not disturb the internal standard side
+        of the combined method."""
+        at = norm_with_standards_app
+        at.radio(key='norm_method_selection').set_value(
+            'Internal Standards + Protein',
+        ).run()
+        before = dict(at.session_state['standard_concentrations'])
+
+        at.number_input(key='protein_bulk_amount').set_value(150.0).run()
+        at.button(key='protein_apply_all').click().run()
+
+        assert not at.exception
+        assert dict(at.session_state['standard_concentrations']) == before
+        assert before  # the standards side really was populated
+
     def test_protein_input_method_has_two_options(self, norm_no_standards_app):
         """Protein input method has Manual Input and Upload CSV options."""
         at = norm_no_standards_app
@@ -201,13 +508,24 @@ class TestGradeFiltering:
         text_values = [t.value for t in at.text]
         assert any("default_config" in v for v in text_values)
 
-    def test_grade_filter_has_two_modes(self, grade_filtering_app):
-        """Grade filtering radio has two mode options."""
+    def test_grade_filter_has_three_modes(self, grade_filtering_app):
+        """Grade filtering radio has three mode options."""
         at = grade_filtering_app
         radio = at.radio(key='grade_filter_mode_radio')
-        assert len(radio.options) == 2
+        assert len(radio.options) == 3
         assert 'Use Default Settings' in radio.options
+        assert 'Allow C for all classes' in radio.options
         assert 'Customize by Class' in radio.options
+
+    def test_grade_filter_blanket_c_applies_abc_to_all_classes(self, grade_filtering_app):
+        """'Allow C for all classes' returns A/B/C for every class."""
+        at = grade_filtering_app
+        at.radio(key='grade_filter_mode_radio').set_value('Allow C for all classes').run()
+        text_values = [t.value for t in at.text]
+        # One config entry per class (LPC, PC, PE, SM = 4 classes)
+        assert any("custom_config:4" in v for v in text_values)
+        # PC (a normally strict class) now includes grade C
+        assert any(v == "pc_grades:A,B,C" for v in text_values)
 
     def test_grade_filter_custom_shows_multiselects(self, grade_filtering_app):
         """Switching to custom mode shows per-class grade multiselects."""

@@ -14,7 +14,7 @@ class TestDataFormatEnum:
 
     def test_enum_values(self):
         """Test that enum has expected values."""
-        assert DataFormat.LIPIDSEARCH.value == "LipidSearch 5.0"
+        assert DataFormat.LIPIDSEARCH.value == "LipidSearch"
         assert DataFormat.MSDIAL.value == "MS-DIAL"
         assert DataFormat.METABOLOMICS_WORKBENCH.value == "Metabolomics Workbench"
         assert DataFormat.GENERIC.value == "Generic Format"
@@ -23,7 +23,7 @@ class TestDataFormatEnum:
     def test_enum_is_string(self):
         """Test that enum values are strings."""
         assert isinstance(DataFormat.LIPIDSEARCH.value, str)
-        assert DataFormat.LIPIDSEARCH.value == "LipidSearch 5.0"
+        assert DataFormat.LIPIDSEARCH.value == "LipidSearch"
 
     def test_enum_comparison(self):
         """Test enum comparison."""
@@ -32,7 +32,7 @@ class TestDataFormatEnum:
 
     def test_enum_string_equality(self):
         """Test enum string equality."""
-        assert DataFormat.LIPIDSEARCH == "LipidSearch 5.0"
+        assert DataFormat.LIPIDSEARCH == "LipidSearch"
         assert DataFormat.MSDIAL == "MS-DIAL"
 
     def test_all_enum_members(self):
@@ -824,7 +824,7 @@ class TestHelperMethods:
 
     def test_get_format_display_name_all_formats(self):
         """Test getting display name for all formats."""
-        assert FormatDetectionService.get_format_display_name(DataFormat.LIPIDSEARCH) == "LipidSearch 5.0"
+        assert FormatDetectionService.get_format_display_name(DataFormat.LIPIDSEARCH) == "LipidSearch"
         assert FormatDetectionService.get_format_display_name(DataFormat.MSDIAL) == "MS-DIAL"
         assert FormatDetectionService.get_format_display_name(DataFormat.GENERIC) == "Generic Format"
         assert FormatDetectionService.get_format_display_name(DataFormat.METABOLOMICS_WORKBENCH) == "Metabolomics Workbench"

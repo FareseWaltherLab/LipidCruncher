@@ -57,6 +57,8 @@ UI (src/main_app.py, src/app/ui/)
 
 Format detection auto-routes to a cleaner via the registry in `src/app/services/data_cleaning/__init__.py`. Adding a format = new cleaner class + registry entry + a `DataFormat` enum value. See `format_detection.py` for the detection signature order (most specific first).
 
+LipidSearch uploads (the `LipidSearch` format — handles both 5.0 and 5.2) auto-detect the delimiter (tab vs comma) and the layout: flat `MeanArea[*]` (5.0 / sample-grouped 5.2) vs. condition-grouped **dual-polarity** `OriginalArea[s{cond}-{file}]` (5.2). The dual-polarity layout requires the **Alignment Setting file** to pair each sample's positive/negative runs before merging into `intensity[s1..sN]` — see `src/app/services/lipidsearch_alignment.py`.
+
 ## Further reading
 
 - `CODEBASE.md` — full layer-by-layer reference (services, workflows, adapter contract, session-state keys, troubleshooting, extension guide).

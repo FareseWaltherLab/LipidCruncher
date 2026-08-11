@@ -231,7 +231,7 @@ class QualityCheckWorkflow:
     ) -> RetentionTimeDataResult:
         """Check if retention time data is available.
 
-        Retention time plots are only relevant for LipidSearch 5.0 and
+        Retention time plots are only relevant for LipidSearch and
         MS-DIAL formats that include BaseRt and CalcMass columns.
 
         Args:

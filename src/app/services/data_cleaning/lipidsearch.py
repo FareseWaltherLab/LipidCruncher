@@ -1,5 +1,5 @@
 """
-LipidSearch 5.0 format data cleaning.
+LipidSearch format data cleaning.
 Pure logic - no Streamlit dependencies.
 """
 import pandas as pd
@@ -18,7 +18,7 @@ from .exceptions import EmptyDataError, ConfigurationError
 
 class LipidSearchCleaner(BaseDataCleaner):
     """
-    Cleaner for LipidSearch 5.0 format data.
+    Cleaner for LipidSearch format data.
 
     Handles:
     - Grade filtering (A/B/C/D)
@@ -27,8 +27,12 @@ class LipidSearchCleaner(BaseDataCleaner):
     - Best AUC selection per lipid
     """
 
-    # Columns to keep in cleaned output
-    OUTPUT_COLUMNS: Tuple[str, ...] = ('LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt')
+    # Metadata columns to keep in cleaned output. LipidMolec is listed first
+    # so the final projection preserves it as the leftmost column. Intensity
+    # columns are appended after these by _final_cleanup.
+    OUTPUT_COLUMNS: Tuple[str, ...] = (
+        'LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'FAKey', 'TotalGrade',
+    )
 
     @staticmethod
     def clean(
@@ -37,7 +41,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         grade_config: Optional[GradeFilterConfig] = None
     ) -> Tuple[pd.DataFrame, List[str]]:
         """
-        Clean LipidSearch 5.0 format data.
+        Clean LipidSearch format data.
 
         Args:
             df: Raw LipidSearch DataFrame.
@@ -347,7 +351,12 @@ class LipidSearchCleaner(BaseDataCleaner):
 
     @staticmethod
     def _final_cleanup(df: pd.DataFrame) -> pd.DataFrame:
-        """Remove temporary columns and reset index."""
-        if 'TotalSmpIDRate(%)' in df.columns:
-            df = df.drop(columns=['TotalSmpIDRate(%)'])
-        return df.reset_index(drop=True)
+        """Project to canonical metadata + intensity columns, reset index.
+
+        Drops any extra columns produced by extended LipidSearch exports
+        (e.g. OrgMeanArea[*], MeanHeight[*], MeanConc[*], LipidMolecGroup, etc.)
+        so the cleaned frame matches the schema expected by downstream steps.
+        """
+        metadata_cols = [c for c in LipidSearchCleaner.OUTPUT_COLUMNS if c in df.columns]
+        intensity_cols = [c for c in df.columns if c.startswith('intensity[')]
+        return df[metadata_cols + intensity_cols].reset_index(drop=True)

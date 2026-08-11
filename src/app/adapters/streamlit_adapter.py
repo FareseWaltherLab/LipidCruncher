@@ -148,6 +148,9 @@ class SessionState:
     # for the multiselects — toggling samples between conditions also
     # invalidates a prior Confirm Inputs check.
     _last_seen_selects: Optional[Dict[str, Tuple[str, ...]]] = None
+    # Maps internal sample label (s1, s2, ...) → user-facing display name,
+    # auto-seeded from the uploaded column headers and editable in the sidebar.
+    sample_names: Optional[Dict[str, str]] = None
 
     # --- Data processing (owner: data_processing.py) ---
     cleaned_df: Optional[pd.DataFrame] = None
@@ -276,6 +279,20 @@ class SessionState:
 # (they control app-level routing, not data-specific state)
 _PRESERVE_ON_RESET = {'page', 'module'}
 
+# Keys kept by reset_to_experiment_setup(): the uploaded data plus the
+# standardization outputs derived from it. Everything else (experiment config,
+# grouping, processing, normalization, QC, analysis) is cleared so the user
+# restarts from the Define Experiment step without having to re-upload.
+_SOFT_RESET_PRESERVE = frozenset({
+    # Upload
+    'raw_df', 'using_sample_data', 'sample_data_file',
+    # Standardization outputs (so column mapping need not be redone)
+    'standardized_df', 'column_mapping', 'n_intensity_cols', 'format_type',
+    'msdial_features', 'msdial_sample_names', '_msdial_override_samples',
+    'msdial_use_normalized', 'msdial_data_type_index',
+    'workbench_conditions', 'workbench_samples',
+})
+
 # Widget keys created by Streamlit widgets (not in SessionState dataclass).
 # Must be removed on reset to prevent stale widget state.
 _WIDGET_KEYS = {
@@ -283,7 +300,7 @@ _WIDGET_KEYS = {
     'data_format_select', 'n_conditions',
     'manual_sample_override', 'grouping_radio',
     'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
-    'sample_data_experiment',
+    'sample_data_experiment', 'sample_names_editor',
     # Data processing widgets (data_processing.py)
     'grade_filter_mode', 'grade_selections',
     'grade_filter_mode_radio',
@@ -487,12 +504,38 @@ class StreamlitAdapter:
                 st.session_state[f.name] = getattr(defaults, f.name)
         for key in _WIDGET_KEYS:
             st.session_state.pop(key, None)
-        dynamic_keys = [
-            key for key in list(st.session_state.keys())
-            if isinstance(key, str) and key.startswith(_DYNAMIC_KEY_PREFIXES)
-        ]
-        for key in dynamic_keys:
-            st.session_state.pop(key, None)
+
+    @staticmethod
+    def reset_to_experiment_setup() -> None:
+        """Soft reset: keep the uploaded/standardized data, clear everything else.
+
+        Clears experiment config, grouping, processing, normalization, QC and
+        analysis state plus the ``@st.cache_data`` cache, then returns the user
+        to the Define Experiment step — all via a rerun, so no page refresh is
+        needed. Unlike ``reset_data_state()`` (a full wipe back to landing),
+        this preserves the upload and standardization outputs so the user does
+        not have to re-upload the file or re-map columns.
+        """
+        preserved = {
+            key: st.session_state.get(key) for key in _SOFT_RESET_PRESERVE
+        }
+        StreamlitAdapter.reset_data_state()
+        for key, value in preserved.items():
+            st.session_state[key] = value
+        # Force the confirm checkbox off. Popping its key (via reset_data_state)
+        # is not enough: the reset button renders before the confirm checkbox,
+        # and formats that pre-fill the experiment (LipidSearch 5.2 alignment,
+        # Metabolomics Workbench auto-detect) fire an extra st.rerun() in which
+        # Streamlit re-creates the checkbox with identical parameters and
+        # restores its cached 'checked' value. An explicit False in session
+        # state overrides that. Safe to set: the widget is not instantiated yet
+        # this run.
+        st.session_state['confirm_checkbox'] = False
+        # Start from Module 1 so a re-confirmed experiment runs the pipeline
+        # from the top rather than jumping into a stale QC/Analysis view.
+        st.session_state.module = MODULE_DATA_PROCESSING
+        # Drop cached computations (box plots, PCA, heatmaps, ...).
+        st.cache_data.clear()
 
     # ==================== Widget Preservation ====================
 
@@ -1013,11 +1056,16 @@ class StreamlitAdapter:
         selected_classes: List[str],
         heatmap_type: str = 'regular',
         n_clusters: int = 3,
+        species_page: int = 0,
+        color_scale: str = 'zscore',
+        control_condition: Optional[str] = None,
     ) -> HeatmapResult:
         """Cached lipidomic heatmap analysis."""
         return AnalysisWorkflow.run_heatmap(
             df, experiment, selected_conditions, selected_classes,
             heatmap_type=heatmap_type, n_clusters=n_clusters,
+            species_page=species_page, color_scale=color_scale,
+            control_condition=control_condition,
         )
 
     # ==================== AI Chat Wrappers (NOT cached — stateful) ====================

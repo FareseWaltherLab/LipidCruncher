@@ -16,7 +16,7 @@ def _display_fach_heatmaps(
 ) -> None:
     """Display Fatty Acid Composition Heatmap analysis."""
     with st.expander(
-        "Class Level Breakdown - Fatty Acid Composition Heatmaps", expanded=True
+        "Class Level Breakdown - Fatty Acid Composition Heatmaps", expanded=False
     ):
         st.markdown(
             "Visualize the distribution of fatty acid chain lengths and "

@@ -68,13 +68,19 @@ def display_grade_filtering_config(df: pd.DataFrame) -> dict:
         return None
 
     with st.expander("⚙️ Configure Grade Filtering", expanded=False):
+        st.info(
+            "ℹ️ The **default settings** (A/B for all classes, plus C for LPC and SM) "
+            "are recommended if you are unsure. Choose **Allow C for all classes** to "
+            "relax quality across the board, or **Customize by Class** for finer control."
+        )
+
         # Initialize session state for persistence
         if 'grade_filter_mode' not in st.session_state:
             st.session_state.grade_filter_mode = "Use Default Settings"
         if 'grade_selections' not in st.session_state:
             st.session_state.grade_selections = {}
 
-        options = ["Use Default Settings", "Customize by Class"]
+        options = ["Use Default Settings", "Allow C for all classes", "Customize by Class"]
         widget_key = "grade_filter_mode_radio"
 
         # Initialize widget key from persisted value BEFORE rendering
@@ -97,6 +103,10 @@ def display_grade_filtering_config(df: pd.DataFrame) -> dict:
         if use_custom == "Use Default Settings":
             st.success("✓ Default: A/B for all classes, plus C for LPC and SM.")
             return None
+
+        if use_custom == "Allow C for all classes":
+            st.success("✓ Allowing grades A/B/C for every class (D excluded).")
+            return {lipid_class: list(LIPIDSEARCH_RELAXED_GRADES) for lipid_class in all_classes}
 
         # Custom settings
         st.markdown("---")

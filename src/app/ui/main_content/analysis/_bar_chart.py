@@ -16,7 +16,7 @@ from app.ui.main_content.analysis._shared import (
 
 def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
     """Display abundance bar chart analysis."""
-    with st.expander("Class Concentration Bar Chart", expanded=True):
+    with st.expander("Class Concentration Bar Chart", expanded=False):
         st.markdown(
             "Visualize the total abundance of each lipid class across conditions."
         )

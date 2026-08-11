@@ -6,6 +6,7 @@ import streamlit as st
 
 from ..models.experiment import ExperimentConfig
 from ..services.plotting.standards_plotter import StandardsPlotterService
+from .st_helpers import keep_intsta_expander_open
 
 
 def display_standards_consistency_plots(
@@ -39,7 +40,10 @@ def display_standards_consistency_plots(
         'Select conditions:',
         conditions,
         default=conditions,
-        key='standards_conditions_select'
+        key='standards_conditions_select',
+        # This renders inside the Manage Internal Standards expander; latch it
+        # open so filtering conditions doesn't collapse the section.
+        on_change=keep_intsta_expander_open,
     )
 
     if not selected_conditions:
@@ -60,10 +64,19 @@ def display_standards_consistency_plots(
         st.warning("No samples available for selected conditions.")
         return
 
+    # Condition label per selected sample (index-aligned) so bars can be
+    # grouped and colored by condition/group.
+    cond_by_sample = {}
+    for cond, samps in zip(conditions, experiment.individual_samples_list):
+        for s in samps:
+            cond_by_sample[s] = cond
+    sample_conditions = [cond_by_sample[s] for s in selected_samples_ordered]
+
     # Generate and display plots
     plots = StandardsPlotterService.create_consistency_plots(
         intsta_df,
-        selected_samples_ordered
+        selected_samples_ordered,
+        sample_conditions=sample_conditions,
     )
 
     if plots:

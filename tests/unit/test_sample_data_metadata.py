@@ -16,7 +16,7 @@ from app.ui.content.sample_data import SAMPLE_DATA_INFO, get_sample_data_info
 # =============================================================================
 
 # Formats that should have experiment metadata
-FORMATS_WITH_EXPERIMENT = ['Generic Format', 'LipidSearch 5.0', 'MS-DIAL']
+FORMATS_WITH_EXPERIMENT = ['Generic Format', 'LipidSearch', 'MS-DIAL']
 
 # Metabolomics Workbench uses auto-detection, not metadata
 FORMATS_WITHOUT_EXPERIMENT = ['Metabolomics Workbench']
@@ -27,7 +27,7 @@ class TestSampleDataInfoStructure:
 
     def test_all_formats_present(self):
         """All expected formats are in the info dict."""
-        expected = ['Generic Format', 'LipidSearch 5.0', 'MS-DIAL', 'Metabolomics Workbench']
+        expected = ['Generic Format', 'LipidSearch', 'MS-DIAL', 'Metabolomics Workbench']
         for fmt in expected:
             assert fmt in SAMPLE_DATA_INFO, f"Missing format: {fmt}"
 
@@ -154,7 +154,7 @@ class TestLipidSearchMetadata:
 
     @pytest.fixture
     def exp(self):
-        return SAMPLE_DATA_INFO['LipidSearch 5.0']['experiment']
+        return SAMPLE_DATA_INFO['LipidSearch']['experiment']
 
     def test_n_conditions(self, exp):
         assert exp['n_conditions'] == 3

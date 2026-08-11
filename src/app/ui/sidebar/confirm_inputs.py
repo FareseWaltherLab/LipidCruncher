@@ -38,9 +38,14 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
         if preserved in bqc_options:
             st.session_state['bqc_radio'] = preserved
 
+    # Pass `index` only when the key is absent. The pre-fill helpers (sample
+    # data / alignment) may set `bqc_radio` in session state; passing `index`
+    # as well makes Streamlit warn that a keyed widget has both a default and a
+    # session-state value. Once the key exists, session state preserves the
+    # selection across reruns, so the default is only needed on first render.
     bqc_kwargs = {'key': 'bqc_radio'}
     if 'bqc_radio' not in st.session_state:
-        bqc_kwargs['index'] = 1  # Default to 'No'
+        bqc_kwargs['index'] = 1
     bqc_ans = st.sidebar.radio(
         'Do you have Batch Quality Control (BQC) samples?',
         bqc_options,
@@ -70,6 +75,9 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
                 if preserved_label in conditions_with_two_plus:
                     st.session_state['bqc_label_radio'] = preserved_label
 
+            # Same guard as bqc_radio: the pre-fill helpers may set
+            # 'bqc_label_radio' in session state, so only supply `index` when
+            # the key is absent to avoid the default-plus-session-state warning.
             label_kwargs = {'key': 'bqc_label_radio'}
             if 'bqc_label_radio' not in st.session_state:
                 label_kwargs['index'] = 0

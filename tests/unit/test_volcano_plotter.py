@@ -502,6 +502,20 @@ class TestCreateVolcanoPlot:
         for trace in fig.data:
             assert trace.marker.color == simple_color_mapping[trace.name]
 
+    def test_markers_have_black_outline(self, simple_volcano_data, simple_color_mapping):
+        fig = VolcanoPlotterService.create_volcano_plot(
+            simple_volcano_data, simple_color_mapping,
+        )
+        for trace in fig.data:
+            assert trace.marker.line.color == 'black'
+            assert trace.marker.line.width == 1
+
+    def test_legend_font_enlarged(self, simple_volcano_data, simple_color_mapping):
+        fig = VolcanoPlotterService.create_volcano_plot(
+            simple_volcano_data, simple_color_mapping,
+        )
+        assert fig.layout.legend.font.size == 14
+
     def test_title_is_volcano_plot(self, simple_volcano_data, simple_color_mapping):
         fig = VolcanoPlotterService.create_volcano_plot(
             simple_volcano_data, simple_color_mapping,

@@ -102,7 +102,10 @@ def _create_scatter_plot(
         fig.add_trace(go.Scatter(
             x=cond_df['PC1'], y=cond_df['PC2'],
             mode='markers', name=condition,
-            marker=dict(color=color_mapping[condition], size=5),
+            marker=dict(
+                color=color_mapping[condition], size=8,
+                line=dict(width=1, color='black'),
+            ),
             text=cond_df['Sample'],
             hovertemplate=(
                 '<b>Sample:</b> %{text}<br>'

@@ -162,6 +162,33 @@ def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes
 # Helper Functions - Protein Configuration
 # =============================================================================
 
+def _display_bulk_protein_fill(sample_names: list) -> None:
+    """Display an amount box and a button that fills every sample with it.
+
+    Must be called before the per-sample number inputs are instantiated,
+    so that overwriting their session-state keys takes effect immediately.
+    """
+    col_value, col_button = st.columns([2, 1])
+    with col_value:
+        bulk_amount = st.number_input(
+            "Apply the same amount to all samples:",
+            min_value=0.0,
+            max_value=1000000.0,
+            step=0.1,
+            key="protein_bulk_amount",
+            help=(
+                "Use this when every sample was prepared at the same protein "
+                "amount. You can still edit individual samples afterwards."
+            ),
+        )
+    with col_button:
+        st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+        if st.button("Apply to all", key="protein_apply_all"):
+            for sample in sample_names:
+                st.session_state[f"protein_{sample}"] = float(bulk_amount)
+            st.success(f"Applied {bulk_amount:g} to all {len(sample_names)} samples.")
+
+
 def _display_manual_protein_input(sample_names: list) -> dict:
     """Display manual protein concentration input as a 3-column grid.
 
@@ -181,6 +208,11 @@ def _display_manual_protein_input(sample_names: list) -> dict:
         widget_key = f"protein_{sample}"
         if widget_key not in st.session_state:
             st.session_state[widget_key] = float(preserved_values.get(sample, 1.0))
+
+    # Bulk fill, for the common case where every sample was prepared at the
+    # same protein amount. Rendered before the grid so the per-sample widgets
+    # below pick up the new values in this same run.
+    _display_bulk_protein_fill(sample_names)
 
     # 3-column flat grid layout (matches old app)
     protein_concentrations = {}

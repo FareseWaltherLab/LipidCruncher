@@ -18,6 +18,8 @@ to test different data scenarios without importing main_app.py.
 10. Edge cases — single condition volcano warning, three-condition analysis
 """
 
+import numpy as np
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from tests.ui.conftest import (
@@ -31,6 +33,41 @@ from tests.ui.conftest import (
 # =============================================================================
 # Group 1: Analysis Radio Selection (3 tests)
 # =============================================================================
+
+class TestAnalysisSectionsCollapsed:
+    """Landing on Visualize and Analyze must not open a section on its own."""
+
+    # (radio option fragment, expander label fragment)
+    SECTIONS = [
+        ("Bar Chart", "Bar Chart"),
+        ("Pie", "Pie Chart"),
+        ("Saturation", "Saturation"),
+        ("Pathway", "Pathway"),
+        ("Volcano", "Volcano"),
+        ("Lipidomic Heatmap", "Lipidomic Heatmap"),
+    ]
+
+    def test_default_section_is_collapsed_on_landing(self, analysis_generic_app):
+        at = analysis_generic_app
+        charts = [e for e in at.expander if 'Bar Chart' in e.label]
+        assert len(charts) == 1
+        assert charts[0].proto.expanded is False
+
+    @pytest.mark.parametrize("option,label", SECTIONS)
+    def test_every_section_starts_collapsed(
+        self, analysis_generic_app, option, label,
+    ):
+        at = analysis_generic_app
+        radio = at.radio(key='analysis_radio')
+        match = [o for o in radio.options if option in o]
+        if not match:
+            pytest.skip(f"{option} not offered for this dataset")
+        at.radio(key='analysis_radio').set_value(match[0]).run()
+
+        target = [e for e in at.expander if label in e.label]
+        assert target, f"no expander labelled {label}"
+        assert all(e.proto.expanded is False for e in target)
+
 
 class TestAnalysisRadioSelection:
     """Tests for the main analysis type radio selector."""
@@ -514,7 +551,14 @@ class TestVolcanoUI:
         assert p_input is not None
         assert fc_input is not None
         assert p_input.value == 0.05
-        assert fc_input.value == 2.0
+        assert fc_input.value == 1.5
+
+    def test_volcano_correction_default_uncorrected(self, analysis_generic_app):
+        """Multiple-testing correction defaults to uncorrected (relaxed default)."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        correction = at.selectbox(key='volcano_correction')
+        assert correction is not None
+        assert correction.value == 'uncorrected'
 
     def test_volcano_stores_figure_in_session(self, analysis_generic_app):
         """Volcano plot figure is stored in session state."""
@@ -580,6 +624,259 @@ class TestHeatmapUI:
         radio = at.radio(key='heatmap_type')
         assert radio is not None
         assert radio.value == "Clustered"
+
+    def test_heatmap_type_radio_has_four_modes(self, analysis_generic_app):
+        """Two original modes plus the two class-oriented ones."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        assert at.radio(key='heatmap_type').options == [
+            "Clustered", "Regular", "Grouped by Class", "Aggregated by Class",
+        ]
+
+    def test_heatmap_grouped_by_class_renders(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    def test_heatmap_aggregated_by_class_renders(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    @staticmethod
+    def _big_analysis_app(n_lipids):
+        """An analysis app carrying more species than the grouped mode allows."""
+        from streamlit.testing.v1 import AppTest
+        from app.models.experiment import ExperimentConfig
+        from tests.ui.conftest import (
+            DEFAULT_TIMEOUT, analysis_module_script, make_analysis_dataframe,
+        )
+
+        at = AppTest.from_function(
+            analysis_module_script, default_timeout=DEFAULT_TIMEOUT,
+        )
+        at.session_state['_test_df'] = make_analysis_dataframe(
+            n_lipids=n_lipids, n_samples=6,
+        )
+        at.session_state['_test_experiment'] = ExperimentConfig(
+            n_conditions=2,
+            conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[3, 3],
+        )
+        at.session_state['_test_bqc_label'] = None
+        at.session_state['_test_format_type'] = 'Generic Format'
+        return at.run()
+
+    def test_grouped_by_class_offers_a_species_pager_when_oversized(self):
+        """Too many species to draw at once must page, not refuse."""
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._big_analysis_app(GROUPED_PAGE_SIZE + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+
+        assert not at.exception
+        pager = at.selectbox(key='heatmap_species_page')
+        assert len(pager.options) == 2
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    def test_species_pager_switches_pages(self):
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._big_analysis_app(GROUPED_PAGE_SIZE + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+        at.selectbox(key='heatmap_species_page').set_value(1).run()
+
+        assert not at.exception
+        heatmap = at.session_state['analysis_heatmap_fig']
+        assert len(heatmap.data[0].y[1]) == 40  # the remainder page
+
+    def test_no_pager_when_species_fit_on_one_page(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+
+        assert not at.exception
+        assert not [s for s in at.selectbox if s.key == 'heatmap_species_page']
+
+    def test_aggregated_by_class_still_works_at_that_size(self):
+        """The alternative offered for seeing everything at once."""
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._big_analysis_app(GROUPED_PAGE_SIZE + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        assert not at.exception
+        assert at.session_state['analysis_heatmap_fig'] is not None
+
+    def test_color_scale_defaults_to_zscore(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        radio = at.radio(key='heatmap_color_scale')
+        assert radio.options == ["Z-score", "Log2 Fold Change"]
+        assert radio.value == "Z-score"
+
+    def test_no_control_selector_under_zscore(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        assert not [
+            s for s in at.selectbox if s.key == 'heatmap_control_condition'
+        ]
+
+    def test_log2fc_reveals_the_control_selector(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        assert not at.exception
+        control = at.selectbox(key='heatmap_control_condition')
+        assert control.options == ['Control', 'Treatment']
+        assert control.value == 'Control'
+
+    def test_log2fc_renders_a_fold_change_heatmap(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        assert not at.exception
+        fig = at.session_state['analysis_heatmap_fig']
+        assert fig.data[0].colorbar.title.text == 'log2FC'
+
+    def test_switching_control_changes_the_reference(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        first = at.session_state['analysis_heatmap_fig'].data[0].z
+
+        at.selectbox(key='heatmap_control_condition').set_value('Treatment').run()
+        second = at.session_state['analysis_heatmap_fig'].data[0].z
+
+        assert not at.exception
+        assert not np.allclose(np.asarray(first), np.asarray(second))
+
+    def test_log2fc_available_for_every_mode(self, analysis_generic_app):
+        """The colour scale is independent of how the rows are organised."""
+        for mode in ("Clustered", "Regular", "Grouped by Class",
+                     "Aggregated by Class"):
+            at = self._switch_to_heatmap(analysis_generic_app)
+            at.radio(key='heatmap_type').set_value(mode).run()
+            at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+            assert not at.exception, mode
+            fig = at.session_state['analysis_heatmap_fig']
+            assert fig.data[0].colorbar.title.text == 'log2FC', mode
+
+    def test_clustered_log2fc_notes_what_it_clusters_on(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Clustered").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        captions = ' '.join(c.value for c in at.caption)
+        assert 'Clustering runs on the fold changes' in captions
+
+    def test_log2fc_falls_back_without_a_comparison(self, analysis_generic_app):
+        """Fold change needs something to divide by. With a single condition
+        selected there is no comparison, so it must say so and revert rather
+        than plot a heatmap that is zero everywhere."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        at.multiselect(key='heatmap_conditions').set_value(['Control']).run()
+
+        assert not at.exception
+        warnings = ' '.join(w.value for w in at.warning)
+        assert 'needs a control condition' in warnings
+        fig = at.session_state['analysis_heatmap_fig']
+        assert fig.data[0].colorbar.title.text == 'Z-score'
+
+    def test_fallback_hides_the_control_selector(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        at.multiselect(key='heatmap_conditions').set_value(['Control']).run()
+
+        assert not [
+            s for s in at.selectbox if s.key == 'heatmap_control_condition'
+        ]
+
+    def test_recovers_when_a_condition_is_added_back(self, analysis_generic_app):
+        """The fallback must not be sticky once a comparison exists again."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        at.multiselect(key='heatmap_conditions').set_value(['Control']).run()
+        at.multiselect(key='heatmap_conditions').set_value(
+            ['Control', 'Treatment'],
+        ).run()
+
+        assert not at.exception
+        fig = at.session_state['analysis_heatmap_fig']
+        assert fig.data[0].colorbar.title.text == 'log2FC'
+
+    @pytest.mark.parametrize(
+        "mode", ["Clustered", "Regular", "Grouped by Class"],
+    )
+    def test_single_step_formula_is_not_numbered(
+        self, analysis_generic_app, mode,
+    ):
+        """One step, so no "1." — numbering it implies a missing step two."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value(mode).run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        formula = [c.value for c in at.code if 'log2FC' in c.value][0]
+        assert formula.startswith('log2FC =')
+        assert '1.' not in formula
+        assert '2.' not in formula
+
+    def test_aggregated_formula_keeps_its_two_steps_numbered(
+        self, analysis_generic_app,
+    ):
+        """Aggregation really is two steps, so numbering belongs there."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        formula = [c.value for c in at.code if 'log2FC' in c.value][0]
+        assert formula.startswith('1. Class total')
+        assert '2. log2FC' in formula
+
+    def test_log2fc_explains_the_formula(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+
+        formulas = ' '.join(c.value for c in at.code)
+        assert 'log2FC' in formulas
+        assert 'control samples' in formulas
+
+    def test_aggregated_mode_explains_the_aggregation(self, analysis_generic_app):
+        """Summing species into class totals is a real analytic choice, so it
+        must be stated where the plot is, not only in the docs."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        formulas = ' '.join(c.value for c in at.code)
+        assert 'Class total' in formulas
+        assert 'sum of the concentrations' in formulas
+
+    def test_aggregated_mode_states_the_abundance_caveat(self, analysis_generic_app):
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
+
+        captions = ' '.join(c.value for c in at.caption)
+        assert 'abundant species dominate' in captions
+        assert 'S6.3' in captions
+
+    def test_species_modes_keep_the_per_species_formula(self, analysis_generic_app):
+        """The per-species wording would be wrong for the aggregated mode, so
+        it must appear only for the species-level ones."""
+        for mode in ("Clustered", "Regular", "Grouped by Class"):
+            at = self._switch_to_heatmap(analysis_generic_app)
+            at.radio(key='heatmap_type').set_value(mode).run()
+            formulas = ' '.join(c.value for c in at.code)
+            assert 'computed per lipid species' in formulas, mode
+            assert 'Class total' not in formulas, mode
 
     def test_heatmap_cluster_slider_defaults(self, analysis_generic_app):
         """Cluster slider defaults to 5 in Clustered mode."""
