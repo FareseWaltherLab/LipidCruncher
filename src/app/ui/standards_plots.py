@@ -24,6 +24,11 @@ def display_standards_consistency_plots(
         intsta_df: Internal standards DataFrame with LipidMolec, ClassKey, and intensity columns.
         experiment: Experiment configuration with conditions and sample mappings.
     """
+    # Clear first, re-populate below only once figures are actually rendered.
+    # Every early return means nothing is on screen, so the PDF report must
+    # not keep figures from a previous rerun either.
+    st.session_state.standards_consistency_figs = []
+
     if intsta_df is None or intsta_df.empty:
         return
 
@@ -80,6 +85,7 @@ def display_standards_consistency_plots(
     )
 
     if plots:
+        st.session_state.standards_consistency_figs = plots
         for fig in plots:
             st.plotly_chart(fig, use_container_width=True)
     else:

@@ -67,6 +67,7 @@ class SessionState:
       internal_standards.py → original_auto_intsta_df, preserved_intsta_df,
                               preserved_standards_mode, custom_standards_df,
                               custom_standards_mode, standards_source
+      standards_plots.py   → standards_consistency_figs
       zero_filtering.py    → _zero_filter_format, _preserved_zero_filter_*
       normalization.py     → normalized_df, normalization_method, normalization_inputs,
                              selected_classes, create_norm_dataset, norm_method_selection,
@@ -136,6 +137,10 @@ class SessionState:
     custom_standards_df: Optional[pd.DataFrame] = None
     custom_standards_mode: Optional[str] = None
     standards_source: Optional[str] = None
+    # Consistency bar charts, one per internal-standard class (owner:
+    # standards_plots.py). Held so the PDF report can include them —
+    # Module 1 plots have no other route into the report.
+    standards_consistency_figs: List[go.Figure] = field(default_factory=list)
 
     # --- Zero filtering (owner: zero_filtering.py) ---
     _zero_filter_format: Optional[str] = None

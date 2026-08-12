@@ -1169,7 +1169,8 @@ def module3_nav_script():
 # Module 3: Analysis — Data Builders
 # =============================================================================
 
-def make_analysis_dataframe(n_lipids=20, n_samples=6, detailed_fa=False):
+def make_analysis_dataframe(n_lipids=20, n_samples=6, detailed_fa=False,
+                            condition_effect=False):
     """Build an analysis-ready DataFrame with concentration columns.
 
     Args:
@@ -1177,6 +1178,11 @@ def make_analysis_dataframe(n_lipids=20, n_samples=6, detailed_fa=False):
         n_samples: Number of sample columns (concentration[s1]..concentration[sN]).
         detailed_fa: Use detailed fatty acid names (e.g., PC(16:0_18:1)) instead
                      of consolidated (e.g., PC(34:1)).
+        condition_effect: Give the second half of the samples a large,
+            low-variance shift so between-condition tests come out
+            significant. The default (independent uniform draws) has too much
+            within-group spread to ever trip a p < 0.05 threshold, which
+            leaves significance-annotation paths untested.
 
     Returns:
         DataFrame with LipidMolec, ClassKey, and concentration columns.
@@ -1204,8 +1210,17 @@ def make_analysis_dataframe(n_lipids=20, n_samples=6, detailed_fa=False):
         'ClassKey': classes,
     }
 
+    # Drawn only in the condition_effect case so the default path consumes
+    # the RNG in exactly the same order as before.
+    base = np.random.uniform(500, 5000, n_lipids) if condition_effect else None
+
     for i in range(1, n_samples + 1):
-        data[f'concentration[s{i}]'] = np.random.uniform(500, 5000, n_lipids).tolist()
+        if condition_effect:
+            multiplier = 5.0 if i > n_samples // 2 else 1.0
+            values = base * multiplier * np.random.normal(1.0, 0.02, n_lipids)
+        else:
+            values = np.random.uniform(500, 5000, n_lipids)
+        data[f'concentration[s{i}]'] = values.tolist()
 
     return pd.DataFrame(data)
 
@@ -1221,6 +1236,26 @@ def analysis_generic_app():
 
     at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
     at.session_state['_test_df'] = make_analysis_dataframe(n_lipids=20, n_samples=6)
+    at.session_state['_test_experiment'] = ExperimentConfig(
+        n_conditions=2,
+        conditions_list=['Control', 'Treatment'],
+        number_of_samples_list=[3, 3],
+    )
+    at.session_state['_test_bqc_label'] = None
+    at.session_state['_test_format_type'] = 'Generic Format'
+    return at.run()
+
+
+@pytest.fixture
+def analysis_significant_app():
+    """Analysis module with a strong between-condition effect, so significance
+    annotations are actually drawn on the saturation plots."""
+    from app.models.experiment import ExperimentConfig
+
+    at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_test_df'] = make_analysis_dataframe(
+        n_lipids=20, n_samples=6, condition_effect=True,
+    )
     at.session_state['_test_experiment'] = ExperimentConfig(
         n_conditions=2,
         conditions_list=['Control', 'Treatment'],

@@ -243,11 +243,17 @@ def _render_volcano_results(
     # Show detailed results
     _display_detailed_statistics(result.stat_summary, 'volcano')
 
-    # Concentration vs Fold Change
+    # Concentration vs Fold Change. Drop first, re-store below only if the
+    # plot is actually rendered, so the PDF report never carries a figure
+    # from a previous comparison that the user can no longer see.
+    st.session_state.analysis_all_plots.pop('conc_vs_fc', None)
     if result.concentration_plot is not None:
         st.markdown("---")
         st.markdown("###### Concentration vs. Fold Change")
         st.plotly_chart(result.concentration_plot, use_container_width=True)
+        st.session_state.analysis_all_plots['conc_vs_fc'] = (
+            result.concentration_plot
+        )
 
         if result.concentration_df is not None:
             display_export_buttons(
@@ -328,6 +334,11 @@ def _display_individual_lipid_analysis(
     experimental: str,
 ) -> None:
     """Display individual lipid distribution plots."""
+    # Drop first, re-store below only if a plot is actually rendered. Every
+    # early return in this function means the user is no longer looking at a
+    # distribution plot, so the PDF report shouldn't hold one either.
+    st.session_state.analysis_all_plots.pop('lipid_distribution', None)
+
     if result.volcano_data is None or result.volcano_data.volcano_df is None:
         return
 
@@ -367,6 +378,7 @@ def _display_individual_lipid_analysis(
         )
 
     st.pyplot(dist_fig)
+    st.session_state.analysis_all_plots['lipid_distribution'] = dist_fig
 
     dist_data = _build_distribution_csv(
         df, detail_lipids, experiment, selected_conditions,

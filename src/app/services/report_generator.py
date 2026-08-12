@@ -244,9 +244,16 @@ def _render_heatmap_page(pdf: canvas.Canvas, fig: Any, title: str) -> None:
 # ── Analysis List Builder ───────────────────────────────────────────────────
 
 def _build_analyses_list(plots: Dict[str, Any],
-                         qc_plots: Dict[str, Any]) -> List[str]:
+                         qc_plots: Dict[str, Any],
+                         standards_plots: Optional[List[Any]] = None) -> List[str]:
     """Build the bullet-point list of included analyses for the cover page."""
     items: List[str] = []
+
+    # Internal standards (Module 1)
+    if standards_plots:
+        items.append(
+            f"Internal Standards Consistency ({len(standards_plots)} class(es))"
+        )
 
     # QC analyses
     if qc_plots.get('box_plot_fig1') or qc_plots.get('box_plot_fig2'):
@@ -279,6 +286,10 @@ def _build_analyses_list(plots: Dict[str, Any],
         items.append("Lipid Pathway Visualization")
     if 'volcano' in plots:
         items.append("Volcano Plot Analysis")
+    if 'conc_vs_fc' in plots:
+        items.append("Concentration vs. Fold Change")
+    if 'lipid_distribution' in plots:
+        items.append("Individual Lipid Concentration Distribution")
     if 'heatmap' in plots:
         items.append("Lipidomic Heatmap")
 
@@ -291,6 +302,7 @@ def generate_pdf_report(
     analysis_plots: Dict[str, Any],
     metadata: ReportMetadata,
     qc_plots: Optional[Dict[str, Any]] = None,
+    standards_plots: Optional[List[Any]] = None,
 ) -> Optional[io.BytesIO]:
     """
     Generate a PDF report containing all generated plots.
@@ -299,20 +311,25 @@ def generate_pdf_report(
         analysis_plots: Dict from ``analysis_all_plots`` session state.
             Keys like ``bar_chart``, ``pie_<cond>``, ``sat_concentration_<cls>``,
             ``sat_percentage_<cls>``, ``fach``, ``pathway``, ``volcano``,
-            ``heatmap``.
+            ``conc_vs_fc``, ``lipid_distribution`` (matplotlib), ``heatmap``.
         metadata: Report metadata for the cover page.
         qc_plots: Optional dict of QC plots with keys:
             ``box_plot_fig1``, ``box_plot_fig2``, ``bqc_plot``,
             ``retention_time_plot``, ``pca_plot``,
             ``correlation_plots`` (Dict[condition, matplotlib fig]).
+        standards_plots: Optional list of internal-standards consistency
+            figures from ``standards_consistency_figs`` session state, one
+            per standard class.
 
     Returns:
         BytesIO buffer containing the PDF, or None on error.
     """
     if qc_plots is None:
         qc_plots = {}
+    if standards_plots is None:
+        standards_plots = []
 
-    analyses = _build_analyses_list(analysis_plots, qc_plots)
+    analyses = _build_analyses_list(analysis_plots, qc_plots, standards_plots)
 
     pdf_buffer = io.BytesIO()
 
@@ -321,6 +338,9 @@ def generate_pdf_report(
 
         # Cover page
         _render_cover_page(pdf, metadata, analyses)
+
+        # Internal standards (Module 1)
+        _render_standards_plots(pdf, standards_plots)
 
         # QC plots
         _render_qc_plots(pdf, qc_plots)
@@ -335,6 +355,26 @@ def generate_pdf_report(
         raise ValueError(f"PDF report generation failed: {e}") from e
 
     return pdf_buffer
+
+
+def _render_standards_plots(pdf: canvas.Canvas,
+                            standards_plots: List[Any]) -> None:
+    """Render the internal-standards consistency charts, one per page.
+
+    Each figure already carries the class it describes in its own title, so
+    that is reused as the page caption rather than re-deriving the class list.
+    """
+    for idx, fig in enumerate(standards_plots, 1):
+        title = _figure_title(fig) or f"Internal Standards Consistency ({idx})"
+        _render_plot_page(pdf, fig, title, 'landscape', False)
+
+
+def _figure_title(fig: Any) -> Optional[str]:
+    """Best-effort read of a Plotly figure's own title text."""
+    try:
+        return fig.layout.title.text or None
+    except AttributeError:
+        return None
 
 
 def _render_qc_plots(pdf: canvas.Canvas, qc_plots: Dict[str, Any]) -> None:
@@ -428,6 +468,17 @@ def _render_analysis_plots(pdf: canvas.Canvas,
     if 'volcano' in plots:
         _render_plot_page(pdf, plots['volcano'],
                           "Volcano Plot", 'landscape', False)
+
+    # Concentration vs. fold change (rendered under the volcano plot)
+    if 'conc_vs_fc' in plots:
+        _render_plot_page(pdf, plots['conc_vs_fc'],
+                          "Concentration vs. Fold Change", 'landscape', False)
+
+    # Individual lipid distributions (matplotlib)
+    if 'lipid_distribution' in plots:
+        _render_plot_page(pdf, plots['lipid_distribution'],
+                          "Individual Lipid Concentration Distribution",
+                          'portrait', True)
 
     # Heatmap (special handler)
     if 'heatmap' in plots:

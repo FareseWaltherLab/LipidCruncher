@@ -155,15 +155,16 @@ def _display_pdf_report_section(
     """Display PDF report generation and download section."""
     analysis_plots = st.session_state.get('analysis_all_plots', {})
     qc_plots = _collect_qc_plots()
+    standards_plots = st.session_state.get('standards_consistency_figs', [])
 
-    if not analysis_plots and not qc_plots:
+    if not analysis_plots and not qc_plots and not standards_plots:
         return
 
     st.markdown("---")
     st.subheader("Download PDF Report")
     st.markdown(
-        "Generate a PDF report containing all QC and analysis plots "
-        "created during this session."
+        "Generate a PDF report containing all internal standards, QC and "
+        "analysis plots created during this session."
     )
 
     if st.button("Generate PDF Report", key="generate_pdf_report"):
@@ -174,6 +175,7 @@ def _display_pdf_report_section(
                     analysis_plots=analysis_plots,
                     metadata=metadata,
                     qc_plots=qc_plots,
+                    standards_plots=standards_plots,
                 )
 
             st.download_button(

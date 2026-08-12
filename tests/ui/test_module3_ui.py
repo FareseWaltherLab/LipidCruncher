@@ -295,6 +295,40 @@ class TestSaturationUI:
         assert any('concentration' in k for k in figs)
         assert any('percentage' in k for k in figs)
 
+    def test_hiding_significance_hides_it_in_the_stored_figure(
+        self, analysis_significant_app,
+    ):
+        """Regression: unchecking 'Show significance asterisks' stripped the
+        annotations from the on-screen copy only. The stored figure — used by
+        both the PDF report and the SVG download — kept them, so the export
+        contradicted the screen."""
+        at = self._switch_to_saturation(analysis_significant_app)
+
+        # Checking the box is what puts asterisks on screen. Assert that first,
+        # so the unchecked case below is known to be a real absence rather than
+        # a dataset with nothing significant to mark.
+        at.checkbox(key='sat_show_significance').set_value(True).run()
+        assert not at.exception
+        shown = at.session_state['analysis_saturation_figs']
+        conc_keys = [k for k in shown if k.endswith('_concentration')]
+        assert conc_keys, "no concentration saturation figure was stored"
+        assert any(len(shown[k].layout.annotations) > 0 for k in conc_keys), (
+            "fixture produced no significant results, so this test cannot "
+            "distinguish the annotated and un-annotated figures"
+        )
+
+        # Unchecking must strip them from the stored copy too.
+        at.checkbox(key='sat_show_significance').set_value(False).run()
+        assert not at.exception
+        hidden = at.session_state['analysis_saturation_figs']
+        for key in conc_keys:
+            assert len(hidden[key].layout.annotations) == 0
+            assert len(hidden[key].layout.shapes) == 0
+            report_fig = at.session_state['analysis_all_plots'][
+                f"sat_concentration_{key.rsplit('_', 1)[0]}"
+            ]
+            assert len(report_fig.layout.annotations) == 0
+
     def test_saturation_manual_mode_renders(self, analysis_generic_app):
         """Switching saturation stats to Manual mode renders without error."""
         at = self._switch_to_saturation(analysis_generic_app)
@@ -597,6 +631,39 @@ class TestVolcanoUI:
         at.selectbox(key='volcano_correction').set_value("bonferroni").run()
         assert not at.exception
         assert at.session_state['analysis_volcano_fig'] is not None
+
+    def test_conc_vs_fc_reaches_the_report(self, analysis_generic_app):
+        """The Concentration vs. Fold Change plot is displayed and offered as
+        an SVG download, but was never added to analysis_all_plots, so the PDF
+        report silently omitted it."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        assert 'conc_vs_fc' in at.session_state['analysis_all_plots']
+
+    def test_conc_vs_fc_keeps_its_download_buttons(self, analysis_generic_app):
+        """Storing the figure for the report must not disturb the existing
+        SVG/CSV downloads rendered beneath it."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        assert 'analysis_svg_conc_fc' in at.session_state
+        assert 'analysis_csv_conc_fc' in at.session_state
+
+    def test_lipid_distribution_reaches_the_report(self, analysis_generic_app):
+        """Same omission for the individual-lipid distribution plot, which is
+        Matplotlib rather than Plotly."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        assert 'lipid_distribution' in at.session_state['analysis_all_plots']
+
+    def test_deselecting_lipids_drops_the_stale_distribution(
+        self, analysis_generic_app,
+    ):
+        """Clearing the lipid multiselect removes the plot from the screen, so
+        it must leave the report too — otherwise the PDF shows a figure the
+        user can no longer see."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        assert 'lipid_distribution' in at.session_state['analysis_all_plots']
+
+        at.multiselect(key='volcano_detail_lipids').set_value([]).run()
+        assert not at.exception
+        assert 'lipid_distribution' not in at.session_state['analysis_all_plots']
 
 
 # =============================================================================
