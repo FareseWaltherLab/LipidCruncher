@@ -213,8 +213,8 @@ def _display_call_to_action() -> None:
     st.markdown(
         "If your dataset is in a **different format**, use **AI Studio** to "
         "transform it into the Generic format through a guided conversation "
-        "with AI. You can then load the result back into LipidCruncher "
-        "for the full analysis pipeline. AI Studio also lets you generate "
+        "with AI. You can then load the result back into the LipidCruncher "
+        "main pipeline for the full analysis. AI Studio also lets you generate "
         "custom visualizations from any dataset."
     )
 

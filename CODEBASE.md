@@ -235,8 +235,7 @@ LipidCruncher/
 ├── images/                                  # UI assets (logo, module PDFs)
 ├── requirements.txt
 ├── pytest.ini
-├── Dockerfile
-├── Dockerfile.isotope                       # R-enabled image (isotope test deploy)
+├── Dockerfile                               # Single image: app + AI Studio + R/IsoCorrectoR
 └── README.md
 ```
 
@@ -614,9 +613,9 @@ docker build -t lipidcruncher .
 docker run -p 8501:8501 lipidcruncher
 ```
 
-The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for PDF generation), and runs `streamlit run src/main_app.py`.
+The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for PDF generation) plus R + Bioconductor + IsoCorrectoR + `jsonlite` (for the stable isotope tracing module), and runs `streamlit run src/main_app.py`.
 
-**Isotope tracing image (`Dockerfile.isotope`):** a separate image that adds R + Bioconductor + IsoCorrectoR + `jsonlite` on top of the app, for deployments that need the isotope module. Built explicitly (`docker build -f Dockerfile.isotope ...`), so the production image is unaffected. See `docs/isotope_deployment.md` for the standalone-deploy guide.
+**One image, many deployments.** There is a single Dockerfile; what an image contains is decided by the branch it is built from, and deployments are separated by ECR tag and ECS service rather than by a second Dockerfile. Build for Fargate with `--platform linux/amd64`. The R layer dominates a cold build but sits before the application `COPY`, so it stays cached across app changes. `ANTHROPIC_API_KEY` is injected at run time (ECS `secrets`), never baked into the image; without it every page works except the AI Studio. See `docs/isotope_deployment.md` for the separate-deployment guide.
 
 ### Local Development
 
