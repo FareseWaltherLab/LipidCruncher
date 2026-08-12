@@ -6,18 +6,47 @@ from app.constants import (
 
 PROCESSING_DOCS = {
     FORMAT_LIPIDSEARCH: """
+Covers both **LipidSearch 5.0** and **5.2** exports. The delimiter (tab or
+comma) is detected automatically — 5.2 exports are tab-delimited despite the
+`.csv` extension.
+
+### Reading Intensities
+
+Two export layouts are recognized, and they reach the same place:
+
+| Layout | Intensity columns | What happens |
+|--------|-------------------|--------------|
+| Flat (5.0, and sample-grouped 5.2) | `MeanArea[s1]`, `MeanArea[s2]`, … | Renamed directly to `intensity[s1]`, `intensity[s2]`, … |
+| Condition-grouped **dual-polarity** (5.2) | `OriginalArea[s{condition}-{file}]` | Requires the **Alignment Setting file** (see below) |
+
+#### Dual-polarity exports and the Alignment Setting file
+
+In the condition-grouped 5.2 layout each biological sample was run twice — once
+in positive and once in negative mode — and appears as two separate per-file
+columns. Nothing in the data file itself says which two files belong to the
+same sample, so the **Alignment Setting file is required** and is requested at
+upload.
+
+It is used to pair each sample's positive and negative runs; the paired columns
+are then summed into a single `intensity[s1..sN]` per sample. Because any given
+lipid is detected in only one polarity, that sum is equivalent to taking
+whichever polarity saw it. Samples are renumbered flat in alignment order, and
+the conditions and sample counts read from the alignment pre-populate the
+experiment setup in the sidebar.
+
+---
+
 ### Data Cleaning Pipeline
 
 | Step | Action |
 |------|--------|
-| 1. Column Standardization | Extract LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey, MeanArea columns |
-| 2. Data Type Conversion | Convert MeanArea to numeric (non-numeric → 0) |
-| 3. Lipid Name Standardization | Standardize to LIPID MAPS shorthand (`Class chains`) |
-| 4. Grade Filtering | Filter by quality grade (**configurable below**) |
-| 5. Best Peak Selection | Keep entry with highest TotalSmpIDRate(%) per lipid |
-| 6. Missing FA Keys | Remove rows without FAKey (except Ch class, deuterated standards) |
-| 7. Duplicate Removal | Remove duplicates by LipidMolec |
-| 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+| 1. Missing FA Keys | Remove rows without FAKey (except Ch class and `Ch-D*` deuterated standards) |
+| 2. Data Type Conversion | Convert intensity columns to numeric (non-numeric → 0) |
+| 3. Grade Filtering | Filter by quality grade (**configurable below**) |
+| 4. Lipid Name Standardization | Standardize to LIPID MAPS shorthand (`Class chains`) |
+| 5. Best Peak Selection | One entry per lipid: best grade first, then highest TotalSmpIDRate(%) |
+| 6. Column Projection | Keep LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey and the intensity columns; drop extended-export extras (`OrgMeanArea[*]`, `MeanHeight[*]`, `MeanConc[*]`, `LipidMolecGroup`, …) |
+| 7. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
 
 ---
 
@@ -31,6 +60,10 @@ LipidSearch assigns quality grades to each identification:
 | B | Good | Keep |
 | C | Lower | Keep for LPC/SM only |
 | D | Lowest | Remove |
+
+Grades also break ties in step 5: when a lipid has several eligible entries, the
+better grade wins, and TotalSmpIDRate(%) only decides between entries of the
+same grade.
 
 **Configure in "Configure Grade Filtering" section below.**
 """,
