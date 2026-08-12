@@ -1,0 +1,25 @@
+ISOCORRECTOR LOG-FILE - 2026-03-31 10:35:34.720022
+IsoCorrectoR-version: 1.28.0
+
+IsoCorrectoR is free software and comes without any warranty.
+
+FILES AND DIRECTORIES
+
+Measurement File: C:/Users/lyr1/Downloads/IsoCorrectoR LG/MeasurementFile.csv
+Molecule File: C:/Users/lyr1/Downloads/IsoCorrectoR LG/MoleculeFile.csv
+Element File: C:/Users/lyr1/Downloads/IsoCorrectoR LG/ElementFile.csv
+Working Directory: C:/Users/lyr1/OneDrive - Memorial Sloan Kettering Cancer Center/Documents
+Output Directory: C:/Users/lyr1/Downloads/IsoCorrectoR LG/2026-03-31_103534
+Result File(s): IsoCorrectoR_result_Corrected.csv, IsoCorrectoR_result_CorrectedFractions.csv, IsoCorrectoR_result_Residuals.csv, IsoCorrectoR_result_RelativeResiduals.csv, IsoCorrectoR_result_MeanEnrichment.csv, IsoCorrectoR_result_RawData.csv
+
+PARAMETERS
+
+Correction for tracer impurity: TRUE
+Correction of tracer element in core molecule: TRUE
+Ultra-High-Resolution correction mode: TRUE
+Calculation of mean enrichment: TRUE
+Molecules in the correction process: BMP_18:1_18:1, PC_34:1
+Tracer(s): C
+Tracer purity: 0.99
+Limit value for calculation: 8
+

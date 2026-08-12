@@ -13,7 +13,7 @@ from typing import Optional
 import streamlit as st
 from PIL import Image
 
-from app.constants import PAGE_APP, PAGE_AI_STUDIO
+from app.constants import PAGE_APP, PAGE_AI_STUDIO, PAGE_ISOTOPE_TRACING
 
 
 try:
@@ -174,22 +174,39 @@ def _display_modules_overview() -> None:
 
     st.markdown("---")
 
+    # Stable Isotope Tracing — separate, parallel workflow
+    st.markdown("#### 🧪 Plus: Stable Isotope Tracing")
+    st.markdown("""
+    **A separate workflow for stable isotope (e.g. ¹³C) tracing experiments.** Upload IsoCorrectoR's three
+    input files (Measurement, Molecule, Element) and run natural-isotope-abundance correction with the real
+    IsoCorrectoR package—removing the naturally-occurring heavy-isotope background so the remaining signal
+    reflects only the label you fed in. View and download the corrected intensities, fractions, mean
+    enrichment, and residuals. Choose **Stable Isotope Tracing** below to start.
+    """)
+
+    st.markdown("---")
+
 
 def _display_call_to_action() -> None:
-    """Display the Start Crunching button and AI Studio option."""
+    """Display the data-type choice, then the AI Studio option.
+
+    Two separate questions: which pipeline the data belongs in (general
+    lipidomics vs isotope tracing), and — for lipidomics data that isn't in
+    a supported format — whether to route through AI Studio first.
+    """
     st.subheader("🎯 Ready to Crunch?")
-
-    st.markdown(
-        "If your data is in one of the supported formats "
-        "(LipidSearch, MS-DIAL, Generic, or Metabolomics Workbench), "
-        "start crunching to begin the full analysis pipeline."
-    )
-
-    btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
-    with btn_col2:
-        if st.button("🚀 Start Crunching", width='stretch', type="primary"):
+    st.markdown("**What type of data do you want to process?**")
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("🧬 General Lipidomics", width='stretch', type="primary"):
             st.session_state.page = PAGE_APP
             st.rerun()
+        st.caption("Filter, normalize, QC, visualize, and analyze lipidomics data.")
+    with btn_col2:
+        if st.button("🧪 Stable Isotope Tracing", width='stretch'):
+            st.session_state.page = PAGE_ISOTOPE_TRACING
+            st.rerun()
+        st.caption("Natural-isotope-abundance correction via IsoCorrectoR.")
 
     st.markdown("")
 

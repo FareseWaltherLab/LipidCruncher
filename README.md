@@ -18,6 +18,7 @@ Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/fare
 | 🔬 **QC + Normalization** | Integrated quality control with flexible normalization options |
 | 📊 **Lipid-Specific Viz** | Saturation profiles, pathway maps, fatty acid composition heatmaps, and more |
 | 📈 **High-Quality Outputs** | Interactive plots with SVG export and PDF reports |
+| 🧪 **Stable Isotope Tracing** | Natural-isotope-abundance correction via IsoCorrectoR (e.g. ¹³C/¹⁵N tracing) |
 
 ---
 
@@ -28,6 +29,9 @@ Import your data, define experimental conditions, and apply automatic standardiz
 
 ### Step 2: Quality Check & Analysis
 Validate your data with box plots, BQC coefficient-of-variation analysis, correlation heatmaps, and PCA—then explore results with bar/pie charts, volcano plots, saturation profiles, chain length distributions, metabolic pathway maps, clustered heatmaps, and fatty acid composition analysis. All on a single integrated page.
+
+### 🧪 Stable Isotope Tracing (separate workflow)
+A parallel workflow for stable isotope tracing experiments. Upload IsoCorrectoR's three input files (Measurement, Molecule, Element) and run natural-isotope-abundance correction with the real [IsoCorrectoR](https://bioconductor.org/packages/IsoCorrectoR/) package—removing the naturally-occurring heavy-isotope background so the remaining signal reflects only your label—then view and download the corrected intensities, fractions, mean enrichment, and residuals. *Requires R with IsoCorrectoR installed (see [Local Installation](#-local-installation)); the rest of the app runs without it.*
 
 ---
 
@@ -55,6 +59,13 @@ streamlit run src/main_app.py
 **System requirement:** Install [Poppler](https://github.com/oschwartz10612/poppler-windows/releases) for PDF export.
 - Ubuntu/Debian: `sudo apt-get install poppler-utils`
 - macOS: `brew install poppler`
+
+**For Stable Isotope Tracing only:** install R with the IsoCorrectoR package (the rest of the app works without it; the isotope page shows a notice if R is absent).
+- Install R (e.g. `brew install r`, or `apt-get install r-base`), then in an R session:
+  ```r
+  install.packages(c("BiocManager", "jsonlite"))
+  BiocManager::install("IsoCorrectoR")
+  ```
 
 ---
 

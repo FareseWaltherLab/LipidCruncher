@@ -9,6 +9,7 @@ from .quality_check import (
     QualityCheckWorkflow,
     QualityCheckConfig,
 )
+from .isotope_tracing import IsotopeTracingWorkflow, IsotopeTracingResult
 
 __all__ = [
     'DataIngestionWorkflow',
@@ -19,4 +20,6 @@ __all__ = [
     'NormalizationWorkflowResult',
     'QualityCheckWorkflow',
     'QualityCheckConfig',
+    'IsotopeTracingWorkflow',
+    'IsotopeTracingResult',
 ]

@@ -102,7 +102,8 @@ LipidCruncher/
 │       │   ├── experiment.py                #   ExperimentConfig
 │       │   ├── normalization.py             #   NormalizationConfig
 │       │   ├── statistics.py                #   StatisticalTestConfig
-│       │   └── chat.py                      #   ChatMessage, ChatSession, ChatMode, AIConfig, SandboxConfig
+│       │   ├── chat.py                      #   ChatMessage, ChatSession, ChatMode, AIConfig, SandboxConfig
+│       │   └── isotope_tracing.py           #   IsotopeCorrectionConfig
 │       ├── services/                        # Pure business logic
 │       │   ├── __init__.py                  #   Public API: re-exports services + exceptions
 │       │   ├── exceptions.py                #   Typed exception hierarchy (ServiceError, etc.)
@@ -138,6 +139,12 @@ LipidCruncher/
 │       │   │   ├── prompt_examples.py       #     Few-shot example prompts shown in chat UI
 │       │   │   ├── data_transformer.py      #     DataTransformerService (CSV → Generic format)
 │       │   │   └── viz_generator.py         #     VizGeneratorService (NL → Plotly figure)
+│       │   ├── isotope_correction/          #   Stable isotope tracing (IsoCorrectoR)
+│       │   │   ├── service.py               #     IsotopeCorrectionService (Rscript subprocess)
+│       │   │   ├── run_isocorrector.R       #     Bundled trusted R wrapper
+│       │   │   ├── validation.py            #     Pure-Python input validation
+│       │   │   ├── r_runtime.py             #     R/IsoCorrectoR availability detection
+│       │   │   └── exceptions.py            #     IsotopeError hierarchy
 │       │   └── plotting/                    #   Visualization services
 │       │       ├── __init__.py              #     Public API: re-exports all plotters + shared utils
 │       │       ├── base.py                  #     PlotterServiceProtocol (interface contract)
@@ -161,11 +168,13 @@ LipidCruncher/
 │       │   ├── normalization.py             #   NormalizationWorkflow
 │       │   ├── quality_check.py             #   QualityCheckWorkflow
 │       │   ├── analysis.py                  #   AnalysisWorkflow
-│       │   └── ai_chat.py                   #   AIChatWorkflow (transform / viz / data Q / LC Q / unified)
+│       │   ├── ai_chat.py                   #   AIChatWorkflow (transform / viz / data Q / LC Q / unified)
+│       │   └── isotope_tracing.py           #   IsotopeTracingWorkflow
 │       ├── adapters/
 │       │   └── streamlit_adapter.py         #   StreamlitAdapter
 │       └── ui/                              # Streamlit UI components
 │           ├── landing_page.py
+│           ├── isotope_tracing_page.py      #   Stable isotope tracing page
 │           ├── format_requirements.py
 │           ├── zero_filtering.py
 │           ├── standards_plots.py
@@ -221,11 +230,13 @@ LipidCruncher/
 │   ├── lipidsearch5_test_dataset.csv
 │   ├── msdial_test_dataset.csv
 │   ├── generic_test_dataset.csv
-│   └── mw_test_dataset.csv
+│   ├── mw_test_dataset.csv
+│   └── isotope_tracing/                     # IsoCorrectoR inputs + golden output
 ├── images/                                  # UI assets (logo, module PDFs)
 ├── requirements.txt
 ├── pytest.ini
 ├── Dockerfile
+├── Dockerfile.isotope                       # R-enabled image (isotope test deploy)
 └── README.md
 ```
 
@@ -233,7 +244,7 @@ LipidCruncher/
 
 ## Application Flow
 
-The app has three pages: a **landing page**, the **main app page**, and an **AI Studio page**. The main app page has two modules that the user progresses through sequentially. The AI Studio is reachable from the landing page or from the end of Module 2 (so users can take pipeline output into AI-driven exploration); a round-trip back to the main app preserves sidebar widget state via `StreamlitAdapter.preserve_main_app_widgets()` / `restore_navigation_widgets()`.
+The app has four pages: a **landing page**, the **main app page**, an **AI Studio page**, and the **isotope tracing page**. The landing page asks *what type of data?* and routes to either the main lipidomics app (`Page.APP`) or the stable isotope tracing workflow (`Page.ISOTOPE_TRACING`). The main app page has two modules that the user progresses through sequentially. The AI Studio is reachable from the landing page or from the end of Module 2 (so users can take pipeline output into AI-driven exploration); a round-trip back to the main app preserves sidebar widget state via `StreamlitAdapter.preserve_main_app_widgets()` / `restore_navigation_widgets()`.
 
 ### Module 1: Data Cleaning, Filtering, & Normalization
 
@@ -281,6 +292,21 @@ Reached via `Page.AI_STUDIO`. Independent of the main pipeline — users can upl
 4. **Custom Visualization** — generate Plotly figures from natural-language requests against Module 1 output (gated by `Module1ValidationResult`).
 
 All AI-generated code runs through `SandboxService` (AST validation + curated builtins + timeout), and the AI runs in a tool-use loop (`AIClientService.execute_tool_loop`) so it can `search_codebase`, `read_file_section`, `list_files`, or `read_documentation` before answering.
+### Stable Isotope Tracing (separate workflow)
+
+Reached from the landing-page mode choice (`Page.ISOTOPE_TRACING`); fully independent of Modules 1–2.
+
+```
+Upload 3 files (Measurement, Molecule, Element) → Validate → IsoCorrectoR (Rscript) → Corrected tables + CSV download
+```
+
+1. **Upload / sample data** — three IsoCorrectoR CSVs, or the bundled example.
+2. **Settings** — `IsotopeCorrectionConfig` (tracer-impurity, UHR mode, etc.).
+3. **Validation** — pure-Python structural checks before R is invoked.
+4. **Correction** — `IsotopeCorrectionService` runs the real IsoCorrectoR via an `Rscript` subprocess.
+5. **Results** — corrected intensities, fractions, mean enrichment, residuals, raw data — viewed and downloaded as CSV; run log shown.
+
+Requires R + IsoCorrectoR; degrades gracefully (clear notice) where R is absent.
 
 ---
 
@@ -300,6 +326,7 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 | `ChatMode` | `chat.py` | Enum: `DATA_TRANSFORM`, `VISUALIZATION`, `DATA_QUESTIONS`, `LIPIDCRUNCHER_QUESTIONS`. |
 | `AIConfig` | `chat.py` | Anthropic API config: `model`, `max_tokens` (1–8192), `temperature` (0.0–1.0). Defaults to a deterministic Sonnet call. |
 | `SandboxConfig` | `chat.py` | Limits for sandboxed execution: `execution_timeout` (seconds), `max_output_rows`, `max_figure_size_bytes`. |
+| `IsotopeCorrectionConfig` | `isotope_tracing.py` | One field per IsoCorrectoR `IsoCorrection()` setting (`correct_tracer_impurity`, `correct_tracer_element_core`, `calculate_mean_enrichment`, `ultra_high_res`, `correct_also_monoisotopic`, `calculation_threshold_uhr`). Used by the stable isotope tracing workflow. |
 
 ### Services
 
@@ -370,6 +397,17 @@ AIChatError (base)
 ├── SandboxError        — code rejected by AST validator or runtime failure
 └── TransformationError — output failed Generic-format validation
 ```
+#### Isotope Correction (`services/isotope_correction/`)
+
+The stable isotope tracing module. Runs the real **IsoCorrectoR** R/Bioconductor package via an `Rscript` subprocess (no `rpy2`) — the app is Python, IsoCorrectoR is R.
+
+| File | Purpose |
+|---|---|
+| `service.py` | `IsotopeCorrectionService.run_correction()` — writes the three input DataFrames + a JSON config to a temp dir, invokes the R wrapper, parses the CSV outputs back into a `CorrectionResult` (corrected intensities, fractions, mean enrichment, residuals, raw data, run log). |
+| `run_isocorrector.R` | **Bundled, trusted** R wrapper: reads the JSON config, calls `IsoCorrection()`, writes outputs. The executed R is *ours*; the user supplies data files, not code (so the AI-sandbox boundary does not apply). Passed file-path **arguments**, never shell-interpolated. |
+| `validation.py` | Pure-Python structural validation of the three files *before* R runs (molecule-name consistency, numeric intensities, and a resolution-mode/ID-format check that catches UHR-vs-standard mismatches with an actionable message). |
+| `r_runtime.py` | `find_rscript()` / `check_isocorrector_available()` / `require_isocorrector()` — graceful detection so the rest of the app runs where R is absent. |
+| `exceptions.py` | `IsotopeError` → `RRuntimeError` (R missing/crashed) and `IsotopeInputError` (bad inputs). |
 
 #### Plotting Services (`services/plotting/`)
 
@@ -405,6 +443,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 | `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_pca()`, `remove_samples()`. Each step can be run independently. |
 | `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
 | `AIChatWorkflow` | One method per chat mode | Orchestrates the AI Studio chat loop. `diagnose_format()` decides if a CSV needs transformation; `validate_module1_output()` gates the viz tab. Per-mode session starters (`start_transform_session`, `start_viz_session`, `start_data_questions_session`, `start_lc_questions_session`, `start_unified_session`) and message handlers (`handle_transform_message`, `handle_viz_message`, `handle_data_questions_message`, `handle_lc_questions_message`, `handle_unified_message`). Each handler appends user/assistant messages to an immutable `ChatSession`, calls `AIClientService` (with tools where appropriate), runs returned code in the sandbox, and returns a typed result dataclass (`FormatDiagnosticResult`, `Module1ValidationResult`, `TransformStepResult`, `VizStepResult`, `DataQuestionsStepResult`, `LCQuestionsStepResult`, `UnifiedStepResult`). |
+| `IsotopeTracingWorkflow` | `run()` → `IsotopeTracingResult` | Validate the three input files → run `IsotopeCorrectionService` → typed result (success + `CorrectionResult`, or `validation_errors` / `error_message`). Separate from the lipidomics pipeline. |
 
 ### Adapter
 
@@ -456,6 +495,7 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 | `ai_chat/_data_transform_ui.py` | Tab 3 — CSV → Generic format transformation, with download of the result. |
 | `ai_chat/_viz_generation_ui.py` | Tab 4 — natural-language Plotly figure generation. Gated by `Module1ValidationResult`. |
 | `ai_chat/_unified_chat_ui.py` | Single-chat variant (legacy / fallback before tabs were reintroduced). |
+**Isotope tracing page** (`isotope_tracing_page.py`): a standalone page (route `Page.ISOTOPE_TRACING`, reached from the landing-page mode choice) for the stable isotope tracing workflow — three file uploaders + sample-data loader, a settings panel mapping 1:1 to `IsotopeCorrectionConfig`, in-app help expanders (input-file requirements, about-correction), run button, result tables with per-table CSV download, run-log expander, and a graceful "R runtime unavailable" notice.
 
 ---
 
@@ -504,6 +544,8 @@ raw_df → standardized_df → cleaned_df → normalized_df → qc_continuation_
 ```
 
 Each DataFrame flows forward through the pipeline. If the user changes something upstream (e.g., re-uploads data), downstream state is automatically cleared.
+
+The isotope tracing page owns the `iso_`-prefixed keys (`iso_measurement_df`, `iso_molecule_df`, `iso_element_df`, `iso_config`, `iso_result`), cleared together via `reset_module_state('iso_')` when leaving the page.
 
 ---
 
@@ -556,7 +598,7 @@ pytest tests/ --cov=src/app --cov-report=term-missing
 
 ### Sample Datasets
 
-`sample_datasets/` contains one test CSV per format, used by both the test suite and the app's "Load Sample Data" feature.
+`sample_datasets/` contains one test CSV per format, used by both the test suite and the app's "Load Sample Data" feature. The `isotope_tracing/` subfolder holds the IsoCorrectoR golden dataset (the three input files plus `golden_output/`), used by the sample-data loader and the R-gated parity test.
 
 ---
 
@@ -573,6 +615,8 @@ docker run -p 8501:8501 lipidcruncher
 ```
 
 The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for PDF generation), and runs `streamlit run src/main_app.py`.
+
+**Isotope tracing image (`Dockerfile.isotope`):** a separate image that adds R + Bioconductor + IsoCorrectoR + `jsonlite` on top of the app, for deployments that need the isotope module. Built explicitly (`docker build -f Dockerfile.isotope ...`), so the production image is unaffected. See `docs/isotope_deployment.md` for the standalone-deploy guide.
 
 ### Local Development
 

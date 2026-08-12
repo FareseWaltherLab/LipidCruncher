@@ -31,6 +31,7 @@ class Page(str, Enum):
     LANDING = "landing"
     APP = "app"
     AI_STUDIO = "ai_studio"
+    ISOTOPE_TRACING = "isotope_tracing"
 
 
 class Module(str, Enum):
@@ -43,6 +44,7 @@ class Module(str, Enum):
 PAGE_LANDING = Page.LANDING
 PAGE_APP = Page.APP
 PAGE_AI_STUDIO = Page.AI_STUDIO
+PAGE_ISOTOPE_TRACING = Page.ISOTOPE_TRACING
 MODULE_DATA_PROCESSING = Module.DATA_PROCESSING
 MODULE_QC_ANALYSIS = Module.QC_ANALYSIS
 

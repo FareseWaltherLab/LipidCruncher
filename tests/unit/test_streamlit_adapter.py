@@ -979,6 +979,12 @@ class TestSessionStateFieldCompleteness:
         assert len(field_names) == len(set(field_names)), "duplicate field name"
         assert len(field_names) >= 100
 
+    def test_isotope_field_count(self):
+        """Test isotope tracing fields exist (guard against accidental deletion)."""
+        field_names = [f.name for f in fields(SessionState)]
+        iso_fields = [f for f in field_names if f.startswith('iso_')]
+        assert len(iso_fields) == 5
+
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""
         state = SessionState()
