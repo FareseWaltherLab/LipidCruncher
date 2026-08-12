@@ -51,7 +51,9 @@ LIPIDSEARCH_REQUIREMENTS = """
 ### 🔬 LipidSearch Format
 
 Supports both LipidSearch **5.0** and **5.2** exports. The layout is
-auto-detected from the columns — you don't pick a version.
+auto-detected from the columns — you don't pick a version. The delimiter is
+detected too, so 5.2's tab-delimited exports upload as-is despite the `.csv`
+extension; no conversion needed.
 
 **Required Columns (both layouts):**
 
@@ -125,8 +127,8 @@ MSDIAL_REQUIREMENTS = """
 
 | Column | Description |
 |--------|-------------|
-| `Metabolite name` | Lipid identifiers (exact name required) |
-| Sample columns | Intensity values — **must be LAST columns** and **uniquely named** |
+| `Metabolite name` | Lipid identifiers. `Metabolite`, `Name`, `Lipid` and `LipidMolec` are also accepted, but the MS-DIAL default needs no renaming |
+| Sample columns | Intensity values — **uniquely named** (duplicates break parsing) |
 
 **Optional Columns** (enable extra features):
 
@@ -156,6 +158,11 @@ The `Lipid IS` column separates raw from normalized data. You'll choose which to
 
 **⚠️ Important:**
 - All sample column names must be **unique** — duplicate names will cause parsing errors
+- Sample columns are found by content, not position: **any numeric column that
+  MS-DIAL doesn't publish as a standard metadata column is read as a sample**,
+  wherever it sits. A custom numeric annotation you added yourself will show up
+  as a phantom sample, so remove those before upload. (The `Lipid IS` marker is
+  the one positional rule — it separates raw from normalized data.)
 
 ---
 
@@ -184,14 +191,22 @@ The `Lipid IS` column separates raw from normalized data. You'll choose which to
 GENERIC_REQUIREMENTS = """
 ### 🔬 Generic Format
 
-**Simple structure — just two things:**
+**Simple structure:**
 
 | Position | Content |
 |----------|---------|
 | Column 1 | Lipid names |
-| Columns 2+ | Sample intensities (one column per sample) |
+| Column 2 | *(optional)* Lipid class — see below |
+| Remaining columns | Sample intensities (one column per sample) |
 
-**⚠️ Important:** No extra columns allowed! Remove any metadata columns before upload.
+**Optional class column.** If the second column holds lipid classes rather than
+numbers, it is used directly as `ClassKey`. It is recognized either by the
+header `ClassKey` or by its content (short, mostly letters, not numeric). Keep
+it if you have it — otherwise the class is inferred from the lipid name.
+
+**⚠️ Important:** apart from that one optional class column, **every remaining
+column is read as a sample**, whatever it contains. A stray metadata column
+becomes a phantom sample, so remove metadata before upload.
 
 ---
 
