@@ -123,15 +123,18 @@ def _render_saturation_results(
                 _reset_y_range(display_fig)
             st.markdown(f"###### {lipid_class}")
             st.plotly_chart(display_fig, use_container_width=True)
+            # Store and export the figure the user is actually looking at.
+            # Storing `fig` here would put significance annotations the user
+            # explicitly hid into both the PDF report and the SVG download.
             st.session_state.analysis_saturation_figs[
                 f"{lipid_class}_{ptype}"
-            ] = fig
+            ] = display_fig
             st.session_state.analysis_all_plots[
                 f'sat_{ptype}_{lipid_class}'
-            ] = fig
+            ] = display_fig
 
             display_export_buttons(
-                fig,
+                display_fig,
                 _build_saturation_csv(df, experiment, selected_conditions, lipid_class),
                 f"saturation_{ptype}_{lipid_class}.svg",
                 f"saturation_{ptype}_{lipid_class}.csv",

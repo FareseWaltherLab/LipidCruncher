@@ -244,6 +244,31 @@ class TestInternalStandards:
         assert not at.exception
         assert at.session_state['_intsta_expander_open'] is True
 
+    def test_consistency_plots_are_kept_for_the_pdf_report(
+        self, intsta_with_standards_app,
+    ):
+        """These are Module 1 plots, so they have no route into the PDF report
+        other than session state. They used to be rendered and discarded."""
+        at = intsta_with_standards_app
+        figs = at.session_state['standards_consistency_figs']
+        assert figs, "no consistency figures were stored"
+        # One per internal-standard class, each titled with its class.
+        assert all(
+            'Internal Standards Intensity' in (f.layout.title.text or '')
+            for f in figs
+        )
+
+    def test_deselecting_all_conditions_drops_the_stored_plots(
+        self, intsta_with_standards_app,
+    ):
+        """With no conditions selected nothing is drawn, so the report must not
+        keep figures from the previous rerun."""
+        at = intsta_with_standards_app
+        assert at.session_state['standards_consistency_figs']
+        at.multiselect(key='standards_conditions_select').set_value([]).run()
+        assert not at.exception
+        assert at.session_state['standards_consistency_figs'] == []
+
     def test_select_from_dataset_removes_lipid_from_main_dataset(self, intsta_with_standards_app):
         """Exclusive Select-from-Dataset also drops the lipid from analysed species."""
         import pandas as pd

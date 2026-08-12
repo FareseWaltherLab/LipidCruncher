@@ -183,6 +183,26 @@ class TestBuildAnalysesList:
         items = _build_analyses_list(plots, {})
         assert "Saturation Profiles (2 class(es))" in items
 
+    def test_volcano_companion_plots_listed(self, plotly_fig, matplotlib_fig):
+        """The two plots rendered underneath the volcano plot are reported
+        separately, so the cover page reflects what the PDF contains."""
+        plots = {
+            'volcano': plotly_fig,
+            'conc_vs_fc': plotly_fig,
+            'lipid_distribution': matplotlib_fig,
+        }
+        items = _build_analyses_list(plots, {})
+        assert "Concentration vs. Fold Change" in items
+        assert "Individual Lipid Concentration Distribution" in items
+
+    def test_standards_plots_listed(self, plotly_fig):
+        items = _build_analyses_list({}, {}, [plotly_fig, plotly_fig])
+        assert "Internal Standards Consistency (2 class(es))" in items
+
+    def test_standards_absent_when_not_supplied(self, plotly_fig):
+        items = _build_analyses_list({'volcano': plotly_fig}, {})
+        assert not any('Internal Standards' in i for i in items)
+
 
 # ── TestGetSaturationClasses ────────────────────────────────────────────────
 
@@ -280,6 +300,69 @@ class TestGeneratePdfReport:
 
 
 # ── TestCoverPageContent ────────────────────────────────────────────────────
+
+class TestPlotsReachThePdf:
+    """A plot listed on the cover page but missing from the renderer never
+    reaches the PDF, so assert on what is actually drawn."""
+
+    def _rendered_titles(self, **kwargs):
+        titles = []
+        with patch(
+            'app.services.report_generator._render_plot_page',
+            side_effect=lambda pdf, fig, title, *a, **k: titles.append(title),
+        ):
+            generate_pdf_report(**kwargs)
+        return titles
+
+    def test_volcano_companion_plots_render(self, simple_metadata, plotly_fig,
+                                            matplotlib_fig):
+        titles = self._rendered_titles(
+            analysis_plots={
+                'volcano': plotly_fig,
+                'conc_vs_fc': plotly_fig,
+                'lipid_distribution': matplotlib_fig,
+            },
+            metadata=simple_metadata,
+        )
+        assert "Concentration vs. Fold Change" in titles
+        assert "Individual Lipid Concentration Distribution" in titles
+
+    def test_matplotlib_distribution_survives_export(self, simple_metadata,
+                                                     matplotlib_fig):
+        """The distribution plot is Matplotlib, not Plotly. Routing it to the
+        Plotly exporter raises, so this fails if is_matplotlib is wrong."""
+        result = generate_pdf_report(
+            {'lipid_distribution': matplotlib_fig}, simple_metadata,
+        )
+        assert result is not None
+        assert result.getbuffer().nbytes > 0
+
+    def test_standards_plots_render_with_their_own_titles(self, simple_metadata):
+        fig = go.Figure()
+        fig.update_layout(
+            title='Internal Standards Intensity for PC (PC 15:0)'
+        )
+        titles = self._rendered_titles(
+            analysis_plots={}, metadata=simple_metadata, standards_plots=[fig],
+        )
+        assert 'Internal Standards Intensity for PC (PC 15:0)' in titles
+
+    def test_untitled_standard_gets_a_numbered_caption(self, simple_metadata,
+                                                       plotly_fig):
+        titles = self._rendered_titles(
+            analysis_plots={}, metadata=simple_metadata,
+            standards_plots=[plotly_fig],
+        )
+        assert 'Internal Standards Consistency (1)' in titles
+
+    def test_standards_only_report_generates(self, simple_metadata, plotly_fig):
+        """A user who ran Module 1 and stopped still gets their standards."""
+        result = generate_pdf_report(
+            {}, simple_metadata, standards_plots=[plotly_fig, plotly_fig],
+        )
+        assert result is not None
+        assert result.getbuffer().nbytes > 0
+
 
 class TestCoverPageContent:
     """Test cover page rendering via mock canvas to inspect drawString calls."""
