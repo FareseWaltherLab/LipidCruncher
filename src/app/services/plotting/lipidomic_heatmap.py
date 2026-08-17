@@ -234,27 +234,62 @@ class LipidomicHeatmapPlotterService:
         return start, min(start + GROUPED_PAGE_SIZE, total)
 
     @staticmethod
-    def order_by_class(z_scores_df: pd.DataFrame) -> pd.DataFrame:
+    def order_by_class(
+        z_scores_df: pd.DataFrame,
+        sort_columns: Optional[List[str]] = None,
+        ascending: bool = False,
+    ) -> pd.DataFrame:
         """Reorder rows so each lipid class forms one contiguous block.
 
         Classes keep the order in which they first appear, so the block order
-        follows the input data rather than being alphabetised.
+        follows the input data rather than being alphabetised. Within a block,
+        species keep their input order unless ``sort_columns`` is given, in
+        which case they are ranked by their mean value across those columns —
+        the colour gradient then runs down each block in step with the colour
+        bar instead of being scattered through it.
 
         Args:
             z_scores_df: Z-score DataFrame indexed by (LipidMolec, ClassKey).
+            sort_columns: Columns to average when ranking species inside a
+                class block. None (the default) keeps the input order.
+            ascending: Rank from the most negative value down when True,
+                from the most positive when False.
 
         Returns:
             The same DataFrame with rows grouped by class.
 
         Raises:
-            ValueError: If the DataFrame is empty.
+            ValueError: If the DataFrame is empty, or if none of
+                ``sort_columns`` are present.
         """
         if z_scores_df is None or z_scores_df.empty:
             raise ValueError("Z-scores DataFrame is empty")
 
         classes = list(z_scores_df.index.get_level_values('ClassKey'))
         rank = {c: i for i, c in enumerate(dict.fromkeys(classes))}
-        order = np.argsort([rank[c] for c in classes], kind='stable')
+        class_rank = np.array([rank[c] for c in classes])
+
+        if not sort_columns:
+            order = np.argsort(class_rank, kind='stable')
+            return z_scores_df.iloc[order]
+
+        present = [c for c in sort_columns if c in z_scores_df.columns]
+        if not present:
+            raise ValueError(
+                "None of the requested sort columns are present: "
+                f"{', '.join(sort_columns)}"
+            )
+
+        means = z_scores_df[present].mean(axis=1).to_numpy(dtype=float)
+        key = means if ascending else -means
+        # A species with no usable value in any sort column has no place in the
+        # ranking; park it at the foot of its block rather than letting NaN
+        # land it somewhere arbitrary.
+        key = np.where(np.isnan(key), np.inf, key)
+
+        # lexsort takes the primary key last, and is stable, so species that
+        # tie on the mean keep their input order.
+        order = np.lexsort((key, class_rank))
         return z_scores_df.iloc[order]
 
     @staticmethod

@@ -1113,6 +1113,7 @@ class StreamlitAdapter:
         species_page: int = 0,
         color_scale: str = 'zscore',
         control_condition: Optional[str] = None,
+        sort_direction: str = 'desc',
     ) -> HeatmapResult:
         """Cached lipidomic heatmap analysis."""
         return AnalysisWorkflow.run_heatmap(
@@ -1120,6 +1121,7 @@ class StreamlitAdapter:
             heatmap_type=heatmap_type, n_clusters=n_clusters,
             species_page=species_page, color_scale=color_scale,
             control_condition=control_condition,
+            sort_direction=sort_direction,
         )
 
     # ==================== AI Chat Wrappers (NOT cached — stateful) ====================

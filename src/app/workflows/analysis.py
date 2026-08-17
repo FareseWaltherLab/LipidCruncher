@@ -928,6 +928,7 @@ class AnalysisWorkflow:
         species_page: int = 0,
         color_scale: str = 'zscore',
         control_condition: Optional[str] = None,
+        sort_direction: str = 'desc',
     ) -> HeatmapResult:
         """Run lipidomic heatmap analysis.
 
@@ -953,6 +954,11 @@ class AnalysisWorkflow:
             control_condition: Condition to use as the log2fc denominator.
                 Required when color_scale is 'log2fc', and must be one of
                 selected_conditions so that it is also drawn.
+            sort_direction: Order of the species inside each class block, for
+                the class_grouped type under the log2fc color scale only.
+                'desc' ranks from the most positive mean fold change to the
+                most negative, 'asc' the other way. Every other combination
+                keeps the input order, since there is no fold change to rank by.
 
         Returns:
             HeatmapResult with figure, Z-scores, and optional cluster info.
@@ -978,6 +984,11 @@ class AnalysisWorkflow:
             raise ValueError(
                 f"Invalid color_scale '{color_scale}'. "
                 "Must be 'zscore' or 'log2fc'"
+            )
+        if sort_direction not in ('desc', 'asc'):
+            raise ValueError(
+                f"Invalid sort_direction '{sort_direction}'. "
+                "Must be 'desc' or 'asc'"
             )
         if color_scale == 'log2fc':
             if not control_condition:
@@ -1046,11 +1057,24 @@ class AnalysisWorkflow:
                 filtered_df=filtered_df,
             )
         elif heatmap_type == 'class_grouped':
+            # Under log2fc, rank the species inside each class block by their
+            # mean fold change across the samples that are not the control.
+            # The control columns sit at zero by construction, so averaging
+            # them in would only pull every species toward the middle.
+            sort_columns = None
+            if color_scale == 'log2fc':
+                sort_columns = [
+                    f'concentration[{s}]' for s in selected_samples
+                    if s not in control_samples
+                ] or None
+
             # One row per species at a fixed cell size, so the figure height is
             # unbounded. Show one page of species at a time, in class order, so
             # every species stays reachable however many there are.
             ordered_df = LipidomicHeatmapPlotterService.order_by_class(
                 z_scores_df,
+                sort_columns=sort_columns,
+                ascending=(sort_direction == 'asc'),
             )
             start, end = LipidomicHeatmapPlotterService.page_bounds(
                 len(ordered_df), species_page,

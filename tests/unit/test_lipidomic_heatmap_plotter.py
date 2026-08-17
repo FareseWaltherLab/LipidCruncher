@@ -1161,6 +1161,118 @@ class TestOrderByClass:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# TestOrderByClassSorted
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestOrderByClassSorted:
+    """Species ranked by value inside each class block."""
+
+    @staticmethod
+    def _z(classes, values):
+        """One row per class/value pair, the same value in both columns."""
+        index = pd.MultiIndex.from_arrays(
+            [[f'L{i}' for i in range(len(classes))], list(classes)],
+            names=['LipidMolec', 'ClassKey'],
+        )
+        return pd.DataFrame(
+            {'s1': list(values), 's2': list(values)},
+            index=index, dtype=float,
+        )
+
+    @staticmethod
+    def _lipids(frame):
+        return list(frame.index.get_level_values('LipidMolec'))
+
+    def test_descending_is_the_default(self):
+        z = self._z(['PC', 'PC', 'PC'], [0.0, 2.0, -2.0])
+        out = LipidomicHeatmapPlotterService.order_by_class(
+            z, sort_columns=['s1', 's2'],
+        )
+        assert self._lipids(out) == ['L1', 'L0', 'L2']
+
+    def test_ascending_reverses_the_ranking(self):
+        z = self._z(['PC', 'PC', 'PC'], [0.0, 2.0, -2.0])
+        out = LipidomicHeatmapPlotterService.order_by_class(
+            z, sort_columns=['s1', 's2'], ascending=True,
+        )
+        assert self._lipids(out) == ['L2', 'L0', 'L1']
+
+    def test_sorting_stays_inside_the_class_block(self):
+        """A large PE value must not outrank the PC species it follows."""
+        z = self._z(['PC', 'PE', 'PC', 'PE'], [1.0, 9.0, 5.0, -9.0])
+        out = LipidomicHeatmapPlotterService.order_by_class(
+            z, sort_columns=['s1', 's2'],
+        )
+        classes = list(out.index.get_level_values('ClassKey'))
+        assert classes == ['PC', 'PC', 'PE', 'PE']
+        assert self._lipids(out) == ['L2', 'L0', 'L1', 'L3']
+
+    def test_class_block_order_is_unaffected(self):
+        """Blocks keep first-appearance order however the species rank."""
+        z = self._z(['TG', 'PC', 'TG'], [-5.0, 5.0, 5.0])
+        out = LipidomicHeatmapPlotterService.order_by_class(
+            z, sort_columns=['s1', 's2'],
+        )
+        classes = list(out.index.get_level_values('ClassKey'))
+        assert [k for k, _ in itertools.groupby(classes)] == ['TG', 'PC']
+
+    def test_row_values_follow_their_lipid(self):
+        z = self._z(['PC', 'PC', 'PE'], [1.0, 3.0, 2.0])
+        out = LipidomicHeatmapPlotterService.order_by_class(
+            z, sort_columns=['s1', 's2'],
+        )
+        for lipid in self._lipids(z):
+            original = z.xs(lipid, level='LipidMolec').to_numpy()
+            moved = out.xs(lipid, level='LipidMolec').to_numpy()
+            assert np.array_equal(original, moved)
+
+    def test_ties_keep_input_order(self):
+        z = self._z(['PC', 'PC', 'PC'], [1.0, 1.0, 1.0])
+        out = LipidomicHeatmapPlotterService.order_by_class(
+            z, sort_columns=['s1', 's2'],
+        )
+        assert self._lipids(out) == ['L0', 'L1', 'L2']
+
+    def test_unrankable_species_go_last(self):
+        """An all-NaN row has no rank; it belongs at the foot of its block."""
+        z = self._z(['PC', 'PC', 'PC'], [1.0, np.nan, 3.0])
+        for ascending in (False, True):
+            out = LipidomicHeatmapPlotterService.order_by_class(
+                z, sort_columns=['s1', 's2'], ascending=ascending,
+            )
+            assert self._lipids(out)[-1] == 'L1'
+
+    def test_partial_nan_row_ranks_on_what_it_has(self):
+        z = self._z(['PC', 'PC'], [1.0, 0.0])
+        z.iloc[1, 0] = np.nan  # L1 keeps only s2 = 0.0
+        z.iloc[1, 1] = 9.0     # ...raised to 9.0, so L1 should outrank L0
+        out = LipidomicHeatmapPlotterService.order_by_class(
+            z, sort_columns=['s1', 's2'],
+        )
+        assert self._lipids(out) == ['L1', 'L0']
+
+    def test_no_sort_columns_keeps_input_order(self):
+        z = self._z(['PC', 'PC', 'PC'], [1.0, 3.0, 2.0])
+        out = LipidomicHeatmapPlotterService.order_by_class(z)
+        assert self._lipids(out) == ['L0', 'L1', 'L2']
+
+    def test_unknown_sort_columns_raise(self):
+        z = self._z(['PC', 'PC'], [1.0, 2.0])
+        with pytest.raises(ValueError, match="sort columns"):
+            LipidomicHeatmapPlotterService.order_by_class(
+                z, sort_columns=['nope'],
+            )
+
+    def test_no_rows_lost(self):
+        z = self._z(['PC', 'TG', 'PE', 'PC'], [1.0, 2.0, 3.0, 4.0])
+        out = LipidomicHeatmapPlotterService.order_by_class(
+            z, sort_columns=['s1', 's2'],
+        )
+        assert set(out.index) == set(z.index)
+        assert len(out) == len(z)
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # TestClassGroupedHeatmap
 # ═══════════════════════════════════════════════════════════════════════
 

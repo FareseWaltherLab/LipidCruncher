@@ -94,6 +94,10 @@ def _display_lipidomic_heatmap(
             selected_conditions, heatmap_type_value,
         )
 
+        sort_direction = 'desc'
+        if heatmap_type_value == 'class_grouped' and color_scale == 'log2fc':
+            sort_direction = _select_species_sort()
+
         _display_method_explanation(heatmap_type_value, color_scale)
 
         species_total = LipidomicHeatmapPlotterService.count_species(
@@ -112,6 +116,7 @@ def _display_lipidomic_heatmap(
             species_page=species_page,
             color_scale=color_scale,
             control_condition=control_condition,
+            sort_direction=sort_direction,
         )
 
         if not result.success:
@@ -217,6 +222,32 @@ def _select_color_scale(
             "they respond to the control rather than by abundance profile."
         )
     return 'log2fc', control_condition
+
+
+def _select_species_sort() -> str:
+    """Choose how species are ranked inside each lipid class block.
+
+    Offered only for the class-grouped mode under log2 fold change, which is
+    the only combination with a signed change to rank by.
+    """
+    labels = {
+        'desc': "Highest → lowest log2FC",
+        'asc': "Lowest → highest log2FC",
+    }
+    return st.selectbox(
+        "Sort Species Within Class",
+        list(labels),
+        index=0,
+        format_func=lambda key: labels[key],
+        key='heatmap_species_sort',
+        help=(
+            "Species are ranked inside their own class block by their mean "
+            "log2 fold change across the samples outside the control "
+            "condition, so the colour gradient runs down each block in step "
+            "with the colour bar. The class blocks themselves keep their "
+            "order."
+        ),
+    )
 
 
 def _display_method_explanation(
