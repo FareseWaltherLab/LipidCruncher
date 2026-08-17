@@ -1247,6 +1247,96 @@ class TestRunHeatmap:
         runs = [key for key, _ in itertools.groupby(classes)]
         assert len(runs) == len(set(runs))
 
+    @staticmethod
+    def _fold_change_df():
+        """PC species with known fold changes, interleaved with a PE species.
+
+        Control (s1-s3) is flat at 10 for every species, so each Treatment
+        (s4-s6) level fixes that species' log2FC: PC-flat 0, PC-up +2,
+        PC-down -2. Input order is deliberately unsorted, and 'PE up' sits
+        between the PC species while tying 'PC up' on fold change, so a sort
+        that ignored the class blocks would move it.
+        """
+        treatment = {
+            'PC flat': 10.0, 'PE up': 40.0, 'PC up': 40.0, 'PC down': 2.5,
+        }
+        lipids = list(treatment)
+        return pd.DataFrame({
+            'LipidMolec': lipids,
+            'ClassKey': ['PC', 'PE', 'PC', 'PC'],
+            **{f'concentration[s{i}]': [10.0] * 4 for i in (1, 2, 3)},
+            **{
+                f'concentration[s{i}]': [treatment[m] for m in lipids]
+                for i in (4, 5, 6)
+            },
+        })
+
+    def _sorted_rows(self, exp, **kwargs):
+        result = AnalysisWorkflow.run_heatmap(
+            self._fold_change_df(), exp,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_grouped',
+            **kwargs,
+        )
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        return list(heatmap.y[1])
+
+    def test_log2fc_sorts_species_high_to_low_by_default(self, exp_2x3):
+        rows = self._sorted_rows(
+            exp_2x3, color_scale='log2fc', control_condition='Control',
+        )
+        assert rows == ['PC up', 'PC flat', 'PC down', 'PE up']
+
+    def test_log2fc_sort_direction_can_be_reversed(self, exp_2x3):
+        rows = self._sorted_rows(
+            exp_2x3, color_scale='log2fc', control_condition='Control',
+            sort_direction='asc',
+        )
+        assert rows == ['PC down', 'PC flat', 'PC up', 'PE up']
+
+    def test_sorting_does_not_leave_its_class_block(self, exp_2x3):
+        """PE up ties with PC up, but must stay in its own block."""
+        result = AnalysisWorkflow.run_heatmap(
+            self._fold_change_df(), exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='class_grouped',
+            color_scale='log2fc', control_condition='Control',
+        )
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        assert list(heatmap.y[0]) == ['PC', 'PC', 'PC', 'PE']
+        assert list(heatmap.y[1])[-1] == 'PE up'
+
+    def test_zscore_keeps_input_order(self, exp_2x3):
+        """There is no fold change to rank by, so nothing is reordered."""
+        for direction in ('desc', 'asc'):
+            rows = self._sorted_rows(exp_2x3, sort_direction=direction)
+            assert rows == ['PC flat', 'PC up', 'PC down', 'PE up']
+
+    def test_invalid_sort_direction_rejected(self, exp_2x3):
+        with pytest.raises(ValueError, match="sort_direction"):
+            self._sorted_rows(
+                exp_2x3, color_scale='log2fc', control_condition='Control',
+                sort_direction='sideways',
+            )
+
+    def test_sorting_composes_with_species_paging(self, exp_2x3):
+        """The first page must hold the top-ranked species, not the first ones."""
+        df = self._many_species_df(GROUPED_PAGE_SIZE + 10, exp_2x3)
+        result = AnalysisWorkflow.run_heatmap(
+            df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            heatmap_type='class_grouped',
+            color_scale='log2fc', control_condition='Control',
+        )
+        heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
+        page = np.asarray(heatmap.z)
+        treatment_cols = page[:, 3:]
+        means = np.nanmean(treatment_cols, axis=1)
+        assert np.all(np.diff(means) <= 1e-9)
+
     def test_class_modes_colour_code_the_sample_axis(self, multi_species_df, exp_2x3):
         """The workflow must pass condition labels to the two class modes."""
         for mode in ('class_grouped', 'class_aggregated'):

@@ -841,6 +841,63 @@ class TestHeatmapUI:
         captions = ' '.join(c.value for c in at.caption)
         assert 'Clustering runs on the fold changes' in captions
 
+    def _grouped_log2fc(self, at):
+        """Grouped-by-class mode under the log2 fold change colour scale."""
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+        at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
+        return at
+
+    def test_species_sort_defaults_to_highest_first(self, analysis_generic_app):
+        at = self._grouped_log2fc(analysis_generic_app)
+
+        assert not at.exception
+        sorter = at.selectbox(key='heatmap_species_sort')
+        assert sorter.value == 'desc'
+
+    def test_species_sort_only_offered_for_grouped_log2fc(
+        self, analysis_generic_app,
+    ):
+        """Z-score has no fold change to rank by, and the other modes either
+        order themselves or have no species to order."""
+        for mode, scale in (
+            ("Grouped by Class", "Z-score"),
+            ("Clustered", "Log2 Fold Change"),
+            ("Regular", "Log2 Fold Change"),
+            ("Aggregated by Class", "Log2 Fold Change"),
+        ):
+            at = self._switch_to_heatmap(analysis_generic_app)
+            at.radio(key='heatmap_type').set_value(mode).run()
+            at.radio(key='heatmap_color_scale').set_value(scale).run()
+
+            assert not at.exception, mode
+            assert not [
+                s for s in at.selectbox if s.key == 'heatmap_species_sort'
+            ], f'{mode} / {scale} should not offer a species sort'
+
+    def test_species_sort_ranks_rows_by_fold_change(self, analysis_generic_app):
+        at = self._grouped_log2fc(analysis_generic_app)
+        fig = at.session_state['analysis_heatmap_fig']
+        classes = list(fig.data[0].y[0])
+        values = np.asarray(fig.data[0].z, dtype=float)
+
+        # Controls are the first three columns; rank on the rest.
+        means = np.nanmean(values[:, 3:], axis=1)
+        for cls in set(classes):
+            block = means[[i for i, c in enumerate(classes) if c == cls]]
+            assert np.all(np.diff(block) <= 1e-9), f'{cls} block is not sorted'
+
+    def test_reversing_the_sort_reverses_each_block(self, analysis_generic_app):
+        at = self._grouped_log2fc(analysis_generic_app)
+        first = list(at.session_state['analysis_heatmap_fig'].data[0].y[1])
+
+        at.selectbox(key='heatmap_species_sort').set_value('asc').run()
+
+        assert not at.exception
+        second = list(at.session_state['analysis_heatmap_fig'].data[0].y[1])
+        assert second != first
+        assert sorted(second) == sorted(first)
+
     def test_log2fc_falls_back_without_a_comparison(self, analysis_generic_app):
         """Fold change needs something to divide by. With a single condition
         selected there is no comparison, so it must say so and revert rather
