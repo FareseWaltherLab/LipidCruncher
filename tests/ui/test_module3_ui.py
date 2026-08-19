@@ -387,6 +387,19 @@ class TestChainLengthUI:
         assert 'analysis_chain_length_fig' in at.session_state
         assert at.session_state['analysis_chain_length_fig'] is not None
 
+    def test_chain_length_explains_how_bubbles_are_computed(
+        self, analysis_generic_app,
+    ):
+        """Bubble size and the chain summing are not inferable from the plot."""
+        at = self._switch_to_chain_length(analysis_generic_app)
+        markdowns = ' '.join(m.value for m in at.markdown)
+        code = ' '.join(c.value for c in at.code)
+        captions = ' '.join(c.value for c in at.caption)
+
+        assert 'How each bubble is computed' in markdowns
+        assert 'summed across every chain' in code
+        assert 'area' in captions and 'radius' in captions
+
 
 # =============================================================================
 # Group 6: FACH Heatmaps (3 tests)

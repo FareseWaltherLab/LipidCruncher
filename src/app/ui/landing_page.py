@@ -168,7 +168,8 @@ def _display_modules_overview() -> None:
     st.markdown("#### Module 3: Visualize and Analyze")
     st.markdown("""
     **Turn complex lipid profiles into biological insights.** Bar & pie charts, volcano plots, saturation profiles (SFA, MUFA, PUFA),
-    metabolic pathway mapping, clustered heatmaps, and fatty acid composition analysis—all interactive with SVG/CSV export.
+    chain length distributions, metabolic pathway mapping, lipidomic heatmaps (Z-score or log2 fold change), and fatty acid
+    composition analysis—all interactive with SVG/CSV export, plus a PDF report and a pre-filled LSI compliance checklist.
     """)
     load_module_image('module3.pdf')
 
@@ -240,14 +241,16 @@ def _display_whats_new() -> None:
           palette from 10 to 20 colours
 
         ### UI/UX Improvements
-        - **Reset Session**: One button clears the session and starts a fresh analysis without
-          refreshing the page
+        - **Reset Session**: One sidebar button clears your experiment setup, processing and
+          cached results and returns you to Define Experiment—without refreshing the page or
+          re-uploading your data
         - **Collapsed Analysis Sections**: Landing on Visualize and Analyze no longer opens a
           section on its own
-        - **Sample Names in the Sidebar**: See which uploaded file each sample label maps to
-          while grouping
-        - **Blanket Grade Filtering**: Apply one grade threshold across every sample instead of
-          setting them one at a time
+        - **Sample Names in the Sidebar**: Sample selectors show the original column header
+          next to each label (s3 — mouse liver #5), so you can group without cross-referencing
+          your file
+        - **Blanket Grade Filtering**: Relax LipidSearch grades to A/B/C for every lipid class
+          at once, instead of setting each class individually
         - **Corrected Format Documentation**: The data-requirements and processing panels now
           match what the code actually does for the Generic, MS-DIAL and LipidSearch formats
         - **Clearer Heatmap Documentation**: Inline notes explaining how each cell is computed,
@@ -350,7 +353,11 @@ def _display_footer() -> None:
     foot_col1, foot_col2 = st.columns(2)
     with foot_col1:
         st.markdown("#### 💡 Pro Tip")
-        st.markdown("Starting a new analysis? Refresh the page first to ensure a clean session.")
+        st.markdown(
+            "Starting a new analysis? Use **🔄 Reset session** in the sidebar to clear your "
+            "setup and results while keeping the uploaded file—or refresh the page to start "
+            "completely fresh."
+        )
     with foot_col2:
         st.markdown("#### 📧 Support")
         st.markdown("Questions, bugs, or feature requests? Email **abdih@mskcc.org**")
