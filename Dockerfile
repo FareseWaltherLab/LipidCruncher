@@ -49,6 +49,11 @@ RUN pip install -r requirements.txt
 # Application.
 COPY . .
 
+# Keep the upload cap on the image rather than relying on the working
+# directory finding .streamlit/config.toml, or on a task-definition
+# override that lives outside this repo.
+ENV STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1024
+
 EXPOSE 8501
 
 # The AI Studio reads ANTHROPIC_API_KEY from the environment at call time. It is

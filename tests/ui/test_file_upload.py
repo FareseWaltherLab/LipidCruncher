@@ -64,3 +64,37 @@ def test_read_tabular_parses_tab_delimited_upload():
 
     assert list(df.columns) == _COLUMNS
     assert FormatDetectionService.detect_format(df) == DataFormat.LIPIDSEARCH
+
+
+# ── Upload limit label ─────────────────────────────────────────────────
+#
+# The tooltip used to hardcode "Limit 800MB per file" while the real cap came
+# from .streamlit/config.toml (or an env var in the container), so the two
+# drifted apart: the tooltip claimed 800MB while the app served 200MB locally
+# and 1GB in production.
+
+def test_upload_limit_label_tracks_the_configured_cap(monkeypatch):
+    import streamlit as st
+
+    from app.ui.sidebar import file_upload
+
+    for megabytes, expected in (
+        (1024, '1GB'), (2048, '2GB'), (800, '800MB'), (200, '200MB'),
+    ):
+        monkeypatch.setattr(
+            st, 'get_option', lambda name, mb=megabytes: (
+                mb if name == 'server.maxUploadSize' else None
+            ),
+        )
+        assert file_upload._upload_limit_text() == expected
+
+
+def test_upload_limit_label_matches_the_real_option():
+    """No monkeypatching: what the tooltip says is what the app enforces."""
+    import streamlit as st
+
+    from app.ui.sidebar import file_upload
+
+    megabytes = st.get_option('server.maxUploadSize')
+    label = file_upload._upload_limit_text()
+    assert str(megabytes) in label or str(megabytes // 1024) in label
