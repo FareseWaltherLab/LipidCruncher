@@ -238,6 +238,19 @@ def load_sample_dataset(data_format: str) -> Optional[pd.DataFrame]:
     return None
 
 
+def _upload_limit_text() -> str:
+    """The configured upload cap, formatted the way Streamlit labels it.
+
+    Read at call time rather than hardcoded: the cap is set in
+    .streamlit/config.toml locally and by an env var in the container, and a
+    literal here would silently contradict whichever one is in force.
+    """
+    megabytes = st.get_option("server.maxUploadSize")
+    if megabytes >= 1024 and megabytes % 1024 == 0:
+        return f"{megabytes // 1024}GB"
+    return f"{megabytes}MB"
+
+
 def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
     """Display file upload widget and sample data option.
 
@@ -280,7 +293,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
     uploaded_file = st.sidebar.file_uploader(
         f'Upload your {data_format} dataset',
         type=file_types,
-        help="Limit 800MB per file"
+        help=f"Limit {_upload_limit_text()} per file"
     )
 
     if uploaded_file is not None:

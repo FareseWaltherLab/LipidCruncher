@@ -1,2 +1,6 @@
 [server]
-maxUploadSize = 800
+# 1 GB. Not a Streamlit ceiling — the option simply defaults to 200 MB,
+# so it has to be set explicitly. Streamlit reads this file relative to the
+# working directory, so it only applies when the app is launched from the
+# repo root; the container sets the same value as an env var instead.
+maxUploadSize = 1024

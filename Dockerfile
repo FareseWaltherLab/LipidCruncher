@@ -13,6 +13,11 @@ RUN pip install -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
+# Keep the upload cap on the image rather than relying on the working
+# directory finding .streamlit/config.toml, or on a task-definition
+# override that lives outside this repo.
+ENV STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1024
+
 EXPOSE 8501
 
 ENTRYPOINT ["streamlit", "run"]
