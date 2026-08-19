@@ -255,8 +255,9 @@ def _display_whats_new() -> None:
           match what the code actually does for the Generic, MS-DIAL and LipidSearch formats
         - **Clearer Heatmap Documentation**: Inline notes explaining how each cell is computed,
           how class totals are aggregated, and how the rows are ordered
-        - **1GB File Uploads**: The upload cap is raised from 800MB to 1GB and is now set on the
-          container image itself, so the deployed app and a local run report the same limit
+        - **Accurate Upload Limit**: The uploader tooltip claimed 800MB while the app was already
+          accepting 1GB files. Both now agree on 1GB, and the limit is pinned to the app itself so
+          the two cannot drift apart again
         """)
 
     with st.expander("Version 1.3 (March 30, 2026)", expanded=False):
