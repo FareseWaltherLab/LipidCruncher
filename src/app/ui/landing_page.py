@@ -189,9 +189,72 @@ def _display_call_to_action() -> None:
 
 def _display_whats_new() -> None:
     """Display the What's New changelog section."""
-    st.markdown("#### ✨ What's New in Version 1.3 (March 30, 2026)")
+    st.markdown("#### ✨ What's New in Version 1.4 (August 19, 2026)")
 
     with st.expander("New Features & Improvements", expanded=False):
+        st.markdown("""
+        ### Major Features
+        - **LipidSearch 5.2 Support**: The LipidSearch format (renamed from "LipidSearch 5.0")
+          now covers both 5.0 and 5.2 exports—tab and comma delimiters are detected automatically,
+          and condition-grouped dual-polarity exports are merged into single samples using the
+          Alignment Setting file, which also pre-fills your experiment setup
+        - **Chain Length Distribution**: New class-level bubble chart showing how carbon chain
+          length is distributed within each lipid class, plotted per condition and included in
+          the PDF report
+        - **LSI Compliance Report**: Generate a pre-filled Lipidomics Standards Initiative
+          reporting checklist from your session, downloadable as PDF or CSV
+        - **Redesigned Lipidomic Heatmaps**: Two new modes—**Grouped by Class** (one row per
+          species, blocked by lipid class) and **Aggregated by Class** (one row per class,
+          summing its species)—with square cells, colour-coded condition strips, and paging
+          so large class selections stay readable
+        - **Log2 Fold Change Heatmaps**: Every heatmap mode can now be coloured by log2 fold
+          change against a control condition instead of Z-score, so colour reads as the
+          direction and size of change rather than a position within each row's own spread
+        - **Fold-Change Sorted Species**: In Grouped by Class, species are ranked inside their
+          class block from the largest increase down to the largest decrease (reversible),
+          turning each block into a gradient that lines up with the colour bar
+        - **Internal Standards from Your Dataset**: Choose standards already present in your
+          data alongside the automatically detected ones
+
+        ### Bug Fixes
+        - Fixed sample regrouping being re-applied on every page interaction, and undo restoring
+          a reshuffled dataset instead of the original
+        - Fixed three plots—concentration vs. fold change, individual lipid distribution, and
+          internal standards consistency—rendering on screen but never reaching the PDF report
+        - Fixed saturation plot exports keeping significance asterisks after they were switched
+          off on screen
+        - Fixed significance asterisks not appearing on saturation plots, and bar chart
+          significance indicators drifting out of line with their bars
+        - Fixed the heatmap silently mislabelling samples when a selected sample had no
+          concentration column
+        - Fixed the LipidSearch cleaner discarding columns from extended exports
+        - Fixed custom standards upload failing after the LIPID MAPS notation change, and added
+          specific error messages when an upload is rejected
+        - Fixed SPLASH standard class inference for chain-prefixed names
+        - Fixed the MS-DIAL MS/MS filter not syncing with the selected preset, and data type
+          switching not taking effect
+        - Fixed Metabolomics Workbench sample data not auto-populating, and a crash when the
+          detection threshold was left empty
+        - Fixed pathway visualization circle sizing and volcano plot label placement
+        - Fixed lipid classes being indistinguishable in plots by expanding the class colour
+          palette from 10 to 20 colours
+
+        ### UI/UX Improvements
+        - **Reset Session**: One button clears the session and starts a fresh analysis without
+          refreshing the page
+        - **Collapsed Analysis Sections**: Landing on Visualize and Analyze no longer opens a
+          section on its own
+        - **Sample Names in the Sidebar**: See which uploaded file each sample label maps to
+          while grouping
+        - **Blanket Grade Filtering**: Apply one grade threshold across every sample instead of
+          setting them one at a time
+        - **Corrected Format Documentation**: The data-requirements and processing panels now
+          match what the code actually does for the Generic, MS-DIAL and LipidSearch formats
+        - **Clearer Heatmap Documentation**: Inline notes explaining how each cell is computed,
+          how class totals are aggregated, and how the rows are ordered
+        """)
+
+    with st.expander("Version 1.3 (March 30, 2026)", expanded=False):
         st.markdown("""
         ### Major Features
         - **LIPID MAPS Nomenclature**: Full compliance with the LIPID MAPS shorthand notation system
