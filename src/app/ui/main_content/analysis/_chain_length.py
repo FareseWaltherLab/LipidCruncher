@@ -25,6 +25,27 @@ def _display_chain_length_plots(
             "Bubble size reflects mean concentration."
         )
 
+        st.markdown("**How each bubble is computed**:")
+        st.code(
+            "1. Total carbons /  = summed across every chain in the lipid name,\n"
+            "   double bonds       so PC 16:0_18:1 and PC 34:1 both land at 34:1\n"
+            "2. Mean             = that species averaged across the samples of\n"
+            "   concentration      the condition being plotted\n"
+            "3. Bubble           = species sharing a class, carbon count and\n"
+            "                      double bond count are summed together",
+            language=None,
+        )
+        st.caption(
+            "Bubble area — not radius — is proportional to that summed "
+            "concentration, so a bubble covering twice the area is twice the "
+            "abundance. Species whose names carry no chain information are "
+            "skipped, as are species whose mean is zero or negative, so a class "
+            "can be absent from a condition it barely registers in. Because "
+            "chains are summed rather than kept separate, two different "
+            "molecular species with the same total land in the same bubble — "
+            "use the Fatty Acid Composition heatmap to separate them."
+        )
+
         selected_conditions, selected_classes = _display_condition_class_selectors(
             experiment, df, 'clen',
         )
