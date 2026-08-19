@@ -898,6 +898,53 @@ class TestHeatmapUI:
         assert second != first
         assert sorted(second) == sorted(first)
 
+    def test_row_order_is_explained_under_fold_change(self, analysis_generic_app):
+        """The ranking is the point of the mode; it must be stated on screen,
+        not only in a tooltip."""
+        at = self._grouped_log2fc(analysis_generic_app)
+        markdowns = ' '.join(m.value for m in at.markdown)
+        captions = ' '.join(c.value for c in at.caption)
+
+        assert 'How the rows are ordered' in markdowns
+        assert 'largest increase down to the largest decrease' in captions
+        assert 'outside the control condition' in captions
+
+    def test_row_order_explanation_follows_the_direction(self, analysis_generic_app):
+        """The prose must not keep claiming descending after a switch."""
+        at = self._grouped_log2fc(analysis_generic_app)
+        at.selectbox(key='heatmap_species_sort').set_value('asc').run()
+
+        assert not at.exception
+        captions = ' '.join(c.value for c in at.caption)
+        assert 'largest decrease up to the largest increase' in captions
+
+    def test_no_row_order_explanation_without_a_ranking(self, analysis_generic_app):
+        """Z-score keeps input order, so there is no ranking to describe."""
+        at = self._switch_to_heatmap(analysis_generic_app)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+
+        markdowns = ' '.join(m.value for m in at.markdown)
+        assert 'How the rows are ordered' not in markdowns
+
+    def test_paging_caption_names_the_fold_change_order(self):
+        """Which species land on a page now depends on the ranking."""
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._grouped_log2fc(self._big_analysis_app(GROUPED_PAGE_SIZE + 40))
+
+        assert not at.exception
+        captions = ' '.join(c.value for c in at.caption)
+        assert 'then by fold change within each class' in captions
+        assert 'largest increases' in captions
+
+    def test_paging_caption_states_the_csv_order(self):
+        """The download is not re-sorted, so the caption must not imply it is."""
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._grouped_log2fc(self._big_analysis_app(GROUPED_PAGE_SIZE + 40))
+        captions = ' '.join(c.value for c in at.caption)
+        assert 'in the order they appear in your data' in captions
+
     def test_log2fc_falls_back_without_a_comparison(self, analysis_generic_app):
         """Fold change needs something to divide by. With a single condition
         selected there is no comparison, so it must say so and revert rather
