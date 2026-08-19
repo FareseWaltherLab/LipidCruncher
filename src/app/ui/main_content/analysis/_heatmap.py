@@ -23,7 +23,8 @@ def _display_lipidomic_heatmap(
     with st.expander("Species Level Breakdown - Lipidomic Heatmap", expanded=False):
         st.markdown(
             "Visualize concentration patterns across lipid species, or across "
-            "whole lipid classes, using Z-score normalized heatmaps."
+            "whole lipid classes, as Z-scores or as log2 fold changes against "
+            "a control condition."
         )
 
         all_conditions = AnalysisWorkflow.get_all_conditions(experiment)
@@ -65,7 +66,9 @@ def _display_lipidomic_heatmap(
                     "clustering. "
                     "Regular: one row per species, in input order. "
                     "Grouped by Class: one row per species, grouped into lipid "
-                    f"class blocks, {GROUPED_PAGE_SIZE} species per page. "
+                    "class blocks and ranked by fold change inside each block "
+                    "when the Log2 Fold Change colour scale is on, "
+                    f"{GROUPED_PAGE_SIZE} species per page. "
                     "Aggregated by Class: one row per lipid class, summing the "
                     "concentrations of its species."
                 ),
@@ -98,14 +101,18 @@ def _display_lipidomic_heatmap(
         if heatmap_type_value == 'class_grouped' and color_scale == 'log2fc':
             sort_direction = _select_species_sort()
 
-        _display_method_explanation(heatmap_type_value, color_scale)
+        _display_method_explanation(
+            heatmap_type_value, color_scale, sort_direction,
+        )
 
         species_total = LipidomicHeatmapPlotterService.count_species(
             df, selected_classes,
         )
         species_page = 0
         if heatmap_type_value == 'class_grouped':
-            species_page = _select_species_page(species_total)
+            species_page = _select_species_page(
+                species_total, sorted_by_fc=(color_scale == 'log2fc'),
+            )
 
         section_header("📈 Results")
 
@@ -138,10 +145,22 @@ def _display_lipidomic_heatmap(
             start, end = LipidomicHeatmapPlotterService.page_bounds(
                 species_total, species_page,
             )
+            if color_scale == 'log2fc':
+                ranked = (
+                    'largest increases' if sort_direction == 'desc'
+                    else 'largest decreases'
+                )
+                order_text = (
+                    "ordered by lipid class and then by fold change within "
+                    f"each class, so a class's {ranked} sit at the top of "
+                    "its block"
+                )
+            else:
+                order_text = "ordered by lipid class"
             st.caption(
                 f"Showing species {start + 1}–{end} of {species_total}, "
-                f"ordered by lipid class. The CSV download below contains "
-                f"all {species_total}."
+                f"{order_text}. The CSV download below contains all "
+                f"{species_total}, in the order they appear in your data."
             )
         st.session_state.analysis_heatmap_fig = result.figure
         st.session_state.analysis_all_plots['heatmap'] = result.figure
@@ -252,6 +271,7 @@ def _select_species_sort() -> str:
 
 def _display_method_explanation(
     heatmap_type_value: str, color_scale: str = 'zscore',
+    sort_direction: str = 'desc',
 ) -> None:
     """Explain how the colour scale is computed for the selected mode.
 
@@ -281,6 +301,8 @@ def _display_method_explanation(
             "same adjustment the statistical tests use, so one zero cannot "
             "send a row to negative infinity."
         )
+        if heatmap_type_value == 'class_grouped':
+            _display_row_order_explanation(sort_direction)
         return
 
     if heatmap_type_value == 'class_aggregated':
@@ -308,13 +330,39 @@ def _display_method_explanation(
         )
 
 
-def _select_species_page(species_total: int) -> int:
+def _display_row_order_explanation(sort_direction: str) -> None:
+    """State how the class-grouped rows are ordered under fold change."""
+    direction = (
+        "the largest increase down to the largest decrease"
+        if sort_direction == 'desc'
+        else "the largest decrease up to the largest increase"
+    )
+    st.markdown("**How the rows are ordered**:")
+    st.caption(
+        "Within each lipid class block, species are ranked by their mean "
+        "log2FC across the samples outside the control condition, running "
+        f"from {direction}. The control samples are left out of that average "
+        "because they sit at zero by construction and would only pull every "
+        "species toward the middle; with more than two conditions selected, "
+        "all the non-control ones are averaged together. The class blocks "
+        "themselves keep their order, so a large change in one class never "
+        "moves a species into another, and a species with no usable value "
+        "sits at the foot of its block."
+    )
+
+
+def _select_species_page(species_total: int, sorted_by_fc: bool = False) -> int:
     """Show a species-range picker and return the chosen zero-based page.
 
     One row per species would make a tall selection unreadable, so the species
     are paged. Returns 0 without rendering anything when they all fit on one
     page. Narrowing the class selection is not an alternative here: a single
     class can hold far more species than fit.
+
+    Args:
+        species_total: Number of species in the current selection.
+        sorted_by_fc: Whether the species are ranked by fold change inside
+            their class block, which is what decides who lands on a page.
     """
     if species_total <= GROUPED_PAGE_SIZE:
         return 0
@@ -332,9 +380,15 @@ def _select_species_page(species_total: int) -> int:
         format_func=_label,
         key='heatmap_species_page',
         help=(
-            "One row per species, so the species are shown a page at a time "
-            "in lipid class order. Use 'Aggregated by Class' to see every "
-            "class at once instead."
+            "One row per species, so the species are shown a page at a time, "
+            "in lipid class order"
+            + (
+                " and ranked by fold change inside each class. A class larger "
+                "than one page therefore continues onto the next page, "
+                "carrying on down its own ranking. "
+                if sorted_by_fc else ". "
+            )
+            + "Use 'Aggregated by Class' to see every class at once instead."
         ),
     )
 
