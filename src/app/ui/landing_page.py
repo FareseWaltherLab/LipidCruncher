@@ -213,28 +213,27 @@ def _display_modules_overview() -> None:
 
 
 def _display_call_to_action() -> None:
-    """Display the data-type choice, then the AI Studio option.
+    """Display the three destinations as one stacked column.
 
-    Two separate questions: which pipeline the data belongs in (general
-    lipidomics vs isotope tracing), and — for lipidomics data that isn't in
-    a supported format — whether to route through AI Studio first.
-
-    Button tiers follow that split rather than importance. The two data-type
-    buttons are both ``primary`` because they are genuine peers: "what type of
-    data?" has two valid answers, and for a tracing experiment the isotope
-    workflow is the path, not a fallback. AI Studio is ``tertiary`` so it reads
-    as the side door it is.
+    General Lipidomics is the primary call to action; isotope tracing and AI
+    Studio follow as secondary buttons, each on its own row. The AI Studio
+    paragraph sits between the second and third rows because it answers a
+    different question — not what type of data you have, but what to do when
+    its format isn't supported.
     """
     st.subheader("🎯 Ready to Crunch?")
     st.markdown("**What type of data do you want to process?**")
-    btn_col1, btn_col2 = st.columns(2)
-    with btn_col1:
+
+    _, row, _ = st.columns([1, 2, 1])
+    with row:
         if st.button("🧬 General Lipidomics", width='stretch', type="primary"):
             st.session_state.page = PAGE_APP
             st.rerun()
         st.caption("Filter, normalize, QC, visualize, and analyze lipidomics data.")
-    with btn_col2:
-        if st.button("🧪 Stable Isotope Tracing", width='stretch', type="primary"):
+
+    _, row, _ = st.columns([1, 2, 1])
+    with row:
+        if st.button("🧪 Stable Isotope Tracing", width='stretch'):
             st.session_state.page = PAGE_ISOTOPE_TRACING
             st.rerun()
         st.caption("Natural-isotope-abundance correction via IsoCorrectoR.")
@@ -249,9 +248,9 @@ def _display_call_to_action() -> None:
         "custom visualizations from any dataset."
     )
 
-    btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
-    with btn_col2:
-        if st.button("🤖 Open AI Studio", width='stretch', type="tertiary"):
+    _, row, _ = st.columns([1, 2, 1])
+    with row:
+        if st.button("🤖 Open AI Studio", width='stretch'):
             st.session_state.page = PAGE_AI_STUDIO
             st.rerun()
 

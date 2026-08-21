@@ -129,22 +129,6 @@ class TestLandingPageIntroducesEveryWorkflow:
         text = self._page_text(landing_app)
         assert "Alongside the main pipeline" in text
 
-    def test_button_tiers_group_the_data_type_choice_together(self, landing_app):
-        """The two data-type buttons are peers answering one question, so they
-        share a tier; AI Studio answers a different question and drops below.
-
-        Regression: isotope tracing rendered as secondary, making it look like
-        a sibling of AI Studio rather than of General Lipidomics — the opposite
-        of the page's structure.
-        """
-        tiers = {b.label: b.proto.type for b in landing_app.button}
-        general = next(v for k, v in tiers.items() if "General Lipidomics" in k)
-        isotope = next(v for k, v in tiers.items() if "Stable Isotope" in k)
-        ai_studio = next(v for k, v in tiers.items() if "AI Studio" in k)
-
-        assert general == isotope == "primary"
-        assert ai_studio == "tertiary"
-
     def test_release_notes_cover_both_modules(self, landing_app):
         """The 1.4 notes were written on main, which has neither module, so
         they shipped here describing a version this build does not match."""
