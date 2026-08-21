@@ -216,13 +216,12 @@ def _display_call_to_action() -> None:
     """Display the three destinations as one stacked column.
 
     General Lipidomics is the primary call to action; isotope tracing and AI
-    Studio follow as secondary buttons, each on its own row. The AI Studio
-    paragraph sits between the second and third rows because it answers a
-    different question — not what type of data you have, but what to do when
-    its format isn't supported.
+    Studio follow as secondary buttons, each on its own row. Every button gets
+    the same one-line caption underneath, so the three read as one list of
+    starting points rather than two buttons plus a paragraph.
     """
     st.subheader("🎯 Ready to Crunch?")
-    st.markdown("**What type of data do you want to process?**")
+    st.markdown("**Where do you want to start?**")
 
     _, row, _ = st.columns([1, 2, 1])
     with row:
@@ -238,21 +237,12 @@ def _display_call_to_action() -> None:
             st.rerun()
         st.caption("Natural-isotope-abundance correction via IsoCorrectoR.")
 
-    st.markdown("")
-
-    st.markdown(
-        "If your dataset is in a **different format**, use **AI Studio** to "
-        "transform it into the Generic format through a guided conversation "
-        "with AI. You can then load the result back into the LipidCruncher "
-        "main pipeline for the full analysis. AI Studio also lets you generate "
-        "custom visualizations from any dataset."
-    )
-
     _, row, _ = st.columns([1, 2, 1])
     with row:
         if st.button("🤖 Open AI Studio", width='stretch'):
             st.session_state.page = PAGE_AI_STUDIO
             st.rerun()
+        st.caption("Convert unsupported formats to Generic, and explore any dataset with AI.")
 
     st.markdown("---")
 
