@@ -80,6 +80,64 @@ class TestLandingPageNavigation:
         assert at.session_state['page'] == 'landing'
 
 
+class TestLandingPageIntroducesEveryWorkflow:
+    """A button the page never explains is a button nobody presses.
+
+    AI Studio used to appear only as a call-to-action at the very bottom —
+    no mention in the highlights, nothing in "How It Works", nothing in the
+    release notes — so a reader met it for the first time as a button for a
+    feature they had never heard of.
+    """
+
+    @staticmethod
+    def _page_text(at):
+        """Everything the reader sees, whichever element rendered it —
+        st.subheader and st.markdown land in different buckets."""
+        return " ".join(
+            e.value for e in list(at.markdown) + list(at.subheader) + list(at.header)
+        )
+
+    def test_ai_studio_is_introduced_before_its_button(self, landing_app):
+        """Assert on wording unique to the walkthrough section. Matching bare
+        "AI Studio" would pass on the call-to-action paragraph alone, which is
+        exactly the state this test exists to rule out."""
+        text = self._page_text(landing_app)
+        assert "#### 🤖 AI Studio" in text
+        assert "Four tabs" in text
+
+    def test_isotope_tracing_is_introduced_before_its_button(self, landing_app):
+        text = self._page_text(landing_app)
+        assert "Stable Isotope Tracing" in text
+        assert "IsoCorrectoR" in text
+
+    def test_both_are_framed_as_separate_workflows(self, landing_app):
+        """Regression: the isotope section sat inside the module walkthrough,
+        one heading after "Module 3" and at the same depth, so it read as a
+        fourth step of a pipeline it shares nothing with."""
+        text = self._page_text(landing_app)
+        assert "Beyond the Main Pipeline" in text
+        assert "Neither is a step in the pipeline" in text
+        # The three modules stay the pipeline's own, not the whole app's.
+        assert "The main lipidomics pipeline guides you through three" in text
+
+    def test_neither_is_labelled_as_a_bonus(self, landing_app):
+        """"Plus:" framed a parallel workflow as an add-on."""
+        assert "Plus: Stable Isotope Tracing" not in self._page_text(landing_app)
+
+    def test_both_appear_in_the_highlights(self, landing_app):
+        """They should be visible without scrolling the whole page."""
+        text = self._page_text(landing_app)
+        assert "Alongside the main pipeline" in text
+
+    def test_release_notes_cover_both_modules(self, landing_app):
+        """The 1.4 notes were written on main, which has neither module, so
+        they shipped here describing a version this build does not match."""
+        text = self._page_text(landing_app)
+        notes = text[text.find("Major Features"):]
+        assert "**Stable Isotope Tracing**" in notes
+        assert "**AI Studio**" in notes
+
+
 # =============================================================================
 # Group 2: Format Selection (3 tests)
 # =============================================================================

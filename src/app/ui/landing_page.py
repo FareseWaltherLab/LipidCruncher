@@ -133,13 +133,20 @@ def _display_hero_section() -> None:
     col3.markdown("**📊 Lipid-Specific Viz**<br>Saturation profiles, pathway maps, lipidomic heatmap", unsafe_allow_html=True)
     col4.markdown("**📈 High-Quality Outputs**<br>Interactive plots, SVG export, PDF reports", unsafe_allow_html=True)
 
+    st.markdown(
+        "Alongside the main pipeline: **🧪 Stable Isotope Tracing** for ¹³C-labelled "
+        "experiments, and **🤖 AI Studio** for exploring any dataset through a "
+        "conversation with AI."
+    )
+
     st.markdown("---")
 
 
 def _display_modules_overview() -> None:
-    """Display the three module descriptions with images."""
+    """Display the three pipeline modules, then the two workflows that sit
+    alongside them (isotope tracing and AI Studio)."""
     st.subheader("🚀 How It Works")
-    st.markdown("LipidCruncher guides you through three intuitive modules:")
+    st.markdown("The main lipidomics pipeline guides you through three intuitive modules:")
 
     # Module 1
     st.markdown("#### Module 1: Filter and Normalize")
@@ -175,14 +182,31 @@ def _display_modules_overview() -> None:
 
     st.markdown("---")
 
-    # Stable Isotope Tracing — separate, parallel workflow
-    st.markdown("#### 🧪 Plus: Stable Isotope Tracing")
+    # The two workflows that sit alongside the pipeline rather than inside it.
+    # Grouped under one subheader, at the same heading depth as each other, so
+    # neither reads as a fourth module of the pipeline above.
+    st.subheader("🧭 Beyond the Main Pipeline")
+    st.markdown(
+        "Two workflows run alongside those three modules. Neither is a step in "
+        "the pipeline — each is its own page, reachable from the bottom of this one."
+    )
+
+    st.markdown("#### 🧪 Stable Isotope Tracing")
     st.markdown("""
     **A separate workflow for stable isotope (e.g. ¹³C) tracing experiments.** Upload IsoCorrectoR's three
     input files (Measurement, Molecule, Element) and run natural-isotope-abundance correction with the real
     IsoCorrectoR package—removing the naturally-occurring heavy-isotope background so the remaining signal
     reflects only the label you fed in. View and download the corrected intensities, fractions, mean
-    enrichment, and residuals. Choose **Stable Isotope Tracing** below to start.
+    enrichment, and residuals.
+    """)
+
+    st.markdown("#### 🤖 AI Studio")
+    st.markdown("""
+    **Explore any dataset through a conversation.** Four tabs: ask how LipidCruncher itself works; ask
+    questions about your own data and get the answer computed on the spot; convert an unsupported CSV into
+    the Generic format so the main pipeline can take it; or describe a figure and have it generated. Bring
+    data in by uploading a CSV or by importing what the main pipeline is already holding—raw, normalized,
+    or QC-filtered—and download transformed results to feed back into it.
     """)
 
     st.markdown("---")
@@ -235,6 +259,14 @@ def _display_whats_new() -> None:
     with st.expander("New Features & Improvements", expanded=False):
         st.markdown("""
         ### Major Features
+        - **Stable Isotope Tracing**: A separate workflow for stable isotope (e.g. ¹³C) tracing
+          experiments—upload IsoCorrectoR's three input files and run natural-isotope-abundance
+          correction with the real IsoCorrectoR package, then view and download the corrected
+          intensities, fractions, mean enrichment, and residuals
+        - **AI Studio**: A conversational workspace with four tabs—questions about LipidCruncher,
+          questions about your own data, converting an unsupported CSV into the Generic format,
+          and custom visualizations—working either on an uploaded file or on data imported from
+          the main pipeline (raw, normalized, or QC-filtered)
         - **LipidSearch 5.2 Support**: The LipidSearch format (renamed from "LipidSearch 5.0")
           now covers both 5.0 and 5.2 exports—tab and comma delimiters are detected automatically,
           and condition-grouped dual-polarity exports are merged into single samples using the
