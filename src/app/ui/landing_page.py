@@ -218,6 +218,12 @@ def _display_call_to_action() -> None:
     Two separate questions: which pipeline the data belongs in (general
     lipidomics vs isotope tracing), and — for lipidomics data that isn't in
     a supported format — whether to route through AI Studio first.
+
+    Button tiers follow that split rather than importance. The two data-type
+    buttons are both ``primary`` because they are genuine peers: "what type of
+    data?" has two valid answers, and for a tracing experiment the isotope
+    workflow is the path, not a fallback. AI Studio is ``tertiary`` so it reads
+    as the side door it is.
     """
     st.subheader("🎯 Ready to Crunch?")
     st.markdown("**What type of data do you want to process?**")
@@ -228,7 +234,7 @@ def _display_call_to_action() -> None:
             st.rerun()
         st.caption("Filter, normalize, QC, visualize, and analyze lipidomics data.")
     with btn_col2:
-        if st.button("🧪 Stable Isotope Tracing", width='stretch'):
+        if st.button("🧪 Stable Isotope Tracing", width='stretch', type="primary"):
             st.session_state.page = PAGE_ISOTOPE_TRACING
             st.rerun()
         st.caption("Natural-isotope-abundance correction via IsoCorrectoR.")
@@ -245,7 +251,7 @@ def _display_call_to_action() -> None:
 
     btn_col1, btn_col2, btn_col3 = st.columns([1, 2, 1])
     with btn_col2:
-        if st.button("🤖 Open AI Studio", width='stretch'):
+        if st.button("🤖 Open AI Studio", width='stretch', type="tertiary"):
             st.session_state.page = PAGE_AI_STUDIO
             st.rerun()
 
