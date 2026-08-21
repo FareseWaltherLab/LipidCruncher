@@ -130,8 +130,10 @@ LipidCruncher/
 │       │   ├── ai_chat/                     #   AI Studio service layer (Anthropic API + sandbox)
 │       │   │   ├── __init__.py              #     Public API: re-exports AI services + exceptions
 │       │   │   ├── exceptions.py            #     AIChatError, AIClientError, SandboxError, TransformationError
-│       │   │   ├── ai_client.py             #     Anthropic SDK wrapper + tool-use loop
-│       │   │   ├── sandbox.py               #     AST-validated sandboxed code execution
+│       │   │   ├── ai_client.py             #     Anthropic SDK wrapper + tool-use loop (blocking + streaming)
+│       │   │   ├── sandbox.py               #     Sandboxed execution, parent side (validate → spawn child → time out)
+│       │   │   ├── sandbox_runner.py        #     Child-process entry point that actually runs the AI's code
+│       │   │   ├── interaction_logger.py    #     One JSON record per chat turn / feedback event (stdout → CloudWatch)
 │       │   │   ├── schema_extractor.py      #     DataFrame → schema description for prompts
 │       │   │   ├── codebase_tools.py        #     search_codebase / read_file_section / list_files / read_documentation tools
 │       │   │   ├── knowledge_base.py        #     Condensed app knowledge embedded in system prompts
@@ -169,6 +171,7 @@ LipidCruncher/
 │       │   ├── quality_check.py             #   QualityCheckWorkflow
 │       │   ├── analysis.py                  #   AnalysisWorkflow
 │       │   ├── ai_chat.py                   #   AIChatWorkflow (transform / viz / data Q / LC Q / unified)
+│       │   ├── pipeline_api.py              #   PipelineAPI — the `lc` object AI-generated code calls into
 │       │   └── isotope_tracing.py           #   IsotopeTracingWorkflow
 │       ├── adapters/
 │       │   └── streamlit_adapter.py         #   StreamlitAdapter
@@ -188,6 +191,7 @@ LipidCruncher/
 │           │   ├── _data_questions_ui.py    #     Tab 2: dataset exploration
 │           │   ├── _data_transform_ui.py    #     Tab 3: CSV → Generic transformation
 │           │   ├── _viz_generation_ui.py    #     Tab 4: custom visualization
+│           │   ├── _interaction_log.py      #     Per-turn logging + thumbs / comment feedback widgets
 │           │   └── _unified_chat_ui.py      #     Single-chat variant (legacy / fallback)
 │           ├── sidebar/                     #   Sidebar input components
 │           │   ├── file_upload.py
@@ -223,9 +227,9 @@ LipidCruncher/
 │               └── analysis_docs.py         #   Statistical testing & saturation docs
 ├── tests/
 │   ├── conftest.py                          # Shared fixtures
-│   ├── unit/                                # 54 unit test modules (incl. AI chat models, sandbox, codebase tools, transformer, viz generator, schema extractor, scope, validation, adapter, workflow)
-│   ├── integration/                         # 6 integration test modules (incl. test_ai_tool_use.py)
-│   └── ui/                                  # 6 UI test modules (incl. test_navigation.py for AI Studio routing)
+│   ├── unit/                                # 64 unit test modules (incl. AI chat models, sandbox isolation, codebase tools, transformer, viz generator, schema extractor, scope, validation, adapter, workflow)
+│   ├── integration/                         # 6 integration test modules (incl. test_ai_tool_use.py, test_isotope_tracing_golden.py)
+│   └── ui/                                  # 10 UI test modules (incl. test_navigation.py for AI Studio routing)
 ├── sample_datasets/                         # Test data (one per format)
 │   ├── lipidsearch5_test_dataset.csv
 │   ├── msdial_test_dataset.csv
@@ -233,6 +237,7 @@ LipidCruncher/
 │   ├── mw_test_dataset.csv
 │   └── isotope_tracing/                     # IsoCorrectoR inputs + golden output
 ├── images/                                  # UI assets (logo, module PDFs)
+├── .streamlit/config.toml                   # Server settings (upload cap: maxUploadSize = 1024 MB)
 ├── requirements.txt
 ├── pytest.ini
 ├── Dockerfile                               # Single image: app + AI Studio + R/IsoCorrectoR
@@ -243,7 +248,7 @@ LipidCruncher/
 
 ## Application Flow
 
-The app has four pages: a **landing page**, the **main app page**, an **AI Studio page**, and the **isotope tracing page**. The landing page asks *what type of data?* and routes to either the main lipidomics app (`Page.APP`) or the stable isotope tracing workflow (`Page.ISOTOPE_TRACING`). The main app page has two modules that the user progresses through sequentially. The AI Studio is reachable from the landing page or from the end of Module 2 (so users can take pipeline output into AI-driven exploration); a round-trip back to the main app preserves sidebar widget state via `StreamlitAdapter.preserve_main_app_widgets()` / `restore_navigation_widgets()`.
+The app has four pages: a **landing page**, the **main app page**, an **AI Studio page**, and the **isotope tracing page**. The landing page asks *where do you want to start?* and offers all three destinations as stacked buttons — the main lipidomics app (`Page.APP`), the stable isotope tracing workflow (`Page.ISOTOPE_TRACING`), and the AI Studio (`Page.AI_STUDIO`) — each with a one-line caption. The main app page has two modules that the user progresses through sequentially. The AI Studio is also reachable from the end of Module 2 (so users can take pipeline output into AI-driven exploration); a round-trip back to the main app preserves sidebar widget state via `StreamlitAdapter.preserve_main_app_widgets()` / `restore_navigation_widgets()`.
 
 ### Module 1: Data Cleaning, Filtering, & Normalization
 
@@ -283,14 +288,17 @@ Each analysis type is independent and user-selectable. All produce interactive p
 
 ### AI Studio (separate page)
 
-Reached via `Page.AI_STUDIO`. Independent of the main pipeline — users can upload a fresh CSV or import the current pipeline DataFrame (raw or normalized). The page exposes four tabs:
+Reached via `Page.AI_STUDIO`. Independent of the main pipeline — users can upload a fresh CSV or import the current pipeline DataFrame in one of three states (`chat_studio_pipeline_source`): `raw` (standardized column names, not yet filtered or normalized), `normalized` (Module 1 output), or `qc_filtered` (Module 2 output, with high-CoV lipids and PCA-removed samples excluded). The page exposes four tabs:
 
 1. **LipidCruncher Questions** — Q&A about the app's features and methods. No data required. The AI may use codebase / documentation tools to ground its answers.
 2. **Data Questions** — explore and summarize the uploaded dataset. AI generates pandas code that runs in the sandbox; results appear as inline tables and printed text.
 3. **Transform to Generic** — convert an arbitrary CSV into LipidCruncher's Generic format. A format diagnostic guesses lipid-name / intensity / metadata columns; the AI iterates on transformation code until the output validates.
 4. **Custom Visualization** — generate Plotly figures from natural-language requests against Module 1 output (gated by `Module1ValidationResult`).
 
-All AI-generated code runs through `SandboxService` (AST validation + curated builtins + timeout), and the AI runs in a tool-use loop (`AIClientService.execute_tool_loop`) so it can `search_codebase`, `read_file_section`, `list_files`, or `read_documentation` before answering.
+All AI-generated code runs through `SandboxService`, which executes it in a hardened child process (`sandbox_runner.py`) with AST validation and curated builtins in front as defense-in-depth. The AI runs in a tool-use loop (`AIClientService.execute_tool_loop`, or `stream_tool_loop` for the token-by-token variant every tab uses) so it can `search_codebase`, `read_file_section`, `list_files`, or `read_documentation` before answering, and generated code can call into the pipeline itself through `PipelineAPI` (exposed as `lc`). Each turn — and each thumbs-up/down with optional comment — is logged as a JSON record by `interaction_logger`.
+
+In-app guidance sits alongside the tabs: page-level *How to use the AI Studio* and *How the AI works — and its limits* expanders (what reaches the API, where code runs, session caps of 50 messages / 20 executions), plus an *About this tab* expander in each of the four tabs.
+
 ### Stable Isotope Tracing (separate workflow)
 
 Reached from the landing-page mode choice (`Page.ISOTOPE_TRACING`); fully independent of Modules 1–2.
@@ -378,8 +386,9 @@ All services are stateless static methods. The Anthropic API key is read from `A
 
 | Service / Module | File | Purpose |
 |---|---|---|
-| `AIClientService` | `ai_client.py` | Anthropic SDK wrapper. `send_message()` for plain calls, `execute_tool_loop()` for tool-use (caps round-trips at 4), `extract_code_block()` to pull ` ```python ` blocks out of responses. |
-| `SandboxService` + `validate_code()` | `sandbox.py` | AST validator + executor for AI-generated Python. Whitelist of imports (`math`, `statistics`, `re`, plus pandas/numpy/plotly that are pre-loaded as `pd`/`np`/`px`/`go`), block-list of dunders (`__class__`, `__globals__`, `__import__`, ...) and dangerous builtins (`exec`, `eval`, `open`, `getattr`, ...). Curated `_SAFE_BUILTINS` map replaces the default builtins. Code runs on a daemon thread with a timeout. Returns `SandboxResult(success, figure, result_df, stdout, error_message, execution_time)`. |
+| `AIClientService` | `ai_client.py` | Anthropic SDK wrapper. `send_message()` for plain calls, `execute_tool_loop()` for tool-use (caps round-trips at 4), the streaming counterparts `stream_tool_loop()` / `stream_explanation()` that every tab renders through `st.write_stream`, and `extract_code_block()` to pull ` ```python ` blocks out of responses. System prompts are marked for prompt caching. |
+| `SandboxService` + `validate_code()` | `sandbox.py` | Runs AI-generated Python. **The security boundary is the child process**, not the parser: code executes via `sandbox_runner.py` in a separate process with no inherited environment (so `ANTHROPIC_API_KEY` is unreachable), no filesystem writes, no network, no subprocesses, and a hard kill on timeout. The AST validator (import whitelist — `math`, `statistics`, `re`, plus the pre-loaded `pd`/`np`/`px`/`go`; block-list of dunders and dangerous builtins) and the curated `_SAFE_BUILTINS` map run in front as defense-in-depth — never sufficient alone, since `pd`/`np` expose real modules by ordinary attribute access. Returns `SandboxResult(success, figure, result_df, stdout, error_message, execution_time)`. |
+| `sandbox_runner` | `sandbox_runner.py` | The child-process entry point (`python -m app.services.ai_chat.sandbox_runner <fd>`): reads a pickled request from stdin, hardens itself best-effort (`RLIMIT_FSIZE` 0 → no file writes, `RLIMIT_CPU`, `RLIMIT_NPROC` 0 → no subprocesses, `socket` neutered in place → no network), executes the code, and writes the pickled response to a dedicated pipe. Covered end to end by `tests/unit/test_sandbox_isolation.py`. |
 | `SchemaExtractorService` | `schema_extractor.py` | Builds a compact textual schema (column names, dtypes, example values) for inclusion in prompts — keeps raw data out of the API call. |
 | `DataTransformerService` | `data_transformer.py` | Drives the CSV → Generic format transformation: builds prompt context, calls AI, runs the returned code in the sandbox, validates that the output is Generic-shaped. Returns `TransformationResult(success, result_df, explanation, code, sandbox_result, validation_errors)`. |
 | `VizGeneratorService` | `viz_generator.py` | Generates Plotly figures from natural-language requests using `ExperimentConfig` context. Same loop: prompt → AI → sandbox → result. |
@@ -387,6 +396,7 @@ All services are stateless static methods. The Anthropic API key is read from `A
 | `knowledge_base` | `knowledge_base.py` | `get_app_knowledge()` — condensed reference (formats, modules, terminology) injected into system prompts so the assistant doesn't need to query the codebase for basic context. |
 | `prompt_templates` | `prompt_templates.py` | Per-mode system prompts (`data_transform_system_prompt`, `data_questions_system_prompt`, `lipidcruncher_questions_system_prompt`, `unified_system_prompt`) and `build_transform_context` / `build_diagnostic_context` helpers. Includes `METHODOLOGY_CLARIFICATION_RULES` so the AI clarifies methodology before running aggregations or ratios. |
 | `prompt_examples` | `prompt_examples.py` | Few-shot example prompts shown as clickable buttons in each AI Studio tab. |
+| `interaction_logger` | `interaction_logger.py` | Emits one JSON record per chat turn and per feedback event to stdout (shipped to CloudWatch Logs by the container's `awslogs` driver). Pure — the UI/adapter supplies the fields, including an anonymous session id; emission failures are swallowed so logging can never break a turn. |
 
 Exception hierarchy in `ai_chat/exceptions.py`:
 
@@ -429,7 +439,7 @@ Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strin
 | `FACHPlotterService` | Fatty acid composition heatmap |
 | `PathwayVizService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
 | `VolcanoPlotterService` | Fold-change vs. p-value scatter |
-| `LipidomicHeatmapService` | Clustered heatmap with k-means |
+| `LipidomicHeatmapService` | Heatmaps in four modes — `regular`, `clustered` (k-means), `class_grouped` (one row per species, blocked by class, paged), `class_aggregated` (one row per class) — coloured by row Z-score or by log2 fold change against a control condition; under `class_grouped` + log2FC, species are sorted within each block by mean fold change |
 
 ### Workflows
 
@@ -442,6 +452,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 | `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_pca()`, `remove_samples()`. Each step can be run independently. |
 | `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
 | `AIChatWorkflow` | One method per chat mode | Orchestrates the AI Studio chat loop. `diagnose_format()` decides if a CSV needs transformation; `validate_module1_output()` gates the viz tab. Per-mode session starters (`start_transform_session`, `start_viz_session`, `start_data_questions_session`, `start_lc_questions_session`, `start_unified_session`) and message handlers (`handle_transform_message`, `handle_viz_message`, `handle_data_questions_message`, `handle_lc_questions_message`, `handle_unified_message`). Each handler appends user/assistant messages to an immutable `ChatSession`, calls `AIClientService` (with tools where appropriate), runs returned code in the sandbox, and returns a typed result dataclass (`FormatDiagnosticResult`, `Module1ValidationResult`, `TransformStepResult`, `VizStepResult`, `DataQuestionsStepResult`, `LCQuestionsStepResult`, `UnifiedStepResult`). |
+| `PipelineAPI` | Instance methods, injected as `lc` | Not a workflow but a workflow-layer facade: gives AI-generated sandbox code the pipeline's own analytics instead of re-invented heuristics — `conditions()`, `samples_for()`, `compare_species()`, `compare_classes()`, `class_summary()`, and one method per Module 3 analysis (`bar_chart()`, `pie_charts()`, `saturation()`, `chain_length()`, `fatty_acid_composition()`, `pathway()`, `volcano()`, `heatmap()`), each returning an `LCResult`. |
 | `IsotopeTracingWorkflow` | `run()` → `IsotopeTracingResult` | Validate the three input files → run `IsotopeCorrectionService` → typed result (success + `CorrectionResult`, or `validation_errors` / `error_message`). Separate from the lipidomics pipeline. |
 
 ### Adapter
@@ -454,7 +465,9 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 - **`reset_module_state(*prefixes)`** — clears keys matching given prefixes (e.g., `'qc_'`, `'analysis_'`).
 - **Widget value preservation** — `restore_widget_value()` / `save_widget_value()` persist widget selections across module navigation.
 - **Cached wrappers** — every workflow/service call that should be cached is wrapped with `@st.cache_data` and custom hash functions for Pydantic models and DataFrames.
-- **AI Studio state** — `chat_studio_df`, `chat_studio_df_original`, `chat_studio_experiment`, `chat_studio_pipeline_source`, plus per-mode session keys `chat_transform_session`, `chat_viz_session`, `chat_data_questions_session`, `chat_unified_session`, and result caches (`chat_transform_result`, `chat_viz_figures`, `chat_result_tables`).
+- **AI Studio state** — `chat_studio_df`, `chat_studio_df_original`, `chat_studio_experiment`, `chat_studio_pipeline_source`, `studio_applied_snapshot` (set when the user confirms the inputs; the gate the three data tabs check), plus per-mode session keys `chat_transform_session`, `chat_viz_session`, `chat_data_questions_session`, `chat_unified_session`, and result caches (`chat_transform_result`, `chat_viz_figures`, `chat_result_tables`).
+- **AI streaming wrappers** — `stream_ai_transform()`, `stream_ai_viz()` and `stream_ai_data_questions()` return `(explanation_generator, finalize)`: the UI streams the explanation through `st.write_stream`, then calls `finalize()` to run the code and get the typed step result. `stream_ai_lc_questions()` returns `(session_with_user_message, text_chunk_generator)` — no code to execute, so the UI just accumulates the text. `get_cached_lc_answer()` / `set_cached_lc_answer()` cache the canonical answers to the example LipidCruncher questions (instant repeats, and a fallback when the API is down), and `log_ai_feedback()` records thumbs / comments.
+- **Isotope tracing** — `run_isotope_correction()` wraps `IsotopeTracingWorkflow` for the isotope page.
 - **Cross-page widget preservation** — `preserve_main_app_widgets()` / `preserve_ai_studio_widgets()` snapshot widget values into `_nav_preserved_*` keys before navigation; `restore_navigation_widgets()` re-hydrates them on return. Required because Streamlit garbage-collects widget keys when their owning page is not rendered.
 
 ### UI
@@ -487,14 +500,15 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 **AI Studio** (`ui/ai_studio_page.py` + `ui/ai_chat/`):
 | File | Responsibility |
 |---|---|
-| `ai_studio_page.py` | Top-level page: data-source sidebar (upload / import from main pipeline), tab routing, round-trip navigation back to the main app. Locks data-dependent tabs behind a "Confirm" step. |
+| `ai_studio_page.py` | Top-level page: data-source sidebar (upload / import from main pipeline), tab routing, round-trip navigation back to the main app. Locks data-dependent tabs behind a "Confirm" step. Carries the two page-level help expanders (*How to use the AI Studio*, *How the AI works — and its limits*); each tab module carries its own *About this tab* expander. |
 | `ai_chat/chat_panel.py` | Shared chat-rendering helpers used by every tab (message rendering, code expanders, example-prompt buttons, figure / table display). |
 | `ai_chat/_lipidcruncher_questions_ui.py` | Tab 1 — Q&A about LipidCruncher itself. |
 | `ai_chat/_data_questions_ui.py` | Tab 2 — natural-language exploration of the loaded DataFrame. |
 | `ai_chat/_data_transform_ui.py` | Tab 3 — CSV → Generic format transformation, with download of the result. |
 | `ai_chat/_viz_generation_ui.py` | Tab 4 — natural-language Plotly figure generation. Gated by `Module1ValidationResult`. |
+| `ai_chat/_interaction_log.py` | `record_turn()` (one structured log record per turn) and `render_feedback()` (thumbs up/down + optional comment under each assistant message). |
 | `ai_chat/_unified_chat_ui.py` | Single-chat variant (legacy / fallback before tabs were reintroduced). |
-**Isotope tracing page** (`isotope_tracing_page.py`): a standalone page (route `Page.ISOTOPE_TRACING`, reached from the landing-page mode choice) for the stable isotope tracing workflow — three file uploaders + sample-data loader, a settings panel mapping 1:1 to `IsotopeCorrectionConfig`, in-app help expanders (input-file requirements, about-correction), run button, result tables with per-table CSV download, run-log expander, and a graceful "R runtime unavailable" notice.
+**Isotope tracing page** (`isotope_tracing_page.py`): a standalone page (route `Page.ISOTOPE_TRACING`, reached from the landing-page mode choice) for the stable isotope tracing workflow — three file uploaders + sample-data loader, a settings panel mapping 1:1 to `IsotopeCorrectionConfig`, in-app help expanders (*How to Run a Correction* with a rejection-message → fix table, *Input File Requirements*, *About Isotope Correction*), run button, result tables with per-table CSV download and a *How to Read These Tables* expander explaining each IsoCorrectoR output and what a healthy run looks like, run-log expander, and a graceful "R runtime unavailable" notice.
 
 ---
 
@@ -534,7 +548,7 @@ All session state is managed through the `SessionState` dataclass in `streamlit_
 2. **Prefixed resets** — `reset_module_state('qc_')` clears all QC keys without touching other modules.
 3. **Widget preservation** — when the user navigates between modules, widget values are saved to `_preserved_*` keys and restored on return. Cross-page navigation between the main app and AI Studio uses a separate `_nav_preserved_*` snapshot via `preserve_main_app_widgets()` / `preserve_ai_studio_widgets()` / `restore_navigation_widgets()`.
 4. **Cascade resets** — navigating back to Module 1 resets both QC and Analysis state. Going home resets everything.
-5. **Page routing** — the active page is controlled by a `Page` enum (`LANDING`, `APP`, `AI_STUDIO`) stored in `st.session_state.page`; aliases `PAGE_LANDING`, `PAGE_APP`, `PAGE_AI_STUDIO` are exported from `constants.py` for backward compatibility.
+5. **Page routing** — the active page is controlled by a `Page` enum (`LANDING`, `APP`, `AI_STUDIO`, `ISOTOPE_TRACING`) stored in `st.session_state.page`; aliases `PAGE_LANDING`, `PAGE_APP`, `PAGE_AI_STUDIO`, `PAGE_ISOTOPE_TRACING` are exported from `constants.py` for backward compatibility.
 
 **Important state keys and their flow:**
 
@@ -565,9 +579,9 @@ This allows imports like `from app.services.normalization import NormalizationSe
 
 | Directory | Count | Scope |
 |---|---|---|
-| `tests/unit/` | 42 modules | Individual services, models, plotters, adapter |
-| `tests/integration/` | 4 modules | End-to-end pipeline per module |
-| `tests/ui/` | 5 modules | Streamlit component rendering (AppTest framework) |
+| `tests/unit/` | 64 modules | Individual services, models, plotters, adapter, sandbox isolation |
+| `tests/integration/` | 6 modules | End-to-end pipeline per module, AI tool use, isotope golden run |
+| `tests/ui/` | 10 modules | Streamlit component rendering (AppTest framework) |
 
 ### Running Tests
 
@@ -624,7 +638,7 @@ source lipidcruncher_env/bin/activate
 streamlit run src/main_app.py
 ```
 
-The app runs on port 8501 by default.
+The app runs on port 8501 by default. Server settings live in `.streamlit/config.toml`; `maxUploadSize = 1024` sets the 1 GB upload cap, and the sidebar reads it back with `st.get_option("server.maxUploadSize")` rather than hard-coding a number.
 
 ---
 
@@ -697,11 +711,12 @@ The app runs on port 8501 by default.
 
 ### Extending the Sandbox
 
-Sandbox changes are security-critical — review carefully.
+Sandbox changes are security-critical — review carefully. Never route AI code around the child process: the AST validator and builtin allowlist are defense-in-depth, not the boundary.
 
 1. **New safe builtin** — add to `_SAFE_BUILTINS` in `services/ai_chat/sandbox.py`. Avoid anything that touches I/O, threading, or attribute introspection.
 2. **New whitelisted import** — add to `_WHITELISTED_IMPORTS`. Confirm the module has no `eval`/`exec`/`__import__`-style escape hatches.
-3. **Update tests** — `tests/unit/test_ai_sandbox.py` covers AST validation, blocked dunders / builtins, timeout, and output limits. Add cases for any new allowance.
+3. **Changing the child process** — process hardening lives in `_harden()` in `sandbox_runner.py`; each control is best-effort and independent, so one unavailable on the host must not prevent the others from applying.
+4. **Update tests** — `tests/unit/test_ai_sandbox.py` covers AST validation, blocked dunders / builtins, timeout, and output limits; `tests/unit/test_sandbox_isolation.py` drives each escape (env, filesystem, network, subprocess) end to end through the real child process. Both must stay passing.
 
 ### Adding a New QC Step
 
