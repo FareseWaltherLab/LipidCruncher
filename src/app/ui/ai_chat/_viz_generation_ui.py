@@ -34,6 +34,34 @@ def _figure_has_data(fig) -> bool:
     return False
 
 
+_ABOUT_TAB = """
+**What this tab does** — builds a custom Plotly figure from your data. The AI
+writes the plotting code, it runs here, and the figure appears in the
+conversation.
+
+**What it needs** — data that has already been through **Module 1** of the main
+pipeline (cleaned, zero-filtered, normalized), i.e. `LipidMolec`, `ClassKey`, and
+`intensity[sN]` / `concentration[sN]` columns. The usual route is *Start
+Crunching* on the home page, then **Import from main pipeline** in the sidebar.
+
+**Describing a plot** — name the chart type, what goes on each axis, how to group
+or colour it, and which classes, species, or conditions to include. For example:
+*box plot of TG species per condition, log10 scale, coloured by condition*.
+
+**Working with a figure**
+
+- The Plotly toolbar (top-right of the chart) zooms, pans, and saves a PNG.
+- **View code** shows exactly how the figure was built — including any
+  aggregation or transformation applied on the way.
+- Refine by asking for changes ("same plot, but split by chain length") rather
+  than starting over; the AI keeps the previous figure in context.
+
+**This is not Module 3.** Nothing here is statistically validated: no tests,
+corrections, or significance markers are applied unless you ask for them, and
+even then the built-in analyses remain the reference implementation.
+"""
+
+
 def _render_messages(session) -> None:
     """Render all chat messages with inline figures.
 
@@ -74,6 +102,9 @@ def render_viz_chat(analysis_df, experiment) -> None:
         experiment: Experiment configuration.
     """
     session = st.session_state.chat_viz_session
+
+    with st.expander("ℹ️ About this tab", expanded=False):
+        st.markdown(_ABOUT_TAB)
 
     # Show introductory message if no messages yet
     if len(session.messages) == 0:

@@ -23,6 +23,36 @@ _EXAMPLE_PROMPTS = [
 ]
 
 
+_ABOUT_TAB = """
+**What this tab does** — converts a dataset LipidCruncher can't read directly
+into the **Generic** format the main pipeline accepts. The AI writes the
+conversion code, runs it here on your file, and hands back the result.
+
+**The Generic format** is deliberately plain: column 1 = lipid names (any
+naming convention — LipidCruncher standardizes them to LIPID MAPS notation on
+upload), columns 2+ = one numeric intensity column per sample, one row per
+species, and **no other columns** (mass, retention time, scores and the like are
+dropped).
+
+**The round trip**
+
+1. Describe your file, or just ask for the transformation.
+2. Check **Preview transformed data**, and **View code** for what was actually
+   done to your numbers.
+3. Download the CSV.
+4. Upload it on the main pipeline as a **Generic** dataset and run the normal
+   Module 1 → 2 → 3 analysis.
+
+**Also useful before converting** — asking to *see* something ("list the internal
+standards you can find", "show the distinct values in column X") prints an
+answer instead of producing a file.
+
+**Check the preview before you download.** The AI decides which columns are
+samples and which are metadata from their names; if it guessed wrong, say which
+columns are which and ask it to redo the transform.
+"""
+
+
 def _render_messages(session) -> None:
     """Render all chat messages in the session."""
     for msg in session.messages:
@@ -41,6 +71,9 @@ def render_transform_chat(source_df) -> None:
         source_df: The user's uploaded DataFrame.
     """
     session = st.session_state.chat_transform_session
+
+    with st.expander("ℹ️ About this tab", expanded=False):
+        st.markdown(_ABOUT_TAB)
 
     # Show introductory message with format diagnostic
     if len(session.messages) == 0:

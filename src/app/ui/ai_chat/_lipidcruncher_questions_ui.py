@@ -25,6 +25,28 @@ _EXAMPLE_PROMPTS = [
 ]
 
 
+_ABOUT_TAB = """
+**What this tab does** — answers questions about LipidCruncher itself: what a
+feature does, which method sits behind it, why a default is what it is, what a
+supported format requires.
+
+**Where the answers come from** — LipidCruncher's own paper, supplementary
+methods, release notes, and source code, which the AI reads while composing the
+answer rather than recalling from memory. No code runs, and this tab never sees
+your data — so it works with nothing uploaded.
+
+**Ask it things like**
+
+- *Why is Welch's t-test the default rather than Student's?*
+- *What does the BQC CoV filter actually remove?*
+- *Which normalization should I use if I have no internal standards?*
+- *How does LipidCruncher decide which duplicate lipid row to keep?*
+
+**It cannot** compute anything on your dataset — that's the **Data Questions**
+tab.
+"""
+
+
 def _render_messages(session) -> None:
     """Render all chat messages in the session."""
     for msg in session.messages:
@@ -36,6 +58,9 @@ def _render_messages(session) -> None:
 def render_lc_questions_chat() -> None:
     """Render the LipidCruncher questions chat interface."""
     session = st.session_state.chat_lc_questions_session
+
+    with st.expander("ℹ️ About this tab", expanded=False):
+        st.markdown(_ABOUT_TAB)
 
     # Show introductory message if no messages yet
     if len(session.messages) == 0:

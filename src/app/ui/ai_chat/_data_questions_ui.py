@@ -23,6 +23,34 @@ _EXAMPLE_PROMPTS = [
 ]
 
 
+_ABOUT_TAB = """
+**What this tab does** — answers questions about the dataset loaded in the
+sidebar. The AI writes pandas code, that code runs here on your data, and you
+see what it returned.
+
+**How to read an answer** — the reply is the AI's explanation; **View code**
+shows the pandas that actually produced it, and **Result Table** holds the rows
+it returned. The code is the method — read it before quoting a number.
+
+**Ask it things like**
+
+- *How many species per class, per condition?*
+- *Which samples have the most missing values?*
+- *Median intensity per sample*
+- *List the internal standards present in this dataset*
+
+**Getting better answers**
+
+- Say what a column holds when its header is cryptic — the AI infers meaning
+  from column names and three sample rows.
+- Ask one thing at a time; follow-up questions keep the earlier context.
+- If a result looks wrong, say what's wrong instead of rephrasing from scratch.
+
+**It never modifies your dataset** — everything here is read-only. To produce a
+new file, use **Transform to Generic**.
+"""
+
+
 def _render_messages(session) -> None:
     """Render all chat messages in the session."""
     for msg in session.messages:
@@ -41,6 +69,9 @@ def render_data_questions_chat(source_df) -> None:
         source_df: The user's uploaded DataFrame.
     """
     session = st.session_state.chat_data_questions_session
+
+    with st.expander("ℹ️ About this tab", expanded=False):
+        st.markdown(_ABOUT_TAB)
 
     # Show introductory message if no messages yet
     if len(session.messages) == 0:

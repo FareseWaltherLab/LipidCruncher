@@ -46,6 +46,48 @@ _AI_STUDIO_BLOCKED_FORMATS: frozenset = frozenset({
 })
 
 
+# Method / transparency documentation for the Studio as a whole. Kept next to
+# the "How to use" copy it sits beside in the UI.
+_HOW_AI_WORKS_DOC = """
+**What the AI is sent**
+
+Your dataset is not uploaded to the AI. For the three data tabs, what goes to
+Anthropic's API is a **schema**: the shape, every column name with its dtype and
+non-null count, and the first 3 rows as a formatting sample — plus your question
+and the conversation so far. The full table stays on the machine running
+LipidCruncher. (Anything the generated code *prints* becomes part of the
+conversation, so it is visible to the AI on later turns.)
+
+**How an answer is produced**
+
+Data Questions, Transform to Generic, and Custom Visualization do not answer from
+the model's memory. The AI writes **Python (pandas / Plotly)**, that code is
+executed here against your data, and you are shown what it returned. Every such
+answer carries a **View code** expander — that code *is* the method. Read it
+before you trust the number.
+
+Generated code runs in a locked-down child process: no network, no file writes,
+no subprocesses, a 10-second limit, and no access to the app's environment.
+
+**LipidCruncher Questions** works differently — no code, no data. It answers from
+LipidCruncher's own paper, supplementary methods, release notes, and source code,
+which it reads with tools while composing the answer.
+
+**Limits worth knowing**
+
+- The AI infers what your columns mean from their names and three sample rows.
+  Ambiguous names get misread — check the code, and say what a column holds when
+  it isn't obvious from the header.
+- The same question asked twice can produce differently written code. For
+  anything headed into a figure or a manuscript, download the result (and keep
+  the code) so the exact analysis is on record.
+- The main pipeline's methods are validated and documented; AI Studio is an
+  exploration tool. When both could answer a question, prefer the pipeline.
+- Each session is capped at **50 messages** and **20 code executions**. Use
+  **Reset Chat** in a tab to start fresh.
+"""
+
+
 def _is_blocked_standard_format() -> bool:
     """True when the uploaded file is a known standard format that should
     go through the main pipeline first. Pipeline imports are exempt: the
@@ -964,6 +1006,9 @@ def display_ai_studio_page() -> None:
   use **Import from main pipeline** in the sidebar.
                 """
             )
+
+        with st.expander("📖 How the AI works — and its limits", expanded=False):
+            st.markdown(_HOW_AI_WORKS_DOC)
 
         st.markdown("---")
 

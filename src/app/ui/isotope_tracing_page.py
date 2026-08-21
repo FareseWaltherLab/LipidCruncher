@@ -28,6 +28,33 @@ _SAMPLE_DIR = Path(__file__).parents[3] / "sample_datasets" / "isotope_tracing"
 # In-app documentation (mirrors format_requirements.py / data-processing docs)
 # =============================================================================
 
+_HOW_TO_RUN_DOC = """
+### 🚀 Running a Correction
+
+1. **Load your inputs** in the sidebar — upload the Measurement, Molecule, and
+   Element CSVs, or click **Load sample data** for the bundled ¹³C example.
+2. **Match the resolution mode to your isotopologue IDs** under *Correction
+   settings*: **Ultra-high-resolution mode** ON for element-specific IDs
+   (`_C0`, `_C1`), OFF for plain mass-shift IDs (`_0`, `_1`).
+3. **Check the remaining settings.** The defaults — correct tracer impurity,
+   correct tracer element in the core molecule, calculate mean enrichment —
+   suit most tracing experiments.
+4. **Click Run correction.** The three files are checked structurally first,
+   so most mistakes are reported before IsoCorrectoR is invoked.
+5. **Read the outputs.** Corrected intensities appear first; the remaining
+   IsoCorrectoR tables and the run log follow in expanders, each downloadable
+   as CSV.
+
+**If the run is rejected**
+
+| Message | What to do |
+|---------|------------|
+| *…do not match any molecule in the Molecule file* | Every measurement ID must begin with a molecule name from the Molecule file (`PC_34:1` → `PC_34:1_C0`). Check spelling and separators. |
+| *Measurement IDs use ultra-high-resolution / standard-resolution labeling* | The ID style and the *Ultra-high-resolution mode* setting disagree — flip the setting, or relabel the isotopologues. |
+| *…contains non-numeric intensity values* | Remove text (`N/A`, `n.d.`, thousands separators) from the sample columns; leave missing values blank. |
+| *R runtime unavailable* | This deployment has no R + IsoCorrectoR installed. The rest of LipidCruncher is unaffected. |
+"""
+
 _INPUT_REQUIREMENTS_DOC = """
 ### 🧪 IsoCorrectoR Input Files
 
@@ -98,8 +125,40 @@ and raw data, each downloadable as CSV.
 """
 
 
+_OUTPUTS_DOC = """
+### 📊 What Each Output Table Means
+
+| Table | What it contains |
+|-------|------------------|
+| **Corrected** | Isotopologue intensities after natural-abundance correction (and tracer-impurity correction, if enabled) — the numbers to carry into downstream quantification. |
+| **Corrected Fractions** | The same corrected values as fractions of each molecule's total signal in that sample (they sum to 1 per molecule per sample) — the labeling *pattern*, independent of how much lipid was there. |
+| **Mean Enrichment** | The average fraction of tracer-element positions carrying the label, per molecule per sample: 0 = unlabeled, 1 = fully labeled. One number summarizing each labeling pattern. |
+| **Raw Data** | Your measured intensities as IsoCorrectoR read them — use it to confirm the files were parsed the way you expected. |
+| **Residuals** | Measured minus back-calculated intensities: the part of the signal the correction model could not explain. |
+| **Relative Residuals** | The same discrepancy relative to the measured signal — the scale-free version, and the one worth reading. |
+
+**What to look for**
+
+- **Relative residuals near zero.** Large values flag a mismatch between your data
+  and the model: a wrong elemental formula in the Molecule file, a missing
+  isotopologue row, an isobaric co-elution, or a peak too small to correct.
+- **Corrected values that go negative.** Correction *subtracts* the
+  natural-abundance contribution, so a noisy low-intensity isotopologue can dip
+  slightly below zero — a few near-zero values are normal. Systematically
+  negative values point to the same causes as large residuals.
+- **Mean enrichment between 0 and 1**, and consistent across replicates of a
+  condition. Replicates that disagree are a labeling or sample-prep problem, not
+  a correction problem.
+- **Corrected vs. raw.** Heavy isotopologues should shrink once their
+  natural-abundance share is removed. If nothing changed, check that the tracer
+  element's mass shift and purity are actually filled in in the Element file.
+"""
+
+
 def _display_docs() -> None:
-    """Render the input-requirements and about-correction help expanders."""
+    """Render the how-to, input-requirements and about-correction expanders."""
+    with st.expander("🚀 How to Run a Correction", expanded=False):
+        st.markdown(_HOW_TO_RUN_DOC)
     with st.expander("📋 Input File Requirements", expanded=False):
         st.markdown(_INPUT_REQUIREMENTS_DOC)
     with st.expander("📖 About Isotope Correction", expanded=False):
@@ -249,6 +308,10 @@ def _display_results(result) -> None:
 
     correction = result.correction
     st.success("Correction complete.")
+
+    # How to read the tables, next to the tables themselves.
+    with st.expander("📖 How to Read These Tables", expanded=False):
+        st.markdown(_OUTPUTS_DOC)
 
     # Primary output: the corrected intensities.
     st.markdown("#### Corrected intensities")
