@@ -2,7 +2,12 @@
 
 A professional lipidomics data analysis application built with Streamlit, developed by the Farese & Walther Lab at Memorial Sloan Kettering Cancer Center. LipidCruncher enables researchers to process, analyze, and visualize lipidomic data from multiple sources without requiring bioinformatics expertise.
 
-The app also includes an **AI Studio** — a standalone page with a Claude-powered chat that lets users ask questions about their data, transform arbitrary CSVs into LipidCruncher's Generic format, and generate custom Plotly visualizations from natural language. AI-generated code runs in a sandboxed execution environment.
+Two workflows sit alongside that pipeline, each on its own page rather than as a step inside it:
+
+- **AI Studio** — a Claude-powered chat with four tabs: questions about LipidCruncher itself, questions about the user's own data, converting an unsupported CSV into the Generic format, and custom Plotly visualizations. AI-generated code is executed in a hardened child process, never in the app process.
+- **Stable Isotope Tracing** — natural-isotope-abundance correction for ¹³C/¹⁵N tracing experiments, run through the real IsoCorrectoR R package in an `Rscript` subprocess.
+
+Both follow the same layering as the main pipeline; each adds one out-of-process execution boundary of its own.
 
 ---
 
@@ -12,6 +17,10 @@ The app also includes an **AI Studio** — a standalone page with a Claude-power
 2. [Architecture Overview](#architecture-overview)
 3. [Directory Structure](#directory-structure)
 4. [Application Flow](#application-flow)
+   - [Module 1: Data Cleaning, Filtering, & Normalization](#module-1-data-cleaning-filtering--normalization)
+   - [Module 2: Quality Check & Analysis](#module-2-quality-check--analysis-single-page)
+   - [AI Studio](#ai-studio-separate-page)
+   - [Stable Isotope Tracing](#stable-isotope-tracing-separate-workflow)
 5. [Layer-by-Layer Reference](#layer-by-layer-reference)
    - [Models](#models)
    - [Services](#services)
@@ -79,13 +88,36 @@ LipidCruncher follows a **layered architecture** with strict dependency rules �
 └─────────────────────────────────────────────────┘
 ```
 
+**Where the two companion subsystems sit.** Neither is a parallel architecture — both enter at the UI layer and descend the same stack. What each adds is a boundary at the bottom, where work leaves the Python process:
+
+```
+AI Studio                              Stable Isotope Tracing
+─────────                              ──────────────────────
+ui/ai_studio_page.py + ui/ai_chat/     ui/isotope_tracing_page.py
+        │                                      │
+   StreamlitAdapter                       StreamlitAdapter
+        │                                      │
+ workflows/ai_chat.py                  workflows/isotope_tracing.py
+ workflows/pipeline_api.py  (`lc`)             │
+        │                                      │
+ services/ai_chat/                     services/isotope_correction/
+        │                                      │
+   ┌────▼─────────────────┐              ┌─────▼──────────────┐
+   │ child process        │              │ Rscript subprocess │
+   │ sandbox_runner.py    │              │ run_isocorrector.R │
+   │ UNTRUSTED (AI code)  │              │ TRUSTED (ours)     │
+   └──────────────────────┘              └────────────────────┘
+```
+
+The two boundaries exist for opposite reasons. The sandbox child process contains code **we did not write and do not trust**; the `Rscript` subprocess runs a bundled wrapper that *is* ours, and exists only because IsoCorrectoR is an R package and the app is Python. See [AI Chat Services](#ai-chat-services-servicesai_chat) and [Isotope Correction](#isotope-correction-servicesisotope_correction) for each.
+
 **Key design principles:**
 
 - **Services and workflows are pure** — they have zero Streamlit dependencies, use only static methods, and are fully testable in isolation.
 - **Models are immutable** — Pydantic models with `frozen=True` make them hashable and safe for `@st.cache_data`.
 - **The adapter is the only bridge** — `StreamlitAdapter` is the sole point where Streamlit concerns (caching, session state) meet business logic.
 - **UI modules are thin** — they call adapter/workflow methods and render results; no data processing logic lives here.
-- **AI-generated code is untrusted** — the AI Studio adds an extra security layer: every model output goes through `SandboxService` (AST validation + curated builtins + timeout) before execution. The sandbox is the security boundary, not AI compliance.
+- **AI-generated code is untrusted** — every model output goes through `SandboxService` before execution. **The security boundary is the child process**, not the parser: code runs via `sandbox_runner.py` with no inherited environment, no filesystem writes, no network, no subprocesses, and a hard kill on timeout. The AST validator and curated builtins run in front of it as defense-in-depth, never as the boundary on their own.
 
 ---
 
