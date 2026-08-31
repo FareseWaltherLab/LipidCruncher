@@ -63,3 +63,26 @@ def test_unknown_exception_preserves_detail():
 def test_context_prefix_on_unknown_exception():
     err = _friendly_error(ValueError("boom"), context="streaming")
     assert str(err).startswith("streaming:")
+
+
+def test_installed_sdk_accepts_our_call_kwargs():
+    """Regression: the deployed image once installed a newer anthropic SDK
+    (requirements.txt said >=) whose Messages.stream() had dropped the
+    'temperature' kwarg, so every AI Studio call failed with a TypeError at
+    runtime. Assert the installed SDK still accepts every kwarg ai_client
+    passes, so a future SDK bump fails here instead of in production."""
+    import inspect
+
+    from anthropic.resources.messages import Messages
+
+    our_kwargs = {"model", "max_tokens", "temperature", "system", "messages"}
+    for method in (Messages.create, Messages.stream):
+        params = inspect.signature(method).parameters
+        takes_var_kwargs = any(
+            p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+        )
+        missing = our_kwargs - set(params)
+        assert takes_var_kwargs or not missing, (
+            f"{method.__qualname__} no longer accepts {sorted(missing)}; "
+            "update ai_client.py before bumping the anthropic pin"
+        )
