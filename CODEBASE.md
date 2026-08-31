@@ -661,7 +661,7 @@ docker run -p 8501:8501 lipidcruncher
 
 The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for PDF generation) plus R + Bioconductor + IsoCorrectoR + `jsonlite` (for the stable isotope tracing module), and runs `streamlit run src/main_app.py`.
 
-**One image, many deployments.** There is a single Dockerfile; what an image contains is decided by the branch it is built from, and deployments are separated by ECR tag and ECS service rather than by a second Dockerfile. Build for Fargate with `--platform linux/amd64`. The R layer dominates a cold build but sits before the application `COPY`, so it stays cached across app changes. `ANTHROPIC_API_KEY` is injected at run time (ECS `secrets`), never baked into the image; without it every page works except the AI Studio. See `docs/isotope_deployment.md` for the separate-deployment guide.
+**One image, many deployments.** There is a single Dockerfile; what an image contains is decided by the branch it is built from, and deployments are separated by ECR tag and ECS service rather than by a second Dockerfile. Build for Fargate with `--platform linux/amd64`. The R layer dominates a cold build but sits before the application `COPY`, so it stays cached across app changes. `ANTHROPIC_API_KEY` is injected at run time (ECS `secrets`), never baked into the image; without it every page works except the AI Studio. See `docs/integration_deployment.md` for the separate-deployment guide.
 
 ### Local Development
 

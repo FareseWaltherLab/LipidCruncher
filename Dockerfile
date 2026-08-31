@@ -5,7 +5,7 @@
 # One Dockerfile, many deployments. Which app you get is decided by the branch
 # you build from, not by picking a different file here; separate deployments
 # are separate ECR tags + ECS services pointing at them. See
-# docs/isotope_deployment.md.
+# docs/integration_deployment.md.
 #
 # The R layer roughly triples the image size and dominates a cold build. It is
 # placed before the application COPY so it stays cached across app changes —
