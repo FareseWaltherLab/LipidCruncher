@@ -40,6 +40,7 @@ docs/isotope_tracing_plan.md
 # AI Studio interaction logs pulled from CloudWatch (local analysis only)
 ai_studio_logs.jsonl
 *.jsonl
+docs/ai_studio_feedback.md
 
 # Vendor / reference material (LipidSearch docs, sample inputs)
 Alignment.txt
