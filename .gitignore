@@ -41,6 +41,7 @@ docs/isotope_tracing_plan.md
 ai_studio_logs.jsonl
 *.jsonl
 docs/ai_studio_feedback.md
+docs/integration_deployment.md
 
 # Vendor / reference material (LipidSearch docs, sample inputs)
 Alignment.txt

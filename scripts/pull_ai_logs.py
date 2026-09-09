@@ -7,9 +7,8 @@ CloudWatch into a JSONL file that scripts/feedback_viewer.py reads.
     python scripts/pull_ai_logs.py --since 7d         # last 7 days
     python scripts/pull_ai_logs.py --since 2026-09-01 --out /tmp/logs.jsonl
 
-Uses the AWS CLI (already configured for account 266735825011 — see
-docs/integration_deployment.md). One record per line; the file is
-overwritten.
+Uses the AWS CLI, signed in to the account that owns the integration
+deployment. One record per line; the file is overwritten.
 """
 import argparse
 import json
