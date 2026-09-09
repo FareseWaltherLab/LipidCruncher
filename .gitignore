@@ -44,10 +44,6 @@ docs/ai_studio_feedback.md
 docs/integration_deployment.md
 review_feedback.command
 
-# Vendor / reference material (LipidSearch docs, sample inputs)
-Alignment.txt
-LipidMol.txt
-
 # IDE/editor config
 .idea/
 .vscode/
@@ -57,9 +53,12 @@ LipidMol.txt
 htmlcov/
 .pytest_cache/
 
+
 # Project-specific
 LipidCruncher/*.json
-task-definition.json
+
+# Ad-hoc datasets, vendor PDFs and other one-off material (see local/README.md)
+local/
 
 # Project development notes
 PROJECT_KNOWLEDGE.md
@@ -72,11 +71,6 @@ AI_STUDIO_EVAL_PLAN.md
 # AI Studio schematics (working files)
 ai_studio_schematic.png
 ai_studio_schematic.tiff
-
-# LipidSearch 5.2 test data (super-user datasets, not for VCS)
-LS5.2 - Fumonisin B1 Mouse Liver.csv
-JYK_Alignment.csv
-JYK_LipidMol.csv
 
 # Data/report files — keep stray CSV/PDF out of VCS.
 # Sample datasets, test fixtures and bundled UI assets are whitelisted below.
