@@ -217,12 +217,17 @@ def render_transform_chat(source_df) -> None:
                     produced_table=bool(
                         _t and _t.success and not _t.is_info_only
                     ),
+                    history=session.messages,
+                    df=source_df,
                 )
 
             except Exception as e:
                 st.session_state.chat_last_error = str(e)
                 st.session_state.chat_last_failed_input = user_input
-                record_turn("transform", user_input, "", error=str(e))
+                record_turn(
+                    "transform", user_input, "", error=str(e),
+                    history=session.messages, df=source_df,
+                )
 
         st.rerun()
 

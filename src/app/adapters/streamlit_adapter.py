@@ -1382,9 +1382,20 @@ class StreamlitAdapter:
         produced_table: bool = False,
         produced_figure: bool = False,
         error: Optional[str] = None,
+        history=None,
+        df: Optional[pd.DataFrame] = None,
+        experiment: Optional[ExperimentConfig] = None,
+        figure=None,
     ) -> str:
         """Log one completed AI Studio turn. Returns the turn_id so the UI
-        can attach a later 👍/👎 feedback record to it."""
+        can attach a later 👍/👎 feedback record to it.
+
+        ``history`` is the chat's messages *before* this turn; ``df`` /
+        ``experiment`` describe the data the tab ran against (the upload's
+        name and detected format come from session state); ``figure`` is
+        the Plotly figure the turn produced, if any.
+        """
+        from ..models.chat import AIConfig
         from ..services.ai_chat.interaction_logger import InteractionLoggingService
         turn_id = InteractionLoggingService.new_turn_id()
         InteractionLoggingService.log_turn(
@@ -1397,6 +1408,18 @@ class StreamlitAdapter:
             produced_table=produced_table,
             produced_figure=produced_figure,
             error=error,
+            model=AIConfig().model,
+            dataset=InteractionLoggingService.describe_dataset(
+                df,
+                source=(
+                    st.session_state.get("chat_studio_pipeline_source")
+                    or st.session_state.get("chat_studio_file_id")
+                ),
+                data_format=st.session_state.get("chat_studio_detected_format"),
+                experiment=experiment,
+            ),
+            history=history,
+            figure_json=InteractionLoggingService.serialize_figure(figure),
         )
         return turn_id
 

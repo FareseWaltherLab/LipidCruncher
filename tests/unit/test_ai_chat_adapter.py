@@ -125,3 +125,58 @@ class TestModuleImports:
         from app.ui.ai_chat import display_transform_chat, display_viz_chat
         assert callable(display_transform_chat)
         assert callable(display_viz_chat)
+
+
+# ---------------------------------------------------------------------------
+# Interaction logging: adapter supplies the session-state context
+# ---------------------------------------------------------------------------
+
+class TestLogAiTurnContext:
+    def test_log_ai_turn_passes_model_dataset_history_and_figure(self):
+        import plotly.graph_objects as go
+        from app.adapters.streamlit_adapter import StreamlitAdapter
+        from app.models.chat import AIConfig, ChatMessage
+
+        df = pd.DataFrame({"LipidMolec": ["a"], "s1": [1.0]})
+        exp = ExperimentConfig(conditions_list=["WT"], number_of_samples_list=[1])
+        fig = go.Figure(data=[go.Bar(x=["a"], y=[1])])
+        history = (ChatMessage(role="user", content="earlier"),)
+
+        with patch("app.adapters.streamlit_adapter.st") as mock_st, \
+             patch("app.services.ai_chat.interaction_logger."
+                   "InteractionLoggingService.log_turn") as log_turn:
+            mock_st.session_state = {
+                "chat_studio_file_id": "run.csv_42",
+                "chat_studio_detected_format": "Generic",
+            }
+            turn_id = StreamlitAdapter.log_ai_turn(
+                tab="visualization", question="plot", answer="ok",
+                produced_figure=True, history=history, df=df,
+                experiment=exp, figure=fig,
+            )
+
+        kwargs = log_turn.call_args.kwargs
+        assert kwargs["turn_id"] == turn_id
+        assert kwargs["model"] == AIConfig().model
+        assert kwargs["dataset"]["source"] == "run.csv_42"
+        assert kwargs["dataset"]["format"] == "Generic"
+        assert kwargs["dataset"]["rows"] == 1
+        assert kwargs["dataset"]["conditions"] == {"WT": 1}
+        assert kwargs["history"] is history
+        assert '"bar"' in kwargs["figure_json"]
+
+    def test_pipeline_import_source_wins_over_file_id(self):
+        from app.adapters.streamlit_adapter import StreamlitAdapter
+
+        with patch("app.adapters.streamlit_adapter.st") as mock_st, \
+             patch("app.services.ai_chat.interaction_logger."
+                   "InteractionLoggingService.log_turn") as log_turn:
+            mock_st.session_state = {
+                "chat_studio_file_id": "_pipeline_import",
+                "chat_studio_pipeline_source": "normalized",
+            }
+            StreamlitAdapter.log_ai_turn(
+                tab="data_questions", question="q", answer="a",
+                df=pd.DataFrame({"x": [1]}),
+            )
+        assert log_turn.call_args.kwargs["dataset"]["source"] == "normalized"

@@ -180,13 +180,16 @@ def render_data_questions_chat(source_df) -> None:
                     assistant_msg=result.session.messages[-1],
                     code=result.code or None,
                     produced_table=result.result_df is not None,
+                    history=session.messages,
+                    df=source_df,
                 )
 
             except Exception as e:
                 st.session_state.chat_last_error = str(e)
                 st.session_state.chat_last_failed_input = user_input
                 record_turn(
-                    "data_questions", user_input, "", error=str(e)
+                    "data_questions", user_input, "", error=str(e),
+                    history=session.messages, df=source_df,
                 )
 
         st.rerun()

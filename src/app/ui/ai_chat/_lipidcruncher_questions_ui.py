@@ -144,6 +144,7 @@ def render_lc_questions_chat() -> None:
                 assistant_msg=(
                     st.session_state.chat_lc_questions_session.messages[-1]
                 ),
+                history=session.messages,
             )
             st.rerun()
 
@@ -187,6 +188,7 @@ def render_lc_questions_chat() -> None:
                     assistant_msg=(
                         st.session_state.chat_lc_questions_session.messages[-1]
                     ),
+                    history=session.messages,
                 )
 
             except Exception as e:
@@ -223,6 +225,7 @@ def render_lc_questions_chat() -> None:
                     assistant_msg=(
                         st.session_state.chat_lc_questions_session.messages[-1]
                     ),
+                    history=session.messages,
                 )
             else:
                 user_msg = ChatMessage(role="user", content=user_input)
@@ -237,7 +240,8 @@ def render_lc_questions_chat() -> None:
                 # Remember the failed input so the Retry button can re-fire it.
                 st.session_state.chat_lc_retry_input = user_input
                 record_turn(
-                    "lc_questions", user_input, "", error=error_text
+                    "lc_questions", user_input, "", error=error_text,
+                    history=session.messages,
                 )
 
         st.rerun()

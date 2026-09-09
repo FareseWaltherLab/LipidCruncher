@@ -216,12 +216,20 @@ def render_viz_chat(analysis_df, experiment) -> None:
                     assistant_msg=result.session.messages[-1],
                     code=result.session.messages[-1].code,
                     produced_figure=bool(_sr and _sr.figure is not None),
+                    history=session.messages,
+                    df=analysis_df,
+                    experiment=experiment,
+                    figure=_sr.figure if _sr else None,
                 )
 
             except Exception as e:
                 st.session_state.chat_last_error = str(e)
                 st.session_state.chat_last_failed_input = user_input
-                record_turn("visualization", user_input, "", error=str(e))
+                record_turn(
+                    "visualization", user_input, "", error=str(e),
+                    history=session.messages, df=analysis_df,
+                    experiment=experiment,
+                )
 
         st.rerun()
 

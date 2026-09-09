@@ -20,7 +20,17 @@ from typing import Optional
 
 # Records reference this schema version so the offline eval/analysis tooling
 # can evolve the shape later without silently mis-parsing old logs.
-SCHEMA_VERSION = 1
+#   1 — question / answer / code / outcome flags
+#   2 — adds model, dataset descriptor, prior conversation, figure JSON
+SCHEMA_VERSION = 2
+
+# Size guards. The awslogs driver splits a stdout line above 256 KB into
+# several CloudWatch events, which would break the JSON, so every optional
+# blob is capped to keep a whole record comfortably under that.
+HISTORY_MAX_MESSAGES = 20        # last N prior messages (10 turns)
+HISTORY_MAX_CHARS = 1000         # per prior message
+FIGURE_MAX_BYTES = 120_000       # serialized Plotly figure
+DATASET_MAX_COLUMNS = 60         # column names listed in the descriptor
 
 _LOGGER_NAME = "ai_studio.interactions"
 
@@ -64,6 +74,65 @@ class InteractionLoggingService:
         return uuid.uuid4().hex
 
     @staticmethod
+    def describe_dataset(
+        df,
+        *,
+        source: Optional[str] = None,
+        data_format: Optional[str] = None,
+        experiment=None,
+    ) -> Optional[dict]:
+        """Describe the dataset a turn ran against — shape and column names,
+        never the values. ``experiment`` (an ExperimentConfig) adds the
+        condition → sample-count map when the tab has one."""
+        if df is None:
+            return None
+        columns = [str(c) for c in df.columns]
+        desc = {
+            "source": source,
+            "format": data_format,
+            "rows": int(len(df)),
+            "n_columns": len(columns),
+            "columns": columns[:DATASET_MAX_COLUMNS],
+        }
+        if experiment is not None:
+            desc["conditions"] = dict(zip(
+                experiment.conditions_list,
+                experiment.number_of_samples_list,
+            ))
+        return desc
+
+    @staticmethod
+    def serialize_figure(fig) -> Optional[str]:
+        """Plotly figure → JSON string, or None if absent / too large to fit
+        in one log event (the flag ``produced_figure`` still records that a
+        figure existed)."""
+        if fig is None:
+            return None
+        try:
+            text = fig.to_json()
+        except Exception:
+            return None
+        if len(text.encode("utf-8")) > FIGURE_MAX_BYTES:
+            return None
+        return text
+
+    @staticmethod
+    def _compact_history(history) -> Optional[list]:
+        """Prior messages as ``[{role, content}]``, last N only, each
+        truncated. Accepts objects with ``.role``/``.content`` or dicts."""
+        if not history:
+            return None
+        out = []
+        for m in list(history)[-HISTORY_MAX_MESSAGES:]:
+            role = m["role"] if isinstance(m, dict) else m.role
+            content = m["content"] if isinstance(m, dict) else m.content
+            content = content or ""
+            if len(content) > HISTORY_MAX_CHARS:
+                content = content[:HISTORY_MAX_CHARS] + "…"
+            out.append({"role": role, "content": content})
+        return out
+
+    @staticmethod
     def build_turn_record(
         *,
         turn_id: str,
@@ -75,9 +144,17 @@ class InteractionLoggingService:
         produced_table: bool = False,
         produced_figure: bool = False,
         error: Optional[str] = None,
+        model: Optional[str] = None,
+        dataset: Optional[dict] = None,
+        history=None,
+        figure_json: Optional[str] = None,
     ) -> dict:
         """Build the turn record dict (pure — no I/O). Broken out so it can
-        be unit-tested without capturing stdout."""
+        be unit-tested without capturing stdout.
+
+        ``history`` is the conversation *before* this turn (so the record is
+        self-contained when read back); ``dataset`` comes from
+        ``describe_dataset``; ``figure_json`` from ``serialize_figure``."""
         return {
             "event": "ai_turn",
             "schema": SCHEMA_VERSION,
@@ -85,12 +162,16 @@ class InteractionLoggingService:
             "turn_id": turn_id,
             "session_id": session_id,
             "tab": tab,
+            "model": model,
             "question": question,
             "answer": answer,
             "code": code or None,
             "produced_table": produced_table,
             "produced_figure": produced_figure,
             "error": error,
+            "dataset": dataset,
+            "history": InteractionLoggingService._compact_history(history),
+            "figure_json": figure_json,
         }
 
     @staticmethod
@@ -124,8 +205,13 @@ class InteractionLoggingService:
         produced_table: bool = False,
         produced_figure: bool = False,
         error: Optional[str] = None,
+        model: Optional[str] = None,
+        dataset: Optional[dict] = None,
+        history=None,
+        figure_json: Optional[str] = None,
     ) -> None:
-        """Emit one turn record (question, answer, tab, code, outcome)."""
+        """Emit one turn record (question, answer, tab, code, outcome, plus
+        the model, dataset descriptor, prior conversation and figure)."""
         _emit(InteractionLoggingService.build_turn_record(
             turn_id=turn_id,
             session_id=session_id,
@@ -136,6 +222,10 @@ class InteractionLoggingService:
             produced_table=produced_table,
             produced_figure=produced_figure,
             error=error,
+            model=model,
+            dataset=dataset,
+            history=history,
+            figure_json=figure_json,
         ))
 
     @staticmethod

@@ -26,9 +26,15 @@ def record_turn(
     produced_table: bool = False,
     produced_figure: bool = False,
     error=None,
+    history=None,
+    df=None,
+    experiment=None,
+    figure=None,
 ) -> None:
     """Log one turn. If ``assistant_msg`` is given, map its timestamp to the
-    turn_id so the feedback widget can attach to it. Never raises — logging
+    turn_id so the feedback widget can attach to it. ``history`` is the
+    session's messages before this turn; ``df`` / ``experiment`` / ``figure``
+    give the record its data and figure context. Never raises — logging
     must not break a chat turn."""
     try:
         turn_id = StreamlitAdapter.log_ai_turn(
@@ -39,6 +45,10 @@ def record_turn(
             produced_table=produced_table,
             produced_figure=produced_figure,
             error=error,
+            history=history,
+            df=df,
+            experiment=experiment,
+            figure=figure,
         )
         if assistant_msg is not None:
             store = st.session_state.setdefault(_TURN_IDS, {})

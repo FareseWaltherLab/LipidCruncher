@@ -257,6 +257,10 @@ LipidCruncher/
 │               ├── normalization_docs.py
 │               ├── standards_help.py
 │               └── analysis_docs.py         #   Statistical testing & saturation docs
+├── scripts/                                 # Local tooling, not part of the deployed app
+│   ├── pull_ai_logs.py                      #   CloudWatch → ai_studio_logs.jsonl (AI Studio turns + feedback)
+│   ├── feedback_viewer.py                   #   `streamlit run` viewer: verdicts, comments, full turn context
+│   └── ai_feedback_records.py               #   Pure join/parse helpers used by the viewer (unit-tested)
 ├── tests/
 │   ├── conftest.py                          # Shared fixtures
 │   ├── unit/                                # 64 unit test modules (incl. AI chat models, sandbox isolation, codebase tools, transformer, viz generator, schema extractor, scope, validation, adapter, workflow)
@@ -428,7 +432,7 @@ All services are stateless static methods. The Anthropic API key is read from `A
 | `knowledge_base` | `knowledge_base.py` | `get_app_knowledge()` — condensed reference (formats, modules, terminology) injected into system prompts so the assistant doesn't need to query the codebase for basic context. |
 | `prompt_templates` | `prompt_templates.py` | Per-mode system prompts (`data_transform_system_prompt`, `data_questions_system_prompt`, `lipidcruncher_questions_system_prompt`, `unified_system_prompt`) and `build_transform_context` / `build_diagnostic_context` helpers. Includes `METHODOLOGY_CLARIFICATION_RULES` so the AI clarifies methodology before running aggregations or ratios. |
 | `prompt_examples` | `prompt_examples.py` | Few-shot example prompts shown as clickable buttons in each AI Studio tab. |
-| `interaction_logger` | `interaction_logger.py` | Emits one JSON record per chat turn and per feedback event to stdout (shipped to CloudWatch Logs by the container's `awslogs` driver). Pure — the UI/adapter supplies the fields, including an anonymous session id; emission failures are swallowed so logging can never break a turn. |
+| `interaction_logger` | `interaction_logger.py` | Emits one JSON record per chat turn and per feedback event to stdout (shipped to CloudWatch Logs by the container's `awslogs` driver). A turn record (schema 2) holds the question, answer, code, outcome flags, model id, a dataset descriptor (`describe_dataset` — shape and column names, never values), the prior conversation (last 20 messages, truncated) and the Plotly figure as JSON (`serialize_figure`, dropped above 120 KB so one record stays one CloudWatch event). Pure — the UI/adapter supplies the fields, including an anonymous session id; emission failures are swallowed so logging can never break a turn. `scripts/pull_ai_logs.py` + `scripts/feedback_viewer.py` read the records back. |
 
 Exception hierarchy in `ai_chat/exceptions.py`:
 
@@ -498,7 +502,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 - **Widget value preservation** — `restore_widget_value()` / `save_widget_value()` persist widget selections across module navigation.
 - **Cached wrappers** — every workflow/service call that should be cached is wrapped with `@st.cache_data` and custom hash functions for Pydantic models and DataFrames.
 - **AI Studio state** — `chat_studio_df`, `chat_studio_df_original`, `chat_studio_experiment`, `chat_studio_pipeline_source`, `studio_applied_snapshot` (set when the user confirms the inputs; the gate the three data tabs check), plus per-mode session keys `chat_transform_session`, `chat_viz_session`, `chat_data_questions_session`, `chat_unified_session`, and result caches (`chat_transform_result`, `chat_viz_figures`, `chat_result_tables`).
-- **AI streaming wrappers** — `stream_ai_transform()`, `stream_ai_viz()` and `stream_ai_data_questions()` return `(explanation_generator, finalize)`: the UI streams the explanation through `st.write_stream`, then calls `finalize()` to run the code and get the typed step result. `stream_ai_lc_questions()` returns `(session_with_user_message, text_chunk_generator)` — no code to execute, so the UI just accumulates the text. `get_cached_lc_answer()` / `set_cached_lc_answer()` cache the canonical answers to the example LipidCruncher questions (instant repeats, and a fallback when the API is down), and `log_ai_feedback()` records thumbs / comments.
+- **AI streaming wrappers** — `stream_ai_transform()`, `stream_ai_viz()` and `stream_ai_data_questions()` return `(explanation_generator, finalize)`: the UI streams the explanation through `st.write_stream`, then calls `finalize()` to run the code and get the typed step result. `stream_ai_lc_questions()` returns `(session_with_user_message, text_chunk_generator)` — no code to execute, so the UI just accumulates the text. `get_cached_lc_answer()` / `set_cached_lc_answer()` cache the canonical answers to the example LipidCruncher questions (instant repeats, and a fallback when the API is down), `log_ai_turn()` logs a completed turn (adding the model id, the dataset descriptor from session state, the prior conversation and the figure) and `log_ai_feedback()` records thumbs / comments.
 - **Isotope tracing** — `run_isotope_correction()` wraps `IsotopeTracingWorkflow` for the isotope page.
 - **Cross-page widget preservation** — `preserve_main_app_widgets()` / `preserve_ai_studio_widgets()` snapshot widget values into `_nav_preserved_*` keys before navigation; `restore_navigation_widgets()` re-hydrates them on return. Required because Streamlit garbage-collects widget keys when their owning page is not rendered.
 
