@@ -35,8 +35,11 @@ src/.streamlit/
 # Documentation working files
 *.docx
 *.doc
-docs/isotope_deployment.md
 docs/isotope_tracing_plan.md
+
+# AI Studio interaction logs pulled from CloudWatch (local analysis only)
+ai_studio_logs.jsonl
+*.jsonl
 
 # Vendor / reference material (LipidSearch docs, sample inputs)
 Alignment.txt
