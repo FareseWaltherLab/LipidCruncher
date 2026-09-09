@@ -42,6 +42,7 @@ ai_studio_logs.jsonl
 *.jsonl
 docs/ai_studio_feedback.md
 docs/integration_deployment.md
+review_feedback.command
 
 # Vendor / reference material (LipidSearch docs, sample inputs)
 Alignment.txt
