@@ -150,6 +150,41 @@ class TestParseAlignment:
         assert m.samples_per_condition == [1, 1]
 
 
+class TestSampleNames:
+    """Each biological sample is named from its raw filename(s)."""
+
+    def test_pos_neg_file_pair_named_by_shared_base(self):
+        # Separate positive/negative files: the name drops the polarity marker.
+        m = parse_alignment_file(_alignment_text(_ROWS))
+        assert [s.name for s in m.samples] == ["sample_01", "sample_02", "sample_03"]
+
+    def test_polarity_switching_single_file_keeps_stem(self):
+        # One acquisition holds both polarities: one token, one filename.
+        rows = [("QC_00.raw", "s1-1", "QC"), ("CM_01.raw", "s2-1", "CM")]
+        m = parse_alignment_file(_alignment_text(rows))
+        assert [s.name for s in m.samples] == ["QC_00", "CM_01"]
+
+    def test_one_raw_file_several_jobs_keeps_stem(self):
+        rows = [
+            ("ID_01.raw", "s1-1", "ID"),
+            ("ID_01.raw", "s1-2", "ID"),
+            ("Blank_01.raw", "s2-1", "Blank"),
+        ]
+        m = parse_alignment_file(_alignment_text(rows))
+        assert [s.name for s in m.samples] == ["ID_01", "Blank_01"]
+
+    @pytest.mark.parametrize("fname,expected", [
+        ("Control_Fumonisin.raw", "Control_Fumonisin"),
+        ("run5P.raw", "run5P"),
+        ("mouseA-negative.mzML", "mouseA-negative"),
+    ])
+    def test_single_file_ending_in_polarity_letter_is_not_stripped(self, fname, expected):
+        # A lone file's trailing n/p (or 'negative') is part of its name, not a
+        # polarity marker to remove — only a differing pair implies polarity.
+        m = parse_alignment_file(_alignment_text([(fname, "s1-1", "A")]))
+        assert m.samples[0].name == expected
+
+
 def _lipidmol_df():
     """Synthetic LipidMol frame with per-file OriginalArea columns matching _ROWS."""
     data = {'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)', 'FA(15:0)']}
@@ -252,6 +287,18 @@ class TestStandardizeWithAlignment:
         assert result.lipidsearch_samples_per_condition == [2, 1]
         icols = [c for c in result.standardized_df.columns if c.startswith('intensity[')]
         assert icols == ['intensity[s1]', 'intensity[s2]', 'intensity[s3]']
+
+    def test_reports_sample_names_keeping_mapping_provenance(self):
+        result = DataStandardizationService.standardize_lipidsearch_with_alignment(
+            _full_lipidmol_df(), _alignment_text(_ROWS),
+        )
+        assert result.lipidsearch_sample_names == {
+            's1': 'sample_01', 's2': 'sample_02', 's3': 'sample_03',
+        }
+        # The column mapping still records the merged per-file tokens.
+        assert result.column_mapping['original_name'].tolist()[0] == (
+            'OriginalArea[s1-1] + OriginalArea[s1-2]'
+        )
 
     def test_missing_required_columns_fails(self):
         df = _full_lipidmol_df().drop(columns=['ClassKey'])

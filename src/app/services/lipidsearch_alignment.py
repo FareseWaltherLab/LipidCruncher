@@ -69,6 +69,7 @@ class BiologicalSample:
     base: str            # filename base shared by the pair, e.g. '140509_FT_01'
     condition: str       # e.g. 'Control'
     dataids: List[str]   # per-file tokens, e.g. ['s1-1', 's1-2']
+    name: str = ''       # display name, e.g. 'ID_01' (see _sample_name)
 
 
 @dataclass
@@ -84,6 +85,21 @@ def _sample_base(filename: str) -> str:
     and the trailing polarity marker. e.g. '140509_FT_01n.raw' -> '140509_FT_01'."""
     stem = re.sub(r'\.[^.]+$', '', filename.strip())
     return _POLARITY_SUFFIX_RE.sub('', stem)
+
+
+def _sample_name(filenames: List[str], base: str) -> str:
+    """Return the display name of a biological sample from its raw filenames.
+
+    A sample backed by one raw file (polarity switching, or one file searched by
+    several jobs) keeps that file's stem, dropping only the extension — so a
+    name ending in 'n'/'p' (e.g. 'Control_Fumonisin.raw') is not mistaken for a
+    polarity marker. A positive/negative pair of different files is named by
+    their shared base, e.g. '140509_FT_01n.raw' + '..._01p.raw' -> '140509_FT_01'.
+    """
+    unique = set(filenames)
+    if len(unique) == 1:
+        return re.sub(r'\.[^.]+$', '', unique.pop())
+    return base
 
 
 def parse_alignment_file(text: str) -> AlignmentMap:
@@ -134,12 +150,17 @@ def parse_alignment_file(text: str) -> AlignmentMap:
     # Group by (condition, base) preserving first-seen order.
     samples: List[BiologicalSample] = []
     index = {}
+    filenames = {}
     for dataid, filename, condition in rows:
         key = (condition, _sample_base(filename))
         if key not in index:
             index[key] = BiologicalSample(base=key[1], condition=condition, dataids=[])
             samples.append(index[key])
+            filenames[key] = []
         index[key].dataids.append(dataid)
+        filenames[key].append(filename)
+    for key, sample in index.items():
+        sample.name = _sample_name(filenames[key], sample.base)
 
     _validate_pairing(samples, rows)
 

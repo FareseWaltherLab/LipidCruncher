@@ -258,10 +258,13 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
         )
         return None, None
 
-    # Seed display names from the uploaded column headers on first run.
+    # Seed display names on first run: from the Alignment Setting file's raw
+    # filenames for a LipidSearch 5.2 alignment upload (its column mapping holds
+    # only per-file tokens), otherwise from the uploaded column headers.
     if st.session_state.get('sample_names') is None:
-        st.session_state.sample_names = build_names_from_mapping(
-            st.session_state.get('column_mapping')
+        st.session_state.sample_names = (
+            st.session_state.get('lipidsearch_sample_names')
+            or build_names_from_mapping(st.session_state.get('column_mapping'))
         )
 
     # Step 2: Group Samples (with manual regrouping option)

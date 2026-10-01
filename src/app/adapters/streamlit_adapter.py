@@ -56,7 +56,7 @@ class SessionState:
       file_upload.py       → raw_df, using_sample_data, sample_data_file
       column_mapping.py    → standardized_df, column_mapping, n_intensity_cols,
                              format_type, msdial_features, msdial_sample_names,
-                             _msdial_override_samples
+                             _msdial_override_samples, lipidsearch_sample_names
       experiment_config.py → workbench_conditions, workbench_samples
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
                              original_column_order
@@ -103,6 +103,8 @@ class SessionState:
     msdial_features: Optional[MSDIALFeatures] = None
     msdial_sample_names: Optional[List[str]] = None
     _msdial_override_samples: Optional[List[str]] = None
+    # LipidSearch 5.2 alignment: s-label → sample name from the raw filenames.
+    lipidsearch_sample_names: Optional[Dict[str, str]] = None
 
     # --- Experiment config (owner: experiment_config.py) ---
     workbench_conditions: Optional[List[str]] = None
@@ -215,6 +217,7 @@ _SOFT_RESET_PRESERVE = frozenset({
     # Standardization outputs (so column mapping need not be redone)
     'standardized_df', 'column_mapping', 'n_intensity_cols', 'format_type',
     'msdial_features', 'msdial_sample_names', '_msdial_override_samples',
+    'lipidsearch_sample_names',
     'msdial_use_normalized', 'msdial_data_type_index',
     'workbench_conditions', 'workbench_samples',
 })

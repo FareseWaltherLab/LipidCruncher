@@ -59,6 +59,8 @@ class StandardizationResult:
     # the Alignment Setting file so the UI can pre-populate the experiment.
     lipidsearch_conditions: Optional[List[str]] = None
     lipidsearch_samples_per_condition: Optional[List[int]] = None
+    # Map of s1->raw-filename-derived sample name from the alignment file.
+    lipidsearch_sample_names: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -470,8 +472,8 @@ class DataStandardizationService:
 
         Parses the alignment to pair each biological sample's positive/negative
         files, merges them into flat intensity[s1..sN] columns, and returns the
-        experiment layout (conditions and per-condition sample counts) read from
-        the alignment so the UI can pre-populate the experiment.
+        experiment layout (conditions and per-condition sample counts) and the
+        sample names read from the alignment so the UI can pre-populate them.
         """
         if not isinstance(df, pd.DataFrame):
             return StandardizationResult(False, "Expected a DataFrame for LipidSearch format")
@@ -508,6 +510,9 @@ class DataStandardizationService:
             n_intensity_cols=len(alignment.samples),
             lipidsearch_conditions=alignment.conditions,
             lipidsearch_samples_per_condition=alignment.samples_per_condition,
+            lipidsearch_sample_names={
+                f's{i}': s.name for i, s in enumerate(alignment.samples, start=1)
+            },
         )
 
     # ------------------------------------------------------------------
