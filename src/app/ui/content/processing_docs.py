@@ -32,7 +32,8 @@ are then summed into a single `intensity[s1..sN]` per sample. Because any given
 lipid is detected in only one polarity, that sum is equivalent to taking
 whichever polarity saw it. Samples are renumbered flat in alignment order, and
 the conditions and sample counts read from the alignment pre-populate the
-experiment setup in the sidebar.
+experiment setup in the sidebar, with each sample named after its raw file
+(e.g. `ID_01.raw` -> `ID_01`).
 
 ---
 

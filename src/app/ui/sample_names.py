@@ -2,7 +2,8 @@
 Sample display-name helpers.
 
 Original sample names (e.g. the uploaded column headers like "mouse liver #5")
-survive only in the ``column_mapping`` table. These helpers turn that mapping
+survive only in the ``column_mapping`` table (LipidSearch 5.2 alignment uploads
+take theirs from the Alignment Setting file instead). These helpers turn that mapping
 into a ``{internal_label -> display_name}`` dict, keep it in sync when samples
 are regrouped, and format labels for the sidebar sample selectors as
 ``"s3 — mouse liver #5"``.
