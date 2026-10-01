@@ -67,12 +67,27 @@ def matplotlib_svg_download_button(fig, filename, key=None):
     )
 
 
-def convert_df(df, sample_names=None):
-    """Convert a DataFrame to CSV bytes for downloading.
+def export_frame(df, sample_names=None):
+    """Return a DataFrame as it is exported: row labels kept, samples named.
 
     An informative index (a MultiIndex or any named level, such as the
-    heatmap's LipidMolec/ClassKey row labels) is written out as leading
-    columns; a plain positional index is dropped.
+    heatmap's LipidMolec/ClassKey row labels) becomes leading columns; a plain
+    positional index is left in place for the caller to drop.
+
+    Args:
+        df: DataFrame to export.
+        sample_names: Optional ``{s-label -> name}`` map, keyed in the same
+            label space as ``df``, used to name the per-sample columns.
+    """
+    if isinstance(df.index, pd.MultiIndex) or any(
+        name is not None for name in df.index.names
+    ):
+        df = df.reset_index()
+    return name_samples_for_csv(df, sample_names)
+
+
+def convert_df(df, sample_names=None):
+    """Convert a DataFrame to CSV bytes for downloading.
 
     Args:
         df: DataFrame to convert.
@@ -82,12 +97,19 @@ def convert_df(df, sample_names=None):
     Returns:
         CSV-encoded bytes.
     """
-    if isinstance(df.index, pd.MultiIndex) or any(
-        name is not None for name in df.index.names
-    ):
-        df = df.reset_index()
-    df = name_samples_for_csv(df, sample_names)
-    return df.to_csv(index=False).encode('utf-8')
+    return export_frame(df, sample_names).to_csv(index=False).encode('utf-8')
+
+
+def named_dataframe(df, sample_names=None, **kwargs):
+    """Show a DataFrame on screen exactly as its CSV download names it.
+
+    Args:
+        df: DataFrame to display.
+        sample_names: Optional ``{s-label -> name}`` map, keyed in the same
+            label space as ``df``; pass the map the matching download uses.
+        **kwargs: Passed through to ``st.dataframe``.
+    """
+    st.dataframe(export_frame(df, sample_names), **kwargs)
 
 
 def csv_download_button(df, filename, key=None, on_click=None, sample_names=None):

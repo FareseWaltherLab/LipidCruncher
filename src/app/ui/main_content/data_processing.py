@@ -19,7 +19,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.ui.download_utils import csv_download_button
+from app.ui.download_utils import csv_download_button, named_dataframe
 
 from app.constants import (
     FORMAT_LIPIDSEARCH, FORMAT_MSDIAL,
@@ -452,7 +452,10 @@ def display_final_filtered_data(cleaned_df: pd.DataFrame):
         st.session_state.continuation_df = cleaned_df
 
     st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
-    st.dataframe(cleaned_df, width='stretch')
+    named_dataframe(
+        cleaned_df, sample_names=st.session_state.get('sample_names'),
+        width='stretch',
+    )
     csv_download_button(
         cleaned_df, "final_filtered_data.csv", key="download_filtered_data",
         sample_names=st.session_state.get('sample_names'),

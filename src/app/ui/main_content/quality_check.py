@@ -22,7 +22,7 @@ from app.constants import resolve_format_enum
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.ui.download_utils import csv_download_button
+from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_names import remap_names_after_exclusion
 from app.ui.st_helpers import (
     display_export_buttons,
@@ -355,7 +355,10 @@ def _render_bqc_filtering(
 
     # Show filtered dataset
     st.markdown("###### Filtered Dataset")
-    st.dataframe(result.filtered_df, width='stretch')
+    named_dataframe(
+        result.filtered_df, sample_names=st.session_state.get('qc_input_sample_names'),
+        width='stretch',
+    )
 
     csv_download_button(
         result.filtered_df, "filtered_data.csv", key="bqc_filtered_download",
@@ -523,7 +526,11 @@ def _display_correlation_analysis(
 
         # Correlation matrix table
         st.markdown("###### Correlation Coefficients")
-        st.dataframe(correlation_df, width='stretch')
+        named_dataframe(
+            correlation_df.rename_axis('Sample'),
+            sample_names=st.session_state.get('qc_input_sample_names'),
+            width='stretch', hide_index=True,
+        )
 
 
 # =============================================================================

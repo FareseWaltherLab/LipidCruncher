@@ -4,7 +4,8 @@ UI tests for what CSV downloads contain.
 Covers:
 1. Heatmap CSVs keep their row labels (lipid class / species, plus the
    cluster for the clustered mode, in the figure's row order).
-2. User sample names replace the s-labels in per-sample CSV headers.
+2. User sample names replace the s-labels in per-sample CSV headers, and the
+   on-screen tables next to those downloads show the same names.
 3. After Quality Check excludes samples (which renumbers the survivors), the
    downstream CSVs carry each survivor's own name, not its new label's.
 """
@@ -135,6 +136,41 @@ class TestSampleNamesInCsv:
         out = _csv(captured_downloads, 'corr_csv_download')
         assert list(out.columns) == ['Sample', 'A', 's2', 's3']
         assert out['Sample'].tolist() == ['A', 's2', 's3']
+
+
+class TestSampleNamesOnScreen:
+    """On-screen tables show what their CSV download contains."""
+
+    @staticmethod
+    def _table_with(at, column):
+        tables = [d.value for d in at.dataframe if column in d.value.columns]
+        assert tables, f"no table on screen with a {column!r} column"
+        return tables[0]
+
+    def test_normalized_data_table(self, captured_downloads):
+        """Regression: the table above the download kept concentration[s1]."""
+        at = AppTest.from_function(normalization_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=6)
+        at.session_state['_test_intsta_df'] = None
+        at.session_state['_test_experiment'] = _experiment()
+        at.session_state['sample_names'] = {'s1': 'ID_01'}
+        at.run()
+        assert not at.exception
+        shown = self._table_with(at, 'concentration[ID_01]')
+        assert 'concentration[s1]' not in shown.columns
+        csv = _csv(captured_downloads, 'download_normalized_data')
+        assert list(shown.columns) == list(csv.columns)
+
+    def test_correlation_table_shows_named_row_labels(self, captured_downloads):
+        at = AppTest.from_function(qc_module_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['_test_df'] = make_analysis_dataframe(n_lipids=20, n_samples=6)
+        at.session_state['_test_experiment'] = _experiment()
+        at.session_state['sample_names'] = {'s1': 'A'}
+        at.run()
+        assert not at.exception
+        shown = self._table_with(at, 'Sample')
+        assert list(shown.columns) == ['Sample', 'A', 's2', 's3']
+        assert shown['Sample'].tolist() == ['A', 's2', 's3']
 
 
 # =============================================================================
