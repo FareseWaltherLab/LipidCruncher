@@ -120,6 +120,10 @@ def remap_names_after_exclusion(
     the same way. Mirrors ``QualityCheckService._drop_and_rename_columns``: the
     survivors, in their original order, take ``labels_after`` in turn.
 
+    Returns the CSV display text, disambiguated in the original label space
+    first, so a shared name keeps its original label (``"QC (s5)"``) in every
+    CSV rather than picking up the survivor's new one.
+
     Args:
         names: ``{s-label -> name}`` in the pre-exclusion label space.
         labels_before: Sample labels before the exclusion, in order.
@@ -128,6 +132,7 @@ def remap_names_after_exclusion(
     """
     if not names:
         return {}
+    names = _csv_display_names(names)
     survivors = [label for label in labels_before if label not in removed]
     return {
         new: names[old]

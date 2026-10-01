@@ -101,6 +101,19 @@ class TestRemapAfterExclusion:
             ['s1', 's2', 's3'],
         ) == {'s2': 'D', 's3': 'E'}
 
+    def test_shared_name_keeps_its_original_label(self):
+        """Regression: the suffix used the post-exclusion label, so
+        'QC (s4)' meant original s4 before the exclusion and original s5
+        after it."""
+        names = {'s4': 'QC', 's5': 'QC'}
+        labels = ['s1', 's2', 's3', 's4', 's5']
+        remapped = remap_names_after_exclusion(names, labels, ['s1'], labels[:4])
+        assert remapped == {'s3': 'QC (s4)', 's4': 'QC (s5)'}
+        post = pd.DataFrame(columns=['concentration[s3]', 'concentration[s4]'])
+        assert list(name_samples_for_csv(post, remapped).columns) == [
+            'concentration[QC (s4)]', 'concentration[QC (s5)]',
+        ]
+
     def test_no_names(self):
         assert remap_names_after_exclusion(None, ['s1', 's2'], ['s1'], ['s1']) == {}
         assert remap_names_after_exclusion({}, ['s1', 's2'], ['s1'], ['s1']) == {}
