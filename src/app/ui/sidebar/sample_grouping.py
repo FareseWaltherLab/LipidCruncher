@@ -186,7 +186,7 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
     Names are auto-seeded from the uploaded column headers (or a LipidSearch
     5.2 Alignment Setting file's raw filenames) and stored in
     ``st.session_state.sample_names`` keyed by internal label (s1, s2, ...).
-    They appear in the Group Samples table and in CSV downloads.
+    They appear in the Group Samples table, data tables and CSV downloads.
     """
     labels = experiment.full_samples_list
     names = st.session_state.get('sample_names') or {}
@@ -194,7 +194,8 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
     with st.sidebar.expander('✏️ Sample Names (optional)', expanded=False):
         st.caption(
             "These names are shown in the Group Samples table and replace s1, "
-            "s2, ... in CSV downloads; plots keep the s-labels. "
+            "s2, ... in data tables and CSV downloads; plots keep the "
+            "s-labels. "
             "Auto-filled from your file's column headers (or, for LipidSearch "
             "5.2, the Alignment Setting file's raw filenames) — edit as needed."
         )

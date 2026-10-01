@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_COMPLETE_HELP
-from app.ui.download_utils import csv_download_button
+from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.st_helpers import keep_intsta_expander_open, INTSTA_EXPANDER_KEY
 
 
@@ -154,7 +154,10 @@ def _display_auto_detected_standards(
 
     if auto_detected_df is not None and not auto_detected_df.empty:
         st.success(f"✓ Found {len(auto_detected_df)} standards")
-        st.dataframe(auto_detected_df, use_container_width=True)
+        named_dataframe(
+            auto_detected_df, sample_names=st.session_state.get('sample_names'),
+            use_container_width=True,
+        )
 
         csv_download_button(
             auto_detected_df, "detected_standards.csv",
@@ -182,7 +185,10 @@ def _display_auto_detected_standards(
 
     combined_df = _combine_standards(base_df, added_df)
     st.markdown("###### Active internal standards")
-    st.dataframe(combined_df, use_container_width=True)
+    named_dataframe(
+        combined_df, sample_names=st.session_state.get('sample_names'),
+        use_container_width=True,
+    )
     csv_download_button(
         combined_df, "active_standards.csv",
         key="download_combined_standards", on_click=_latch_expander_open,
@@ -251,7 +257,10 @@ def _display_select_from_dataset(
         )
 
     st.success(f"✓ Using {len(standards_df)} selected standard(s) from the dataset.")
-    st.dataframe(standards_df, use_container_width=True)
+    named_dataframe(
+        standards_df, sample_names=st.session_state.get('sample_names'),
+        use_container_width=True,
+    )
     csv_download_button(
         standards_df, "selected_standards.csv",
         key="download_selected_standards", on_click=_latch_expander_open,
@@ -316,7 +325,10 @@ def _display_custom_upload(
 def _display_preserved_custom_standards() -> pd.DataFrame:
     """Display previously uploaded custom standards with clear button."""
     st.success(f"✓ Using {len(st.session_state.custom_standards_df)} custom standards")
-    st.dataframe(st.session_state.custom_standards_df, use_container_width=True)
+    named_dataframe(
+        st.session_state.custom_standards_df, sample_names=st.session_state.get('sample_names'),
+        use_container_width=True,
+    )
 
     if st.button(
         "Clear Custom Standards",
@@ -376,7 +388,10 @@ def _process_uploaded_standards(
             st.info(f"Removed {result.duplicates_removed} duplicate standard(s).")
 
         st.success(f"✓ Loaded {result.standards_count} custom standards (mode: {result.source_mode})")
-        st.dataframe(result.standards_df, use_container_width=True)
+        named_dataframe(
+            result.standards_df, sample_names=st.session_state.get('sample_names'),
+            use_container_width=True,
+        )
 
         csv_download_button(
             result.standards_df, "custom_standards.csv",
