@@ -86,7 +86,8 @@ merges each sample's positive/negative pair into one intensity column.
 (it lists every raw filename with its sample and condition). When you upload a
 dual-polarity dataset, a second uploader appears — the file is **required** so
 the correct positive/negative files are paired per sample, and the conditions
-are read from it automatically to pre-fill your experiment.
+and sample names (from the raw filenames) are read from it automatically to
+pre-fill your experiment.
 
 **💡 Tip:** Export directly from LipidSearch — column names should match
 automatically. For a 5.2 condition-grouped export, also grab the Alignment

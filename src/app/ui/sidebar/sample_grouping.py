@@ -182,7 +182,8 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
 def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
     """Let the user review/edit the display name for each sample.
 
-    Names are auto-seeded from the uploaded column headers and stored in
+    Names are auto-seeded from the uploaded column headers (or a LipidSearch
+    5.2 Alignment Setting file's raw filenames) and stored in
     ``st.session_state.sample_names`` keyed by internal label (s1, s2, ...).
     They appear in the sample selectors and all sample-facing plots.
     """
