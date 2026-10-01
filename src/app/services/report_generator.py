@@ -212,8 +212,11 @@ def _render_heatmap_page(pdf: canvas.Canvas, fig: Any, title: str) -> None:
     page_width, page_height = letter
 
     fig_copy = copy.deepcopy(fig)
+    # Keep a taller top margin if the figure has one: it holds the condition
+    # strip and its labels, which would otherwise run into the title.
+    top = max(60, fig_copy.layout.margin.t or 0)
     fig_copy.update_layout(
-        margin=dict(l=180, r=100, t=60, b=60),
+        margin=dict(l=180, r=100, t=top, b=60),
         yaxis=dict(tickfont=dict(size=11)),
         xaxis=dict(tickfont=dict(size=10)),
     )

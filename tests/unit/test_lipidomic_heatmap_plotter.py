@@ -20,13 +20,18 @@ import pytest
 from app.services.plotting.lipidomic_heatmap import (
     CELL_SIZE_PX,
     GROUPED_PAGE_SIZE,
+    HEATMAP_HEIGHT,
     MARGIN_TOP,
     MAX_CELL_SIZE_PX,
+    STRIP_GAP_PX,
     STRIP_HEIGHT_PX,
+    STRIP_LABEL_ROW_PX,
     ClusteringResult,
     LipidomicHeatmapPlotterService,
     _compute_concentration_percentages,
     _compute_species_percentages,
+    _condition_blocks,
+    _label_rows,
     cell_size,
 )
 from tests.conftest import make_experiment
@@ -1577,13 +1582,14 @@ class TestSquareCells:
         )
         assert wide.layout.width - narrow.layout.width == 6 * cell_size(4)
 
-    def test_regular_keeps_original_fixed_layout(self):
-        """Regular mode was deliberately left alone."""
+    def test_regular_keeps_its_stretched_layout(self):
+        """Regular mode still stretches to the container width; it only
+        gained a fixed height so the condition strip has a known canvas."""
         fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(
             self._z(), ['s1', 's2', 's3'],
         )
         assert fig.layout.width is None
-        assert fig.layout.height is None
+        assert fig.layout.height == HEATMAP_HEIGHT
         assert fig.layout.margin.l == 10
 
     def test_clustered_keeps_original_fixed_canvas(self):
@@ -1630,7 +1636,8 @@ class TestConditionStrip:
     def test_blocks_sit_above_the_plot_area(self):
         for rect in [s for s in self._fig().layout.shapes if s.type == 'rect']:
             assert rect.yref == 'paper'
-            assert rect.y0 > 1.0
+            assert rect.yanchor == 1
+            assert rect.y0 > 0
 
     def test_separator_between_conditions(self):
         lines = [
@@ -1674,8 +1681,7 @@ class TestConditionStrip:
             if s.type == 'line' and s.y0 == 0 and s.y1 == 1
         ]
 
-    def test_never_added_to_the_untouched_modes(self):
-        """Clustered and Regular were reverted, so they must stay strip-free."""
+    def test_clustered_and_regular_absent_when_conditions_not_supplied(self):
         for fig in (
             LipidomicHeatmapPlotterService.generate_regular_heatmap(
                 self._z(), self.SAMPLES,
@@ -1785,7 +1791,10 @@ class TestStripGeometry:
 
     As a fixed paper fraction it thickened with the plot and pushed its own
     labels out of the top margin, so a tall heatmap showed condition colours
-    with no condition names.
+    with no condition names. Converting pixels to a paper fraction per figure
+    fixed the natural-size render but not a resized one: the PDF report
+    re-exports the heatmap on a taller canvas, where the strip grew over the
+    title again. Plotly's pixel size mode is immune to the resize.
     """
 
     @staticmethod
@@ -1806,23 +1815,187 @@ class TestStripGeometry:
     @pytest.mark.parametrize('n_rows', [2, 10, 60, 150])
     def test_strip_thickness_is_constant_in_pixels(self, n_rows):
         fig = self._fig(n_rows)
-        plot_height = n_rows * cell_size(n_rows)
         rect = [s for s in fig.layout.shapes if s.type == 'rect'][0]
-        assert (rect.y1 - rect.y0) * plot_height == pytest.approx(
-            STRIP_HEIGHT_PX, abs=0.01,
+        assert rect.ysizemode == 'pixel'
+        assert (rect.y0, rect.y1) == (
+            STRIP_GAP_PX, STRIP_GAP_PX + STRIP_HEIGHT_PX,
         )
 
     @pytest.mark.parametrize('n_rows', [2, 10, 60, 150])
     def test_labels_stay_inside_the_top_margin(self, n_rows):
         fig = self._fig(n_rows)
-        plot_height = n_rows * cell_size(n_rows)
         for annotation in fig.layout.annotations:
-            above_plot = (annotation.y - 1) * plot_height
-            assert above_plot < MARGIN_TOP
+            assert annotation.y == 1
+            assert annotation.yshift + STRIP_LABEL_ROW_PX < MARGIN_TOP
 
     def test_tall_heatmap_still_labels_every_block(self):
         labels = [a.text for a in self._fig(150).layout.annotations]
         assert 'A' in labels and 'B' in labels
+
+    def test_second_label_row_keeps_cells_square(self):
+        """A colliding name adds to the top margin, not to the plot area."""
+        class_z = pd.DataFrame(
+            np.zeros((3, 4)),
+            index=pd.Index(['PC', 'PE', 'TG'], name='ClassKey'),
+            columns=['s1', 's2', 's3', 's4'],
+        )
+        fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+            class_z, ['s1', 's2', 's3', 's4'],
+            sample_conditions=['CLEANUP_BLANK', 'KNOCKOUT_24H', 'QC', 'QC'],
+        )
+        layout = fig.layout
+        assert layout.margin.t == MARGIN_TOP + 2 * STRIP_LABEL_ROW_PX
+        assert layout.height - layout.margin.t - layout.margin.b == 3 * cell_size(3)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TestStretchedModeConditionStrip
+#
+# Clustered and Regular stretch to the container rather than drawing square
+# cells, but carry the same condition strip as the class modes.
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestStretchedModeConditionStrip:
+    SAMPLES = [f's{i+1}' for i in range(7)]
+    CONDITIONS = ['WT'] * 3 + ['KO'] * 2 + ['Rescue'] * 2
+
+    @staticmethod
+    def _z(n_rows=12):
+        rng = np.random.default_rng(0)
+        index = pd.MultiIndex.from_arrays(
+            [[f'L{i}' for i in range(n_rows)], ['PC'] * n_rows],
+            names=['LipidMolec', 'ClassKey'],
+        )
+        return pd.DataFrame(
+            rng.normal(size=(n_rows, 7)), index=index,
+            columns=TestStretchedModeConditionStrip.SAMPLES,
+        )
+
+    def _figs(self, conditions=None):
+        conditions = self.CONDITIONS if conditions is None else conditions
+        return {
+            'clustered': LipidomicHeatmapPlotterService.generate_clustered_heatmap(
+                self._z(), self.SAMPLES, 3, sample_conditions=conditions,
+            ),
+            'regular': LipidomicHeatmapPlotterService.generate_regular_heatmap(
+                self._z(), self.SAMPLES, sample_conditions=conditions,
+            ),
+        }
+
+    @staticmethod
+    def _separators(fig):
+        return [
+            s for s in fig.layout.shapes
+            if s.type == 'line' and s.yref == 'paper'
+        ]
+
+    def test_one_labelled_block_per_condition(self):
+        for mode, fig in self._figs().items():
+            rects = [s for s in fig.layout.shapes if s.type == 'rect']
+            assert [(r.x0, r.x1) for r in rects] == [
+                (-0.5, 2.5), (2.5, 4.5), (4.5, 6.5),
+            ], mode
+            assert [a.text for a in fig.layout.annotations] == [
+                'WT', 'KO', 'Rescue',
+            ], mode
+
+    def test_separators_run_the_full_plot_height(self):
+        for mode, fig in self._figs().items():
+            separators = self._separators(fig)
+            assert [s.x0 for s in separators] == [2.5, 4.5], mode
+            for s in separators:
+                assert (s.y0, s.y1) == (0, 1), mode
+                assert s.line.dash is None, mode
+
+    def test_clustered_keeps_its_dashed_cluster_boundaries(self):
+        fig = self._figs()['clustered']
+        dashed = [
+            s for s in fig.layout.shapes
+            if s.type == 'line' and s.line.dash == 'dash'
+        ]
+        assert len(dashed) == 2
+        assert all(s.yref != 'paper' for s in dashed)
+
+    def test_strip_is_pixel_sized_above_the_plot(self):
+        for mode, fig in self._figs().items():
+            for rect in [s for s in fig.layout.shapes if s.type == 'rect']:
+                assert rect.yref == 'paper' and rect.yanchor == 1, mode
+                assert rect.ysizemode == 'pixel', mode
+                assert (rect.y0, rect.y1) == (
+                    STRIP_GAP_PX, STRIP_GAP_PX + STRIP_HEIGHT_PX,
+                ), mode
+
+    def test_labels_clear_the_title(self):
+        """The title sits at the vertical centre of the top margin, so every
+        condition name must top out below that line."""
+        long_names = ['CLEANUP_BLANK', 'KNOCKOUT_24H'] + ['QC'] * 5
+        for conditions in (self.CONDITIONS, long_names):
+            for mode, fig in self._figs(conditions).items():
+                top = fig.layout.margin.t
+                for a in fig.layout.annotations:
+                    assert a.yshift + STRIP_LABEL_ROW_PX < top / 2, mode
+
+    def test_colliding_names_get_a_second_row_and_more_margin(self):
+        long_names = ['CLEANUP_BLANK', 'KNOCKOUT_24H'] + ['QC'] * 5
+        for mode, fig in self._figs(long_names).items():
+            shifts = [a.yshift for a in fig.layout.annotations]
+            assert shifts[1] == shifts[0] + STRIP_LABEL_ROW_PX, mode
+            assert fig.layout.margin.t == MARGIN_TOP + 2 * STRIP_LABEL_ROW_PX, mode
+
+    def test_short_names_stay_on_one_row(self):
+        for mode, fig in self._figs().items():
+            assert len({a.yshift for a in fig.layout.annotations}) == 1, mode
+            assert fig.layout.margin.t == MARGIN_TOP, mode
+
+    def test_x_axis_pinned_to_the_columns(self):
+        """Autorange would widen the axis to fit a name overhanging the last
+        block, leaving an empty sliver beside the heatmap."""
+        for mode, fig in self._figs().items():
+            assert tuple(fig.layout.xaxis.range) == (-0.5, 6.5), mode
+
+    def test_canvas_size_unchanged(self):
+        figs = self._figs()
+        assert (figs['clustered'].layout.width,
+                figs['clustered'].layout.height) == (900, HEATMAP_HEIGHT)
+        assert figs['regular'].layout.width is None
+
+    @pytest.mark.parametrize('conditions', [None, []])
+    def test_no_strip_without_conditions(self, conditions):
+        for fig in (
+            LipidomicHeatmapPlotterService.generate_clustered_heatmap(
+                self._z(), self.SAMPLES, 3, sample_conditions=conditions,
+            ),
+            LipidomicHeatmapPlotterService.generate_regular_heatmap(
+                self._z(), self.SAMPLES, sample_conditions=conditions,
+            ),
+        ):
+            assert not [s for s in fig.layout.shapes if s.type == 'rect']
+            assert not self._separators(fig)
+            assert not fig.layout.annotations
+
+    def test_figures_serialize(self):
+        for fig in self._figs().values():
+            assert fig.to_json()
+
+
+class TestLabelRows:
+    def test_names_that_fit_share_one_row(self):
+        blocks = _condition_blocks(['A'] * 3 + ['B'] * 3)
+        assert _label_rows(blocks, column_px=20) == [0, 0]
+
+    def test_a_colliding_name_moves_up(self):
+        blocks = _condition_blocks(['CLEANUP_BLANK', 'KNOCKOUT_24H'])
+        assert _label_rows(blocks, column_px=20) == [0, 1]
+
+    def test_rows_alternate_through_a_run_of_collisions(self):
+        blocks = _condition_blocks(
+            ['CLEANUP_BLANK', 'KNOCKOUT_24H', 'VEHICLE_ONLY', 'RESCUE_48H'],
+        )
+        assert _label_rows(blocks, column_px=60) == [0, 1, 0, 1]
+
+    def test_wider_columns_need_no_second_row(self):
+        blocks = _condition_blocks(['CLEANUP_BLANK', 'KNOCKOUT_24H'])
+        assert _label_rows(blocks, column_px=200) == [0, 0]
 
 
 # ═══════════════════════════════════════════════════════════════════════
