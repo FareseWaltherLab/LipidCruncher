@@ -128,3 +128,78 @@ class TestExperimentPrefill:
         assert vals['nc'] == '2'
         # No StreamlitAPIException from setting widget-backed keys pre-render.
         assert len(at.exception) == 0
+
+
+# One raw file searched by two jobs (ID_01) plus a pos/neg file pair (m02).
+_NAMED_ALIGNMENT_TEXT = (
+    "*Target search job\n"
+    "J\tID_01.raw\ts1-1\tID\tu1\n"
+    "J\tID_01.raw\ts1-2\tID\tu2\n"
+    "J\tm02n.raw\ts2-1\tTreated\tu3\n"
+    "J\tm02p.raw\ts2-2\tTreated\tu4\n"
+)
+
+
+def _sample_names_script():
+    """Standardize a dual-polarity frame via its alignment, then run the
+    sidebar sample grouping (which seeds and renders the Sample Names editor)
+    and emit the resulting session sample_names."""
+    import streamlit as st
+    import numpy as np
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    from app.constants import FORMAT_LIPIDSEARCH
+    from app.services.lipidsearch_alignment import parse_alignment_file
+    from app.ui.sidebar.column_mapping import standardize_uploaded_data
+    from app.ui.sidebar.file_upload import _populate_experiment_from_alignment
+    from app.ui.sidebar.sample_grouping import display_sample_grouping
+
+    text = st.session_state['lipidsearch_alignment_text']
+    if st.session_state.get('standardized_df') is None:
+        alignment = parse_alignment_file(text)
+        _populate_experiment_from_alignment(
+            alignment.conditions, alignment.samples_per_condition
+        )
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)', 'FA(15:0)'],
+            'ClassKey': ['PC', 'FA'],
+            'CalcMass': [757.5, 242.2],
+            'BaseRt': [10.0, 3.0],
+            'TotalGrade': ['A', 'A'],
+            'TotalSmpIDRate(%)': [100.0, 100.0],
+            'FAKey': ['(16:0_18:1)', '(15:0)'],
+            'OriginalArea[s1-1]': [np.nan, 300.0], 'OriginalArea[s1-2]': [200.0, np.nan],
+            'OriginalArea[s2-1]': [np.nan, 330.0], 'OriginalArea[s2-2]': [220.0, np.nan],
+        })
+        st.session_state.standardized_df = standardize_uploaded_data(
+            df, FORMAT_LIPIDSEARCH
+        )
+    display_sample_grouping(st.session_state.standardized_df, FORMAT_LIPIDSEARCH)
+    st.text(f"names:{st.session_state.get('sample_names')}")
+
+
+class TestAlignmentSampleNames:
+    """The alignment's raw filenames seed the editable sample display names.
+
+    Regression: the merged column mapping holds only per-file tokens
+    ("OriginalArea[s1-1] + OriginalArea[s1-2]"), so alignment uploads got no
+    sample names at all.
+    """
+
+    def test_seeds_editor_names_from_raw_filenames(self):
+        at = AppTest.from_function(_sample_names_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['lipidsearch_alignment_text'] = _NAMED_ALIGNMENT_TEXT
+        at.run()
+        assert not at.exception
+        # Seeded, then written back unchanged by the Sample Names editor.
+        assert at.session_state['sample_names'] == {'s1': 'ID_01', 's2': 'm02'}
+
+    def test_user_names_are_not_overwritten(self):
+        at = AppTest.from_function(_sample_names_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['lipidsearch_alignment_text'] = _NAMED_ALIGNMENT_TEXT
+        at.session_state['sample_names'] = {'s1': 'pooled', 's2': 'mouse 2'}
+        at.run()
+        assert not at.exception
+        assert at.session_state['sample_names'] == {'s1': 'pooled', 's2': 'mouse 2'}

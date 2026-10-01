@@ -681,6 +681,7 @@ class TestSessionStateIntegration:
             'column_mapping': pd.DataFrame({'standardized_name': ['intensity[s1]']}),
             'format_type': 'MS-DIAL',
             'using_sample_data': True,
+            'lipidsearch_sample_names': {'s1': 'ID_01'},
             # Downstream state — must be cleared.
             'experiment': ExperimentConfig(
                 n_conditions=1, conditions_list=['A'], number_of_samples_list=[1],
@@ -705,6 +706,8 @@ class TestSessionStateIntegration:
         assert mock_st.session_state['column_mapping'] is not None
         assert mock_st.session_state['format_type'] == 'MS-DIAL'
         assert mock_st.session_state['using_sample_data'] is True
+        # Alignment-derived names survive so sample_names can be re-seeded.
+        assert mock_st.session_state['lipidsearch_sample_names'] == {'s1': 'ID_01'}
 
         # Cleared: experiment + all downstream.
         assert mock_st.session_state['experiment'] is None

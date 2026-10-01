@@ -88,6 +88,7 @@ def _standardize_lipidsearch_dual_polarity(
         st.session_state.column_mapping = result.column_mapping
     if st.session_state.get('n_intensity_cols') is None:
         st.session_state.n_intensity_cols = result.n_intensity_cols
+    st.session_state.lipidsearch_sample_names = result.lipidsearch_sample_names
     return result.standardized_df
 
 
