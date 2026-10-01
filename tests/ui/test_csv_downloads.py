@@ -10,6 +10,7 @@ Covers:
 """
 
 import io
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -227,3 +228,49 @@ class TestNamesAfterExclusion:
         out = _csv(captured_downloads, 'analysis_csv_heatmap')
         sample_cols = [c for c in out.columns if c.startswith('concentration[')]
         assert sample_cols == [f'concentration[{n}]' for n in 'DEF']
+
+
+# =============================================================================
+# 4. Regrouping after Module 1
+# =============================================================================
+
+class TestRegroupOnQcPage:
+    """Regression: regrouping from the sidebar on the QC page re-keyed
+    sample_names but not the normalized data QC already held, so each moved
+    sample's name went onto another sample's column."""
+
+    def test_names_stay_with_their_data(self, captured_downloads):
+        from app.constants import PAGE_APP
+        at = AppTest.from_file(
+            str(Path(__file__).parents[2] / 'src' / 'main_app.py'),
+            default_timeout=DEFAULT_TIMEOUT,
+        )
+        at.session_state['page'] = PAGE_APP
+        at.run()
+        at.sidebar.button(key='load_sample').click().run()
+        at.sidebar.checkbox(key='confirm_checkbox').check().run()
+        at.session_state['sample_names'] = {f's{i}': f'N{i}' for i in range(1, 13)}
+        at.run()
+        [b for b in at.button if b.label.startswith('Next')][0].click().run()
+        assert not at.exception
+        before = _csv(captured_downloads, 'qc_box_plot_csv')
+
+        # Swap s1 and s5 between the first two conditions.
+        at.sidebar.radio(key='grouping_radio').set_value('No').run()
+        conditions = at.session_state['experiment'].conditions_list
+        selections = [
+            ['s5', 's2', 's3', 's4'], ['s1', 's6', 's7', 's8'],
+            ['s9', 's10', 's11', 's12'],
+        ]
+        for condition, samples in zip(conditions, selections):
+            at.sidebar.multiselect(key=f'select_{condition}').set_value(samples).run()
+        captured_downloads.clear()
+        at.sidebar.checkbox(key='confirm_checkbox').check().run()
+        assert not at.exception
+        assert at.session_state['sample_names']['s1'] == 'N5'
+
+        after = _csv(captured_downloads, 'qc_box_plot_csv')
+        assert list(after.columns) == list(before.columns)
+        pd.testing.assert_frame_equal(after, before)
+        pca = _csv(captured_downloads, 'pca_csv_download')
+        assert pca['Sample'].tolist()[:5] == ['N1', 'N2', 'N3', 'N4', 'N5']
