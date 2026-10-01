@@ -384,6 +384,27 @@ class TestMSDIALOverridePreservation:
         assert any("pre_regroup_cleared:True" in v for v in text_values)
         assert any("col_order_cleared:True" in v for v in text_values)
 
+    def test_data_type_switch_restores_upload_order_names(self, msdial_features_dict):
+        """Switching data type puts the names back in upload order with the data.
+
+        Regression: the toggle dropped the regroup data snapshot but left the
+        remapped names, so the next regroup remapped them a second time and
+        CSV downloads put one sample's name on another sample's data.
+        """
+        at = AppTest.from_function(override_preservation_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['msdial_features'] = msdial_features_dict
+        # A confirmed regroup that swapped s1 and s2.
+        at.session_state['_pre_regroup_df'] = 'stale_raw_snapshot'
+        at.session_state['_pre_regroup_sample_names'] = {'s1': 'Blank', 's2': 'KO_1'}
+        at.session_state['sample_names'] = {'s1': 'KO_1', 's2': 'Blank'}
+        at.run()
+        radio = at.radio(key='msdial_data_type_radio')
+        norm_option = [o for o in radio.options if "Pre-normalized" in o][0]
+        radio.set_value(norm_option).run()
+        text_values = [t.value for t in at.text]
+        assert any("sample_names:{'s1': 'Blank', 's2': 'KO_1'}" in v for v in text_values)
+        assert '_pre_regroup_sample_names' not in at.session_state
+
     def test_override_cleared_on_reset(self, msdial_features_dict):
         """reset_data_state() removes the override from session state."""
         at = AppTest.from_function(override_reset_script, default_timeout=DEFAULT_TIMEOUT)

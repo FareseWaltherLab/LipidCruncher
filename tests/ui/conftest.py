@@ -210,6 +210,7 @@ def override_preservation_script():
     st.text(f"n_intensity_cleared:{st.session_state.get('n_intensity_cols') is None}")
     st.text(f"pre_regroup_cleared:{st.session_state.get('_pre_regroup_df') is None}")
     st.text(f"col_order_cleared:{st.session_state.get('original_column_order') is None}")
+    st.text(f"sample_names:{st.session_state.get('sample_names')}")
 
 
 def override_reset_script():

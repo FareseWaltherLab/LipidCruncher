@@ -189,6 +189,12 @@ Your MS-DIAL export contains both raw and pre-normalized intensity values:
             # Clearing it forces a re-snapshot from the freshly standardized data.
             st.session_state.pop('_pre_regroup_df', None)
             st.session_state.pop('original_column_order', None)
+            # The fresh data comes back in upload order, so the names must too;
+            # left remapped, the next regroup would remap them a second time.
+            if '_pre_regroup_sample_names' in st.session_state:
+                st.session_state.sample_names = st.session_state.pop(
+                    '_pre_regroup_sample_names'
+                )
 
         data_type = st.radio(
             "Select which data to use:",

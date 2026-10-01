@@ -759,6 +759,20 @@ class TestSessionStateIntegration:
         assert '_pre_regroup_sample_names' not in mock_st.session_state
 
     @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_format_derived_state_drops_regroup_snapshot(self, mock_st):
+        """Regression: switching format kept the regroup snapshot, which the
+        grouping step's "Yes" branch then restored over the re-standardized data."""
+        mock_st.session_state = MockSessionState({
+            '_pre_regroup_df': pd.DataFrame({'intensity[s1]': [1.0]}),
+            '_pre_regroup_sample_names': {'s1': 'old format sample'},
+        })
+
+        StreamlitAdapter.reset_format_derived_state()
+
+        assert '_pre_regroup_df' not in mock_st.session_state
+        assert '_pre_regroup_sample_names' not in mock_st.session_state
+
+    @patch('app.adapters.streamlit_adapter.st')
     def test_reset_data_state_rearms_alignment_prefill(self, mock_st):
         """Regression: after Start Over the experiment pre-fill never fired
         again for the same Alignment Setting file, leaving default conditions."""

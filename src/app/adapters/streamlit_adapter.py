@@ -543,6 +543,10 @@ class StreamlitAdapter:
                 st.session_state[f.name] = getattr(defaults, f.name)
         for key in _WIDGET_KEYS:
             st.session_state.pop(key, None)
+        # A regroup snapshot from the old format would be restored over the
+        # re-standardized data by the grouping step's "Yes" branch.
+        for key in ('_pre_regroup_df', '_pre_regroup_sample_names'):
+            st.session_state.pop(key, None)
 
     @staticmethod
     def reset_to_experiment_setup() -> None:
