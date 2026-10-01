@@ -50,9 +50,9 @@ BLOCK_LINE_STYLE = dict(color='black', width=2)
 STRIP_GAP_PX = 6
 STRIP_HEIGHT_PX = 18
 
-# A condition name that would run into its neighbour's moves up to a second
-# row. The title sits at the vertical centre of the top margin, so that row
-# costs twice its height in margin to stay clear of the title.
+# A condition name that would run into its neighbour's moves up to the next
+# row with room. The title sits at the vertical centre of the top margin, so
+# each extra row costs twice its height in margin to stay clear of the title.
 STRIP_LABEL_ROW_PX = 16
 STRIP_LABEL_GAP_PX = 8
 # Condition names are mostly capitals and digits, wider than tick labels.
@@ -556,6 +556,7 @@ class LipidomicHeatmapPlotterService:
         extra_top = _add_condition_strip(
             fig, sample_conditions,
             STRETCHED_PLOT_WIDTH_PX / max(1, len(selected_samples)),
+            label_color=None,
         )
 
         fig.update_layout(
@@ -617,6 +618,7 @@ class LipidomicHeatmapPlotterService:
         extra_top = _add_condition_strip(
             fig, sample_conditions,
             STRETCHED_PLOT_WIDTH_PX / max(1, len(selected_samples)),
+            label_color=None,
         )
 
         fig.update_layout(
@@ -899,6 +901,7 @@ def _add_condition_strip(
     fig: go.Figure,
     sample_conditions: Optional[List[str]],
     column_px: float,
+    label_color: Optional[str] = 'black',
 ) -> int:
     """Draw a colour-coded condition strip above the columns.
 
@@ -915,10 +918,14 @@ def _add_condition_strip(
         sample_conditions: Condition label per sample, or None for no strip.
         column_px: Width of one sample column in px, used to tell whether
             neighbouring condition names would collide.
+        label_color: Colour of the condition names. None leaves it to the
+            figure's font, so the names follow the Streamlit theme like the
+            title does on a figure without a fixed white background.
 
     Returns:
-        Extra top margin, in px, the caller must add so a second row of
-        condition names clears the title; 0 when one row suffices.
+        Extra top margin, in px, the caller must add so any rows of
+        condition names above the first clear the title; 0 when one row
+        suffices.
     """
     blocks = _condition_blocks(sample_conditions or [])
     if not blocks:
@@ -948,7 +955,7 @@ def _add_condition_strip(
             yshift=strip_top + row * STRIP_LABEL_ROW_PX,
             text=condition,
             showarrow=False, yanchor='bottom',
-            font=dict(size=12, color='black'),
+            font=dict(size=12, color=label_color),
         )
 
     # Separator between adjacent condition blocks
@@ -965,22 +972,29 @@ def _add_condition_strip(
     # the outermost block, leaving an empty sliver beside the columns.
     fig.update_xaxes(range=[-0.5, len(sample_conditions) - 0.5])
 
-    return 2 * STRIP_LABEL_ROW_PX if any(rows) else 0
+    return 2 * STRIP_LABEL_ROW_PX * max(rows)
 
 
 def _label_rows(
     blocks: List[Tuple[str, int, int]],
     column_px: float,
 ) -> List[int]:
-    """Put each condition name on row 0, or on row 1 above it if it would
-    run into the name before it on row 0."""
+    """Put each condition name on the lowest row where it clears the name
+    before it on that row, opening a new row above when none has room."""
     rows: List[int] = []
-    right_edge = [-np.inf, -np.inf]
+    right_edge: List[float] = []
     for condition, start, end in blocks:
         centre = (start + end + 1) / 2 * column_px
         half_width = len(str(condition)) * STRIP_LABEL_PX_PER_CHAR / 2
-        row = 0 if centre - half_width >= right_edge[0] + STRIP_LABEL_GAP_PX else 1
-        right_edge[row] = centre + half_width
+        row = next(
+            (r for r, edge in enumerate(right_edge)
+             if centre - half_width >= edge + STRIP_LABEL_GAP_PX),
+            len(right_edge),
+        )
+        if row == len(right_edge):
+            right_edge.append(centre + half_width)
+        else:
+            right_edge[row] = centre + half_width
         rows.append(row)
     return rows
 
@@ -1001,7 +1015,7 @@ def _apply_square_layout(
     The plot area is fixed at n_cols x n_rows cells and the margins are sized
     from the longest tick label, so the caller must render the figure at its
     natural size rather than stretching it to the container width.
-    ``extra_top`` adds to the top margin, for a second row of condition names.
+    ``extra_top`` adds to the top margin, for extra rows of condition names.
     """
     cell = cell_size(n_rows)
     left = _label_extent(y_labels) + (CLASS_LABEL_WIDTH if grouped else 0)

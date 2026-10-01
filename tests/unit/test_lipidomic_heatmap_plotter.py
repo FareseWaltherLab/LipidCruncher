@@ -25,7 +25,10 @@ from app.services.plotting.lipidomic_heatmap import (
     MAX_CELL_SIZE_PX,
     STRIP_GAP_PX,
     STRIP_HEIGHT_PX,
+    STRIP_LABEL_GAP_PX,
+    STRIP_LABEL_PX_PER_CHAR,
     STRIP_LABEL_ROW_PX,
+    STRETCHED_PLOT_WIDTH_PX,
     ClusteringResult,
     LipidomicHeatmapPlotterService,
     _compute_concentration_percentages,
@@ -1656,6 +1659,11 @@ class TestConditionStrip:
         assert 'Treat' in labels
         assert fig.layout.showlegend is False
 
+    def test_labels_stay_black_on_the_fixed_white_background(self):
+        fig = self._fig()
+        assert fig.layout.paper_bgcolor == 'white'
+        assert all(a.font.color == 'black' for a in fig.layout.annotations)
+
     def test_blocks_use_shared_condition_palette(self):
         from app.services.plotting._shared import generate_condition_color_mapping
         expected = generate_condition_color_mapping(['Control', 'Treat'])
@@ -1973,6 +1981,15 @@ class TestStretchedModeConditionStrip:
             assert not self._separators(fig)
             assert not fig.layout.annotations
 
+    def test_labels_follow_the_theme_text_colour(self):
+        """These figures leave their background to the Streamlit theme, so
+        black names would vanish on its dark background; they inherit the
+        figure's font colour instead, as the title does."""
+        for mode, fig in self._figs().items():
+            assert fig.layout.paper_bgcolor is None, mode
+            for a in fig.layout.annotations:
+                assert a.font.color is None, mode
+
     def test_figures_serialize(self):
         for fig in self._figs().values():
             assert fig.to_json()
@@ -1992,6 +2009,46 @@ class TestLabelRows:
             ['CLEANUP_BLANK', 'KNOCKOUT_24H', 'VEHICLE_ONLY', 'RESCUE_48H'],
         )
         assert _label_rows(blocks, column_px=60) == [0, 1, 0, 1]
+
+    @pytest.mark.parametrize('conditions', [
+        ['WT_CONTROL'] * 24 + ['CLEANUP_BLANK'] * 2
+        + ['KNOCKOUT_24H'] * 2 + ['VEHICLE_ONLY'] * 2,
+        ['CONTROL'] * 6 + ['TREATED'] * 6 + ['VEHICLE'] * 6
+        + ['KNOCKOUT_24H'] * 3 + ['KNOCKOUT_48H'] * 3
+        + ['RESCUE_24H'] * 3 + ['RESCUE_48H'] * 3,
+    ])
+    def test_names_sharing_a_row_never_overlap(self, conditions):
+        """Narrow neighbouring blocks with long names used to all land on
+        the second row, printed over one another."""
+        column_px = STRETCHED_PLOT_WIDTH_PX / len(conditions)
+        blocks = _condition_blocks(conditions)
+        extents = {}
+        for (name, start, end), row in zip(blocks, _label_rows(blocks, column_px)):
+            centre = (start + end + 1) / 2 * column_px
+            half = len(name) * STRIP_LABEL_PX_PER_CHAR / 2
+            extents.setdefault(row, []).append((centre - half, centre + half))
+        for spans in extents.values():
+            for (_, right), (left, _) in zip(spans, spans[1:]):
+                assert left >= right + STRIP_LABEL_GAP_PX
+
+    def test_every_extra_row_buys_top_margin(self):
+        conditions = (
+            ['WT_CONTROL'] * 24 + ['CLEANUP_BLANK'] * 2
+            + ['KNOCKOUT_24H'] * 2 + ['VEHICLE_ONLY'] * 2
+        )
+        samples = [f's{i+1}' for i in range(30)]
+        index = pd.MultiIndex.from_arrays(
+            [['L0', 'L1'], ['PC', 'PC']], names=['LipidMolec', 'ClassKey'],
+        )
+        z = pd.DataFrame(
+            np.arange(60, dtype=float).reshape(2, 30),
+            index=index, columns=samples,
+        )
+        fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(
+            z, samples, sample_conditions=conditions,
+        )
+        top_row = max(a.yshift for a in fig.layout.annotations)
+        assert top_row + STRIP_LABEL_ROW_PX < fig.layout.margin.t / 2
 
     def test_wider_columns_need_no_second_row(self):
         blocks = _condition_blocks(['CLEANUP_BLANK', 'KNOCKOUT_24H'])
