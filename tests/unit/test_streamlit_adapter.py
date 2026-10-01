@@ -726,6 +726,24 @@ class TestSessionStateIntegration:
         mock_st.cache_data.clear.assert_called_once()
 
     @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_to_experiment_setup_undoes_confirmed_regroup(self, mock_st):
+        """Regression: after a confirmed regroup the soft reset kept the
+        renumbered standardized_df, so re-seeded names landed on the wrong data."""
+        original = pd.DataFrame({'intensity[s1]': [1.0], 'intensity[s2]': [2.0]})
+        regrouped = pd.DataFrame({'intensity[s2]': [1.0], 'intensity[s1]': [2.0]})
+        mock_st.session_state = MockSessionState({
+            'standardized_df': regrouped,
+            '_pre_regroup_df': original,
+            '_pre_regroup_sample_names': {'s1': 'alpha', 's2': 'beta'},
+        })
+
+        StreamlitAdapter.reset_to_experiment_setup()
+
+        assert mock_st.session_state['standardized_df'] is original
+        assert '_pre_regroup_df' not in mock_st.session_state
+        assert '_pre_regroup_sample_names' not in mock_st.session_state
+
+    @patch('app.adapters.streamlit_adapter.st')
     def test_initialize_creates_analysis_keys(self, mock_st):
         """Test that initialization creates all analysis session state keys."""
         mock_st.session_state = MockSessionState()
