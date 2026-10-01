@@ -483,3 +483,56 @@ class TestManyConditions:
         m = ReportMetadata(format_type="Generic")
         result = generate_pdf_report(plots, m)
         assert result is not None
+
+
+# ── TestHeatmapPage ─────────────────────────────────────────────────────────
+
+class TestHeatmapPage:
+    """The heatmap page re-exports the figure with its own margins. Its old
+    fixed 60px top margin had no room for the condition strip's names, which
+    ran into the title or were clipped off the page."""
+
+    @staticmethod
+    def _exported_top_margin(fig):
+        from PIL import Image
+        from reportlab.pdfgen import canvas
+        from app.services.report_generator import _render_heatmap_page
+
+        seen = {}
+
+        def fake_export(fig_copy, params):
+            seen['top'] = fig_copy.layout.margin.t
+            buf = io.BytesIO()
+            Image.new('RGB', (9, 12)).save(buf, 'PNG')
+            return buf.getvalue()
+
+        with patch(
+            'app.services.report_generator._plotly_to_image',
+            side_effect=fake_export,
+        ):
+            _render_heatmap_page(
+                canvas.Canvas(io.BytesIO()), fig, "Lipidomic Heatmap",
+            )
+        return seen['top']
+
+    def test_keeps_the_room_made_for_the_condition_strip(self):
+        import numpy as np
+        import pandas as pd
+        from app.services.plotting.lipidomic_heatmap import (
+            LipidomicHeatmapPlotterService,
+        )
+
+        z = pd.DataFrame(
+            np.arange(8, dtype=float).reshape(2, 4),
+            index=pd.MultiIndex.from_arrays(
+                [['L0', 'L1'], ['PC', 'PE']], names=['LipidMolec', 'ClassKey'],
+            ),
+            columns=['s1', 's2', 's3', 's4'],
+        )
+        fig = LipidomicHeatmapPlotterService.generate_regular_heatmap(
+            z, ['s1', 's2', 's3', 's4'], sample_conditions=['A', 'A', 'B', 'B'],
+        )
+        assert self._exported_top_margin(fig) == fig.layout.margin.t > 60
+
+    def test_figures_without_a_taller_margin_get_the_default(self, plotly_fig):
+        assert self._exported_top_margin(plotly_fig) == 60

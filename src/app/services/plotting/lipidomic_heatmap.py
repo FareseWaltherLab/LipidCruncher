@@ -42,12 +42,27 @@ CELL_SIZE_PX = 18
 # Solid separators between condition columns and lipid class blocks.
 BLOCK_LINE_STYLE = dict(color='black', width=2)
 
-# Condition strip geometry, in px above the plot area. Held in pixels and
-# converted to paper coordinates per figure: as a fixed paper fraction the
-# strip would thicken with the plot and push its own labels out of the top
-# margin, which is how a tall heatmap ended up showing colours but no names.
+# Condition strip geometry, in px above the plot area. Drawn in pixels rather
+# than as a paper fraction: as a fraction the strip thickens with the plot and
+# pushes its own labels out of the top margin, which is how a tall heatmap —
+# or any heatmap re-exported at the PDF report's larger canvas — ended up
+# showing colours but no names.
 STRIP_GAP_PX = 6
 STRIP_HEIGHT_PX = 18
+
+# A condition name that would run into its neighbour's moves up to a second
+# row. The title sits at the vertical centre of the top margin, so that row
+# costs twice its height in margin to stay clear of the title.
+STRIP_LABEL_ROW_PX = 16
+STRIP_LABEL_GAP_PX = 8
+# Condition names are mostly capitals and digits, wider than tick labels.
+STRIP_LABEL_PX_PER_CHAR = 8
+
+# Clustered and Regular stretch to the container, so their column width is
+# unknown when the figure is built. Name collisions are judged at this plot
+# width, roughly what a 700px container leaves beside the species names and
+# colour bar; wider renders only gain room.
+STRETCHED_PLOT_WIDTH_PX = 450
 
 # Margin budget (px). Left/bottom also grow with the longest tick label.
 MARGIN_RIGHT = 130
@@ -472,6 +487,7 @@ class LipidomicHeatmapPlotterService:
         z_scores_df: pd.DataFrame,
         selected_samples: List[str],
         n_clusters: int,
+        sample_conditions: Optional[List[str]] = None,
         value_label: str = 'Z-score',
     ) -> go.Figure:
         """Create a heatmap reordered by hierarchical clustering with cluster boundaries.
@@ -482,6 +498,9 @@ class LipidomicHeatmapPlotterService:
                 Clustering runs on whichever is given.
             selected_samples: Sample names for column labels.
             n_clusters: Number of clusters.
+            sample_conditions: Optional condition label per sample, index-aligned
+                with selected_samples. When given, a colour-coded condition strip
+                is drawn above the columns.
             value_label: Name of the plotted quantity, used for the colour bar.
 
         Returns:
@@ -534,11 +553,16 @@ class LipidomicHeatmapPlotterService:
                 line=CLUSTER_LINE_STYLE,
             )
 
+        extra_top = _add_condition_strip(
+            fig, sample_conditions,
+            STRETCHED_PLOT_WIDTH_PX / max(1, len(selected_samples)),
+        )
+
         fig.update_layout(
             title=_titled('Clustered Lipidomic Heatmap', value_label),
             xaxis_title='Samples',
             yaxis_title='Lipid Molecules',
-            margin=dict(l=100, r=100, t=50, b=50),
+            margin=dict(l=100, r=100, t=MARGIN_TOP + extra_top, b=50),
             width=HEATMAP_WIDTH,
             height=HEATMAP_HEIGHT,
         )
@@ -552,6 +576,7 @@ class LipidomicHeatmapPlotterService:
     def generate_regular_heatmap(
         z_scores_df: pd.DataFrame,
         selected_samples: List[str],
+        sample_conditions: Optional[List[str]] = None,
         value_label: str = 'Z-score',
     ) -> go.Figure:
         """Create a regular heatmap without clustering.
@@ -559,6 +584,9 @@ class LipidomicHeatmapPlotterService:
         Args:
             z_scores_df: Z-score DataFrame (output of compute_z_scores).
             selected_samples: Sample names for column labels.
+            sample_conditions: Optional condition label per sample, index-aligned
+                with selected_samples. When given, a colour-coded condition strip
+                is drawn above the columns.
 
         Returns:
             Plotly Figure with regular heatmap.
@@ -586,11 +614,17 @@ class LipidomicHeatmapPlotterService:
             colorbar=dict(title=value_label),
         ))
 
+        extra_top = _add_condition_strip(
+            fig, sample_conditions,
+            STRETCHED_PLOT_WIDTH_PX / max(1, len(selected_samples)),
+        )
+
         fig.update_layout(
             title=_titled('Regular Lipidomic Heatmap', value_label),
             xaxis_title='Samples',
             yaxis_title='Lipid Molecules',
-            margin=dict(l=10, r=10, t=25, b=20),
+            margin=dict(l=10, r=10, t=MARGIN_TOP + extra_top, b=20),
+            height=HEATMAP_HEIGHT,
         )
 
         fig.update_xaxes(tickangle=45)
@@ -642,12 +676,14 @@ class LipidomicHeatmapPlotterService:
             value_label=value_label,
         )
 
-        _add_condition_strip(fig, sample_conditions, len(species))
+        extra_top = _add_condition_strip(
+            fig, sample_conditions, cell_size(len(species)),
+        )
         _apply_square_layout(
             fig, f'Lipidomic Heatmap Grouped by Class ({value_label})',
             n_rows=len(species), n_cols=len(selected_samples),
             y_labels=species, x_labels=selected_samples,
-            grouped=True,
+            grouped=True, extra_top=extra_top,
         )
 
         fig.update_yaxes(
@@ -694,12 +730,14 @@ class LipidomicHeatmapPlotterService:
             value_label=value_label,
         )
 
-        _add_condition_strip(fig, sample_conditions, len(classes))
+        extra_top = _add_condition_strip(
+            fig, sample_conditions, cell_size(len(classes)),
+        )
         _apply_square_layout(
             fig, f'Lipidomic Heatmap Aggregated by Class ({value_label})',
             n_rows=len(classes), n_cols=len(selected_samples),
             y_labels=classes, x_labels=selected_samples,
-            y_title='Lipid Classes',
+            y_title='Lipid Classes', extra_top=extra_top,
         )
 
         fig.update_yaxes(tickmode='array', autorange='reversed')
@@ -860,8 +898,8 @@ def _condition_blocks(
 def _add_condition_strip(
     fig: go.Figure,
     sample_conditions: Optional[List[str]],
-    n_rows: int,
-) -> None:
+    column_px: float,
+) -> int:
     """Draw a colour-coded condition strip above the columns.
 
     Adds one filled block per condition, the condition name above each block,
@@ -869,37 +907,45 @@ def _add_condition_strip(
     directly rather than through a legend, which keeps the figure readable at
     any row count. Does nothing when no conditions are supplied.
 
+    The strip is anchored to the top of the plot area and sized in pixels, so
+    it keeps its thickness however tall the figure is drawn.
+
     Args:
         fig: Figure to annotate.
         sample_conditions: Condition label per sample, or None for no strip.
-        n_rows: Heatmap row count, used to convert the strip's pixel geometry
-            into paper coordinates so it keeps a constant thickness.
+        column_px: Width of one sample column in px, used to tell whether
+            neighbouring condition names would collide.
+
+    Returns:
+        Extra top margin, in px, the caller must add so a second row of
+        condition names clears the title; 0 when one row suffices.
     """
     blocks = _condition_blocks(sample_conditions or [])
     if not blocks:
-        return
+        return 0
 
-    plot_height = max(1, n_rows * cell_size(n_rows))
-    strip_y0 = 1 + STRIP_GAP_PX / plot_height
-    strip_y1 = strip_y0 + STRIP_HEIGHT_PX / plot_height
+    strip_top = STRIP_GAP_PX + STRIP_HEIGHT_PX
+    rows = _label_rows(blocks, column_px)
 
     color_map = generate_condition_color_mapping(
         list(dict.fromkeys(cond for cond, _, _ in blocks))
     )
 
-    for condition, start, end in blocks:
+    for (condition, start, end), row in zip(blocks, rows):
         fig.add_shape(
             type='rect',
             xref='x', yref='paper',
+            ysizemode='pixel', yanchor=1,
             x0=start - 0.5, x1=end + 0.5,
-            y0=strip_y0, y1=strip_y1,
+            y0=STRIP_GAP_PX, y1=strip_top,
             fillcolor=color_map[condition],
             line=dict(width=0),
             layer='above',
         )
         fig.add_annotation(
             xref='x', yref='paper',
-            x=(start + end) / 2, y=strip_y1,
+            x=(start + end) / 2, y=1,
+            yshift=strip_top + row * STRIP_LABEL_ROW_PX,
             text=condition,
             showarrow=False, yanchor='bottom',
             font=dict(size=12, color='black'),
@@ -915,6 +961,29 @@ def _add_condition_strip(
             line=BLOCK_LINE_STYLE,
         )
 
+    # Autorange would otherwise widen the axis to fit a name that overhangs
+    # the outermost block, leaving an empty sliver beside the columns.
+    fig.update_xaxes(range=[-0.5, len(sample_conditions) - 0.5])
+
+    return 2 * STRIP_LABEL_ROW_PX if any(rows) else 0
+
+
+def _label_rows(
+    blocks: List[Tuple[str, int, int]],
+    column_px: float,
+) -> List[int]:
+    """Put each condition name on row 0, or on row 1 above it if it would
+    run into the name before it on row 0."""
+    rows: List[int] = []
+    right_edge = [-np.inf, -np.inf]
+    for condition, start, end in blocks:
+        centre = (start + end + 1) / 2 * column_px
+        half_width = len(str(condition)) * STRIP_LABEL_PX_PER_CHAR / 2
+        row = 0 if centre - half_width >= right_edge[0] + STRIP_LABEL_GAP_PX else 1
+        right_edge[row] = centre + half_width
+        rows.append(row)
+    return rows
+
 
 def _apply_square_layout(
     fig: go.Figure,
@@ -925,24 +994,27 @@ def _apply_square_layout(
     x_labels: List[str],
     grouped: bool = False,
     y_title: str = 'Lipid Molecules',
+    extra_top: int = 0,
 ) -> None:
     """Size the figure so every cell renders as a square.
 
     The plot area is fixed at n_cols x n_rows cells and the margins are sized
     from the longest tick label, so the caller must render the figure at its
     natural size rather than stretching it to the container width.
+    ``extra_top`` adds to the top margin, for a second row of condition names.
     """
     cell = cell_size(n_rows)
     left = _label_extent(y_labels) + (CLASS_LABEL_WIDTH if grouped else 0)
     bottom = _label_extent(x_labels)
+    top = MARGIN_TOP + extra_top
 
     fig.update_layout(
         title=title,
         xaxis_title='Samples',
         yaxis_title=y_title,
-        margin=dict(l=left, r=MARGIN_RIGHT, t=MARGIN_TOP, b=bottom),
+        margin=dict(l=left, r=MARGIN_RIGHT, t=top, b=bottom),
         width=left + MARGIN_RIGHT + n_cols * cell,
-        height=MARGIN_TOP + bottom + n_rows * cell,
+        height=top + bottom + n_rows * cell,
         plot_bgcolor='white',
         paper_bgcolor='white',
         showlegend=False,

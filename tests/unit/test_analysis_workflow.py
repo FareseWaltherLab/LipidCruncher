@@ -1337,20 +1337,37 @@ class TestRunHeatmap:
         means = np.nanmean(treatment_cols, axis=1)
         assert np.all(np.diff(means) <= 1e-9)
 
-    def test_class_modes_colour_code_the_sample_axis(self, multi_species_df, exp_2x3):
-        """The workflow must pass condition labels to the two class modes."""
-        for mode in ('class_grouped', 'class_aggregated'):
+    def test_every_mode_colour_codes_the_sample_axis(self, multi_species_df, exp_2x3):
+        """The workflow must pass condition labels to every heatmap mode."""
+        for mode in ('class_grouped', 'class_aggregated', 'clustered', 'regular'):
             result = AnalysisWorkflow.run_heatmap(
                 multi_species_df, exp_2x3,
                 selected_conditions=['Control', 'Treatment'],
                 selected_classes=['PC', 'PE'],
-                heatmap_type=mode,
+                heatmap_type=mode, n_clusters=2,
             )
             rects = [s for s in result.figure.layout.shapes if s.type == 'rect']
             assert len(rects) == 2, f'{mode} is missing the condition strip'
+            labels = [a.text for a in result.figure.layout.annotations]
+            assert labels == ['Control', 'Treatment'], mode
 
-    def test_original_modes_are_unchanged(self, multi_species_df, exp_2x3):
-        """Clustered and Regular were reverted to their original rendering."""
+    def test_clustered_and_regular_follow_condition_order(
+        self, df_9_samples, exp_3x3,
+    ):
+        """Blocks follow the selected conditions, not the experiment order."""
+        for mode in ('clustered', 'regular'):
+            result = AnalysisWorkflow.run_heatmap(
+                df_9_samples, exp_3x3,
+                selected_conditions=['Vehicle', 'Control'],
+                selected_classes=['PC', 'PE'],
+                heatmap_type=mode, n_clusters=2,
+            )
+            labels = [a.text for a in result.figure.layout.annotations]
+            assert labels == ['Vehicle', 'Control'], mode
+
+    def test_clustered_and_regular_add_no_legend_proxies(
+        self, multi_species_df, exp_2x3,
+    ):
         for mode in ('regular', 'clustered'):
             result = AnalysisWorkflow.run_heatmap(
                 multi_species_df, exp_2x3,
@@ -1358,9 +1375,6 @@ class TestRunHeatmap:
                 selected_classes=['PC', 'PE'],
                 heatmap_type=mode, n_clusters=2,
             )
-            assert not [
-                s for s in result.figure.layout.shapes if s.type == 'rect'
-            ], f'{mode} should not have a condition strip'
             assert not [
                 t for t in result.figure.data if isinstance(t, go.Scatter)
             ], f'{mode} should not have legend proxies'

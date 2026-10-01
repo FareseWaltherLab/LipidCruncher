@@ -1050,6 +1050,7 @@ class AnalysisWorkflow:
         if heatmap_type == 'clustered':
             figure = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
                 z_scores_df, selected_samples, n_clusters,
+                sample_conditions=sample_conditions,
                 value_label=value_label,
             )
             cluster_composition = LipidomicHeatmapPlotterService.get_cluster_composition(
@@ -1086,7 +1087,9 @@ class AnalysisWorkflow:
             )
         else:
             figure = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-                z_scores_df, selected_samples, value_label=value_label,
+                z_scores_df, selected_samples,
+                sample_conditions=sample_conditions,
+                value_label=value_label,
             )
 
         return HeatmapResult(
