@@ -394,6 +394,14 @@ class StreamlitAdapter:
         ]
         for key in dynamic_keys:
             st.session_state.pop(key, None)
+        # Plain (non-field) keys tied to the previous grouping or upload. A
+        # leftover regroup snapshot would otherwise be restored over the next
+        # dataset by the grouping step's "Yes" branch, carrying the old names
+        # onto new data; the alignment marker would stop the experiment
+        # pre-fill from firing again for the same Alignment Setting file.
+        for key in ('_pre_regroup_df', '_pre_regroup_sample_names',
+                    '_ls_align_prefilled_for'):
+            st.session_state.pop(key, None)
 
     @staticmethod
     def reset_to_experiment_setup() -> None:
@@ -414,8 +422,6 @@ class StreamlitAdapter:
         # the pre-regroup data, since the grouping itself is being reset.
         if st.session_state.get('_pre_regroup_df') is not None:
             preserved['standardized_df'] = st.session_state['_pre_regroup_df']
-        st.session_state.pop('_pre_regroup_df', None)
-        st.session_state.pop('_pre_regroup_sample_names', None)
         StreamlitAdapter.reset_data_state()
         for key, value in preserved.items():
             st.session_state[key] = value
