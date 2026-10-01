@@ -195,7 +195,8 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
         st.caption(
             "These names are shown in the Group Samples table and replace s1, "
             "s2, ... in CSV downloads; plots keep the s-labels. "
-            "Auto-filled from your file's column headers — edit as needed."
+            "Auto-filled from your file's column headers (or, for LipidSearch "
+            "5.2, the Alignment Setting file's raw filenames) — edit as needed."
         )
         editor_df = pd.DataFrame({
             'sample': labels,

@@ -246,9 +246,8 @@ def _display_whats_new() -> None:
           re-uploading your data
         - **Collapsed Analysis Sections**: Landing on Visualize and Analyze no longer opens a
           section on its own
-        - **Sample Names in the Sidebar**: Sample selectors show the original column header
-          next to each label (s3 — mouse liver #5), so you can group without cross-referencing
-          your file
+        - **Sample Names in the Sidebar**: The Group Samples table shows each sample's original
+          column header next to its label, so you can group without cross-referencing your file
         - **Blanket Grade Filtering**: Relax LipidSearch grades to A/B/C for every lipid class
           at once, instead of setting each class individually
         - **Corrected Format Documentation**: The data-requirements and processing panels now
