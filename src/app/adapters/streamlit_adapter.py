@@ -403,6 +403,13 @@ class StreamlitAdapter:
         preserved = {
             key: st.session_state.get(key) for key in _SOFT_RESET_PRESERVE
         }
+        # A confirmed manual regroup leaves standardized_df renumbered, which no
+        # longer matches the column mapping or the seeded sample names. Restore
+        # the pre-regroup data, since the grouping itself is being reset.
+        if st.session_state.get('_pre_regroup_df') is not None:
+            preserved['standardized_df'] = st.session_state['_pre_regroup_df']
+        st.session_state.pop('_pre_regroup_df', None)
+        st.session_state.pop('_pre_regroup_sample_names', None)
         StreamlitAdapter.reset_data_state()
         for key, value in preserved.items():
             st.session_state[key] = value

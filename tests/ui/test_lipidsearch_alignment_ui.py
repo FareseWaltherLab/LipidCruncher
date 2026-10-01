@@ -183,9 +183,9 @@ def _sample_names_script():
 class TestAlignmentSampleNames:
     """The alignment's raw filenames seed the editable sample display names.
 
-    Regression: the merged column mapping holds only per-file tokens
-    ("OriginalArea[s1-1] + OriginalArea[s1-2]"), so alignment uploads got no
-    sample names at all.
+    Regression: the merged column mapping holds only per-file tokens, so
+    build_names_from_mapping named each alignment sample with the composite
+    "OriginalArea[s1-1] + OriginalArea[s1-2]" string.
     """
 
     def test_seeds_editor_names_from_raw_filenames(self):
@@ -203,3 +203,79 @@ class TestAlignmentSampleNames:
         at.run()
         assert not at.exception
         assert at.session_state['sample_names'] == {'s1': 'pooled', 's2': 'mouse 2'}
+
+
+# Sample values 1..4 identify which raw file's data a column holds.
+_SOFT_RESET_ALIGNMENT_TEXT = (
+    "*Target search job\n"
+    "J\talpha.raw\ts1-1\tA\tu1\nJ\tbeta.raw\ts1-2\tA\tu2\n"
+    "J\tgamma.raw\ts2-1\tB\tu3\nJ\tdelta.raw\ts2-2\tB\tu4\n"
+)
+
+
+def _soft_reset_script():
+    """Sample grouping over an alignment upload, with an optional soft reset
+    (st.session_state['_soft']); emits each sample name's data value."""
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    from app.constants import FORMAT_LIPIDSEARCH
+    from app.services.lipidsearch_alignment import parse_alignment_file
+    from app.ui.sidebar.column_mapping import standardize_uploaded_data
+    from app.ui.sidebar.file_upload import _populate_experiment_from_alignment
+    from app.ui.sidebar.sample_grouping import display_sample_grouping
+
+    if st.session_state.pop('_soft', False):
+        StreamlitAdapter.reset_to_experiment_setup()
+    if st.session_state.get('experiment') is None:
+        alignment = parse_alignment_file(st.session_state['lipidsearch_alignment_text'])
+        _populate_experiment_from_alignment(
+            alignment.conditions, alignment.samples_per_condition
+        )
+    if st.session_state.get('standardized_df') is None:
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)'], 'ClassKey': ['PC'], 'CalcMass': [757.5],
+            'BaseRt': [10.0], 'TotalGrade': ['A'], 'TotalSmpIDRate(%)': [100.0],
+            'FAKey': ['(16:0_18:1)'],
+            'OriginalArea[s1-1]': [1.0], 'OriginalArea[s1-2]': [2.0],
+            'OriginalArea[s2-1]': [3.0], 'OriginalArea[s2-2]': [4.0],
+        })
+        st.session_state.standardized_df = standardize_uploaded_data(df, FORMAT_LIPIDSEARCH)
+    display_sample_grouping(st.session_state.standardized_df, FORMAT_LIPIDSEARCH)
+    sdf = st.session_state.standardized_df
+    names = st.session_state.get('sample_names') or {}
+    st.text("data:" + str(sorted(
+        (name, float(sdf[f'intensity[{s}]'].iloc[0])) for s, name in names.items()
+    )))
+
+
+class TestAlignmentNamesAfterSoftReset:
+    """Regression: a soft reset after a confirmed regroup kept the renumbered
+    data but re-seeded names in alignment order, so 'alpha' labelled gamma's
+    data (and a second regroup carried the mismatch through)."""
+
+    _EXPECTED = "data:[('alpha', 1.0), ('beta', 2.0), ('delta', 4.0), ('gamma', 3.0)]"
+
+    def test_names_stay_with_their_data(self):
+        at = AppTest.from_function(_soft_reset_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['lipidsearch_alignment_text'] = _SOFT_RESET_ALIGNMENT_TEXT
+        at.run()
+        assert at.text[0].value == self._EXPECTED
+        # Regroup: swap the conditions, then confirm.
+        at.sidebar.radio(key='grouping_radio').set_value('No').run()
+        at.sidebar.multiselect(key='select_A').set_value(['s3', 's4']).run()
+        at.sidebar.multiselect(key='select_B').set_value(['s1', 's2']).run()
+        at.sidebar.checkbox(key='confirm_checkbox').check().run()
+        assert at.text[0].value == self._EXPECTED
+        # Start Over, then regroup again and confirm.
+        at.session_state['_soft'] = True
+        at.run()
+        assert at.text[0].value == self._EXPECTED
+        at.sidebar.radio(key='grouping_radio').set_value('No').run()
+        at.sidebar.multiselect(key='select_A').set_value(['s1', 's2']).run()
+        at.sidebar.multiselect(key='select_B').set_value(['s3', 's4']).run()
+        at.sidebar.checkbox(key='confirm_checkbox').check().run()
+        assert not at.exception
+        assert at.text[0].value == self._EXPECTED
