@@ -18,6 +18,7 @@ from app.models.experiment import ExperimentConfig
 from app.services.sample_grouping import SampleGroupingService
 from app.ui.sample_names import (
     build_names_from_mapping,
+    names_from_editor,
     remap_names_after_regroup,
 )
 from app.ui.sidebar.experiment_config import detect_sample_columns, extract_sample_names, display_experiment_definition
@@ -210,11 +211,7 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
             },
             key='sample_names_editor',
         )
-        st.session_state.sample_names = {
-            row['sample']: str(row['name']).strip()
-            for _, row in edited.iterrows()
-            if str(row['name']).strip()
-        }
+        st.session_state.sample_names = names_from_editor(edited)
 
 
 def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optional[ExperimentConfig], Optional[str]]:

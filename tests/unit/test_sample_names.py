@@ -11,6 +11,7 @@ from app.ui.sample_names import (
     build_names_from_mapping,
     display_label,
     name_samples_for_csv,
+    names_from_editor,
     remap_names_after_exclusion,
     remap_names_after_regroup,
 )
@@ -81,6 +82,19 @@ class TestRemapAfterRegroup:
         assert remap_names_after_regroup({'s1': 'a', 's4': 'd'}, old_to_new) == {
             's1': 'd', 's2': 'a',
         }
+
+
+class TestNamesFromEditor:
+    """names_from_editor reads the sidebar editor's rows."""
+
+    def test_cleared_cell_is_no_name(self):
+        """Regression: a cleared cell comes back as None, which was stored as
+        the name 'None' and written into CSV headers."""
+        edited = pd.DataFrame({
+            'sample': ['s1', 's2', 's3', 's4'],
+            'name': [None, float('nan'), '  ', ' ID_04 '],
+        })
+        assert names_from_editor(edited) == {'s4': 'ID_04'}
 
 
 class TestRemapAfterExclusion:

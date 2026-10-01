@@ -83,6 +83,19 @@ def display_label(label: str, names: Optional[Dict[str, str]]) -> str:
     return label
 
 
+def names_from_editor(edited: pd.DataFrame) -> Dict[str, str]:
+    """Collect ``{s-label -> name}`` from the sidebar name editor's rows.
+
+    A cleared cell comes back as None (or NaN), which means no name rather
+    than the text "None"; blank names are dropped so the label is kept.
+    """
+    return {
+        row['sample']: str(row['name']).strip()
+        for _, row in edited.iterrows()
+        if not pd.isna(row['name']) and str(row['name']).strip()
+    }
+
+
 def remap_names_after_regroup(
     names: Optional[Dict[str, str]],
     old_to_new: Dict[str, str],
