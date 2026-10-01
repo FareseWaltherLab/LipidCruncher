@@ -185,15 +185,15 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
     Names are auto-seeded from the uploaded column headers (or a LipidSearch
     5.2 Alignment Setting file's raw filenames) and stored in
     ``st.session_state.sample_names`` keyed by internal label (s1, s2, ...).
-    They appear in the sample selectors and all sample-facing plots.
+    They appear in the sample selectors and in CSV downloads.
     """
     labels = experiment.full_samples_list
     names = st.session_state.get('sample_names') or {}
 
     with st.sidebar.expander('✏️ Sample Names (optional)', expanded=False):
         st.caption(
-            "These names carry over to the sample selectors and every "
-            "sample-facing plot (box plots, correlation, PCA, heatmap). "
+            "These names appear in the sample selectors and replace s1, s2, "
+            "... in CSV downloads; plots keep the s-labels. "
             "Auto-filled from your file's column headers — edit as needed."
         )
         editor_df = pd.DataFrame({

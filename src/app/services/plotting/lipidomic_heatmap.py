@@ -308,6 +308,36 @@ class LipidomicHeatmapPlotterService:
         return z_scores_df.iloc[order]
 
     @staticmethod
+    def order_by_clusters(
+        z_scores_df: pd.DataFrame,
+        n_clusters: int,
+    ) -> pd.DataFrame:
+        """Reorder rows into the clustered heatmap's top-to-bottom order.
+
+        Runs the same clustering as generate_clustered_heatmap, so the rows
+        follow its dendrogram order.
+
+        Args:
+            z_scores_df: Per-species value DataFrame indexed by
+                (LipidMolec, ClassKey).
+            n_clusters: Number of clusters.
+
+        Returns:
+            The rows in dendrogram order, with a leading 'Cluster' column
+            holding each species' 1-based cluster.
+
+        Raises:
+            ValueError: If inputs are invalid.
+        """
+        clustering = LipidomicHeatmapPlotterService.perform_clustering(
+            z_scores_df, n_clusters,
+        )
+        order = clustering.dendrogram_order
+        ordered_df = z_scores_df.iloc[order].copy()
+        ordered_df.insert(0, 'Cluster', clustering.cluster_labels[order])
+        return ordered_df
+
+    @staticmethod
     def compute_log2fc(
         filtered_df: pd.DataFrame,
         control_samples: List[str],

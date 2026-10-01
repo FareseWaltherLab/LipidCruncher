@@ -1169,6 +1169,54 @@ class TestOrderByClass:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# TestOrderByClusters
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestOrderByClusters:
+    """Rows in the clustered heatmap's order, with their cluster, for the CSV."""
+
+    def test_rows_follow_dendrogram_order(self):
+        z_df, _ = _make_clusterable_z_scores(n_lipids=8)
+        clustering = LipidomicHeatmapPlotterService.perform_clustering(z_df, 2)
+        out = LipidomicHeatmapPlotterService.order_by_clusters(z_df, 2)
+        assert list(out.index) == list(z_df.index[clustering.dendrogram_order])
+
+    def test_rows_match_the_clustered_figure(self):
+        z_df, samples = _make_clusterable_z_scores(n_lipids=8)
+        fig = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
+            z_df, samples, 2,
+        )
+        y = fig.data[0].y
+        # Tolerate a two-level (class, species) axis as well as a flat one.
+        species = list(y[-1]) if isinstance(y[0], (list, tuple, np.ndarray)) else list(y)
+        out = LipidomicHeatmapPlotterService.order_by_clusters(z_df, 2)
+        assert list(out.index.get_level_values('LipidMolec')) == species
+
+    def test_leading_cluster_column(self):
+        z_df, _ = _make_clusterable_z_scores(n_lipids=8)
+        clustering = LipidomicHeatmapPlotterService.perform_clustering(z_df, 2)
+        out = LipidomicHeatmapPlotterService.order_by_clusters(z_df, 2)
+        assert out.columns[0] == 'Cluster'
+        assert list(out.columns[1:]) == list(z_df.columns)
+        assert out['Cluster'].tolist() == list(
+            clustering.cluster_labels[clustering.dendrogram_order]
+        )
+
+    def test_row_values_follow_their_lipid(self):
+        z_df, _ = _make_clusterable_z_scores(n_lipids=8)
+        out = LipidomicHeatmapPlotterService.order_by_clusters(z_df, 2)
+        pd.testing.assert_frame_equal(
+            out.drop(columns='Cluster').loc[z_df.index], z_df,
+        )
+
+    def test_input_not_mutated(self):
+        z_df, _ = _make_clusterable_z_scores(n_lipids=8)
+        before = z_df.copy()
+        LipidomicHeatmapPlotterService.order_by_clusters(z_df, 2)
+        pd.testing.assert_frame_equal(z_df, before)
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # TestOrderByClassSorted
 # ═══════════════════════════════════════════════════════════════════════
 

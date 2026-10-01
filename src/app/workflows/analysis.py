@@ -247,12 +247,15 @@ class HeatmapResult:
         figure: Plotly heatmap figure.
         z_scores_df: Row-wise Z-score DataFrame.
         cluster_composition: Cluster composition DataFrame (clustered mode only).
+        clustered_df: z_scores_df in the figure's top-to-bottom order with a
+            leading Cluster column, for the CSV download (clustered mode only).
         success: Whether the analysis completed successfully.
         validation_errors: List of error messages if analysis failed.
     """
     figure: Optional[go.Figure] = None
     z_scores_df: Optional[pd.DataFrame] = None
     cluster_composition: Optional[pd.DataFrame] = None
+    clustered_df: Optional[pd.DataFrame] = None
     success: bool = True
     validation_errors: List[str] = dataclass_field(default_factory=list)
 
@@ -1092,8 +1095,15 @@ class AnalysisWorkflow:
                 value_label=value_label,
             )
 
+        # The clustered CSV lists species as the figure draws them.
+        clustered_df = (
+            LipidomicHeatmapPlotterService.order_by_clusters(z_scores_df, n_clusters)
+            if heatmap_type == 'clustered' else None
+        )
+
         return HeatmapResult(
             figure=figure,
             z_scores_df=z_scores_df,
             cluster_composition=cluster_composition,
+            clustered_df=clustered_df,
         )

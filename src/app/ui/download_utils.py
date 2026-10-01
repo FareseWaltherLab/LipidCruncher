@@ -10,6 +10,8 @@ import logging
 import streamlit as st
 import pandas as pd
 
+from app.ui.sample_names import name_samples_for_csv
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,19 +67,30 @@ def matplotlib_svg_download_button(fig, filename, key=None):
     )
 
 
-def convert_df(df):
+def convert_df(df, sample_names=None):
     """Convert a DataFrame to CSV bytes for downloading.
+
+    An informative index (a MultiIndex or any named level, such as the
+    heatmap's LipidMolec/ClassKey row labels) is written out as leading
+    columns; a plain positional index is dropped.
 
     Args:
         df: DataFrame to convert.
+        sample_names: Optional ``{s-label -> name}`` map, keyed in the same
+            label space as ``df``, used to name the per-sample columns.
 
     Returns:
         CSV-encoded bytes.
     """
+    if isinstance(df.index, pd.MultiIndex) or any(
+        name is not None for name in df.index.names
+    ):
+        df = df.reset_index()
+    df = name_samples_for_csv(df, sample_names)
     return df.to_csv(index=False).encode('utf-8')
 
 
-def csv_download_button(df, filename, key=None, on_click=None):
+def csv_download_button(df, filename, key=None, on_click=None, sample_names=None):
     """Create a download button for a DataFrame as CSV.
 
     Args:
@@ -85,10 +98,12 @@ def csv_download_button(df, filename, key=None, on_click=None):
         filename: Name for the downloaded file.
         key: Optional unique widget key.
         on_click: Optional callback fired on download (clicking reruns the app).
+        sample_names: Optional ``{s-label -> name}`` map for the per-sample
+            columns; it must be keyed in the label space ``df`` is in.
     """
     st.download_button(
         label="Download CSV",
-        data=convert_df(df),
+        data=convert_df(df, sample_names),
         file_name=filename,
         mime="text/csv",
         key=key,

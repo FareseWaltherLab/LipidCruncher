@@ -175,6 +175,9 @@ class SessionState:
     qc_correlation_plots: Dict[str, matplotlib.figure.Figure] = field(default_factory=dict)
     qc_pca_plot: Optional[go.Figure] = None
     qc_samples_removed: List[str] = field(default_factory=list)
+    # sample_names re-keyed into the label space left after PCA sample
+    # exclusion (which renumbers survivors); used by post-QC CSV downloads.
+    qc_sample_names: Optional[Dict[str, str]] = None
     _preserved_bqc_filter_choice: str = 'No'
     _preserved_rt_viewing_mode: str = 'Comparison Mode'
     _preserved_pca_samples_remove: List[str] = field(default_factory=list)

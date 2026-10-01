@@ -23,6 +23,7 @@ from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button
+from app.ui.sample_names import remap_names_after_exclusion
 from app.ui.st_helpers import (
     display_export_buttons,
     data_selection_header,
@@ -58,6 +59,10 @@ def display_quality_check_module(
 
     # Resolve format_type to DataFormat enum
     format_enum = resolve_format_enum(format_type)
+
+    # Names for CSVs produced after this module, re-keyed by the PCA section
+    # if it excludes samples (exclusion renumbers the survivors).
+    st.session_state.qc_sample_names = st.session_state.get('sample_names')
 
     # Validate inputs
     errors = QualityCheckWorkflow.validate_inputs(continuation_df, experiment)
@@ -144,6 +149,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             fig1, missing_values_df,
             "missing_values_distribution.svg", "missing_values_data.csv",
             "qc_missing_values_svg", "qc_missing_values_csv",
+            sample_names=st.session_state.get('sample_names'),
         )
 
         st.markdown("---")
@@ -162,6 +168,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             fig2, mean_area_df,
             "box_plot.svg", "box_plot_data.csv",
             "qc_box_plot_svg", "qc_box_plot_csv",
+            sample_names=st.session_state.get('sample_names'),
         )
 
 
@@ -341,7 +348,10 @@ def _render_bqc_filtering(
     st.markdown("###### Filtered Dataset")
     st.dataframe(result.filtered_df, use_container_width=True)
 
-    csv_download_button(result.filtered_df, "filtered_data.csv", key="bqc_filtered_download")
+    csv_download_button(
+        result.filtered_df, "filtered_data.csv", key="bqc_filtered_download",
+        sample_names=st.session_state.get('sample_names'),
+    )
 
     return result.filtered_df
 
@@ -492,13 +502,14 @@ def _display_correlation_analysis(
         # Store for potential PDF generation
         st.session_state.qc_correlation_plots[selected_condition] = fig
 
-        # Download buttons
+        # Download buttons. Name the index so the CSV keeps its row labels.
         display_export_buttons(
-            fig, correlation_df,
+            fig, correlation_df.rename_axis('Sample'),
             f"correlation_plot_{selected_condition}.svg",
             f"correlation_matrix_{selected_condition}.csv",
             'qc_corr_svg', "corr_csv_download",
             is_matplotlib=True,
+            sample_names=st.session_state.get('sample_names'),
         )
 
         # Correlation matrix table
@@ -591,6 +602,12 @@ def _display_pca_analysis(
             removal_result = QualityCheckWorkflow.remove_samples(
                 df, experiment, combined_removal
             )
+            st.session_state.qc_sample_names = remap_names_after_exclusion(
+                st.session_state.get('sample_names'),
+                experiment.full_samples_list,
+                removal_result.removed_samples,
+                removal_result.updated_experiment.full_samples_list,
+            )
             df = removal_result.updated_df
             experiment = removal_result.updated_experiment
             st.session_state.qc_samples_removed = combined_removal
@@ -613,6 +630,7 @@ def _display_pca_analysis(
             pca_plot, pca_df,
             "pca_plot.svg", "pca_data.csv",
             "qc_pca_svg", "pca_csv_download",
+            sample_names=st.session_state.get('qc_sample_names'),
         )
 
     return df, experiment

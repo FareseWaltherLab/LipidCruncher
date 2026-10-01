@@ -1105,6 +1105,56 @@ def analysis_module_script():
     st.text("analysis_rendered:ok")
 
 
+def qc_and_analysis_script():
+    """Run the QC module and feed its output to the Analysis module, as
+    main_app.py's _display_module2_and_3() does.
+
+    Expects session state keys:
+        _test_df: DataFrame with concentration[s] columns, LipidMolec, ClassKey
+        _test_experiment: ExperimentConfig
+    """
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    if not st.session_state.get('analysis_all_plots'):
+        st.session_state.analysis_all_plots = {}
+    from app.ui.main_content.quality_check import display_quality_check_module
+    from app.ui.main_content.analysis import display_analysis_module
+
+    qc_df, updated_exp = display_quality_check_module(
+        continuation_df=st.session_state['_test_df'],
+        experiment=st.session_state['_test_experiment'],
+        bqc_label=None,
+        format_type='Generic Format',
+    )
+    display_analysis_module(
+        df=qc_df,
+        experiment=updated_exp,
+        bqc_label=None,
+        format_type='Generic Format',
+    )
+
+
+@pytest.fixture
+def captured_downloads(monkeypatch):
+    """Record the data behind every st.download_button, keyed by widget key.
+
+    AppTest runs scripts in this process, so patching the module attribute
+    reaches every ``st.download_button`` call the app makes.
+    """
+    import streamlit
+
+    captured = {}
+    original = streamlit.download_button
+
+    def _capture(label, data=None, *args, key=None, **kwargs):
+        captured[key] = data
+        return original(label, data, *args, key=key, **kwargs)
+
+    monkeypatch.setattr(streamlit, 'download_button', _capture)
+    return captured
+
+
 def module3_nav_script():
     """Combined Module 2+3 navigation buttons (Back to Data Processing + Back to Home).
 
