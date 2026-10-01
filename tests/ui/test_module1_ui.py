@@ -342,10 +342,12 @@ class TestSampleNameEditor:
         assert any("mouse liver #5" in v for v in text_values)
 
     def test_editor_caption_present(self, sample_name_editor_app):
-        """The editor explains the names carry to selectors/plots."""
+        """The editor says where the names appear: the Group Samples table
+        and CSV downloads, not the sample selectors or plots."""
         at = sample_name_editor_app
         captions = [c.value for c in at.caption]
-        assert any("sample selectors" in c for c in captions)
+        assert any("CSV downloads" in c for c in captions)
+        assert not any("sample selectors" in c for c in captions)
 
 
 # =============================================================================
