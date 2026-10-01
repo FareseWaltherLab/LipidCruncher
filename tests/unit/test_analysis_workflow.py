@@ -1224,6 +1224,34 @@ class TestRunHeatmap:
         assert result.cluster_composition is not None
         assert isinstance(result.cluster_composition, pd.DataFrame)
 
+    def test_clustered_csv_frame_in_figure_order(self, multi_species_df, exp_2x3):
+        """The clustered CSV frame lists species top-to-bottom as the figure
+        draws them, each with its cluster."""
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='clustered',
+            n_clusters=2,
+        )
+        clustered = result.clustered_df
+        assert clustered.columns[0] == 'Cluster'
+        assert list(clustered.index.names) == ['LipidMolec', 'ClassKey']
+        assert sorted(clustered.index) == sorted(result.z_scores_df.index)
+        y = result.figure.data[0].y
+        species = list(y[-1]) if isinstance(y[0], (list, tuple, np.ndarray)) else list(y)
+        assert list(clustered.index.get_level_values('LipidMolec')) == species
+
+    def test_only_clustered_has_clustered_frame(self, multi_species_df, exp_2x3):
+        for heatmap_type in ('regular', 'class_grouped', 'class_aggregated'):
+            result = AnalysisWorkflow.run_heatmap(
+                multi_species_df, exp_2x3,
+                selected_conditions=['Control', 'Treatment'],
+                selected_classes=['PC', 'PE'],
+                heatmap_type=heatmap_type,
+            )
+            assert result.clustered_df is None
+
     def test_class_grouped_heatmap(self, multi_species_df, exp_2x3):
         result = AnalysisWorkflow.run_heatmap(
             multi_species_df, exp_2x3,

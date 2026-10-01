@@ -7,7 +7,7 @@ Eliminates repeated patterns across UI modules:
 - Widget state persistence
 """
 
-from typing import Optional
+from typing import Dict, Optional
 
 import pandas as pd
 import streamlit as st
@@ -40,6 +40,7 @@ def display_export_buttons(
     csv_key: str,
     *,
     is_matplotlib: bool = False,
+    sample_names: Optional[Dict[str, str]] = None,
 ) -> None:
     """Render a two-column row with SVG download + CSV download buttons.
 
@@ -51,6 +52,8 @@ def display_export_buttons(
         svg_key: Unique widget key for the SVG button.
         csv_key: Unique widget key for the CSV button.
         is_matplotlib: If True, use matplotlib SVG export instead of Plotly.
+        sample_names: Optional ``{s-label -> name}`` map for the CSV's
+            per-sample columns, keyed in the label space ``df`` is in.
     """
     col1, col2 = st.columns(2)
     with col1:
@@ -59,7 +62,7 @@ def display_export_buttons(
         else:
             plotly_svg_download_button(fig, svg_filename, key=svg_key)
     with col2:
-        csv_download_button(df, csv_filename, key=csv_key)
+        csv_download_button(df, csv_filename, key=csv_key, sample_names=sample_names)
 
 
 def section_header(title: str) -> None:

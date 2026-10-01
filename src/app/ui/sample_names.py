@@ -5,14 +5,15 @@ Original sample names (e.g. the uploaded column headers like "mouse liver #5")
 survive only in the ``column_mapping`` table (LipidSearch 5.2 alignment uploads
 take theirs from the Alignment Setting file instead). These helpers turn that mapping
 into a ``{internal_label -> display_name}`` dict, keep it in sync when samples
-are regrouped, and format labels for the sidebar sample selectors as
-``"s3 — mouse liver #5"``.
+are regrouped or excluded, format labels for the sidebar sample selectors as
+``"s3 — mouse liver #5"``, and put the names into CSV downloads.
 
 Pure logic — no Streamlit dependencies.
 """
 
 import re
-from typing import Dict, Optional
+from collections import Counter
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -25,6 +26,10 @@ _INTENSITY_LABEL_RE = re.compile(r"^intensity\[(s\d+)\]$")
 _WRAPPED_HEADER_RE = re.compile(r"^\w+\[([^\]]+)\]$")
 # Matches a standardized intensity column in a regroup rename map key/value.
 _INTENSITY_ANY_RE = re.compile(r"^intensity\[(s\d+)\]$")
+# Matches any per-sample column, e.g. "concentration[s3]" -> ("concentration", "s3").
+_SAMPLE_COLUMN_RE = re.compile(r"^(\w+)\[(s\d+)\]$")
+# Matches a bare internal sample label, e.g. "s3".
+_BARE_LABEL_RE = re.compile(r"^s\d+$")
 
 
 def _clean_header(original_name: str) -> str:
@@ -100,3 +105,95 @@ def remap_names_after_regroup(
             if old_label in names:
                 remapped[new_match.group(1)] = names[old_label]
     return remapped
+
+
+def remap_names_after_exclusion(
+    names: Optional[Dict[str, str]],
+    labels_before: List[str],
+    removed: List[str],
+    labels_after: List[str],
+) -> Dict[str, str]:
+    """Re-key names into the label space left by Quality Check's sample exclusion.
+
+    Excluding samples renumbers the survivors (remove s2 and the old s3 becomes
+    s2), so every frame produced after the exclusion needs the names re-keyed
+    the same way. Mirrors ``QualityCheckService._drop_and_rename_columns``: the
+    survivors, in their original order, take ``labels_after`` in turn.
+
+    Args:
+        names: ``{s-label -> name}`` in the pre-exclusion label space.
+        labels_before: Sample labels before the exclusion, in order.
+        removed: Labels that were excluded.
+        labels_after: Sample labels after the exclusion, in order.
+    """
+    if not names:
+        return {}
+    survivors = [label for label in labels_before if label not in removed]
+    return {
+        new: names[old]
+        for old, new in zip(survivors, labels_after)
+        if old in names
+    }
+
+
+def _csv_display_names(names: Dict[str, str]) -> Dict[str, str]:
+    """Map each named label to the text written for it in a CSV.
+
+    Blank names and names equal to their own label are dropped (the label is
+    kept). A name shared by several samples, or equal to another sample's
+    label, gets its label appended (``"QC (s5)"``) so no two samples can end
+    up with the same header.
+    """
+    cleaned = {}
+    for label, name in names.items():
+        text = str(name).strip() if name is not None else ''
+        if text and text != label:
+            cleaned[label] = text
+    counts = Counter(cleaned.values())
+    return {
+        label: (
+            text if counts[text] == 1 and not _BARE_LABEL_RE.match(text)
+            else f"{text} ({label})"
+        )
+        for label, text in cleaned.items()
+    }
+
+
+def name_samples_for_csv(
+    df: pd.DataFrame,
+    names: Optional[Dict[str, str]],
+) -> pd.DataFrame:
+    """Replace internal sample labels with display names for a CSV download.
+
+    ``concentration[s1]`` becomes ``concentration[ID_01]`` (any ``prefix[sN]``
+    column keeps its prefix), a bare ``s1`` column header becomes ``ID_01``, and
+    ``s1`` values in a ``Sample`` column become ``ID_01``. Unnamed samples keep
+    their label. ``names`` must be keyed in the same label space as ``df``.
+
+    Returns:
+        A renamed copy, or ``df`` itself when there is nothing to rename.
+    """
+    display = _csv_display_names(names or {})
+    if not display:
+        return df
+
+    def _header(column):
+        match = _SAMPLE_COLUMN_RE.match(str(column))
+        if match and match.group(2) in display:
+            return f"{match.group(1)}[{display[match.group(2)]}]"
+        return display.get(column, column)
+
+    renamed = [_header(column) for column in df.columns]
+    # A name that clashes with another column's header keeps its label rather
+    # than producing a duplicate header.
+    counts = Counter(renamed)
+    renamed = [
+        new if counts[new] == 1 else old
+        for old, new in zip(df.columns, renamed)
+    ]
+
+    out = df.copy()
+    out.columns = renamed
+    if 'Sample' in out.columns:
+        out['Sample'] = out['Sample'].map(lambda value: display.get(value, value))
+    return out

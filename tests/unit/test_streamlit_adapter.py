@@ -987,7 +987,8 @@ class TestSessionStateFieldCompleteness:
         qc_fields = [f for f in field_names if f.startswith('qc_')]
         # 9 original + qc_experiment (the post-QC ExperimentConfig, needed
         # because PCA sample removal renumbers the surviving samples).
-        assert len(qc_fields) == 10
+        # + 1 (qc_sample_names, names re-keyed after sample exclusion)
+        assert len(qc_fields) == 11
 
     def test_total_field_count(self):
         """Guard against accidental field deletion and duplicate names.

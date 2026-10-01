@@ -166,11 +166,17 @@ def _display_lipidomic_heatmap(
         st.session_state.analysis_all_plots['heatmap'] = result.figure
 
         if result.z_scores_df is not None:
+            # Clustered rows go out in the figure's order, with their cluster.
+            csv_df = (
+                result.clustered_df if result.clustered_df is not None
+                else result.z_scores_df
+            )
             display_export_buttons(
-                result.figure, result.z_scores_df,
+                result.figure, csv_df,
                 f"lipidomic_{heatmap_type_value}_heatmap.svg",
                 f"{heatmap_type_value}_heatmap_data.csv",
                 "analysis_svg_heatmap", "analysis_csv_heatmap",
+                sample_names=st.session_state.get('qc_sample_names'),
             )
 
         # Cluster composition (clustered mode only)

@@ -389,6 +389,7 @@ def _display_individual_lipid_analysis(
         f"conc_dist_data_{experimental}_vs_{control}.csv",
         "analysis_svg_dist", "analysis_csv_dist",
         is_matplotlib=True,
+        sample_names=st.session_state.get('qc_sample_names'),
     )
 
 

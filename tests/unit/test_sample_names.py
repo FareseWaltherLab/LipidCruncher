@@ -10,6 +10,8 @@ import pandas as pd
 from app.ui.sample_names import (
     build_names_from_mapping,
     display_label,
+    name_samples_for_csv,
+    remap_names_after_exclusion,
     remap_names_after_regroup,
 )
 
@@ -79,3 +81,98 @@ class TestRemapAfterRegroup:
         assert remap_names_after_regroup({'s1': 'a', 's4': 'd'}, old_to_new) == {
             's1': 'd', 's2': 'a',
         }
+
+
+class TestRemapAfterExclusion:
+    """Names follow the survivors when sample exclusion renumbers them."""
+
+    def test_survivors_take_the_freed_labels(self):
+        # Excluding s2 renumbers old s3 -> s2 and old s4 -> s3; the name must
+        # travel with the sample, not stay on the label.
+        names = {'s1': 'A', 's2': 'B', 's3': 'C', 's4': 'D'}
+        assert remap_names_after_exclusion(
+            names, ['s1', 's2', 's3', 's4'], ['s2'], ['s1', 's2', 's3'],
+        ) == {'s1': 'A', 's2': 'C', 's3': 'D'}
+
+    def test_several_removed_and_unnamed_survivor(self):
+        names = {'s1': 'A', 's4': 'D', 's5': 'E'}
+        assert remap_names_after_exclusion(
+            names, ['s1', 's2', 's3', 's4', 's5'], ['s1', 's3'],
+            ['s1', 's2', 's3'],
+        ) == {'s2': 'D', 's3': 'E'}
+
+    def test_no_names(self):
+        assert remap_names_after_exclusion(None, ['s1', 's2'], ['s1'], ['s1']) == {}
+        assert remap_names_after_exclusion({}, ['s1', 's2'], ['s1'], ['s1']) == {}
+
+
+class TestNameSamplesForCsv:
+    """name_samples_for_csv puts display names into CSV headers and labels."""
+
+    def test_keeps_prefix_and_leaves_unnamed_and_other_columns(self):
+        df = pd.DataFrame(columns=[
+            'LipidMolec', 'concentration[s1]', 'concentration[s2]', 'intensity[s1]',
+        ])
+        out = name_samples_for_csv(df, {'s1': 'ID_01'})
+        assert list(out.columns) == [
+            'LipidMolec', 'concentration[ID_01]', 'concentration[s2]',
+            'intensity[ID_01]',
+        ]
+
+    def test_label_does_not_match_a_longer_label(self):
+        # s1's name must not leak onto s10/s11.
+        df = pd.DataFrame(columns=['concentration[s1]', 'concentration[s10]'])
+        out = name_samples_for_csv(df, {'s1': 'A'})
+        assert list(out.columns) == ['concentration[A]', 'concentration[s10]']
+
+    def test_blank_names_keep_the_label(self):
+        df = pd.DataFrame(columns=['concentration[s1]', 'concentration[s2]'])
+        out = name_samples_for_csv(df, {'s1': '   ', 's2': ''})
+        assert list(out.columns) == ['concentration[s1]', 'concentration[s2]']
+
+    def test_names_are_stripped(self):
+        df = pd.DataFrame(columns=['concentration[s1]'])
+        out = name_samples_for_csv(df, {'s1': '  ID_01 '})
+        assert list(out.columns) == ['concentration[ID_01]']
+
+    def test_duplicate_names_get_their_label(self):
+        df = pd.DataFrame(columns=[
+            'concentration[s1]', 'concentration[s2]', 'concentration[s3]',
+        ])
+        out = name_samples_for_csv(df, {'s1': 'QC', 's2': 'QC', 's3': 'X'})
+        assert list(out.columns) == [
+            'concentration[QC (s1)]', 'concentration[QC (s2)]',
+            'concentration[X]',
+        ]
+
+    def test_name_equal_to_another_label_is_disambiguated(self):
+        # Naming s1 "s2" would otherwise give two concentration[s2] headers.
+        df = pd.DataFrame(columns=['concentration[s1]', 'concentration[s2]'])
+        out = name_samples_for_csv(df, {'s1': 's2'})
+        assert list(out.columns) == ['concentration[s2 (s1)]', 'concentration[s2]']
+        assert out.columns.is_unique
+
+    def test_bare_label_columns_and_sample_values(self):
+        # The shape of the correlation matrix and the PCA/box-plot tables.
+        df = pd.DataFrame({
+            'Sample': ['s1', 's2'], 's1': [1.0, 0.9], 's2': [0.9, 1.0],
+        })
+        out = name_samples_for_csv(df, {'s1': 'A'})
+        assert list(out.columns) == ['Sample', 'A', 's2']
+        assert out['Sample'].tolist() == ['A', 's2']
+
+    def test_name_clashing_with_another_column_keeps_its_label(self):
+        df = pd.DataFrame({'Sample': ['s1'], 's1': [1.0]})
+        out = name_samples_for_csv(df, {'s1': 'Sample'})
+        assert list(out.columns) == ['Sample', 's1']
+
+    def test_no_names_returns_frame_unchanged(self):
+        df = pd.DataFrame(columns=['concentration[s1]'])
+        assert name_samples_for_csv(df, None) is df
+        assert name_samples_for_csv(df, {}) is df
+
+    def test_does_not_mutate_input(self):
+        df = pd.DataFrame({'Sample': ['s1'], 'concentration[s1]': [1.0]})
+        name_samples_for_csv(df, {'s1': 'A'})
+        assert list(df.columns) == ['Sample', 'concentration[s1]']
+        assert df['Sample'].tolist() == ['s1']

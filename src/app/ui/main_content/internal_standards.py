@@ -159,6 +159,7 @@ def _display_auto_detected_standards(
         csv_download_button(
             auto_detected_df, "detected_standards.csv",
             key="download_auto_standards", on_click=_latch_expander_open,
+            sample_names=st.session_state.get('sample_names'),
         )
         base_df = auto_detected_df
     else:
@@ -185,6 +186,7 @@ def _display_auto_detected_standards(
     csv_download_button(
         combined_df, "active_standards.csv",
         key="download_combined_standards", on_click=_latch_expander_open,
+        sample_names=st.session_state.get('sample_names'),
     )
     return combined_df
 
@@ -253,6 +255,7 @@ def _display_select_from_dataset(
     csv_download_button(
         standards_df, "selected_standards.csv",
         key="download_selected_standards", on_click=_latch_expander_open,
+        sample_names=st.session_state.get('sample_names'),
     )
 
     return standards_df
@@ -378,6 +381,7 @@ def _process_uploaded_standards(
         csv_download_button(
             result.standards_df, "custom_standards.csv",
             key="download_custom_standards", on_click=_latch_expander_open,
+            sample_names=st.session_state.get('sample_names'),
         )
 
         return result.standards_df
