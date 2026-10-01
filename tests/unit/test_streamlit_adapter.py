@@ -744,6 +744,33 @@ class TestSessionStateIntegration:
         assert '_pre_regroup_sample_names' not in mock_st.session_state
 
     @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_data_state_drops_regroup_snapshot(self, mock_st):
+        """Regression: a hard reset (Back to Home, Clear & Upload) kept the
+        regroup snapshot, so the next upload's "Yes" grouping restored the
+        previous dataset's names, and those names reach the CSV downloads."""
+        mock_st.session_state = MockSessionState({
+            '_pre_regroup_df': pd.DataFrame({'intensity[s1]': [1.0]}),
+            '_pre_regroup_sample_names': {'s1': 'old file sample'},
+        })
+
+        StreamlitAdapter.reset_data_state()
+
+        assert '_pre_regroup_df' not in mock_st.session_state
+        assert '_pre_regroup_sample_names' not in mock_st.session_state
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_data_state_rearms_alignment_prefill(self, mock_st):
+        """Regression: after Start Over the experiment pre-fill never fired
+        again for the same Alignment Setting file, leaving default conditions."""
+        mock_st.session_state = MockSessionState({
+            '_ls_align_prefilled_for': 'alignment text',
+        })
+
+        StreamlitAdapter.reset_data_state()
+
+        assert '_ls_align_prefilled_for' not in mock_st.session_state
+
+    @patch('app.adapters.streamlit_adapter.st')
     def test_initialize_creates_analysis_keys(self, mock_st):
         """Test that initialization creates all analysis session state keys."""
         mock_st.session_state = MockSessionState()
