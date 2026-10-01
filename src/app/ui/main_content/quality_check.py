@@ -60,9 +60,14 @@ def display_quality_check_module(
     # Resolve format_type to DataFormat enum
     format_enum = resolve_format_enum(format_type)
 
+    # Freeze the names on the first run after Module 1 hands over its data: a
+    # later sidebar regroup re-keys sample_names but not continuation_df, so
+    # live names would land on other samples' columns.
+    if st.session_state.get('qc_input_sample_names') is None:
+        st.session_state.qc_input_sample_names = st.session_state.get('sample_names') or {}
     # Names for CSVs produced after this module, re-keyed by the PCA section
     # if it excludes samples (exclusion renumbers the survivors).
-    st.session_state.qc_sample_names = st.session_state.get('sample_names')
+    st.session_state.qc_sample_names = st.session_state.qc_input_sample_names
 
     # Validate inputs
     errors = QualityCheckWorkflow.validate_inputs(continuation_df, experiment)
@@ -149,7 +154,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             fig1, missing_values_df,
             "missing_values_distribution.svg", "missing_values_data.csv",
             "qc_missing_values_svg", "qc_missing_values_csv",
-            sample_names=st.session_state.get('sample_names'),
+            sample_names=st.session_state.get('qc_input_sample_names'),
         )
 
         st.markdown("---")
@@ -168,7 +173,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             fig2, mean_area_df,
             "box_plot.svg", "box_plot_data.csv",
             "qc_box_plot_svg", "qc_box_plot_csv",
-            sample_names=st.session_state.get('sample_names'),
+            sample_names=st.session_state.get('qc_input_sample_names'),
         )
 
 
@@ -350,7 +355,7 @@ def _render_bqc_filtering(
 
     csv_download_button(
         result.filtered_df, "filtered_data.csv", key="bqc_filtered_download",
-        sample_names=st.session_state.get('sample_names'),
+        sample_names=st.session_state.get('qc_input_sample_names'),
     )
 
     return result.filtered_df
@@ -509,7 +514,7 @@ def _display_correlation_analysis(
             f"correlation_matrix_{selected_condition}.csv",
             'qc_corr_svg', "corr_csv_download",
             is_matplotlib=True,
-            sample_names=st.session_state.get('sample_names'),
+            sample_names=st.session_state.get('qc_input_sample_names'),
         )
 
         # Correlation matrix table
@@ -603,7 +608,7 @@ def _display_pca_analysis(
                 df, experiment, combined_removal
             )
             st.session_state.qc_sample_names = remap_names_after_exclusion(
-                st.session_state.get('sample_names'),
+                st.session_state.get('qc_input_sample_names'),
                 experiment.full_samples_list,
                 removal_result.removed_samples,
                 removal_result.updated_experiment.full_samples_list,

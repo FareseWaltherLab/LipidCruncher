@@ -986,7 +986,8 @@ class TestSessionStateFieldCompleteness:
         field_names = [f.name for f in fields(SessionState)]
         qc_fields = [f for f in field_names if f.startswith('qc_')]
         # 9 + 1 (qc_sample_names, names re-keyed after sample exclusion)
-        assert len(qc_fields) == 10
+        # + 1 (qc_input_sample_names, names frozen at Module 1's handoff)
+        assert len(qc_fields) == 11
 
     def test_total_field_count(self):
         """Test total SessionState field count matches expected."""
@@ -995,8 +996,9 @@ class TestSessionStateFieldCompleteness:
         # + 1 (sample_names, sidebar display names)
         # + 1 (standards_consistency_figs, kept for the PDF report)
         # + 1 (lipidsearch_sample_names, alignment-derived names)
-        # + 1 (qc_sample_names, names re-keyed after sample exclusion) = 87
-        assert len(field_names) == 87
+        # + 1 (qc_sample_names, names re-keyed after sample exclusion)
+        # + 1 (qc_input_sample_names, names frozen at Module 1's handoff) = 88
+        assert len(field_names) == 88
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""
