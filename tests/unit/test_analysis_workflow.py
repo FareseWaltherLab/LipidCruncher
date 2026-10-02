@@ -1742,6 +1742,67 @@ class TestRunHeatmapEdgeCases:
         assert isinstance(result.figure, go.Figure)
 
 
+class TestRunHeatmapDisplayNames:
+    """The "Show samples as" switch: the sample axis shows the names passed
+    in, while every lookup (control samples, sort columns, the returned
+    frames) stays keyed by s-label."""
+
+    MODES = ['regular', 'clustered', 'class_grouped', 'class_aggregated']
+    NAMES = {
+        's1': 'CLEANUP_BLANK_01', 's2': 'ID_02', 's3': 'QC (s3)',
+        's4': 'SS48_JW_03', 's6': 'WAKEUP_BLANK_02',
+    }  # s5 unnamed
+
+    def _run(self, df, exp, mode, display_names=None, **kwargs):
+        return AnalysisWorkflow.run_heatmap(
+            df, exp, ['Control', 'Treatment'], ['PC', 'PE', 'TG'],
+            heatmap_type=mode, n_clusters=2,
+            display_names=display_names, **kwargs,
+        )
+
+    @pytest.mark.parametrize('mode', MODES)
+    def test_axis_shows_names_and_unnamed_keep_label(
+        self, multi_species_df, exp_2x3, mode,
+    ):
+        fig = self._run(multi_species_df, exp_2x3, mode, self.NAMES).figure
+        assert list(fig.data[0].x) == [
+            'CLEANUP_BLANK_01', 'ID_02', 'QC (s3)', 'SS48_JW_03', 's5',
+            'WAKEUP_BLANK_02',
+        ]
+
+    @pytest.mark.parametrize('mode', MODES)
+    def test_without_names_figure_is_unchanged(
+        self, multi_species_df, exp_2x3, mode,
+    ):
+        """None and {} (standardized labels chosen) draw exactly the figure
+        drawn before names existed."""
+        before = self._run(multi_species_df, exp_2x3, mode).figure
+        empty = self._run(multi_species_df, exp_2x3, mode, {}).figure
+        assert list(before.data[0].x) == [f's{i}' for i in range(1, 7)]
+        assert before.to_json() == empty.to_json()
+        assert before.layout.xaxis.tickangle == 45
+
+    @pytest.mark.parametrize('mode', MODES)
+    def test_values_and_frames_stay_keyed_by_label(
+        self, multi_species_df, exp_2x3, mode,
+    ):
+        """Names change only the drawn text, under log2FC too, where the
+        control samples and (class-grouped) the sort columns are looked up
+        by label."""
+        kwargs = dict(color_scale='log2fc', control_condition='Control')
+        named = self._run(multi_species_df, exp_2x3, mode, self.NAMES, **kwargs)
+        plain = self._run(multi_species_df, exp_2x3, mode, **kwargs)
+        np.testing.assert_array_equal(
+            np.asarray(named.figure.data[0].z, dtype=float),
+            np.asarray(plain.figure.data[0].z, dtype=float),
+        )
+        assert list(named.figure.data[0].y) == list(plain.figure.data[0].y)
+        pd.testing.assert_frame_equal(named.z_scores_df, plain.z_scores_df)
+        assert all(
+            c.startswith('concentration[s') for c in named.z_scores_df.columns
+        )
+
+
 # =============================================================================
 # Cross-Analysis Tests
 # =============================================================================

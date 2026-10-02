@@ -2410,3 +2410,71 @@ class TestValueLabel:
         heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
         assert heatmap.colorbar.title.text == 'log2FC'
         assert 'log2FC' in fig.layout.title.text
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TestLongSampleLabels
+#
+# With "Show samples as" on original names, the sample axis carries names
+# such as 'CLEANUP_BLANK_01' rather than s1, s2, ... At 45 degrees they ran
+# into each other, and the fixed bottom margins of the Clustered (50px) and
+# Regular (20px) modes clipped them wherever Plotly does not grow the margin
+# itself, as in the PDF report's export.
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestLongSampleLabels:
+    SHORT = ['s1', 's2', 's3', 's10']
+    LONG = ['ID_01', 'CLEANUP_BLANK_01', 'QC (s3)', 'SS48_JW_03']
+    CONDITIONS = ['A', 'A', 'B', 'B']
+
+    @staticmethod
+    def _z():
+        index = pd.MultiIndex.from_arrays(
+            [[f'L{i}' for i in range(6)], ['PC'] * 3 + ['PE'] * 3],
+            names=['LipidMolec', 'ClassKey'],
+        )
+        rng = np.random.default_rng(1)
+        return pd.DataFrame(rng.normal(size=(6, 4)), index=index)
+
+    def _figs(self, samples):
+        z = self._z()
+        class_z = z.groupby(level='ClassKey').sum()
+        S = LipidomicHeatmapPlotterService
+        return {
+            'clustered': S.generate_clustered_heatmap(
+                z, samples, 2, sample_conditions=self.CONDITIONS),
+            'regular': S.generate_regular_heatmap(
+                z, samples, sample_conditions=self.CONDITIONS),
+            'class_grouped': S.generate_class_grouped_heatmap(
+                z, samples, sample_conditions=self.CONDITIONS),
+            'class_aggregated': S.generate_class_aggregated_heatmap(
+                class_z, samples, sample_conditions=self.CONDITIONS),
+        }
+
+    def test_short_labels_keep_the_original_layout(self):
+        figs = self._figs(self.SHORT)
+        for mode, fig in figs.items():
+            assert fig.layout.xaxis.tickangle == 45, mode
+            assert fig.layout.xaxis.automargin is None, mode
+        assert figs['clustered'].layout.margin.b == 50
+        assert figs['regular'].layout.margin.b == 20
+
+    def test_long_labels_stand_upright_with_room_below(self):
+        for mode, fig in self._figs(self.LONG).items():
+            assert list(fig.data[0].x) == self.LONG, mode
+            assert fig.layout.xaxis.tickangle == 90, mode
+            assert fig.layout.xaxis.automargin is True, mode
+            # 16 characters at PX_PER_CHAR, plus room for the axis title.
+            assert fig.layout.margin.b >= 16 * 7 + 40, mode
+
+    def test_square_cells_survive_long_labels(self):
+        """The class modes size the figure from the margins, so growing the
+        bottom margin must grow the figure, not shrink the cells."""
+        fig = self._figs(self.LONG)['class_aggregated']
+        layout = fig.layout
+        assert (
+            layout.height - layout.margin.t - layout.margin.b
+        ) == 2 * cell_size(2)
+        assert (
+            layout.width - layout.margin.l - layout.margin.r
+        ) == 4 * cell_size(2)

@@ -70,6 +70,12 @@ MARGIN_TOP = 90
 CLASS_LABEL_WIDTH = 95
 PX_PER_CHAR = 7
 
+# Sample labels longer than a standardized label (s1 ... s999) — original
+# sample names such as 'CLEANUP_BLANK_01' — stand upright. At 45 degrees,
+# adjacent long names in narrow columns run into each other and the last ones
+# run off past the plot's right edge.
+SHORT_SAMPLE_LABEL_CHARS = 4
+
 # A class-aggregated heatmap can be only a handful of rows tall, where 18px
 # cells would leave a sliver of a plot. Cells grow (staying square) until the
 # plot area is reasonably tall, up to a ceiling so a 2-class map is not absurd.
@@ -589,16 +595,17 @@ class LipidomicHeatmapPlotterService:
             label_color=None,
         )
 
+        sample_axis, bottom = _sample_axis_layout(selected_samples, bottom=50)
         fig.update_layout(
             title=_titled('Clustered Lipidomic Heatmap', value_label),
             xaxis_title='Samples',
             yaxis_title='Lipid Molecules',
-            margin=dict(l=100, r=100, t=MARGIN_TOP + extra_top, b=50),
+            margin=dict(l=100, r=100, t=MARGIN_TOP + extra_top, b=bottom),
             width=HEATMAP_WIDTH,
             height=HEATMAP_HEIGHT,
         )
 
-        fig.update_xaxes(tickangle=45)
+        fig.update_xaxes(**sample_axis)
         fig.update_yaxes(tickmode='array', autorange='reversed')
 
         return fig
@@ -651,15 +658,16 @@ class LipidomicHeatmapPlotterService:
             label_color=None,
         )
 
+        sample_axis, bottom = _sample_axis_layout(selected_samples, bottom=20)
         fig.update_layout(
             title=_titled('Regular Lipidomic Heatmap', value_label),
             xaxis_title='Samples',
             yaxis_title='Lipid Molecules',
-            margin=dict(l=10, r=10, t=MARGIN_TOP + extra_top, b=20),
+            margin=dict(l=10, r=10, t=MARGIN_TOP + extra_top, b=bottom),
             height=HEATMAP_HEIGHT,
         )
 
-        fig.update_xaxes(tickangle=45)
+        fig.update_xaxes(**sample_axis)
         fig.update_yaxes(tickmode='array')
 
         return fig
@@ -1063,7 +1071,8 @@ def _apply_square_layout(
         paper_bgcolor='white',
         showlegend=False,
     )
-    fig.update_xaxes(tickangle=45, tickfont=dict(color='black'))
+    sample_axis, _ = _sample_axis_layout(x_labels, bottom=bottom)
+    fig.update_xaxes(**sample_axis, tickfont=dict(color='black'))
     fig.update_yaxes(tickfont=dict(color='black'))
 
 
@@ -1082,6 +1091,25 @@ def _label_extent(labels: List[str]) -> int:
     """Approximate the margin, in px, needed to fit the longest tick label."""
     longest = max((len(str(label)) for label in labels), default=0)
     return 45 + longest * PX_PER_CHAR
+
+
+def _sample_axis_layout(x_labels: List[str], bottom: int) -> Tuple[dict, int]:
+    """Sample-axis settings and bottom margin, in px, for the x labels.
+
+    Labels as short as a standardized label keep the 45 degree ticks and the
+    caller's ``bottom``. Longer ones (original sample names) stand upright,
+    with the bottom margin grown to fit the longest, since a fixed margin
+    would clip them wherever Plotly does not grow it itself (the PDF report's
+    export). Automargin is switched on for them too, which is what drops the
+    axis title below the names instead of across them.
+    """
+    longest = max((len(str(label)) for label in x_labels), default=0)
+    if longest <= SHORT_SAMPLE_LABEL_CHARS:
+        return dict(tickangle=45), bottom
+    return (
+        dict(tickangle=90, automargin=True),
+        max(bottom, _label_extent(x_labels)),
+    )
 
 
 def _compute_species_percentages(

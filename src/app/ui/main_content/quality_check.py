@@ -24,7 +24,7 @@ from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_names import remap_names_after_exclusion
-from app.ui.sample_labels import names_for
+from app.ui.sample_labels import display_names_for, labeler, names_for
 from app.ui.st_helpers import (
     display_export_buttons,
     data_selection_header,
@@ -123,7 +123,9 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
 
         # Compute box plots (cached)
         fig1, fig2, mean_area_df, zero_values_percent_list, current_samples = (
-            StreamlitAdapter.run_box_plots(df, experiment)
+            StreamlitAdapter.run_box_plots(
+                df, experiment, display_names_for('qc_input'),
+            )
         )
 
         # Store for PDF report
@@ -502,14 +504,26 @@ def _display_correlation_analysis(
         results_header()
 
         condition_index = experiment.conditions_list.index(selected_condition)
+        display_names = display_names_for('qc_input')
         fig, correlation_df = StreamlitAdapter.run_correlation(
-            df, experiment, condition_index, sample_type,
+            df, experiment, condition_index, sample_type, display_names,
         )
 
         st.pyplot(fig)
 
-        # Store for potential PDF generation
+        # Store for potential PDF generation. Redraw the other conditions'
+        # stored heatmaps too (cached), so a "Show samples as" flip relabels
+        # every heatmap the PDF will contain, not just the one on screen.
         st.session_state.qc_correlation_plots[selected_condition] = fig
+        for condition in list(st.session_state.qc_correlation_plots):
+            if condition != selected_condition and condition in eligible:
+                st.session_state.qc_correlation_plots[condition], _ = (
+                    StreamlitAdapter.run_correlation(
+                        df, experiment,
+                        experiment.conditions_list.index(condition),
+                        sample_type, display_names,
+                    )
+                )
 
         # Download buttons. Name the index so the CSV keeps its row labels.
         display_export_buttons(
@@ -586,10 +600,12 @@ def _display_pca_analysis(
         )
         # Filter preserved values to only include currently valid samples
         valid_restored = [s for s in restored_pca if s in experiment.full_samples_list]
+        # Values stay s-labels; only the shown text follows the switch.
         samples_to_remove = st.multiselect(
             'Exclude Samples (optional)',
             experiment.full_samples_list,
             default=valid_restored if valid_restored else [],
+            format_func=labeler('qc_input'),
             help=(
                 "Exclude suspected outliers, or technical runs you don't want "
                 "in the analysis (e.g. pooled QC, blanks). Excluded samples "
@@ -634,7 +650,9 @@ def _display_pca_analysis(
         # --- Results ---
         results_header()
 
-        pca_plot, pca_df = StreamlitAdapter.run_pca(df, experiment)
+        pca_plot, pca_df = StreamlitAdapter.run_pca(
+            df, experiment, display_names_for('qc'),
+        )
         st.plotly_chart(pca_plot, use_container_width=True)
         st.session_state.qc_pca_plot = pca_plot
 

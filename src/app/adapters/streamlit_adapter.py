@@ -611,8 +611,12 @@ class StreamlitAdapter:
     def run_box_plots(
         df: pd.DataFrame,
         experiment: ExperimentConfig,
+        display_names: Optional[Dict[str, str]] = None,
     ) -> Tuple[go.Figure, go.Figure, pd.DataFrame, List[float], List[str]]:
         """Cached box plot computation.
+
+        ``display_names`` (``{s-label -> text shown}``) labels the samples in
+        both figures; the returned data stays keyed by s-label.
 
         Returns:
             Tuple of (missing_values_fig, box_plot_fig, mean_area_df,
@@ -626,10 +630,12 @@ class StreamlitAdapter:
         fig1 = BoxPlotService.plot_missing_values(
             samples, missing_pct,
             experiment.conditions_list, experiment.individual_samples_list,
+            display_names=display_names,
         )
         fig2 = BoxPlotService.plot_box_plot(
             mean_area_df, samples,
             experiment.conditions_list, experiment.individual_samples_list,
+            display_names=display_names,
         )
         return fig1, fig2, mean_area_df, missing_pct, samples
 
@@ -663,8 +669,12 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         condition_index: int,
         sample_type: str,
+        display_names: Optional[Dict[str, str]] = None,
     ) -> Tuple[matplotlib.figure.Figure, pd.DataFrame]:
         """Cached pairwise correlation computation.
+
+        ``display_names`` (``{s-label -> text shown}``) labels the heatmap's
+        ticks; ``correlation_df`` stays keyed by s-label.
 
         Returns:
             Tuple of (matplotlib_fig, correlation_df)
@@ -680,6 +690,7 @@ class StreamlitAdapter:
         condition_name = experiment.conditions_list[condition_index]
         fig = CorrelationPlotterService.render_correlation_plot(
             correlation_df, v_min, thresh, condition_name,
+            display_names=display_names,
         )
         return fig, correlation_df
 
@@ -691,8 +702,12 @@ class StreamlitAdapter:
     def run_pca(
         df: pd.DataFrame,
         experiment: ExperimentConfig,
+        display_names: Optional[Dict[str, str]] = None,
     ) -> Tuple[go.Figure, pd.DataFrame]:
         """Cached PCA computation.
+
+        ``display_names`` (``{s-label -> text shown}``) labels the hover text;
+        ``pca_df`` keeps the s-labels.
 
         Returns:
             Tuple of (pca_plot, pca_df)
@@ -700,6 +715,7 @@ class StreamlitAdapter:
         return PCAPlotterService.plot_pca(
             df, experiment.full_samples_list,
             experiment.extensive_conditions_list,
+            display_names=display_names,
         )
 
     @staticmethod
@@ -910,12 +926,18 @@ class StreamlitAdapter:
         color_scale: str = 'zscore',
         control_condition: Optional[str] = None,
         sort_direction: str = 'desc',
+        display_names: Optional[Dict[str, str]] = None,
     ) -> HeatmapResult:
-        """Cached lipidomic heatmap analysis."""
+        """Cached lipidomic heatmap analysis.
+
+        ``display_names`` is part of the cache key, so switching between
+        original names and standardized labels redraws the sample axis.
+        """
         return AnalysisWorkflow.run_heatmap(
             df, experiment, selected_conditions, selected_classes,
             heatmap_type=heatmap_type, n_clusters=n_clusters,
             species_page=species_page, color_scale=color_scale,
             control_condition=control_condition,
             sort_direction=sort_direction,
+            display_names=display_names,
         )

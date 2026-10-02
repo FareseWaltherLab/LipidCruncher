@@ -14,7 +14,7 @@ from app.services.plotting.lipidomic_heatmap import (
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
-from app.ui.sample_labels import names_for
+from app.ui.sample_labels import display_names_for, names_for
 
 
 def _display_lipidomic_heatmap(
@@ -125,6 +125,7 @@ def _display_lipidomic_heatmap(
             color_scale=color_scale,
             control_condition=control_condition,
             sort_direction=sort_direction,
+            display_names=display_names_for('qc'),
         )
 
         if not result.success:

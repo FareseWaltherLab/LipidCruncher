@@ -20,8 +20,9 @@ from app.ui.sample_names import (
     build_names_from_mapping,
     names_from_editor,
     remap_names_after_regroup,
+    sample_display_map,
 )
-from app.ui.sample_labels import render_sample_label_switch
+from app.ui.sample_labels import render_sample_label_switch, showing_original_names
 from app.ui.sidebar.experiment_config import detect_sample_columns, extract_sample_names, display_experiment_definition
 from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_inputs
 
@@ -132,17 +133,29 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
     remaining_samples = group_df['sample name'].tolist()
     expected_samples = dict(zip(experiment.conditions_list, experiment.number_of_samples_list))
 
+    # Option labels come from the pre-regroup snapshot, which is keyed like the
+    # options and never changes during the regroup. NOT the live sample_names:
+    # the regroup below rewrites those mid-run, which changed the option labels,
+    # reset these widgets and wiped the user's selections.
+    shown = (
+        sample_display_map(st.session_state.get('_pre_regroup_sample_names'))
+        if showing_original_names() else {}
+    )
+
     for condition in experiment.conditions_list:
         st.sidebar.write(f"Select {expected_samples[condition]} samples for {condition}")
 
-        # NOTE: no format_func here. The picker's options are the same s-labels
-        # shown (with names) in the Group Samples table above. Deriving option
-        # labels from sample_names would reset this widget whenever the regroup
-        # updates sample_names mid-run, wiping the user's selections.
+        # Flipping "Show samples as" changes the option labels, which makes
+        # Streamlit treat this as a new widget; seed it with the selection it
+        # had so the flip does not blank the picker.
+        key = f'select_{condition}'
+        previous = [s for s in st.session_state.get(key) or [] if s in remaining_samples]
         selected_samples = st.sidebar.multiselect(
             f'Pick the samples that belong to condition {condition}',
             remaining_samples,
-            key=f'select_{condition}',
+            default=previous or None,
+            format_func=lambda s: shown.get(s, s),
+            key=key,
         )
 
         selections[condition] = selected_samples

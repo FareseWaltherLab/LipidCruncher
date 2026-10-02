@@ -125,6 +125,91 @@ class TestBuildMetadataFromExperiment:
         assert m.conditions_detail[0] == ("WT", 3, ["s1", "s2", "s3"])
 
 
+    def test_display_names_fill_the_sample_ids(self):
+        """The cover lists samples as the switch shows them; unnamed ones
+        keep their label."""
+        exp = MagicMock()
+        exp.n_conditions = 2
+        exp.conditions_list = ["WT", "KO"]
+        exp.number_of_samples_list = [2, 2]
+        exp.individual_samples_list = [["s1", "s2"], ["s3", "s4"]]
+        exp.full_samples_list = ["s1", "s2", "s3", "s4"]
+
+        m = build_metadata_from_experiment(
+            exp, "LipidSearch",
+            display_names={"s1": "CLEANUP_BLANK_01", "s3": "QC (s3)"},
+        )
+        assert m.conditions_detail == [
+            ("WT", 2, ["CLEANUP_BLANK_01", "s2"]),
+            ("KO", 2, ["QC (s3)", "s4"]),
+        ]
+        assert m.total_samples == 4
+
+
+# ── TestCoverSampleIds ──────────────────────────────────────────────────────
+
+class TestCoverSampleIds:
+    """The cover's Sample IDs column cut its text at 35 characters, which
+    with original names left two and a half names (``"CLEANUP_BLANK_01,
+    CLEANUP_BLANK_02, WA"``) and dropped the count of the rest."""
+
+    @staticmethod
+    def _cover_text(details):
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        from app.services.report_generator import _render_conditions_table
+
+        pdf = canvas.Canvas(io.BytesIO(), pagesize=letter)
+        drawn = []
+        original = pdf.drawString
+
+        def _record(x, y, text, *args, **kwargs):
+            drawn.append((x, text))
+            return original(x, y, text, *args, **kwargs)
+
+        pdf.drawString = _record
+        _render_conditions_table(pdf, 600, letter[0], details)
+        return [text for x, text in drawn if x == 400]
+
+    def test_standardized_labels_render_as_before(self):
+        ids = self._cover_text([
+            ("WT", 8, [f"s{i}" for i in range(1, 9)]),
+            ("KO", 2, ["s9", "s10"]),
+        ])
+        assert ids == [
+            "Sample IDs", "s1, s2, s3, s4, s5 ... (+3 more)", "s9, s10",
+        ]
+
+    def test_long_names_wrap_whole_and_keep_the_count(self):
+        names = [
+            "CLEANUP_BLANK_01", "CLEANUP_BLANK_02",
+            "WAKEUP_BLANK_01", "WAKEUP_BLANK_02",
+        ]
+        ids = self._cover_text([("Blank", 4, names)])[1:]
+        assert 1 < len(ids) <= 3
+        text = " ".join(ids)
+        assert "(+1 more)" in text
+        for name in names[:3]:
+            assert name in text
+        assert all(not line.endswith("...") for line in ids)
+
+    def test_rows_below_a_wrapped_row_move_down(self):
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        from app.services.report_generator import _render_conditions_table
+
+        pdf = canvas.Canvas(io.BytesIO(), pagesize=letter)
+        short = _render_conditions_table(
+            pdf, 600, letter[0], [("A", 2, ["s1", "s2"])],
+        )
+        wrapped = _render_conditions_table(
+            pdf, 600, letter[0],
+            [("A", 2, ["CLEANUP_BLANK_01", "CLEANUP_BLANK_02",
+                       "WAKEUP_BLANK_01"])],
+        )
+        assert wrapped < short
+
+
 # ── TestBuildAnalysesList ───────────────────────────────────────────────────
 
 class TestBuildAnalysesList:

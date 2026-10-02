@@ -9,6 +9,7 @@ This module contains:
 import streamlit as st
 
 from app.models.experiment import ExperimentConfig
+from app.ui.sample_labels import display_names_for
 
 
 # =============================================================================
@@ -84,15 +85,18 @@ def display_confirm_inputs(experiment: ExperimentConfig) -> bool:
     total_samples = sum(experiment.number_of_samples_list)
     st.sidebar.write(f"There are a total of {total_samples} samples.")
 
-    # Display sample-condition pairings
+    # Display sample-condition pairings, under the names the "Show samples
+    # as" switch picks. Names may contain '-', so they are comma-separated.
+    names = display_names_for('upload')
+    separator = ', ' if names else '-'
     for i, condition in enumerate(experiment.conditions_list):
         if condition and condition.strip():
-            samples = experiment.individual_samples_list[i]
+            samples = [names.get(s, s) for s in experiment.individual_samples_list[i]]
 
             if len(samples) > 5:
                 display_text = f"• {samples[0]} to {samples[-1]} (total {len(samples)}) correspond to {condition}"
             else:
-                display_text = f"• {'-'.join(samples)} correspond to {condition}"
+                display_text = f"• {separator.join(samples)} correspond to {condition}"
 
             # Use st.sidebar.text() to avoid markdown parsing of pipe characters
             st.sidebar.text(display_text)
