@@ -1,0 +1,22 @@
+# Ship only what the app runs on. The Dockerfile copies the whole build
+# context, so without this a build from a working checkout also packed the
+# local virtualenv, git history, lab datasets and gitignored ops docs into
+# the image. Everything is excluded, then the runtime files are let back in;
+# a new runtime path has to be added here or it will be missing in the image.
+*
+!src
+!sample_datasets
+!requirements.txt
+!.streamlit/config.toml
+# Read at runtime by the AI Studio's documentation and source tools. Only the
+# tracked docs: docs/ also holds local, gitignored ops notes.
+!CODEBASE.md
+!docs/lipidcruncher_paper.md
+!docs/supplementary_methods.md
+!tests
+
+**/__pycache__
+**/.DS_Store
+# Never ship secrets: they come from the environment (ECS secrets) at run time.
+**/secrets.toml
+**/.env
