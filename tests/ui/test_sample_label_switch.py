@@ -260,17 +260,20 @@ def _confirm_script():
 
 
 class TestConfirmSummary:
-    @pytest.mark.parametrize('mode, expected', [
-        ('original', [
-            '• N-1, N2, s3 correspond to A',
-            '• N4 to N9 (total 6) correspond to B',
-        ]),
-        ('standardized', [
-            '• s1-s2-s3 correspond to A',
-            '• s4 to s9 (total 6) correspond to B',
-        ]),
+    @pytest.mark.parametrize('mode, headings, lists', [
+        ('original',
+         [r'**A** · 3 samples', r'**B** · 6 samples'],
+         [r'N\-1, N2, s3', r'N4, N5, N6, N7, N8, N9']),
+        ('standardized',
+         [r'**A** · 3 samples', r'**B** · 6 samples'],
+         [r's1, s2, s3', r's4, s5, s6, s7, s8, s9']),
     ])
-    def test_summary_follows_the_switch(self, mode, expected):
+    def test_summary_follows_the_switch(self, mode, headings, lists):
+        """Each condition is a heading with every sample listed under it.
+
+        Regression: conditions with more than five samples showed a range
+        ('N4 to N9'), which says nothing about the samples in between once
+        they have names."""
         at = AppTest.from_function(_confirm_script, default_timeout=DEFAULT_TIMEOUT)
         names = {f's{i}': f'N{i}' for i in range(2, 10)}
         names['s1'] = 'N-1'
@@ -279,7 +282,43 @@ class TestConfirmSummary:
         at.session_state['sample_label_mode'] = mode
         at.run()
         assert not at.exception
-        assert [t.value for t in at.sidebar.text] == expected
+        markdown = [m.value for m in at.sidebar.markdown]
+        assert markdown[0] == '9 samples in 2 conditions'
+        assert markdown[1:] == headings
+        assert [c.value for c in at.sidebar.caption] == lists
+
+    def test_long_condition_lists_the_first_ten(self):
+        def script():
+            from app.models.experiment import ExperimentConfig
+            from app.ui.sidebar.confirm_inputs import display_confirm_inputs
+            display_confirm_inputs(ExperimentConfig(
+                n_conditions=1, conditions_list=['A'],
+                number_of_samples_list=[13],
+            ))
+        at = AppTest.from_function(script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['sample_label_mode'] = 'standardized'
+        at.run()
+        assert not at.exception
+        assert [c.value for c in at.sidebar.caption] == [
+            's1, s2, s3, s4, s5, s6, s7, s8, s9, s10, … and 3 more',
+        ]
+
+    def test_markdown_characters_show_as_typed(self):
+        """Names and conditions are escaped, so '|' or '$' cannot turn the
+        summary into a table or a formula."""
+        def script():
+            from app.models.experiment import ExperimentConfig
+            from app.ui.sidebar.confirm_inputs import display_confirm_inputs
+            display_confirm_inputs(ExperimentConfig(
+                n_conditions=1, conditions_list=['KO|WT'],
+                number_of_samples_list=[2],
+            ))
+        at = AppTest.from_function(script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['sample_names'] = {'s1': '$5_a', 's2': '*b*'}
+        at.run()
+        assert not at.exception
+        assert at.sidebar.markdown[1].value == r'**KO\|WT** · 2 samples'
+        assert at.sidebar.caption[0].value == r'\$5\_a, \*b\*'
 
 
 class TestRegroupPickers:
