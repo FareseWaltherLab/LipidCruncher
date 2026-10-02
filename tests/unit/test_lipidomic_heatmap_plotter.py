@@ -1825,6 +1825,11 @@ class TestPageBounds:
         assert LipidomicHeatmapPlotterService.page_bounds(20, 0) == (0, 20)
         assert LipidomicHeatmapPlotterService.page_bounds(20, 9) == (0, 20)
 
+    def test_smaller_page_size(self):
+        assert LipidomicHeatmapPlotterService.page_bounds(190, 2, 50) == (100, 150)
+        assert LipidomicHeatmapPlotterService.page_bounds(190, 3, 50) == (150, 190)
+        assert LipidomicHeatmapPlotterService.page_bounds(190, 9, 50) == (150, 190)
+
     def test_exact_multiple_has_no_trailing_empty_page(self):
         total = GROUPED_PAGE_SIZE * 2
         assert LipidomicHeatmapPlotterService.page_bounds(total, 2) == (

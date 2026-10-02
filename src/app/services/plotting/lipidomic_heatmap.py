@@ -90,6 +90,11 @@ TARGET_PLOT_HEIGHT = 380
 # selection is not a workaround here — a single class can hold far more than
 # this (TG alone has 1,903 species in the bundled LipidSearch dataset).
 GROUPED_PAGE_SIZE = 150
+# Page sizes on offer. Full screen forces the figure to the window's height,
+# so it needs a smaller page for every species name to get a row tall enough
+# to show: 30 on a laptop screen, 50 on a large monitor. Below ~16px a row
+# Plotly starts dropping every other name.
+GROUPED_PAGE_SIZES = (30, 50, 100, GROUPED_PAGE_SIZE)
 
 
 @dataclass
@@ -236,7 +241,9 @@ class LipidomicHeatmapPlotterService:
         return int(df['ClassKey'].isin(selected_classes).sum())
 
     @staticmethod
-    def page_bounds(total: int, page: int) -> Tuple[int, int]:
+    def page_bounds(
+        total: int, page: int, page_size: int = GROUPED_PAGE_SIZE,
+    ) -> Tuple[int, int]:
         """Resolve a species page to (start, end) row offsets.
 
         The page index is clamped into range, so a stale selection left over
@@ -245,16 +252,17 @@ class LipidomicHeatmapPlotterService:
         Args:
             total: Total number of species available.
             page: Zero-based page index.
+            page_size: Species per page.
 
         Returns:
             (start, end) offsets suitable for ``iloc`` slicing.
         """
         if total <= 0:
             return 0, 0
-        last_page = max(0, (total - 1) // GROUPED_PAGE_SIZE)
+        last_page = max(0, (total - 1) // page_size)
         page = min(max(0, page), last_page)
-        start = page * GROUPED_PAGE_SIZE
-        return start, min(start + GROUPED_PAGE_SIZE, total)
+        start = page * page_size
+        return start, min(start + page_size, total)
 
     @staticmethod
     def order_by_class(

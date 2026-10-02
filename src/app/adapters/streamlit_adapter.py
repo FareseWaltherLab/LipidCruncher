@@ -31,6 +31,7 @@ from ..services.plotting.pca import PCAPlotterService
 from ..services.plotting.retention_time import RetentionTimePlotterService
 from ..services.validation import get_matching_concentration_columns
 from ..workflows.analysis import (
+    GROUPED_PAGE_SIZE,
     AnalysisWorkflow,
     BarChartResult,
     ChainLengthResult,
@@ -1160,6 +1161,7 @@ class StreamlitAdapter:
         control_condition: Optional[str] = None,
         sort_direction: str = 'desc',
         display_names: Optional[Dict[str, str]] = None,
+        species_page_size: int = GROUPED_PAGE_SIZE,
     ) -> HeatmapResult:
         """Cached lipidomic heatmap analysis.
 
@@ -1173,6 +1175,7 @@ class StreamlitAdapter:
             control_condition=control_condition,
             sort_direction=sort_direction,
             display_names=display_names,
+            species_page_size=species_page_size,
         )
 
     # ==================== AI Chat Wrappers (NOT cached — stateful) ====================
