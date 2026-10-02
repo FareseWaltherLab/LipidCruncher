@@ -61,7 +61,9 @@ STRIP_LABEL_PX_PER_CHAR = 8
 # Clustered and Regular stretch to the container, so their column width is
 # unknown when the figure is built. Name collisions are judged at this plot
 # width, roughly what a 700px container leaves beside the species names and
-# colour bar; wider renders only gain room.
+# colour bar; wider renders only gain room. The square-celled class modes are
+# judged at no more than this too: Streamlit narrows a figure wider than its
+# container, squeezing the columns while the condition names keep their size.
 STRETCHED_PLOT_WIDTH_PX = 450
 
 # Margin budget (px). Left/bottom also grow with the longest tick label.
@@ -717,7 +719,8 @@ class LipidomicHeatmapPlotterService:
         )
 
         extra_top = _add_condition_strip(
-            fig, sample_conditions, cell_size(len(species)),
+            fig, sample_conditions,
+            _square_column_px(len(species), len(selected_samples)),
         )
         _apply_square_layout(
             fig, f'Lipidomic Heatmap Grouped by Class ({value_label})',
@@ -771,7 +774,8 @@ class LipidomicHeatmapPlotterService:
         )
 
         extra_top = _add_condition_strip(
-            fig, sample_conditions, cell_size(len(classes)),
+            fig, sample_conditions,
+            _square_column_px(len(classes), len(selected_samples)),
         )
         _apply_square_layout(
             fig, f'Lipidomic Heatmap Aggregated by Class ({value_label})',
@@ -1011,6 +1015,15 @@ def _add_condition_strip(
     fig.update_xaxes(range=[-0.5, len(sample_conditions) - 0.5])
 
     return 2 * STRIP_LABEL_ROW_PX * max(rows)
+
+
+def _square_column_px(n_rows: int, n_cols: int) -> float:
+    """Column width to judge condition-name collisions at in a class mode.
+
+    The drawn cell size, unless the figure is wide enough that Streamlit may
+    narrow it to fit the page; then the width the stretched modes assume.
+    """
+    return min(cell_size(n_rows), STRETCHED_PLOT_WIDTH_PX / max(1, n_cols))
 
 
 def _label_rows(

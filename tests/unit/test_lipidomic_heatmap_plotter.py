@@ -2102,6 +2102,35 @@ class TestLabelRows:
         blocks = _condition_blocks(['CLEANUP_BLANK', 'KNOCKOUT_24H'])
         assert _label_rows(blocks, column_px=200) == [0, 0]
 
+    @pytest.mark.parametrize('mode', ['class_grouped', 'class_aggregated'])
+    def test_class_modes_allow_for_a_narrowed_figure(self, mode):
+        """Regression: the class modes judged collisions at their full 18px
+        cell, but Streamlit narrows a figure wider than the page, so on the
+        JYK design SS48 and SS48_JW overlapped. They are now judged at the
+        same width as the stretched modes, putting SS48_JW on a second row."""
+        sizes = {'ID': 6, 'Blank': 4, 'QC': 5, '30Perc': 3, 'CM': 3,
+                 'SS24': 3, 'SS48': 3, 'SS48_JW': 3}
+        conditions = [c for c, n in sizes.items() for _ in range(n)]
+        samples = [f's{i+1}' for i in range(len(conditions))]
+        index = pd.MultiIndex.from_arrays(
+            [['L0', 'L1'], ['PC', 'PE']], names=['LipidMolec', 'ClassKey'],
+        )
+        z = pd.DataFrame(
+            np.arange(2.0 * len(samples)).reshape(2, -1),
+            index=index, columns=samples,
+        )
+        if mode == 'class_grouped':
+            fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+                z, samples, sample_conditions=conditions,
+            )
+        else:
+            fig = LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
+                z.droplevel('LipidMolec'), samples, sample_conditions=conditions,
+            )
+        shift = {a.text: a.yshift for a in fig.layout.annotations}
+        assert shift['SS48_JW'] == shift['SS48'] + STRIP_LABEL_ROW_PX
+        assert shift['ID'] == shift['SS48']
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # TestMissingSampleColumns
