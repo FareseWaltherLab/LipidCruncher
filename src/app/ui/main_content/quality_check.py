@@ -24,6 +24,7 @@ from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_names import remap_names_after_exclusion
+from app.ui.sample_labels import names_for
 from app.ui.st_helpers import (
     display_export_buttons,
     data_selection_header,
@@ -158,7 +159,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             fig1, missing_values_df,
             "missing_values_distribution.svg", "missing_values_data.csv",
             "qc_missing_values_svg", "qc_missing_values_csv",
-            sample_names=st.session_state.get('qc_input_sample_names'),
+            sample_names=names_for('qc_input'),
         )
 
         st.markdown("---")
@@ -177,7 +178,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             fig2, mean_area_df,
             "box_plot.svg", "box_plot_data.csv",
             "qc_box_plot_svg", "qc_box_plot_csv",
-            sample_names=st.session_state.get('qc_input_sample_names'),
+            sample_names=names_for('qc_input'),
         )
 
 
@@ -356,13 +357,13 @@ def _render_bqc_filtering(
     # Show filtered dataset
     st.markdown("###### Filtered Dataset")
     named_dataframe(
-        result.filtered_df, sample_names=st.session_state.get('qc_input_sample_names'),
+        result.filtered_df, sample_names=names_for('qc_input'),
         width='stretch',
     )
 
     csv_download_button(
         result.filtered_df, "filtered_data.csv", key="bqc_filtered_download",
-        sample_names=st.session_state.get('qc_input_sample_names'),
+        sample_names=names_for('qc_input'),
     )
 
     return result.filtered_df
@@ -521,14 +522,14 @@ def _display_correlation_analysis(
             f"correlation_matrix_{selected_condition}.csv",
             'qc_corr_svg', "corr_csv_download",
             is_matplotlib=True,
-            sample_names=st.session_state.get('qc_input_sample_names'),
+            sample_names=names_for('qc_input'),
         )
 
         # Correlation matrix table
         st.markdown("###### Correlation Coefficients")
         named_dataframe(
             correlation_df.rename_axis('Sample'),
-            sample_names=st.session_state.get('qc_input_sample_names'),
+            sample_names=names_for('qc_input'),
             width='stretch', hide_index=True,
         )
 
@@ -646,7 +647,7 @@ def _display_pca_analysis(
             pca_plot, pca_df,
             "pca_plot.svg", "pca_data.csv",
             "qc_pca_svg", "pca_csv_download",
-            sample_names=st.session_state.get('qc_sample_names'),
+            sample_names=names_for('qc'),
         )
 
     return df, experiment

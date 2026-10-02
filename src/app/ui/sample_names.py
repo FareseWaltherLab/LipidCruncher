@@ -154,6 +154,15 @@ def remap_names_after_exclusion(
     }
 
 
+def sample_display_map(names: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """Map each named label to the text shown for it on screen and in exports.
+
+    The same text a CSV header uses, so a plot, a table and a download never
+    disagree; unnamed labels are absent (show the label itself).
+    """
+    return _csv_display_names(names or {})
+
+
 def _csv_display_names(names: Dict[str, str]) -> Dict[str, str]:
     """Map each named label to the text written for it in a CSV.
 

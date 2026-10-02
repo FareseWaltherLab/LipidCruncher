@@ -196,6 +196,28 @@ class TestAlignmentSampleNames:
         # Seeded, then written back unchanged by the Sample Names editor.
         assert at.session_state['sample_names'] == {'s1': 'ID_01', 's2': 'm02'}
 
+    def test_group_table_names_both_label_kinds(self):
+        """The Group Samples table says which column is which."""
+        at = AppTest.from_function(_sample_names_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['lipidsearch_alignment_text'] = _NAMED_ALIGNMENT_TEXT
+        at.run()
+        assert not at.exception
+        group_table = at.sidebar.dataframe[0].value
+        assert list(group_table.columns) == [
+            'Standardized Label', 'Original Name', 'Condition',
+        ]
+        assert group_table['Original Name'].tolist() == ['ID_01', 'm02']
+
+    def test_label_switch_defaults_to_original_names(self):
+        at = AppTest.from_function(_sample_names_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['lipidsearch_alignment_text'] = _NAMED_ALIGNMENT_TEXT
+        at.run()
+        switch = at.sidebar.radio(key='_sample_label_mode_radio')
+        assert switch.value == 'original'
+        switch.set_value('standardized').run()
+        assert not at.exception
+        assert at.session_state['sample_label_mode'] == 'standardized'
+
     def test_user_names_are_not_overwritten(self):
         at = AppTest.from_function(_sample_names_script, default_timeout=DEFAULT_TIMEOUT)
         at.session_state['lipidsearch_alignment_text'] = _NAMED_ALIGNMENT_TEXT

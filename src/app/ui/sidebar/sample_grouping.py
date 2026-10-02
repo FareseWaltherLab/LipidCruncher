@@ -22,6 +22,7 @@ from app.ui.sample_names import (
     names_from_editor,
     remap_names_after_regroup,
 )
+from app.ui.sample_labels import render_sample_label_switch
 from app.ui.sidebar.experiment_config import detect_sample_columns, extract_sample_names, display_experiment_definition
 from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_inputs
 
@@ -190,12 +191,16 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
 
     group_df = result.group_df
 
-    # Show the user-facing sample names alongside the internal s-labels.
+    # Show the original names alongside the standardized labels; both stay
+    # visible here whichever the "Show samples as" switch picks, so the user
+    # can read one against the other.
     names = st.session_state.get('sample_names') or {}
-    display_group = group_df.copy()
+    display_group = group_df.rename(columns={
+        'sample name': 'Standardized Label', 'condition': 'Condition',
+    })
     if names:
         display_group.insert(
-            1, 'name', [names.get(s, '') for s in group_df['sample name']]
+            1, 'Original Name', [names.get(s, '') for s in group_df['sample name']]
         )
     st.sidebar.dataframe(display_group, width='stretch')
 
@@ -336,16 +341,17 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
     Names are auto-seeded from the uploaded column headers (or a LipidSearch
     5.2 Alignment Setting file's raw filenames) and stored in
     ``st.session_state.sample_names`` keyed by internal label (s1, s2, ...).
-    They appear in the Group Samples table, data tables and CSV downloads.
+    The "Show samples as" switch decides whether they or the s-labels are
+    shown in tables, plots, sample pickers and downloads.
     """
     labels = experiment.full_samples_list
     names = st.session_state.get('sample_names') or {}
 
     with st.sidebar.expander('✏️ Sample Names (optional)', expanded=False):
         st.caption(
-            "These names are shown in the Group Samples table and replace s1, "
-            "s2, ... in data tables and CSV downloads; plots keep the "
-            "s-labels. "
+            "Choose under **Show samples as** whether these names or the "
+            "standardized labels (s1, s2, ...) appear in tables, plots, sample "
+            "pickers and downloads. "
             "Auto-filled from your file's column headers (or, for LipidSearch "
             "5.2, the Alignment Setting file's raw filenames) — edit as needed."
         )
@@ -358,8 +364,10 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
             hide_index=True,
             width='stretch',
             column_config={
-                'sample': st.column_config.TextColumn('Sample', disabled=True),
-                'name': st.column_config.TextColumn('Display name'),
+                'sample': st.column_config.TextColumn(
+                    'Standardized Label', disabled=True,
+                ),
+                'name': st.column_config.TextColumn('Original Name'),
             },
             key='sample_names_editor',
         )
@@ -435,8 +443,9 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
         st.sidebar.error("Please complete sample grouping before proceeding.")
         return None, None
 
-    # Step 2b: Optional sample display-name editing
+    # Step 2b: Optional sample display-name editing, and which labels to show
     _display_sample_name_editor(experiment)
+    render_sample_label_switch()
 
     # Step 3: BQC Section
     bqc_label = display_bqc_section(experiment)

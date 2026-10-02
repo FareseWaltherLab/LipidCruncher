@@ -14,6 +14,7 @@ from app.services.plotting.lipidomic_heatmap import (
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
+from app.ui.sample_labels import names_for
 
 
 def _display_lipidomic_heatmap(
@@ -176,7 +177,7 @@ def _display_lipidomic_heatmap(
                 f"lipidomic_{heatmap_type_value}_heatmap.svg",
                 f"{heatmap_type_value}_heatmap_data.csv",
                 "analysis_svg_heatmap", "analysis_csv_heatmap",
-                sample_names=st.session_state.get('qc_sample_names'),
+                sample_names=names_for('qc'),
             )
 
         # Cluster composition (clustered mode only)
