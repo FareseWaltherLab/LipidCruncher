@@ -56,6 +56,7 @@ from ..services.plotting.volcano_plot import (
     VolcanoData,
 )
 from ..services.plotting.lipidomic_heatmap import (
+    GROUPED_PAGE_SIZE,
     LipidomicHeatmapPlotterService,
     ClusteringResult,
 )
@@ -933,6 +934,7 @@ class AnalysisWorkflow:
         control_condition: Optional[str] = None,
         sort_direction: str = 'desc',
         display_names: Optional[Dict[str, str]] = None,
+        species_page_size: int = GROUPED_PAGE_SIZE,
     ) -> HeatmapResult:
         """Run lipidomic heatmap analysis.
 
@@ -949,6 +951,7 @@ class AnalysisWorkflow:
             n_clusters: Number of clusters (only for clustered type).
             species_page: Zero-based page of species to draw, for the
                 class_grouped type only. Clamped into range.
+            species_page_size: Species per page for the class_grouped type.
             color_scale: 'zscore' to standardise each row across samples, or
                 'log2fc' to express every sample as a log2 fold change against
                 the control condition's mean. Applies to every heatmap type;
@@ -1091,7 +1094,7 @@ class AnalysisWorkflow:
                 ascending=(sort_direction == 'asc'),
             )
             start, end = LipidomicHeatmapPlotterService.page_bounds(
-                len(ordered_df), species_page,
+                len(ordered_df), species_page, species_page_size,
             )
             figure = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
                 ordered_df.iloc[start:end], shown_samples,

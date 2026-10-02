@@ -773,6 +773,38 @@ class TestHeatmapUI:
         heatmap = at.session_state['analysis_heatmap_fig']
         assert len(heatmap.data[0].y[1]) == 40  # the remainder page
 
+    def test_smaller_pages_for_full_screen(self):
+        """Full screen fits the figure to the window's height, so 50 species
+        per page is offered for every name to stay readable there."""
+        from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
+
+        at = self._big_analysis_app(GROUPED_PAGE_SIZE + 40)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+        assert at.selectbox(key='heatmap_species_page_size').value == GROUPED_PAGE_SIZE
+
+        at.selectbox(key='heatmap_species_page_size').set_value(50).run()
+
+        assert not at.exception
+        assert len(at.selectbox(key='heatmap_species_page').options) == 4
+        heatmap = at.session_state['analysis_heatmap_fig']
+        assert len(heatmap.data[0].y[1]) == 50
+
+    def test_changing_page_size_returns_to_the_first_page(self):
+        """Page 2 of 50 is not page 2 of 150, so a size change starts over."""
+        at = self._big_analysis_app(190)
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Grouped by Class").run()
+        at.selectbox(key='heatmap_species_page_size').set_value(50).run()
+        at.selectbox(key='heatmap_species_page').set_value(3).run()
+
+        at.selectbox(key='heatmap_species_page_size').set_value(100).run()
+
+        assert not at.exception
+        assert at.selectbox(key='heatmap_species_page').value == 0
+        heatmap = at.session_state['analysis_heatmap_fig']
+        assert len(heatmap.data[0].y[1]) == 100
+
     def test_no_pager_when_species_fit_on_one_page(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
         at.radio(key='heatmap_type').set_value("Grouped by Class").run()

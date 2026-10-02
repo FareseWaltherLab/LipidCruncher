@@ -9,6 +9,7 @@ from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.plotting.lipidomic_heatmap import (
     GROUPED_PAGE_SIZE,
+    GROUPED_PAGE_SIZES,
     LipidomicHeatmapPlotterService,
 )
 from app.workflows.analysis import AnalysisWorkflow
@@ -69,7 +70,7 @@ def _display_lipidomic_heatmap(
                     "Grouped by Class: one row per species, grouped into lipid "
                     "class blocks and ranked by fold change inside each block "
                     "when the Log2 Fold Change colour scale is on, "
-                    f"{GROUPED_PAGE_SIZE} species per page. "
+                    f"up to {GROUPED_PAGE_SIZE} species per page. "
                     "Aggregated by Class: one row per lipid class, summing the "
                     "concentrations of its species."
                 ),
@@ -109,9 +110,9 @@ def _display_lipidomic_heatmap(
         species_total = LipidomicHeatmapPlotterService.count_species(
             df, selected_classes,
         )
-        species_page = 0
+        species_page, page_size = 0, GROUPED_PAGE_SIZE
         if heatmap_type_value == 'class_grouped':
-            species_page = _select_species_page(
+            species_page, page_size = _select_species_page(
                 species_total, sorted_by_fc=(color_scale == 'log2fc'),
             )
 
@@ -126,6 +127,7 @@ def _display_lipidomic_heatmap(
             control_condition=control_condition,
             sort_direction=sort_direction,
             display_names=display_names_for('qc'),
+            species_page_size=page_size,
         )
 
         if not result.success:
@@ -143,9 +145,9 @@ def _display_lipidomic_heatmap(
         square_celled = heatmap_type_value in ('class_grouped', 'class_aggregated')
         st.plotly_chart(result.figure, use_container_width=not square_celled)
 
-        if heatmap_type_value == 'class_grouped' and species_total > GROUPED_PAGE_SIZE:
+        if heatmap_type_value == 'class_grouped' and species_total > page_size:
             start, end = LipidomicHeatmapPlotterService.page_bounds(
-                species_total, species_page,
+                species_total, species_page, page_size,
             )
             if color_scale == 'log2fc':
                 ranked = (
@@ -359,46 +361,75 @@ def _display_row_order_explanation(sort_direction: str) -> None:
     )
 
 
-def _select_species_page(species_total: int, sorted_by_fc: bool = False) -> int:
-    """Show a species-range picker and return the chosen zero-based page.
+def _select_species_page(
+    species_total: int, sorted_by_fc: bool = False,
+) -> tuple:
+    """Show the species-per-page and species-range pickers.
 
     One row per species would make a tall selection unreadable, so the species
-    are paged. Returns 0 without rendering anything when they all fit on one
-    page. Narrowing the class selection is not an alternative here: a single
-    class can hold far more species than fit.
+    are paged. Narrowing the class selection is not an alternative here: a
+    single class can hold far more species than fit. Full screen squeezes the
+    figure to the window's height, so smaller pages are offered for it.
 
     Args:
         species_total: Number of species in the current selection.
         sorted_by_fc: Whether the species are ranked by fold change inside
             their class block, which is what decides who lands on a page.
-    """
-    if species_total <= GROUPED_PAGE_SIZE:
-        return 0
 
-    n_pages = math.ceil(species_total / GROUPED_PAGE_SIZE)
+    Returns:
+        (zero-based page, species per page). Nothing is rendered, and
+        (0, GROUPED_PAGE_SIZE) returned, when every species fits the
+        smallest page.
+    """
+    if species_total <= min(GROUPED_PAGE_SIZES):
+        return 0, GROUPED_PAGE_SIZE
+
+    col_size, col_range = st.columns(2)
+    with col_size:
+        page_size = st.selectbox(
+            "Species per page",
+            GROUPED_PAGE_SIZES,
+            index=GROUPED_PAGE_SIZES.index(GROUPED_PAGE_SIZE),
+            key='heatmap_species_page_size',
+            # A page number means different species at another page size.
+            on_change=lambda: st.session_state.pop('heatmap_species_page', None),
+            help=(
+                "Full screen fits the heatmap to the window's height, so a "
+                "large page squeezes the rows until the species names no "
+                "longer fit. In full screen, choose 30 to read every name on "
+                "a laptop, or 50 on a large monitor."
+            ),
+        )
+    if species_total <= page_size:
+        return 0, page_size
+
+    n_pages = math.ceil(species_total / page_size)
     pages = list(range(n_pages))
 
     def _label(page: int) -> str:
-        start = page * GROUPED_PAGE_SIZE
-        return f"{start + 1}–{min(start + GROUPED_PAGE_SIZE, species_total)}"
+        start = page * page_size
+        return f"{start + 1}–{min(start + page_size, species_total)}"
 
-    return st.selectbox(
-        f"Species range ({species_total} species, {n_pages} pages)",
-        pages,
-        format_func=_label,
-        key='heatmap_species_page',
-        help=(
-            "One row per species, so the species are shown a page at a time, "
-            "in lipid class order"
-            + (
-                " and ranked by fold change inside each class. A class larger "
-                "than one page therefore continues onto the next page, "
-                "carrying on down its own ranking. "
-                if sorted_by_fc else ". "
-            )
-            + "Use 'Aggregated by Class' to see every class at once instead."
-        ),
-    )
+    with col_range:
+        page = st.selectbox(
+            f"Species range ({species_total} species, {n_pages} pages)",
+            pages,
+            format_func=_label,
+            key='heatmap_species_page',
+            help=(
+                "One row per species, so the species are shown a page at a "
+                "time, in lipid class order"
+                + (
+                    " and ranked by fold change inside each class. A class "
+                    "larger than one page therefore continues onto the next "
+                    "page, carrying on down its own ranking. "
+                    if sorted_by_fc else ". "
+                )
+                + "Use 'Aggregated by Class' to see every class at once "
+                "instead."
+            ),
+        )
+    return page, page_size
 
 
 def _display_cluster_composition(
