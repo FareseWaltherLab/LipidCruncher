@@ -348,6 +348,35 @@ class TestCreatePerConditionFigure:
         assert fig.layout.xaxis3 is not None
         assert fig.layout.xaxis4 is not None
 
+    @staticmethod
+    def _row_gap_px(n_conditions, basic_df, basic_experiment):
+        """Build a figure with n_conditions rows; return the row gap in px."""
+        data = ChainLengthPlotterService.calculate_per_condition_data(
+            basic_df, basic_experiment, ['Control'], ['PC', 'PE'],
+        )['Control']
+        per_cond = {f'Cond{i}': data for i in range(n_conditions)}
+        colors = ChainLengthPlotterService.generate_color_mapping(['PC', 'PE'])
+        fig = ChainLengthPlotterService.create_per_condition_figure(
+            per_cond, colors,
+        )
+        # Rows 1 and 2 of the left column are yaxis and yaxis3.
+        gap = fig.layout.yaxis.domain[0] - fig.layout.yaxis3.domain[1]
+        return gap * fig.layout.height
+
+    def test_many_conditions_do_not_crash(self, basic_df, basic_experiment):
+        """Regression: a fixed 0.22 vertical spacing exceeded Plotly's
+        1 / (rows - 1) limit from six conditions up, so an 8-condition
+        experiment raised ValueError instead of drawing."""
+        gap = self._row_gap_px(8, basic_df, basic_experiment)
+        assert gap > 0
+
+    def test_row_gap_stays_the_same_size(self, basic_df, basic_experiment):
+        """The gap holds its two-condition size however many rows there are."""
+        two = self._row_gap_px(2, basic_df, basic_experiment)
+        eight = self._row_gap_px(8, basic_df, basic_experiment)
+        assert two == pytest.approx(0.22 * 2 * 450)
+        assert eight == pytest.approx(two)
+
     def test_single_condition_has_two_panels(self, basic_df, basic_experiment):
         per_cond = ChainLengthPlotterService.calculate_per_condition_data(
             basic_df, basic_experiment,

@@ -26,6 +26,11 @@ from app.services.plotting._shared import (
 
 CHART_HEIGHT_PER_CONDITION = 450
 CHART_WIDTH = 900
+# Gap between condition rows, in px: room for a row's axis title and angled
+# class labels plus the next row's subplot titles. Held in pixels because the
+# figure grows with the condition count; as a fixed fraction (0.22) it broke
+# Plotly's 1/(rows - 1) limit from six conditions up.
+ROW_GAP_PX = 198
 MIN_MARKER_SIZE = 6
 MAX_MARKER_SIZE = 50
 MARKER_OPACITY = 0.7
@@ -233,7 +238,7 @@ class ChainLengthPlotterService:
         fig = make_subplots(
             rows=n_conditions, cols=2,
             subplot_titles=subplot_titles,
-            vertical_spacing=0.22 if n_conditions > 1 else 0.15,
+            vertical_spacing=ROW_GAP_PX / (CHART_HEIGHT_PER_CONDITION * n_conditions),
             horizontal_spacing=0.12,
         )
 
