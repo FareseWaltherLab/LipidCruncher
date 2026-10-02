@@ -15,6 +15,7 @@ from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import _display_detailed_statistics
+from app.ui.sample_labels import names_for
 
 
 def _display_volcano_plot(
@@ -389,7 +390,7 @@ def _display_individual_lipid_analysis(
         f"conc_dist_data_{experimental}_vs_{control}.csv",
         "analysis_svg_dist", "analysis_csv_dist",
         is_matplotlib=True,
-        sample_names=st.session_state.get('qc_sample_names'),
+        sample_names=names_for('qc'),
     )
 
 

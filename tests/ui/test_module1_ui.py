@@ -322,7 +322,7 @@ class TestBackToHome:
 
 
 # =============================================================================
-# Group 9: Sample Display Names (sidebar-only feature)
+# Group 9: Sample Display Names
 # =============================================================================
 
 class TestSampleNameEditor:
@@ -341,13 +341,12 @@ class TestSampleNameEditor:
         text_values = [t.value for t in at.text]
         assert any("mouse liver #5" in v for v in text_values)
 
-    def test_editor_caption_present(self, sample_name_editor_app):
-        """The editor says where the names appear: the Group Samples table
-        and CSV downloads, not the sample selectors or plots."""
+    def test_editor_caption_points_to_the_switch(self, sample_name_editor_app):
+        """The editor says the Show samples as switch decides where names appear."""
         at = sample_name_editor_app
         captions = [c.value for c in at.caption]
-        assert any("CSV downloads" in c for c in captions)
-        assert not any("sample selectors" in c for c in captions)
+        assert any("Show samples as" in c for c in captions)
+        assert not any("plots keep the" in c for c in captions)
 
 
 # =============================================================================

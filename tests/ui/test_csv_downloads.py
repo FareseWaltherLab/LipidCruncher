@@ -161,6 +161,23 @@ class TestSampleNamesOnScreen:
         csv = _csv(captured_downloads, 'download_normalized_data')
         assert list(shown.columns) == list(csv.columns)
 
+    def test_standardized_labels_switch_table_and_csv_back(self, captured_downloads):
+        """With 'Show samples as' on standardized labels, screen and file
+        both show s1, s2, ... even though names exist."""
+        at = AppTest.from_function(normalization_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['_test_cleaned_df'] = make_cleaned_dataframe(n_lipids=20, n_samples=6)
+        at.session_state['_test_intsta_df'] = None
+        at.session_state['_test_experiment'] = _experiment()
+        at.session_state['sample_names'] = {'s1': 'ID_01'}
+        at.session_state['sample_label_mode'] = 'standardized'
+        at.run()
+        assert not at.exception
+        shown = self._table_with(at, 'concentration[s1]')
+        assert 'concentration[ID_01]' not in shown.columns
+        csv = _csv(captured_downloads, 'download_normalized_data')
+        assert 'concentration[s1]' in csv.columns
+        assert 'concentration[ID_01]' not in csv.columns
+
     def test_correlation_table_shows_named_row_labels(self, captured_downloads):
         at = AppTest.from_function(qc_module_script, default_timeout=DEFAULT_TIMEOUT)
         at.session_state['_test_df'] = make_analysis_dataframe(n_lipids=20, n_samples=6)

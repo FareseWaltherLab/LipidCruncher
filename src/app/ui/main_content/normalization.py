@@ -24,6 +24,7 @@ from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
+from app.ui.sample_labels import names_for
 
 
 # =============================================================================
@@ -529,12 +530,12 @@ def _display_normalization_results(result) -> None:
         st.markdown("##### 📊 Final Normalized Data")
         if result.normalized_df is not None:
             named_dataframe(
-                result.normalized_df, sample_names=st.session_state.get('sample_names'),
+                result.normalized_df, sample_names=names_for('upload'),
                 use_container_width=True,
             )
             csv_download_button(
                 result.normalized_df, "normalized_data.csv", key="download_normalized_data",
-                sample_names=st.session_state.get('sample_names'),
+                sample_names=names_for('upload'),
             )
     elif result:
         for error in result.validation_errors:

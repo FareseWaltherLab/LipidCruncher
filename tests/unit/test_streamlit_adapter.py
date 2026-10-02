@@ -1024,8 +1024,9 @@ class TestSessionStateFieldCompleteness:
         # + 1 (standards_consistency_figs, kept for the PDF report)
         # + 1 (lipidsearch_sample_names, alignment-derived names)
         # + 1 (qc_sample_names, names re-keyed after sample exclusion)
-        # + 1 (qc_input_sample_names, names frozen at Module 1's handoff) = 88
-        assert len(field_names) == 88
+        # + 1 (qc_input_sample_names, names frozen at Module 1's handoff)
+        # + 1 (sample_label_mode, original names vs s-labels switch) = 89
+        assert len(field_names) == 89
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""

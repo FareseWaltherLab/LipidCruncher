@@ -33,6 +33,7 @@ from app.constants import (
 )
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from app.ui.content import get_processing_docs, ZERO_FILTERING_DOCS
+from app.ui.sample_labels import names_for
 
 
 # =============================================================================
@@ -440,10 +441,10 @@ def display_final_filtered_data(cleaned_df: pd.DataFrame):
 
     st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
     named_dataframe(
-        cleaned_df, sample_names=st.session_state.get('sample_names'),
+        cleaned_df, sample_names=names_for('upload'),
         use_container_width=True,
     )
     csv_download_button(
         cleaned_df, "final_filtered_data.csv", key="download_filtered_data",
-        sample_names=st.session_state.get('sample_names'),
+        sample_names=names_for('upload'),
     )

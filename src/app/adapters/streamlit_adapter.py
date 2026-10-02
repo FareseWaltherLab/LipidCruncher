@@ -119,6 +119,9 @@ class SessionState:
     # Maps internal sample label (s1, s2, ...) → user-facing display name,
     # auto-seeded from the uploaded column headers and editable in the sidebar.
     sample_names: Optional[Dict[str, str]] = None
+    # 'original' shows those names in tables, plots, pickers and downloads;
+    # 'standardized' shows s1, s2, ... instead (sidebar switch).
+    sample_label_mode: str = 'original'
 
     # --- Data processing (owner: data_processing.py) ---
     cleaned_df: Optional[pd.DataFrame] = None
@@ -223,7 +226,7 @@ _SOFT_RESET_PRESERVE = frozenset({
     # Standardization outputs (so column mapping need not be redone)
     'standardized_df', 'column_mapping', 'n_intensity_cols', 'format_type',
     'msdial_features', 'msdial_sample_names', '_msdial_override_samples',
-    'lipidsearch_sample_names',
+    'lipidsearch_sample_names', 'sample_label_mode',
     'msdial_use_normalized', 'msdial_data_type_index',
     'workbench_conditions', 'workbench_samples',
 })
@@ -234,7 +237,7 @@ _WIDGET_KEYS = {
     # Sidebar widgets (file_upload, experiment_config, sample_grouping, confirm_inputs)
     'manual_sample_override', 'grouping_radio',
     'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
-    'sample_data_experiment', 'sample_names_editor',
+    'sample_data_experiment', 'sample_names_editor', '_sample_label_mode_radio',
     # Data processing widgets (data_processing.py)
     'grade_filter_mode', 'grade_selections',
     'grade_filter_mode_radio',
