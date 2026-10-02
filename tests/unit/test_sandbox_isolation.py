@@ -64,6 +64,59 @@ class TestSecretsAreNotInherited:
         assert res.stdout.strip() == "None"
 
 
+class TestFilesCannotBeRead:
+    """Regression: the child inherited no environment but could still read
+    files, so `pd.read_csv` on a secrets file baked into the image, or on
+    the parent's /proc/<pid>/environ (where ECS puts the API key), printed
+    the secret straight back."""
+
+    @pytest.fixture
+    def secret_file(self, tmp_path):
+        path = tmp_path / "secrets.csv"
+        path.write_text("key\nsk-must-not-leak\n")
+        return str(path)
+
+    @pytest.mark.parametrize("reader", [
+        "pd.read_csv({p!r})",
+        "pd.read_csv({p!r}, engine='pyarrow')",
+        "pd.read_csv({p!r}, engine='python')",
+        "pd.read_table({p!r})",
+        "pd.read_json({p!r})",
+        "pd.read_parquet({p!r})",
+        "np.loadtxt({p!r}, dtype=str, delimiter='|')",
+        "np.fromfile({p!r}, dtype='uint8')",
+        "np.memmap({p!r}, dtype='uint8', mode='r')",
+        "pd.io.common.get_handle({p!r}, 'r').handle.read()",
+    ])
+    def test_library_readers_cannot_open_files(self, df, secret_file, reader):
+        res = run(f"print({reader.format(p=secret_file)})", df)
+        assert not res.success
+        assert "sk-must-not-leak" not in res.stdout + res.error_message
+
+    def test_parent_environment_cannot_be_read(self, df, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-must-not-leak")
+        res = run(
+            f"print(pd.read_csv('/proc/{os.getpid()}/environ', sep='|'))", df,
+        )
+        assert not res.success
+        assert "sk-must-not-leak" not in res.stdout + res.error_message
+
+    def test_directories_cannot_be_listed(self, df, secret_file):
+        res = run(
+            f"print(pd.compat.os.listdir({os.path.dirname(secret_file)!r}))", df,
+        )
+        assert not res.success
+        assert "secrets.csv" not in res.stdout + res.error_message
+
+    def test_dot_dot_cannot_climb_out_of_the_libraries(self, df, secret_file):
+        res = run(
+            f"print(pd.read_csv(np.__file__ + '/../../../../../..' + {secret_file!r}))",
+            df,
+        )
+        assert not res.success
+        assert "sk-must-not-leak" not in res.stdout + res.error_message
+
+
 class TestFilesystemIsBlocked:
     def test_cannot_write_a_file_through_pandas(self, df, tmp_path):
         target = tmp_path / "escaped.csv"

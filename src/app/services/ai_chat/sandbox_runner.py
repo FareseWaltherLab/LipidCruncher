@@ -21,6 +21,58 @@ import pickle
 import sys
 
 
+_READABLE_DEVICES = ('/dev/null', '/dev/urandom', '/dev/random')
+
+
+def _readable_roots() -> list:
+    """Directories the sandboxed code may read from: library code only."""
+    import site
+    import app
+
+    roots = {sys.prefix, sys.base_prefix, sys.exec_prefix,
+             os.path.dirname(app.__file__)}
+    try:
+        roots.update(site.getsitepackages())
+        roots.add(site.getusersitepackages())
+    except Exception:
+        pass
+    return [os.path.realpath(r) + os.sep for r in roots if r]
+
+
+def _install_read_guard() -> None:
+    """Refuse file opens and directory listings outside the readable roots."""
+    roots = _readable_roots()
+
+    # Load matplotlib's font list now, while files may still be read: on
+    # first use it reads (or rebuilds, scanning the system font folders) a
+    # cache that the sandbox keeps in the system temp dir, which the guard
+    # must not open up. Drawing afterwards only reads matplotlib's own fonts.
+    try:
+        import matplotlib.font_manager  # noqa: F401
+    except Exception:
+        pass
+
+    def _allowed(path) -> bool:
+        if isinstance(path, int):
+            return True  # an already-open descriptor, e.g. the result pipe
+        if path is None:
+            path = os.getcwd()
+        if isinstance(path, bytes):
+            path = os.fsdecode(path)
+        real = os.path.realpath(os.fspath(path))
+        if real in _READABLE_DEVICES:
+            return True
+        return any((real + os.sep).startswith(root) for root in roots)
+
+    def _guard(event, args):
+        if event in ('open', 'os.listdir', 'os.scandir') and not _allowed(args[0]):
+            raise PermissionError(
+                "Reading files is disabled in the sandbox; use the provided data."
+            )
+
+    sys.addaudithook(_guard)
+
+
 def _harden(cpu_seconds: int) -> None:
     """Reduce what this process can do before running untrusted code.
 
@@ -59,6 +111,19 @@ def _harden(cpu_seconds: int) -> None:
     try:
         import resource
         resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
+    except Exception:
+        pass
+
+    # --- No reading files outside the libraries -------------------------
+    # The child inherits no environment, but it could still *read*:
+    # `pd.read_csv('/proc/<parent>/environ')` printed the parent's
+    # environment (where ECS puts the API key), and any file baked into the
+    # image was readable. An audit hook cannot be removed by Python code; it
+    # refuses every open or directory listing outside the interpreter's own
+    # install, the site-packages, the app package (for lazy imports) and
+    # matplotlib's cache.
+    try:
+        _install_read_guard()
     except Exception:
         pass
 
