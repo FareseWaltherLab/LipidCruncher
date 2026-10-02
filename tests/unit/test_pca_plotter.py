@@ -478,3 +478,33 @@ class TestBoundary:
             assert len(pc_df) == 3
         except ValueError:
             pass  # Acceptable — not enough features for 2 components
+
+
+# =============================================================================
+# TestDisplayNames
+# =============================================================================
+
+class TestDisplayNames:
+    """Hover text shows display names; the returned data keeps labels."""
+
+    def test_hover_text_shows_names(self, pca_df, samples, conditions_list):
+        fig, pc_df = PCAPlotterService.plot_pca(
+            pca_df, samples, conditions_list,
+            display_names={'s1': 'ID_01', 's4': 'QC (s4)'},
+        )
+        hover = [
+            text for t in fig.data if t.mode == 'markers' for text in t.text
+        ]
+        assert hover == ['ID_01', 's2', 's3', 'QC (s4)', 's5', 's6']
+        assert pc_df['Sample'].tolist() == samples
+
+    def test_without_names_hover_text_shows_labels(
+        self, pca_df, samples, conditions_list,
+    ):
+        fig, _ = PCAPlotterService.plot_pca(
+            pca_df, samples, conditions_list, display_names=None,
+        )
+        hover = [
+            text for t in fig.data if t.mode == 'markers' for text in t.text
+        ]
+        assert hover == samples

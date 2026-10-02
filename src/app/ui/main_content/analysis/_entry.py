@@ -20,6 +20,7 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.services.report_generator import generate_pdf_report, build_metadata_from_experiment
 from app.ui.main_content.lsi_report import display_lsi_report_section
+from app.ui.sample_labels import display_names_for
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.content import STATISTICAL_TESTING_DOCS, SATURATION_PROFILE_DOCS
 
@@ -170,7 +171,10 @@ def _display_pdf_report_section(
     if st.button("Generate PDF Report", key="generate_pdf_report"):
         try:
             with st.spinner("Generating PDF report..."):
-                metadata = build_metadata_from_experiment(experiment, format_type)
+                metadata = build_metadata_from_experiment(
+                    experiment, format_type,
+                    display_names=display_names_for('qc'),
+                )
                 pdf_buffer = generate_pdf_report(
                     analysis_plots=analysis_plots,
                     metadata=metadata,

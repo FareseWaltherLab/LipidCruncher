@@ -6,6 +6,7 @@ import streamlit as st
 
 from ..models.experiment import ExperimentConfig
 from ..services.plotting.standards_plotter import StandardsPlotterService
+from .sample_labels import display_names_for
 from .st_helpers import keep_intsta_expander_open
 
 
@@ -82,6 +83,7 @@ def display_standards_consistency_plots(
         intsta_df,
         selected_samples_ordered,
         sample_conditions=sample_conditions,
+        display_names=display_names_for('upload'),
     )
 
     if plots:

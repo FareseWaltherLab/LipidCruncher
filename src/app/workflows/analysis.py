@@ -932,6 +932,7 @@ class AnalysisWorkflow:
         color_scale: str = 'zscore',
         control_condition: Optional[str] = None,
         sort_direction: str = 'desc',
+        display_names: Optional[Dict[str, str]] = None,
     ) -> HeatmapResult:
         """Run lipidomic heatmap analysis.
 
@@ -962,6 +963,10 @@ class AnalysisWorkflow:
                 'desc' ranks from the most positive mean fold change to the
                 most negative, 'asc' the other way. Every other combination
                 keeps the input order, since there is no fold change to rank by.
+            display_names: Optional ``{sample label -> text shown}`` for the
+                sample axis (unique per sample); unlisted samples show their
+                label. Only the drawn labels change: the data, and the
+                Z-score/fold-change frames returned, stay keyed by label.
 
         Returns:
             HeatmapResult with figure, Z-scores, and optional cluster info.
@@ -1011,6 +1016,11 @@ class AnalysisWorkflow:
         sample_conditions = LipidomicHeatmapPlotterService.sample_condition_labels(
             selected_conditions, experiment,
         )
+        # The text drawn under each column. selected_samples stays the labels,
+        # which the control and sort-column lookups below key on.
+        shown_samples = [
+            (display_names or {}).get(s, s) for s in selected_samples
+        ]
 
         control_samples = (
             LipidomicHeatmapPlotterService.samples_for_condition(
@@ -1033,7 +1043,7 @@ class AnalysisWorkflow:
                 )
             return HeatmapResult(
                 figure=LipidomicHeatmapPlotterService.generate_class_aggregated_heatmap(
-                    class_values_df, selected_samples,
+                    class_values_df, shown_samples,
                     sample_conditions=sample_conditions,
                     value_label=value_label,
                 ),
@@ -1052,7 +1062,7 @@ class AnalysisWorkflow:
         cluster_composition = None
         if heatmap_type == 'clustered':
             figure = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
-                z_scores_df, selected_samples, n_clusters,
+                z_scores_df, shown_samples, n_clusters,
                 sample_conditions=sample_conditions,
                 value_label=value_label,
             )
@@ -1084,13 +1094,13 @@ class AnalysisWorkflow:
                 len(ordered_df), species_page,
             )
             figure = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
-                ordered_df.iloc[start:end], selected_samples,
+                ordered_df.iloc[start:end], shown_samples,
                 sample_conditions=sample_conditions,
                 value_label=value_label,
             )
         else:
             figure = LipidomicHeatmapPlotterService.generate_regular_heatmap(
-                z_scores_df, selected_samples,
+                z_scores_df, shown_samples,
                 sample_conditions=sample_conditions,
                 value_label=value_label,
             )

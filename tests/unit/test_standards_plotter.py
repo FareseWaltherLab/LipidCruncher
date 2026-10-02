@@ -487,3 +487,85 @@ class TestIntensityValues:
         assert y_vals[0] == 100
         assert np.isnan(y_vals[1])
         assert y_vals[2] == 300
+
+
+# =============================================================================
+# TestDisplayNames
+# =============================================================================
+
+
+class TestDisplayNames:
+    """The "Show samples as" switch: bars sit under the shown names while the
+    intensities are still read from the s-labelled columns."""
+
+    SAMPLES = ['s1', 's2', 's3', 's4']
+    CONDS = ['A', 'A', 'B', 'B']
+    NAMES = {'s1': 'CLEANUP_BLANK_01', 's2': 'ID_02', 's4': 'QC (s4)'}
+
+    @pytest.fixture
+    def single(self):
+        return make_standards_df(
+            [('PC(15:0)+D7:(s)', 'PC', [100, 200, 300, 400])], self.SAMPLES,
+        )
+
+    @pytest.fixture
+    def multi(self):
+        return make_standards_df(
+            [
+                ('PE(15:0)+D7:(s)', 'PE', [500, 600, 700, 800]),
+                ('PE(17:0)+D7:(s)', 'PE', [1, 2, 3, 4]),
+            ],
+            self.SAMPLES,
+        )
+
+    @pytest.mark.parametrize('conds', [None, CONDS])
+    def test_single_standard_bars_under_names(self, single, conds):
+        fig = StandardsPlotterService.create_consistency_plots(
+            single, self.SAMPLES, sample_conditions=conds,
+            display_names=self.NAMES,
+        )[0]
+        xs = [x for t in fig.data for x in t.x]
+        ys = [y for t in fig.data for y in t.y]
+        # s3 has no name and keeps its label.
+        assert xs == ['CLEANUP_BLANK_01', 'ID_02', 's3', 'QC (s4)']
+        assert ys == [100, 200, 300, 400]
+
+    def test_multi_standard_bars_under_names(self, multi):
+        fig = StandardsPlotterService.create_consistency_plots(
+            multi, self.SAMPLES, sample_conditions=self.CONDS,
+            display_names=self.NAMES,
+        )[0]
+        second = [t for t in fig.data if not t.showlegend]
+        assert [x for t in second for x in t.x] == [
+            'CLEANUP_BLANK_01', 'ID_02', 's3', 'QC (s4)',
+        ]
+        assert [y for t in second for y in t.y] == [1, 2, 3, 4]
+
+    @pytest.mark.parametrize('names', [None, {}])
+    def test_without_names_figures_are_unchanged(self, single, multi, names):
+        for df in (single, multi):
+            before = StandardsPlotterService.create_consistency_plots(
+                df, self.SAMPLES, sample_conditions=self.CONDS,
+            )[0]
+            after = StandardsPlotterService.create_consistency_plots(
+                df, self.SAMPLES, sample_conditions=self.CONDS,
+                display_names=names,
+            )[0]
+            assert before.to_json() == after.to_json()
+        assert before.layout.height == 600
+
+    def test_long_names_get_room_short_ones_do_not(self, single, multi):
+        """Long names take height for their tick labels, so the bars and the
+        legend keep theirs; short names leave the figure as it was."""
+        for df, base in ((single, 400), (multi, 600)):
+            short = StandardsPlotterService.create_consistency_plots(
+                df, self.SAMPLES, display_names={'s1': 'WT1'},
+            )[0]
+            long = StandardsPlotterService.create_consistency_plots(
+                df, self.SAMPLES, display_names=self.NAMES,
+            )[0]
+            assert short.layout.height == base
+            assert short.layout.xaxis.automargin is None
+            # 'CLEANUP_BLANK_01' is 12 characters longer than 's100'.
+            assert long.layout.height == base + 12 * 7
+            assert long.layout.xaxis.automargin is True

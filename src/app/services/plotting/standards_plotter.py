@@ -8,7 +8,7 @@ preparation and instrument performance.
 Pure logic — no Streamlit dependencies.
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -25,6 +25,12 @@ _COLORS = [
 
 _FONT_STYLE = dict(color='black')
 
+# Sample labels longer than a standardized label (s1 ... s999) — original
+# sample names — add height for their tick labels, roughly PX_PER_CHAR per
+# extra character, so the bars and the legend keep their room.
+_SHORT_SAMPLE_LABEL_CHARS = 4
+_PX_PER_CHAR = 7
+
 
 class StandardsPlotterService:
     """Creates consistency bar plots for internal standards."""
@@ -34,6 +40,7 @@ class StandardsPlotterService:
         intsta_df: pd.DataFrame,
         samples: List[str],
         sample_conditions: Optional[List[str]] = None,
+        display_names: Optional[Dict[str, str]] = None,
     ) -> List[go.Figure]:
         """Create bar plots for each internal standard class.
 
@@ -48,6 +55,9 @@ class StandardsPlotterService:
                 index-aligned with ``samples``. When provided, bars are grouped
                 and colored by condition with a condition legend; otherwise a
                 single color per standard is used.
+            display_names: Optional ``{sample label -> text shown}`` for the
+                sample axis (unique per sample); unlisted samples show their
+                label. Intensities are still looked up by label.
 
         Returns:
             List of Plotly figures, one per lipid class.
@@ -75,6 +85,13 @@ class StandardsPlotterService:
                 s for s in samples if f'intensity[{s}]' in intensity_cols
             ]
             valid_conditions = [cond_by_sample[s] for s in plot_samples]
+        # The bars are drawn under the shown text; the intensity columns
+        # above stay keyed by label.
+        plot_samples = [(display_names or {}).get(s, s) for s in plot_samples]
+        longest = max((len(str(s)) for s in plot_samples), default=0)
+        label_height = (
+            max(0, longest - _SHORT_SAMPLE_LABEL_CHARS) * _PX_PER_CHAR
+        )
 
         figs: List[go.Figure] = []
         classes = sorted(intsta_df['ClassKey'].unique())
@@ -100,8 +117,15 @@ class StandardsPlotterService:
 
             # Style all axes
             fig.update_xaxes(tickfont=_FONT_STYLE, title_font=_FONT_STYLE)
+            if label_height:
+                # Grow the bottom margin to fit long sample names, which the
+                # fixed one would clip in the PDF export.
+                fig.update_xaxes(automargin=True)
             fig.update_yaxes(tickfont=_FONT_STYLE, title_font=_FONT_STYLE)
-            fig.update_layout(legend=dict(font=_FONT_STYLE))
+            fig.update_layout(
+                legend=dict(font=_FONT_STYLE),
+                height=fig.layout.height + label_height,
+            )
 
             figs.append(fig)
 

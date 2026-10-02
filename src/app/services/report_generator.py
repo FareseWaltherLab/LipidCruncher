@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import plotly.io as pio
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,13 @@ def _render_cover_page(pdf: canvas.Canvas, metadata: ReportMetadata,
                           "https://github.com/FareseWaltherLab/LipidCruncher")
 
 
+# Sample IDs column of the cover page's conditions table: at most this many
+# IDs per condition, wrapped onto at most this many lines.
+_COVER_SAMPLE_IDS_SHOWN = 5
+_COVER_SAMPLE_IDS_MAX_LINES = 3
+_COVER_LINE_HEIGHT = 12
+
+
 def _render_conditions_table(pdf: canvas.Canvas, y: float,
                              page_width: float,
                              details: List[Tuple[str, int, List[str]]]) -> float:
@@ -165,17 +173,54 @@ def _render_conditions_table(pdf: canvas.Canvas, y: float,
     y -= 15
 
     pdf.setFont("Helvetica", 10)
+    ids_width = page_width - 50 - 400
     for condition, n_samples, samples in details:
         if y < 150:
             break
         pdf.drawString(70, y, str(condition)[:25])
         pdf.drawString(250, y, str(n_samples))
-        samples_str = ", ".join(samples[:5])
-        if len(samples) > 5:
-            samples_str += f" ... (+{len(samples) - 5} more)"
-        pdf.drawString(400, y, samples_str[:35])
-        y -= 18
+        lines = _sample_id_lines(samples, ids_width)
+        for i, line in enumerate(lines):
+            pdf.drawString(400, y - i * _COVER_LINE_HEIGHT, line)
+        y -= 18 + max(0, len(lines) - 1) * _COVER_LINE_HEIGHT
     return y
+
+
+def _sample_id_lines(samples: List[str], max_width: float) -> List[str]:
+    """Wrap a condition's sample IDs to fit the Sample IDs column.
+
+    Lists the first few IDs and counts the rest (``"s1, s2 ... (+3 more)"``),
+    breaking after a comma onto up to three lines so long original sample
+    names stay whole rather than being cut off mid-name. IDs that would need
+    a fourth line join the count instead.
+    """
+    def fits(text: str) -> bool:
+        return stringWidth(text, "Helvetica", 10) <= max_width
+
+    shown = list(samples[:_COVER_SAMPLE_IDS_SHOWN])
+    while True:
+        more = len(samples) - len(shown)
+        words = [f"{s}," for s in shown[:-1]] + shown[-1:]
+        if more:
+            words.append(f"... (+{more} more)")
+        lines: List[str] = []
+        for word in words:
+            if lines and fits(f"{lines[-1]} {word}"):
+                lines[-1] = f"{lines[-1]} {word}"
+            else:
+                lines.append(word)
+        if len(lines) <= _COVER_SAMPLE_IDS_MAX_LINES or len(shown) <= 1:
+            return [_clip(line, fits) for line in lines]
+        shown.pop()
+
+
+def _clip(text: str, fits) -> str:
+    """Shorten a line that is still too wide (one very long name) with '...'."""
+    if fits(text):
+        return text
+    while text and not fits(text + "..."):
+        text = text[:-1]
+    return text + "..."
 
 
 def _render_plot_page(pdf: canvas.Canvas, fig: Any, title: str,
@@ -504,12 +549,15 @@ def _get_saturation_classes(plots: Dict[str, Any]) -> List[str]:
 def build_metadata_from_experiment(
     experiment: Any,
     format_type: Optional[str] = None,
+    display_names: Optional[Dict[str, str]] = None,
 ) -> ReportMetadata:
     """
     Build ReportMetadata from an ExperimentConfig object.
 
     Convenience function so callers don't need to manually construct
-    the conditions_detail list.
+    the conditions_detail list. ``display_names`` (optional
+    ``{sample label -> text shown}``) puts the samples' shown names in the
+    cover page's Sample IDs column; unlisted samples show their label.
     """
     if experiment is None:
         return ReportMetadata(format_type=format_type)
@@ -520,7 +568,10 @@ def build_metadata_from_experiment(
         experiment.number_of_samples_list,
         experiment.individual_samples_list,
     ):
-        details.append((condition, n_samples, list(samples)))
+        details.append((
+            condition, n_samples,
+            [(display_names or {}).get(s, s) for s in samples],
+        ))
 
     return ReportMetadata(
         format_type=format_type,

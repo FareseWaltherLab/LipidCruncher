@@ -6,7 +6,7 @@ Creates pairwise correlation heatmaps for quality check analysis.
 Pure logic — no Streamlit dependencies.
 """
 
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -65,6 +65,7 @@ class CorrelationPlotterService:
         v_min: float,
         thresh: float,
         condition: str,
+        display_names: Optional[Dict[str, str]] = None,
     ) -> plt.Figure:
         """Render a triangle correlation heatmap.
 
@@ -73,10 +74,17 @@ class CorrelationPlotterService:
             v_min: Minimum value for color scale.
             thresh: Center value for color scale.
             condition: Condition label for the title.
+            display_names: Optional ``{sample label -> text shown}`` for the
+                tick labels (unique per sample); unlisted samples show their
+                label. ``correlation_df`` itself is left as is.
 
         Returns:
             Matplotlib Figure with the heatmap.
         """
+        if display_names:
+            correlation_df = correlation_df.rename(
+                index=display_names, columns=display_names,
+            )
         fig = plt.figure(figsize=(20, 16))
         mask = np.triu(np.ones_like(correlation_df, dtype=bool))
         sns.set(font_scale=3)

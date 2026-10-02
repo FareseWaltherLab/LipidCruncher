@@ -54,9 +54,18 @@ def names_for(space: str) -> Optional[Dict[str, str]]:
     return st.session_state.get(_MAP_KEYS[space]) or None
 
 
+def display_names_for(space: str) -> Dict[str, str]:
+    """``{s-label -> shown text}`` for the named samples in ``space``.
+
+    The text tables and CSVs use, unique per sample; empty when standardized
+    labels are chosen. Pass it to plots so they agree with the tables.
+    """
+    return sample_display_map(names_for(space))
+
+
 def labeler(space: str) -> Callable[[str], str]:
     """Return a function giving the shown text for an s-label in ``space``."""
-    display = sample_display_map(names_for(space))
+    display = display_names_for(space)
     return lambda label: display.get(label, label)
 
 

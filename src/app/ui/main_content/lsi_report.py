@@ -14,6 +14,7 @@ from app.models.experiment import ExperimentConfig
 from app.models.normalization import NormalizationConfig
 from app.models.statistics import StatisticalTestConfig
 from app.services.lsi_report import LSIReportService, _PLACEHOLDER
+from app.ui.sample_labels import labeler
 
 
 def display_lsi_report_section(
@@ -178,7 +179,11 @@ def _build_qc_summary() -> dict:
 
     samples_removed = st.session_state.get("qc_samples_removed", [])
     if samples_removed:
-        summary["Outlier samples removed (PCA)"] = ", ".join(samples_removed)
+        # Removed before exclusion renumbered the survivors: pre-PCA labels.
+        shown = labeler('qc_input')
+        summary["Outlier samples removed (PCA)"] = ", ".join(
+            shown(sample) for sample in samples_removed
+        )
     else:
         summary["Outlier samples removed (PCA)"] = "None"
 

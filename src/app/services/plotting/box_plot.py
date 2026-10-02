@@ -7,7 +7,8 @@ for quality check visualization.
 Pure logic — no Streamlit dependencies.
 """
 
-from typing import List, Optional, Tuple
+import math
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -42,6 +43,29 @@ def _get_sample_colors(
     ]
 
     return colors, sample_to_condition, condition_to_color
+
+
+# Height of the box plot's plot area: 700 px figure minus 60 + 120 px margins.
+_BOX_PLOT_AREA_HEIGHT = 520
+
+
+def _angled_label_room(shown: List[str]) -> int:
+    """Extra px a 45-degree tick label needs below the axis beyond an s-label.
+
+    About 5.5 px of drop per character at the 12 px tick font, measured
+    against a three-character label like ``s12`` that the base layout fits.
+    """
+    longest = max((len(text) for text in shown), default=0)
+    return max(0, math.ceil(5.5 * (longest - 3)))
+
+
+def _shown(
+    samples: List[str], display_names: Optional[Dict[str, str]],
+) -> List[str]:
+    """The text shown for each sample: its display name, else its label."""
+    if not display_names:
+        return list(samples)
+    return [display_names.get(s, s) for s in samples]
 
 
 class BoxPlotService:
@@ -105,6 +129,7 @@ class BoxPlotService:
         zero_values_percent_list: List[float],
         conditions_list: Optional[List[str]] = None,
         individual_samples_list: Optional[List[List[str]]] = None,
+        display_names: Optional[Dict[str, str]] = None,
     ) -> go.Figure:
         """Create horizontal bar chart of missing values percentage.
 
@@ -115,10 +140,14 @@ class BoxPlotService:
             zero_values_percent_list: Missing-value percentages per sample.
             conditions_list: Condition names (optional).
             individual_samples_list: Samples grouped by condition (optional).
+            display_names: Optional ``{sample label -> text shown}`` for the
+                axis labels (unique per sample); unlisted samples show their
+                label.
 
         Returns:
             Plotly Figure.
         """
+        shown = _shown(full_samples_list, display_names)
         dynamic_height = max(400, len(full_samples_list) * 25)
         total_height = dynamic_height + 60
 
@@ -130,7 +159,7 @@ class BoxPlotService:
             )
 
             # Individual bars (no legend)
-            for i, sample in enumerate(full_samples_list):
+            for i, sample in enumerate(shown):
                 fig.add_trace(go.Bar(
                     y=[sample],
                     x=[zero_values_percent_list[i]],
@@ -151,7 +180,7 @@ class BoxPlotService:
                 ))
         else:
             fig.add_trace(go.Bar(
-                y=full_samples_list,
+                y=shown,
                 x=zero_values_percent_list,
                 orientation='h',
                 text=[f'{val:.1f}%' for val in zero_values_percent_list],
@@ -198,19 +227,28 @@ class BoxPlotService:
         full_samples_list: List[str],
         conditions_list: Optional[List[str]] = None,
         individual_samples_list: Optional[List[List[str]]] = None,
+        display_names: Optional[Dict[str, str]] = None,
     ) -> go.Figure:
-        """Create box plot of log10-transformed non-zero concentrations."""
+        """Create box plot of log10-transformed non-zero concentrations.
+
+        ``display_names`` (optional ``{sample label -> text shown}``, unique
+        per sample) labels the boxes; unlisted samples show their label.
+        """
         log_transformed_data = [
             list(np.log10(mean_area_df[col][mean_area_df[col] > 0]))
             for col in mean_area_df.columns
         ]
 
+        shown = _shown(full_samples_list, display_names)
         fig = go.Figure()
         BoxPlotService._add_box_traces(
             fig, log_transformed_data, full_samples_list,
-            conditions_list, individual_samples_list
+            conditions_list, individual_samples_list, shown,
         )
-        BoxPlotService._apply_box_plot_layout(fig, bool(conditions_list))
+        BoxPlotService._apply_box_plot_layout(
+            fig, bool(conditions_list),
+            label_room=_angled_label_room(shown) if display_names else 0,
+        )
         return fig
 
     @staticmethod
@@ -220,15 +258,19 @@ class BoxPlotService:
         samples: List[str],
         conditions_list: Optional[List[str]],
         individual_samples_list: Optional[List[List[str]]],
+        shown: List[str],
     ) -> None:
-        """Add box traces, colored by condition if available."""
+        """Add box traces, colored by condition if available.
+
+        Colors follow ``samples`` (the labels); ``shown`` names each box.
+        """
         if conditions_list and individual_samples_list:
             colors, _, condition_to_color = _get_sample_colors(
                 samples, conditions_list, individual_samples_list
             )
             for i, d in enumerate(data):
                 fig.add_trace(go.Box(
-                    y=d, name=samples[i], boxpoints='outliers',
+                    y=d, name=shown[i], boxpoints='outliers',
                     marker_color=colors[i], line_color=colors[i],
                     showlegend=False,
                 ))
@@ -242,14 +284,21 @@ class BoxPlotService:
         else:
             for i, d in enumerate(data):
                 fig.add_trace(go.Box(
-                    y=d, name=samples[i], boxpoints='outliers',
+                    y=d, name=shown[i], boxpoints='outliers',
                     marker_color='lightblue', line_color='darkblue',
                     showlegend=False,
                 ))
 
     @staticmethod
-    def _apply_box_plot_layout(fig: go.Figure, show_legend: bool) -> None:
-        """Apply standard box plot layout."""
+    def _apply_box_plot_layout(
+        fig: go.Figure, show_legend: bool, label_room: int = 0,
+    ) -> None:
+        """Apply standard box plot layout.
+
+        ``label_room`` is extra space (px) below the plot for tick labels
+        longer than s-labels; the figure grows by it so the plot area keeps
+        its size and the legend moves down past the labels.
+        """
         fig.update_layout(
             title=dict(
                 text='Box Plot of Non-Zero Concentrations',
@@ -260,10 +309,14 @@ class BoxPlotService:
             yaxis_title=dict(text='log10(Concentration)', font=dict(size=14, color='black'), standoff=15),
             xaxis=dict(tickangle=45, tickfont=dict(size=12, color='black'), title_standoff=30),
             yaxis=dict(tickfont=dict(size=12, color='black')),
-            margin=dict(l=100, r=100, t=60, b=120),
+            margin=dict(l=100, r=100, t=60, b=120 + label_room),
             showlegend=show_legend,
-            legend=dict(orientation='h', yanchor='top', y=-0.25, xanchor='center', x=0.5),
-            height=700, width=900,
+            legend=dict(
+                orientation='h', yanchor='top',
+                y=-0.25 - label_room / _BOX_PLOT_AREA_HEIGHT,
+                xanchor='center', x=0.5,
+            ),
+            height=700 + label_room, width=900,
             plot_bgcolor='white',
         )
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')

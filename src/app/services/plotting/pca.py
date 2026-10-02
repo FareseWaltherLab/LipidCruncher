@@ -7,7 +7,7 @@ sample clustering visualization.
 Pure logic — no Streamlit dependencies.
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -27,6 +27,7 @@ class PCAPlotterService:
         df: pd.DataFrame,
         full_samples_list: List[str],
         extensive_conditions_list: List[str],
+        display_names: Optional[Dict[str, str]] = None,
     ) -> Tuple[go.Figure, pd.DataFrame]:
         """Full PCA pipeline: compute PCA and create scatter plot.
 
@@ -35,6 +36,9 @@ class PCAPlotterService:
             full_samples_list: All sample names.
             extensive_conditions_list: Condition label per sample
                 (same length as full_samples_list, index-aligned).
+            display_names: Optional ``{sample label -> text shown}`` for the
+                hover text; unlisted samples show their label. The returned
+                DataFrame keeps the labels in its 'Sample' column.
 
         Returns:
             Tuple of (Plotly Figure, DataFrame with PC1/PC2/Sample/Condition).
@@ -48,7 +52,9 @@ class PCAPlotterService:
         ]
 
         color_mapping = _generate_color_mapping(pc_df['Condition'])
-        fig = _create_scatter_plot(pc_df, pc_names, color_mapping)
+        fig = _create_scatter_plot(
+            pc_df, pc_names, color_mapping, display_names,
+        )
 
         return fig, pc_df
 
@@ -93,6 +99,7 @@ def _create_scatter_plot(
     df: pd.DataFrame,
     pc_names: List[str],
     color_mapping: Dict[str, str],
+    display_names: Optional[Dict[str, str]] = None,
 ) -> go.Figure:
     """Create PCA scatter plot with confidence ellipses."""
     fig = go.Figure()
@@ -106,7 +113,10 @@ def _create_scatter_plot(
                 color=color_mapping[condition], size=8,
                 line=dict(width=1, color='black'),
             ),
-            text=cond_df['Sample'],
+            text=(
+                cond_df['Sample'].map(lambda s: display_names.get(s, s))
+                if display_names else cond_df['Sample']
+            ),
             hovertemplate=(
                 '<b>Sample:</b> %{text}<br>'
                 '<b>PC1:</b> %{x:.4f}<br>'

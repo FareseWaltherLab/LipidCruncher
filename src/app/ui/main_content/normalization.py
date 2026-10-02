@@ -24,7 +24,7 @@ from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
-from app.ui.sample_labels import names_for
+from app.ui.sample_labels import labeler, names_for
 
 
 # =============================================================================
@@ -215,13 +215,15 @@ def _display_manual_protein_input(sample_names: list) -> dict:
     # below pick up the new values in this same run.
     _display_bulk_protein_fill(sample_names)
 
-    # 3-column flat grid layout (matches old app)
+    # 3-column flat grid layout (matches old app). The label follows the
+    # "Show samples as" switch; the key stays the s-label so values persist.
+    shown = labeler('upload')
     protein_concentrations = {}
     cols = st.columns(3)
     for idx, sample in enumerate(sample_names):
         with cols[idx % 3]:
             concentration = st.number_input(
-                f'{sample}:',
+                f'{shown(sample)}:',
                 min_value=0.0,
                 max_value=1000000.0,
                 step=0.1,
@@ -515,9 +517,11 @@ def _collect_method_config(method: str, intsta_df, selected_classes: list, exper
         # Validate: zero concentrations cannot be used as denominators
         zero_samples = [s for s, c in protein_concentrations.items() if c <= 0]
         if zero_samples:
+            shown = labeler('upload')
             st.error(
                 f"Protein concentration must be greater than zero for all samples. "
-                f"The following samples have zero or negative values: {', '.join(zero_samples)}"
+                f"The following samples have zero or negative values: "
+                f"{', '.join(shown(s) for s in zero_samples)}"
             )
             return None, None, None
 

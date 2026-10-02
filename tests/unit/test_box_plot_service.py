@@ -427,3 +427,81 @@ class TestNaNHandling:
         fig = BoxPlotService.plot_box_plot(df, ['s1'])
         # Only 200 and 300 included
         assert len(fig.data[0].y) == 2
+
+
+# =============================================================================
+# TestDisplayNames
+# =============================================================================
+
+class TestDisplayNames:
+    """Samples are shown under display names; colors and data keep labels."""
+
+    NAMES = {'s1': 'CLEANUP_BLANK_01', 's3': 'ID_01'}
+
+    def test_missing_values_bars_show_names(
+        self, samples, conditions, individual_samples,
+    ):
+        fig = BoxPlotService.plot_missing_values(
+            samples, [10, 20, 30, 40], conditions, individual_samples,
+            display_names=self.NAMES,
+        )
+        bars = [t.y[0] for t in fig.data if t.y[0] is not None]
+        assert bars == ['CLEANUP_BLANK_01', 's2', 'ID_01', 's4']
+
+    def test_missing_values_without_conditions_show_names(self, samples):
+        fig = BoxPlotService.plot_missing_values(
+            samples, [10, 20, 30, 40], display_names=self.NAMES,
+        )
+        assert list(fig.data[0].y) == ['CLEANUP_BLANK_01', 's2', 'ID_01', 's4']
+
+    def test_missing_values_colors_follow_conditions(
+        self, samples, conditions, individual_samples,
+    ):
+        plain = BoxPlotService.plot_missing_values(
+            samples, [10, 20, 30, 40], conditions, individual_samples,
+        )
+        named = BoxPlotService.plot_missing_values(
+            samples, [10, 20, 30, 40], conditions, individual_samples,
+            display_names=self.NAMES,
+        )
+        assert [t.marker.color for t in named.data] == [
+            t.marker.color for t in plain.data
+        ]
+
+    def test_boxes_show_names(self, simple_df, samples, conditions, individual_samples):
+        mean_area_df = BoxPlotService.create_mean_area_df(simple_df, samples)
+        fig = BoxPlotService.plot_box_plot(
+            mean_area_df, samples, conditions, individual_samples,
+            display_names=self.NAMES,
+        )
+        assert [t.name for t in fig.data[:4]] == ['CLEANUP_BLANK_01', 's2', 'ID_01', 's4']
+        # Legend entries are still the conditions, in their colors.
+        assert [t.name for t in fig.data[4:]] == conditions
+
+    def test_long_names_push_legend_below_labels(
+        self, simple_df, samples, conditions, individual_samples,
+    ):
+        """Regression: a fixed legend position sat on top of the long
+        45-degree tick labels and the axis title."""
+        mean_area_df = BoxPlotService.create_mean_area_df(simple_df, samples)
+        fig = BoxPlotService.plot_box_plot(
+            mean_area_df, samples, conditions, individual_samples,
+            display_names=self.NAMES,
+        )
+        assert fig.layout.legend.y < -0.25
+        assert fig.layout.margin.b > 120
+        assert fig.layout.height > 700
+
+    @pytest.mark.parametrize('names', [None, {}])
+    def test_without_names_layout_is_unchanged(
+        self, simple_df, samples, conditions, individual_samples, names,
+    ):
+        mean_area_df = BoxPlotService.create_mean_area_df(simple_df, samples)
+        fig = BoxPlotService.plot_box_plot(
+            mean_area_df, samples, conditions, individual_samples,
+            display_names=names,
+        )
+        assert [t.name for t in fig.data[:4]] == samples
+        assert fig.layout.legend.y == -0.25
+        assert fig.layout.margin.b == 120
+        assert fig.layout.height == 700

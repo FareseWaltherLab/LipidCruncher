@@ -400,3 +400,41 @@ class TestNaNHandling:
             df, 'biological replicates'
         )
         assert np.isnan(corr_matrix.iloc[0, 1])
+
+
+# =============================================================================
+# TestDisplayNames
+# =============================================================================
+
+class TestDisplayNames:
+    """Tick labels show display names; the matrix keeps its labels."""
+
+    @staticmethod
+    def _matrix(corr_df, individual_samples):
+        mean_area_df = CorrelationPlotterService.prepare_data_for_correlation(
+            corr_df, individual_samples, 0
+        )
+        return CorrelationPlotterService.compute_correlation(
+            mean_area_df, 'biological replicates'
+        )
+
+    def test_ticks_show_names(self, corr_df, individual_samples):
+        corr_matrix, v_min, thresh = self._matrix(corr_df, individual_samples)
+        fig = CorrelationPlotterService.render_correlation_plot(
+            corr_matrix, v_min, thresh, 'Control',
+            display_names={'s1': 'CLEANUP_BLANK_01'},
+        )
+        ax = fig.axes[0]
+        assert [t.get_text() for t in ax.get_xticklabels()] == ['CLEANUP_BLANK_01', 's2']
+        assert [t.get_text() for t in ax.get_yticklabels()] == ['CLEANUP_BLANK_01', 's2']
+        # The caller's matrix is untouched (it feeds the table and CSV).
+        assert list(corr_matrix.columns) == ['s1', 's2']
+        assert list(corr_matrix.index) == ['s1', 's2']
+
+    def test_without_names_ticks_show_labels(self, corr_df, individual_samples):
+        corr_matrix, v_min, thresh = self._matrix(corr_df, individual_samples)
+        fig = CorrelationPlotterService.render_correlation_plot(
+            corr_matrix, v_min, thresh, 'Control', display_names=None,
+        )
+        ax = fig.axes[0]
+        assert [t.get_text() for t in ax.get_xticklabels()] == ['s1', 's2']
