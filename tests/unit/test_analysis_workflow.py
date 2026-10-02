@@ -1271,7 +1271,7 @@ class TestRunHeatmap:
             heatmap_type='class_grouped',
         )
         heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
-        classes = list(heatmap.y[0])
+        classes = [row[0] for row in heatmap.customdata]
         runs = [key for key, _ in itertools.groupby(classes)]
         assert len(runs) == len(set(runs))
 
@@ -1308,7 +1308,7 @@ class TestRunHeatmap:
             **kwargs,
         )
         heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
-        return list(heatmap.y[1])
+        return list(heatmap.y)
 
     def test_log2fc_sorts_species_high_to_low_by_default(self, exp_2x3):
         rows = self._sorted_rows(
@@ -1333,8 +1333,8 @@ class TestRunHeatmap:
             color_scale='log2fc', control_condition='Control',
         )
         heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
-        assert list(heatmap.y[0]) == ['PC', 'PC', 'PC', 'PE']
-        assert list(heatmap.y[1])[-1] == 'PE up'
+        assert [row[0] for row in heatmap.customdata] == ['PC', 'PC', 'PC', 'PE']
+        assert list(heatmap.y)[-1] == 'PE up'
 
     def test_zscore_keeps_input_order(self, exp_2x3):
         """There is no fold change to rank by, so nothing is reordered."""
@@ -1376,7 +1376,9 @@ class TestRunHeatmap:
             )
             rects = [s for s in result.figure.layout.shapes if s.type == 'rect']
             assert len(rects) == 2, f'{mode} is missing the condition strip'
-            labels = [a.text for a in result.figure.layout.annotations]
+            labels = [
+                a.text for a in result.figure.layout.annotations if a.xref == 'x'
+            ]
             assert labels == ['Control', 'Treatment'], mode
 
     def test_clustered_and_regular_follow_condition_order(
@@ -1432,7 +1434,7 @@ class TestRunHeatmap:
     @staticmethod
     def _rows(result):
         heatmap = [t for t in result.figure.data if isinstance(t, go.Heatmap)][0]
-        return list(heatmap.y[1])
+        return list(heatmap.y)
 
     def test_oversized_selection_draws_a_full_page(self, exp_2x3):
         """A selection larger than one page still plots, one page at a time,
