@@ -70,6 +70,10 @@ STRETCHED_PLOT_WIDTH_PX = 450
 MARGIN_RIGHT = 130
 MARGIN_TOP = 90
 CLASS_LABEL_WIDTH = 95
+# Inside the class column: room kept at its outer edge for the y-axis title,
+# and how far the block lines reach into the gap before the species names.
+CLASS_TITLE_PX = 22
+CLASS_LINE_CLEARANCE_PX = 30
 PX_PER_CHAR = 7
 
 # Sample labels longer than a standardized label (s1 ... s999) — original
@@ -719,10 +723,11 @@ class LipidomicHeatmapPlotterService:
         species = list(ordered_df.index.get_level_values('LipidMolec'))
         classes = list(ordered_df.index.get_level_values('ClassKey'))
 
-        # A two-level y axis renders the class as a group label to the left of
-        # the species names, with dividers between blocks.
+        # Species on a plain axis; the class names and block dividers are
+        # drawn in a column of their own by _add_class_column. Plotly's
+        # two-level axis ran its dividers through the species names.
         fig = _build_heatmap_figure(
-            ordered_df.to_numpy(), selected_samples, [classes, species],
+            ordered_df.to_numpy(), selected_samples, _unique_labels(species),
             value_label=value_label,
         )
 
@@ -737,11 +742,16 @@ class LipidomicHeatmapPlotterService:
             grouped=True, extra_top=extra_top,
         )
 
-        fig.update_yaxes(
-            autorange='reversed',
-            showdividers=True,
-            dividercolor=BLOCK_LINE_STYLE['color'],
-            dividerwidth=BLOCK_LINE_STYLE['width'],
+        fig.update_yaxes(autorange='reversed')
+        _add_class_column(fig, classes, _label_extent(species))
+        # Each cell carries its row's class, for the hover box (the class is
+        # no longer part of the y value).
+        fig.update_traces(
+            customdata=[[cls] * len(selected_samples) for cls in classes],
+            hovertemplate=(
+                'x: %{x}<br>y: %{y}<br>class: %{customdata}<br>'
+                'z: %{z}<extra></extra>'
+            ),
         )
 
         return fig
@@ -926,6 +936,71 @@ def _build_heatmap_figure(
         xgap=1,
         ygap=1,
     ))
+
+
+def _unique_labels(labels: List[str]) -> List[str]:
+    """Make repeated labels distinct with invisible zero-width suffixes.
+
+    A categorical axis merges equal labels into one row, which would shift
+    every row below it; the suffix keeps them apart without showing.
+    """
+    seen: Dict[str, int] = {}
+    unique = []
+    for label in labels:
+        count = seen.get(label, 0)
+        seen[label] = count + 1
+        unique.append(label + '\u200b' * count)
+    return unique
+
+
+def _add_class_column(
+    fig: go.Figure,
+    classes: List[str],
+    species_px: int,
+) -> None:
+    """Label each lipid class block in a column left of the species names.
+
+    The class name is centred on its block, and a solid line marks each block
+    edge across the class column only, stopping short of the species names so
+    no name is ever struck through. Everything is placed in pixels from the
+    plot's left edge, so it holds when Streamlit narrows or full-screens the
+    figure. The y-axis title moves to the outer edge, clear of the class names.
+
+    Args:
+        fig: Class-grouped heatmap figure, one row per species.
+        classes: Class of each row, in row order (blocks contiguous).
+        species_px: Room the species names take left of the plot, in px.
+    """
+    blocks = _condition_blocks(classes)
+    column_left = -(species_px + CLASS_LABEL_WIDTH) + CLASS_TITLE_PX
+    column_right = -(species_px - CLASS_LINE_CLEARANCE_PX)
+
+    edges = [start - 0.5 for _, start, _ in blocks] + [blocks[-1][2] + 0.5]
+    for edge in edges:
+        fig.add_shape(
+            type='line',
+            xref='paper', xsizemode='pixel', xanchor=0,
+            x0=column_left, x1=column_right,
+            yref='y', y0=edge, y1=edge,
+            line=BLOCK_LINE_STYLE,
+        )
+    for name, start, end in blocks:
+        fig.add_annotation(
+            xref='paper', x=0, xanchor='center',
+            xshift=(column_left + column_right) / 2,
+            yref='y', y=(start + end) / 2,
+            text=name, showarrow=False,
+            font=dict(size=12, color='black'),
+        )
+
+    fig.update_yaxes(title_text=None)
+    fig.add_annotation(
+        xref='paper', x=0, xanchor='left',
+        xshift=-(species_px + CLASS_LABEL_WIDTH),
+        yref='paper', y=0.5, yanchor='middle',
+        text='Lipid Molecules', textangle=-90, showarrow=False,
+        font=dict(size=14),
+    )
 
 
 def _condition_blocks(

@@ -19,10 +19,12 @@ import pytest
 
 from app.services.plotting.lipidomic_heatmap import (
     CELL_SIZE_PX,
+    CLASS_LABEL_WIDTH,
     GROUPED_PAGE_SIZE,
     HEATMAP_HEIGHT,
     MARGIN_TOP,
     MAX_CELL_SIZE_PX,
+    PX_PER_CHAR,
     STRIP_GAP_PX,
     STRIP_HEIGHT_PX,
     STRIP_LABEL_GAP_PX,
@@ -34,6 +36,7 @@ from app.services.plotting.lipidomic_heatmap import (
     _compute_concentration_percentages,
     _compute_species_percentages,
     _condition_blocks,
+    _label_extent,
     _label_rows,
     cell_size,
 )
@@ -1351,22 +1354,55 @@ class TestClassGroupedHeatmap:
         assert isinstance(fig, go.Figure)
         assert [t for t in fig.data if isinstance(t, go.Heatmap)]
 
-    def test_y_axis_is_two_level(self):
-        """Class must be the outer level so it renders left of the species."""
+    def test_rows_are_species_carrying_their_class(self):
         fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
             self._z(), ['s1', 's2', 's3'],
         )
         heatmap = [t for t in fig.data if isinstance(t, go.Heatmap)][0]
-        assert len(heatmap.y) == 2
-        assert list(heatmap.y[0]) == ['PC', 'PC', 'TG', 'PE']
-        assert list(heatmap.y[1]) == ['L0', 'L3', 'L1', 'L2']
+        assert list(heatmap.y) == ['L0', 'L3', 'L1', 'L2']
+        assert [row[0] for row in heatmap.customdata] == ['PC', 'PC', 'TG', 'PE']
 
-    def test_dividers_enabled_between_class_blocks(self):
+    def test_each_class_block_is_labelled_once(self):
         fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
             self._z(), ['s1', 's2', 's3'],
         )
-        assert fig.layout.yaxis.showdividers is True
-        assert fig.layout.yaxis.dividerwidth == 2
+        class_labels = {
+            a.text: a.y for a in fig.layout.annotations if a.yref == 'y'
+        }
+        # Centred on its block: PC covers rows 0-1, TG row 2, PE row 3.
+        assert class_labels == {'PC': 0.5, 'TG': 2, 'PE': 3}
+
+    def test_block_lines_stay_clear_of_the_species_names(self):
+        """Regression: Plotly's two-level axis drew its class dividers right
+        through the species-name column, striking out the first species of
+        every block. The lines now end before the species names start."""
+        fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            self._z(), ['s1', 's2', 's3'],
+        )
+        assert not fig.layout.yaxis.showdividers
+        lines = [
+            s for s in fig.layout.shapes
+            if s.type == 'line' and s.yref == 'y' and s.xsizemode == 'pixel'
+        ]
+        # One line at every block edge: above PC, PC|TG, TG|PE, below PE.
+        assert sorted(line.y0 for line in lines) == [-0.5, 1.5, 2.5, 3.5]
+        species_px = _label_extent(['L0', 'L3', 'L1', 'L2'])
+        longest_name_px = max(len(s) for s in ['L0', 'L3', 'L1', 'L2']) * PX_PER_CHAR
+        for line in lines:
+            assert line.x1 < -longest_name_px
+            assert line.x0 >= -(species_px + CLASS_LABEL_WIDTH)
+
+    def test_repeated_species_names_keep_their_own_rows(self):
+        """A categorical axis merges equal names into one row."""
+        index = pd.MultiIndex.from_arrays(
+            [['X', 'X', 'Y'], ['PC', 'PE', 'PE']],
+            names=['LipidMolec', 'ClassKey'],
+        )
+        z = pd.DataFrame(np.eye(3), index=index, columns=['s1', 's2', 's3'])
+        fig = LipidomicHeatmapPlotterService.generate_class_grouped_heatmap(
+            z, ['s1', 's2', 's3'],
+        )
+        assert len(set(fig.data[0].y)) == 3
 
     def test_rows_reordered_with_their_values(self):
         z = self._z()
@@ -1710,7 +1746,8 @@ class TestConditionStrip:
     def test_labels_stay_black_on_the_fixed_white_background(self):
         fig = self._fig()
         assert fig.layout.paper_bgcolor == 'white'
-        assert all(a.font.color == 'black' for a in fig.layout.annotations)
+        strip = [a for a in fig.layout.annotations if a.xref == 'x']
+        assert strip and all(a.font.color == 'black' for a in strip)
 
     def test_blocks_use_shared_condition_palette(self):
         from app.services.plotting._shared import generate_condition_color_mapping
@@ -1885,7 +1922,8 @@ class TestStripGeometry:
     @pytest.mark.parametrize('n_rows', [2, 10, 60, 150])
     def test_labels_stay_inside_the_top_margin(self, n_rows):
         fig = self._fig(n_rows)
-        for annotation in fig.layout.annotations:
+        # Condition names only; the grouped mode also labels its class blocks.
+        for annotation in [a for a in fig.layout.annotations if a.xref == 'x']:
             assert annotation.y == 1
             assert annotation.yshift + STRIP_LABEL_ROW_PX < MARGIN_TOP
 

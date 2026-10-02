@@ -771,7 +771,7 @@ class TestHeatmapUI:
 
         assert not at.exception
         heatmap = at.session_state['analysis_heatmap_fig']
-        assert len(heatmap.data[0].y[1]) == 40  # the remainder page
+        assert len(heatmap.data[0].y) == 40  # the remainder page
 
     def test_smaller_pages_for_full_screen(self):
         """Full screen fits the figure to the window's height, so 50 species
@@ -788,7 +788,7 @@ class TestHeatmapUI:
         assert not at.exception
         assert len(at.selectbox(key='heatmap_species_page').options) == 4
         heatmap = at.session_state['analysis_heatmap_fig']
-        assert len(heatmap.data[0].y[1]) == 50
+        assert len(heatmap.data[0].y) == 50
 
     def test_changing_page_size_returns_to_the_first_page(self):
         """Page 2 of 50 is not page 2 of 150, so a size change starts over."""
@@ -803,7 +803,7 @@ class TestHeatmapUI:
         assert not at.exception
         assert at.selectbox(key='heatmap_species_page').value == 0
         heatmap = at.session_state['analysis_heatmap_fig']
-        assert len(heatmap.data[0].y[1]) == 100
+        assert len(heatmap.data[0].y) == 100
 
     def test_no_pager_when_species_fit_on_one_page(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
@@ -923,7 +923,7 @@ class TestHeatmapUI:
     def test_species_sort_ranks_rows_by_fold_change(self, analysis_generic_app):
         at = self._grouped_log2fc(analysis_generic_app)
         fig = at.session_state['analysis_heatmap_fig']
-        classes = list(fig.data[0].y[0])
+        classes = [row[0] for row in fig.data[0].customdata]
         values = np.asarray(fig.data[0].z, dtype=float)
 
         # Controls are the first three columns; rank on the rest.
@@ -934,12 +934,12 @@ class TestHeatmapUI:
 
     def test_reversing_the_sort_reverses_each_block(self, analysis_generic_app):
         at = self._grouped_log2fc(analysis_generic_app)
-        first = list(at.session_state['analysis_heatmap_fig'].data[0].y[1])
+        first = list(at.session_state['analysis_heatmap_fig'].data[0].y)
 
         at.selectbox(key='heatmap_species_sort').set_value('asc').run()
 
         assert not at.exception
-        second = list(at.session_state['analysis_heatmap_fig'].data[0].y[1])
+        second = list(at.session_state['analysis_heatmap_fig'].data[0].y)
         assert second != first
         assert sorted(second) == sorted(first)
 
