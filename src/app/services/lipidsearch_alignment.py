@@ -168,6 +168,11 @@ def parse_alignment_file(text: str) -> AlignmentMap:
     for s in samples:
         if s.condition not in conditions:
             conditions.append(s.condition)
+    # Number samples condition by condition (stable within a condition): the
+    # experiment maps s1..sN to conditions contiguously from the per-condition
+    # counts, so an interleaved acquisition order would otherwise put samples
+    # in the wrong condition.
+    samples = sorted(samples, key=lambda s: conditions.index(s.condition))
     samples_per_condition = [
         sum(1 for s in samples if s.condition == c) for c in conditions
     ]
@@ -226,7 +231,8 @@ def merge_dual_polarity(
     are summed (missing values treated as zero, but a row stays NaN when every
     file of that sample is missing the lipid). Because a lipid is detected in
     only one polarity, this sum equals coalescing the pair. Samples are
-    renumbered flat ``intensity[s1..sN]`` in alignment order.
+    renumbered flat ``intensity[s1..sN]`` in ``alignment.samples`` order
+    (condition-contiguous, see ``parse_alignment_file``).
 
     Args:
         df: Raw LipidSearch dataframe (already delimiter-parsed).
