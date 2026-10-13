@@ -441,7 +441,9 @@ class NormalizationWorkflow:
             essential = ['CalcMass', 'BaseRt']
             for col in essential:
                 if col in df.columns:
-                    stored[col] = df[col].copy()
+                    # Key by LipidMolec: the service rebuilds the frame with a
+                    # fresh index, so the original row index is meaningless.
+                    stored[col] = pd.Series(df[col].values, index=df['LipidMolec'].values)
 
         return stored
 
@@ -467,9 +469,9 @@ class NormalizationWorkflow:
 
         for col_name, col_data in stored_columns.items():
             if col_name not in result.columns:
-                # Always align by index to prevent silent misalignment
-                # when DataFrame was filtered during normalization
-                result[col_name] = col_data.reindex(result.index).values
+                # Align by LipidMolec, not row position: the normalized frame
+                # is re-indexed and reordered class-by-class.
+                result[col_name] = col_data.reindex(result['LipidMolec'].values).values
 
         return result
 
