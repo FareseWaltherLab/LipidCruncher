@@ -9,6 +9,7 @@ Validates and standardizes data from all supported formats into a common schema:
 Pure logic — no Streamlit dependencies.
 """
 
+import csv
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Union
@@ -938,8 +939,11 @@ class DataStandardizationService:
             if len(data_section) < 3:
                 return StandardizationResult(False, "Insufficient data rows")
 
-            samples_line = data_section[0].split(',')
-            factors_line = data_section[1].split(',')
+            # csv.reader keeps a quoted name such as "1,2-DAG 34:1" as one
+            # field; a plain split on ',' silently dropped those rows.
+            parsed = list(csv.reader(data_section))
+            samples_line = parsed[0]
+            factors_line = parsed[1]
 
             sample_names = samples_line[1:]
             conditions = factors_line[1:]
@@ -952,11 +956,9 @@ class DataStandardizationService:
                 cleaned_conditions.append(cond)
 
             data_rows = []
-            for line in data_section[2:]:
-                if line.strip():
-                    values = line.split(',')
-                    if len(values) == len(sample_names) + 1:
-                        data_rows.append(values)
+            for values in parsed[2:]:
+                if len(values) == len(sample_names) + 1:
+                    data_rows.append(values)
 
             if not data_rows:
                 return StandardizationResult(False, "No valid data rows found")
