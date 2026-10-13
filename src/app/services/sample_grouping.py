@@ -135,6 +135,27 @@ class SampleGroupingService:
                 expected_samples=expected,
             )
 
+        # Every service maps s1..sN to conditions by position, so the labels
+        # must be exactly that run: a gap (e.g. a deleted MeanArea[s3]) would
+        # silently shift every later sample into the wrong condition.
+        present = [c[len('intensity['):-1] for c in intensity_cols]
+        wanted = experiment.full_samples_list
+        if set(present) != set(wanted):
+            missing = [s for s in wanted if s not in present]
+            extra = [s for s in present if s not in wanted]
+            msg = (
+                f"Intensity columns must be numbered s1..s{expected} without "
+                f"gaps. Missing: {', '.join(missing) or 'none'}; unexpected: "
+                f"{', '.join(extra) or 'none'}. Rename the sample columns so "
+                "they run consecutively."
+            )
+            return DatasetValidationResult(
+                valid=False,
+                message=msg,
+                n_intensity_cols=actual,
+                expected_samples=expected,
+            )
+
         return DatasetValidationResult(
             valid=True,
             message="Dataset is valid.",

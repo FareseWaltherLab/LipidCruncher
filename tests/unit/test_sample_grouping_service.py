@@ -113,6 +113,21 @@ class TestValidateDataset:
         assert "4" in result.message
         assert "6" in result.message
 
+    def test_non_contiguous_sample_labels_rejected(self):
+        """Regression: a gap in sN numbering passed the count-only check and
+        shifted every later sample into the wrong condition downstream."""
+        exp = make_experiment(2, 2)  # expects s1..s4
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'],
+            'intensity[s1]': [1.0], 'intensity[s2]': [2.0],
+            'intensity[s4]': [4.0], 'intensity[s5]': [5.0],  # s3 deleted
+        })
+        result = SampleGroupingService.validate_dataset(df, exp)
+        assert result.valid is False
+        assert "s3" in result.message
+        assert "s5" in result.message
+        assert result.n_intensity_cols == 4
+
     def test_msdial_double_columns_error(self):
         exp = make_experiment(1, 3)  # expects 3
         df = make_df(6)  # has 6 = 2 * 3
