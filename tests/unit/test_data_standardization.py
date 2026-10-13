@@ -834,6 +834,25 @@ class TestMetabolomicsWorkbenchStandardization:
         for key, cond in conditions.items():
             assert not cond.startswith('Condition:')
 
+    def test_quoted_metabolite_name_with_comma_is_kept(self):
+        """Regression: rows whose name contains a comma (quoted per CSV) were
+        split on every comma and silently dropped as malformed."""
+        text = "\n".join([
+            'MS_METABOLITE_DATA_START',
+            'Samples,sample_1,sample_2',
+            'Factors,Condition:A,Condition:B',
+            '"1,2-DAG 34:1",3,4',
+            'PC 16:0_18:1,5,6',
+            'MS_METABOLITE_DATA_END',
+        ])
+        result = DataStandardizationService._process_metabolomics_workbench(text)
+        assert result.success is True
+        sdf = result.standardized_df
+        assert len(sdf) == 2
+        assert sdf['intensity[s1]'].tolist() == [3.0, 5.0]
+        assert sdf['intensity[s2]'].tolist() == [4.0, 6.0]
+        assert result.workbench_samples == {'s1': 'sample_1', 's2': 'sample_2'}
+
     def test_workbench_conditions_populated(self):
         text = make_mw_text(n_samples=3)
         result = DataStandardizationService._process_metabolomics_workbench(text)
@@ -1264,6 +1283,22 @@ class TestDetectMSDIALSampleColumns:
             DataStandardizationService._detect_msdial_sample_columns(df, columns=columns)
         )
         assert len(raw) == 2
+
+    def test_msdial_4x_score_columns_are_not_samples(self):
+        """Regression: MS-DIAL 4.x exports carry numeric score columns under
+        names missing from the metadata set, so they were taken as samples
+        (s1..s5) and the real samples shifted or were cut off."""
+        df = make_msdial_df(n_samples=2)
+        score_cols = [
+            'm/z similarity', 'Simple dot product', 'Weighted dot product',
+            'Matched peaks count', 'Matched peaks percentage',
+        ]
+        for i, col in enumerate(score_cols):
+            df.insert(len(df.columns) - 2, col, [80.0 + i] * len(df))
+        raw, norm, lip_idx, raw_idx, norm_idx = (
+            DataStandardizationService._detect_msdial_sample_columns(df)
+        )
+        assert raw == ['sample_1', 'sample_2']
 
     def test_metadata_cols_excluded(self):
         df = make_msdial_df(n_samples=2)

@@ -58,7 +58,12 @@ class FormatDetectionService:
         'Isotope tracking parent ID', 'Isotope tracking weight number',
         'Total score', 'RT similarity', 'Dot product', 'Reverse dot product',
         'Fragment presence %', 'S/N average', 'Spectrum reference file name',
-        'MS1 isotopic spectrum', 'MS/MS spectrum', 'Lipid IS'
+        'MS1 isotopic spectrum', 'MS/MS spectrum', 'Lipid IS',
+        # MS-DIAL 4.x names for the score and curation columns; numeric, so
+        # without this they are detected as samples.
+        'm/z similarity', 'Simple dot product', 'Weighted dot product',
+        'Matched peaks count', 'Matched peaks percentage',
+        'Manually modified for quantification', 'Manually modified for annotation',
     }
 
     # MS-DIAL signature columns (presence of these suggests MS-DIAL format)
