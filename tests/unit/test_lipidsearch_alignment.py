@@ -72,6 +72,31 @@ class TestParseAlignment:
         assert m.samples[0].dataids == ["s1-1", "s1-2"]
         assert m.samples[0].base == "sample_01"
 
+    def test_interleaved_acquisition_order_is_numbered_by_condition(self):
+        """Regression: files acquired Ctrl, KO, Ctrl, KO must still yield
+        s1,s2 = Control and s3,s4 = KO, because the experiment assigns
+        conditions to s1..sN contiguously from the per-condition counts."""
+        rows = [
+            ("Ctrl_01n.raw", "a1", "Control"), ("Ctrl_01p.raw", "a2", "Control"),
+            ("KO_01n.raw", "b1", "KO"), ("KO_01p.raw", "b2", "KO"),
+            ("Ctrl_02n.raw", "a3", "Control"), ("Ctrl_02p.raw", "a4", "Control"),
+            ("KO_02n.raw", "b3", "KO"), ("KO_02p.raw", "b4", "KO"),
+        ]
+        m = parse_alignment_file(_alignment_text(rows))
+        assert m.conditions == ["Control", "KO"]
+        assert m.samples_per_condition == [2, 2]
+        assert [s.base for s in m.samples] == ["Ctrl_01", "Ctrl_02", "KO_01", "KO_02"]
+        assert [s.condition for s in m.samples] == ["Control", "Control", "KO", "KO"]
+
+        df = pd.DataFrame({
+            'OriginalArea[a1]': [1.0], 'OriginalArea[a2]': [np.nan],
+            'OriginalArea[b1]': [2.0], 'OriginalArea[b2]': [np.nan],
+            'OriginalArea[a3]': [3.0], 'OriginalArea[a4]': [np.nan],
+            'OriginalArea[b3]': [4.0], 'OriginalArea[b4]': [np.nan],
+        })
+        out = merge_dual_polarity(df, m)
+        assert out[['intensity[s1]', 'intensity[s2]', 'intensity[s3]', 'intensity[s4]']].iloc[0].tolist() == [1.0, 3.0, 2.0, 4.0]
+
     def test_condition_asterisk_stripped(self):
         m = parse_alignment_file(_alignment_text(_ROWS))
         assert m.conditions == ["Control", "Treated"]
