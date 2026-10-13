@@ -99,7 +99,7 @@ class SessionState:
                              qc_cov_threshold,
                              qc_correlation_plots, qc_pca_plot, qc_samples_removed,
                              _preserved_bqc_filter_choice, _preserved_rt_viewing_mode,
-                             _preserved_pca_samples_remove
+                             _preserved_pca_samples_remove, _preserved_pca_groups_remove
       analysis.py          → analysis_selection, analysis_bar_chart_fig,
                              analysis_pie_chart_figs, analysis_saturation_figs,
                              analysis_chain_length_fig, analysis_fach_fig, analysis_pathway_fig,
@@ -233,6 +233,7 @@ class SessionState:
     _preserved_bqc_filter_choice: str = 'No'
     _preserved_rt_viewing_mode: str = 'Comparison Mode'
     _preserved_pca_samples_remove: List[str] = field(default_factory=list)
+    _preserved_pca_groups_remove: List[str] = field(default_factory=list)
 
     # --- Analysis (owner: analysis.py) ---
     analysis_selection: Optional[str] = None
@@ -528,7 +529,7 @@ class StreamlitAdapter:
         # onto new data; the alignment marker would stop the experiment
         # pre-fill from firing again for the same Alignment Setting file.
         for key in ('_pre_regroup_df', '_pre_regroup_sample_names',
-                    '_ls_align_prefilled_for'):
+                    '_ls_align_prefilled_for', '_dataset_source_id'):
             st.session_state.pop(key, None)
 
     @staticmethod
@@ -551,6 +552,31 @@ class StreamlitAdapter:
         # re-standardized data by the grouping step's "Yes" branch.
         for key in ('_pre_regroup_df', '_pre_regroup_sample_names'):
             st.session_state.pop(key, None)
+
+    @staticmethod
+    def reset_for_new_source(source_id: str) -> bool:
+        """Reset data state when a different dataset source arrives.
+
+        Uploading another file, or loading sample data, over a loaded dataset
+        would otherwise leave every downstream frame (standardized, cleaned,
+        normalized, QC, analysis) computed from the previous one. The source
+        id is stable across reruns (an upload's file_id, or the sample-data
+        format), so the same file surviving a rerun does not reset anything.
+
+        Args:
+            source_id: Identifier for the incoming dataset.
+
+        Returns:
+            True if a loaded dataset was reset.
+        """
+        if st.session_state.get('_dataset_source_id') == source_id:
+            return False
+        had_data = st.session_state.get('raw_df') is not None
+        if had_data:
+            StreamlitAdapter.reset_data_state()
+            st.cache_data.clear()
+        st.session_state['_dataset_source_id'] = source_id
+        return had_data
 
     @staticmethod
     def reset_to_experiment_setup() -> None:

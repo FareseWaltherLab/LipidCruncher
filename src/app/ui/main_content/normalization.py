@@ -350,6 +350,14 @@ def _display_protein_config(experiment: ExperimentConfig) -> dict:
 # Helper Functions - Run Normalization
 # =============================================================================
 
+def _clear_normalization_output() -> None:
+    """Drop the previous run's output so an invalid configuration cannot
+    leave a stale normalized_df behind (which gates the Next button and
+    feeds Modules 2 and 3)."""
+    st.session_state.normalized_df = None
+    st.session_state.normalization_result = None
+
+
 def _run_normalization(
     cleaned_df: pd.DataFrame,
     intsta_df: pd.DataFrame,
@@ -385,12 +393,15 @@ def _run_normalization(
             st.session_state.normalization_result = result
             st.session_state.normalized_df = result.normalized_df
             st.session_state.continuation_df = result.normalized_df
+        else:
+            _clear_normalization_output()
 
         return result
 
     except (ValueError, KeyError) as e:
         logger.error("Normalization error: %s", e)
         st.error(f"Normalization failed: {e}")
+        _clear_normalization_output()
         return None
 
 
@@ -421,6 +432,7 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
     selected_classes = _display_class_selection(cleaned_df)
     if not selected_classes:
         st.warning("Please select at least one lipid class.")
+        _clear_normalization_output()
         return None
 
     # Method selection
@@ -441,6 +453,7 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
         _collect_method_config(method, intsta_df, selected_classes, experiment)
     )
     if internal_standards is None or protein_concentrations is None:
+        _clear_normalization_output()
         return None
 
     # Apply normalization
