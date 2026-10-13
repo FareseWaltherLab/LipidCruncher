@@ -451,7 +451,8 @@ class NormalizationService:
             Array of AUC values for each sample
 
         Raises:
-            ValueError: If standard not found in intsta_df
+            ValueError: If standard not found in intsta_df, or its intensity
+                is zero (or missing) in any sample.
         """
         filtered_intsta = intsta_df[intsta_df['LipidMolec'] == intsta_species]
 
@@ -470,7 +471,19 @@ class NormalizationService:
                 f"Internal standards DataFrame is missing intensity columns: {', '.join(missing_cols)}"
             )
 
-        return filtered_intsta[cols].values.reshape(len(full_samples_list),)
+        auc = filtered_intsta[cols].values.reshape(len(full_samples_list),)
+
+        # A zero standard means the spike or injection failed for that sample;
+        # dividing by it would silently zero every species in the class.
+        bad = [s for s, v in zip(full_samples_list, auc) if not v > 0]
+        if bad:
+            raise ValidationError(
+                f"Internal standard '{intsta_species}' has zero intensity in "
+                f"sample(s) {', '.join(bad)}. Remove the sample(s) or choose a "
+                f"different standard before normalizing."
+            )
+
+        return auc
 
     @staticmethod
     def _compute_normalized_auc(
@@ -508,9 +521,7 @@ class NormalizationService:
         intensity_df = class_df[available_cols]
 
         # Normalize: (lipid_intensity / standard_intensity) * standard_concentration
-        # Handle division by zero - replace zeros in intsta_auc with nan temporarily
-        safe_intsta_auc = np.where(intsta_auc == 0, np.nan, intsta_auc)
-        normalized_intensity_df = (intensity_df.divide(safe_intsta_auc, axis='columns') * concentration)
+        normalized_intensity_df = (intensity_df.divide(intsta_auc, axis='columns') * concentration)
 
         # Keep essential columns
         essential_cols = ['LipidMolec', 'ClassKey']

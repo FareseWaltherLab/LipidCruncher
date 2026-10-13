@@ -1081,6 +1081,26 @@ class TestRunWorkflowInternalStandardMethod:
 
         assert len(result.removed_standards) > 0
 
+    def test_run_is_zero_standard_fails_with_message(
+        self, basic_df, simple_experiment_2x2, intsta_with_zeros_df
+    ):
+        """Regression: a zero standard surfaces as a validation error, not zeros."""
+        norm_config = NormalizationConfig(
+            method='internal_standard',
+            selected_classes=['PC', 'PE'],
+            internal_standards={'PC': 'PC(15:0_18:1-d7)', 'PE': 'PE(17:0_20:4-d7)'},
+            intsta_concentrations={'PC(15:0_18:1-d7)': 1.0, 'PE(17:0_20:4-d7)': 1.0},
+        )
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=norm_config,
+            data_format=DataFormat.GENERIC,
+        )
+        result = NormalizationWorkflow.run(basic_df, config, intsta_with_zeros_df)
+        assert result.success is False
+        assert result.normalized_df is None
+        assert any("zero intensity" in e for e in result.validation_errors)
+
     def test_run_is_without_intsta_df_fails(self, basic_df, simple_experiment_2x2, internal_standard_config):
         """Test that IS normalization fails without standards DataFrame."""
         config = NormalizationWorkflowConfig(
