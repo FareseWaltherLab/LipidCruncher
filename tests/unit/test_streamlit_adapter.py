@@ -771,6 +771,84 @@ class TestSessionStateIntegration:
         assert '_ls_align_prefilled_for' not in mock_st.session_state
 
     @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_data_state_clears_pca_group_exclusion(self, mock_st):
+        """Regression: the PCA group exclusion lived outside SessionState, so
+        no reset cleared it and it re-applied to the next dataset with a
+        same-named condition."""
+        mock_st.session_state = MockSessionState({
+            '_preserved_pca_groups_remove': ['Blank'],
+            '_preserved_pca_samples_remove': ['s1'],
+        })
+
+        StreamlitAdapter.reset_data_state()
+
+        assert mock_st.session_state['_preserved_pca_groups_remove'] == []
+        assert mock_st.session_state['_preserved_pca_samples_remove'] == []
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_module_state_clears_pca_group_exclusion(self, mock_st):
+        """main_app's _reset_qc_state resets by the '_preserved_pca_' prefix."""
+        mock_st.session_state = MockSessionState({
+            '_preserved_pca_groups_remove': ['Blank'],
+        })
+
+        StreamlitAdapter.reset_module_state('_preserved_pca_')
+
+        assert mock_st.session_state['_preserved_pca_groups_remove'] == []
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_for_new_source_resets_loaded_dataset(self, mock_st):
+        """Regression: uploading a different file replaced raw_df only, so
+        every downstream frame still came from the previous dataset."""
+        mock_st.session_state = MockSessionState({
+            'raw_df': pd.DataFrame({'A': [1]}),
+            'cleaned_df': pd.DataFrame({'B': [2]}),
+            'normalized_df': pd.DataFrame({'C': [3]}),
+            '_dataset_source_id': 'upload:first',
+        })
+
+        assert StreamlitAdapter.reset_for_new_source('upload:second') is True
+
+        assert mock_st.session_state['raw_df'] is None
+        assert mock_st.session_state['cleaned_df'] is None
+        assert mock_st.session_state['normalized_df'] is None
+        assert mock_st.session_state['_dataset_source_id'] == 'upload:second'
+        mock_st.cache_data.clear.assert_called_once()
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_for_new_source_same_source_is_noop(self, mock_st):
+        """The same upload survives every rerun; it must not reset anything."""
+        df = pd.DataFrame({'A': [1]})
+        mock_st.session_state = MockSessionState({
+            'raw_df': df,
+            'cleaned_df': pd.DataFrame({'B': [2]}),
+            '_dataset_source_id': 'upload:first',
+        })
+
+        assert StreamlitAdapter.reset_for_new_source('upload:first') is False
+
+        assert mock_st.session_state['raw_df'] is df
+        assert mock_st.session_state['cleaned_df'] is not None
+        mock_st.cache_data.clear.assert_not_called()
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_for_new_source_first_upload_only_records_source(self, mock_st):
+        mock_st.session_state = MockSessionState({'raw_df': None})
+
+        assert StreamlitAdapter.reset_for_new_source('upload:first') is False
+
+        assert mock_st.session_state['_dataset_source_id'] == 'upload:first'
+        mock_st.cache_data.clear.assert_not_called()
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_data_state_forgets_dataset_source(self, mock_st):
+        mock_st.session_state = MockSessionState({'_dataset_source_id': 'upload:x'})
+
+        StreamlitAdapter.reset_data_state()
+
+        assert '_dataset_source_id' not in mock_st.session_state
+
+    @patch('app.adapters.streamlit_adapter.st')
     def test_initialize_creates_analysis_keys(self, mock_st):
         """Test that initialization creates all analysis session state keys."""
         mock_st.session_state = MockSessionState()
@@ -1026,7 +1104,8 @@ class TestSessionStateFieldCompleteness:
         # + 1 (qc_sample_names, names re-keyed after sample exclusion)
         # + 1 (qc_input_sample_names, names frozen at Module 1's handoff)
         # + 1 (sample_label_mode, original names vs s-labels switch) = 89
-        assert len(field_names) == 89
+        # + 1 (_preserved_pca_groups_remove, PCA group exclusion, reset with QC) = 90
+        assert len(field_names) == 90
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""

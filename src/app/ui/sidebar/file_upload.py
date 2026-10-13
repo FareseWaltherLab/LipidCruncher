@@ -268,6 +268,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
             st.markdown(info['description'])
             st.markdown("---")
         if st.button("Load Sample Data", key="load_sample"):
+            StreamlitAdapter.reset_for_new_source(f"sample:{data_format}")
             sample_df = load_sample_dataset(data_format)
             if sample_df is not None:
                 st.session_state.using_sample_data = True
@@ -297,6 +298,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
     )
 
     if uploaded_file is not None:
+        StreamlitAdapter.reset_for_new_source(f"upload:{uploaded_file.file_id}")
         try:
             if data_format == FORMAT_METABOLOMICS_WORKBENCH:
                 # Metabolomics Workbench needs raw text for parsing special markers

@@ -120,6 +120,55 @@ class TestSampleDataLoading:
         assert at.session_state['raw_df'] is not None
 
 
+class TestNewDatasetResetsPipeline:
+    """Regression: loading a different dataset over a loaded one replaced
+    raw_df only; standardized, cleaned, normalized and later frames all kept
+    coming from the previous dataset."""
+
+    def test_loading_other_sample_data_clears_downstream_state(self, format_upload_app):
+        at = format_upload_app
+        at.sidebar.button(key='load_sample').click().run()
+        generic_rows = at.session_state['raw_df'].shape[0]
+        at.session_state['cleaned_df'] = at.session_state['raw_df'].head(5)
+        at.session_state['normalized_df'] = at.session_state['raw_df'].head(5)
+
+        at.sidebar.selectbox[0].set_value('LipidSearch').run()
+        at.sidebar.button(key='load_sample').click().run()
+
+        assert at.session_state['raw_df'].shape[0] != generic_rows
+        assert at.session_state['cleaned_df'] is None
+        assert at.session_state['normalized_df'] is None
+        assert at.session_state['using_sample_data'] is True
+
+    def test_reloading_same_sample_keeps_state(self, format_upload_app):
+        at = format_upload_app
+        at.sidebar.button(key='load_sample').click().run()
+        at.session_state['cleaned_df'] = at.session_state['raw_df'].head(5)
+
+        at.sidebar.button(key='load_sample').click().run()
+
+        assert at.session_state['cleaned_df'] is not None
+
+
+class TestInvalidNormalizationClearsOutput:
+    """Regression: switching to a method whose inputs are missing left the
+    previous normalized_df in place, so Next still proceeded on stale data."""
+
+    def test_missing_protein_csv_clears_previous_result(self):
+        from tests.ui.conftest import normalization_ui_script
+        at = AppTest.from_function(normalization_ui_script, default_timeout=DEFAULT_TIMEOUT).run()
+        assert at.session_state['normalized_df'] is not None  # 'None' method succeeds
+
+        at.radio(key='norm_method_selection').set_value('Protein-based').run()
+        assert at.session_state['normalized_df'] is not None  # manual 1.0 µM succeeds
+
+        at.radio(key='protein_input_method').set_value('Upload CSV File').run()
+
+        assert at.session_state['normalized_df'] is None
+        assert at.session_state['normalization_result'] is None
+        assert any("normalized:False" in t.value for t in at.text)
+
+
 # =============================================================================
 # Group 4: Experiment Definition (4 tests)
 # =============================================================================

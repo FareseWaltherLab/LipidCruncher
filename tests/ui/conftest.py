@@ -405,6 +405,36 @@ def make_qc_bqc_dataframe(n_lipids=20, high_cov_count=3):
 # Module Navigation — Wrapper Functions
 # =============================================================================
 
+def normalization_ui_script():
+    """Module 1 normalization step on a small Generic dataset, no standards.
+
+    Emits ``normalized:<bool>`` so tests can see whether normalized_df is set
+    after the step ran with the current widget state.
+    """
+    import pandas as pd
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.constants import FORMAT_GENERIC
+    from app.models.experiment import ExperimentConfig
+    from app.ui.main_content.normalization import display_normalization_ui
+    StreamlitAdapter.initialize_session_state()
+
+    cleaned_df = pd.DataFrame({
+        'LipidMolec': ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
+        'ClassKey': ['PC', 'PE'],
+        'intensity[s1]': [1e6, 2e6],
+        'intensity[s2]': [1.1e6, 2.1e6],
+        'intensity[s3]': [1.2e6, 2.2e6],
+        'intensity[s4]': [1.3e6, 2.3e6],
+    })
+    experiment = ExperimentConfig(
+        n_conditions=2, conditions_list=['Control', 'Treated'],
+        number_of_samples_list=[2, 2],
+    )
+    display_normalization_ui(cleaned_df, None, experiment, FORMAT_GENERIC)
+    st.text(f"normalized:{st.session_state.get('normalized_df') is not None}")
+
+
 def module1_nav_script():
     """Module 1 with navigation buttons (Next + Back to Home).
 
