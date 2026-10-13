@@ -237,18 +237,24 @@ class StatisticalTestingService:
         alpha: float = 0.05,
         auto_transform: bool = True,
         global_small_value: Optional[float] = None,
+        test_type: Literal['parametric', 'non_parametric'] = 'parametric',
     ) -> List[PostHocResult]:
         """Run pairwise post-hoc tests for 3+ groups.
 
         Args:
             groups_dict: Condition name → values array.
-            correction: 'tukey' for Tukey's HSD,
+            correction: 'tukey' for Tukey's HSD (parametric only; for
+                        non-parametric this is Bonferroni-corrected
+                        Mann-Whitney U, per the methods doc),
                         'bonferroni' for Bonferroni-corrected pairwise tests,
                         'uncorrected' for raw pairwise tests.
             alpha: Significance threshold.
             auto_transform: If True, apply zero replacement + log10.
             global_small_value: Dataset-wide zero-replacement threshold.
                 If None, falls back to computing from these groups.
+            test_type: Pairwise test matching the omnibus test:
+                'parametric' for Welch's t-test, 'non_parametric' for
+                Mann-Whitney U.
 
         Returns:
             List of PostHocResult for each pairwise comparison.
@@ -272,11 +278,12 @@ class StatisticalTestingService:
         }
 
         if correction == 'tukey':
-            return StatisticalTestingService._run_tukey(prepared, alpha)
-        else:
-            return StatisticalTestingService._run_pairwise(
-                prepared, correction, alpha
-            )
+            if test_type == 'parametric':
+                return StatisticalTestingService._run_tukey(prepared, alpha)
+            correction = 'bonferroni'
+        return StatisticalTestingService._run_pairwise(
+            prepared, correction, alpha, test_type
+        )
 
     @staticmethod
     def _run_tukey(
@@ -315,16 +322,22 @@ class StatisticalTestingService:
         prepared: Dict[str, np.ndarray],
         correction: Literal['bonferroni', 'uncorrected'],
         alpha: float,
+        test_type: Literal['parametric', 'non_parametric'] = 'parametric',
     ) -> List[PostHocResult]:
-        """Run pairwise Mann-Whitney U tests with optional Bonferroni."""
+        """Run pairwise Welch's t / Mann-Whitney U tests with optional Bonferroni."""
         keys = list(prepared.keys())
         pairs = list(combinations(keys, 2))
         raw_p = []
 
         for g1, g2 in pairs:
-            _, p = mannwhitneyu(
-                prepared[g1], prepared[g2], alternative='two-sided'
-            )
+            if test_type == 'non_parametric':
+                _, p = mannwhitneyu(
+                    prepared[g1], prepared[g2], alternative='two-sided'
+                )
+            else:
+                _, p = stats.ttest_ind(
+                    prepared[g1], prepared[g2], equal_var=False
+                )
             raw_p.append(float(p))
 
         raw_arr = np.array(raw_p)
@@ -335,6 +348,14 @@ class StatisticalTestingService:
         else:
             sig, adj = raw_arr <= alpha, raw_arr.copy()
 
+        base_name = (
+            "Mann-Whitney U" if test_type == 'non_parametric'
+            else "Welch's t-test"
+        )
+        test_name = (
+            f"{base_name} (Bonferroni)" if correction == 'bonferroni'
+            else base_name
+        )
         results = []
         for k, (g1, g2) in enumerate(pairs):
             results.append(PostHocResult(
@@ -343,11 +364,7 @@ class StatisticalTestingService:
                 p_value=raw_p[k],
                 adjusted_p_value=float(adj[k]),
                 significant=bool(sig[k]),
-                test_name=(
-                    "Mann-Whitney U (Bonferroni)"
-                    if correction == 'bonferroni'
-                    else "Mann-Whitney U"
-                ),
+                test_name=test_name,
             ))
         return results
 
@@ -420,7 +437,7 @@ class StatisticalTestingService:
                     continue
                 ph = StatisticalTestingService.run_posthoc(
                     groups, posthoc_corr, config.alpha, config.auto_transform,
-                    global_small,
+                    global_small, test_type=test_type,
                 )
                 posthoc_results[cls] = ph
 
@@ -529,7 +546,7 @@ class StatisticalTestingService:
                 try:
                     ph = StatisticalTestingService.run_posthoc(
                         groups, posthoc_corr, config.alpha, config.auto_transform,
-                        global_small,
+                        global_small, test_type=test_type,
                     )
                     posthoc_results[key] = ph
                 except ValueError:

@@ -456,6 +456,63 @@ class TestPostHoc:
         assert len(results) == 3
         assert all("Bonferroni" in r.test_name for r in results)
 
+    def test_bonferroni_parametric_uses_welch(self, three_groups):
+        """Regression: Bonferroni post-hoc must use the pairwise test matching
+        the omnibus (Welch's t for parametric), not always Mann-Whitney U."""
+        results = StatisticalTestingService.run_posthoc(
+            three_groups, 'bonferroni', test_type='parametric'
+        )
+        assert all(r.test_name == "Welch's t-test (Bonferroni)" for r in results)
+        ab = next(r for r in results if {r.group1, r.group2} == {'A', 'B'})
+        _, expected = sp_stats.ttest_ind(
+            np.log10(three_groups['A']), np.log10(three_groups['B']),
+            equal_var=False,
+        )
+        assert ab.p_value == pytest.approx(expected)
+        assert ab.adjusted_p_value == pytest.approx(min(1.0, expected * 3))
+
+    def test_bonferroni_nonparametric_uses_mannwhitney(self, three_groups):
+        results = StatisticalTestingService.run_posthoc(
+            three_groups, 'bonferroni', test_type='non_parametric'
+        )
+        assert all(r.test_name == "Mann-Whitney U (Bonferroni)" for r in results)
+        ab = next(r for r in results if {r.group1, r.group2} == {'A', 'B'})
+        _, expected = sp_stats.mannwhitneyu(
+            np.log10(three_groups['A']), np.log10(three_groups['B']),
+            alternative='two-sided',
+        )
+        assert ab.p_value == pytest.approx(expected)
+
+    def test_tukey_nonparametric_falls_back_to_bonferroni_mw(self, three_groups):
+        """Docs: Tukey's HSD applies to parametric tests only; non-parametric
+        uses Bonferroni-corrected Mann-Whitney U."""
+        results = StatisticalTestingService.run_posthoc(
+            three_groups, 'tukey', test_type='non_parametric'
+        )
+        assert all(r.test_name == "Mann-Whitney U (Bonferroni)" for r in results)
+
+    def test_uncorrected_parametric_uses_welch(self, three_groups):
+        results = StatisticalTestingService.run_posthoc(
+            three_groups, 'uncorrected', test_type='parametric'
+        )
+        assert all(r.test_name == "Welch's t-test" for r in results)
+        assert all(r.adjusted_p_value == pytest.approx(r.p_value) for r in results)
+
+    def test_small_n_parametric_bonferroni_can_be_significant(self):
+        """With n=3 per group Mann-Whitney's minimum two-sided p is 0.10, so the
+        old code could never flag a parametric Bonferroni post-hoc as
+        significant regardless of effect size."""
+        groups = {
+            'A': np.array([10.0, 10.5, 9.8]),
+            'B': np.array([10.2, 9.9, 10.4]),
+            'C': np.array([100.0, 101.0, 99.5]),
+        }
+        results = StatisticalTestingService.run_posthoc(
+            groups, 'bonferroni', test_type='parametric'
+        )
+        ac = next(r for r in results if {r.group1, r.group2} == {'A', 'C'})
+        assert ac.significant
+
     def test_uncorrected_pairwise(self, three_groups):
         results = StatisticalTestingService.run_posthoc(
             three_groups, 'uncorrected', 0.05, True
@@ -702,6 +759,49 @@ class TestClassLevelTests:
         # If omnibus is significant, posthoc should be present
         if summary.results['PC'].significant:
             assert 'PC' in summary.posthoc_results
+
+    def test_posthoc_matches_omnibus_test_type(self, experiment_3x3):
+        """Regression: class-level post-hoc must use Welch's t when the
+        omnibus is parametric, and Mann-Whitney U when non-parametric."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(18:0)'],
+            'ClassKey': ['PC', 'PC'],
+            'concentration[s1]': [100, 200],
+            'concentration[s2]': [110, 210],
+            'concentration[s3]': [105, 205],
+            'concentration[s4]': [100, 200],
+            'concentration[s5]': [110, 210],
+            'concentration[s6]': [105, 205],
+            'concentration[s7]': [500, 600],
+            'concentration[s8]': [510, 610],
+            'concentration[s9]': [520, 620],
+        })
+        conds = ['Control', 'Treatment', 'Vehicle']
+        param = StatisticalTestConfig.create_manual(
+            test_type='parametric', correction_method='uncorrected',
+            posthoc_correction='bonferroni',
+        )
+        summary = StatisticalTestingService.run_class_level_tests(
+            df, experiment_3x3, conds, ['PC'], param,
+        )
+        assert summary.results['PC'].significant
+        assert all(
+            r.test_name == "Welch's t-test (Bonferroni)"
+            for r in summary.posthoc_results['PC']
+        )
+
+        nonparam = StatisticalTestConfig.create_manual(
+            test_type='non_parametric', correction_method='uncorrected',
+            posthoc_correction='tukey',
+        )
+        summary = StatisticalTestingService.run_class_level_tests(
+            df, experiment_3x3, conds, ['PC'], nonparam,
+        )
+        if summary.results['PC'].significant:
+            assert all(
+                r.test_name == "Mann-Whitney U (Bonferroni)"
+                for r in summary.posthoc_results['PC']
+            )
 
     def test_nonparametric(self, class_level_df, experiment_2x3, manual_nonparam_config):
         summary = StatisticalTestingService.run_class_level_tests(
