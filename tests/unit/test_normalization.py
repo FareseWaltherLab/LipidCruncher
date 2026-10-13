@@ -8,6 +8,7 @@ from app.services.normalization import (
 )
 from app.models.normalization import NormalizationConfig
 from app.models.experiment import ExperimentConfig
+from app.services.exceptions import ValidationError
 
 # =============================================================================
 # Test Fixtures
@@ -691,35 +692,39 @@ class TestInternalStandardMissingMapping:
 
 
 class TestInternalStandardZeroHandling:
-    """Tests for handling zero values in internal standards."""
+    """A zero standard intensity must stop normalization, not silently zero a class."""
 
-    def test_is_normalization_zero_standard_produces_zero(self, multi_class_df, simple_experiment_2x3, internal_standard_config, intsta_df_with_zeros):
-        """Test that division by zero standard produces zero (not inf)."""
-        result = NormalizationService.normalize(
-            multi_class_df, internal_standard_config, simple_experiment_2x3, intsta_df=intsta_df_with_zeros
+    def test_zero_standard_raises_naming_standard_and_sample(
+        self, multi_class_df, simple_experiment_2x3, internal_standard_config, intsta_df_with_zeros
+    ):
+        """Regression: previously every species in the class became 0 for that sample."""
+        with pytest.raises(ValidationError, match="zero intensity") as excinfo:
+            NormalizationService.normalize(
+                multi_class_df, internal_standard_config, simple_experiment_2x3,
+                intsta_df=intsta_df_with_zeros
+            )
+        msg = str(excinfo.value)
+        assert "PC(15:0_15:0)_IS" in msg or "PE(17:0_17:0)_IS" in msg
+        assert "s4" in msg or "s1" in msg
+
+    def test_all_zero_standard_raises(self, multi_class_df, simple_experiment_2x3, intsta_df_all_zeros):
+        config = NormalizationConfig(
+            method='internal_standard',
+            selected_classes=['PC'],
+            internal_standards={'PC': 'PC(15:0_15:0)_IS'},
+            intsta_concentrations={'PC(15:0_15:0)_IS': 10.0}
         )
-        assert not np.isinf(result.normalized_df['concentration[s1]']).any()
+        with pytest.raises(ValidationError, match="PC\\(15:0_15:0\\)_IS.*s1, s2, s3, s4, s5, s6"):
+            NormalizationService.normalize(
+                multi_class_df, config, simple_experiment_2x3, intsta_df=intsta_df_all_zeros
+            )
 
-    def test_is_normalization_replaces_inf_with_zero(self, multi_class_df, simple_experiment_2x3, internal_standard_config, intsta_df_with_zeros):
-        """Test that infinity values are replaced with zero."""
-        result = NormalizationService.normalize(
-            multi_class_df, internal_standard_config, simple_experiment_2x3, intsta_df=intsta_df_with_zeros
-        )
-        for col in result.normalized_df.columns:
-            if col.startswith('concentration['):
-                assert not np.isinf(result.normalized_df[col]).any()
-
-    def test_is_normalization_replaces_nan_with_zero(self, multi_class_df, simple_experiment_2x3, internal_standard_config, intsta_df_with_zeros):
-        """Test that NaN values are replaced with zero."""
-        result = NormalizationService.normalize(
-            multi_class_df, internal_standard_config, simple_experiment_2x3, intsta_df=intsta_df_with_zeros
-        )
-        for col in result.normalized_df.columns:
-            if col.startswith('concentration['):
-                assert not result.normalized_df[col].isna().any()
-
-    def test_is_normalization_all_zeros_standard(self, multi_class_df, simple_experiment_2x3, intsta_df_all_zeros):
-        """Test IS normalization when standard has all zero values."""
+    def test_zero_standard_in_unselected_class_is_ignored(
+        self, multi_class_df, simple_experiment_2x3, intsta_df_with_zeros
+    ):
+        """Only standards actually used for normalization are checked."""
+        intsta = intsta_df_with_zeros.copy()
+        intsta.loc[intsta['LipidMolec'] == 'PC(15:0_15:0)_IS', 'intensity[s4]'] = 500.0
         config = NormalizationConfig(
             method='internal_standard',
             selected_classes=['PC'],
@@ -727,12 +732,9 @@ class TestInternalStandardZeroHandling:
             intsta_concentrations={'PC(15:0_15:0)_IS': 10.0}
         )
         result = NormalizationService.normalize(
-            multi_class_df, config, simple_experiment_2x3, intsta_df=intsta_df_all_zeros
+            multi_class_df, config, simple_experiment_2x3, intsta_df=intsta
         )
-        # All values should be 0 since standard was all zeros
-        for col in result.normalized_df.columns:
-            if col.startswith('concentration['):
-                assert (result.normalized_df[col] == 0).all()
+        assert result.normalized_df['concentration[s4]'].gt(0).all()
 
 
 class TestInternalStandardColumnRenaming:
