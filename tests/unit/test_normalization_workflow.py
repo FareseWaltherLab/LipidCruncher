@@ -870,7 +870,9 @@ class TestStoreAndRestoreEssentialColumns:
     def test_restore_essential_columns(self, lipidsearch_df):
         """Test restoring essential columns."""
         # Store columns
-        stored = {'CalcMass': lipidsearch_df['CalcMass'].copy()}
+        stored = NormalizationWorkflow._store_essential_columns(
+            lipidsearch_df, DataFormat.LIPIDSEARCH
+        )
 
         # Create a DataFrame without CalcMass
         df_without = lipidsearch_df.drop(columns=['CalcMass'])
@@ -1538,6 +1540,46 @@ class TestRunWorkflowIntegration:
         assert result.success is True
         # Essential columns should be preserved
         assert 'CalcMass' in result.normalized_df.columns
+
+    def test_lipidsearch_essential_columns_follow_their_species(
+        self, simple_experiment_2x2, basic_intsta_df
+    ):
+        """Regression: CalcMass/BaseRt must stay with their lipid after IS normalization.
+
+        The service rebuilds the frame class-by-class with a fresh 0..N index, so
+        restoring by row position attached each species' mass/RT to a different
+        species. Interleaved classes and a gapped input index (as left behind by
+        standard removal) both have to survive.
+        """
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)', 'TG(16:0_18:1_18:2)', 'PC(18:0_18:1)', 'TG(18:0_18:1_18:1)'],
+            'ClassKey': ['PC', 'TG', 'PC', 'TG'],
+            'CalcMass': [759.6, 856.8, 787.6, 884.8],
+            'BaseRt': [10.5, 20.0, 11.0, 21.0],
+            'intensity[s1]': [1e6, 2e6, 3e6, 4e6],
+            'intensity[s2]': [1e6, 2e6, 3e6, 4e6],
+            'intensity[s3]': [1e6, 2e6, 3e6, 4e6],
+            'intensity[s4]': [1e6, 2e6, 3e6, 4e6],
+        }, index=[0, 1, 3, 4])  # gapped, as after dropping a standard row
+
+        norm_config = NormalizationConfig(
+            method='internal_standard',
+            selected_classes=['PC', 'TG'],
+            internal_standards={'PC': 'PC(15:0_18:1-d7)', 'TG': 'TG(15:0_15:0_15:0-d9)'},
+            intsta_concentrations={'PC(15:0_18:1-d7)': 1.0, 'TG(15:0_15:0_15:0-d9)': 1.0},
+        )
+        config = NormalizationWorkflowConfig(
+            experiment=simple_experiment_2x2,
+            normalization=norm_config,
+            data_format=DataFormat.LIPIDSEARCH,
+        )
+
+        result = NormalizationWorkflow.run(df, config, basic_intsta_df)
+
+        assert result.success is True
+        expected = df.set_index('LipidMolec')[['CalcMass', 'BaseRt']]
+        got = result.normalized_df.set_index('LipidMolec')[['CalcMass', 'BaseRt']]
+        pd.testing.assert_frame_equal(got.loc[expected.index], expected)
         assert 'BaseRt' in result.normalized_df.columns
 
 
