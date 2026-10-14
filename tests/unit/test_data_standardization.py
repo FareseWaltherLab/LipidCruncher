@@ -852,6 +852,27 @@ class TestMetabolomicsWorkbenchStandardization:
         assert sdf['intensity[s2]'].tolist() == [4.0, 6.0]
         assert result.workbench_samples == {'s1': 'sample_1', 's2': 'sample_2'}
 
+    def test_interleaved_conditions_numbered_condition_by_condition(self):
+        """Regression: samples were numbered in file order while the experiment
+        assigns s1..sN to conditions contiguously, so with Factors
+        Ctrl,KO,Ctrl,KO the first KO sample was analysed as Control."""
+        text = "\n".join([
+            'MS_METABOLITE_DATA_START',
+            'Samples,C1,K1,C2,K2',
+            'Factors,Condition:Ctrl,Condition:KO,Condition:Ctrl,Condition:KO',
+            'PC 16:0_18:1,1,100,2,200',
+            'MS_METABOLITE_DATA_END',
+        ])
+        result = DataStandardizationService._process_metabolomics_workbench(text)
+        assert result.success is True
+        sdf = result.standardized_df
+        values = [sdf[f'intensity[s{i}]'].iloc[0] for i in range(1, 5)]
+        assert values == [1.0, 2.0, 100.0, 200.0]
+        assert result.workbench_conditions == {
+            's1': 'Ctrl', 's2': 'Ctrl', 's3': 'KO', 's4': 'KO',
+        }
+        assert result.workbench_samples == {'s1': 'C1', 's2': 'C2', 's3': 'K1', 's4': 'K2'}
+
     def test_workbench_conditions_populated(self):
         text = make_mw_text(n_samples=3)
         result = DataStandardizationService._process_metabolomics_workbench(text)

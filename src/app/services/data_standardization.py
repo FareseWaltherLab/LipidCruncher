@@ -963,6 +963,19 @@ class DataStandardizationService:
             if not data_rows:
                 return StandardizationResult(False, "No valid data rows found")
 
+            # Number samples condition by condition (stable within a condition):
+            # the experiment assigns s1..sN to conditions contiguously, so an
+            # interleaved factor order would otherwise put samples in the wrong
+            # condition.
+            first_seen = list(dict.fromkeys(cleaned_conditions))
+            order = sorted(
+                range(len(sample_names)),
+                key=lambda i: first_seen.index(cleaned_conditions[i]),
+            )
+            sample_names = [sample_names[i] for i in order]
+            cleaned_conditions = [cleaned_conditions[i] for i in order]
+            data_rows = [[row[0]] + [row[i + 1] for i in order] for row in data_rows]
+
             columns = ['LipidMolec'] + [
                 f'intensity[s{i + 1}]' for i in range(len(sample_names))
             ]
