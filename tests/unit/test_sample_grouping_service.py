@@ -660,6 +660,25 @@ class TestReorderIntensityColumns:
         assert 'intensity[s3]' in result.columns
         assert 'intensity[s2]' in result.columns
 
+    def test_output_columns_in_natural_numeric_order(self):
+        """With >9 samples, output columns must be s1..sN in numeric order,
+        not lexicographic (s1, s10, s11, s2, ...).  Reproduces the bug where
+        swapping s1 and s5 in a 12-sample dataset displayed the filtered data
+        as s10, s11, s12, s5, s1-s9."""
+        cols = {'LipidMolec': ['PC(16:0)']}
+        for i in range(1, 13):
+            cols[f'intensity[s{i}]'] = [float(i)]
+        df = pd.DataFrame(cols)
+
+        # Swap s1 and s5; everything else identity-maps.
+        mapping = {f'intensity[s{i}]': f'intensity[s{i}]' for i in range(1, 13)}
+        mapping['intensity[s5]'] = 'intensity[s1]'
+        mapping['intensity[s1]'] = 'intensity[s5]'
+
+        result = SampleGroupingService._reorder_intensity_columns(df, mapping)
+        intensity_order = [c for c in result.columns if c.startswith('intensity[')]
+        assert intensity_order == [f'intensity[s{i}]' for i in range(1, 13)]
+
 
 # =============================================================================
 # TestBuildNameMapping
