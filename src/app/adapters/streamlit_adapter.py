@@ -246,6 +246,12 @@ _SOFT_RESET_PRESERVE = frozenset({
     'workbench_conditions', 'workbench_samples',
 })
 
+# Keys kept by reset_format_derived_state(): only the upload itself. Its
+# standardization, and everything computed from it, belong to the old format.
+_FORMAT_CHANGE_PRESERVE = frozenset({
+    'raw_df', 'using_sample_data', 'sample_data_file', '_dataset_source_id',
+})
+
 # Widget keys created by Streamlit widgets (not in SessionState dataclass).
 # Must be removed on reset to prevent stale widget state.
 _WIDGET_KEYS = {
@@ -445,6 +451,26 @@ class StreamlitAdapter:
             st.cache_data.clear()
         st.session_state['_dataset_source_id'] = source_id
         return had_data
+
+    @staticmethod
+    def reset_format_derived_state() -> None:
+        """Clear everything derived from the upload when the format changes.
+
+        Keeps the uploaded file (and the sample-data flags) so it is
+        re-standardized under the newly selected format; standardization
+        outputs, experiment setup and all downstream state are cleared, and
+        the user returns to Module 1.
+        """
+        preserved = {
+            key: st.session_state.get(key) for key in _FORMAT_CHANGE_PRESERVE
+        }
+        StreamlitAdapter.reset_data_state()
+        for key, value in preserved.items():
+            st.session_state[key] = value
+        # Same reason as in reset_to_experiment_setup(): an explicit False
+        # beats the checkbox's cached value on a pre-fill rerun.
+        st.session_state['confirm_checkbox'] = False
+        st.session_state.module = MODULE_DATA_PROCESSING
 
     @staticmethod
     def reset_to_experiment_setup() -> None:

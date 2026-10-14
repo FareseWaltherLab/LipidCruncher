@@ -128,6 +128,12 @@ def display_app_page() -> None:
                 st.rerun()
         return
 
+    # A format change re-standardizes the same upload; state derived from the
+    # previous format's standardization would otherwise be reused.
+    cached_format = st.session_state.get('format_type')
+    if cached_format is not None and cached_format != data_format:
+        StreamlitAdapter.reset_format_derived_state()
+
     # Sidebar: session reset — available from any step once data is loaded.
     _display_session_reset_button()
 

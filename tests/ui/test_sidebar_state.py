@@ -96,3 +96,43 @@ class TestRegroupUndoRestoresData:
             _values(restored, 'intensity[s1]'), _values(original, 'intensity[s1]')
         )
         assert at.session_state['sample_names']['s1'] == 'N1'
+
+
+def _switch_format(at, format_prefix):
+    select = at.sidebar.selectbox[0]
+    option = [o for o in select.options if o.startswith(format_prefix)][0]
+    select.set_value(option).run()
+
+
+class TestFormatSwitchWithDataLoaded:
+    """Regression for M11: changing the format dropdown with data loaded kept
+    the previous format's standardized data and ran the new format's cleaner
+    on it (or crashed)."""
+
+    def test_switch_to_msdial_does_not_clean_generic_data(self):
+        at = _load_sample()
+        assert at.session_state['format_type'] == 'Generic Format'
+        assert at.session_state['cleaned_df'] is not None
+
+        _switch_format(at, 'MS-DIAL')
+
+        assert not at.exception
+        assert at.session_state['format_type'] != 'Generic Format'
+        assert at.session_state['cleaned_df'] is None
+        assert at.sidebar.error, "the Generic file should fail MS-DIAL standardization visibly"
+
+    def test_switch_to_workbench_does_not_crash(self):
+        at = _load_sample()
+        _switch_format(at, 'Metabolomics Workbench')
+        assert not at.exception
+
+    def test_switching_back_restandardizes_the_upload(self):
+        at = _load_sample()
+        standardized = at.session_state['standardized_df'].copy()
+
+        _switch_format(at, 'MS-DIAL')
+        _switch_format(at, 'Generic')
+
+        assert not at.exception
+        assert at.session_state['format_type'] == 'Generic Format'
+        pd.testing.assert_frame_equal(at.session_state['standardized_df'], standardized)
