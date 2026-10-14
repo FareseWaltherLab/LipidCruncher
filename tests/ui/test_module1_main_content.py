@@ -268,6 +268,16 @@ class TestInternalStandards:
         assert not at.exception
         assert at.session_state['standards_consistency_figs'] == []
 
+    def test_no_active_standards_drops_the_stored_plots(self, intsta_with_standards_app):
+        """Regression: with no standards active (custom upload chosen, no file
+        yet) the plot function was skipped, so the previous source's figures
+        stayed in the PDF report."""
+        at = intsta_with_standards_app
+        assert at.session_state['standards_consistency_figs']
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        assert not at.exception
+        assert at.session_state['standards_consistency_figs'] == []
+
     def test_select_from_dataset_removes_lipid_from_main_dataset(self, intsta_with_standards_app):
         """Exclusive Select-from-Dataset also drops the lipid from analysed species."""
         import pandas as pd

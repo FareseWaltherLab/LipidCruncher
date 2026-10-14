@@ -476,6 +476,9 @@ def display_manage_internal_standards(
         The active internal standards DataFrame to use for normalization
     """
     active_standards_df = pd.DataFrame()
+    # The consistency plots below repopulate this when they render; with no
+    # active standards they are skipped, and the PDF must not keep old ones.
+    st.session_state.standards_consistency_figs = []
 
     # Keep the expander open once the user starts configuring standards, so a
     # rerun from any widget in this section doesn't collapse it mid-task.
