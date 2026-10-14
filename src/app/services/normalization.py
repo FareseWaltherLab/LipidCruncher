@@ -479,8 +479,10 @@ class NormalizationService:
         if bad:
             raise ValidationError(
                 f"Internal standard '{intsta_species}' has zero intensity in "
-                f"sample(s) {', '.join(bad)}. Remove the sample(s) or choose a "
-                f"different standard before normalizing."
+                f"sample(s) {', '.join(bad)}. Choose a different standard for "
+                "that class, exclude the sample(s) under 'Exclude Samples' in "
+                "the sidebar, deselect the class, or upload a corrected "
+                "standards table."
             )
 
         return auc

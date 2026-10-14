@@ -156,14 +156,14 @@ def _display_auto_detected_standards(
     if auto_detected_df is not None and not auto_detected_df.empty:
         st.success(f"✓ Found {len(auto_detected_df)} standards")
         named_dataframe(
-            auto_detected_df, sample_names=names_for('upload'),
+            auto_detected_df, sample_names=names_for('processing'),
             width='stretch',
         )
 
         csv_download_button(
             auto_detected_df, "detected_standards.csv",
             key="download_auto_standards", on_click=_latch_expander_open,
-            sample_names=names_for('upload'),
+            sample_names=names_for('processing'),
         )
         base_df = auto_detected_df
     else:
@@ -187,13 +187,13 @@ def _display_auto_detected_standards(
     combined_df = _combine_standards(base_df, added_df)
     st.markdown("###### Active internal standards")
     named_dataframe(
-        combined_df, sample_names=names_for('upload'),
+        combined_df, sample_names=names_for('processing'),
         width='stretch',
     )
     csv_download_button(
         combined_df, "active_standards.csv",
         key="download_combined_standards", on_click=_latch_expander_open,
-        sample_names=names_for('upload'),
+        sample_names=names_for('processing'),
     )
     return combined_df
 
@@ -259,13 +259,13 @@ def _display_select_from_dataset(
 
     st.success(f"✓ Using {len(standards_df)} selected standard(s) from the dataset.")
     named_dataframe(
-        standards_df, sample_names=names_for('upload'),
+        standards_df, sample_names=names_for('processing'),
         width='stretch',
     )
     csv_download_button(
         standards_df, "selected_standards.csv",
         key="download_selected_standards", on_click=_latch_expander_open,
-        sample_names=names_for('upload'),
+        sample_names=names_for('processing'),
     )
 
     return standards_df
@@ -327,7 +327,7 @@ def _display_preserved_custom_standards() -> pd.DataFrame:
     """Display previously uploaded custom standards with clear button."""
     st.success(f"✓ Using {len(st.session_state.custom_standards_df)} custom standards")
     named_dataframe(
-        st.session_state.custom_standards_df, sample_names=names_for('upload'),
+        st.session_state.custom_standards_df, sample_names=names_for('processing'),
         width='stretch',
     )
 
@@ -390,14 +390,14 @@ def _process_uploaded_standards(
 
         st.success(f"✓ Loaded {result.standards_count} custom standards (mode: {result.source_mode})")
         named_dataframe(
-            result.standards_df, sample_names=names_for('upload'),
+            result.standards_df, sample_names=names_for('processing'),
             width='stretch',
         )
 
         csv_download_button(
             result.standards_df, "custom_standards.csv",
             key="download_custom_standards", on_click=_latch_expander_open,
-            sample_names=names_for('upload'),
+            sample_names=names_for('processing'),
         )
 
         return result.standards_df

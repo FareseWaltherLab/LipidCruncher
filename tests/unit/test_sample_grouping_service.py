@@ -14,6 +14,7 @@ from app.services.sample_grouping import (
     DatasetValidationResult,
     GroupingResult,
     RegroupingResult,
+    SampleExclusionResult,
     SampleGroupingService,
 )
 from tests.conftest import make_experiment as _make_experiment, make_dataframe
@@ -854,3 +855,68 @@ class TestTypeCoercion:
         df = pd.DataFrame(data)
         numbers = SampleGroupingService._extract_sample_numbers(df)
         assert numbers == [1, 2, 3]
+
+
+# =============================================================================
+# TestExcludeSamples
+# =============================================================================
+
+
+class TestExcludeSamples:
+    """Sidebar sample exclusion: drop columns, renumber survivors, shrink the experiment."""
+
+    def setup_method(self):
+        self.exp = make_experiment(2, 3)  # Cond_1: s1-s3, Cond_2: s4-s6
+        self.df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(18:0)'],
+            'ClassKey': ['PC', 'PC'],
+            **{f'intensity[s{i}]': [10.0 * i, 100.0 * i] for i in range(1, 7)},
+        })
+
+    def test_drops_column_and_renumbers_survivors(self):
+        result = SampleGroupingService.exclude_samples(self.df, self.exp, ['s2'])
+        assert isinstance(result, SampleExclusionResult)
+        cols = [c for c in result.updated_df.columns if c.startswith('intensity[')]
+        assert cols == [f'intensity[s{i}]' for i in range(1, 6)]
+        # old s3 is now s2 and carries s3's values
+        assert result.updated_df['intensity[s2]'].tolist() == [30.0, 300.0]
+        assert result.updated_df['intensity[s5]'].tolist() == [60.0, 600.0]
+        assert result.removed_samples == ['s2']
+        assert result.old_to_new == {
+            'intensity[s1]': 'intensity[s1]', 'intensity[s3]': 'intensity[s2]',
+            'intensity[s4]': 'intensity[s3]', 'intensity[s5]': 'intensity[s4]',
+            'intensity[s6]': 'intensity[s5]',
+        }
+
+    def test_experiment_counts_shrink(self):
+        result = SampleGroupingService.exclude_samples(self.df, self.exp, ['s2', 's6'])
+        exp = result.updated_experiment
+        assert exp.conditions_list == ['Cond_1', 'Cond_2']
+        assert exp.number_of_samples_list == [2, 2]
+        assert exp.full_samples_list == ['s1', 's2', 's3', 's4']
+
+    def test_input_frame_untouched(self):
+        before = self.df.copy()
+        SampleGroupingService.exclude_samples(self.df, self.exp, ['s1'])
+        pd.testing.assert_frame_equal(self.df, before)
+
+    def test_unknown_labels_ignored(self):
+        result = SampleGroupingService.exclude_samples(self.df, self.exp, ['s9', 's4'])
+        assert result.removed_samples == ['s4']
+
+    def test_emptying_a_condition_raises(self):
+        with pytest.raises(ValueError, match="Cond_2.*no samples"):
+            SampleGroupingService.exclude_samples(self.df, self.exp, ['s4', 's5', 's6'])
+
+    def test_nothing_to_exclude_raises(self):
+        with pytest.raises(ValueError, match="No samples"):
+            SampleGroupingService.exclude_samples(self.df, self.exp, [])
+
+    def test_fewer_than_two_remaining_raises(self):
+        exp = make_experiment(1, 3)  # s1, s2, s3
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'], 'ClassKey': ['PC'],
+            'intensity[s1]': [1.0], 'intensity[s2]': [2.0], 'intensity[s3]': [3.0],
+        })
+        with pytest.raises(ValueError, match="At least two"):
+            SampleGroupingService.exclude_samples(df, exp, ['s1', 's2'])

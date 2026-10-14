@@ -65,7 +65,11 @@ def display_quality_check_module(
     # later sidebar regroup re-keys sample_names but not continuation_df, so
     # live names would land on other samples' columns.
     if st.session_state.get('qc_input_sample_names') is None:
-        st.session_state.qc_input_sample_names = st.session_state.get('sample_names') or {}
+        st.session_state.qc_input_sample_names = (
+            st.session_state.get('processing_sample_names')
+            or st.session_state.get('sample_names')
+            or {}
+        )
     # Names for CSVs produced after this module, re-keyed by the PCA section
     # if it excludes samples (exclusion renumbers the survivors).
     st.session_state.qc_sample_names = st.session_state.qc_input_sample_names

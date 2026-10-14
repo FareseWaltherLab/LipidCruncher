@@ -14,6 +14,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import FORMAT_MSDIAL
 from app.models.experiment import ExperimentConfig
 from app.services.sample_grouping import DatasetValidationResult, SampleGroupingService
@@ -23,7 +24,7 @@ from app.ui.sample_names import (
     remap_names_after_regroup,
     sample_display_map,
 )
-from app.ui.sample_labels import render_sample_label_switch, showing_original_names
+from app.ui.sample_labels import labeler, render_sample_label_switch, showing_original_names
 from app.ui.sidebar.experiment_config import detect_sample_columns, extract_sample_names, display_experiment_definition
 from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_inputs
 
@@ -387,6 +388,57 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
         st.session_state.sample_names = names_from_editor(edited)
 
 
+def _display_sample_exclusion(
+    df: pd.DataFrame, experiment: ExperimentConfig
+) -> Optional[Tuple[ExperimentConfig, pd.DataFrame]]:
+    """Optional sidebar step: drop samples before any processing.
+
+    For a sample that should not enter the analysis at all — e.g. one whose
+    internal-standard spike failed, which would otherwise stop normalization.
+    Returns the (experiment, df) Module 1 should run on: the originals when
+    nothing is excluded, None when the selection is invalid. Also keeps
+    ``processing_sample_names`` in step with the renumbered survivors.
+    """
+    restored = StreamlitAdapter.restore_widget_value(
+        'exclude_samples', '_preserved_excluded_samples', []
+    )
+    valid_restored = [s for s in restored if s in experiment.full_samples_list]
+    with st.sidebar.expander('🚫 Exclude Samples (optional)', expanded=bool(valid_restored)):
+        excluded = st.multiselect(
+            'Samples to exclude',
+            experiment.full_samples_list,
+            default=valid_restored,
+            format_func=labeler('upload'),
+            help=(
+                "Dropped before cleaning, filtering and normalization — e.g. a "
+                "sample whose internal standard failed. Keep at least one sample "
+                "per condition (a whole condition can be excluded in Quality "
+                "Check). The remaining samples are renumbered s1, s2, …"
+            ),
+            key='exclude_samples',
+        )
+        StreamlitAdapter.save_widget_value('exclude_samples', '_preserved_excluded_samples')
+
+        names = st.session_state.get('sample_names')
+        if not excluded:
+            st.session_state.processing_sample_names = names
+            return experiment, df
+        try:
+            result = SampleGroupingService.exclude_samples(df, experiment, excluded)
+        except ValueError as e:
+            st.error(str(e))
+            return None
+        st.session_state.processing_sample_names = remap_names_after_regroup(
+            names, result.old_to_new
+        )
+        remaining = result.updated_experiment.full_samples_list
+        st.info(
+            f"{len(result.removed_samples)} sample(s) excluded; "
+            f"{len(remaining)} remain, renumbered s1–s{len(remaining)}."
+        )
+        return result.updated_experiment, result.updated_df
+
+
 def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optional[ExperimentConfig], Optional[str]]:
     """
     Display complete sample grouping UI in sidebar.
@@ -460,6 +512,10 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     _display_sample_name_editor(experiment)
     render_sample_label_switch()
 
+    # Step 2c: Optional sample exclusion. The sidebar keeps the full df and
+    # experiment; Module 1 runs on the reduced pair.
+    exclusion = _display_sample_exclusion(updated_df, experiment)
+
     # Step 3: BQC Section
     bqc_label = display_bqc_section(experiment)
 
@@ -467,11 +523,17 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     confirmed = display_confirm_inputs(experiment)
 
     if confirmed:
-        st.session_state.experiment = experiment
+        if exclusion is None:
+            st.sidebar.error("Fix the sample exclusion above before confirming.")
+            st.session_state.confirmed = False
+            return None, None
+        processing_experiment, processing_df = exclusion
+        st.session_state.experiment = processing_experiment
         st.session_state.bqc_label = bqc_label
         st.session_state.confirmed = True
         st.session_state.standardized_df = updated_df
-        return experiment, bqc_label
+        st.session_state.processing_df = processing_df
+        return processing_experiment, bqc_label
     else:
         # Checkbox unchecked - clear confirmed state
         st.session_state.confirmed = False

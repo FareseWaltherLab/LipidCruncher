@@ -52,6 +52,25 @@ class GroupingResult:
 
 
 @dataclass
+class SampleExclusionResult:
+    """Result of excluding samples before processing.
+
+    Attributes:
+        updated_df: DataFrame without the excluded intensity columns, survivors
+            renumbered s1..sM in their original order.
+        updated_experiment: ExperimentConfig with the per-condition counts
+            reduced accordingly.
+        removed_samples: Labels that were excluded, in original order.
+        old_to_new: Mapping of ``intensity[s_old] -> intensity[s_new]`` for
+            every surviving sample (identity entries included).
+    """
+    updated_df: pd.DataFrame
+    updated_experiment: ExperimentConfig
+    removed_samples: List[str]
+    old_to_new: Dict[str, str]
+
+
+@dataclass
 class RegroupingResult:
     """Result of manual sample regrouping.
 
@@ -242,6 +261,64 @@ class SampleGroupingService:
         })
 
         return GroupingResult(group_df=group_df, sample_names=sample_names)
+
+    @staticmethod
+    def exclude_samples(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        samples_to_remove: List[str],
+    ) -> SampleExclusionResult:
+        """Drop samples before processing and renumber the survivors.
+
+        Every condition must keep at least one sample (excluding a whole
+        condition is Quality Check's job) and at least two samples must
+        remain overall.
+
+        Args:
+            df: Standardized DataFrame with intensity[sN] columns.
+            experiment: Experiment configuration for the full dataset.
+            samples_to_remove: Sample labels to exclude; unknown labels are
+                ignored.
+
+        Returns:
+            SampleExclusionResult.
+
+        Raises:
+            ValueError: If nothing would be removed, a condition would be
+                emptied, or fewer than two samples would remain.
+        """
+        full = experiment.full_samples_list
+        removed = [s for s in full if s in samples_to_remove]
+        if not removed:
+            raise ValueError("No samples to exclude.")
+        for cond, samples in zip(experiment.conditions_list, experiment.individual_samples_list):
+            if all(s in removed for s in samples):
+                raise ValueError(
+                    f"Excluding these samples would leave condition '{cond}' with "
+                    "no samples. Keep at least one sample per condition; a whole "
+                    "condition can be excluded in Quality Check."
+                )
+        if len(full) - len(removed) < 2:
+            raise ValueError("At least two samples must remain after exclusion.")
+
+        new_experiment = experiment.without_samples(removed)
+        survivors = [s for s in full if s not in removed]
+        old_to_new = {
+            f'intensity[{old}]': f'intensity[{new}]'
+            for old, new in zip(survivors, new_experiment.full_samples_list)
+        }
+        updated_df = df.drop(
+            columns=[f'intensity[{s}]' for s in removed if f'intensity[{s}]' in df.columns]
+        )
+        updated_df = updated_df.rename(
+            columns={old: new for old, new in old_to_new.items() if old != new}
+        )
+        return SampleExclusionResult(
+            updated_df=updated_df,
+            updated_experiment=new_experiment,
+            removed_samples=removed,
+            old_to_new=old_to_new,
+        )
 
     @staticmethod
     def regroup_samples(
