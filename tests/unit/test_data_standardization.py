@@ -65,8 +65,10 @@ def make_msdial_df(n_samples=3, with_normalized=False, with_header_rows=False):
             for j, col in enumerate(all_cols):
                 if col == 'Alignment ID':
                     row.append(str(row_idx + 1))
-                elif col in ('Average Rt(min)', 'Average Mz'):
+                elif col == 'Average Rt(min)':
                     row.append(str(round(5.0 + row_idx * 0.5, 2)))
+                elif col == 'Average Mz':
+                    row.append(str(round(760.6 + row_idx * 8.0, 2)))
                 elif col == 'Metabolite name':
                     row.append(['PC 16:0_18:1', 'PE 18:0_20:4'][row_idx])
                 elif col == 'Adduct type':
@@ -94,8 +96,10 @@ def make_msdial_df(n_samples=3, with_normalized=False, with_header_rows=False):
         for col in all_cols:
             if col == 'Alignment ID':
                 data[col] = list(range(1, 3))
-            elif col in ('Average Rt(min)', 'Average Mz'):
+            elif col == 'Average Rt(min)':
                 data[col] = [5.0, 5.5]
+            elif col == 'Average Mz':
+                data[col] = [760.6, 768.6]
             elif col == 'Metabolite name':
                 data[col] = ['PC 16:0_18:1', 'PE 18:0_20:4']
             elif col == 'Adduct type':
@@ -702,14 +706,16 @@ class TestMSDIALStandardization:
         assert 'Total score' in sdf.columns
 
     def test_optional_basert(self):
+        """BaseRt comes from Average Rt(min) (the fixture used to give Rt and
+        m/z the same values, so reading the wrong column passed)."""
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert 'BaseRt' in result.standardized_df.columns
+        assert result.standardized_df['BaseRt'].astype(float).tolist() == [5.0, 5.5]
 
     def test_optional_calcmass(self):
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert 'CalcMass' in result.standardized_df.columns
+        assert result.standardized_df['CalcMass'].astype(float).tolist() == [760.6, 768.6]
 
     def test_column_mapping(self):
         df = make_msdial_df(n_samples=2)
