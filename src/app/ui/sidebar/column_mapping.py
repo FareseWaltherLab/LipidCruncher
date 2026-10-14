@@ -175,12 +175,21 @@ def display_column_mapping(df: pd.DataFrame, data_format: str) -> Tuple[bool, Op
 
     # MS-DIAL: Optional override for sample column detection
     if data_format == FORMAT_MSDIAL:
-        with st.sidebar.expander("🔧 Override Sample Detection (Optional)", expanded=False):
-            st.write("Only change this if auto-detection incorrectly classified columns.")
+        features = st.session_state.get('msdial_features', None)
+        detected_samples = getattr(features, 'raw_sample_columns', [])
+        all_columns = getattr(features, 'actual_columns', [])
 
-            features = st.session_state.get('msdial_features', None)
-            detected_samples = getattr(features, 'raw_sample_columns', [])
-            all_columns = getattr(features, 'actual_columns', [])
+        # Put the count in the label. Detection reads any unrecognized numeric
+        # column as a sample, so the number is the cheapest way for a user to
+        # notice an extra one without opening the expander.
+        label = "🔧 Override Sample Detection (Optional)"
+        if detected_samples:
+            label = (
+                f"🔧 Override Sample Detection — {len(detected_samples)} "
+                f"column(s) detected"
+            )
+        with st.sidebar.expander(label, expanded=False):
+            st.write("Only change this if auto-detection incorrectly classified columns.")
 
             # Deduplicate: raw and normalized columns share same names in MS-DIAL
             available_for_samples = list(dict.fromkeys(

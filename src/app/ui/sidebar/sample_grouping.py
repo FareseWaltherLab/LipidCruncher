@@ -7,14 +7,15 @@ This module contains:
 """
 
 import logging
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import streamlit as st
 import pandas as pd
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.constants import FORMAT_MSDIAL
 from app.models.experiment import ExperimentConfig
-from app.services.sample_grouping import SampleGroupingService
+from app.services.sample_grouping import DatasetValidationResult, SampleGroupingService
 from app.ui.sample_names import (
     build_names_from_mapping,
     names_from_editor,
@@ -31,6 +32,58 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # UI Components
 # =============================================================================
+
+def _detected_sample_column_names() -> List[str]:
+    """Original (pre-rename) names of the columns taken as sample intensities.
+
+    By validation time the columns are already renamed to ``intensity[sN]``,
+    which is useless for spotting an impostor — the mapping is where the names
+    the user actually wrote still live.
+    """
+    mapping = st.session_state.get('column_mapping')
+    if mapping is None or 'standardized_name' not in mapping:
+        return []
+    is_intensity = (
+        mapping['standardized_name'].astype(str).str.startswith('intensity[')
+    )
+    return mapping.loc[is_intensity, 'original_name'].astype(str).tolist()
+
+
+def _explain_sample_count_mismatch(
+    validation: DatasetValidationResult, data_format: str,
+) -> None:
+    """Turn a bare count mismatch into something the user can act on.
+
+    "Found 13, expected 12" reads as *I mis-declared my experiment*, but the
+    usual cause is the opposite: sample columns are detected by content, so any
+    numeric column the format doesn't publish as metadata gets absorbed as a
+    sample. Naming the columns that were taken lets the user spot the stray one
+    at a glance, and the fix differs by format — MS-DIAL has an override, the
+    others need the file corrected.
+    """
+    expected, actual = validation.expected_samples, validation.n_intensity_cols
+    if not expected or not actual or expected == actual:
+        return
+
+    detected = _detected_sample_column_names()
+    if detected:
+        st.sidebar.caption(
+            "Read as samples: " + ", ".join(f"`{c}`" for c in detected)
+        )
+
+    if data_format == FORMAT_MSDIAL:
+        st.sidebar.caption(
+            "If that list is wrong, fix it under **🔧 Override Sample "
+            "Detection** in the Column Name Standardization section above. "
+            "Otherwise correct the experiment setup."
+        )
+    else:
+        st.sidebar.caption(
+            "Every column after the lipid name — apart from an optional "
+            "lipid-class column — is read as a sample. Remove any extra "
+            "columns and re-upload, or correct the experiment setup."
+        )
+
 
 def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_format: str) -> tuple:
     """
@@ -50,6 +103,7 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
     validation = SampleGroupingService.validate_dataset(df, experiment, data_format)
     if not validation.valid:
         st.sidebar.error(validation.message)
+        _explain_sample_count_mismatch(validation, data_format)
         return None, df
 
     # Build group_df
