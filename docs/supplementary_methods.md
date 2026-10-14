@@ -242,11 +242,11 @@ LipidCruncher offers both automated and manual modes for statistical testing.
 
 Test type options:
 
-- Parametric: Uses Welch's t-test for two-group comparisons (handles unequal variances) or Welch's ANOVA for multi-group comparisons
+- Parametric: Uses Welch's t-test for two-group comparisons or the Alexander-Govern test for multi-group comparisons (both handle unequal variances; Alexander-Govern is a heteroscedasticity-robust alternative to Welch's ANOVA)
 
 - Non-parametric: Uses Mann-Whitney U test (two-sided) for two-group comparisons or Kruskal-Wallis test for multi-group comparisons
 
-- Auto: Automatically selects parametric tests (Welch's t-test for two-group comparisons and Welch's ANOVA for multi-group comparisons) and applies context-dependent multiple testing corrections based on the number of lipid classes and conditions selected (see S5.2)
+- Auto: Automatically selects parametric tests (Welch's t-test for two-group comparisons and the Alexander-Govern test for multi-group comparisons) and applies context-dependent multiple testing corrections based on the number of lipid classes and conditions selected (see S5.2)
 
 ## S5.2 Multiple Testing Correction Framework
 

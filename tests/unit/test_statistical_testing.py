@@ -298,7 +298,7 @@ class TestMultipleGroups:
         result = StatisticalTestingService.test_multiple_groups(
             three_groups, 'parametric', True
         )
-        assert result.test_name == "Welch's ANOVA"
+        assert result.test_name == "Alexander-Govern"
         assert result.p_value < 0.05
 
     def test_parametric_all_equal(self, three_equal_groups):

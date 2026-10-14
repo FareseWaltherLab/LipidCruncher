@@ -21,10 +21,10 @@ Statistical tests give us a **p-value**—the probability of seeing this differe
 
 | Test Type | 2 Conditions | 3+ Conditions | When to Use |
 |-----------|--------------|---------------|-------------|
-| **Parametric** | Welch's t-test | Welch's ANOVA | Default choice. Works great with log-transformed lipidomic data |
+| **Parametric** | Welch's t-test | Alexander-Govern test | Default choice. Works great with log-transformed lipidomic data |
 | **Non-parametric** | Mann-Whitney U | Kruskal-Wallis | More conservative. Use when you want maximum rigor or have unusual distributions |
 
-**Why Welch's?** Unlike classic t-tests and ANOVA, Welch's versions don't assume equal variances across groups—important for biological data where variability often differs between conditions.
+**Why these tests?** Unlike the classic t-test and one-way ANOVA, Welch's t-test and the Alexander-Govern test (a heteroscedasticity-robust alternative to Welch's ANOVA) don't assume equal variances across groups—important for biological data where variability often differs between conditions.
 
 **Why log transformation?** Lipidomic data is typically right-skewed (a few very high values). Log10 transformation makes the data more symmetric and suitable for parametric tests. This is standard practice in the field.
 
