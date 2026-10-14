@@ -14,7 +14,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.constants import COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING
+from app.constants import (
+    COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING, resolve_format_enum,
+)
 
 from ..models.experiment import ExperimentConfig
 from ..services.data_standardization import MSDIALFeatures
@@ -606,6 +608,18 @@ class StreamlitAdapter:
             Detected DataFormat
         """
         return FormatDetectionService.detect_format(df)
+
+    @staticmethod
+    def detect_format_mismatch(df: pd.DataFrame, data_format: str) -> Optional[DataFormat]:
+        """Return the format ``df`` looks like when it is not the selected one.
+
+        None when detection agrees or is inconclusive (UNKNOWN). The dropdown
+        alone decides how the file is read; this only feeds a warning.
+        """
+        detected = FormatDetectionService.detect_format(df)
+        if detected in (DataFormat.UNKNOWN, resolve_format_enum(data_format)):
+            return None
+        return detected
 
     # ==================== Cached Workflow Wrappers ====================
 

@@ -34,7 +34,10 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL
+from app.constants import (
+    MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL,
+    FORMAT_METABOLOMICS_WORKBENCH,
+)
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
@@ -133,6 +136,17 @@ def display_app_page() -> None:
     cached_format = st.session_state.get('format_type')
     if cached_format is not None and cached_format != data_format:
         StreamlitAdapter.reset_format_derived_state()
+
+    # Workbench uploads are parsed from text before this point, so there is
+    # no raw table left to compare.
+    if data_format != FORMAT_METABOLOMICS_WORKBENCH:
+        looks_like = StreamlitAdapter.detect_format_mismatch(raw_df, data_format)
+        if looks_like is not None:
+            st.sidebar.warning(
+                f"This file looks like **{looks_like.value}** data, but "
+                f"**{data_format}** is selected above. If so, switch the format "
+                "so the file is read correctly."
+            )
 
     # Sidebar: session reset — available from any step once data is loaded.
     _display_session_reset_button()

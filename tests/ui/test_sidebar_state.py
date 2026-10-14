@@ -304,3 +304,24 @@ class TestUploadersStartEmptyForANewDataset:
         _confirm(at)
 
         assert _protein_csv_uploader_id(at) != first
+
+
+def _format_warnings(at):
+    return [w.value for w in at.sidebar.warning if 'looks like' in w.value]
+
+
+class TestFormatMismatchWarning:
+    """The format dropdown alone decides how a file is read; detection only
+    warns when the file looks like a different format."""
+
+    def test_warns_when_file_looks_like_another_format(self):
+        at = _load_sample()  # Generic sample
+        _switch_format(at, 'MS-DIAL')
+        assert not at.exception
+        warnings = _format_warnings(at)
+        assert len(warnings) == 1 and 'Generic' in warnings[0]
+
+    def test_no_warning_for_matching_formats(self):
+        for format_prefix in (None, 'LipidSearch', 'MS-DIAL'):
+            at = _load_sample(format_prefix)
+            assert _format_warnings(at) == [], format_prefix
