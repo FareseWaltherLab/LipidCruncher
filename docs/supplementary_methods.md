@@ -351,7 +351,7 @@ The same total composition yields completely different saturation profiles. Lipi
 
 S6.7 Metabolomic Pathway Visualization
 
-The pathway visualization displays lipid classes as nodes in a metabolic network, connected by 23 edges representing known metabolic relationships (e.g., Kennedy pathway: DG→PC, DG→PE; sphingolipid biosynthesis: LCB→dhCer→Cer→SM; cardiolipin synthesis: PG→CL). Three starting presets are available: the default 18-class pathway, all 28 curated classes, or an empty canvas for building a custom network.
+The pathway visualization displays lipid classes as nodes in a metabolic network, connected by 25 curated edges representing known metabolic relationships (e.g., Kennedy pathway: DG→PC, DG→PE; sphingolipid biosynthesis: LCB→dhCer→Cer→SM; cardiolipin synthesis: PG→CL). Three starting presets are available: the default 18-class pathway, all 28 curated classes, or an empty canvas for building a custom network.
 
 Circle diameter encodes the concentration fold change (mean experimental / mean control) using log2 scaling, clamped to a minimum and maximum size to maintain readability across extreme fold changes. A unit circle (fold change = 1) is always displayed as a reference. Circle color encodes the fatty acid saturation ratio (saturated chains / total chains) on the Plasma color scale. Classes present in the pathway but absent from the dataset are shown as dashed gray outlines to distinguish them from detected classes. Hovering over any node displays the class name, fold change, saturation ratio, and number of detected species.
 

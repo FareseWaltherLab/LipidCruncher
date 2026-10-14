@@ -57,7 +57,8 @@ class StandardizationResult:
     workbench_conditions: Optional[Dict[str, str]] = None
     workbench_samples: Optional[Dict[str, str]] = None
     # LipidSearch 5.2 dual-polarity alignment: experiment metadata read from
-    # the Alignment Setting file so the UI can pre-populate the experiment.
+    # the Alignment Setting file. (The sidebar pre-fills the experiment from
+    # its own parse of the file; these fields are not read by the UI.)
     lipidsearch_conditions: Optional[List[str]] = None
     lipidsearch_samples_per_condition: Optional[List[int]] = None
     # Map of s1->raw-filename-derived sample name from the alignment file.

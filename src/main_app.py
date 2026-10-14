@@ -2,9 +2,9 @@
 LipidCruncher - Lipidomics Data Analysis Application
 
 Architecture:
-    UI Layer (this file)
-        → Workflows (app/workflows/)
-            → Adapters (app/adapters/)
+    UI Layer (this file, app/ui/)
+        → Adapter (app/adapters/)
+            → Workflows (app/workflows/)
                 → Services (app/services/)
                     → Models (app/models/)
 

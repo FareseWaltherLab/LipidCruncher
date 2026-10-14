@@ -1,11 +1,9 @@
 """
 Base plotter interface.
 
-Defines the PlotterServiceProtocol that all plotting services should follow.
-This is a structural (duck-typing) protocol — services don't need to inherit
-from it, but they should implement the same interface pattern.
-
-Used for documentation and static type checking (mypy/pyright).
+Defines PlotterServiceProtocol, a structural (duck-typing) protocol that some
+plotting services implement; they don't inherit from it. It documents the
+interface pattern; no static type checker is configured for the project.
 """
 
 from typing import Dict, List, Protocol, runtime_checkable
