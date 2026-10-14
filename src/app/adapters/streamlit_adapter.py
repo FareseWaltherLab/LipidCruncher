@@ -245,9 +245,9 @@ class SessionState:
     lsi_pdf_bytes: Optional[bytes] = None
 
 
-# Keys that should NOT be reset when starting a fresh analysis
-# (they control app-level routing, not data-specific state)
-_PRESERVE_ON_RESET = {'page', 'module'}
+# Keys that should NOT be reset when starting a fresh analysis (app-level
+# routing). Not 'module': a fresh dataset always starts at Module 1.
+_PRESERVE_ON_RESET = {'page'}
 
 # Keys kept by reset_to_experiment_setup(): the uploaded data plus the
 # standardization outputs derived from it. Everything else (experiment config,

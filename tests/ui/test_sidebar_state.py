@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from streamlit.testing.v1 import AppTest
 
-from app.constants import PAGE_APP
+from app.constants import MODULE_DATA_PROCESSING, PAGE_APP
 
 DEFAULT_TIMEOUT = 90
 MAIN_APP = str(Path(__file__).parents[2] / 'src' / 'main_app.py')
@@ -263,3 +263,19 @@ class TestWorkbenchSampleNames:
         samples = at.session_state['workbench_samples']
         assert samples, "the bundled Workbench file names its samples"
         assert at.session_state['sample_names'] == samples
+
+
+class TestNewDatasetStartsAtModule1:
+
+    def test_back_to_home_from_quality_check_resets_module(self):
+        """Regression: reset_data_state kept `module`, so after Back to Home
+        from Quality Check the next dataset opened on Module 2 with "No
+        normalized data available. Please complete Module 1 first.\""""
+        at = _load_sample()
+        _go_to_quality_check(at)
+        at.button(key='back_home_module2').click().run()
+
+        # (Re-entering the app from here trips an AppTest artifact: the
+        # element tree still holds Module 2's widgets after st.rerun(), so the
+        # next run cannot read their popped keys. The state is what matters.)
+        assert at.session_state['module'] == MODULE_DATA_PROCESSING

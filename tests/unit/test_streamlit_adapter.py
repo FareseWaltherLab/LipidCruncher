@@ -457,9 +457,10 @@ class TestPreserveOnReset:
         """Test that 'page' is preserved on reset."""
         assert 'page' in _PRESERVE_ON_RESET
 
-    def test_preserve_on_reset_contains_module(self):
-        """Test that 'module' is preserved on reset."""
-        assert 'module' in _PRESERVE_ON_RESET
+    def test_preserve_on_reset_does_not_contain_module(self):
+        """A reset starts the next dataset at Module 1 (regression: keeping
+        'module' opened it on an empty Quality Check page)."""
+        assert 'module' not in _PRESERVE_ON_RESET
 
     def test_preserve_on_reset_does_not_contain_analysis_keys(self):
         """Test that analysis keys are NOT preserved on reset (they should reset)."""
@@ -938,8 +939,8 @@ class TestSessionStateIntegration:
         assert mock_st.session_state['analysis_all_plots'] == {}
 
     @patch('app.adapters.streamlit_adapter.st')
-    def test_reset_preserves_page_and_module(self, mock_st):
-        """Test that reset_data_state preserves page and module."""
+    def test_reset_preserves_page_and_returns_to_module1(self, mock_st):
+        """reset_data_state keeps the page but sends the module back to Module 1."""
         mock_st.session_state = MockSessionState({
             'page': 'app',
             'module': 'Quality Check & Analysis',
@@ -949,7 +950,7 @@ class TestSessionStateIntegration:
         StreamlitAdapter.reset_data_state()
 
         assert mock_st.session_state['page'] == 'app'
-        assert mock_st.session_state['module'] == 'Quality Check & Analysis'
+        assert mock_st.session_state['module'] == MODULE_DATA_PROCESSING
         assert mock_st.session_state['analysis_selection'] is None
 
     @patch('app.adapters.streamlit_adapter.st')
