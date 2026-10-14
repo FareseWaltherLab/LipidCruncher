@@ -26,6 +26,16 @@ from app.ui.download_utils import (
 INTSTA_EXPANDER_KEY = '_intsta_expander_open'
 
 
+def dataset_widget_key(base: str) -> str:
+    """Widget key scoped to the loaded dataset.
+
+    A file uploader keeps its file in the browser under its key, which no
+    session reset can clear; keying it by the dataset gives every new dataset
+    an empty uploader instead of the previous dataset's file.
+    """
+    return f"{base}_{st.session_state.get('_dataset_source_id')}"
+
+
 def keep_intsta_expander_open() -> None:
     """Latch the Manage Internal Standards expander open across reruns."""
     st.session_state[INTSTA_EXPANDER_KEY] = True

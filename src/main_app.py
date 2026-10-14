@@ -2,9 +2,9 @@
 LipidCruncher - Lipidomics Data Analysis Application
 
 Architecture:
-    UI Layer (this file)
-        → Workflows (app/workflows/)
-            → Adapters (app/adapters/)
+    UI Layer (this file, app/ui/)
+        → Adapter (app/adapters/)
+            → Workflows (app/workflows/)
                 → Services (app/services/)
                     → Models (app/models/)
 
@@ -12,7 +12,7 @@ Architecture:
 
 import logging
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -46,7 +46,10 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, PAGE_AI_STUDIO, PAGE_ISOTOPE_TRACING, FORMAT_MSDIAL
+from app.constants import (
+    MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, PAGE_AI_STUDIO,
+    PAGE_ISOTOPE_TRACING, FORMAT_MSDIAL, FORMAT_METABOLOMICS_WORKBENCH,
+)
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.isotope_tracing_page import display_isotope_tracing_page
 from app.ui.format_requirements import display_format_requirements
@@ -148,12 +151,22 @@ def display_app_page() -> None:
                 st.rerun()
         return
 
-    # Detect format change and invalidate stale standardization-derived state.
-    # Without this, switching the dropdown would keep showing the previous
-    # format's column mapping and skip re-standardization entirely.
+    # A format change re-standardizes the same upload; state derived from the
+    # previous format's standardization would otherwise be reused.
     cached_format = st.session_state.get('format_type')
     if cached_format is not None and cached_format != data_format:
         StreamlitAdapter.reset_format_derived_state()
+
+    # Workbench uploads are parsed from text before this point, so there is
+    # no raw table left to compare.
+    if data_format != FORMAT_METABOLOMICS_WORKBENCH:
+        looks_like = StreamlitAdapter.detect_format_mismatch(raw_df, data_format)
+        if looks_like is not None:
+            st.sidebar.warning(
+                f"This file looks like **{looks_like.value}** data, but "
+                f"**{data_format}** is selected above. If so, switch the format "
+                "so the file is read correctly."
+            )
 
     # Sidebar: session reset — available from any step once data is loaded.
     _display_session_reset_button()
@@ -309,6 +322,34 @@ def _display_module1(
     _display_module1_navigation()
 
 
+def _module1_handoff(
+    experiment: 'ExperimentConfig', bqc_label: Optional[str],
+) -> Tuple['ExperimentConfig', Optional[str]]:
+    """Return the sidebar setup Module 1 ran with, frozen on entry to Module 2.
+
+    The sidebar keeps running here, so an exclusion or regroup made now would
+    pair a new experiment with the normalized data Module 1 already computed.
+    Module 2/3 keep the setup that produced that data and say how to apply
+    the change.
+    """
+    state = st.session_state
+    if state.get('qc_input_experiment') is None:
+        state.qc_input_experiment = experiment
+        state.qc_input_bqc_label = bqc_label
+        state.qc_input_processing_df = state.processing_df
+    elif (
+        experiment != state.qc_input_experiment
+        or bqc_label != state.qc_input_bqc_label
+        or not state.processing_df.equals(state.qc_input_processing_df)
+    ):
+        st.warning(
+            "The sidebar setup changed after Module 1 ran. Quality Check and "
+            "the analyses below still use the samples and grouping Module 1 "
+            "processed; go **← Back to Data Processing** to apply the change."
+        )
+    return state.qc_input_experiment, state.qc_input_bqc_label
+
+
 def _display_module2_and_3(
     experiment: 'ExperimentConfig',
     bqc_label: Optional[str],
@@ -323,6 +364,8 @@ def _display_module2_and_3(
             st.session_state.module = MODULE_DATA_PROCESSING
             st.rerun()
         return
+
+    experiment, bqc_label = _module1_handoff(experiment, bqc_label)
 
     # --- Module 2: Quality Check ---
     qc_df, updated_experiment = display_quality_check_module(

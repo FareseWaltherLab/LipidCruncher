@@ -207,11 +207,22 @@ class TestCorrelation:
         info_values = [i.value for i in at.info]
         assert any("Biological replicates" in v for v in info_values)
 
-    def test_correlation_tech_replicate_info(self, qc_bqc_app):
-        """With BQC label, shows technical replicates info."""
+    def test_correlation_bqc_condition_is_technical(self, qc_bqc_app):
+        """The BQC condition's samples are technical replicates (r >= 0.8)."""
         at = qc_bqc_app
+        at.selectbox(key='corr_condition').set_value('BQC').run()
         info_values = [i.value for i in at.info]
         assert any("Technical replicates" in v for v in info_values)
+
+    def test_correlation_other_conditions_stay_biological(self, qc_bqc_app):
+        """Regression: any experiment with a BQC condition labelled every
+        condition "Technical replicates" and judged WT/KO replicates against
+        the 0.8 technical threshold instead of 0.7."""
+        at = qc_bqc_app
+        at.selectbox(key='corr_condition').set_value('Control').run()
+        info_values = [i.value for i in at.info]
+        assert any("Biological replicates" in v for v in info_values)
+        assert not any("Technical replicates" in v for v in info_values)
 
 
 # =============================================================================
@@ -289,3 +300,28 @@ class TestPCA:
         assert not at.exception
         error_values = [e.value for e in at.error]
         assert any("At least two samples" in v for v in error_values)
+
+
+class TestQcInputNames:
+
+    def test_empty_processing_names_are_not_replaced_by_upload_names(self):
+        """Regression: `processing_sample_names or sample_names` treated an
+        empty map (every named sample excluded in the sidebar) as missing and
+        froze the upload-space names, which are keyed by different s-labels."""
+        from app.models.experiment import ExperimentConfig
+        from tests.ui.conftest import make_qc_dataframe
+
+        at = AppTest.from_function(qc_module_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['_test_df'] = make_qc_dataframe(n_lipids=20, n_samples=6)
+        at.session_state['_test_experiment'] = ExperimentConfig(
+            n_conditions=2, conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[3, 3],
+        )
+        at.session_state['_test_bqc_label'] = None
+        at.session_state['_test_format_type'] = 'Generic Format'
+        at.session_state['sample_names'] = {'s1': 'Named upload sample'}
+        at.session_state['processing_sample_names'] = {}
+        at.run()
+
+        assert not at.exception
+        assert at.session_state['qc_input_sample_names'] == {}

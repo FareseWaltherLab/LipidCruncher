@@ -15,7 +15,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.constants import COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING
+from app.constants import (
+    COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING, resolve_format_enum,
+)
 
 from ..models.experiment import ExperimentConfig
 from ..services.data_standardization import MSDIALFeatures
@@ -81,18 +83,17 @@ class SessionState:
       experiment_config.py → workbench_conditions, workbench_samples
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
                              processing_df, processing_sample_names, _preserved_excluded_samples,
-                             original_column_order
+                             original_column_order, regroup_origin, processing_origin
+      confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
       data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
                              pre_filter_df, grade_config, last_quality_config,
-                             msdial_quality_config, msdial_use_normalized,
-                             msdial_data_type_index
-      internal_standards.py → original_auto_intsta_df, preserved_intsta_df,
-                              preserved_standards_mode, custom_standards_df,
+                             msdial_use_normalized, msdial_data_type_index
+      internal_standards.py → original_auto_intsta_df, custom_standards_df,
                               custom_standards_mode, standards_source
       standards_plots.py   → standards_consistency_figs
       zero_filtering.py    → _zero_filter_format, _preserved_zero_filter_*
-      normalization.py     → normalized_df, normalization_method, normalization_inputs,
-                             selected_classes, create_norm_dataset, norm_method_selection,
+      normalization.py     → normalized_df, normalization_method,
+                             selected_classes, norm_method_selection,
                              _preserved_norm_method_selection, normalization_result,
                              class_standard_map, standard_concentrations, protein_df,
                              protein_input_method, protein_input_method_prev
@@ -141,13 +142,6 @@ class SessionState:
     confirmed: bool = False
     grouping_complete: bool = True
     original_column_order: Optional[List[str]] = None
-    # Survives transient widget garbage collection when the sidebar
-    # short-circuits before the BQC section renders (e.g. mid-regroup).
-    # Without these, switching grouping to "No" wipes the user's prior
-    # BQC answers because Streamlit drops the widget keys whose widgets
-    # didn't render this run.
-    _preserved_bqc_radio: Optional[str] = None
-    _preserved_bqc_label_radio: Optional[str] = None
     # Snapshot of grouping_radio from the previous rerun. Used to
     # detect Yes ↔ No toggles and invalidate the Confirm Inputs
     # checkbox without an on_change callback (which would otherwise
@@ -167,7 +161,20 @@ class SessionState:
     # is excluded. The sidebar keeps using the full dataset and experiment.
     processing_df: Optional[pd.DataFrame] = None
     processing_sample_names: Optional[Dict[str, str]] = None
+    # Sidebar exclusions as upload labels, and the regroup they were saved under.
     _preserved_excluded_samples: List[str] = field(default_factory=list)
+    _preserved_excluded_regroup_origin: Optional[Dict[str, str]] = None
+    # Where each sample came from in the uploaded file (its s-label before any
+    # regroup), so per-sample inputs such as protein amounts can be keyed by
+    # sample rather than by a label that regroup/exclusion renumber.
+    # regroup_origin: sidebar label -> upload label (None when not regrouped);
+    # processing_origin: Module 1 label -> upload label.
+    regroup_origin: Optional[Dict[str, str]] = None
+    processing_origin: Optional[Dict[str, str]] = None
+    # BQC answers, kept for runs where the BQC widgets are not drawn (e.g. a
+    # manual regroup is mid-edit) and Streamlit drops their keys.
+    _preserved_sidebar_bqc_radio: Optional[str] = None
+    _preserved_sidebar_bqc_label_radio: Optional[str] = None
     # 'original' shows those names in tables, plots, pickers and downloads;
     # 'standardized' shows s1, s2, ... instead (sidebar switch).
     sample_label_mode: str = 'original'
@@ -180,16 +187,16 @@ class SessionState:
     ingestion_result: Optional[IngestionResult] = None
     grade_config: Optional[GradeFilterConfig] = None
     last_quality_config: Optional[QualityFilterConfig] = None
-    msdial_quality_config: Optional[QualityFilterConfig] = None
     msdial_use_normalized: bool = False
     msdial_data_type_index: int = 0  # 0 = raw, 1 = pre-normalized
 
     # --- Internal standards (owner: internal_standards.py) ---
     original_auto_intsta_df: Optional[pd.DataFrame] = None
-    preserved_intsta_df: Optional[pd.DataFrame] = None
-    preserved_standards_mode: Optional[str] = None
     custom_standards_df: Optional[pd.DataFrame] = None
     custom_standards_mode: Optional[str] = None
+    # Which samples a 'complete' table's columns were mapped to (by position);
+    # the table is dropped when sidebar regroup/exclusion renumbers them.
+    custom_standards_sample_set: Optional[str] = None
     standards_source: Optional[str] = None
     # Consistency bar charts, one per internal-standard class (owner:
     # standards_plots.py). Held so the PDF report can include them —
@@ -205,9 +212,7 @@ class SessionState:
     # --- Normalization (owner: normalization.py) ---
     normalized_df: Optional[pd.DataFrame] = None
     normalization_method: str = 'None'
-    normalization_inputs: Dict[str, Any] = field(default_factory=dict)
     selected_classes: List[str] = field(default_factory=list)
-    create_norm_dataset: bool = False
     norm_method_selection: Optional[str] = None
     _preserved_norm_method_selection: Optional[str] = None
     normalization_result: Optional[NormalizationWorkflowResult] = None
@@ -235,6 +240,12 @@ class SessionState:
     # sample_names as of Module 1's handoff, so a later regroup cannot
     # relabel the data QC/analysis already hold.
     qc_input_sample_names: Optional[Dict[str, str]] = None
+    # The sidebar setup that produced normalized_df, frozen at the same
+    # handoff: the sidebar keeps running on Module 2/3, and a later exclusion
+    # or regroup must not be paired with Module 1's already-computed data.
+    qc_input_experiment: Optional[ExperimentConfig] = None
+    qc_input_bqc_label: Optional[str] = None
+    qc_input_processing_df: Optional[pd.DataFrame] = None
     # sample_names re-keyed into the label space left after PCA sample
     # exclusion (which renumbers survivors); used by post-QC CSV downloads.
     qc_sample_names: Optional[Dict[str, str]] = None
@@ -251,7 +262,6 @@ class SessionState:
     analysis_chain_length_fig: Optional[go.Figure] = None
     analysis_fach_fig: Optional[go.Figure] = None
     analysis_pathway_fig: Optional[go.Figure] = None
-    analysis_pathway_active_classes: Optional[List[str]] = None
     analysis_pathway_added_edges: List[Tuple[str, str]] = field(default_factory=list)
     analysis_pathway_removed_edges: List[Tuple[str, str]] = field(default_factory=list)
     analysis_pathway_custom_nodes: Dict[str, Tuple[float, float]] = field(default_factory=dict)
@@ -318,9 +328,9 @@ class SessionState:
     iso_result: Optional[IsotopeTracingResult] = None
 
 
-# Keys that should NOT be reset when starting a fresh analysis
-# (they control app-level routing, not data-specific state)
-_PRESERVE_ON_RESET = {'page', 'module'}
+# Keys that should NOT be reset when starting a fresh analysis (app-level
+# routing). Not 'module': a fresh dataset always starts at Module 1.
+_PRESERVE_ON_RESET = {'page'}
 
 # Keys kept by reset_to_experiment_setup(): the uploaded data plus the
 # standardization outputs derived from it. Everything else (experiment config,
@@ -337,11 +347,17 @@ _SOFT_RESET_PRESERVE = frozenset({
     'workbench_conditions', 'workbench_samples',
 })
 
+# Keys kept by reset_format_derived_state(): only the upload itself. Its
+# standardization, and everything computed from it, belong to the old format.
+_FORMAT_CHANGE_PRESERVE = frozenset({
+    'raw_df', 'using_sample_data', 'sample_data_file', '_dataset_source_id',
+})
+
 # Widget keys created by Streamlit widgets (not in SessionState dataclass).
 # Must be removed on reset to prevent stale widget state.
 _WIDGET_KEYS = {
     # Sidebar widgets (file_upload, experiment_config, sample_grouping, confirm_inputs)
-    'data_format_select', 'n_conditions',
+    'n_conditions',
     'manual_sample_override', 'grouping_radio', 'exclude_samples',
     'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
     'sample_data_experiment', 'sample_names_editor', '_sample_label_mode_radio',
@@ -356,9 +372,8 @@ _WIDGET_KEYS = {
     'non_bqc_zero_threshold', 'bqc_zero_threshold',
     # Standards widgets (internal_standards.py)
     'standards_source_radio', 'standards_location_radio', 'standards_conditions_select',
-    'standards_file_uploader',
     # Normalization widgets (normalization.py)
-    'temp_selected_classes', 'protein_csv_upload',
+    'temp_selected_classes',
     'norm_method_selection', 'protein_input_method',
     # Data processing widgets (continued)
     'msdial_msms_only',
@@ -409,6 +424,8 @@ _DYNAMIC_KEY_PREFIXES = (
     'cond_name_',       # condition names by index (experiment_config.py)
     'n_samples_',       # samples per condition by index (experiment_config.py)
     'select_',          # multiselect for condition samples (sample_grouping.py)
+    'standards_file_uploader_',  # keyed by dataset + sample set (internal_standards.py)
+    'lipidsearch_alignment_uploader_',  # keyed by dataset (file_upload.py)
     'qc_rt_svg_individual_',  # individual RT SVG downloads (quality_check.py)
     'rt_csv_individual_',     # individual RT CSV downloads (quality_check.py)
     'volcano_label_x_',       # per-lipid label X position (analysis.py)
@@ -541,27 +558,6 @@ class StreamlitAdapter:
             st.session_state.pop(key, None)
 
     @staticmethod
-    def reset_format_derived_state() -> None:
-        """Reset all state derived from format-specific standardization.
-
-        Use when the user switches data format mid-session. Preserves the
-        raw uploaded file and sample-data flags, but clears all
-        standardization output (column_mapping, msdial_features, etc.) and
-        all downstream pipeline state (cleaned_df, normalized_df, qc_*, analysis_*).
-        """
-        preserve = _PRESERVE_ON_RESET | {'raw_df', 'using_sample_data', 'sample_data_file'}
-        defaults = SessionState()
-        for f in fields(SessionState):
-            if f.name not in preserve:
-                st.session_state[f.name] = getattr(defaults, f.name)
-        for key in _WIDGET_KEYS:
-            st.session_state.pop(key, None)
-        # A regroup snapshot from the old format would be restored over the
-        # re-standardized data by the grouping step's "Yes" branch.
-        for key in ('_pre_regroup_df', '_pre_regroup_sample_names'):
-            st.session_state.pop(key, None)
-
-    @staticmethod
     def reset_for_new_source(source_id: str) -> bool:
         """Reset data state when a different dataset source arrives.
 
@@ -585,6 +581,26 @@ class StreamlitAdapter:
             st.cache_data.clear()
         st.session_state['_dataset_source_id'] = source_id
         return had_data
+
+    @staticmethod
+    def reset_format_derived_state() -> None:
+        """Clear everything derived from the upload when the format changes.
+
+        Keeps the uploaded file (and the sample-data flags) so it is
+        re-standardized under the newly selected format; standardization
+        outputs, experiment setup and all downstream state are cleared, and
+        the user returns to Module 1.
+        """
+        preserved = {
+            key: st.session_state.get(key) for key in _FORMAT_CHANGE_PRESERVE
+        }
+        StreamlitAdapter.reset_data_state()
+        for key, value in preserved.items():
+            st.session_state[key] = value
+        # Same reason as in reset_to_experiment_setup(): an explicit False
+        # beats the checkbox's cached value on a pre-fill rerun.
+        st.session_state['confirm_checkbox'] = False
+        st.session_state.module = MODULE_DATA_PROCESSING
 
     @staticmethod
     def reset_to_experiment_setup() -> None:
@@ -757,6 +773,18 @@ class StreamlitAdapter:
             Detected DataFormat
         """
         return FormatDetectionService.detect_format(df)
+
+    @staticmethod
+    def detect_format_mismatch(df: pd.DataFrame, data_format: str) -> Optional[DataFormat]:
+        """Return the format ``df`` looks like when it is not the selected one.
+
+        None when detection agrees or is inconclusive (UNKNOWN). The dropdown
+        alone decides how the file is read; this only feeds a warning.
+        """
+        detected = FormatDetectionService.detect_format(df)
+        if detected in (DataFormat.UNKNOWN, resolve_format_enum(data_format)):
+            return None
+        return detected
 
     # ==================== Cached Workflow Wrappers ====================
 

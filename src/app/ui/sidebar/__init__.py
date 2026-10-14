@@ -20,7 +20,6 @@ from app.ui.sidebar.column_mapping import (
 )
 from app.ui.sidebar.experiment_config import (
     detect_sample_columns,
-    extract_sample_names,
     display_experiment_definition,
 )
 from app.ui.sidebar.sample_grouping import (
@@ -42,7 +41,6 @@ __all__ = [
     'display_column_mapping',
     # experiment_config
     'detect_sample_columns',
-    'extract_sample_names',
     'display_experiment_definition',
     # sample_grouping
     'display_group_samples',

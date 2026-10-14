@@ -25,6 +25,9 @@ from app.services.lipidsearch_alignment import (
     AlignmentError, has_grouped_per_file_columns, parse_alignment_file,
 )
 from app.ui.content import get_sample_data_info
+from app.ui.st_helpers import dataset_widget_key
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,7 @@ def _store_workbench_result(result) -> Optional[pd.DataFrame]:
     """
     if result.success:
         st.session_state.standardized_df = result.standardized_df
+        st.session_state.column_mapping = result.column_mapping
         if result.workbench_conditions:
             st.session_state.workbench_conditions = result.workbench_conditions
         if result.workbench_samples:
@@ -173,7 +177,7 @@ def _handle_lipidsearch_alignment_upload(df: pd.DataFrame) -> None:
     aln = st.sidebar.file_uploader(
         "Alignment Setting file (required)",
         type=['txt', 'csv'],
-        key='lipidsearch_alignment_uploader',
+        key=dataset_widget_key('lipidsearch_alignment_uploader'),
     )
     if aln is None:
         st.session_state.pop('lipidsearch_alignment_text', None)

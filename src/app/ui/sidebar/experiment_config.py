@@ -3,7 +3,6 @@ Experiment Configuration UI Components for LipidCruncher sidebar.
 
 This module contains:
 - detect_sample_columns: Detect intensity/sample columns based on format
-- extract_sample_names: Extract clean sample names from column names
 - display_experiment_definition: Display experiment definition UI (conditions, samples)
 """
 
@@ -31,28 +30,6 @@ def detect_sample_columns(df: pd.DataFrame, data_format: str) -> list:
     """
     # After standardization, all formats use intensity[...] columns
     return [col for col in df.columns if col.startswith('intensity[')]
-
-
-def extract_sample_names(columns: list, data_format: str) -> list:
-    """Extract clean sample names from column names.
-
-    After standardization, all formats use intensity[sample_name] pattern.
-
-    Args:
-        columns: List of intensity column names
-        data_format: The selected data format string
-
-    Returns:
-        List of clean sample names
-    """
-    names = []
-    for col in columns:
-        if col.startswith('intensity[') and col.endswith(']'):
-            # Extract name from intensity[name]
-            names.append(col[10:-1])  # Remove 'intensity[' and ']'
-        else:
-            names.append(col)
-    return names
 
 
 # =============================================================================

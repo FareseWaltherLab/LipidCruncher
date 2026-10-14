@@ -88,6 +88,19 @@ class TestRunPCA:
         pc_df, _, _ = _run_pca((pca_df,), samples)
         assert len(pc_df) == len(samples)
 
+    def test_features_are_standardized_before_pca(self):
+        """Docs S4.4: concentrations are standardized before PCA. Unscaled,
+        the one high-abundance lipid takes 99.9% of the variance on PC1."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1', 'PE 36:2', 'SM 34:1'],
+            'concentration[s1]': [10000.0, 1.0, 5.0],
+            'concentration[s2]': [10100.0, 2.0, 4.0],
+            'concentration[s3]': [9900.0, 3.0, 2.5],
+            'concentration[s4]': [10050.0, 4.0, 1.0],
+        })
+        _, pc_names, _ = _run_pca(df, ['s1', 's2', 's3', 's4'])
+        assert pc_names == ['PC1 (67%)', 'PC2 (33%)']
+
     def test_two_samples_minimum(self):
         """PCA with exactly 2 samples should work."""
         df = pd.DataFrame({

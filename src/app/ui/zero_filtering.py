@@ -50,7 +50,7 @@ def display_zero_filtering_config(
         st.markdown("Adjust thresholds for removing lipid species with too many zero/below-detection values.")
 
         # Initialize session state for persistence, reset if format changes
-        if ('_preserved_zero_filter_detection_threshold' not in st.session_state
+        if (st.session_state.get('_preserved_zero_filter_detection_threshold') is None
                 or st.session_state.get('_zero_filter_format') != data_format):
             st.session_state._preserved_zero_filter_detection_threshold = default_detection
             st.session_state._zero_filter_format = data_format
@@ -58,8 +58,6 @@ def display_zero_filtering_config(
             st.session_state._preserved_non_bqc_zero_threshold = ZERO_FILTER_NON_BQC_DEFAULT
         if st.session_state.get('_preserved_bqc_zero_threshold') is None:
             st.session_state._preserved_bqc_zero_threshold = ZERO_FILTER_BQC_DEFAULT
-        if st.session_state.get('_preserved_zero_filter_detection_threshold') is None:
-            st.session_state._preserved_zero_filter_detection_threshold = 0.0
 
         col1, col2 = st.columns(2)
 

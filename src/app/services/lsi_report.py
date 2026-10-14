@@ -12,7 +12,6 @@ Pure logic — no Streamlit dependencies. All methods are static.
 """
 import io
 import logging
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -74,13 +73,6 @@ _MANUAL_FIELDS: List[Dict[str, str]] = [
     {"category": "Data Acquisition", "item": "Acquisition software",
      "description": "e.g., MassHunter, Xcalibur, Analyst"},
 ]
-
-
-@dataclass
-class LSIReportData:
-    """Structured container for all LSI report fields (auto + manual)."""
-    auto_fields: Dict[str, Any] = field(default_factory=dict)
-    manual_fields: Dict[str, str] = field(default_factory=dict)
 
 
 class LSIReportService:

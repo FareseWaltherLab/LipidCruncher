@@ -7,10 +7,12 @@ from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.st_helpers import display_export_buttons, section_header
+from app.ui.main_content.analysis._shared import _clear_pdf_plots
 
 
 def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
     """Display abundance pie chart analysis."""
+    _clear_pdf_plots('pie_')
     with st.expander("Class Concentration Pie Chart", expanded=False):
         st.markdown(
             "View the proportional distribution of lipid classes per condition."

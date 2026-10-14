@@ -268,6 +268,16 @@ class TestInternalStandards:
         assert not at.exception
         assert at.session_state['standards_consistency_figs'] == []
 
+    def test_no_active_standards_drops_the_stored_plots(self, intsta_with_standards_app):
+        """Regression: with no standards active (custom upload chosen, no file
+        yet) the plot function was skipped, so the previous source's figures
+        stayed in the PDF report."""
+        at = intsta_with_standards_app
+        assert at.session_state['standards_consistency_figs']
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        assert not at.exception
+        assert at.session_state['standards_consistency_figs'] == []
+
     def test_select_from_dataset_removes_lipid_from_main_dataset(self, intsta_with_standards_app):
         """Exclusive Select-from-Dataset also drops the lipid from analysed species."""
         import pandas as pd
@@ -300,6 +310,46 @@ class TestInternalStandards:
         at.button(key='clear_custom_standards').click().run()
         assert not at.exception
         assert at.session_state['_intsta_expander_open'] is True
+
+    def _load_complete_standards(self, at, origin):
+        import pandas as pd
+        from app.ui.main_content.internal_standards import _sample_set_id
+
+        at.session_state['processing_origin'] = origin
+        at.session_state['custom_standards_df'] = pd.DataFrame({
+            'LipidMolec': ['STD 1'], 'ClassKey': ['PC'],
+            **{f'intensity[s{i}]': [float(i)] for i in range(1, 7)},
+        })
+        at.session_state['custom_standards_mode'] = 'complete'
+        at.session_state['custom_standards_sample_set'] = _sample_set_id(origin)
+
+    def test_complete_standards_dropped_when_samples_renumbered(self, intsta_with_standards_app):
+        """Regression: a complete standards table maps its columns to samples
+        by position; after a sidebar regroup/exclusion it was kept (and a file
+        still in the uploader re-mapped) onto the renumbered samples."""
+        at = intsta_with_standards_app
+        identity = {f's{i}': f's{i}' for i in range(1, 7)}
+        self._load_complete_standards(at, identity)
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        assert at.session_state['custom_standards_df'] is not None
+
+        regrouped = dict(identity, s1='s2', s2='s1')
+        at.session_state['processing_origin'] = regrouped
+        at.run()
+
+        assert not at.exception
+        assert at.session_state['custom_standards_df'] is None
+        assert any('upload it again' in w.value for w in at.warning)
+
+    def test_complete_standards_kept_while_samples_unchanged(self, intsta_with_standards_app):
+        at = intsta_with_standards_app
+        identity = {f's{i}': f's{i}' for i in range(1, 7)}
+        self._load_complete_standards(at, identity)
+        at.radio(key='standards_source_radio').set_value('Upload Custom Standards').run()
+        at.run()
+
+        assert not at.exception
+        assert at.session_state['custom_standards_df'] is not None
 
     def test_expander_latches_open_across_source_switches(self, intsta_with_standards_app):
         """Changing the source (either direction) keeps the expander open."""

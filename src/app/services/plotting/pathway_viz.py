@@ -128,10 +128,6 @@ PATHWAY_COORDS: List[Tuple[float, float]] = [
 # ═══════════════════════════════════════════════════════════════════════
 
 UNIT_CIRCLE_RADIUS = 0.5
-SIZE_SCALE = 50
-FIG_SIZE = (10, 10)
-PLOT_XLIM = (-25, 25)
-PLOT_YLIM = (-20, 30)
 
 # Log2-scaling bounds for fold-change circle sizes.
 MIN_LOG2_SIZE = 0.2

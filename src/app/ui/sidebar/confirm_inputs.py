@@ -8,6 +8,7 @@ This module contains:
 
 import streamlit as st
 
+from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.models.experiment import ExperimentConfig
 from app.ui.sample_labels import display_names_for
 
@@ -20,6 +21,14 @@ _MARKDOWN_SPECIAL = set('\\`*_{}[]()<>#+-.!|~$')
 def _escape_markdown(text: str) -> str:
     """Backslash-escape Markdown syntax so a name like 'a|b' or '$5' shows as typed."""
     return ''.join('\\' + ch if ch in _MARKDOWN_SPECIAL else ch for ch in str(text))
+
+
+def _restore_widget_key(widget_key: str, preserved_key: str, options: list) -> None:
+    """Put a dropped widget key back from its preserved value, if still an option."""
+    if widget_key not in st.session_state:
+        preserved = st.session_state.get(preserved_key)
+        if preserved in options:
+            st.session_state[widget_key] = preserved
 
 
 # =============================================================================
@@ -38,22 +47,15 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
     """
     st.sidebar.subheader("Specify Label of BQC Samples")
 
-    # Restore from the preserved key when Streamlit GC'd the widget key
-    # because an upstream sidebar section short-circuited (e.g. the user
-    # entered manual regrouping and grouping is mid-edit). Without this,
-    # the bqc_radio widget would silently reset to 'No' on the next
-    # rerun even though the user previously answered 'Yes'.
-    bqc_options = ['Yes', 'No']
-    if 'bqc_radio' not in st.session_state:
-        preserved = st.session_state.get('_preserved_bqc_radio')
-        if preserved in bqc_options:
-            st.session_state['bqc_radio'] = preserved
-
     # Pass `index` only when the key is absent. The pre-fill helpers (sample
     # data / alignment) may set `bqc_radio` in session state; passing `index`
     # as well makes Streamlit warn that a keyed widget has both a default and a
     # session-state value. Once the key exists, session state preserves the
     # selection across reruns, so the default is only needed on first render.
+    bqc_options = ['Yes', 'No']
+    # On a run where this section was skipped (e.g. a manual regroup is
+    # mid-edit) Streamlit drops the widget keys; restore the last answers.
+    _restore_widget_key('bqc_radio', '_preserved_sidebar_bqc_radio', bqc_options)
     bqc_kwargs = {'key': 'bqc_radio'}
     if 'bqc_radio' not in st.session_state:
         bqc_kwargs['index'] = 1
@@ -62,8 +64,7 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
         bqc_options,
         **bqc_kwargs,
     )
-    # Persist for the next widget-GC event (see comment above).
-    st.session_state['_preserved_bqc_radio'] = bqc_ans
+    StreamlitAdapter.save_widget_value('bqc_radio', '_preserved_sidebar_bqc_radio')
 
     bqc_label = None
     if bqc_ans == 'Yes':
@@ -75,20 +76,12 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
         ]
 
         if conditions_with_two_plus:
-            # Same restore-before-render trick as above. Guard against a
-            # stale preserved value that no longer matches the current
-            # condition list (e.g. the user renamed conditions); fall
-            # back to the first option in that case.
-            if 'bqc_label_radio' not in st.session_state:
-                preserved_label = st.session_state.get(
-                    '_preserved_bqc_label_radio'
-                )
-                if preserved_label in conditions_with_two_plus:
-                    st.session_state['bqc_label_radio'] = preserved_label
-
             # Same guard as bqc_radio: the pre-fill helpers may set
             # 'bqc_label_radio' in session state, so only supply `index` when
             # the key is absent to avoid the default-plus-session-state warning.
+            _restore_widget_key(
+                'bqc_label_radio', '_preserved_sidebar_bqc_label_radio', conditions_with_two_plus
+            )
             label_kwargs = {'key': 'bqc_label_radio'}
             if 'bqc_label_radio' not in st.session_state:
                 label_kwargs['index'] = 0
@@ -97,7 +90,7 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
                 conditions_with_two_plus,
                 **label_kwargs,
             )
-            st.session_state['_preserved_bqc_label_radio'] = bqc_label
+            StreamlitAdapter.save_widget_value('bqc_label_radio', '_preserved_sidebar_bqc_label_radio')
         else:
             st.sidebar.warning("No conditions with 2+ samples available for BQC.")
 

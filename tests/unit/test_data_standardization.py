@@ -65,8 +65,10 @@ def make_msdial_df(n_samples=3, with_normalized=False, with_header_rows=False):
             for j, col in enumerate(all_cols):
                 if col == 'Alignment ID':
                     row.append(str(row_idx + 1))
-                elif col in ('Average Rt(min)', 'Average Mz'):
+                elif col == 'Average Rt(min)':
                     row.append(str(round(5.0 + row_idx * 0.5, 2)))
+                elif col == 'Average Mz':
+                    row.append(str(round(760.6 + row_idx * 8.0, 2)))
                 elif col == 'Metabolite name':
                     row.append(['PC 16:0_18:1', 'PE 18:0_20:4'][row_idx])
                 elif col == 'Adduct type':
@@ -94,8 +96,10 @@ def make_msdial_df(n_samples=3, with_normalized=False, with_header_rows=False):
         for col in all_cols:
             if col == 'Alignment ID':
                 data[col] = list(range(1, 3))
-            elif col in ('Average Rt(min)', 'Average Mz'):
+            elif col == 'Average Rt(min)':
                 data[col] = [5.0, 5.5]
+            elif col == 'Average Mz':
+                data[col] = [760.6, 768.6]
             elif col == 'Metabolite name':
                 data[col] = ['PC 16:0_18:1', 'PE 18:0_20:4']
             elif col == 'Adduct type':
@@ -186,6 +190,11 @@ class TestStandardizeLipidName:
 
     def test_space_separated(self):
         assert DataStandardizationService.standardize_lipid_name('LPC O-17:4') == 'LPC O-17:4'
+
+    def test_lyso_phantom_chain_removed(self):
+        """The docstring's example: a lyso species' empty 0:0 chain is dropped."""
+        assert DataStandardizationService.standardize_lipid_name('LPC(20:0_0:0)') == 'LPC 20:0'
+        assert DataStandardizationService.standardize_lipid_name('LPE(0:0_18:1)') == 'LPE 18:1'
 
     def test_space_separated_pc(self):
         assert DataStandardizationService.standardize_lipid_name('PC 16:0_18:1') == 'PC 16:0_18:1'
@@ -702,14 +711,16 @@ class TestMSDIALStandardization:
         assert 'Total score' in sdf.columns
 
     def test_optional_basert(self):
+        """BaseRt comes from Average Rt(min) (the fixture used to give Rt and
+        m/z the same values, so reading the wrong column passed)."""
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert 'BaseRt' in result.standardized_df.columns
+        assert result.standardized_df['BaseRt'].astype(float).tolist() == [5.0, 5.5]
 
     def test_optional_calcmass(self):
         df = make_msdial_df(n_samples=2)
         result = DataStandardizationService._process_msdial(df)
-        assert 'CalcMass' in result.standardized_df.columns
+        assert result.standardized_df['CalcMass'].astype(float).tolist() == [760.6, 768.6]
 
     def test_column_mapping(self):
         df = make_msdial_df(n_samples=2)
@@ -851,6 +862,27 @@ class TestMetabolomicsWorkbenchStandardization:
         assert sdf['intensity[s1]'].tolist() == [3.0, 5.0]
         assert sdf['intensity[s2]'].tolist() == [4.0, 6.0]
         assert result.workbench_samples == {'s1': 'sample_1', 's2': 'sample_2'}
+
+    def test_interleaved_conditions_numbered_condition_by_condition(self):
+        """Regression: samples were numbered in file order while the experiment
+        assigns s1..sN to conditions contiguously, so with Factors
+        Ctrl,KO,Ctrl,KO the first KO sample was analysed as Control."""
+        text = "\n".join([
+            'MS_METABOLITE_DATA_START',
+            'Samples,C1,K1,C2,K2',
+            'Factors,Condition:Ctrl,Condition:KO,Condition:Ctrl,Condition:KO',
+            'PC 16:0_18:1,1,100,2,200',
+            'MS_METABOLITE_DATA_END',
+        ])
+        result = DataStandardizationService._process_metabolomics_workbench(text)
+        assert result.success is True
+        sdf = result.standardized_df
+        values = [sdf[f'intensity[s{i}]'].iloc[0] for i in range(1, 5)]
+        assert values == [1.0, 2.0, 100.0, 200.0]
+        assert result.workbench_conditions == {
+            's1': 'Ctrl', 's2': 'Ctrl', 's3': 'KO', 's4': 'KO',
+        }
+        assert result.workbench_samples == {'s1': 'C1', 's2': 'C2', 's3': 'K1', 's4': 'K2'}
 
     def test_workbench_conditions_populated(self):
         text = make_mw_text(n_samples=3)

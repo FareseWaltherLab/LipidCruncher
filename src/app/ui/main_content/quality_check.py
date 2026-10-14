@@ -67,11 +67,12 @@ def display_quality_check_module(
     # later sidebar regroup re-keys sample_names but not continuation_df, so
     # live names would land on other samples' columns.
     if st.session_state.get('qc_input_sample_names') is None:
-        st.session_state.qc_input_sample_names = (
-            st.session_state.get('processing_sample_names')
-            or st.session_state.get('sample_names')
-            or {}
-        )
+        # An empty map is a real answer (every named sample was excluded),
+        # not a reason to fall back to the upload-space names.
+        names = st.session_state.get('processing_sample_names')
+        if names is None:
+            names = st.session_state.get('sample_names')
+        st.session_state.qc_input_sample_names = names or {}
     # Names for CSVs produced after this module, re-keyed by the PCA section
     # if it excludes samples (exclusion renumbers the survivors).
     st.session_state.qc_sample_names = st.session_state.qc_input_sample_names
@@ -468,6 +469,11 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
 # Section 4: Pairwise Correlation
 # =============================================================================
 
+def _replicate_type(condition: str, bqc_label: Optional[str]) -> str:
+    """Correlation sample type: BQC samples are technical replicates."""
+    return 'technical replicates' if condition == bqc_label else 'biological replicates'
+
+
 def _display_correlation_analysis(
     df: pd.DataFrame,
     experiment: 'ExperimentConfig',
@@ -502,13 +508,13 @@ def _display_correlation_analysis(
             key='corr_condition'
         )
 
-        # Auto-detect sample type based on BQC presence
-        if bqc_label is not None:
-            sample_type = 'technical replicates'
-            st.info("**Sample type:** Technical replicates (BQC samples detected)")
+        # Only the BQC condition holds technical replicates (pooled aliquots);
+        # every other condition's samples are biological replicates.
+        sample_type = _replicate_type(selected_condition, bqc_label)
+        if sample_type == 'technical replicates':
+            st.info("**Sample type:** Technical replicates (BQC samples)")
         else:
-            sample_type = 'biological replicates'
-            st.info("**Sample type:** Biological replicates (no BQC samples)")
+            st.info("**Sample type:** Biological replicates")
 
         # --- Results ---
         results_header()
@@ -531,7 +537,7 @@ def _display_correlation_analysis(
                     StreamlitAdapter.run_correlation(
                         df, experiment,
                         experiment.conditions_list.index(condition),
-                        sample_type, display_names,
+                        _replicate_type(condition, bqc_label), display_names,
                     )
                 )
 

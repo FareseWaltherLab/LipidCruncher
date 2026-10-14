@@ -57,7 +57,8 @@ class StandardizationResult:
     workbench_conditions: Optional[Dict[str, str]] = None
     workbench_samples: Optional[Dict[str, str]] = None
     # LipidSearch 5.2 dual-polarity alignment: experiment metadata read from
-    # the Alignment Setting file so the UI can pre-populate the experiment.
+    # the Alignment Setting file. (The sidebar pre-fills the experiment from
+    # its own parse of the file; these fields are not read by the UI.)
     lipidsearch_conditions: Optional[List[str]] = None
     lipidsearch_samples_per_condition: Optional[List[int]] = None
     # Map of s1->raw-filename-derived sample name from the alignment file.
@@ -963,6 +964,19 @@ class DataStandardizationService:
             if not data_rows:
                 return StandardizationResult(False, "No valid data rows found")
 
+            # Number samples condition by condition (stable within a condition):
+            # the experiment assigns s1..sN to conditions contiguously, so an
+            # interleaved factor order would otherwise put samples in the wrong
+            # condition.
+            first_seen = list(dict.fromkeys(cleaned_conditions))
+            order = sorted(
+                range(len(sample_names)),
+                key=lambda i: first_seen.index(cleaned_conditions[i]),
+            )
+            sample_names = [sample_names[i] for i in order]
+            cleaned_conditions = [cleaned_conditions[i] for i in order]
+            data_rows = [[row[0]] + [row[i + 1] for i in order] for row in data_rows]
+
             columns = ['LipidMolec'] + [
                 f'intensity[s{i + 1}]' for i in range(len(sample_names))
             ]
@@ -988,11 +1002,16 @@ class DataStandardizationService:
             wb_samples = {
                 f's{i + 1}': name.strip() for i, name in enumerate(sample_names)
             }
+            column_mapping = pd.DataFrame({
+                'standardized_name': ['LipidMolec'] + intensity_cols,
+                'original_name': [samples_line[0].strip()] + [name.strip() for name in sample_names],
+            })
 
             return StandardizationResult(
                 success=True,
                 message="Data successfully standardized",
                 standardized_df=df,
+                column_mapping=column_mapping,
                 n_intensity_cols=len(sample_names),
                 workbench_conditions=wb_conditions,
                 workbench_samples=wb_samples,

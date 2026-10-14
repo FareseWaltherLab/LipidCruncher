@@ -10,6 +10,8 @@ from ...constants import (
     normalize_hydroxyl, sort_chains_lipid_maps,
     remove_phantom_chains, format_lipid_name,
     LYSO_CLASSES,
+    LIPIDSEARCH_DEFAULT_GRADES, LIPIDSEARCH_RELAXED_GRADES,
+    LIPIDSEARCH_RELAXED_GRADE_CLASSES,
 )
 from .base import BaseDataCleaner
 from .configs import GradeFilterConfig
@@ -85,7 +87,17 @@ class LipidSearchCleaner(BaseDataCleaner):
         if msg:
             messages.append(msg)
 
-        # Step 6: Final cleanup
+        # Step 6: Remove all-zero rows
+        df, msg = LipidSearchCleaner._step_remove_zero_rows(df)
+        if msg:
+            messages.append(msg)
+
+        if df.empty:
+            raise EmptyDataError(
+                "No lipid species with non-zero intensity values found."
+            )
+
+        # Step 7: Final cleanup
         df = LipidSearchCleaner._final_cleanup(df)
 
         messages.append(LipidSearchCleaner._make_summary_message(initial_count, len(df)))
@@ -170,14 +182,22 @@ class LipidSearchCleaner(BaseDataCleaner):
     # ==================== Grade Filtering ====================
 
     @staticmethod
+    def _default_grade_mask(df: pd.DataFrame) -> 'pd.Series':
+        """Default grades: A/B for every class, plus C for LPC and SM."""
+        return (
+            df['TotalGrade'].isin(LIPIDSEARCH_DEFAULT_GRADES) |
+            (df['TotalGrade'].isin(LIPIDSEARCH_RELAXED_GRADES) &
+             df['ClassKey'].isin(LIPIDSEARCH_RELAXED_GRADE_CLASSES))
+        )
+
+    @staticmethod
     def _apply_grade_filter(
         df: pd.DataFrame,
         grade_config: Optional[Dict[str, List[str]]] = None
     ) -> pd.DataFrame:
         """Apply grade filtering to the dataframe."""
         if grade_config is None:
-            # Default: accept A, B, C grades
-            return df[df['TotalGrade'].isin(['A', 'B', 'C'])].copy()
+            return df[LipidSearchCleaner._default_grade_mask(df)].copy()
 
         # Custom filtering based on config
         filtered_dfs = []
@@ -320,11 +340,7 @@ class LipidSearchCleaner(BaseDataCleaner):
     ) -> 'pd.Series':
         """Build boolean mask for entries eligible for AUC selection."""
         if grade_config is None:
-            # Default: A/B for all classes, C only for LPC/SM
-            return (
-                df['TotalGrade'].isin(['A', 'B']) |
-                (df['TotalGrade'].eq('C') & df['ClassKey'].isin(['LPC', 'SM']))
-            )
+            return LipidSearchCleaner._default_grade_mask(df)
 
         # Custom: each class has its own allowed grades
         eligible = pd.Series(False, index=df.index)
@@ -333,18 +349,6 @@ class LipidSearchCleaner(BaseDataCleaner):
                 df['ClassKey'].eq(class_key) & df['TotalGrade'].isin(grades)
             )
         return eligible
-
-    @staticmethod
-    def _select_best_row(lipid_df: pd.DataFrame) -> pd.Series:
-        """Select the best row based on quality rate and grade."""
-        max_quality = lipid_df['TotalSmpIDRate(%)'].max()
-        best_quality_df = lipid_df[lipid_df['TotalSmpIDRate(%)'] == max_quality].copy()
-
-        best_quality_df['grade_priority'] = best_quality_df['TotalGrade'].map(
-            LipidSearchCleaner._GRADE_PRIORITY
-        ).fillna(99)
-
-        return best_quality_df.sort_values('grade_priority').iloc[0]
 
     # ==================== Final Cleanup ====================
 

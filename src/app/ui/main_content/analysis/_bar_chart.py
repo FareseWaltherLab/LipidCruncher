@@ -8,6 +8,7 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
+    _clear_pdf_plots,
     _display_condition_class_selectors,
     _display_statistical_options,
     _display_detailed_statistics,
@@ -16,6 +17,7 @@ from app.ui.main_content.analysis._shared import (
 
 def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
     """Display abundance bar chart analysis."""
+    _clear_pdf_plots('bar_chart')
     with st.expander("Class Concentration Bar Chart", expanded=False):
         st.markdown(
             "Visualize the total abundance of each lipid class across conditions."

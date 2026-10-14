@@ -386,8 +386,8 @@ class TestLipidSearchPipeline:
 
         assert result.is_valid or 'grade' in str(result.validation_errors).lower()
         # With strict filtering, we may get fewer species
-        if result.cleaned_df is not None:
-            assert len(result.cleaned_df) <= len(lipidsearch_sample_df)
+        assert result.cleaned_df is not None
+        assert len(result.cleaned_df) <= len(lipidsearch_sample_df)
 
     def test_full_pipeline_grade_filtering_a_b(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Test pipeline with grade A and B filtering."""
@@ -404,7 +404,7 @@ class TestLipidSearchPipeline:
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
 
         # Should allow more species than A-only
-        assert result.is_valid or len(result.validation_errors) > 0
+        assert result.is_valid, result.validation_errors
 
     def test_full_pipeline_zero_filter_strict(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Test pipeline with strict zero filtering threshold."""
@@ -436,6 +436,7 @@ class TestLipidSearchPipeline:
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
 
+        assert result.is_valid, result.validation_errors
         assert not result.zero_filtered
         assert result.species_removed_count == 0
 
@@ -449,9 +450,10 @@ class TestLipidSearchPipeline:
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
 
-        # Check if standards were detected (may or may not be present in dataset)
-        # The important thing is the workflow doesn't crash
-        assert result.is_valid or len(result.validation_warnings) >= 0
+        assert result.is_valid, result.validation_errors
+        # The bundled LipidSearch sample contains deuterated standards.
+        assert result.internal_standards_df is not None
+        assert len(result.internal_standards_df) > 0
 
     def test_full_pipeline_external_standards(self, lipidsearch_sample_df, lipidsearch_experiment, basic_intsta_df):
         """Test pipeline with external standards provided."""
@@ -466,8 +468,8 @@ class TestLipidSearchPipeline:
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
 
         # External standards should be used
-        if result.internal_standards_df is not None:
-            assert len(result.internal_standards_df) > 0
+        assert result.internal_standards_df is not None
+        assert len(result.internal_standards_df) > 0
 
     def test_cleaning_preserves_essential_columns(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Verify CalcMass and BaseRt columns are preserved through pipeline."""
@@ -479,10 +481,10 @@ class TestLipidSearchPipeline:
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
 
-        if result.cleaned_df is not None:
-            # LipidSearch should preserve CalcMass and BaseRt
-            assert 'LipidMolec' in result.cleaned_df.columns
-            assert 'ClassKey' in result.cleaned_df.columns
+        assert result.cleaned_df is not None
+        # LipidSearch should preserve CalcMass and BaseRt
+        assert 'LipidMolec' in result.cleaned_df.columns
+        assert 'ClassKey' in result.cleaned_df.columns
 
     def test_output_dataframe_structure(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Verify output DataFrame has expected columns and structure."""
@@ -494,13 +496,13 @@ class TestLipidSearchPipeline:
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
 
-        if result.cleaned_df is not None:
-            # Must have these columns
-            assert 'LipidMolec' in result.cleaned_df.columns
-            assert 'ClassKey' in result.cleaned_df.columns
-            # Must have intensity columns
-            intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
-            assert len(intensity_cols) > 0
+        assert result.cleaned_df is not None
+        # Must have these columns
+        assert 'LipidMolec' in result.cleaned_df.columns
+        assert 'ClassKey' in result.cleaned_df.columns
+        # Must have intensity columns
+        intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
+        assert len(intensity_cols) > 0
 
     def test_species_count_decreases_after_filtering(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Verify species count decreases after grade and zero filtering."""
@@ -513,8 +515,8 @@ class TestLipidSearchPipeline:
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
 
         # Filtering should typically reduce species count
-        if result.zero_filtered:
-            assert result.species_before_filter >= result.species_after_filter
+        assert result.zero_filtered
+        assert result.species_before_filter >= result.species_after_filter
 
     def test_explicit_format_specification(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Verify explicit format specification works correctly."""
@@ -587,8 +589,8 @@ class TestMSDIALPipeline:
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
 
         # Moderate filtering should keep more species
-        if result.cleaned_df is not None:
-            assert len(result.cleaned_df) > 0
+        assert result.cleaned_df is not None
+        assert len(result.cleaned_df) > 0
 
     def test_full_pipeline_msms_required(self, msdial_sample_df, msdial_experiment):
         """Test pipeline requiring MS/MS matching."""
@@ -606,7 +608,7 @@ class TestMSDIALPipeline:
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
 
         # Should work, may filter out species without MS/MS
-        assert result.is_valid or len(result.validation_errors) > 0
+        assert result.is_valid, result.validation_errors
 
     def test_full_pipeline_msms_not_required(self, msdial_sample_df, msdial_experiment):
         """Test pipeline without MS/MS requirement."""
@@ -624,8 +626,8 @@ class TestMSDIALPipeline:
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
 
         # Should keep more species without MS/MS requirement
-        if result.cleaned_df is not None:
-            assert len(result.cleaned_df) > 0
+        assert result.cleaned_df is not None
+        assert len(result.cleaned_df) > 0
 
     def test_full_pipeline_zero_filter_with_quality(self, msdial_sample_df, msdial_experiment):
         """Test combination of quality filtering and zero filtering."""
@@ -643,8 +645,8 @@ class TestMSDIALPipeline:
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
 
         # Both filters applied
-        if result.is_valid and result.cleaned_df is not None:
-            assert result.zero_filtered
+        assert result.is_valid and result.cleaned_df is not None
+        assert result.zero_filtered
 
     def test_output_structure(self, msdial_sample_df, msdial_experiment):
         """Verify output DataFrame has expected structure."""
@@ -656,11 +658,11 @@ class TestMSDIALPipeline:
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
 
-        if result.cleaned_df is not None:
-            assert 'LipidMolec' in result.cleaned_df.columns
-            assert 'ClassKey' in result.cleaned_df.columns
-            intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
-            assert len(intensity_cols) > 0
+        assert result.cleaned_df is not None
+        assert 'LipidMolec' in result.cleaned_df.columns
+        assert 'ClassKey' in result.cleaned_df.columns
+        intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
+        assert len(intensity_cols) > 0
 
     def test_explicit_format_specification(self, msdial_sample_df, msdial_experiment):
         """Verify explicit format specification works correctly."""
@@ -674,6 +676,7 @@ class TestMSDIALPipeline:
 
         # Should use the specified format
         assert result.detected_format == DataFormat.MSDIAL
+        assert result.is_valid, result.validation_errors
 
 
 # =============================================================================
@@ -719,6 +722,7 @@ class TestGenericPipeline:
 
         result = DataIngestionWorkflow.run(generic_sample_df, config)
 
+        assert result.is_valid, result.validation_errors
         assert not result.zero_filtered
 
     def test_output_structure(self, generic_sample_df, generic_experiment):
@@ -731,12 +735,12 @@ class TestGenericPipeline:
 
         result = DataIngestionWorkflow.run(generic_sample_df, config)
 
-        if result.cleaned_df is not None:
-            assert 'LipidMolec' in result.cleaned_df.columns
-            # ClassKey should be derived from LipidMolec
-            assert 'ClassKey' in result.cleaned_df.columns
-            intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
-            assert len(intensity_cols) > 0
+        assert result.cleaned_df is not None
+        assert 'LipidMolec' in result.cleaned_df.columns
+        # ClassKey should be derived from LipidMolec
+        assert 'ClassKey' in result.cleaned_df.columns
+        intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
+        assert len(intensity_cols) > 0
 
     def test_format_auto_detection(self, generic_sample_df, generic_experiment):
         """Test format auto-detection for Generic."""
@@ -760,10 +764,10 @@ class TestGenericPipeline:
 
         result = DataIngestionWorkflow.run(generic_sample_df, config)
 
-        if result.cleaned_df is not None:
-            # Should have intensity[] columns (standardized from sample[])
-            intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
-            assert len(intensity_cols) > 0
+        assert result.cleaned_df is not None
+        # Should have intensity[] columns (standardized from sample[])
+        intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
+        assert len(intensity_cols) > 0
 
 
 # =============================================================================
@@ -796,10 +800,10 @@ class TestMetabolomicsWorkbenchPipeline:
 
         result = DataIngestionWorkflow.run(mw_sample_df, config)
 
-        if result.cleaned_df is not None:
-            intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
-            # MW dataset has many samples
-            assert len(intensity_cols) > 10
+        assert result.cleaned_df is not None
+        intensity_cols = [c for c in result.cleaned_df.columns if c.startswith('intensity[')]
+        # MW dataset has many samples
+        assert len(intensity_cols) > 10
 
     def test_zero_filtering_with_many_samples(self, mw_sample_df, mw_experiment):
         """Test zero filtering across many samples."""
@@ -824,9 +828,9 @@ class TestMetabolomicsWorkbenchPipeline:
 
         result = DataIngestionWorkflow.run(mw_sample_df, config)
 
-        if result.cleaned_df is not None:
-            assert 'LipidMolec' in result.cleaned_df.columns
-            assert 'ClassKey' in result.cleaned_df.columns
+        assert result.cleaned_df is not None
+        assert 'LipidMolec' in result.cleaned_df.columns
+        assert 'ClassKey' in result.cleaned_df.columns
 
 
 # =============================================================================
@@ -1028,10 +1032,10 @@ class TestNormalizationInternalStandard:
         )
 
         # Standards should be removed
-        if result.normalized_df is not None:
-            standard_names = set(standards_df['LipidMolec'].tolist())
-            output_names = set(result.normalized_df['LipidMolec'].tolist())
-            assert len(standard_names & output_names) == 0
+        assert result.normalized_df is not None
+        standard_names = set(standards_df['LipidMolec'].tolist())
+        output_names = set(result.normalized_df['LipidMolec'].tolist())
+        assert len(standard_names & output_names) == 0
 
     def test_is_normalization_class_specific_standards(self, sample_data_with_standards, standards_df, intsta_concentrations, simple_experiment_2x2):
         """Test that each class uses its assigned standard."""
@@ -1119,11 +1123,11 @@ class TestNormalizationInternalStandard:
         )
 
         # Values should be normalized (divided by standard)
-        if result.normalized_df is not None:
-            conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
-            for col in conc_cols:
-                # All values should be positive
-                assert (result.normalized_df[col] >= 0).all()
+        assert result.normalized_df is not None
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        for col in conc_cols:
+            # All values should be positive
+            assert (result.normalized_df[col] >= 0).all()
 
     def test_is_normalization_with_lipidsearch_data(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Test IS normalization with real LipidSearch data."""
@@ -1134,45 +1138,45 @@ class TestNormalizationInternalStandard:
         )
         ingestion_result = DataIngestionWorkflow.run(lipidsearch_sample_df, ingestion_config)
 
-        if ingestion_result.internal_standards_df is not None and len(ingestion_result.internal_standards_df) > 0:
-            # Use auto-detected standards
-            standards_df = ingestion_result.internal_standards_df
-            available_classes = list(ingestion_result.cleaned_df['ClassKey'].unique())
-            standard_classes = list(standards_df['ClassKey'].unique())
+        assert ingestion_result.internal_standards_df is not None and len(ingestion_result.internal_standards_df) > 0
+        # Use auto-detected standards
+        standards_df = ingestion_result.internal_standards_df
+        available_classes = list(ingestion_result.cleaned_df['ClassKey'].unique())
+        standard_classes = list(standards_df['ClassKey'].unique())
 
-            # Build mapping for classes that have standards
-            mapping = {}
-            intsta_concs = {}
-            for cls in available_classes[:2]:  # Just test with 2 classes
-                for std_cls in standard_classes:
-                    if std_cls == cls:
-                        std_name = standards_df[standards_df['ClassKey'] == std_cls]['LipidMolec'].iloc[0]
-                        mapping[cls] = std_name
-                        intsta_concs[std_name] = 1.0
-                        break
-                else:
-                    # Use first standard if no class-specific one
-                    std_name = standards_df['LipidMolec'].iloc[0]
+        # Build mapping for classes that have standards
+        mapping = {}
+        intsta_concs = {}
+        for cls in available_classes[:2]:  # Just test with 2 classes
+            for std_cls in standard_classes:
+                if std_cls == cls:
+                    std_name = standards_df[standards_df['ClassKey'] == std_cls]['LipidMolec'].iloc[0]
                     mapping[cls] = std_name
                     intsta_concs[std_name] = 1.0
+                    break
+            else:
+                # Use first standard if no class-specific one
+                std_name = standards_df['LipidMolec'].iloc[0]
+                mapping[cls] = std_name
+                intsta_concs[std_name] = 1.0
 
-            if mapping:
-                norm_config = NormalizationWorkflowConfig(
-                    experiment=lipidsearch_experiment,
-                    normalization=NormalizationConfig(
-                        method='internal_standard',
-                        selected_classes=list(mapping.keys()),
-                        internal_standards=mapping,
-                        intsta_concentrations=intsta_concs
-                    ),
-                    data_format=DataFormat.LIPIDSEARCH
-                )
+        if mapping:
+            norm_config = NormalizationWorkflowConfig(
+                experiment=lipidsearch_experiment,
+                normalization=NormalizationConfig(
+                    method='internal_standard',
+                    selected_classes=list(mapping.keys()),
+                    internal_standards=mapping,
+                    intsta_concentrations=intsta_concs
+                ),
+                data_format=DataFormat.LIPIDSEARCH
+            )
 
-                result = NormalizationWorkflow.run(
-                    ingestion_result.cleaned_df, norm_config, standards_df
-                )
+            result = NormalizationWorkflow.run(
+                ingestion_result.cleaned_df, norm_config, standards_df
+            )
 
-                assert result.success or len(result.validation_errors) > 0
+            assert result.success or len(result.validation_errors) > 0
 
 
 # =============================================================================
@@ -1242,11 +1246,11 @@ class TestNormalizationProtein:
 
         assert result.success
         # Concentration for s1 should be 100 (1000/10), s2 should be 50 (1000/20)
-        if result.normalized_df is not None:
-            pc_row = result.normalized_df[result.normalized_df['LipidMolec'] == 'PC(16:0_18:1)']
-            if len(pc_row) > 0:
-                assert abs(pc_row['concentration[s1]'].values[0] - 100.0) < 0.1
-                assert abs(pc_row['concentration[s2]'].values[0] - 50.0) < 0.1
+        assert result.normalized_df is not None
+        pc_row = result.normalized_df[result.normalized_df['LipidMolec'] == 'PC(16:0_18:1)']
+        if len(pc_row) > 0:
+            assert abs(pc_row['concentration[s1]'].values[0] - 100.0) < 0.1
+            assert abs(pc_row['concentration[s2]'].values[0] - 50.0) < 0.1
 
     def test_protein_normalization_varying_concentrations(self, simple_experiment_2x2):
         """Test protein normalization with varying concentrations."""
@@ -1276,8 +1280,8 @@ class TestNormalizationProtein:
 
         assert result.success
         # Higher concentration = lower normalized value
-        if result.normalized_df is not None:
-            assert result.normalized_df['concentration[s1]'].values[0] > result.normalized_df['concentration[s4]'].values[0]
+        assert result.normalized_df is not None
+        assert result.normalized_df['concentration[s1]'].values[0] > result.normalized_df['concentration[s4]'].values[0]
 
     def test_protein_normalization_with_class_filter(self, simple_experiment_2x2):
         """Test protein normalization with class filtering."""
@@ -1398,8 +1402,8 @@ class TestNormalizationBoth:
         )
 
         # Standard should be removed
-        if result.normalized_df is not None:
-            assert 'PC(15:0_18:1)(d7)' not in result.normalized_df['LipidMolec'].values
+        assert result.normalized_df is not None
+        assert 'PC(15:0_18:1)(d7)' not in result.normalized_df['LipidMolec'].values
 
     def test_both_normalization_output_structure(self, data_with_standards, standards_for_both, intsta_conc_for_both, simple_experiment_2x2):
         """Test output structure of combined normalization."""
@@ -1424,13 +1428,13 @@ class TestNormalizationBoth:
             data_with_standards, norm_config, standards_for_both
         )
 
-        if result.normalized_df is not None:
-            # Should have concentration columns
-            conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
-            assert len(conc_cols) == 4
-            # Should have LipidMolec and ClassKey
-            assert 'LipidMolec' in result.normalized_df.columns
-            assert 'ClassKey' in result.normalized_df.columns
+        assert result.normalized_df is not None
+        # Should have concentration columns
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        assert len(conc_cols) == 4
+        # Should have LipidMolec and ClassKey
+        assert 'LipidMolec' in result.normalized_df.columns
+        assert 'ClassKey' in result.normalized_df.columns
 
 
 # =============================================================================
@@ -1670,9 +1674,9 @@ class TestEdgeCases:
 
         result = DataIngestionWorkflow.run(partial_zeros_df, config)
 
-        if result.is_valid and result.cleaned_df is not None:
-            # Rows with all zeros should be filtered
-            assert result.species_removed_count >= 0
+        assert result.is_valid and result.cleaned_df is not None
+        # Rows with all zeros should be filtered
+        assert result.species_removed_count >= 0
 
     def test_nan_values_handling(self, nan_values_df, simple_experiment_2x2):
         """Test handling of NaN values in intensity columns."""
@@ -1685,7 +1689,7 @@ class TestEdgeCases:
         result = DataIngestionWorkflow.run(nan_values_df, config)
 
         # Should handle NaN values gracefully
-        assert result.is_valid or len(result.validation_errors) > 0
+        assert result.is_valid, result.validation_errors
 
     def test_duplicate_lipids_handling(self, duplicate_lipids_df, simple_experiment_2x2):
         """Test handling of duplicate lipid entries."""
@@ -1698,7 +1702,7 @@ class TestEdgeCases:
         result = DataIngestionWorkflow.run(duplicate_lipids_df, config)
 
         # Should process without crashing
-        assert result.is_valid or len(result.validation_errors) > 0
+        assert result.is_valid, result.validation_errors
 
     def test_standards_only_data(self, standards_only_df, simple_experiment_2x2):
         """Test data containing only internal standards."""
@@ -1711,7 +1715,7 @@ class TestEdgeCases:
         result = DataIngestionWorkflow.run(standards_only_df, config)
 
         # Should process and detect all as standards
-        assert result.is_valid or len(result.validation_errors) > 0
+        assert result.is_valid, result.validation_errors
 
     def test_mixed_standards_data(self, mixed_standards_df, simple_experiment_2x2):
         """Test data with mix of regular lipids and standards."""
@@ -1725,8 +1729,8 @@ class TestEdgeCases:
 
         assert result.is_valid
         # Some should be detected as standards
-        if result.internal_standards_df is not None:
-            assert len(result.internal_standards_df) >= 0
+        assert result.internal_standards_df is not None
+        assert len(result.internal_standards_df) >= 0
 
     def test_very_large_intensity_values(self, simple_experiment_2x2):
         """Test handling of very large intensity values."""
@@ -1890,7 +1894,7 @@ class TestErrorHandling:
         result = DataIngestionWorkflow.run(empty_df, config)
 
         # Should fail validation
-        assert not result.is_valid or len(result.validation_errors) > 0
+        assert not result.is_valid and result.validation_errors
 
     def test_missing_lipidmolec_column(self, simple_experiment_2x2):
         """Test handling of missing LipidMolec column."""
@@ -1911,9 +1915,8 @@ class TestErrorHandling:
 
         result = DataIngestionWorkflow.run(data, config)
 
-        # This might succeed if the first column is used as LipidMolec
-        # or it might fail - either is acceptable error handling
-        assert result.is_valid or len(result.validation_errors) > 0
+        assert not result.is_valid
+        assert any('LipidMolec' in e for e in result.validation_errors)
 
     def test_sample_count_mismatch(self, simple_experiment_2x2):
         """Test handling of sample count mismatch."""
@@ -2029,10 +2032,9 @@ class TestErrorHandling:
 
         result = DataIngestionWorkflow.run(all_zeros_df, config)
 
-        # All rows should be filtered out
-        if result.is_valid:
-            # Either empty result or all removed
-            assert result.cleaned_df is None or len(result.cleaned_df) == 0 or result.species_removed_count == len(all_zeros_df)
+        # Nothing non-zero to analyse: rejected at cleaning
+        assert not result.is_valid
+        assert any('non-zero' in e for e in result.validation_errors)
 
     def test_ingestion_error_prevents_normalization(self, simple_experiment_2x2):
         """Test that ingestion errors prevent subsequent normalization."""

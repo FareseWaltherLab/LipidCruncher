@@ -525,7 +525,9 @@ class TestBoundary:
         assert scatter_traces[0].marker.color == 'blue'
 
     def test_cov_exactly_at_threshold(self):
-        """Value exactly at threshold should be <= (blue)."""
+        """Value exactly at the threshold is drawn red, like the filter that
+        removes CoV >= threshold (regression: it was drawn blue, i.e. shown as
+        reliable and then removed)."""
         fig, _ = BQCPlotterService.create_cov_scatter_plot_with_threshold(
             np.array([1.0]),
             np.array([30.0]),
@@ -534,7 +536,7 @@ class TestBoundary:
         )
         scatter_traces = [t for t in fig.data if isinstance(t, go.Scatter)]
         assert len(scatter_traces) == 1
-        assert scatter_traces[0].marker.color == 'blue'
+        assert scatter_traces[0].marker.color == 'red'
 
     def test_two_bqc_samples_minimum(self):
         df = pd.DataFrame({
@@ -585,3 +587,4 @@ class TestMarkerStyling:
     def test_threshold_coloring_preserved(self):
         fig = self._cov_figure()
         assert [t.marker.color for t in fig.data] == ['blue', 'red']
+

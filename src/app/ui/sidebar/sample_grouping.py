@@ -12,7 +12,6 @@ from typing import List, Optional, Tuple
 import streamlit as st
 import pandas as pd
 
-from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import FORMAT_MSDIAL
 from app.models.experiment import ExperimentConfig
 from app.services.sample_grouping import DatasetValidationResult, SampleGroupingService
@@ -85,23 +84,9 @@ def _invalidate_confirmation_if_grouping_changed() -> None:
         st.session_state.confirmed = False
 
 
-def _snapshot_bqc_widgets_to_preserved() -> None:
-    """Copy the live values of the BQC widgets into their ``_preserved_*``
-    shadows. The save line inside ``display_bqc_section`` only runs when
-    grouping is complete; while the user is mid-regroup the BQC section
-    is skipped, Streamlit drops the un-rendered widget keys at the end
-    of the run, and the next render of the BQC section would otherwise
-    fall back to the hard-coded default of 'No'. Calling this at the
-    top of ``display_sample_grouping`` (before any short-circuit return)
-    keeps the shadow in sync with whatever the user last picked."""
-    if 'bqc_radio' in st.session_state:
-        st.session_state['_preserved_bqc_radio'] = (
-            st.session_state['bqc_radio']
-        )
-    if 'bqc_label_radio' in st.session_state:
-        st.session_state['_preserved_bqc_label_radio'] = (
-            st.session_state['bqc_label_radio']
-        )
+def _sample_label(column: str) -> str:
+    """'intensity[s3]' -> 's3'."""
+    return column[len('intensity['):-1]
 
 
 def _detected_sample_column_names() -> List[str]:
@@ -220,6 +205,7 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
         return _handle_manual_regrouping(df, group_df, experiment)
     else:
         st.session_state.grouping_complete = True
+        st.session_state.regroup_origin = None
         # Restore the original pre-regrouping DataFrame if user previously
         # reshuffled samples.  A simple reindex is insufficient because
         # regrouping renames columns (e.g. intensity[s4] → intensity[s1]),
@@ -227,14 +213,9 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
         # underneath differs.
         if st.session_state.get('_pre_regroup_df') is not None:
             df = st.session_state['_pre_regroup_df'].copy()
-            # Commit the restored ordering to standardized_df now, not just
-            # to the local df. The grouping-radio toggle popped
-            # confirm_checkbox, so display_sample_grouping will return
-            # (None, None) this run and skip its usual
-            # `standardized_df = updated_df` write. Without this line the
-            # next rerun reads df = standardized_df (still the regrouped
-            # version), the user's re-check of Confirm Inputs re-commits
-            # the regrouped data, and the original ordering is lost.
+            # Commit the restored data now: if Confirm is unchecked this run,
+            # display_sample_grouping returns before writing standardized_df,
+            # and the next run would regroup-restore from the regrouped frame.
             st.session_state.standardized_df = df
             # Clean up regrouping state so it doesn't persist
             del st.session_state['_pre_regroup_df']
@@ -336,6 +317,10 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
             st.session_state.get('_pre_regroup_sample_names'),
             regroup_result.old_to_new,
         )
+        st.session_state.regroup_origin = {
+            _sample_label(new): _sample_label(old)
+            for old, new in regroup_result.old_to_new.items()
+        }
         st.session_state.grouping_complete = True
         st.sidebar.write("New sample order after regrouping:")
         st.sidebar.dataframe(regroup_result.name_df, width='stretch')
@@ -400,9 +385,18 @@ def _display_sample_exclusion(
     nothing is excluded, None when the selection is invalid. Also keeps
     ``processing_sample_names`` in step with the renumbered survivors.
     """
-    restored = StreamlitAdapter.restore_widget_value(
-        'exclude_samples', '_preserved_excluded_samples', []
-    )
+    # Exclusions are kept by the sample's upload label, so a regroup that
+    # renumbers samples keeps excluding the same samples. When the regroup
+    # changed since they were saved, the widget's labels are stale: drop its
+    # key so it re-renders from the translated selection.
+    regroup_origin = st.session_state.get('regroup_origin') or {}
+    to_label = {origin: label for label, origin in regroup_origin.items()}
+    if (st.session_state.get('_preserved_excluded_regroup_origin') or {}) != regroup_origin:
+        st.session_state.pop('exclude_samples', None)
+    restored = st.session_state.get('exclude_samples', [
+        to_label.get(origin, origin)
+        for origin in st.session_state.get('_preserved_excluded_samples') or []
+    ])
     valid_restored = [s for s in restored if s in experiment.full_samples_list]
     with st.sidebar.expander('🚫 Exclude Samples (optional)', expanded=bool(valid_restored)):
         excluded = st.multiselect(
@@ -418,17 +412,28 @@ def _display_sample_exclusion(
             ),
             key='exclude_samples',
         )
-        StreamlitAdapter.save_widget_value('exclude_samples', '_preserved_excluded_samples')
+        st.session_state['_preserved_excluded_samples'] = [
+            regroup_origin.get(s, s) for s in excluded
+        ]
+        st.session_state['_preserved_excluded_regroup_origin'] = regroup_origin
 
         names = st.session_state.get('sample_names')
+        upload_label = st.session_state.get('regroup_origin') or {}
         if not excluded:
             st.session_state.processing_sample_names = names
+            st.session_state.processing_origin = {
+                s: upload_label.get(s, s) for s in experiment.full_samples_list
+            }
             return experiment, df
         try:
             result = SampleGroupingService.exclude_samples(df, experiment, excluded)
         except ValueError as e:
             st.error(str(e))
             return None
+        st.session_state.processing_origin = {
+            _sample_label(new): upload_label.get(_sample_label(old), _sample_label(old))
+            for old, new in result.old_to_new.items()
+        }
         st.session_state.processing_sample_names = remap_names_after_regroup(
             names, result.old_to_new
         )
@@ -452,11 +457,8 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     Returns:
         Tuple of (experiment, bqc_label) or (None, None) if not confirmed
     """
-    # Run before any short-circuit return below: shadow the BQC widget
-    # values so they survive a rerun where the BQC section is skipped,
-    # and clear the Confirm Inputs checkbox if the grouping radio just
-    # changed.
-    _snapshot_bqc_widgets_to_preserved()
+    # Run before any short-circuit return below: clear the Confirm Inputs
+    # checkbox if the grouping radio or a sample multiselect just changed.
     _invalidate_confirmation_if_grouping_changed()
 
     # Detect sample columns

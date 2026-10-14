@@ -16,9 +16,9 @@ from .msdial import MSDIALCleaner
 from .generic import GenericCleaner
 
 
-# Registry mapping DataFormat to cleaning function.
-# Each entry is a callable(df, experiment, **kwargs) -> Tuple[DataFrame, List[str]].
-# Adding a new format only requires adding an entry here.
+# Registry mapping DataFormat to its cleaner class; dispatch calls
+# cleaner_cls.clean(df, experiment, ...). A new format also needs its
+# DataFormat value and an entry in constants.FORMAT_OPTIONS.
 _CLEANER_REGISTRY: Dict[DataFormat, type] = {
     DataFormat.LIPIDSEARCH: LipidSearchCleaner,
     DataFormat.MSDIAL: MSDIALCleaner,

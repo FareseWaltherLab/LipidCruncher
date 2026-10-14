@@ -695,6 +695,18 @@ class TestLipidSearchCleanerBasic:
         assert 'CalcMass' in cleaned.columns
         assert 'BaseRt' in cleaned.columns
 
+    def test_clean_removes_all_zero_rows(self, lipidsearch_df, simple_experiment_2x2):
+        """Regression: the LipidSearch pipeline skipped the all-zero-row step
+        the Generic and MS-DIAL cleaners run, so an all-zero species (e.g. a
+        standard that was not spiked) survived cleaning for LipidSearch only."""
+        df = lipidsearch_df.copy()
+        for col in [c for c in df.columns if c.startswith('intensity[')]:
+            df.loc[1, col] = 0.0
+        cleaned, messages = LipidSearchCleaner.clean(df, simple_experiment_2x2)
+        assert 'PE 18:0_20:4' not in cleaned['LipidMolec'].tolist()
+        assert len(cleaned) == 2
+        assert any('all-zero' in m for m in messages)
+
     def test_clean_strips_extended_export_columns(self, simple_experiment_2x2):
         """Extended LipidSearch exports (Org*/Mean*/Conc*/Std*/Rsd* plus extra
         metadata columns) must be projected down to canonical metadata +
@@ -794,15 +806,19 @@ class TestLipidSearchGradeFiltering:
     """Tests for grade filtering in LipidSearch."""
 
     def test_default_grade_filter(self):
-        """Test default grade filtering (A, B, C)."""
+        """Default: A/B for every class, plus C only for LPC and SM (docs S2).
+
+        Regression: the grade-filter step defaulted to A/B/C for every class
+        and AUC selection then dropped the C rows of other classes, so the
+        grade-filter message under-reported what grade filtering removed.
+        """
         df = pd.DataFrame({
-            'LipidMolec': ['PC1', 'PC2', 'PC3', 'PC4'],
-            'ClassKey': ['PC', 'PC', 'PC', 'PC'],
-            'TotalGrade': ['A', 'B', 'C', 'D'],
+            'LipidMolec': ['PC1', 'PC2', 'PC3', 'PC4', 'LPC1', 'SM1', 'LPC2'],
+            'ClassKey': ['PC', 'PC', 'PC', 'PC', 'LPC', 'SM', 'LPC'],
+            'TotalGrade': ['A', 'B', 'C', 'D', 'C', 'C', 'D'],
         })
         result = LipidSearchCleaner._apply_grade_filter(df)
-        assert len(result) == 3
-        assert 'D' not in result['TotalGrade'].values
+        assert sorted(result['LipidMolec']) == ['LPC1', 'PC1', 'PC2', 'SM1']
 
     def test_custom_grade_filter(self):
         """Test custom grade filtering."""
@@ -978,30 +994,6 @@ class TestLipidSearchAUCSelection:
         })
         result = LipidSearchCleaner._select_best_auc(df, simple_experiment_2x2)
         assert len(result) == 2
-
-    def test_select_best_row_nan_grade_deprioritized(self):
-        """Test that NaN TotalGrade is deprioritized over any valid grade."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', 'PC(16:0)'],
-            'TotalGrade': [float('nan'), 'D'],
-            'TotalSmpIDRate(%)': [100.0, 100.0],
-            'intensity[s1]': [1000, 2000],
-        })
-        result = LipidSearchCleaner._select_best_row(df)
-
-        assert result['intensity[s1]'] == 2000  # Grade D selected, not NaN
-
-    def test_select_best_row_all_nan_grades(self):
-        """Test that all-NaN grades still selects a row without error."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)', 'PC(16:0)'],
-            'TotalGrade': [float('nan'), float('nan')],
-            'TotalSmpIDRate(%)': [100.0, 100.0],
-            'intensity[s1]': [1000, 2000],
-        })
-        result = LipidSearchCleaner._select_best_row(df)
-
-        assert result['LipidMolec'] == 'PC(16:0)'  # Returns a valid row
 
 
 # =============================================================================

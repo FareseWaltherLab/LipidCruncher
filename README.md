@@ -25,7 +25,7 @@ Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/fare
 ## 🚀 How It Works
 
 ### Step 1: Standardize, Filter & Normalize
-Import your data, define experimental conditions, and apply automatic standardization, filtering, and normalization (internal standards, protein concentration, or both). Internal standards consistency plots verify sample prep quality.
+Import your data, define experimental conditions, and apply automatic standardization, filtering, and normalization (internal standards, protein concentration, both, or total intensity). Internal standards consistency plots verify sample prep quality.
 
 ### Step 2: Quality Check & Analysis
 Validate your data with box plots, BQC coefficient-of-variation analysis, correlation heatmaps, and PCA—then explore results with bar/pie charts, volcano plots, saturation profiles, chain length distributions, metabolic pathway maps, clustered heatmaps, and fatty acid composition analysis. All on a single integrated page.
@@ -37,7 +37,7 @@ A parallel workflow for stable isotope tracing experiments. Upload IsoCorrectoR'
 
 ## 🧪 Try It Out
 
-**No dataset?** Click "Load Sample Data" in the app to instantly try LipidCruncher with built-in test datasets for all supported formats (LipidSearch, MS-DIAL, Generic). No download required.
+**No dataset?** Click "Load Sample Data" in the app to instantly try LipidCruncher with built-in test datasets for all supported formats (LipidSearch, MS-DIAL, Generic, Metabolomics Workbench). No download required.
 
 Sample datasets are also available in the [sample_datasets](https://github.com/FareseWaltherLab/LipidCruncher/tree/main/sample_datasets) folder.
 
@@ -57,7 +57,7 @@ pip install -r requirements-dev.txt   # tests and lint (optional)
 streamlit run src/main_app.py
 ```
 
-**System requirement:** Install [Poppler](https://github.com/oschwartz10612/poppler-windows/releases) for PDF export.
+**System requirement:** Install [Poppler](https://github.com/oschwartz10612/poppler-windows/releases) for the landing-page module images (PDF report export uses kaleido, installed with the Python requirements).
 - Ubuntu/Debian: `sudo apt-get install poppler-utils`
 - macOS: `brew install poppler`
 
@@ -107,9 +107,9 @@ src/
         ├── main_content/        #   Processing, QC, analysis, and LSI report views
         └── content/             #   Static documentation text
 tests/
-├── unit/                        # 42 service & model tests
-├── integration/                 # 4 end-to-end pipeline tests
-└── ui/                          # 5 UI component tests
+├── unit/                        # service, workflow, adapter & model tests
+├── integration/                 # end-to-end pipeline tests
+└── ui/                          # Streamlit AppTest UI tests
 ```
 
 For detailed developer documentation, see `CODEBASE.md`.
@@ -134,8 +134,8 @@ pytest tests/ --cov=src/app --cov-report=term-missing
 ## 📦 Dependencies
 
 **Core:** streamlit, pandas, numpy, scipy, scikit-learn, statsmodels  
-**Visualization:** plotly, matplotlib, seaborn, bokeh, kaleido  
-**Documents:** pillow, reportlab, svglib, pdf2image, openpyxl
+**Visualization:** plotly, matplotlib, seaborn, kaleido  
+**Documents:** pillow, reportlab, pdf2image
 
 See `requirements.txt` for versions.
 

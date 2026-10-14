@@ -22,6 +22,7 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_labels import labeler, names_for
+from app.ui.st_helpers import dataset_widget_key
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,17 @@ def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes
 # Helper Functions - Protein Configuration
 # =============================================================================
 
+def _protein_key(sample: str) -> str:
+    """Widget/storage key for a sample's protein amount.
+
+    Keyed by where the sample sits in the uploaded file, not by its current
+    s-label: sidebar regroup and exclusion renumber samples, and an amount
+    keyed by label would then belong to a different sample.
+    """
+    origin = st.session_state.get('processing_origin') or {}
+    return origin.get(sample, sample)
+
+
 def _display_bulk_protein_fill(sample_names: list) -> None:
     """Display an amount box and a button that fills every sample with it.
 
@@ -185,7 +197,7 @@ def _display_bulk_protein_fill(sample_names: list) -> None:
         st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
         if st.button("Apply to all", key="protein_apply_all"):
             for sample in sample_names:
-                st.session_state[f"protein_{sample}"] = float(bulk_amount)
+                st.session_state[f"protein_{_protein_key(sample)}"] = float(bulk_amount)
             st.success(f"Applied {bulk_amount:g} to all {len(sample_names)} samples.")
 
 
@@ -194,7 +206,7 @@ def _display_manual_protein_input(sample_names: list) -> dict:
 
     Returns protein_concentrations dict.
     """
-    # Get preserved protein data for restoring values
+    # Get preserved protein data (keyed like the widgets) for restoring values
     preserved_protein_df = st.session_state.get('protein_df')
     preserved_values = {}
     if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
@@ -205,9 +217,9 @@ def _display_manual_protein_input(sample_names: list) -> dict:
 
     # Initialize session state for all samples BEFORE widgets render
     for sample in sample_names:
-        widget_key = f"protein_{sample}"
+        widget_key = f"protein_{_protein_key(sample)}"
         if widget_key not in st.session_state:
-            st.session_state[widget_key] = float(preserved_values.get(sample, 1.0))
+            st.session_state[widget_key] = float(preserved_values.get(_protein_key(sample), 1.0))
 
     # Bulk fill, for the common case where every sample was prepared at the
     # same protein amount. Rendered before the grid so the per-sample widgets
@@ -226,11 +238,13 @@ def _display_manual_protein_input(sample_names: list) -> dict:
                 min_value=0.0,
                 max_value=1000000.0,
                 step=0.1,
-                key=f"protein_{sample}"
+                key=f"protein_{_protein_key(sample)}"
             )
             protein_concentrations[sample] = concentration
 
-    st.session_state.protein_df = protein_concentrations.copy()
+    st.session_state.protein_df = {
+        _protein_key(s): c for s, c in protein_concentrations.items()
+    }
     return protein_concentrations
 
 
@@ -243,7 +257,9 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
 
     preserved_protein_df = st.session_state.get('protein_df')
 
-    uploaded_file = st.file_uploader("Upload CSV", type="csv", key="protein_csv_upload")
+    uploaded_file = st.file_uploader(
+        "Upload CSV", type="csv", key=dataset_widget_key("protein_csv_upload"),
+    )
 
     if uploaded_file is not None:
         try:
@@ -263,7 +279,9 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
                 return None
 
             protein_concentrations = dict(zip(sample_names, csv_df['Concentration'].tolist()))
-            st.session_state.protein_df = protein_concentrations.copy()
+            st.session_state.protein_df = {
+                _protein_key(s): c for s, c in protein_concentrations.items()
+            }
             st.success(f"✓ Loaded {len(protein_concentrations)} concentration values")
             return protein_concentrations
 
@@ -296,9 +314,10 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
 
     # No new file uploaded - check preserved data
     if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
-        if len(preserved_protein_df) == len(sample_names):
+        keys = [_protein_key(s) for s in sample_names]
+        if len(preserved_protein_df) == len(sample_names) and all(k in preserved_protein_df for k in keys):
             st.success(f"✓ Using previously loaded {len(preserved_protein_df)} concentration values")
-            return preserved_protein_df
+            return {s: preserved_protein_df[k] for s, k in zip(sample_names, keys)}
 
     st.info("Please upload a CSV file with protein concentrations.")
     return None
@@ -333,7 +352,7 @@ def _display_protein_config(experiment: ExperimentConfig) -> dict:
             if 'protein_df' in st.session_state:
                 del st.session_state.protein_df
             for sample in sample_names:
-                widget_key = f"protein_{sample}"
+                widget_key = f"protein_{_protein_key(sample)}"
                 if widget_key in st.session_state:
                     del st.session_state[widget_key]
 

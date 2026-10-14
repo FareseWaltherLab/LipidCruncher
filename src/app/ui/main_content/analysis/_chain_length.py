@@ -8,6 +8,7 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
+    _clear_pdf_plots,
     _display_condition_class_selectors,
 )
 
@@ -16,6 +17,7 @@ def _display_chain_length_plots(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display chain length and double bond distribution bubble charts."""
+    _clear_pdf_plots('chain_length')
     with st.expander(
         "Class Level Breakdown - Chain Length Distribution", expanded=False
     ):

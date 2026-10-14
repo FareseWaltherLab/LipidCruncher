@@ -152,7 +152,7 @@ def _display_modules_overview() -> None:
     st.markdown("""
     **Get your data analysis-ready in minutes.** Import data from LipidSearch, MS-DIAL, Metabolomics Workbench, or a generic CSV format.
     Define your experiment by assigning samples to conditions, then apply automatic column standardization,
-    filtering (duplicates, empty rows, zero values), and flexible normalization (internal standards, protein concentration, or both).
+    filtering (duplicates, empty rows, zero values), and flexible normalization (internal standards, protein concentration, both, or total intensity).
     Internal standards consistency plots help verify sample preparation and instrument performance.
     """)
     load_module_image('module1.pdf')

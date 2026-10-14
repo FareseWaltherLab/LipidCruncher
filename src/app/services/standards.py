@@ -698,6 +698,20 @@ class StandardsService:
                 f"Your main dataset has {len(expected_intensity_cols)} samples."
             )
 
+        # _standardize_columns renames only as many value columns as there are
+        # samples; any left under their original names are surplus.
+        surplus_cols = [
+            col for col in standards_df.columns
+            if col not in ('LipidMolec', 'ClassKey') and not col.startswith('intensity[')
+        ]
+        if surplus_cols:
+            raise ValueError(
+                f"Standards file has {len(uploaded_intensity_cols) + len(surplus_cols)} "
+                f"intensity columns but your main dataset has {len(expected_intensity_cols)} "
+                "samples. Give one column per sample, in the order of the samples shown "
+                "in the sidebar (s1, s2, ...); if you excluded samples, remove their columns."
+            )
+
         # Select and order columns
         result_cols = ['LipidMolec', 'ClassKey'] + expected_intensity_cols
         available_cols = [c for c in result_cols if c in standards_df.columns]

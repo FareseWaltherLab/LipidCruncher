@@ -6,7 +6,9 @@ This module contains:
   (auto-detect, upload custom, view consistency plots)
 """
 
+import hashlib
 import logging
+from typing import Dict, Optional
 
 import streamlit as st
 import pandas as pd
@@ -15,7 +17,7 @@ from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_COMPLETE_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
-from app.ui.st_helpers import keep_intsta_expander_open, INTSTA_EXPANDER_KEY
+from app.ui.st_helpers import dataset_widget_key, keep_intsta_expander_open, INTSTA_EXPANDER_KEY
 from app.ui.sample_labels import names_for
 
 logger = logging.getLogger(__name__)
@@ -294,6 +296,22 @@ def _display_custom_upload(
         st.session_state.custom_standards_df = None
         st.session_state.custom_standards_mode = None
 
+    # A complete table's columns are mapped to samples by position. If the
+    # sidebar has renumbered the samples since it was loaded, that mapping no
+    # longer holds: drop the table, and key the uploader to the sample set so
+    # a file still in it is not silently re-mapped onto the new order.
+    sample_set = _sample_set_id(st.session_state.get('processing_origin'))
+    if (st.session_state.custom_standards_df is not None and
+            st.session_state.custom_standards_sample_set not in (None, sample_set)):
+        st.session_state.custom_standards_df = None
+        st.session_state.custom_standards_mode = None
+        st.session_state.custom_standards_sample_set = None
+        st.warning(
+            "Samples were regrouped or excluded in the sidebar after the standards "
+            "table was loaded, so its columns no longer line up with the samples. "
+            "Please upload it again with one column per sample in the current order."
+        )
+
     # Format guidance
     st.markdown(STANDARDS_COMPLETE_HELP)
 
@@ -301,7 +319,7 @@ def _display_custom_upload(
     uploaded_file = st.file_uploader(
         "Upload standards CSV",
         type=['csv'],
-        key="standards_file_uploader",
+        key=f"{dataset_widget_key('standards_file_uploader')}_{sample_set}",
         on_change=_latch_expander_open,
     )
 
@@ -321,6 +339,11 @@ def _display_custom_upload(
     # active until they upload (or switch back to Automatic Detection).
     st.info("Upload a standards CSV, or switch to Automatic Detection to use detected standards.")
     return pd.DataFrame()
+
+
+def _sample_set_id(origin: Optional[Dict[str, str]]) -> str:
+    """Short id of which uploaded sample sits under each Module 1 label."""
+    return hashlib.sha1(repr(list((origin or {}).items())).encode()).hexdigest()[:10]
 
 
 def _display_preserved_custom_standards() -> pd.DataFrame:
@@ -370,6 +393,9 @@ def _process_uploaded_standards(
 
         st.session_state.custom_standards_df = result.standards_df
         st.session_state.custom_standards_mode = current_mode
+        st.session_state.custom_standards_sample_set = _sample_set_id(
+            st.session_state.get('processing_origin')
+        )
 
         # For external standards, remove them from main dataset if present
         if not use_extract_mode:
@@ -450,6 +476,9 @@ def display_manage_internal_standards(
         The active internal standards DataFrame to use for normalization
     """
     active_standards_df = pd.DataFrame()
+    # The consistency plots below repopulate this when they render; with no
+    # active standards they are skipped, and the PDF must not keep old ones.
+    st.session_state.standards_consistency_figs = []
 
     # Keep the expander open once the user starts configuring standards, so a
     # rerun from any widget in this section doesn't collapse it mid-task.
@@ -509,7 +538,6 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
         # Show consistency plots if we have standards and experiment config
         if (active_standards_df is not None and
             not active_standards_df.empty and
-            'experiment' in st.session_state and
             st.session_state.experiment is not None):
             display_standards_consistency_plots(
                 intsta_df=active_standards_df,

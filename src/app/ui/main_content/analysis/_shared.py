@@ -17,6 +17,53 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.st_helpers import section_header
 
 
+def _skipped_tests_message(params: dict) -> Optional[str]:
+    """Say how many tests were skipped, counting what was actually tested.
+
+    Species-level results count lipids (n_lipids_total / n_lipids_skipped,
+    with reasons); saturation results count class × fatty-acid-type tests
+    (n_tests run, n_skipped).
+    """
+    if 'n_lipids_total' in params:
+        n_skipped = params.get('n_lipids_skipped', 0)
+        if not n_skipped:
+            return None
+        skip_parts = []
+        if params.get('n_skipped_insufficient_data'):
+            skip_parts.append(f"{params['n_skipped_insufficient_data']} had insufficient data (<2 values per group)")
+        if params.get('n_skipped_all_zero'):
+            skip_parts.append(f"{params['n_skipped_all_zero']} had all-zero values in one or both groups")
+        if params.get('n_skipped_test_error'):
+            skip_parts.append(f"{params['n_skipped_test_error']} failed the statistical test")
+        msg = f"{n_skipped} of {params['n_lipids_total']} lipids were skipped during testing"
+        if skip_parts:
+            msg += f" ({'; '.join(skip_parts)})"
+        return msg
+
+    n_skipped = params.get('n_skipped', 0)
+    if not n_skipped:
+        return None
+    total = params.get('n_tests', 0) + n_skipped
+    return (
+        f"{n_skipped} of {total} tests (lipid class × fatty-acid type) "
+        "were skipped during testing"
+    )
+
+
+def _clear_pdf_plots(*keys: str) -> None:
+    """Drop an analysis's figures from the PDF report before it re-renders.
+
+    Each analysis stores only the figures it actually draws, so a figure the
+    user can no longer see (classes deselected, plot type switched, an early
+    return) does not stay in the report. A key ending in '_' is a prefix.
+    """
+    plots = st.session_state.analysis_all_plots
+    prefixes = tuple(k for k in keys if k.endswith('_'))
+    for key in list(plots):
+        if key in keys or (prefixes and key.startswith(prefixes)):
+            del plots[key]
+
+
 def _display_statistical_options(
     key_prefix: str,
     n_classes: int,
@@ -180,22 +227,9 @@ def _display_detailed_statistics(
         st.dataframe(pd.DataFrame(rows), width='stretch')
 
     # Report skipped items
-    params = stat_summary.parameters or {}
-    n_skipped = params.get('n_lipids_skipped', 0) or params.get('n_skipped', 0)
-    if n_skipped:
-        skip_parts = []
-        if params.get('n_skipped_insufficient_data'):
-            skip_parts.append(f"{params['n_skipped_insufficient_data']} had insufficient data (<2 values per group)")
-        if params.get('n_skipped_all_zero'):
-            skip_parts.append(f"{params['n_skipped_all_zero']} had all-zero values in one or both groups")
-        if params.get('n_skipped_test_error'):
-            skip_parts.append(f"{params['n_skipped_test_error']} failed the statistical test")
-        detail = '; '.join(skip_parts) if skip_parts else ''
-        total = params.get('n_lipids_total', '?')
-        msg = f"{n_skipped} of {total} lipids were skipped during testing"
-        if detail:
-            msg += f" ({detail})"
-        st.info(msg)
+    skipped_msg = _skipped_tests_message(stat_summary.parameters or {})
+    if skipped_msg:
+        st.info(skipped_msg)
 
     # Post-hoc results
     if stat_summary.posthoc_results:

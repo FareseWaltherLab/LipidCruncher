@@ -124,10 +124,9 @@ class DataIngestionWorkflow:
             config: Ingestion configuration with experiment and settings
 
         Returns:
-            IngestionResult with all intermediate and final results
-
-        Raises:
-            ValueError: If input data is invalid or becomes empty after cleaning
+            IngestionResult with all intermediate and final results. Invalid
+            or empty input is reported as is_valid=False with
+            validation_errors, not raised.
         """
         result = IngestionResult(detected_format=DataFormat.UNKNOWN)
 

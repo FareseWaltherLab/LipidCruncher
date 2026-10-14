@@ -42,12 +42,12 @@ class ZeroFilterConfig:
 
     @classmethod
     def strict(cls) -> "ZeroFilterConfig":
-        """Create strict config (lower thresholds = keep more data)."""
+        """Create strict config (lower zero-fraction thresholds = remove more species)."""
         return cls(bqc_threshold=0.25, non_bqc_threshold=0.50)
 
     @classmethod
     def permissive(cls) -> "ZeroFilterConfig":
-        """Create permissive config (higher thresholds = remove more data)."""
+        """Create permissive config (higher zero-fraction thresholds = keep more species)."""
         return cls(bqc_threshold=0.75, non_bqc_threshold=0.90)
 
 

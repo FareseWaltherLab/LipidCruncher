@@ -152,7 +152,7 @@ class StatisticalTestingService:
 
         Args:
             groups_dict: Mapping of condition name → raw values array.
-            test_type: 'parametric' for Welch's ANOVA (Alexander-Govern),
+            test_type: 'parametric' for the Alexander-Govern test,
                        'non_parametric' for Kruskal-Wallis.
             auto_transform: If True, apply zero replacement + log10.
             global_small_value: Dataset-wide zero-replacement threshold.
@@ -193,7 +193,7 @@ class StatisticalTestingService:
         else:
             result = alexandergovern(*arrays)
             stat, p = result.statistic, result.pvalue
-            name = "Welch's ANOVA"
+            name = "Alexander-Govern"
 
         return StatisticalTestResult(
             test_name=name, statistic=float(stat), p_value=float(p)

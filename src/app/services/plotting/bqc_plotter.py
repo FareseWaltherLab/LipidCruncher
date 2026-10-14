@@ -185,8 +185,9 @@ class BQCPlotterService:
             '<extra></extra>'
         )
 
-        below = cov_df[cov_df['CoV'] <= cov_threshold]
-        above = cov_df[cov_df['CoV'] > cov_threshold]
+        # Same boundary as the filter, which removes CoV >= threshold.
+        below = cov_df[cov_df['CoV'] < cov_threshold]
+        above = cov_df[cov_df['CoV'] >= cov_threshold]
 
         if len(below) > 0:
             fig.add_trace(go.Scatter(

@@ -40,7 +40,7 @@ Both follow the same layering as the main pipeline; each adds one out-of-process
 
 ```bash
 # Create and activate virtual environment
-python -m venv lipidcruncher_env
+python3.11 -m venv lipidcruncher_env
 source lipidcruncher_env/bin/activate
 
 # Install dependencies
@@ -116,7 +116,7 @@ The two boundaries exist for opposite reasons. The sandbox child process contain
 - **Services and workflows are pure** — they have zero Streamlit dependencies, use only static methods, and are fully testable in isolation.
 - **Models are immutable** — Pydantic models with `frozen=True` make them hashable and safe for `@st.cache_data`.
 - **The adapter is the only bridge** — `StreamlitAdapter` is the sole point where Streamlit concerns (caching, session state) meet business logic.
-- **UI modules are thin** — they call adapter/workflow methods and render results; no data processing logic lives here.
+- **UI modules mostly render and collect input** — most logic lives in services and workflows, reached mostly through the adapter. Some orchestration still happens in `main_app.py` and the UI modules (the Module 1 step order and the zero-filtering call in `main_app.py`, the direct pathway plotter call in `analysis/_pathway.py`, picking the high-CoV lipids for the BQC filter in `quality_check.py`), and many UI modules import services or workflows directly.
 - **AI-generated code is untrusted** — every model output goes through `SandboxService` before execution. **The security boundary is the child process**, not the parser: code runs via `sandbox_runner.py` with no inherited environment, no filesystem writes, no network, no subprocesses, and a hard kill on timeout. The AST validator and curated builtins run in front of it as defense-in-depth, never as the boundary on their own.
 
 ---
@@ -126,6 +126,7 @@ The two boundaries exist for opposite reasons. The sandbox child process contain
 ```
 LipidCruncher/
 ├── src/
+│   ├── images/                              # UI assets (logo, module PDFs)
 │   ├── main_app.py                          # Entry point (enum-based page routing)
 │   └── app/
 │       ├── constants.py                     # Shared constants, enums, format mappings
@@ -214,6 +215,8 @@ LipidCruncher/
 │           ├── zero_filtering.py
 │           ├── standards_plots.py
 │           ├── download_utils.py
+│           ├── sample_labels.py             #   Sidebar switch: original sample names vs s1, s2, ... app-wide
+│           ├── sample_names.py              #   Sample display-name mapping helpers (pure logic)
 │           ├── st_helpers.py                #   Shared UI helpers (export buttons, section headers)
 │           ├── ai_studio_page.py            #   Standalone AI Studio page (4 tabs + sidebar data controls)
 │           ├── ai_chat/                     #   AI chat panels (per-tab UI)
@@ -263,16 +266,15 @@ LipidCruncher/
 │   └── ai_feedback_records.py               #   Pure join/parse helpers used by the viewer (unit-tested)
 ├── tests/
 │   ├── conftest.py                          # Shared fixtures
-│   ├── unit/                                # 64 unit test modules (incl. AI chat models, sandbox isolation, codebase tools, transformer, viz generator, schema extractor, scope, validation, adapter, workflow)
-│   ├── integration/                         # 6 integration test modules (incl. test_ai_tool_use.py, test_isotope_tracing_golden.py)
-│   └── ui/                                  # 10 UI test modules (incl. test_navigation.py for AI Studio routing)
+│   ├── unit/                                # Unit tests
+│   ├── integration/                         # Integration tests
+│   └── ui/                                  # UI tests (Streamlit AppTest)
 ├── sample_datasets/                         # Test data (one per format)
 │   ├── lipidsearch5_test_dataset.csv
 │   ├── msdial_test_dataset.csv
 │   ├── generic_test_dataset.csv
 │   ├── mw_test_dataset.csv
 │   └── isotope_tracing/                     # IsoCorrectoR inputs + golden output
-├── images/                                  # UI assets (logo, module PDFs)
 ├── .streamlit/config.toml                   # Server settings (upload cap: maxUploadSize = 1024 MB)
 ├── requirements.txt
 ├── pytest.ini
@@ -289,11 +291,11 @@ The app has four pages: a **landing page**, the **main app page**, an **AI Studi
 ### Module 1: Data Cleaning, Filtering, & Normalization
 
 ```
-CSV Upload → Format Detection → Column Standardization → Data Cleaning
+Format Selection → CSV Upload → Column Standardization → Data Cleaning
     → Zero Filtering → Internal Standards Management → Normalization
 ```
 
-1. **Format detection** — auto-detects or user selects the input format.
+1. **Format selection** — the user picks the input format in the sidebar dropdown; `resolve_format_enum()` (`constants.py`) maps it to a `DataFormat`. Detection only drives a sidebar warning when the file looks like a different format.
 2. **Column standardization** — maps format-specific column names (e.g., `MeanArea[s1]`) to standard names (`intensity[s1]`).
 3. **Data cleaning** — format-specific pipeline (grade filtering for LipidSearch, score filtering for MS-DIAL, basic cleanup for Generic).
 4. **Zero filtering** — removes lipid species with excessive missing values (configurable thresholds).
@@ -320,7 +322,7 @@ Box Plots → BQC Assessment → Retention Time → Correlation → PCA
 Bar Charts | Pie Charts | Saturation | Chain Length | FACH | Pathway | Volcano | Heatmap
 ```
 
-Each analysis type is independent and user-selectable. All produce interactive plots with export options (SVG, CSV, PDF).
+Each analysis type is independent and user-selectable. All produce interactive plots with SVG and CSV export, and every analysis shown is included in the PDF report.
 
 ### AI Studio (separate page)
 
@@ -393,11 +395,11 @@ Domain-specific subclasses exist in `data_cleaning/exceptions.py` (`DataCleaning
 | Class | Purpose |
 |---|---|
 | `BaseDataCleaner` | Common utilities: lipid column detection, numeric conversion, internal standard extraction (regex-based), lipid name validation. |
-| `LipidSearchCleaner` | Grade-based filtering (A/B/C/D per class), AUC deduplication (highest abundance), column standardization (`MeanArea[*]` → `intensity[*]`). |
+| `LipidSearchCleaner` | Grade-based filtering (A/B/C/D per class), best-peak deduplication (best grade, then highest TotalSmpIDRate(%)), column standardization (`MeanArea[*]` → `intensity[*]`). |
 | `MSDIALCleaner` | Score threshold filtering, optional MS/MS requirement, deduplication by highest score, sample column auto-detection. |
 | `GenericCleaner` | Basic cleanup: invalid lipid removal, zero column check, standard extraction. Used for Generic and Metabolomics Workbench formats. |
 
-Configuration dataclasses: `GradeFilterConfig` (per-class grade selections), `QualityFilterConfig` (score threshold, MS/MS flag). Results returned as `CleaningResult` dataclass.
+Configuration models (frozen Pydantic): `GradeFilterConfig` (per-class grade selections), `QualityFilterConfig` (score threshold, MS/MS flag). Results returned as `CleaningResult` dataclass.
 
 Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`: `DataCleaningService.clean_data()` looks up the format in `_CLEANER_REGISTRY` (a `Dict[DataFormat, type]` mapping) and delegates to the appropriate cleaner. Adding a new format requires only a registry entry and a new cleaner class.
 
@@ -405,11 +407,11 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 
 | Service | File | Purpose |
 |---|---|---|
-| `FormatDetectionService` | `format_detection.py` | Auto-detects `DataFormat` enum from column signatures. Checks most-specific format first (LipidSearch → MS-DIAL → Metabolomics Workbench → Generic). |
+| `FormatDetectionService` | `format_detection.py` | Detects a `DataFormat` from column signatures, most-specific first (LipidSearch → MS-DIAL → Generic); Metabolomics Workbench is recognised only from raw text by its start/end markers, not from a DataFrame. In the app it only feeds the sidebar format-mismatch warning (`StreamlitAdapter.detect_format_mismatch()`); the format itself comes from the sidebar dropdown. |
 | `DataStandardizationService` | `data_standardization.py` | Converts format-specific column names to standard `intensity[*]` naming. For LipidSearch 5.2 dual-polarity exports, merges each sample's positive/negative files via the alignment map. |
 | `lipidsearch_alignment` | `lipidsearch_alignment.py` | Parses the LipidSearch Alignment Setting file, pairs each biological sample's positive/negative runs by raw-filename base, and merges their per-file `OriginalArea[s{cond}-{file}]` columns into flat `intensity[s1..sN]`. |
 | `NormalizationService` | `normalization.py` | Four methods: internal standard (divide by standard intensity), protein (divide by protein concentration), internal standards + protein (standard then protein), total intensity (divide by per-sample total, scale by median). |
-| `QualityCheckService` | `quality_check.py` | Box plot data prep, BQC CoV calculation, RT availability check, pairwise Pearson correlation, PCA (via scikit-learn). |
+| `QualityCheckService` | `quality_check.py` | Box plot data prep, BQC CoV calculation and filtering, RT availability check, pairwise Pearson correlation, PCA (via scikit-learn), sample removal. In the app only the BQC filter, RT check, correlation-eligibility check and sample removal are used (via `QualityCheckWorkflow`); the QC plots and their data come from the plotter services (see below). |
 | `StatisticalTestingService` | `statistical_testing.py` | Parametric (Welch's t-test, Alexander-Govern ANOVA) and non-parametric (Mann-Whitney, Kruskal-Wallis) tests with two-level correction (between-class and post-hoc). Auto mode selects parametric with log10 transform, FDR for 2+ classes, Tukey for 3+ conditions. Uses dataset-wide zero replacement for consistent detection-floor handling. |
 | `ZeroFilteringService` | `zero_filtering.py` | Removes lipids exceeding configurable zero-value thresholds (default: 75% for non-BQC, 50% for BQC samples). |
 | `StandardsService` | `standards.py` | Standards extraction, validation, and class-to-standard mapping. |
@@ -456,9 +458,9 @@ The stable isotope tracing module. Runs the real **IsoCorrectoR** R/Bioconductor
 
 #### Plotting Services (`services/plotting/`)
 
-Each module provides a static service class that returns Plotly or Matplotlib figures. All plotters follow the contract documented in `PlotterServiceProtocol` (`base.py`): static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`.
+Each module provides a static service class that returns Plotly or Matplotlib figures. `PlotterServiceProtocol` (`base.py`) documents the shared conventions (static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`); its one method, `generate_color_mapping()`, is defined by five plotters (bar chart, pie chart, saturation, chain length, volcano), and none inherit from it.
 
-Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment from a 20-color palette), and `validate_dataframe()` (non-null, non-empty, required columns).
+Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment: classes from the 20-color `CLASS_COLORS`, conditions from the 10-color `CONDITION_COLORS` in `constants.py`), and `validate_dataframe()` (non-null, non-empty, required columns).
 
 | Service | Output |
 |---|---|
@@ -473,9 +475,9 @@ Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strin
 | `SaturationPlotterService` | Saturation degree distribution |
 | `ChainLengthPlotterService` | Carbon chain length and double bond bubble charts |
 | `FACHPlotterService` | Fatty acid composition heatmap |
-| `PathwayVizService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
+| `PathwayVizPlotterService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
 | `VolcanoPlotterService` | Fold-change vs. p-value scatter |
-| `LipidomicHeatmapService` | Heatmaps in four modes — `regular`, `clustered` (k-means), `class_grouped` (one row per species, blocked by class, paged), `class_aggregated` (one row per class) — coloured by row Z-score or by log2 fold change against a control condition; under `class_grouped` + log2FC, species are sorted within each block by mean fold change |
+| `LipidomicHeatmapPlotterService` | Heatmaps in four modes — `regular`, `clustered` (Ward hierarchical clustering), `class_grouped` (one row per species, blocked by class, paged), `class_aggregated` (one row per class) — coloured by row Z-score or by log2 fold change against a control condition; under `class_grouped` + log2FC, species are sorted within each block by mean fold change |
 
 ### Workflows
 
@@ -483,9 +485,9 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 | Workflow | Key Method | What It Does |
 |---|---|---|
-| `DataIngestionWorkflow` | `run()` → `IngestionResult` | Format detection → cleaning → zero filtering → standards validation. Returns cleaned DataFrame + internal standards + messages. |
-| `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. Also provides `suggest_standard_mappings()` and `preview_normalization()`. |
-| `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_pca()`, `remove_samples()`. Each step can be run independently. |
+| `DataIngestionWorkflow` | `run()` → `IngestionResult` | Format detection (only if no format is given) → cleaning → optional zero filtering → standards validation. Returns cleaned DataFrame + internal standards + messages. The app passes the format and `apply_zero_filter=False` (`data_processing.py`); zero filtering runs in `ui/zero_filtering.py`, called from `main_app.py`, so the workflow's own zero-filter branch is used only by tests. |
+| `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. Also provides `suggest_standard_mappings()`, `validate_standard_mappings()`, `create_normalization_config()` and `preview_normalization()`, currently called only by tests. |
+| `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_all_correlations()`, `run_pca()`, `remove_samples()`, plus `run_non_interactive()`. Each step can be run independently. The app uses only `validate_inputs()`, `apply_bqc_filter()`, `check_retention_time_availability()`, `get_eligible_correlation_conditions()` and `remove_samples()`; the QC plots are built by the adapter calling `BoxPlotService`, `BQCPlotterService`, `CorrelationPlotterService` and `PCAPlotterService` directly, so the `run_*` methods are currently exercised only by tests. |
 | `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
 | `AIChatWorkflow` | One method per chat mode | Orchestrates the AI Studio chat loop. `diagnose_format()` decides if a CSV needs transformation; `validate_module1_output()` gates the viz tab. Per-mode session starters (`start_transform_session`, `start_viz_session`, `start_data_questions_session`, `start_lc_questions_session`, `start_unified_session`) and message handlers (`handle_transform_message`, `handle_viz_message`, `handle_data_questions_message`, `handle_lc_questions_message`, `handle_unified_message`). Each handler appends user/assistant messages to an immutable `ChatSession`, calls `AIClientService` (with tools where appropriate), runs returned code in the sandbox, and returns a typed result dataclass (`FormatDiagnosticResult`, `Module1ValidationResult`, `TransformStepResult`, `VizStepResult`, `DataQuestionsStepResult`, `LCQuestionsStepResult`, `UnifiedStepResult`). |
 | `PipelineAPI` | Instance methods, injected as `lc` | Not a workflow but a workflow-layer facade: gives AI-generated sandbox code the pipeline's own analytics instead of re-invented heuristics — `conditions()`, `samples_for()`, `compare_species()`, `compare_classes()`, `class_summary()`, and one method per Module 3 analysis (`bar_chart()`, `pie_charts()`, `saturation()`, `chain_length()`, `fatty_acid_composition()`, `pathway()`, `volcano()`, `heatmap()`), each returning an `LCResult`. |
@@ -508,7 +510,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 ### UI
 
-Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow methods and renders results.
+Located in `src/app/ui/`. Presentation layer that calls adapter/workflow (and in places service) methods and renders results.
 
 **Sidebar components** (`ui/sidebar/`):
 | File | Responsibility |
@@ -531,7 +533,7 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 
 **Static content** (`ui/content/`): Documentation text for processing steps, normalization methods, sample data descriptions, standards help, and analysis methodology (statistical testing guide, saturation profile calculations).
 
-**Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV/PDF export helpers), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
+**Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV export helpers), `sample_labels.py` (original-name vs s-label display switch), `sample_names.py` (sample display-name mapping), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
 
 **AI Studio** (`ui/ai_studio_page.py` + `ui/ai_chat/`):
 | File | Responsibility |
@@ -555,9 +557,9 @@ Located in `src/app/ui/`. Thin presentation layer that calls adapter/workflow me
 | LipidSearch | `LIPIDSEARCH` | Flat `MeanArea[*]` (5.0 / sample-grouped 5.2) **or** per-file `OriginalArea[s{cond}-{file}]` (5.2 dual-polarity, condition-grouped — requires the Alignment Setting file) + required metadata | `LipidMolec`, `ClassKey`, `BaseRt`, `CalcMass`, `TotalGrade`, `MeanArea[s1]`… / `OriginalArea[s1-1]`… |
 | MS-DIAL | `MSDIAL` | `Metabolite name` + signature columns OR `Alignment ID` | `Metabolite name`, `Ontology`, `Total score`, sample columns auto-detected |
 | Generic | `GENERIC` | Lipid names in first column + numeric data | `LipidMolec`, `ClassKey`, numeric sample columns |
-| Metabolomics Workbench | `METABOLOMICS_WORKBENCH` | `START`/`END` text markers | Tab-delimited with metadata headers |
+| Metabolomics Workbench | `METABOLOMICS_WORKBENCH` | `START`/`END` text markers | Comma-separated CSV with metadata headers |
 
-Format detection priority: LipidSearch (most specific) → MS-DIAL → Metabolomics Workbench → Generic (fallback).
+The format is chosen in the sidebar dropdown, not detected. Detection (LipidSearch → MS-DIAL → Generic, most specific first) only feeds a sidebar warning when the file looks like a different format; it is skipped for Metabolomics Workbench uploads, which are parsed from text before that check.
 
 ### Lipid Name Nomenclature (LIPID MAPS)
 
@@ -589,10 +591,12 @@ All session state is managed through the `SessionState` dataclass in `streamlit_
 **Important state keys and their flow:**
 
 ```
-raw_df → standardized_df → cleaned_df → normalized_df → qc_continuation_df → analysis input
+raw_df → standardized_df → processing_df → cleaned_df → normalized_df → QC output → analysis input
 ```
 
-Each DataFrame flows forward through the pipeline. If the user changes something upstream (e.g., re-uploads data), downstream state is automatically cleared.
+Each DataFrame flows forward through the pipeline. `processing_df` is `standardized_df` minus any samples excluded in the sidebar. In `_display_module2_and_3` (`main_app.py`) QC runs on `normalized_df` and its output goes straight to the analyses; `qc_continuation_df` is still written but nothing reads it. On entry to Module 2, `_module1_handoff` freezes the setup Module 1 ran with (`qc_input_experiment`, `qc_input_bqc_label`, `qc_input_processing_df`), so a later sidebar exclusion or regroup only shows a warning instead of being paired with the already-normalized data.
+
+Downstream state is cleared by explicit resets: a new upload or sample-data load calls `reset_for_new_source()` (which runs `reset_data_state()` and clears the cache), a format change calls `reset_format_derived_state()`, the sidebar "Reset session" button calls `reset_to_experiment_setup()`, "Back to Home" calls `reset_data_state()`, and the Next/Back buttons between modules call `_reset_qc_state()` / `_reset_analysis_state()` in `main_app.py`.
 
 The isotope tracing page owns the `iso_`-prefixed keys (`iso_measurement_df`, `iso_molecule_df`, `iso_element_df`, `iso_config`, `iso_result`), cleared together via `reset_module_state('iso_')` when leaving the page.
 
@@ -613,11 +617,11 @@ This allows imports like `from app.services.normalization import NormalizationSe
 
 ### Test Organization
 
-| Directory | Count | Scope |
-|---|---|---|
-| `tests/unit/` | 64 modules | Individual services, models, plotters, adapter, sandbox isolation |
-| `tests/integration/` | 6 modules | End-to-end pipeline per module, AI tool use, isotope golden run |
-| `tests/ui/` | 10 modules | Streamlit component rendering (AppTest framework) |
+| Directory | Scope |
+|---|---|
+| `tests/unit/` | Individual services, models, workflows, plotters, adapter, sandbox isolation |
+| `tests/integration/` | End-to-end pipeline per module, AI tool use, isotope golden run |
+| `tests/ui/` | Streamlit component rendering (AppTest framework) |
 
 ### Running Tests
 
@@ -642,8 +646,8 @@ pytest tests/ --cov=src/app --cov-report=term-missing
 
 - **Service tests** — pure function testing, no mocking needed. Create test DataFrames, call static methods, assert results.
 - **Workflow tests** — integration-style, testing multi-step pipelines with realistic data.
-- **UI tests** — use mocking for `st.session_state` and Streamlit widgets.
-- **Fixtures** — shared in `tests/conftest.py`: sample DataFrames for all formats, `ExperimentConfig` instances, filter configs.
+- **UI tests** — run small wrapper scripts through Streamlit's `AppTest` (`streamlit.testing.v1`) and inspect widgets and `session_state`; the wrapper scripts and app fixtures live in `tests/ui/conftest.py`. `test_file_upload.py` calls the upload helpers directly instead.
+- **Fixtures** — `tests/conftest.py` provides `make_experiment()` / `make_dataframe()` factories and `ExperimentConfig` fixtures; `tests/integration/conftest.py` has helpers that load each sample dataset.
 
 ### Sample Datasets
 
@@ -663,7 +667,7 @@ docker build -t lipidcruncher .
 docker run -p 8501:8501 lipidcruncher
 ```
 
-The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for PDF generation) plus R + Bioconductor + IsoCorrectoR + `jsonlite` (for the stable isotope tracing module), and runs `streamlit run src/main_app.py`.
+The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for `pdf2image`, which renders the landing page's module PDFs) plus R + Bioconductor + IsoCorrectoR + `jsonlite` (for the stable isotope tracing module), and runs `streamlit run src/main_app.py`.
 
 **One image, many deployments.** There is a single Dockerfile; what an image contains is decided by the branch it is built from, and deployments are separated by ECR tag and ECS service rather than by a second Dockerfile. Build for Fargate with `--platform linux/amd64`. The R layer dominates a cold build but sits before the application `COPY`, so it stays cached across app changes. `ANTHROPIC_API_KEY` is injected at run time (ECS `secrets`), never baked into the image; without it every page works except the AI Studio.
 
@@ -684,7 +688,7 @@ The app runs on port 8501 by default. Server settings live in `.streamlit/config
 
 **"No normalized data available"** — The user tried to access Module 2 without completing normalization in Module 1. Ensure `normalized_df` is set in session state before navigating.
 
-**Format detection fails** — Check that the uploaded CSV has the expected column signatures. Use `FormatDetectionService.detect_format()` directly to debug. The detection order matters: it checks LipidSearch first, then MS-DIAL, then Metabolomics Workbench, then Generic.
+**File not read correctly / wrong format** — The format comes from the sidebar dropdown (mapped to a `DataFormat` by `resolve_format_enum()` in `constants.py`), not from detection. Check that the selected format matches the file and that the file has the expected columns (`ui/format_requirements.py`). `FormatDetectionService.detect_format()` only drives the sidebar warning shown when the file looks like another format (`StreamlitAdapter.detect_format_mismatch()`); it checks LipidSearch, then MS-DIAL, then Generic, and is skipped for Metabolomics Workbench.
 
 **Internal standards not detected** — The regex patterns in `constants.py` (`INTERNAL_STANDARD_LIPID_PATTERNS`) define what's recognized. If a lab uses non-standard naming, the patterns may need to be extended.
 
@@ -696,7 +700,7 @@ The app runs on port 8501 by default. Server settings live in `.streamlit/config
 
 **BQC steps unavailable** — BQC assessment requires BQC samples to be labeled during experiment configuration. If no BQC label is set, BQC-related QC steps are skipped.
 
-**PDF report generation fails** — Requires `poppler-utils` system package (installed in Docker). For local dev on macOS: `brew install poppler`.
+**PDF report generation fails** — Reports are built with `reportlab`, and Plotly figures are rasterized with `kaleido` (`report_generator.py`); check that `kaleido` is installed (`pip install kaleido`). Poppler (`brew install poppler` on macOS) is only needed for the landing page's module images.
 
 **AI Studio: "ANTHROPIC_API_KEY environment variable is not set"** — Set the key in your shell (`export ANTHROPIC_API_KEY=...`) or add it to `.streamlit/secrets.toml` as `ANTHROPIC_API_KEY = "..."`. `main_app.py` copies the secret into `os.environ` at startup so the service layer can read it.
 
@@ -726,11 +730,11 @@ The app runs on port 8501 by default. Server settings live in `.streamlit/config
 ### Adding a New Data Format
 
 1. **Add an enum value** to `DataFormat` in `services/format_detection.py`.
-2. **Add detection logic** in `FormatDetectionService.detect_format()` — place it in the correct priority order.
+2. **Add detection logic** in `FormatDetectionService.detect_format()` — place it in the correct priority order (it feeds the sidebar format-mismatch warning).
 3. **Create a cleaner** in `services/data_cleaning/` extending `BaseDataCleaner`.
 4. **Register the cleaner** in `_CLEANER_REGISTRY` in `data_cleaning/__init__.py`.
 5. **Add standardization logic** in `services/data_standardization.py`.
-6. **Update the format display mapping** in `constants.py` (`get_format_display_to_enum()`).
+6. **Update the format display mapping** in `constants.py` (`get_format_display_to_enum()`) and add the format to `FORMAT_OPTIONS` (the sidebar dropdown).
 7. **Add a sample dataset** in `sample_datasets/`.
 8. **Add format requirements** in `ui/format_requirements.py`.
 9. **Add tests** covering detection, cleaning, and end-to-end ingestion.
@@ -771,7 +775,7 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 - **Immutable collections** — constants use `Tuple` and `frozenset` instead of mutable `List`/`set` to prevent accidental mutation in cached contexts.
 - **Enum-based routing** — `Page` and `Module` enums in `constants.py` replace raw strings for type-safe page/module navigation. Backward-compatible aliases (`PAGE_LANDING`, `MODULE_DATA_PROCESSING`, etc.) are provided.
 - **Prefix session state keys** — by module: `qc_*`, `analysis_*`, `_preserved_*`, etc.
-- **Plotting services return figures** — the UI layer handles rendering with `st.plotly_chart()` or `st.pyplot()`. All plotters follow `PlotterServiceProtocol` (`plotting/base.py`).
+- **Plotting services return figures** — the UI layer handles rendering with `st.plotly_chart()` or `st.pyplot()`. `PlotterServiceProtocol` (`plotting/base.py`) documents the conventions; five plotters define its `generate_color_mapping()`.
 - **Constants go in `constants.py`** — thresholds, regex patterns, format mappings. Nomenclature functions live in `lipid_nomenclature.py`.
 
 ---
@@ -783,18 +787,16 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 | streamlit | 1.50.0 | UI framework |
 | pandas | 1.5.3 | Data manipulation |
 | numpy | 1.24.3 | Numerical computing |
-| scipy | 1.13.1 | Statistical tests (t-test, ANOVA, Mann-Whitney, Kruskal-Wallis, Shapiro-Wilk) |
+| scipy | 1.13.1 | Statistical tests (Welch's t-test, Alexander-Govern, Mann-Whitney, Kruskal-Wallis); hierarchical clustering for the heatmap |
 | scikit-learn | 1.3.0 | PCA, StandardScaler |
-| statsmodels | 0.14.0 | Multiple testing correction (FDR, Bonferroni) |
+| statsmodels | 0.14.0 | Multiple testing correction (FDR, Bonferroni), Tukey HSD |
 | plotly | 5.18.0 | Interactive visualizations |
-| matplotlib | 3.7.1 | Static plots (heatmaps, FACH) |
+| matplotlib | 3.7.1 | Static plots (correlation heatmaps, volcano concentration distribution plot) |
 | seaborn | 0.12.2 | Statistical plot styling |
-| bokeh | 2.4.3 | Additional visualization support |
 | kaleido | 0.2.1 | Plotly static image export |
 | reportlab | 3.6.12 | PDF generation |
-| pdf2image | 1.17.0 | PDF to image conversion |
-| svglib | 1.5.1 | SVG rendering for PDF reports |
+| pdf2image | 1.17.0 | PDF to image conversion (landing-page module images; needs Poppler) |
 | pillow | 9.5.0 | Image processing |
-| openpyxl | 3.1.2 | Excel export |
-| selenium | 4.10.0 | Browser automation (export fallback) |
-| anthropic | ≥0.52.0 | Claude API SDK for the AI Studio (chat completion + tool use). Reads `ANTHROPIC_API_KEY` from environment or `st.secrets`. |
+| anthropic | 0.96.0 | Claude API SDK for the AI Studio (chat completion + tool use). Reads `ANTHROPIC_API_KEY` from environment or `st.secrets`. |
+| pydantic | 2.11.3 | Frozen data models and configs |
+| pyarrow | 11.0.0 | Streamlit dependency, pinned to stay on numpy 1.x |

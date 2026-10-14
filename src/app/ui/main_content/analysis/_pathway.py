@@ -22,12 +22,14 @@ from app.ui.main_content.analysis._pathway_state import (
     get_position_overrides,
 )
 from app.ui.main_content.analysis._pathway_editor import display_pathway_layout_editor
+from app.ui.main_content.analysis._shared import _clear_pdf_plots
 
 
 def _display_pathway_viz(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display lipid pathway visualization."""
+    _clear_pdf_plots('pathway')
     init_pathway_state()
 
     with st.expander(

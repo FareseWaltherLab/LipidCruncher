@@ -13,6 +13,7 @@ from app.services.plotting.saturation_plot import SaturationPlotterService, Y_PA
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
+    _clear_pdf_plots,
     _display_condition_class_selectors,
     _display_statistical_options,
     _display_detailed_statistics,
@@ -27,6 +28,7 @@ def _display_saturation_plots(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display SFA/MUFA/PUFA saturation analysis."""
+    _clear_pdf_plots('sat_')
     with st.expander("Class Level Breakdown - Saturation Plots", expanded=False):
         st.markdown(
             "Analyze the distribution of saturated (SFA), monounsaturated (MUFA), "

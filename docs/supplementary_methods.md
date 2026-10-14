@@ -96,7 +96,7 @@ LipidCruncher performs a filtering step to ensure the dataset is prepared for an
 
 Deduplication is handled differently depending on the data format:
 
-- LipidSearch: When multiple entries exist for the same lipid, the entry with the highest TotalSmpIDRate(%) is selected; if tied, the entry with the best quality grade (A > B > C) is retained
+- LipidSearch: When multiple entries exist for the same lipid, the entry with the best quality grade (A > B > C) is retained; among entries with the same grade, the one with the highest TotalSmpIDRate(%) is selected
 
 - MS-DIAL: When duplicates exist, the entry with the highest Total Score is retained; if no score is available, the first occurrence is kept
 
@@ -108,7 +108,7 @@ Applies to: LipidSearch and MS-DIAL formats only
 
 For generic and Metabolomics Workbench formats, quality-based filtering is not performed as these formats do not include quality metrics.
 
-LipidSearch: LipidSearch assigns quality grades to each lipid identification: A (highest confidence), B, C, and D (lowest confidence). By default, LipidCruncher accepts grades A and B for most lipid classes. For SM (sphingomyelin) and LPC (lysophosphatidylcholine) classes, grade C is also accepted by default due to the typically lower identification confidence for these classes. Users can customize grade acceptance for each lipid class through the interface. For each unique lipid with multiple entries, the entry with the highest TotalSmpIDRate(%) is selected as this indicates the most reliable measurement across samples.
+LipidSearch: LipidSearch assigns quality grades to each lipid identification: A (highest confidence), B, C, and D (lowest confidence). By default, LipidCruncher accepts grades A and B for most lipid classes. For SM (sphingomyelin) and LPC (lysophosphatidylcholine) classes, grade C is also accepted by default due to the typically lower identification confidence for these classes. Users can customize grade acceptance for each lipid class through the interface. For each unique lipid with multiple entries, the entry with the best grade is selected, as the grade reflects identification confidence; among entries with the same grade, the one with the highest TotalSmpIDRate(%) is selected, as this indicates the most consistent detection across samples.
 
 MS-DIAL: MS-DIAL provides a Total Score (0-100) reflecting identification confidence. LipidCruncher offers three predefined filtering levels, and users can adjust the threshold as needed:
 
@@ -242,11 +242,11 @@ LipidCruncher offers both automated and manual modes for statistical testing.
 
 Test type options:
 
-- Parametric: Uses Welch's t-test for two-group comparisons (handles unequal variances) or Welch's ANOVA for multi-group comparisons
+- Parametric: Uses Welch's t-test for two-group comparisons or the Alexander-Govern test for multi-group comparisons (both handle unequal variances; Alexander-Govern is a heteroscedasticity-robust alternative to Welch's ANOVA)
 
 - Non-parametric: Uses Mann-Whitney U test (two-sided) for two-group comparisons or Kruskal-Wallis test for multi-group comparisons
 
-- Auto: Automatically selects parametric tests (Welch's t-test for two-group comparisons and Welch's ANOVA for multi-group comparisons) and applies context-dependent multiple testing corrections based on the number of lipid classes and conditions selected (see S5.2)
+- Auto: Automatically selects parametric tests (Welch's t-test for two-group comparisons and the Alexander-Govern test for multi-group comparisons) and applies context-dependent multiple testing corrections based on the number of lipid classes and conditions selected (see S5.2)
 
 ## S5.2 Multiple Testing Correction Framework
 
@@ -351,7 +351,7 @@ The same total composition yields completely different saturation profiles. Lipi
 
 S6.7 Metabolomic Pathway Visualization
 
-The pathway visualization displays lipid classes as nodes in a metabolic network, connected by 23 edges representing known metabolic relationships (e.g., Kennedy pathway: DG→PC, DG→PE; sphingolipid biosynthesis: LCB→dhCer→Cer→SM; cardiolipin synthesis: PG→CL). Three starting presets are available: the default 18-class pathway, all 28 curated classes, or an empty canvas for building a custom network.
+The pathway visualization displays lipid classes as nodes in a metabolic network, connected by 25 curated edges representing known metabolic relationships (e.g., Kennedy pathway: DG→PC, DG→PE; sphingolipid biosynthesis: LCB→dhCer→Cer→SM; cardiolipin synthesis: PG→CL). Three starting presets are available: the default 18-class pathway, all 28 curated classes, or an empty canvas for building a custom network.
 
 Circle diameter encodes the concentration fold change (mean experimental / mean control) using log2 scaling, clamped to a minimum and maximum size to maintain readability across extreme fold changes. A unit circle (fold change = 1) is always displayed as a reference. Circle color encodes the fatty acid saturation ratio (saturated chains / total chains) on the Plasma color scale. Classes present in the pathway but absent from the dataset are shown as dashed gray outlines to distinguish them from detected classes. Hovering over any node displays the class name, fold change, saturation ratio, and number of detected species.
 

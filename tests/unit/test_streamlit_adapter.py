@@ -81,9 +81,7 @@ class TestSessionStateDefaults:
         """Test default normalization settings."""
         state = SessionState()
         assert state.normalization_method == 'None'
-        assert state.normalization_inputs == {}
         assert state.selected_classes == []
-        assert state.create_norm_dataset is False
 
     def test_default_grade_config(self):
         """Test default grade configuration."""
@@ -93,7 +91,6 @@ class TestSessionStateDefaults:
     def test_default_msdial_config(self):
         """Test default MS-DIAL configuration."""
         state = SessionState()
-        assert state.msdial_quality_config is None
         assert state.msdial_features is None
         assert state.msdial_use_normalized is False
         assert state.msdial_data_type_index == 0
@@ -102,8 +99,6 @@ class TestSessionStateDefaults:
         """Test default standards settings."""
         state = SessionState()
         assert state.original_auto_intsta_df is None
-        assert state.preserved_intsta_df is None
-        assert state.preserved_standards_mode is None
 
     def test_default_qc_settings(self):
         """Test default quality check settings."""
@@ -175,12 +170,6 @@ class TestSessionStateCreation:
         """Test creating SessionState with custom page."""
         state = SessionState(page='analysis')
         assert state.page == 'analysis'
-
-    def test_create_with_normalization_inputs(self):
-        """Test creating SessionState with normalization inputs."""
-        inputs = {'method': 'log2', 'param1': 5}
-        state = SessionState(normalization_inputs=inputs)
-        assert state.normalization_inputs == inputs
 
     def test_create_with_grade_config(self):
         """Test creating SessionState with grade config."""
@@ -261,10 +250,10 @@ class TestSessionStateDataIntegrity:
         state1 = SessionState()
         state2 = SessionState()
 
-        state1.normalization_inputs['key'] = 'value'
+        state1.lsi_manual_fields['key'] = 'value'
 
         # state2 should not be affected
-        assert 'key' not in state2.normalization_inputs
+        assert 'key' not in state2.lsi_manual_fields
 
     def test_list_defaults_independent(self):
         """Test that list defaults are independent per instance."""
@@ -457,9 +446,10 @@ class TestPreserveOnReset:
         """Test that 'page' is preserved on reset."""
         assert 'page' in _PRESERVE_ON_RESET
 
-    def test_preserve_on_reset_contains_module(self):
-        """Test that 'module' is preserved on reset."""
-        assert 'module' in _PRESERVE_ON_RESET
+    def test_preserve_on_reset_does_not_contain_module(self):
+        """A reset starts the next dataset at Module 1 (regression: keeping
+        'module' opened it on an empty Quality Check page)."""
+        assert 'module' not in _PRESERVE_ON_RESET
 
     def test_preserve_on_reset_does_not_contain_analysis_keys(self):
         """Test that analysis keys are NOT preserved on reset (they should reset)."""
@@ -952,8 +942,8 @@ class TestSessionStateIntegration:
         assert mock_st.session_state['analysis_all_plots'] == {}
 
     @patch('app.adapters.streamlit_adapter.st')
-    def test_reset_preserves_page_and_module(self, mock_st):
-        """Test that reset_data_state preserves page and module."""
+    def test_reset_preserves_page_and_returns_to_module1(self, mock_st):
+        """reset_data_state keeps the page but sends the module back to Module 1."""
         mock_st.session_state = MockSessionState({
             'page': 'app',
             'module': 'Quality Check & Analysis',
@@ -963,7 +953,7 @@ class TestSessionStateIntegration:
         StreamlitAdapter.reset_data_state()
 
         assert mock_st.session_state['page'] == 'app'
-        assert mock_st.session_state['module'] == 'Quality Check & Analysis'
+        assert mock_st.session_state['module'] == MODULE_DATA_PROCESSING
         assert mock_st.session_state['analysis_selection'] is None
 
     @patch('app.adapters.streamlit_adapter.st')
@@ -1096,7 +1086,8 @@ class TestSessionStateFieldCompleteness:
         """Test total number of analysis fields (guard against accidental deletion)."""
         field_names = [f.name for f in fields(SessionState)]
         analysis_fields = [f for f in field_names if f.startswith('analysis_')]
-        assert len(analysis_fields) == 17
+        # 17 - 1 (analysis_pathway_active_classes: nothing read or wrote it)
+        assert len(analysis_fields) == 16
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
@@ -1106,7 +1097,8 @@ class TestSessionStateFieldCompleteness:
         # because PCA sample removal renumbers the surviving samples).
         # + 1 (qc_sample_names, names re-keyed after sample exclusion)
         # + 1 (qc_input_sample_names, names frozen at Module 1's handoff)
-        assert len(qc_fields) == 12
+        # + 3 (qc_input_experiment/_bqc_label/_processing_df, same handoff)
+        assert len(qc_fields) == 15
 
     def test_total_field_count(self):
         """Guard against accidental field deletion and duplicate names.
@@ -1146,7 +1138,9 @@ class TestSessionStateFieldCompleteness:
     def test_dynamic_prefix_count_includes_analysis(self):
         """Test that _DYNAMIC_KEY_PREFIXES count includes analysis prefixes."""
         # 9 (pre-Module 3) + 4 (analysis) + 1 (_nav_preserved_ for AI Studio) = 14
-        assert len(_DYNAMIC_KEY_PREFIXES) == 14
+        # + 1 (standards_file_uploader_, keyed by sample set) = 15
+        # + 1 (lipidsearch_alignment_uploader_, keyed by dataset) = 16
+        assert len(_DYNAMIC_KEY_PREFIXES) == 16
 
 
 # =============================================================================
