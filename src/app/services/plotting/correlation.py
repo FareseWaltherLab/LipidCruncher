@@ -45,6 +45,10 @@ class CorrelationPlotterService:
     ) -> Tuple[pd.DataFrame, float, float]:
         """Compute Pearson correlation matrix and thresholds.
 
+        A zero means the species was not detected in that sample, not a
+        measured value, so zeros are treated as missing: each pair of samples
+        is correlated over the species detected in both.
+
         Args:
             df: DataFrame with sample columns.
             sample_type: 'biological replicates' or 'technical replicates'.
@@ -56,7 +60,7 @@ class CorrelationPlotterService:
         """
         v_min = 0.5
         thresh = 0.7 if sample_type == 'biological replicates' else 0.8
-        correlation_df = df.corr()
+        correlation_df = df.replace(0, np.nan).corr()
         return correlation_df, v_min, thresh
 
     @staticmethod

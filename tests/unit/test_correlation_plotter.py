@@ -166,6 +166,22 @@ class TestComputeCorrelation:
         assert corr_matrix.iloc[0, 1] == pytest.approx(1.0)
 
 
+    def test_zeros_are_excluded(self):
+        """Regression: zeros (species not detected in a sample) were correlated
+        as measured values, so one undetected species dragged a near-perfect
+        replicate pair down (docs S4.3: zero values are excluded)."""
+        df = pd.DataFrame({
+            's1': [1000.0, 200.0, 300.0, 400.0, 500.0],
+            's2': [0.0, 210.0, 290.0, 410.0, 490.0],
+        })
+        corr_matrix, _, _ = CorrelationPlotterService.compute_correlation(
+            df, 'biological replicates'
+        )
+        expected = np.corrcoef([200, 300, 400, 500], [210, 290, 410, 490])[0, 1]
+        assert corr_matrix.loc['s1', 's2'] == pytest.approx(expected)
+        assert corr_matrix.loc['s1', 's2'] > 0.99
+
+
 # =============================================================================
 # TestRenderCorrelationPlot
 # =============================================================================
