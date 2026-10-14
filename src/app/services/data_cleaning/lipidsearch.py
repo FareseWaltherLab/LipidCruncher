@@ -350,18 +350,6 @@ class LipidSearchCleaner(BaseDataCleaner):
             )
         return eligible
 
-    @staticmethod
-    def _select_best_row(lipid_df: pd.DataFrame) -> pd.Series:
-        """Select the best row based on quality rate and grade."""
-        max_quality = lipid_df['TotalSmpIDRate(%)'].max()
-        best_quality_df = lipid_df[lipid_df['TotalSmpIDRate(%)'] == max_quality].copy()
-
-        best_quality_df['grade_priority'] = best_quality_df['TotalGrade'].map(
-            LipidSearchCleaner._GRADE_PRIORITY
-        ).fillna(99)
-
-        return best_quality_df.sort_values('grade_priority').iloc[0]
-
     # ==================== Final Cleanup ====================
 
     @staticmethod
