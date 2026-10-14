@@ -128,7 +128,9 @@ class SessionState:
     # is excluded. The sidebar keeps using the full dataset and experiment.
     processing_df: Optional[pd.DataFrame] = None
     processing_sample_names: Optional[Dict[str, str]] = None
+    # Sidebar exclusions as upload labels, and the regroup they were saved under.
     _preserved_excluded_samples: List[str] = field(default_factory=list)
+    _preserved_excluded_regroup_origin: Optional[Dict[str, str]] = None
     # Where each sample came from in the uploaded file (its s-label before any
     # regroup), so per-sample inputs such as protein amounts can be keyed by
     # sample rather than by a label that regroup/exclusion renumber.

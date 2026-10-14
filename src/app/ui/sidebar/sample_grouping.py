@@ -12,7 +12,6 @@ from typing import List, Optional, Tuple
 import streamlit as st
 import pandas as pd
 
-from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import FORMAT_MSDIAL
 from app.models.experiment import ExperimentConfig
 from app.services.sample_grouping import DatasetValidationResult, SampleGroupingService
@@ -320,9 +319,18 @@ def _display_sample_exclusion(
     nothing is excluded, None when the selection is invalid. Also keeps
     ``processing_sample_names`` in step with the renumbered survivors.
     """
-    restored = StreamlitAdapter.restore_widget_value(
-        'exclude_samples', '_preserved_excluded_samples', []
-    )
+    # Exclusions are kept by the sample's upload label, so a regroup that
+    # renumbers samples keeps excluding the same samples. When the regroup
+    # changed since they were saved, the widget's labels are stale: drop its
+    # key so it re-renders from the translated selection.
+    regroup_origin = st.session_state.get('regroup_origin') or {}
+    to_label = {origin: label for label, origin in regroup_origin.items()}
+    if (st.session_state.get('_preserved_excluded_regroup_origin') or {}) != regroup_origin:
+        st.session_state.pop('exclude_samples', None)
+    restored = st.session_state.get('exclude_samples', [
+        to_label.get(origin, origin)
+        for origin in st.session_state.get('_preserved_excluded_samples') or []
+    ])
     valid_restored = [s for s in restored if s in experiment.full_samples_list]
     with st.sidebar.expander('🚫 Exclude Samples (optional)', expanded=bool(valid_restored)):
         excluded = st.multiselect(
@@ -338,7 +346,10 @@ def _display_sample_exclusion(
             ),
             key='exclude_samples',
         )
-        StreamlitAdapter.save_widget_value('exclude_samples', '_preserved_excluded_samples')
+        st.session_state['_preserved_excluded_samples'] = [
+            regroup_origin.get(s, s) for s in excluded
+        ]
+        st.session_state['_preserved_excluded_regroup_origin'] = regroup_origin
 
         names = st.session_state.get('sample_names')
         upload_label = st.session_state.get('regroup_origin') or {}

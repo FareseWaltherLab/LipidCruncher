@@ -223,3 +223,31 @@ class TestProteinAmountsFollowTheirSample:
 
         after = _concentrations(at, 's5')
         pd.testing.assert_series_equal(after, before, check_names=False)
+
+
+class TestExclusionFollowsItsSample:
+
+    def test_exclusion_survives_regroup(self):
+        """Regression: an exclusion was kept by label, so after a regroup
+        that swapped s1 and s5 it dropped the sample now labelled s1 (the old
+        s5) and kept the one the user had excluded."""
+        at = _load_sample()
+        original = at.session_state['standardized_df'].copy()
+        at.sidebar.multiselect(key='exclude_samples').set_value(['s1']).run()
+        assert not at.exception
+
+        at.sidebar.radio(key='grouping_radio').set_value('No').run()
+        selections = {
+            'WT': ['s5', 's2', 's3', 's4'],
+            'ADGAT-DKO': ['s1', 's6', 's7', 's8'],
+            'BQC': ['s9', 's10', 's11', 's12'],
+        }
+        for condition, samples in selections.items():
+            at.sidebar.multiselect(key=f'select_{condition}').set_value(samples).run()
+        _confirm(at)
+
+        processing = at.session_state['processing_df']
+        excluded_data = _values(original, 'intensity[s1]')
+        kept = [c for c in processing.columns if c.startswith('intensity[')]
+        assert len(kept) == 11
+        assert not any(np.allclose(_values(processing, c), excluded_data) for c in kept)
