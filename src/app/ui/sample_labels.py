@@ -9,8 +9,12 @@ space, and gets none when standardized labels are chosen. The data itself is
 always keyed by s-label; only what is shown changes.
 
 Label spaces (each keyed by the s-labels its data uses):
-- ``'upload'``: Data Processing, Internal Standards, Normalization and the
-  sidebar — ``sample_names``.
+- ``'upload'``: the sidebar — ``sample_names``, keyed by the full dataset's
+  labels.
+- ``'processing'``: Data Processing, Internal Standards and Normalization —
+  ``processing_sample_names``, re-keyed for the renumbering that the
+  sidebar's sample exclusion causes (equal to ``sample_names`` when nothing
+  is excluded).
 - ``'qc_input'``: Quality Check before PCA sample exclusion — the names
   frozen when Module 1 handed its data over (``qc_input_sample_names``).
 - ``'qc'``: PCA and everything after it — the names re-keyed for the
@@ -32,6 +36,7 @@ _MODE_LABELS = {
 }
 _MAP_KEYS = {
     'upload': 'sample_names',
+    'processing': 'processing_sample_names',
     'qc_input': 'qc_input_sample_names',
     'qc': 'qc_sample_names',
 }
@@ -51,7 +56,12 @@ def names_for(space: str) -> Optional[Dict[str, str]]:
     """
     if not showing_original_names():
         return None
-    return st.session_state.get(_MAP_KEYS[space]) or None
+    names = st.session_state.get(_MAP_KEYS[space])
+    if names is None and space == 'processing':
+        # No sidebar exclusion step has run (nothing excluded, or a page
+        # rendered without the sidebar): Module 1 uses the full names.
+        names = st.session_state.get('sample_names')
+    return names or None
 
 
 def display_names_for(space: str) -> Dict[str, str]:

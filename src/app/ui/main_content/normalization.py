@@ -217,7 +217,7 @@ def _display_manual_protein_input(sample_names: list) -> dict:
 
     # 3-column flat grid layout (matches old app). The label follows the
     # "Show samples as" switch; the key stays the s-label so values persist.
-    shown = labeler('upload')
+    shown = labeler('processing')
     protein_concentrations = {}
     cols = st.columns(3)
     for idx, sample in enumerate(sample_names):
@@ -530,7 +530,7 @@ def _collect_method_config(method: str, intsta_df, selected_classes: list, exper
         # Validate: zero concentrations cannot be used as denominators
         zero_samples = [s for s, c in protein_concentrations.items() if c <= 0]
         if zero_samples:
-            shown = labeler('upload')
+            shown = labeler('processing')
             st.error(
                 f"Protein concentration must be greater than zero for all samples. "
                 f"The following samples have zero or negative values: "
@@ -547,12 +547,12 @@ def _display_normalization_results(result) -> None:
         st.markdown("##### 📊 Final Normalized Data")
         if result.normalized_df is not None:
             named_dataframe(
-                result.normalized_df, sample_names=names_for('upload'),
+                result.normalized_df, sample_names=names_for('processing'),
                 use_container_width=True,
             )
             csv_download_button(
                 result.normalized_df, "normalized_data.csv", key="download_normalized_data",
-                sample_names=names_for('upload'),
+                sample_names=names_for('processing'),
             )
     elif result:
         for error in result.validation_errors:

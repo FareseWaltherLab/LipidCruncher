@@ -18,6 +18,7 @@ Tests across 10 groups covering:
 11. Regroup + confirm with sample names (blank-selection regression)
 """
 
+import pandas as pd
 from streamlit.testing.v1 import AppTest
 
 from tests.ui.conftest import (
@@ -423,6 +424,60 @@ class TestMSDIALOverrideSampleNames:
 # =============================================================================
 # Group 11: Regroup + confirm with sample names (blank-selection regression)
 # =============================================================================
+
+class TestSidebarSampleExclusion:
+    """Excluding a sample in the sidebar hands Module 1 a reduced, renumbered
+    dataset and experiment while the sidebar keeps the full ones."""
+
+    def _loaded(self):
+        at = AppTest.from_function(full_sidebar_script, default_timeout=60)
+        at.run()
+        at.sidebar.button(key='load_sample').click().run()
+        return at
+
+    def test_excluding_one_sample_reduces_module1_input(self):
+        at = self._loaded()
+        full_names = dict(at.session_state['sample_names'] or {})
+        n_full = len(at.sidebar.multiselect(key='exclude_samples').options)
+
+        at.sidebar.multiselect(key='exclude_samples').set_value(['s2']).run()
+        at.sidebar.checkbox(key='confirm_checkbox').set_value(True).run()
+
+        assert not at.exception
+        assert at.session_state['confirmed'] is True
+        exp = at.session_state['experiment']
+        assert len(exp.full_samples_list) == n_full - 1
+        proc_cols = [c for c in at.session_state['processing_df'].columns if c.startswith('intensity[')]
+        assert proc_cols == [f'intensity[s{i}]' for i in range(1, n_full)]
+        std_cols = [c for c in at.session_state['standardized_df'].columns if c.startswith('intensity[')]
+        assert len(std_cols) == n_full  # sidebar data untouched
+        # the old s3 is the new s2, and so is its name
+        if full_names:
+            assert at.session_state['processing_sample_names']['s2'] == full_names['s3']
+            assert at.session_state['sample_names'] == full_names
+
+    def test_emptying_a_condition_blocks_confirm(self):
+        at = self._loaded()
+        # Build the full experiment from the widgets to find one condition's samples.
+        nconds = at.sidebar.number_input[0].value
+        counts = [at.sidebar.number_input[i + 1].value for i in range(nconds)]
+        first_cond_samples = [f's{i}' for i in range(1, counts[0] + 1)]
+
+        at.sidebar.multiselect(key='exclude_samples').set_value(first_cond_samples).run()
+        at.sidebar.checkbox(key='confirm_checkbox').set_value(True).run()
+
+        assert at.session_state['confirmed'] is False
+        assert any("no samples" in e.value for e in at.error)
+
+    def test_no_exclusion_passes_data_through(self):
+        at = self._loaded()
+        at.sidebar.checkbox(key='confirm_checkbox').set_value(True).run()
+        assert at.session_state['confirmed'] is True
+        pd.testing.assert_frame_equal(
+            at.session_state['processing_df'], at.session_state['standardized_df']
+        )
+        assert at.session_state['processing_sample_names'] == at.session_state['sample_names']
+
 
 class TestRegroupConfirmWithNames:
     """Shuffling samples then confirming must advance, not reset the pickers.

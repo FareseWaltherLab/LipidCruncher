@@ -60,6 +60,7 @@ class SessionState:
                              _msdial_override_samples, lipidsearch_sample_names
       experiment_config.py → workbench_conditions, workbench_samples
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
+                             processing_df, processing_sample_names, _preserved_excluded_samples,
                              original_column_order
       data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
                              pre_filter_df, grade_config, last_quality_config,
@@ -120,6 +121,13 @@ class SessionState:
     # Maps internal sample label (s1, s2, ...) → user-facing display name,
     # auto-seeded from the uploaded column headers and editable in the sidebar.
     sample_names: Optional[Dict[str, str]] = None
+    # Module 1's input after the sidebar's optional sample exclusion:
+    # standardized_df without the excluded columns (survivors renumbered) and
+    # sample_names re-keyed the same way. Equal to the originals when nothing
+    # is excluded. The sidebar keeps using the full dataset and experiment.
+    processing_df: Optional[pd.DataFrame] = None
+    processing_sample_names: Optional[Dict[str, str]] = None
+    _preserved_excluded_samples: List[str] = field(default_factory=list)
     # 'original' shows those names in tables, plots, pickers and downloads;
     # 'standardized' shows s1, s2, ... instead (sidebar switch).
     sample_label_mode: str = 'original'
@@ -237,7 +245,7 @@ _SOFT_RESET_PRESERVE = frozenset({
 # Must be removed on reset to prevent stale widget state.
 _WIDGET_KEYS = {
     # Sidebar widgets (file_upload, experiment_config, sample_grouping, confirm_inputs)
-    'manual_sample_override', 'grouping_radio',
+    'manual_sample_override', 'grouping_radio', 'exclude_samples',
     'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
     'sample_data_experiment', 'sample_names_editor', '_sample_label_mode_radio',
     # Data processing widgets (data_processing.py)

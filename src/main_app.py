@@ -165,9 +165,10 @@ def display_app_page() -> None:
             st.info("Configure your experiment in the sidebar and check 'Confirm Inputs' to proceed.")
         return
 
-    # After sample grouping, use the potentially reordered DataFrame from session state
-    # (display_sample_grouping updates st.session_state.standardized_df when user regroups samples)
-    df = st.session_state.standardized_df
+    # After sample grouping, use the frame Module 1 should run on: the
+    # (possibly regrouped) standardized data minus any samples excluded in
+    # the sidebar, with survivors renumbered to match `experiment`.
+    df = st.session_state.processing_df
 
     # ==========================================================================
     # Main area: Module routing

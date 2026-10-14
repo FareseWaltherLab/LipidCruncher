@@ -83,7 +83,7 @@ def display_standards_consistency_plots(
         intsta_df,
         selected_samples_ordered,
         sample_conditions=sample_conditions,
-        display_names=display_names_for('upload'),
+        display_names=display_names_for('processing'),
     )
 
     if plots:
