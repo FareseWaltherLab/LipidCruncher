@@ -695,6 +695,18 @@ class TestLipidSearchCleanerBasic:
         assert 'CalcMass' in cleaned.columns
         assert 'BaseRt' in cleaned.columns
 
+    def test_clean_removes_all_zero_rows(self, lipidsearch_df, simple_experiment_2x2):
+        """Regression: the LipidSearch pipeline skipped the all-zero-row step
+        the Generic and MS-DIAL cleaners run, so an all-zero species (e.g. a
+        standard that was not spiked) survived cleaning for LipidSearch only."""
+        df = lipidsearch_df.copy()
+        for col in [c for c in df.columns if c.startswith('intensity[')]:
+            df.loc[1, col] = 0.0
+        cleaned, messages = LipidSearchCleaner.clean(df, simple_experiment_2x2)
+        assert 'PE 18:0_20:4' not in cleaned['LipidMolec'].tolist()
+        assert len(cleaned) == 2
+        assert any('all-zero' in m for m in messages)
+
     def test_clean_strips_extended_export_columns(self, simple_experiment_2x2):
         """Extended LipidSearch exports (Org*/Mean*/Conc*/Std*/Rsd* plus extra
         metadata columns) must be projected down to canonical metadata +

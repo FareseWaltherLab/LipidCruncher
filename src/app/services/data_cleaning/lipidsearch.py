@@ -85,7 +85,17 @@ class LipidSearchCleaner(BaseDataCleaner):
         if msg:
             messages.append(msg)
 
-        # Step 6: Final cleanup
+        # Step 6: Remove all-zero rows
+        df, msg = LipidSearchCleaner._step_remove_zero_rows(df)
+        if msg:
+            messages.append(msg)
+
+        if df.empty:
+            raise EmptyDataError(
+                "No lipid species with non-zero intensity values found."
+            )
+
+        # Step 7: Final cleanup
         df = LipidSearchCleaner._final_cleanup(df)
 
         messages.append(LipidSearchCleaner._make_summary_message(initial_count, len(df)))

@@ -1769,7 +1769,7 @@ class TestWorkflowZeroFilteringEdgeCases:
     """Edge case tests for zero filtering."""
 
     def test_all_zeros_dataframe(self, df_all_zeros, simple_experiment_2x2):
-        """Test zero filtering with all-zeros DataFrame."""
+        """An all-zero dataset is rejected at cleaning, as for every format."""
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.LIPIDSEARCH,
@@ -1778,8 +1778,8 @@ class TestWorkflowZeroFilteringEdgeCases:
 
         result = DataIngestionWorkflow.run(df_all_zeros, config)
 
-        # Should complete but may have warnings or all species removed
-        assert result.zero_filtered is True
+        assert result.is_valid is False
+        assert any('non-zero' in e for e in result.validation_errors)
 
     def test_no_zeros_dataframe(self, lipidsearch_df, simple_experiment_2x2):
         """Test zero filtering when no zeros present."""
