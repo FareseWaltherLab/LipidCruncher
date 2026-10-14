@@ -20,6 +20,10 @@ from app.lipid_nomenclature import (  # noqa: F401
     remove_phantom_chains,
     sort_chains_lipid_maps,
 )
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.format_detection import DataFormat
 
 
 # =============================================================================

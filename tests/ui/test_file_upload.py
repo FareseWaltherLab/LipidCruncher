@@ -4,9 +4,7 @@ Regression coverage for LipidSearch 5.2, which exports tab-delimited data with a
 .csv extension. Reading it as comma-separated collapsed the header into a single
 column, producing "Missing required columns" errors.
 """
-import io
 
-import pandas as pd
 
 from app.services.format_detection import FormatDetectionService, DataFormat
 from app.ui.sidebar.file_upload import _read_tabular

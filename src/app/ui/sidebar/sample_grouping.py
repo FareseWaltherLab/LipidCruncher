@@ -12,8 +12,6 @@ from typing import List, Optional, Tuple
 import streamlit as st
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import FORMAT_MSDIAL
 from app.models.experiment import ExperimentConfig
@@ -25,8 +23,10 @@ from app.ui.sample_names import (
     sample_display_map,
 )
 from app.ui.sample_labels import labeler, render_sample_label_switch, showing_original_names
-from app.ui.sidebar.experiment_config import detect_sample_columns, extract_sample_names, display_experiment_definition
+from app.ui.sidebar.experiment_config import detect_sample_columns, display_experiment_definition
 from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_inputs
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -209,7 +209,8 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
     # Manual regrouping option
     st.sidebar.write('Are your samples properly grouped together?')
     grouping_correct = st.sidebar.radio(
-        '', ['Yes', 'No'], key='grouping_radio',
+        'Samples properly grouped?', ['Yes', 'No'], key='grouping_radio',
+        label_visibility='collapsed',
     )
     # Record the value the user is now seeing so the NEXT rerun can
     # detect a toggle and invalidate the Confirm Inputs checkbox.
@@ -460,7 +461,6 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
 
     # Detect sample columns
     sample_cols = detect_sample_columns(df, data_format)
-    sample_names = extract_sample_names(sample_cols, data_format)
 
     if not sample_cols:
         st.sidebar.error("No sample columns detected!")

@@ -353,7 +353,6 @@ class TestErrorHandling:
 class TestTypeCoercion:
     def test_integer_concentrations(self):
         np.random.seed(42)
-        n = 10
         df = pd.DataFrame({
             'concentration[s1]': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
             'concentration[s2]': [150, 250, 350, 450, 550, 650, 750, 850, 950, 1050],

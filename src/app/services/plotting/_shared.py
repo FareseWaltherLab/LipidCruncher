@@ -7,7 +7,6 @@ color palette generation, and input validation.
 Pure logic — no Streamlit dependencies.
 """
 
-import itertools
 from typing import Dict, List
 
 import numpy as np

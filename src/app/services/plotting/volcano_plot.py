@@ -8,7 +8,6 @@ concentration-vs-fold-change scatter plots, and Seaborn distribution box plots.
 Pure logic — no Streamlit dependencies.
 """
 
-import itertools
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -24,7 +23,6 @@ from app.services.plotting._shared import (
     generate_class_color_mapping,
 )
 from app.services.statistical_testing import (
-    StatisticalTestResult,
     StatisticalTestSummary,
 )
 

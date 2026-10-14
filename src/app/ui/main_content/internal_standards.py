@@ -11,14 +11,14 @@ import logging
 import streamlit as st
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_COMPLETE_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.st_helpers import keep_intsta_expander_open, INTSTA_EXPANDER_KEY
 from app.ui.sample_labels import names_for
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================

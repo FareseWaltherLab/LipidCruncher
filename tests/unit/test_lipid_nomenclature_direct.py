@@ -5,7 +5,6 @@ These tests verify the module works standalone (not just via constants.py
 re-exports). Existing tests in test_lipid_name_utils.py cover the full
 behavioral surface; these focus on import paths and module-level constants.
 """
-import pytest
 
 from app.lipid_nomenclature import (
     HYDROXYL_PATTERN,

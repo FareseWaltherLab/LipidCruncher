@@ -11,7 +11,6 @@ from app.services.data_cleaning import (
     LipidSearchCleaner,
     MSDIALCleaner,
     GenericCleaner,
-    DataCleaningError,
     ConfigurationError,
     EmptyDataError,
 )
@@ -1852,7 +1851,7 @@ class TestSampleColumnDetection:
 
     def test_sample_names_with_special_characters(self):
         """Test intensity columns with special characters in sample names."""
-        experiment = ExperimentConfig(
+        ExperimentConfig(
             n_conditions=2,
             conditions_list=['Control', 'Treatment'],
             number_of_samples_list=[2, 2]

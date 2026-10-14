@@ -7,14 +7,13 @@ across experimental conditions, with optional significance annotations.
 Pure logic — no Streamlit dependencies.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from app.constants import CONDITION_COLORS
 from app.models.experiment import ExperimentConfig
 from app.services.plotting._shared import (
     generate_condition_color_mapping,

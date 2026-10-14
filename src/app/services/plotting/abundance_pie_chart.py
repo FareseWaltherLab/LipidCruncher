@@ -14,7 +14,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
-from app.services.plotting._shared import CLASS_COLORS, generate_class_color_mapping
+from app.services.plotting._shared import CLASS_COLORS
 
 CHART_WIDTH = 450
 CHART_HEIGHT = 300

@@ -1566,8 +1566,8 @@ class TestServiceClassStructure:
 
     def test_no_instance_state(self):
         """Test that service has no instance state."""
-        service1 = FormatDetectionService()
-        service2 = FormatDetectionService()
+        FormatDetectionService()
+        FormatDetectionService()
 
         # Both should work identically
         df = pd.DataFrame({

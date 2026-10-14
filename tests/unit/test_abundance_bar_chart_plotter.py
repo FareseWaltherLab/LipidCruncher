@@ -11,11 +11,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from app.models.experiment import ExperimentConfig
+from app.constants import CONDITION_COLORS
 from app.services.plotting.abundance_bar_chart import (
     BarChartData,
     BarChartPlotterService,
-    CONDITION_COLORS,
     _compute_log10_stats,
     _get_mode_columns,
     _p_value_to_marker,

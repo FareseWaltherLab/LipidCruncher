@@ -16,6 +16,10 @@ from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import _display_detailed_statistics
 from app.ui.sample_labels import names_for
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.workflows.analysis import VolcanoResult
 
 
 def _display_volcano_plot(

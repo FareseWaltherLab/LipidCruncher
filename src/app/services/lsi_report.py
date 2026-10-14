@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.colors import Color, black, HexColor
+from reportlab.lib.colors import black, HexColor
 from reportlab.pdfgen import canvas
 
 from app.models.experiment import ExperimentConfig

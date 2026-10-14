@@ -6,7 +6,6 @@ logo display, module images, and the main landing page layout.
 """
 
 import io
-import os
 from pathlib import Path
 from typing import Optional
 

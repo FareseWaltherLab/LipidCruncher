@@ -2,10 +2,10 @@
 Configuration classes for data cleaning.
 """
 from dataclasses import dataclass, field as dc_field
-from typing import Dict, FrozenSet, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import pandas as pd
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class GradeFilterConfig(BaseModel):

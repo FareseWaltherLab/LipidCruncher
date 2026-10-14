@@ -9,7 +9,6 @@ Multi-step chains validate cross-analysis consistency (same input →
 consistent class totals across bar chart and pie chart), cascading
 parameter effects, and edge case behavior that unit tests do not cover.
 """
-import matplotlib
 import matplotlib.pyplot as plt
 import pytest
 import pandas as pd
@@ -43,7 +42,6 @@ from app.workflows.analysis import (
 # Services (for result type assertions)
 from app.services.statistical_testing import (
     StatisticalTestSummary,
-    StatisticalTestResult,
     PostHocResult,
 )
 from app.services.plotting.volcano_plot import VolcanoData
@@ -139,7 +137,8 @@ def make_analysis_dataframe(
         DataFrame with LipidMolec, ClassKey, and concentration[s1..sN] columns.
     """
     if values_fn is None:
-        values_fn = lambda lip_idx, samp_idx: (lip_idx + 1) * 1e6 + samp_idx * 1e4
+        def values_fn(lip_idx, samp_idx):
+            return (lip_idx + 1) * 1e6 + samp_idx * 1e4
 
     data = {'LipidMolec': lipids, 'ClassKey': classes}
     for s_idx in range(n_samples):
@@ -1542,7 +1541,7 @@ class TestCrossAnalysis:
             df, lipidsearch_experiment, conditions, classes,
         )
 
-        bar_classes = set(bar_result.abundance_df['ClassKey'].unique())
+        set(bar_result.abundance_df['ClassKey'].unique())
         # Heatmap Z-scores should cover the same classes
         if hasattr(heatmap_result.z_scores_df.index, 'get_level_values'):
             try:
@@ -1733,7 +1732,7 @@ class TestEdgeCases:
             lipids=['PC(16:0/18:1)', 'PE(18:0/20:4)'],
             classes=['PC', 'PE'],
             n_samples=4,
-            values_fn=lambda l, s: 1e15 + l * 1e12,
+            values_fn=lambda label, s: 1e15 + label * 1e12,
         )
 
         result = AnalysisWorkflow.run_bar_chart(
@@ -1752,7 +1751,7 @@ class TestEdgeCases:
             lipids=['PC(16:0/18:1)', 'PE(18:0/20:4)'],
             classes=['PC', 'PE'],
             n_samples=4,
-            values_fn=lambda l, s: 1e-15 + l * 1e-16,
+            values_fn=lambda label, s: 1e-15 + label * 1e-16,
         )
 
         result = AnalysisWorkflow.run_bar_chart(

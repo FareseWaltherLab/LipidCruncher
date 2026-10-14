@@ -13,7 +13,7 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.models.normalization import NormalizationConfig
 from app.models.statistics import StatisticalTestConfig
-from app.services.lsi_report import LSIReportService, _PLACEHOLDER
+from app.services.lsi_report import LSIReportService
 from app.ui.sample_labels import labeler
 
 

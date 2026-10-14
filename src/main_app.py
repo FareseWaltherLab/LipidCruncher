@@ -69,6 +69,10 @@ from app.ui.main_content import (
     display_analysis_module,
 )
 from app.ui.ai_studio_page import display_ai_studio_page
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.experiment import ExperimentConfig
 
 
 # =============================================================================

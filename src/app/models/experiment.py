@@ -2,7 +2,7 @@
 Experiment configuration model.
 """
 from pydantic import BaseModel, Field, field_validator, computed_field, model_validator
-from typing import List, Optional
+from typing import List
 
 
 class ExperimentConfig(BaseModel):

@@ -11,7 +11,6 @@ import pandas as pd
 import pytest
 from scipy import stats as sp_stats
 
-from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.services.statistical_testing import (
     PostHocResult,
@@ -20,7 +19,7 @@ from app.services.statistical_testing import (
     StatisticalTestingService,
     _tukey_pair_index,
 )
-from tests.conftest import make_dataframe, make_experiment
+from tests.conftest import make_experiment
 
 
 # ═══════════════════════════════════════════════════════════════════════

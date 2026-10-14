@@ -131,7 +131,8 @@ def make_qc_dataframe(
         DataFrame with LipidMolec, ClassKey, and concentration[s1..sN] columns.
     """
     if values_fn is None:
-        values_fn = lambda lip_idx, samp_idx: (lip_idx + 1) * 1e6 + samp_idx * 1e4
+        def values_fn(lip_idx, samp_idx):
+            return (lip_idx + 1) * 1e6 + samp_idx * 1e4
 
     data = {'LipidMolec': lipids, 'ClassKey': classes}
     for s_idx in range(n_samples):

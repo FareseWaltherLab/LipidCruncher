@@ -9,8 +9,7 @@ rather than pinning prose that is meant to be edited freely.
 import pytest
 
 from app.constants import (
-    FORMAT_GENERIC, FORMAT_LIPIDSEARCH, FORMAT_METABOLOMICS_WORKBENCH,
-    FORMAT_MSDIAL, FORMAT_OPTIONS,
+    FORMAT_GENERIC, FORMAT_LIPIDSEARCH, FORMAT_OPTIONS,
 )
 from app.ui.content import get_processing_docs
 from app.ui.content.processing_docs import PROCESSING_DOCS

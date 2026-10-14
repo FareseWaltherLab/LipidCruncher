@@ -6,9 +6,6 @@ passing, column renaming, and cross-module consistency. These are the
 only tests that exercise the full data flow in a single test function.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 
 import plotly.graph_objects as go
 
@@ -106,7 +103,7 @@ def run_module2_qc(normalized_df, experiment, bqc_label=None, data_format=DataFo
         qc_df = filter_result.filtered_df
 
     # Retention time
-    rt_result = QualityCheckWorkflow.check_retention_time_availability(qc_df, config)
+    QualityCheckWorkflow.check_retention_time_availability(qc_df, config)
 
     # PCA
     pca_result = QualityCheckWorkflow.run_pca(qc_df, experiment)

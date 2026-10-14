@@ -298,7 +298,7 @@ class TestPrepareBoxPlotData:
     def test_missing_values_with_zeros(self, conc_df_with_zeros, simple_experiment_2x3):
         """Correct missing value percentages when zeros exist."""
         result = QualityCheckService.prepare_box_plot_data(conc_df_with_zeros, simple_experiment_2x3)
-        n_rows = len(conc_df_with_zeros)
+        len(conc_df_with_zeros)
         # s1: [1000, 0, 3000, 0] → 2 zeros out of 4 = 50%
         assert result.missing_values_percent[0] == pytest.approx(50.0)
 

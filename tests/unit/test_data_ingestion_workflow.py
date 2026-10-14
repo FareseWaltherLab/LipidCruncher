@@ -1164,7 +1164,7 @@ class TestValidateForFormatMSDIAL:
 
     def test_msdial_missing_ontology(self, msdial_df):
         """Test MS-DIAL validation when Ontology is missing."""
-        df = msdial_df.drop(columns=['ClassKey'])  # ClassKey is renamed Ontology
+        msdial_df.drop(columns=['ClassKey'])  # ClassKey is renamed Ontology
         # Create raw MS-DIAL without Ontology
         df_raw = pd.DataFrame({
             'LipidMolec': ['PC 32:1'],

@@ -15,16 +15,15 @@ from typing import Optional
 import streamlit as st
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from app.models.experiment import ExperimentConfig
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowResult
 from app.constants import FORMAT_MSDIAL, resolve_format_enum
-from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_labels import labeler, names_for
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================

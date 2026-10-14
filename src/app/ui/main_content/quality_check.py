@@ -20,7 +20,6 @@ import streamlit as st
 
 from app.constants import resolve_format_enum
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
-from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_names import remap_names_after_exclusion
@@ -30,9 +29,12 @@ from app.ui.st_helpers import (
     data_selection_header,
     results_header,
     settings_header,
-    section_header,
     persist_widget,
 )
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.experiment import ExperimentConfig
 
 
 # =============================================================================

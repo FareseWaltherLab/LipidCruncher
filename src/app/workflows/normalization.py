@@ -8,14 +8,14 @@ This workflow handles the business logic flow while leaving UI concerns to the U
 All methods are pure logic (no Streamlit dependencies).
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
 from ..models.experiment import ExperimentConfig
 from ..models.normalization import NormalizationConfig
 from ..services.format_detection import DataFormat
-from ..services.normalization import NormalizationService, NormalizationResult as ServiceResult
+from ..services.normalization import NormalizationService
 
 
 @dataclass

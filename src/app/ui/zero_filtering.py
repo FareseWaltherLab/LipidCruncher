@@ -6,8 +6,6 @@ import logging
 import pandas as pd
 import streamlit as st
 
-logger = logging.getLogger(__name__)
-
 from app.constants import (
     FORMAT_LIPIDSEARCH,
     LIPIDSEARCH_DETECTION_THRESHOLD,
@@ -17,6 +15,8 @@ from app.constants import (
 from ..models.experiment import ExperimentConfig
 from ..services.zero_filtering import ZeroFilteringService, ZeroFilterConfig
 from ..ui.download_utils import csv_download_button
+
+logger = logging.getLogger(__name__)
 
 
 def display_zero_filtering_config(

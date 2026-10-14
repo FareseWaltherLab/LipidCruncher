@@ -25,7 +25,6 @@ DEFAULT_TIMEOUT = 15
 
 def landing_page_script():
     """Render landing page only."""
-    import streamlit as st
     from app.adapters.streamlit_adapter import StreamlitAdapter
     StreamlitAdapter.initialize_session_state()
     import app.ui.landing_page as lp
@@ -579,7 +578,6 @@ def reset_with_overlapping_widget_script():
 @pytest.fixture
 def module1_nav_app():
     """Module 1 navigation with normalized_df pre-populated."""
-    import numpy as np
     import pandas as pd
 
     at = AppTest.from_function(module1_nav_script, default_timeout=DEFAULT_TIMEOUT)
@@ -597,7 +595,6 @@ def module1_nav_app():
 @pytest.fixture
 def module2_nav_app():
     """Module 2 navigation with normalized_df and QC state pre-populated."""
-    import numpy as np
     import pandas as pd
 
     at = AppTest.from_function(module2_nav_script, default_timeout=DEFAULT_TIMEOUT)

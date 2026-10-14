@@ -5,8 +5,8 @@ Pure business logic - no Streamlit dependencies.
 Handles box plot data preparation, BQC quality assessment, retention time
 availability, pairwise correlation, and PCA analysis.
 """
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,7 @@ from ..services.validation import (
     validate_dataframe_not_empty,
     validate_concentration_columns,
 )
-from .exceptions import EmptyDataError, ValidationError
+from .exceptions import ValidationError
 
 
 # ============================================================

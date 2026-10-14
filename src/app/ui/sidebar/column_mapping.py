@@ -6,7 +6,7 @@ This module contains:
 - display_column_mapping: Display column mapping table with MS-DIAL sample override
 """
 
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import streamlit as st
 import pandas as pd

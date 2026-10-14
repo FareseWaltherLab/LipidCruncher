@@ -19,7 +19,7 @@ import pandas as pd
 from app.constants import (
     LYSO_CLASSES, normalize_hydroxyl,
     sort_chains_lipid_maps, remove_phantom_chains,
-    get_chain_separator, format_lipid_name,
+    format_lipid_name,
 )
 from app.services.format_detection import DataFormat, FormatDetectionService
 from app.services.lipidsearch_alignment import (

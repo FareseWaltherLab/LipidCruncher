@@ -74,7 +74,8 @@ def make_dataframe(
     if with_classkey:
         data['ClassKey'] = classes if classes else ['PC'] * n_lipids
     if value_fn is None:
-        value_fn = lambda n: np.random.rand(n) * 1000
+        def value_fn(n):
+            return np.random.rand(n) * 1000
     for i in range(1, n_samples + 1):
         data[f'{prefix}[s{i}]'] = value_fn(n_lipids)
     return pd.DataFrame(data)
