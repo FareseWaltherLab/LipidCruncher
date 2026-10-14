@@ -464,6 +464,11 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
 # Section 4: Pairwise Correlation
 # =============================================================================
 
+def _replicate_type(condition: str, bqc_label: Optional[str]) -> str:
+    """Correlation sample type: BQC samples are technical replicates."""
+    return 'technical replicates' if condition == bqc_label else 'biological replicates'
+
+
 def _display_correlation_analysis(
     df: pd.DataFrame,
     experiment: 'ExperimentConfig',
@@ -498,13 +503,13 @@ def _display_correlation_analysis(
             key='corr_condition'
         )
 
-        # Auto-detect sample type based on BQC presence
-        if bqc_label is not None:
-            sample_type = 'technical replicates'
-            st.info("**Sample type:** Technical replicates (BQC samples detected)")
+        # Only the BQC condition holds technical replicates (pooled aliquots);
+        # every other condition's samples are biological replicates.
+        sample_type = _replicate_type(selected_condition, bqc_label)
+        if sample_type == 'technical replicates':
+            st.info("**Sample type:** Technical replicates (BQC samples)")
         else:
-            sample_type = 'biological replicates'
-            st.info("**Sample type:** Biological replicates (no BQC samples)")
+            st.info("**Sample type:** Biological replicates")
 
         # --- Results ---
         results_header()
@@ -527,7 +532,7 @@ def _display_correlation_analysis(
                     StreamlitAdapter.run_correlation(
                         df, experiment,
                         experiment.conditions_list.index(condition),
-                        sample_type, display_names,
+                        _replicate_type(condition, bqc_label), display_names,
                     )
                 )
 

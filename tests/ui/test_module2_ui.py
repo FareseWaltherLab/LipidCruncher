@@ -207,11 +207,22 @@ class TestCorrelation:
         info_values = [i.value for i in at.info]
         assert any("Biological replicates" in v for v in info_values)
 
-    def test_correlation_tech_replicate_info(self, qc_bqc_app):
-        """With BQC label, shows technical replicates info."""
+    def test_correlation_bqc_condition_is_technical(self, qc_bqc_app):
+        """The BQC condition's samples are technical replicates (r >= 0.8)."""
         at = qc_bqc_app
+        at.selectbox(key='corr_condition').set_value('BQC').run()
         info_values = [i.value for i in at.info]
         assert any("Technical replicates" in v for v in info_values)
+
+    def test_correlation_other_conditions_stay_biological(self, qc_bqc_app):
+        """Regression: any experiment with a BQC condition labelled every
+        condition "Technical replicates" and judged WT/KO replicates against
+        the 0.8 technical threshold instead of 0.7."""
+        at = qc_bqc_app
+        at.selectbox(key='corr_condition').set_value('Control').run()
+        info_values = [i.value for i in at.info]
+        assert any("Biological replicates" in v for v in info_values)
+        assert not any("Technical replicates" in v for v in info_values)
 
 
 # =============================================================================
