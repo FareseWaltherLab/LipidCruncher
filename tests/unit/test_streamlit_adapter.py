@@ -1106,7 +1106,7 @@ class TestSessionStateFieldCompleteness:
         # + 1 (_preserved_pca_groups_remove, PCA group exclusion, reset with QC) = 90
         # + 3 (processing_df, processing_sample_names, _preserved_excluded_samples;
         #      sidebar sample exclusion) = 93
-        # + 2 (_preserved_bqc_radio, _preserved_bqc_label_radio) = 95
+        # + 2 (_preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio) = 95
         # + 3 (qc_input_experiment, qc_input_bqc_label, qc_input_processing_df) = 98
         assert len(field_names) == 98
 

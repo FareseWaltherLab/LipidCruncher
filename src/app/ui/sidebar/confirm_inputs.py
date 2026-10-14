@@ -55,7 +55,7 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
     bqc_options = ['Yes', 'No']
     # On a run where this section was skipped (e.g. a manual regroup is
     # mid-edit) Streamlit drops the widget keys; restore the last answers.
-    _restore_widget_key('bqc_radio', '_preserved_bqc_radio', bqc_options)
+    _restore_widget_key('bqc_radio', '_preserved_sidebar_bqc_radio', bqc_options)
     bqc_kwargs = {'key': 'bqc_radio'}
     if 'bqc_radio' not in st.session_state:
         bqc_kwargs['index'] = 1
@@ -64,7 +64,7 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
         bqc_options,
         **bqc_kwargs,
     )
-    StreamlitAdapter.save_widget_value('bqc_radio', '_preserved_bqc_radio')
+    StreamlitAdapter.save_widget_value('bqc_radio', '_preserved_sidebar_bqc_radio')
 
     bqc_label = None
     if bqc_ans == 'Yes':
@@ -80,7 +80,7 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
             # 'bqc_label_radio' in session state, so only supply `index` when
             # the key is absent to avoid the default-plus-session-state warning.
             _restore_widget_key(
-                'bqc_label_radio', '_preserved_bqc_label_radio', conditions_with_two_plus
+                'bqc_label_radio', '_preserved_sidebar_bqc_label_radio', conditions_with_two_plus
             )
             label_kwargs = {'key': 'bqc_label_radio'}
             if 'bqc_label_radio' not in st.session_state:
@@ -90,7 +90,7 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
                 conditions_with_two_plus,
                 **label_kwargs,
             )
-            StreamlitAdapter.save_widget_value('bqc_label_radio', '_preserved_bqc_label_radio')
+            StreamlitAdapter.save_widget_value('bqc_label_radio', '_preserved_sidebar_bqc_label_radio')
         else:
             st.sidebar.warning("No conditions with 2+ samples available for BQC.")
 
