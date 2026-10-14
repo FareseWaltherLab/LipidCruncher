@@ -17,7 +17,7 @@ pytest tests/ -v
 
 # Run a single test file / test
 pytest tests/unit/test_normalization.py -v
-pytest tests/unit/test_normalization.py::TestNormalizationService::test_internal_standard -v
+pytest tests/unit/test_normalization.py::TestInternalStandardFormula::test_is_normalization_applies_correct_formula -v
 
 # Coverage
 pytest tests/ --cov=src/app --cov-report=term-missing
@@ -53,7 +53,7 @@ UI (src/main_app.py, src/app/ui/)
 
 ## Supported data formats
 
-Format detection auto-routes to a cleaner via the registry in `src/app/services/data_cleaning/__init__.py`. Adding a format = new cleaner class + registry entry + a `DataFormat` enum value. See `format_detection.py` for the detection signature order (most specific first).
+The sidebar format dropdown decides how a file is read: `resolve_format_enum` (`src/app/constants.py`) maps it to a `DataFormat`, which routes to a cleaner via the registry in `src/app/services/data_cleaning/__init__.py`. `FormatDetectionService.detect_format` only feeds a sidebar warning when the file looks like a different format. Adding a format = new cleaner class + registry entry + a `DataFormat` enum value + its entry in `FORMAT_OPTIONS` / `get_format_display_to_enum` in `constants.py` (without it, `resolve_format_enum` silently routes the new format to Generic).
 
 LipidSearch uploads (the `LipidSearch` format — handles both 5.0 and 5.2) auto-detect the delimiter (tab vs comma) and the layout: flat `MeanArea[*]` (5.0 / sample-grouped 5.2) vs. condition-grouped **dual-polarity** `OriginalArea[s{cond}-{file}]` (5.2). The dual-polarity layout requires the **Alignment Setting file** to pair each sample's positive/negative runs before merging into `intensity[s1..sN]` — see `src/app/services/lipidsearch_alignment.py`.
 
