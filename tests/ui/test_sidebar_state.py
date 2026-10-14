@@ -136,3 +136,40 @@ class TestFormatSwitchWithDataLoaded:
         assert not at.exception
         assert at.session_state['format_type'] == 'Generic Format'
         pd.testing.assert_frame_equal(at.session_state['standardized_df'], standardized)
+
+
+def _go_to_quality_check(at):
+    [b for b in at.button if b.label.startswith('Next')][0].click().run()
+    assert not at.exception
+    assert at.session_state['normalized_df'] is not None
+
+
+def _pca_points_per_condition(at):
+    figure = at.session_state['qc_pca_plot']
+    return {t.name: len(t.x) for t in figure.data if t.mode == 'markers'}
+
+
+class TestSidebarChangeAfterModule1:
+    """Module 2/3 analyse Module 1's frozen output, so they must keep the
+    experiment that produced it while the sidebar keeps running."""
+
+    def test_exclusion_in_quality_check_keeps_module1_grouping(self):
+        """Regression: excluding s1 in the sidebar while on Quality Check
+        paired the live 11-sample experiment with the frozen 12-sample
+        normalized data — the excluded sample stayed in WT and later samples
+        shifted into the wrong conditions, with no message."""
+        at = _load_sample()
+        _go_to_quality_check(at)
+        assert _pca_points_per_condition(at) == {'WT': 4, 'ADGAT-DKO': 4, 'BQC': 4}
+
+        at.sidebar.multiselect(key='exclude_samples').set_value(['s1']).run()
+
+        assert not at.exception
+        assert _pca_points_per_condition(at) == {'WT': 4, 'ADGAT-DKO': 4, 'BQC': 4}
+        assert any('Back to Data Processing' in w.value for w in at.warning)
+
+    def test_no_warning_without_sidebar_change(self):
+        at = _load_sample()
+        _go_to_quality_check(at)
+        at.run()
+        assert not any('Back to Data Processing' in w.value for w in at.warning)

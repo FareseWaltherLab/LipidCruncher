@@ -11,7 +11,7 @@ Architecture:
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -288,6 +288,34 @@ def _display_module1(
     _display_module1_navigation()
 
 
+def _module1_handoff(
+    experiment: 'ExperimentConfig', bqc_label: Optional[str],
+) -> Tuple['ExperimentConfig', Optional[str]]:
+    """Return the sidebar setup Module 1 ran with, frozen on entry to Module 2.
+
+    The sidebar keeps running here, so an exclusion or regroup made now would
+    pair a new experiment with the normalized data Module 1 already computed.
+    Module 2/3 keep the setup that produced that data and say how to apply
+    the change.
+    """
+    state = st.session_state
+    if state.get('qc_input_experiment') is None:
+        state.qc_input_experiment = experiment
+        state.qc_input_bqc_label = bqc_label
+        state.qc_input_processing_df = state.processing_df
+    elif (
+        experiment != state.qc_input_experiment
+        or bqc_label != state.qc_input_bqc_label
+        or not state.processing_df.equals(state.qc_input_processing_df)
+    ):
+        st.warning(
+            "The sidebar setup changed after Module 1 ran. Quality Check and "
+            "the analyses below still use the samples and grouping Module 1 "
+            "processed; go **← Back to Data Processing** to apply the change."
+        )
+    return state.qc_input_experiment, state.qc_input_bqc_label
+
+
 def _display_module2_and_3(
     experiment: 'ExperimentConfig',
     bqc_label: Optional[str],
@@ -302,6 +330,8 @@ def _display_module2_and_3(
             st.session_state.module = MODULE_DATA_PROCESSING
             st.rerun()
         return
+
+    experiment, bqc_label = _module1_handoff(experiment, bqc_label)
 
     # --- Module 2: Quality Check ---
     qc_df, updated_experiment = display_quality_check_module(

@@ -195,6 +195,12 @@ class SessionState:
     # sample_names as of Module 1's handoff, so a later regroup cannot
     # relabel the data QC/analysis already hold.
     qc_input_sample_names: Optional[Dict[str, str]] = None
+    # The sidebar setup that produced normalized_df, frozen at the same
+    # handoff: the sidebar keeps running on Module 2/3, and a later exclusion
+    # or regroup must not be paired with Module 1's already-computed data.
+    qc_input_experiment: Optional[ExperimentConfig] = None
+    qc_input_bqc_label: Optional[str] = None
+    qc_input_processing_df: Optional[pd.DataFrame] = None
     # sample_names re-keyed into the label space left after PCA sample
     # exclusion (which renumbers survivors); used by post-QC CSV downloads.
     qc_sample_names: Optional[Dict[str, str]] = None
