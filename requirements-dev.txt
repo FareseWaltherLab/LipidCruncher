@@ -1,0 +1,5 @@
+# Development tools (not needed to run the app). Install after requirements.txt:
+#   pip install -r requirements-dev.txt
+pytest==8.4.2
+pytest-cov==7.0.0
+ruff==0.9.10

@@ -1,0 +1,13 @@
+# Lint configuration. Rules: ruff's defaults (pyflakes + the pycodestyle
+# error subset). Run `ruff check src tests`; CI fails on any finding.
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# Package __init__ files re-export names for callers.
+"__init__.py" = ["F401"]
+# st.set_page_config must be the first Streamlit call, so imports follow it.
+"src/main_app.py" = ["E402"]

@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Activate venv (required before any Python command)
+# Activate venv (required before any Python command). Python 3.11, matching
+# the Dockerfile and CI; recreate with `python3.11 -m venv lipidcruncher_env`.
 source lipidcruncher_env/bin/activate
 
 # Run the app
@@ -20,6 +21,9 @@ pytest tests/unit/test_normalization.py::TestNormalizationService::test_internal
 
 # Coverage
 pytest tests/ --cov=src/app --cov-report=term-missing
+
+# Lint (CI fails on any finding; config in ruff.toml)
+ruff check src tests
 ```
 
 `pytest.ini` sets `pythonpath = src`, so tests import as `from app.services...` (not `src.app.services...`).
@@ -27,6 +31,7 @@ pytest tests/ --cov=src/app --cov-report=term-missing
 ## Testing
 
 - **Every bug we fix gets a regression test.** Add a test that fails on the buggy code and passes after the fix, in the same change as the fix.
+- **`ruff check src tests` must pass** before committing; CI runs it alongside the tests.
 
 ## Architecture (read CODEBASE.md for full detail)
 

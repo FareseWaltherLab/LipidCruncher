@@ -9,7 +9,7 @@ dist/
 build/
 
 # Virtual environment
-lipidcruncher_env/
+lipidcruncher_env*/
 
 # Environment variables (secrets)
 .env
