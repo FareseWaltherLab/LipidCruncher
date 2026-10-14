@@ -589,11 +589,7 @@ The app runs on port 8501 by default.
 | plotly | 5.18.0 | Interactive visualizations |
 | matplotlib | 3.7.1 | Static plots (heatmaps, FACH) |
 | seaborn | 0.12.2 | Statistical plot styling |
-| bokeh | 2.4.3 | Additional visualization support |
 | kaleido | 0.2.1 | Plotly static image export |
 | reportlab | 3.6.12 | PDF generation |
 | pdf2image | 1.17.0 | PDF to image conversion |
-| svglib | 1.5.1 | SVG rendering for PDF reports |
 | pillow | 9.5.0 | Image processing |
-| openpyxl | 3.1.2 | Excel export |
-| selenium | 4.10.0 | Browser automation (export fallback) |

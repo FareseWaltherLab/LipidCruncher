@@ -123,8 +123,8 @@ pytest tests/ --cov=src/app --cov-report=term-missing
 ## 📦 Dependencies
 
 **Core:** streamlit, pandas, numpy, scipy, scikit-learn, statsmodels  
-**Visualization:** plotly, matplotlib, seaborn, bokeh, kaleido  
-**Documents:** pillow, reportlab, svglib, pdf2image, openpyxl
+**Visualization:** plotly, matplotlib, seaborn, kaleido  
+**Documents:** pillow, reportlab, pdf2image
 
 See `requirements.txt` for versions.
 
