@@ -29,20 +29,6 @@ class ReportMetadata:
     conditions_detail: List[Tuple[str, int, List[str]]] = field(default_factory=list)
 
 
-# ── Plot Specification ──────────────────────────────────────────────────────
-# Each entry: (dict_key, title, orientation, is_matplotlib, special_handler)
-
-_ANALYSIS_PLOT_ORDER: List[Tuple[str, str, str, bool]] = [
-    ('bar_chart', 'Abundance Bar Chart', 'landscape', False),
-    # pie_* handled dynamically
-    # sat_*_* handled dynamically
-    ('chain_length', 'Chain Length Distribution', 'landscape', False),
-    ('fach', 'Fatty Acid Composition Heatmap', 'landscape', False),
-    ('pathway', 'Lipid Pathway Visualization', 'landscape', False),
-    ('volcano', 'Volcano Plot', 'landscape', False),
-    ('heatmap', 'Lipidomic Heatmap', 'portrait', False),
-]
-
 # ── Image Conversion ────────────────────────────────────────────────────────
 
 _PLOTLY_EXPORT_LANDSCAPE = dict(format='png', width=1000, height=700, scale=2)

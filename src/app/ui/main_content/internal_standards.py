@@ -538,7 +538,6 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
         # Show consistency plots if we have standards and experiment config
         if (active_standards_df is not None and
             not active_standards_df.empty and
-            'experiment' in st.session_state and
             st.session_state.experiment is not None):
             display_standards_consistency_plots(
                 intsta_df=active_standards_df,
