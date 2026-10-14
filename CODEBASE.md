@@ -281,7 +281,7 @@ Domain-specific subclasses exist in `data_cleaning/exceptions.py` (`DataCleaning
 | Class | Purpose |
 |---|---|
 | `BaseDataCleaner` | Common utilities: lipid column detection, numeric conversion, internal standard extraction (regex-based), lipid name validation. |
-| `LipidSearchCleaner` | Grade-based filtering (A/B/C/D per class), AUC deduplication (highest abundance), column standardization (`MeanArea[*]` → `intensity[*]`). |
+| `LipidSearchCleaner` | Grade-based filtering (A/B/C/D per class), best-peak deduplication (best grade, then highest TotalSmpIDRate(%)), column standardization (`MeanArea[*]` → `intensity[*]`). |
 | `MSDIALCleaner` | Score threshold filtering, optional MS/MS requirement, deduplication by highest score, sample column auto-detection. |
 | `GenericCleaner` | Basic cleanup: invalid lipid removal, zero column check, standard extraction. Used for Generic and Metabolomics Workbench formats. |
 

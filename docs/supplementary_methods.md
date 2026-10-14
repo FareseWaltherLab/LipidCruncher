@@ -96,7 +96,7 @@ LipidCruncher performs a filtering step to ensure the dataset is prepared for an
 
 Deduplication is handled differently depending on the data format:
 
-- LipidSearch: When multiple entries exist for the same lipid, the entry with the highest TotalSmpIDRate(%) is selected; if tied, the entry with the best quality grade (A > B > C) is retained
+- LipidSearch: When multiple entries exist for the same lipid, the entry with the best quality grade (A > B > C) is retained; among entries with the same grade, the one with the highest TotalSmpIDRate(%) is selected
 
 - MS-DIAL: When duplicates exist, the entry with the highest Total Score is retained; if no score is available, the first occurrence is kept
 
@@ -108,7 +108,7 @@ Applies to: LipidSearch and MS-DIAL formats only
 
 For generic and Metabolomics Workbench formats, quality-based filtering is not performed as these formats do not include quality metrics.
 
-LipidSearch: LipidSearch assigns quality grades to each lipid identification: A (highest confidence), B, C, and D (lowest confidence). By default, LipidCruncher accepts grades A and B for most lipid classes. For SM (sphingomyelin) and LPC (lysophosphatidylcholine) classes, grade C is also accepted by default due to the typically lower identification confidence for these classes. Users can customize grade acceptance for each lipid class through the interface. For each unique lipid with multiple entries, the entry with the highest TotalSmpIDRate(%) is selected as this indicates the most reliable measurement across samples.
+LipidSearch: LipidSearch assigns quality grades to each lipid identification: A (highest confidence), B, C, and D (lowest confidence). By default, LipidCruncher accepts grades A and B for most lipid classes. For SM (sphingomyelin) and LPC (lysophosphatidylcholine) classes, grade C is also accepted by default due to the typically lower identification confidence for these classes. Users can customize grade acceptance for each lipid class through the interface. For each unique lipid with multiple entries, the entry with the best grade is selected, as the grade reflects identification confidence; among entries with the same grade, the one with the highest TotalSmpIDRate(%) is selected, as this indicates the most consistent detection across samples.
 
 MS-DIAL: MS-DIAL provides a Total Score (0-100) reflecting identification confidence. LipidCruncher offers three predefined filtering levels, and users can adjust the threshold as needed:
 
