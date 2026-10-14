@@ -17,6 +17,20 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.st_helpers import section_header
 
 
+def _clear_pdf_plots(*keys: str) -> None:
+    """Drop an analysis's figures from the PDF report before it re-renders.
+
+    Each analysis stores only the figures it actually draws, so a figure the
+    user can no longer see (classes deselected, plot type switched, an early
+    return) does not stay in the report. A key ending in '_' is a prefix.
+    """
+    plots = st.session_state.analysis_all_plots
+    prefixes = tuple(k for k in keys if k.endswith('_'))
+    for key in list(plots):
+        if key in keys or (prefixes and key.startswith(prefixes)):
+            del plots[key]
+
+
 def _display_statistical_options(
     key_prefix: str,
     n_classes: int,

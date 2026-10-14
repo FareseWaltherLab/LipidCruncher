@@ -9,12 +9,14 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._utils import _check_fa_compatibility
+from app.ui.main_content.analysis._shared import _clear_pdf_plots
 
 
 def _display_fach_heatmaps(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display Fatty Acid Composition Heatmap analysis."""
+    _clear_pdf_plots('fach')
     with st.expander(
         "Class Level Breakdown - Fatty Acid Composition Heatmaps", expanded=False
     ):

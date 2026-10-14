@@ -14,7 +14,7 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
 
-from app.ui.main_content.analysis._shared import _display_detailed_statistics
+from app.ui.main_content.analysis._shared import _clear_pdf_plots, _display_detailed_statistics
 from app.ui.sample_labels import names_for
 from typing import TYPE_CHECKING
 
@@ -26,6 +26,7 @@ def _display_volcano_plot(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display volcano plot analysis."""
+    _clear_pdf_plots('volcano', 'conc_vs_fc', 'lipid_distribution')
     with st.expander("Species Level Breakdown - Volcano Plot", expanded=False):
         st.markdown(
             "Identify differentially abundant lipid species between two conditions."
@@ -248,10 +249,7 @@ def _render_volcano_results(
     # Show detailed results
     _display_detailed_statistics(result.stat_summary, 'volcano')
 
-    # Concentration vs Fold Change. Drop first, re-store below only if the
-    # plot is actually rendered, so the PDF report never carries a figure
-    # from a previous comparison that the user can no longer see.
-    st.session_state.analysis_all_plots.pop('conc_vs_fc', None)
+    # Concentration vs Fold Change (stored only if rendered; see _clear_pdf_plots)
     if result.concentration_plot is not None:
         st.markdown("---")
         st.markdown("###### Concentration vs. Fold Change")
@@ -339,11 +337,6 @@ def _display_individual_lipid_analysis(
     experimental: str,
 ) -> None:
     """Display individual lipid distribution plots."""
-    # Drop first, re-store below only if a plot is actually rendered. Every
-    # early return in this function means the user is no longer looking at a
-    # distribution plot, so the PDF report shouldn't hold one either.
-    st.session_state.analysis_all_plots.pop('lipid_distribution', None)
-
     if result.volcano_data is None or result.volcano_data.volcano_df is None:
         return
 

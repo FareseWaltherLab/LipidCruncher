@@ -153,6 +153,15 @@ class TestBarChartUI:
         assert at.session_state['analysis_bar_chart_fig'] is not None
         assert 'bar_chart' in at.session_state['analysis_all_plots']
 
+    def test_bar_chart_leaves_pdf_when_no_class_selected(self, analysis_generic_app):
+        """Regression: deselecting every class showed a warning instead of the
+        chart, but the old chart stayed in the PDF report."""
+        at = analysis_generic_app
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
+        at.multiselect(key='bar_classes').set_value([]).run()
+        assert not at.exception
+        assert 'bar_chart' not in at.session_state['analysis_all_plots']
+
     def test_bar_manual_mode_renders(self, analysis_generic_app):
         """Switching bar chart stats to Manual mode renders without error."""
         at = analysis_generic_app
@@ -327,6 +336,19 @@ class TestSaturationUI:
                 f"sat_concentration_{key.rsplit('_', 1)[0]}"
             ]
             assert len(report_fig.layout.annotations) == 0
+
+    def test_saturation_pdf_follows_plot_type(self, analysis_generic_app):
+        """Regression: switching from Both to Concentration left the
+        percentage figures in the PDF report."""
+        at = self._switch_to_saturation(analysis_generic_app)
+        at.radio(key='sat_plot_type').set_value("Both").run()
+        assert any(k.startswith('sat_percentage_') for k in at.session_state['analysis_all_plots'])
+
+        at.radio(key='sat_plot_type').set_value("Concentration").run()
+        assert not at.exception
+        keys = list(at.session_state['analysis_all_plots'])
+        assert any(k.startswith('sat_concentration_') for k in keys)
+        assert not any(k.startswith('sat_percentage_') for k in keys)
 
     def test_saturation_manual_mode_renders(self, analysis_generic_app):
         """Switching saturation stats to Manual mode renders without error."""

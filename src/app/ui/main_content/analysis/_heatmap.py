@@ -16,6 +16,7 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
 from app.ui.sample_labels import display_names_for, names_for
+from app.ui.main_content.analysis._shared import _clear_pdf_plots
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,6 +27,7 @@ def _display_lipidomic_heatmap(
     df: pd.DataFrame, experiment: ExperimentConfig
 ) -> None:
     """Display lipidomic heatmap analysis."""
+    _clear_pdf_plots('heatmap')
     with st.expander("Species Level Breakdown - Lipidomic Heatmap", expanded=False):
         st.markdown(
             "Visualize concentration patterns across lipid species, or across "
