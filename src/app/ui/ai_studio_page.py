@@ -280,11 +280,13 @@ def _offer_pipeline_import_sidebar() -> None:
     # standardized version has the column rename applied (e.g. LipidSearch
     # `MeanArea[s1]` → `intensity[s1]`), which lets AI Studio's auto-
     # detection + experiment pre-populate run end-to-end. Fall back to
-    # `raw_df` only if standardization hasn't happened yet.
-    raw_for_studio = (
-        st.session_state.get("standardized_df")
-        if st.session_state.get("standardized_df") is not None
-        else st.session_state.get("raw_df")
+    # `raw_df` only if standardization hasn't happened yet. Once inputs are
+    # confirmed, `processing_df` comes first: `experiment` describes it, not
+    # `standardized_df`, when samples were excluded in the sidebar.
+    raw_for_studio = next(
+        (st.session_state.get(k) for k in ("processing_df", "standardized_df", "raw_df")
+         if st.session_state.get(k) is not None),
+        None,
     )
     if normalized_df is None and raw_for_studio is None and qc_df is None:
         return

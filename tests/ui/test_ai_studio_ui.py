@@ -459,6 +459,54 @@ def pipeline_import_no_qc_script():
     _offer_pipeline_import_sidebar()
 
 
+def pipeline_import_excluded_script():
+    """Sample s4 was excluded in the sidebar before Module 1: `experiment`
+    and `processing_df` hold the 3 survivors, `standardized_df` still holds
+    all 4 samples."""
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.models.experiment import ExperimentConfig
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('standardized_df') is None:
+        st.session_state.standardized_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1'],
+            'intensity[s1]': [1.0], 'intensity[s2]': [3.0],
+            'intensity[s3]': [5.0], 'intensity[s4]': [7.0],
+        })
+        st.session_state.processing_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1'],
+            'intensity[s1]': [1.0], 'intensity[s2]': [3.0],
+            'intensity[s3]': [5.0],
+        })
+        st.session_state.experiment = ExperimentConfig(
+            conditions_list=['WT', 'KO'], number_of_samples_list=[2, 1],
+        )
+
+    from app.ui.ai_studio_page import _offer_pipeline_import_sidebar
+    _offer_pipeline_import_sidebar()
+
+    imported = st.session_state.get('chat_studio_df')
+    n_cols = (
+        sum(c.startswith('intensity[') for c in imported.columns)
+        if imported is not None else -1
+    )
+    st.text(f"intensity_cols:{n_cols}")
+
+
+class TestRawImportAfterSidebarExclusion:
+    def test_raw_import_matches_the_experiment(self):
+        """Regression: the Raw import paired the full `standardized_df` with
+        the post-exclusion `experiment`, so the Studio saw 4 sample columns
+        for an experiment of 3."""
+        at = AppTest.from_function(
+            pipeline_import_excluded_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.button(key='ai_studio_import_pipeline').click().run()
+        assert _marker(at, 'intensity_cols:') == '3'
+
+
 class TestQCOptionHiddenWithoutQCData:
     def test_no_qc_option_before_module2_runs(self):
         at = AppTest.from_function(
