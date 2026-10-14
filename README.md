@@ -48,9 +48,10 @@ Sample datasets are also available in the [sample_datasets](https://github.com/F
 # Clone and setup
 git clone https://github.com/FareseWaltherLab/LipidCruncher.git
 cd LipidCruncher
-python -m venv lipidcruncher_env
+python3.11 -m venv lipidcruncher_env   # Python 3.11, as in the Dockerfile and CI
 source lipidcruncher_env/bin/activate  # Windows: lipidcruncher_env\Scripts\activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # tests and lint (optional)
 
 # Run
 streamlit run src/main_app.py
