@@ -19,7 +19,6 @@ from .prompt_templates import (
     PIPELINE_FIRST_RULES,
 )
 from .sandbox import SandboxResult, SandboxService
-from .schema_extractor import SchemaExtractorService
 
 
 def _viz_system_prompt() -> str:

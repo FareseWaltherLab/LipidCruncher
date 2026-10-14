@@ -509,7 +509,7 @@ def _display_group_samples_sidebar(
     # Manual reassignment via multiselect, mirroring the main app.
     st.sidebar.write(
         "Pick the samples that belong to each condition. Each condition "
-        f"needs exactly the count you set above."
+        "needs exactly the count you set above."
     )
     manual = []
     remaining = list(sample_names)

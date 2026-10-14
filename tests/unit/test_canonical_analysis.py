@@ -80,7 +80,7 @@ def test_fold_change_directions_match_the_plant(df):
 
 def test_unchanged_lipids_are_not_significant(df):
     stats = ref.species_stats(df)
-    unchanged = [l for l in stats.index if l not in PLANTED]
+    unchanged = [lipid for lipid in stats.index if lipid not in PLANTED]
     assert not stats.loc[unchanged, "significant"].any()
 
 

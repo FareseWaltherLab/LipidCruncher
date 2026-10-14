@@ -20,8 +20,8 @@ import sys
 import tempfile
 import threading
 import time
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -499,7 +499,7 @@ class SandboxService:
 
         # Phase 1: AST validation (raises SandboxError on violation)
         try:
-            tree = validate_code(code)
+            validate_code(code)
         except SandboxError as e:
             return SandboxResult(
                 success=False,

@@ -4,12 +4,10 @@ Unit tests for the AI data transformer service.
 Tests validation logic directly and transformation execution with
 pre-written code (no AI calls needed for these tests).
 """
-import numpy as np
 import pandas as pd
 import pytest
 
-from app.services.ai_chat.data_transformer import DataTransformerService, TransformationResult
-from app.models.chat import SandboxConfig
+from app.services.ai_chat.data_transformer import DataTransformerService
 
 
 # ---------------------------------------------------------------------------

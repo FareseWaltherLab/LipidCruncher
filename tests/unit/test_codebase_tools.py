@@ -206,7 +206,7 @@ class TestReadFileSection:
         })
         assert "lines 1-5" in result
         # Should have exactly 5 numbered lines of content
-        content_lines = [l for l in result.split("\n") if l and not l.startswith("File:")]
+        content_lines = [line for line in result.split("\n") if line and not line.startswith("File:")]
         assert len(content_lines) == 5
 
     def test_nonexistent_file(self):

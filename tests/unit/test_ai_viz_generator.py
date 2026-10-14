@@ -6,12 +6,11 @@ and workflow viz methods with a mocked AI client.
 """
 from unittest.mock import patch
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from app.models.chat import AIConfig, ChatMode, SandboxConfig
+from app.models.chat import ChatMode
 from app.models.experiment import ExperimentConfig
 from app.services.ai_chat.viz_generator import VizGeneratorService, _build_experiment_context
 from app.workflows.ai_chat import AIChatWorkflow, VizStepResult

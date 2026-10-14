@@ -46,7 +46,7 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, PAGE_AI_STUDIO, PAGE_ISOTOPE_TRACING, FORMAT_MSDIAL, Module, Page
+from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, PAGE_AI_STUDIO, PAGE_ISOTOPE_TRACING, FORMAT_MSDIAL
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.isotope_tracing_page import display_isotope_tracing_page
 from app.ui.format_requirements import display_format_requirements

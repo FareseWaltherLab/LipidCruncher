@@ -6,13 +6,11 @@ and that safe code executes correctly in the restricted environment.
 """
 import signal
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from app.services.ai_chat.sandbox import (
     SandboxService,
-    SandboxResult,
     validate_code,
     SandboxError,
 )
@@ -403,7 +401,6 @@ class TestTimeout:
         reason="SIGALRM not available on this platform",
     )
     def test_infinite_loop_times_out(self, sample_df):
-        import signal
         config = SandboxConfig(execution_timeout=1)
         code = "while True:\n    pass"
         result = SandboxService.execute(code, sample_df, config)

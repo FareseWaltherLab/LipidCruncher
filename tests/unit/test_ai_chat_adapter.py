@@ -5,13 +5,12 @@ Tests that SessionState has the correct chat_* keys, that adapter
 methods delegate correctly, and that the chat UI modules import cleanly.
 """
 from dataclasses import fields
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pandas as pd
-import pytest
 
 from app.adapters.streamlit_adapter import SessionState
-from app.models.chat import ChatMode, ChatSession
+from app.models.chat import ChatMode
 from app.models.experiment import ExperimentConfig
 from app.workflows.ai_chat import AIChatWorkflow
 

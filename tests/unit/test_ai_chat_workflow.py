@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from app.models.chat import AIConfig, ChatMode, ChatSession, SandboxConfig
+from app.models.chat import ChatMode
 from app.workflows.ai_chat import AIChatWorkflow, TransformStepResult
 
 

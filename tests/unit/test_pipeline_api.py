@@ -5,7 +5,6 @@ gets from ``lc.compare_species`` must equal what the eval's independent
 reference implementation computes. That is what makes "defer to the
 pipeline" mean the same numbers the main app reports.
 """
-import pandas as pd
 import pytest
 
 from app.models.experiment import ExperimentConfig

@@ -6,9 +6,7 @@ generation, and data questions. Pure logic — no Streamlit dependencies.
 """
 import logging
 from dataclasses import dataclass
-
-logger = logging.getLogger(__name__)
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 
@@ -39,8 +37,7 @@ from ..services.format_detection import (
     GENERIC_METADATA_NAME_PATTERNS,
 )
 
-
-from typing import List
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

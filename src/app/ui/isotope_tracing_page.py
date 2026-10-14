@@ -255,7 +255,7 @@ def _display_sidebar(r_available: bool):
         st.markdown("### Stable Isotope Tracing")
 
         st.button("Load sample data", key="iso_load_sample", on_click=_load_sample_data,
-                  use_container_width=True, help="Load the bundled IsoCorrectoR example dataset.")
+                  width='stretch', help="Load the bundled IsoCorrectoR example dataset.")
 
         measurement_up = st.file_uploader("Measurement file (CSV)", type="csv", key="iso_measurement_uploader")
         molecule_up = st.file_uploader("Molecule file (CSV)", type="csv", key="iso_molecule_uploader")
@@ -277,7 +277,7 @@ def _display_sidebar(r_available: bool):
 
         have_all = measurement_df is not None and molecule_df is not None and element_df is not None
         run_clicked = st.button(
-            "Run correction", type="primary", use_container_width=True,
+            "Run correction", type="primary", width='stretch',
             disabled=not (have_all and r_available),
             key="iso_run",
         )
@@ -287,7 +287,7 @@ def _display_sidebar(r_available: bool):
             st.caption("Upload all three files (or load sample data) to enable.")
 
         st.markdown("---")
-        st.button("← Back to Home", key="iso_back_home", on_click=_go_home, use_container_width=True)
+        st.button("← Back to Home", key="iso_back_home", on_click=_go_home, width='stretch')
 
     return measurement_df, molecule_df, element_df, run_clicked
 
@@ -315,7 +315,7 @@ def _display_results(result) -> None:
 
     # Primary output: the corrected intensities.
     st.markdown("#### Corrected intensities")
-    st.dataframe(correction.corrected, use_container_width=True)
+    st.dataframe(correction.corrected, width='stretch')
     _download_table(correction.corrected, "Corrected", key="iso_dl_corrected_main")
 
     # All other IsoCorrectoR outputs.
@@ -325,7 +325,7 @@ def _display_results(result) -> None:
             if table is None:
                 continue
             st.markdown(f"**{label}**")
-            st.dataframe(table, use_container_width=True)
+            st.dataframe(table, width='stretch')
             _download_table(table, label, key=f"iso_dl_{attr}")
             st.markdown("---")
 

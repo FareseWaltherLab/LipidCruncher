@@ -10,8 +10,6 @@ import pytest
 from app.services.format_detection import DataFormat
 from app.workflows.ai_chat import (
     AIChatWorkflow,
-    FormatDiagnosticResult,
-    Module1ValidationResult,
 )
 
 

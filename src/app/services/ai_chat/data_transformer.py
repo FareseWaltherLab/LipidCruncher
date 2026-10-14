@@ -5,7 +5,6 @@ Generates transformation code via the AI, executes it in the sandbox,
 and validates that the output conforms to the Generic format schema.
 All methods are stateless static methods — no Streamlit imports.
 """
-import re
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
@@ -14,7 +13,6 @@ import pandas as pd
 from ...models.chat import AIConfig, SandboxConfig
 from .ai_client import AIClientService
 from .codebase_tools import TOOL_DEFINITIONS, execute_tool
-from .exceptions import TransformationError
 from .prompt_templates import build_transform_context, data_transform_system_prompt
 from .sandbox import SandboxResult, SandboxService
 from .schema_extractor import SchemaExtractorService

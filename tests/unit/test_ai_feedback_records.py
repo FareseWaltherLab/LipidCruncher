@@ -1,7 +1,7 @@
 """Unit tests for the feedback-viewer join helpers (scripts/ai_feedback_records.py)."""
 import json
 
-from ai_feedback_records import Turn, conversation_for, join_feedback, parse_records
+from ai_feedback_records import conversation_for, join_feedback, parse_records
 
 
 def _turn(tid, ts, session="s", tab="visualization", **extra):

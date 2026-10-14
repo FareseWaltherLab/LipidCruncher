@@ -8,7 +8,7 @@ answer usable?" the thing worth asserting. See section 2 of the eval plan.
 Every case records **why it exists**. Cases mined from real failures keep
 their history, since a fixed bug is the cheapest regression test we have.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Tuple
 
 
