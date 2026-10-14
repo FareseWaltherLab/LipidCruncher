@@ -1640,6 +1640,21 @@ class TestTotalIntensityNormalization:
         totals = result.normalized_df[conc_cols].sum(axis=0)
         np.testing.assert_allclose(totals.values, 675.0, rtol=1e-10)
 
+    def test_total_intensity_scales_to_the_median_not_the_mean(self, simple_experiment_2x3):
+        """Totals 100, 200, 900 (x2): median 200, mean 400. The test above
+        uses totals whose mean equals their median, so it cannot tell."""
+        df = pd.DataFrame({
+            'LipidMolec': ['A', 'B'],
+            'ClassKey': ['X', 'X'],
+            **{f'intensity[s{i}]': [t * 0.25, t * 0.75]
+               for i, t in enumerate([100.0, 200.0, 900.0, 100.0, 200.0, 900.0], start=1)},
+        })
+        config = NormalizationConfig(method='total_intensity')
+        result = NormalizationService.normalize(df, config, simple_experiment_2x3)
+        conc_cols = [c for c in result.normalized_df.columns if c.startswith('concentration[')]
+        totals = result.normalized_df[conc_cols].sum(axis=0)
+        np.testing.assert_allclose(totals.values, 200.0, rtol=1e-10)
+
     def test_total_intensity_with_class_filter(self, multi_class_df, simple_experiment_2x3, total_intensity_config_with_classes):
         """Test total intensity normalization with class selection."""
         result = NormalizationService.normalize(
