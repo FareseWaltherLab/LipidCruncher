@@ -13,7 +13,7 @@ SM 18:1+D9:(s)
 """
 
 STANDARDS_COMPLETE_HELP = """
-**CSV format:** 1st column = lipid names, remaining columns = intensity values per sample.
+**CSV format:** 1st column = lipid names, remaining columns = intensity values, one per sample in the order shown in the sidebar (s1, s2, …).
 
 Example:
 ```

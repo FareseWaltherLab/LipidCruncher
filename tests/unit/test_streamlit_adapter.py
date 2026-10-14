@@ -1109,7 +1109,8 @@ class TestSessionStateFieldCompleteness:
         # + 2 (_preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio) = 95
         # + 3 (qc_input_experiment, qc_input_bqc_label, qc_input_processing_df) = 98
         # + 2 (regroup_origin, processing_origin; sample identity) = 100
-        assert len(field_names) == 100
+        # + 1 (custom_standards_sample_set) = 101
+        assert len(field_names) == 101
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""
@@ -1132,7 +1133,8 @@ class TestSessionStateFieldCompleteness:
     def test_dynamic_prefix_count_includes_analysis(self):
         """Test that _DYNAMIC_KEY_PREFIXES count includes analysis prefixes."""
         # 9 (pre-Module 3) + 4 (analysis) = 13
-        assert len(_DYNAMIC_KEY_PREFIXES) == 13
+        # + 1 (standards_file_uploader_, keyed by sample set) = 14
+        assert len(_DYNAMIC_KEY_PREFIXES) == 14
 
 
 # =============================================================================

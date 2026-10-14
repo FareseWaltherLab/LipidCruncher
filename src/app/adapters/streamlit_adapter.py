@@ -162,6 +162,9 @@ class SessionState:
     preserved_standards_mode: Optional[str] = None
     custom_standards_df: Optional[pd.DataFrame] = None
     custom_standards_mode: Optional[str] = None
+    # Which samples a 'complete' table's columns were mapped to (by position);
+    # the table is dropped when sidebar regroup/exclusion renumbers them.
+    custom_standards_sample_set: Optional[str] = None
     standards_source: Optional[str] = None
     # Consistency bar charts, one per internal-standard class (owner:
     # standards_plots.py). Held so the PDF report can include them —
@@ -283,7 +286,6 @@ _WIDGET_KEYS = {
     'non_bqc_zero_threshold', 'bqc_zero_threshold',
     # Standards widgets (internal_standards.py)
     'standards_source_radio', 'standards_location_radio', 'standards_conditions_select',
-    'standards_file_uploader',
     # Normalization widgets (normalization.py)
     'temp_selected_classes', 'protein_csv_upload',
     'norm_method_selection', 'protein_input_method',
@@ -334,6 +336,7 @@ _DYNAMIC_KEY_PREFIXES = (
     'cond_name_',       # condition names by index (experiment_config.py)
     'n_samples_',       # samples per condition by index (experiment_config.py)
     'select_',          # multiselect for condition samples (sample_grouping.py)
+    'standards_file_uploader_',  # keyed by sample set (internal_standards.py)
     'qc_rt_svg_individual_',  # individual RT SVG downloads (quality_check.py)
     'rt_csv_individual_',     # individual RT CSV downloads (quality_check.py)
     'volcano_label_x_',       # per-lipid label X position (analysis.py)

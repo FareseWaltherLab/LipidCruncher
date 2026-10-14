@@ -6,7 +6,9 @@ This module contains:
   (auto-detect, upload custom, view consistency plots)
 """
 
+import hashlib
 import logging
+from typing import Dict, Optional
 
 import streamlit as st
 import pandas as pd
@@ -294,6 +296,22 @@ def _display_custom_upload(
         st.session_state.custom_standards_df = None
         st.session_state.custom_standards_mode = None
 
+    # A complete table's columns are mapped to samples by position. If the
+    # sidebar has renumbered the samples since it was loaded, that mapping no
+    # longer holds: drop the table, and key the uploader to the sample set so
+    # a file still in it is not silently re-mapped onto the new order.
+    sample_set = _sample_set_id(st.session_state.get('processing_origin'))
+    if (st.session_state.custom_standards_df is not None and
+            st.session_state.custom_standards_sample_set not in (None, sample_set)):
+        st.session_state.custom_standards_df = None
+        st.session_state.custom_standards_mode = None
+        st.session_state.custom_standards_sample_set = None
+        st.warning(
+            "Samples were regrouped or excluded in the sidebar after the standards "
+            "table was loaded, so its columns no longer line up with the samples. "
+            "Please upload it again with one column per sample in the current order."
+        )
+
     # Format guidance
     st.markdown(STANDARDS_COMPLETE_HELP)
 
@@ -301,7 +319,7 @@ def _display_custom_upload(
     uploaded_file = st.file_uploader(
         "Upload standards CSV",
         type=['csv'],
-        key="standards_file_uploader",
+        key=f"standards_file_uploader_{sample_set}",
         on_change=_latch_expander_open,
     )
 
@@ -321,6 +339,11 @@ def _display_custom_upload(
     # active until they upload (or switch back to Automatic Detection).
     st.info("Upload a standards CSV, or switch to Automatic Detection to use detected standards.")
     return pd.DataFrame()
+
+
+def _sample_set_id(origin: Optional[Dict[str, str]]) -> str:
+    """Short id of which uploaded sample sits under each Module 1 label."""
+    return hashlib.sha1(repr(list((origin or {}).items())).encode()).hexdigest()[:10]
 
 
 def _display_preserved_custom_standards() -> pd.DataFrame:
@@ -370,6 +393,9 @@ def _process_uploaded_standards(
 
         st.session_state.custom_standards_df = result.standards_df
         st.session_state.custom_standards_mode = current_mode
+        st.session_state.custom_standards_sample_set = _sample_set_id(
+            st.session_state.get('processing_origin')
+        )
 
         # For external standards, remove them from main dataset if present
         if not use_extract_mode:
