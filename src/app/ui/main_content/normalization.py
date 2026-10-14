@@ -22,6 +22,7 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_labels import labeler, names_for
+from app.ui.st_helpers import dataset_widget_key
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +257,9 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
 
     preserved_protein_df = st.session_state.get('protein_df')
 
-    uploaded_file = st.file_uploader("Upload CSV", type="csv", key="protein_csv_upload")
+    uploaded_file = st.file_uploader(
+        "Upload CSV", type="csv", key=dataset_widget_key("protein_csv_upload"),
+    )
 
     if uploaded_file is not None:
         try:

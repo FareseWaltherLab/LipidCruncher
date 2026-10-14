@@ -25,6 +25,7 @@ from app.services.lipidsearch_alignment import (
     AlignmentError, has_grouped_per_file_columns, parse_alignment_file,
 )
 from app.ui.content import get_sample_data_info
+from app.ui.st_helpers import dataset_widget_key
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,7 @@ def _handle_lipidsearch_alignment_upload(df: pd.DataFrame) -> None:
     aln = st.sidebar.file_uploader(
         "Alignment Setting file (required)",
         type=['txt', 'csv'],
-        key='lipidsearch_alignment_uploader',
+        key=dataset_widget_key('lipidsearch_alignment_uploader'),
     )
     if aln is None:
         st.session_state.pop('lipidsearch_alignment_text', None)

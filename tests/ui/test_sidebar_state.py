@@ -279,3 +279,28 @@ class TestNewDatasetStartsAtModule1:
         # element tree still holds Module 2's widgets after st.rerun(), so the
         # next run cannot read their popped keys. The state is what matters.)
         assert at.session_state['module'] == MODULE_DATA_PROCESSING
+
+
+def _protein_csv_uploader_id(at):
+    at.radio(key='norm_method_selection').set_value('Protein-based').run()
+    at.radio(key='protein_input_method').set_value('Upload CSV File').run()
+    assert not at.exception
+    ids = [u.proto.id for u in at.get('file_uploader') if 'protein_csv_upload' in u.proto.id]
+    assert len(ids) == 1
+    return ids[0]
+
+
+class TestUploadersStartEmptyForANewDataset:
+
+    def test_protein_csv_uploader_is_new_for_a_new_dataset(self):
+        """Regression: file uploaders hold their file in the browser under a
+        fixed key, so a protein CSV (or an Alignment Setting file) uploaded
+        for one dataset was silently applied to the next one."""
+        at = _load_sample()
+        first = _protein_csv_uploader_id(at)
+
+        _switch_format(at, 'LipidSearch')
+        at.sidebar.button(key='load_sample').click().run()
+        _confirm(at)
+
+        assert _protein_csv_uploader_id(at) != first

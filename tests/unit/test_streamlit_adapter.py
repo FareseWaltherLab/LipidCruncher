@@ -1136,7 +1136,8 @@ class TestSessionStateFieldCompleteness:
         """Test that _DYNAMIC_KEY_PREFIXES count includes analysis prefixes."""
         # 9 (pre-Module 3) + 4 (analysis) = 13
         # + 1 (standards_file_uploader_, keyed by sample set) = 14
-        assert len(_DYNAMIC_KEY_PREFIXES) == 14
+        # + 1 (lipidsearch_alignment_uploader_, keyed by dataset) = 15
+        assert len(_DYNAMIC_KEY_PREFIXES) == 15
 
 
 # =============================================================================

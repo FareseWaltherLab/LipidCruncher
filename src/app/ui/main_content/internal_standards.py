@@ -17,7 +17,7 @@ from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_COMPLETE_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
-from app.ui.st_helpers import keep_intsta_expander_open, INTSTA_EXPANDER_KEY
+from app.ui.st_helpers import dataset_widget_key, keep_intsta_expander_open, INTSTA_EXPANDER_KEY
 from app.ui.sample_labels import names_for
 
 logger = logging.getLogger(__name__)
@@ -319,7 +319,7 @@ def _display_custom_upload(
     uploaded_file = st.file_uploader(
         "Upload standards CSV",
         type=['csv'],
-        key=f"standards_file_uploader_{sample_set}",
+        key=f"{dataset_widget_key('standards_file_uploader')}_{sample_set}",
         on_change=_latch_expander_open,
     )
 

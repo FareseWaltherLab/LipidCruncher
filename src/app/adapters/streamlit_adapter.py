@@ -289,7 +289,7 @@ _WIDGET_KEYS = {
     # Standards widgets (internal_standards.py)
     'standards_source_radio', 'standards_location_radio', 'standards_conditions_select',
     # Normalization widgets (normalization.py)
-    'temp_selected_classes', 'protein_csv_upload',
+    'temp_selected_classes',
     'norm_method_selection', 'protein_input_method',
     # Data processing widgets (continued)
     'msdial_msms_only',
@@ -338,7 +338,8 @@ _DYNAMIC_KEY_PREFIXES = (
     'cond_name_',       # condition names by index (experiment_config.py)
     'n_samples_',       # samples per condition by index (experiment_config.py)
     'select_',          # multiselect for condition samples (sample_grouping.py)
-    'standards_file_uploader_',  # keyed by sample set (internal_standards.py)
+    'standards_file_uploader_',  # keyed by dataset + sample set (internal_standards.py)
+    'lipidsearch_alignment_uploader_',  # keyed by dataset (file_upload.py)
     'qc_rt_svg_individual_',  # individual RT SVG downloads (quality_check.py)
     'rt_csv_individual_',     # individual RT CSV downloads (quality_check.py)
     'volcano_label_x_',       # per-lipid label X position (analysis.py)
