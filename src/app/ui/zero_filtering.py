@@ -6,8 +6,6 @@ import logging
 import pandas as pd
 import streamlit as st
 
-logger = logging.getLogger(__name__)
-
 from app.constants import (
     FORMAT_LIPIDSEARCH,
     LIPIDSEARCH_DETECTION_THRESHOLD,
@@ -17,6 +15,8 @@ from app.constants import (
 from ..models.experiment import ExperimentConfig
 from ..services.zero_filtering import ZeroFilteringService, ZeroFilterConfig
 from ..ui.download_utils import csv_download_button
+
+logger = logging.getLogger(__name__)
 
 
 def display_zero_filtering_config(
@@ -128,7 +128,7 @@ def display_zero_filtering_config(
                 st.warning(f"**Result:** Will remove {removed_count} species "
                           f"({filter_result.removal_percentage:.1f}% of dataset)")
                 removed_df = pd.DataFrame({'LipidMolec': filter_result.removed_species})
-                st.dataframe(removed_df, use_container_width=True, height=150)
+                st.dataframe(removed_df, width='stretch', height=150)
 
                 csv_download_button(removed_df, "removed_species.csv", key="download_removed_species")
             else:

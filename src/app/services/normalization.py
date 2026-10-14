@@ -5,7 +5,7 @@ Pure business logic - no Streamlit dependencies.
 Handles internal standard normalization, protein normalization, and combined normalization.
 """
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd

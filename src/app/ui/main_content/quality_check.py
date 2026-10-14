@@ -20,7 +20,6 @@ import streamlit as st
 
 from app.constants import resolve_format_enum
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
-from app.services.format_detection import DataFormat
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_names import remap_names_after_exclusion
@@ -30,9 +29,12 @@ from app.ui.st_helpers import (
     data_selection_header,
     results_header,
     settings_header,
-    section_header,
     persist_widget,
 )
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.experiment import ExperimentConfig
 
 
 # =============================================================================
@@ -321,7 +323,7 @@ def _render_bqc_filtering(
         cov_filtered_df['mean'] = cov_filtered_df['mean'].round(4)
 
         st.markdown("###### Lipids Above Threshold")
-        st.dataframe(cov_filtered_df, use_container_width=True)
+        st.dataframe(cov_filtered_df, width='stretch')
 
         lipids_to_keep = st.multiselect(
             "Keep despite high CoV:",
@@ -360,7 +362,7 @@ def _render_bqc_filtering(
     st.markdown("###### Filtered Dataset")
     named_dataframe(
         result.filtered_df, sample_names=names_for('qc_input'),
-        use_container_width=True,
+        width='stretch',
     )
 
     csv_download_button(
@@ -544,7 +546,7 @@ def _display_correlation_analysis(
         named_dataframe(
             correlation_df.rename_axis('Sample'),
             sample_names=names_for('qc_input'),
-            use_container_width=True, hide_index=True,
+            width='stretch', hide_index=True,
         )
 
 

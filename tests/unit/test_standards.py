@@ -340,8 +340,8 @@ class TestDetectStandardsDeuterated:
             'ClassKey': ['PC', 'PC'],
         })
         result = StandardsService.detect_standards(df)
-        assert result[0] is False or result.iloc[0] == False
-        assert result[1] is True or result.iloc[1] == True
+        assert not result[0] or not result.iloc[0]
+        assert result[1] or result.iloc[1]
 
     def test_detect_d7_pattern(self):
         """Test detection of (d7) pattern."""

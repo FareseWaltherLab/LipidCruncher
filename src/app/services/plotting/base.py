@@ -8,9 +8,8 @@ from it, but they should implement the same interface pattern.
 Used for documentation and static type checking (mypy/pyright).
 """
 
-from typing import Dict, List, Protocol, Union, runtime_checkable
+from typing import Dict, List, Protocol, runtime_checkable
 
-import plotly.graph_objects as go
 
 
 @runtime_checkable

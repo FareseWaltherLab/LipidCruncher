@@ -7,7 +7,7 @@ bar chart, saturation plot, and volcano plot analyses.
 """
 from dataclasses import dataclass, field
 from itertools import combinations
-from typing import Dict, List, Literal, Optional, Tuple, Any
+from typing import Dict, List, Literal, Optional, Tuple
 from typing_extensions import TypedDict
 
 import numpy as np

@@ -6,7 +6,6 @@ coordinate grid, and save/load configuration.
 """
 
 import json
-from typing import List
 
 import streamlit as st
 

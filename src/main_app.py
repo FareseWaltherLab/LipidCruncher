@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL, Module, Page
+from app.constants import MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
@@ -55,6 +55,10 @@ from app.ui.main_content import (
     display_quality_check_module,
     display_analysis_module,
 )
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.experiment import ExperimentConfig
 
 
 # =============================================================================
@@ -91,7 +95,7 @@ def _display_session_reset_button() -> None:
         key="reset_session",
         help="Clear experiment setup, processing, and cached results, then "
              "return to the Define Experiment step. Your uploaded data is kept.",
-        use_container_width=True,
+        width='stretch',
     ):
         StreamlitAdapter.reset_to_experiment_setup()
         st.rerun()

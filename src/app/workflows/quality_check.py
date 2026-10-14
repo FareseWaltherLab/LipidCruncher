@@ -13,7 +13,7 @@ All methods are pure logic (no Streamlit dependencies).
 """
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import pandas as pd
 

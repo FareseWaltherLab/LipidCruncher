@@ -16,8 +16,6 @@ import logging
 import streamlit as st
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
 
@@ -34,6 +32,8 @@ from app.constants import (
 from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from app.ui.content import get_processing_docs, ZERO_FILTERING_DOCS
 from app.ui.sample_labels import names_for
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -442,7 +442,7 @@ def display_final_filtered_data(cleaned_df: pd.DataFrame):
     st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
     named_dataframe(
         cleaned_df, sample_names=names_for('processing'),
-        use_container_width=True,
+        width='stretch',
     )
     csv_download_button(
         cleaned_df, "final_filtered_data.csv", key="download_filtered_data",

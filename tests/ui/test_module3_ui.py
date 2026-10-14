@@ -25,7 +25,6 @@ from streamlit.testing.v1 import AppTest
 from tests.ui.conftest import (
     DEFAULT_TIMEOUT,
     analysis_module_script,
-    module3_nav_script,
     make_analysis_dataframe,
 )
 
@@ -727,11 +726,7 @@ class TestHeatmapUI:
     @staticmethod
     def _big_analysis_app(n_lipids):
         """An analysis app carrying more species than the grouped mode allows."""
-        from streamlit.testing.v1 import AppTest
         from app.models.experiment import ExperimentConfig
-        from tests.ui.conftest import (
-            DEFAULT_TIMEOUT, analysis_module_script, make_analysis_dataframe,
-        )
 
         at = AppTest.from_function(
             analysis_module_script, default_timeout=DEFAULT_TIMEOUT,

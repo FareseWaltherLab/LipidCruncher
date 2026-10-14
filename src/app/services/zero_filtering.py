@@ -199,7 +199,6 @@ class ZeroFilteringService:
         Returns:
             Boolean Series — True for lipids to keep.
         """
-        n_rows = len(df)
         # If BQC exists, default to fail (must pass); if no BQC, default to pass
         bqc_pass = pd.Series(bqc_label is None, index=df.index)
         non_bqc_any_pass = pd.Series(False, index=df.index)

@@ -550,12 +550,10 @@ class StandardsService:
 
             if is_numeric:
                 # No ClassKey provided, all remaining columns are intensities
-                has_classkey = False
                 intensity_start_idx = 1
             else:
                 # Second column is ClassKey
                 new_col_names[cols[1]] = 'ClassKey'
-                has_classkey = True
                 intensity_start_idx = 2
 
             # Rename remaining columns as intensity columns

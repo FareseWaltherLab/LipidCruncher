@@ -29,15 +29,12 @@ from ..services.statistical_testing import (
 from ..services.validation import get_matching_concentration_columns
 from ..services.plotting.abundance_bar_chart import (
     BarChartPlotterService,
-    BarChartData,
 )
 from ..services.plotting.abundance_pie_chart import (
     PieChartPlotterService,
-    PieChartData,
 )
 from ..services.plotting.saturation_plot import (
     SaturationPlotterService,
-    SaturationData,
 )
 from ..services.plotting.chain_length_plot import (
     ChainLengthPlotterService,
@@ -45,11 +42,9 @@ from ..services.plotting.chain_length_plot import (
 )
 from ..services.plotting.fach import (
     FACHPlotterService,
-    FACHData,
 )
 from ..services.plotting.pathway_viz import (
     PathwayVizPlotterService,
-    PathwayData,
 )
 from ..services.plotting.volcano_plot import (
     VolcanoPlotterService,
@@ -58,7 +53,6 @@ from ..services.plotting.volcano_plot import (
 from ..services.plotting.lipidomic_heatmap import (
     GROUPED_PAGE_SIZE,
     LipidomicHeatmapPlotterService,
-    ClusteringResult,
 )
 
 

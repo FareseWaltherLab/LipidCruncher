@@ -27,7 +27,6 @@ from app.services.plotting.pathway_viz import (
     PATHWAY_COORDS,
     PathwayData,
     PathwayVizPlotterService,
-    SIZE_SCALE,
     UNIT_CIRCLE_RADIUS,
     _auto_label_pos,
     _circle_path,

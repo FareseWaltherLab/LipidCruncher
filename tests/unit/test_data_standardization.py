@@ -1,5 +1,4 @@
 """Unit tests for DataStandardizationService."""
-import pytest
 import pandas as pd
 import numpy as np
 from app.services.data_standardization import (
@@ -564,14 +563,14 @@ class TestIsClasskeyColumn:
             'class': ['PC', 'PE'],
             'vals': [100, 200],
         })
-        assert DataStandardizationService._is_classkey_column(df, 1) == True
+        assert DataStandardizationService._is_classkey_column(df, 1)
 
     def test_false_for_numeric_column(self):
         df = pd.DataFrame({
             'lipids': ['PC(16:0)', 'PE(18:0)'],
             'vals': [100.0, 200.0],
         })
-        assert DataStandardizationService._is_classkey_column(df, 1) == False
+        assert not DataStandardizationService._is_classkey_column(df, 1)
 
     def test_true_for_classkey_named_column(self):
         df = pd.DataFrame({
@@ -579,11 +578,11 @@ class TestIsClasskeyColumn:
             'ClassKey': ['PC'],
             'vals': [100],
         })
-        assert DataStandardizationService._is_classkey_column(df, 1) == True
+        assert DataStandardizationService._is_classkey_column(df, 1)
 
     def test_false_for_out_of_range_index(self):
         df = pd.DataFrame({'a': [1], 'b': [2]})
-        assert DataStandardizationService._is_classkey_column(df, 5) == False
+        assert not DataStandardizationService._is_classkey_column(df, 5)
 
     def test_false_for_long_strings(self):
         df = pd.DataFrame({
@@ -594,14 +593,14 @@ class TestIsClasskeyColumn:
             ],
             'vals': [100, 200],
         })
-        assert DataStandardizationService._is_classkey_column(df, 1) == False
+        assert not DataStandardizationService._is_classkey_column(df, 1)
 
     def test_false_for_mostly_numeric_strings(self):
         df = pd.DataFrame({
             'lipids': ['PC(16:0)', 'PE(18:0)'],
             'nums': ['12345', '67890'],
         })
-        assert DataStandardizationService._is_classkey_column(df, 1) == False
+        assert not DataStandardizationService._is_classkey_column(df, 1)
 
 
 # =============================================================================

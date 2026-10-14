@@ -829,7 +829,7 @@ class TestTypeCoercion:
 
     def test_numpy_int64_sample_numbers(self):
         """Columns with numpy int64 indices should work."""
-        exp = make_experiment(1, 3)
+        make_experiment(1, 3)
         data = {'LipidMolec': ['PC(16:0)']}
         for i in range(1, 4):
             data[f'intensity[s{np.int64(i)}]'] = [float(i)]

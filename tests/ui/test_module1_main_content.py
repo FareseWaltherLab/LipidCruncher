@@ -10,7 +10,6 @@ Tests cover:
 - Column mapping display (sidebar mapping table, MS-DIAL override)
 """
 
-import pytest
 
 
 # =============================================================================

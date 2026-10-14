@@ -7,9 +7,7 @@ Focuses on testable components: SessionState dataclass, utility methods.
 Note: Methods with @st.cache_data decorators and session state access
 require mocking or integration tests with Streamlit.
 """
-import pytest
 import pandas as pd
-import numpy as np
 from unittest.mock import MagicMock, patch
 from dataclasses import asdict, fields
 

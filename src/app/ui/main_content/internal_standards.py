@@ -11,14 +11,14 @@ import logging
 import streamlit as st
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_COMPLETE_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.st_helpers import keep_intsta_expander_open, INTSTA_EXPANDER_KEY
 from app.ui.sample_labels import names_for
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -157,7 +157,7 @@ def _display_auto_detected_standards(
         st.success(f"✓ Found {len(auto_detected_df)} standards")
         named_dataframe(
             auto_detected_df, sample_names=names_for('processing'),
-            use_container_width=True,
+            width='stretch',
         )
 
         csv_download_button(
@@ -188,7 +188,7 @@ def _display_auto_detected_standards(
     st.markdown("###### Active internal standards")
     named_dataframe(
         combined_df, sample_names=names_for('processing'),
-        use_container_width=True,
+        width='stretch',
     )
     csv_download_button(
         combined_df, "active_standards.csv",
@@ -260,7 +260,7 @@ def _display_select_from_dataset(
     st.success(f"✓ Using {len(standards_df)} selected standard(s) from the dataset.")
     named_dataframe(
         standards_df, sample_names=names_for('processing'),
-        use_container_width=True,
+        width='stretch',
     )
     csv_download_button(
         standards_df, "selected_standards.csv",
@@ -328,7 +328,7 @@ def _display_preserved_custom_standards() -> pd.DataFrame:
     st.success(f"✓ Using {len(st.session_state.custom_standards_df)} custom standards")
     named_dataframe(
         st.session_state.custom_standards_df, sample_names=names_for('processing'),
-        use_container_width=True,
+        width='stretch',
     )
 
     if st.button(
@@ -391,7 +391,7 @@ def _process_uploaded_standards(
         st.success(f"✓ Loaded {result.standards_count} custom standards (mode: {result.source_mode})")
         named_dataframe(
             result.standards_df, sample_names=names_for('processing'),
-            use_container_width=True,
+            width='stretch',
         )
 
         csv_download_button(

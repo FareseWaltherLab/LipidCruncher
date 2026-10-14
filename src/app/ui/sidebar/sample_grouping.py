@@ -12,8 +12,6 @@ from typing import Optional, Tuple
 import streamlit as st
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.models.experiment import ExperimentConfig
 from app.services.sample_grouping import SampleGroupingService
@@ -24,8 +22,10 @@ from app.ui.sample_names import (
     sample_display_map,
 )
 from app.ui.sample_labels import labeler, render_sample_label_switch, showing_original_names
-from app.ui.sidebar.experiment_config import detect_sample_columns, extract_sample_names, display_experiment_definition
+from app.ui.sidebar.experiment_config import detect_sample_columns, display_experiment_definition
 from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_inputs
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -79,11 +79,14 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
         display_group.insert(
             1, 'Original Name', [names.get(s, '') for s in group_df['sample name']]
         )
-    st.sidebar.dataframe(display_group, use_container_width=True)
+    st.sidebar.dataframe(display_group, width='stretch')
 
     # Manual regrouping option
     st.sidebar.write('Are your samples properly grouped together?')
-    grouping_correct = st.sidebar.radio('', ['Yes', 'No'], key='grouping_radio')
+    grouping_correct = st.sidebar.radio(
+        'Samples properly grouped?', ['Yes', 'No'], key='grouping_radio',
+        label_visibility='collapsed',
+    )
 
     if grouping_correct == 'No':
         return _handle_manual_regrouping(df, group_df, experiment)
@@ -187,7 +190,7 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         )
         st.session_state.grouping_complete = True
         st.sidebar.write("New sample order after regrouping:")
-        st.sidebar.dataframe(regroup_result.name_df, use_container_width=True)
+        st.sidebar.dataframe(regroup_result.name_df, width='stretch')
         return regroup_result.group_df, regroup_result.reordered_df
     except ValueError as e:
         logger.error("Error updating groups: %s", e)
@@ -226,7 +229,7 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
         edited = st.data_editor(
             editor_df,
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 'sample': st.column_config.TextColumn(
                     'Standardized Label', disabled=True,
@@ -303,7 +306,6 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     """
     # Detect sample columns
     sample_cols = detect_sample_columns(df, data_format)
-    sample_names = extract_sample_names(sample_cols, data_format)
 
     if not sample_cols:
         st.sidebar.error("No sample columns detected!")

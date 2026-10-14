@@ -29,11 +29,9 @@ from app.services.plotting.box_plot import BoxPlotService
 from app.services.plotting.bqc_plotter import BQCPlotterService
 from app.services.plotting.retention_time import RetentionTimePlotterService
 from app.services.plotting.volcano_plot import (
-    VolcanoData,
     VolcanoPlotterService,
 )
 from app.services.plotting.abundance_bar_chart import (
-    BarChartData,
     BarChartPlotterService,
     _p_value_to_marker,
 )
@@ -324,7 +322,7 @@ class TestHoverTextContent:
 
     def test_volcano_hover_contains_lipid_and_fc(self):
         """Volcano plot hover should mention Lipid, Log2 Fold Change, p-value."""
-        experiment = make_experiment(2, 3)
+        make_experiment(2, 3)
         df = pd.DataFrame({
             'LipidMolec': ['PC 16:0'],
             'ClassKey': ['PC'],

@@ -16,6 +16,10 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
 from app.ui.sample_labels import display_names_for, names_for
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.workflows.analysis import HeatmapResult
 
 
 def _display_lipidomic_heatmap(
@@ -465,7 +469,7 @@ def _display_cluster_composition(
     )
 
     if composition_df is not None:
-        st.dataframe(composition_df, use_container_width=True)
+        st.dataframe(composition_df, width='stretch')
         st.session_state.analysis_heatmap_clusters = composition_df
 
         csv_download_button(

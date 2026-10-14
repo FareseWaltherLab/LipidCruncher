@@ -177,7 +177,7 @@ def _display_detailed_statistics(
         })
 
     if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+        st.dataframe(pd.DataFrame(rows), width='stretch')
 
     # Report skipped items
     params = stat_summary.parameters or {}
@@ -216,4 +216,4 @@ def _display_detailed_statistics(
                     'Significant': "Yes" if comp.significant else "No",
                 })
         if posthoc_rows:
-            st.dataframe(pd.DataFrame(posthoc_rows), use_container_width=True)
+            st.dataframe(pd.DataFrame(posthoc_rows), width='stretch')

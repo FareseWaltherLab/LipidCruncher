@@ -5,13 +5,17 @@ Pure logic - no Streamlit dependencies.
 from abc import ABC, abstractmethod
 
 import pandas as pd
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple
 
 from app.constants import (
     INTERNAL_STANDARD_LIPID_PATTERNS,
     INTERNAL_STANDARD_CLASS_PATTERN,
 )
 from .exceptions import EmptyDataError
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.experiment import ExperimentConfig
 
 
 class BaseDataCleaner(ABC):

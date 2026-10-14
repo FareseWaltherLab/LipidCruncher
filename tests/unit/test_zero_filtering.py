@@ -938,7 +938,7 @@ class TestNonBQCThreshold:
 
     def test_exactly_at_threshold_fails(self, simple_experiment_2x3):
         """Test that exactly at non-BQC threshold fails."""
-        df = pd.DataFrame({
+        pd.DataFrame({
             'LipidMolec': ['Lipid1'],
             'ClassKey': ['PC'],
             # Control: 75% zeros (at threshold)

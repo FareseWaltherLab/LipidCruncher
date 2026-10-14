@@ -15,12 +15,9 @@ from typing import Optional, Union
 import streamlit as st
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import (
-    FORMAT_GENERIC, FORMAT_METABOLOMICS_WORKBENCH, FORMAT_LIPIDSEARCH, FORMAT_MSDIAL,
-    FORMAT_OPTIONS,
+    FORMAT_METABOLOMICS_WORKBENCH, FORMAT_LIPIDSEARCH, FORMAT_OPTIONS,
 )
 from app.services.data_standardization import DataStandardizationService
 from app.services.format_detection import DataFormat, FormatDetectionService
@@ -28,6 +25,8 @@ from app.services.lipidsearch_alignment import (
     AlignmentError, has_grouped_per_file_columns, parse_alignment_file,
 )
 from app.ui.content import get_sample_data_info
+
+logger = logging.getLogger(__name__)
 
 
 def _read_tabular(source: Union[str, Path, "io.IOBase"]) -> pd.DataFrame:

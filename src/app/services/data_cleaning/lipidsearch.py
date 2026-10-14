@@ -135,7 +135,6 @@ class LipidSearchCleaner(BaseDataCleaner):
         grade_config: Optional[Dict[str, List[str]]]
     ) -> Tuple[pd.DataFrame, Optional[str]]:
         """Select best AUC for each lipid."""
-        initial_lipids = df['LipidMolec'].nunique()
         df = LipidSearchCleaner._select_best_auc(df, experiment, grade_config)
 
         if df.empty:

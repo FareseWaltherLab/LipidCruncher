@@ -14,7 +14,6 @@ import pytest
 from app.services.plotting.saturation_plot import (
     FA_COLORS,
     FA_TYPES,
-    SINGLE_CHAIN_CLASSES,
     SaturationData,
     SaturationPlotterService,
     _calculate_percentage_df,
