@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 # UI Components
 # =============================================================================
 
+def _sample_label(column: str) -> str:
+    """'intensity[s3]' -> 's3'."""
+    return column[len('intensity['):-1]
+
+
 def _detected_sample_column_names() -> List[str]:
     """Original (pre-rename) names of the columns taken as sample intensities.
 
@@ -146,6 +151,7 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
         return _handle_manual_regrouping(df, group_df, experiment)
     else:
         st.session_state.grouping_complete = True
+        st.session_state.regroup_origin = None
         # Restore the original pre-regrouping DataFrame if user previously
         # reshuffled samples.  A simple reindex is insufficient because
         # regrouping renames columns (e.g. intensity[s4] → intensity[s1]),
@@ -246,6 +252,10 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
             st.session_state.get('_pre_regroup_sample_names'),
             regroup_result.old_to_new,
         )
+        st.session_state.regroup_origin = {
+            _sample_label(new): _sample_label(old)
+            for old, new in regroup_result.old_to_new.items()
+        }
         st.session_state.grouping_complete = True
         st.sidebar.write("New sample order after regrouping:")
         st.sidebar.dataframe(regroup_result.name_df, width='stretch')
@@ -331,14 +341,22 @@ def _display_sample_exclusion(
         StreamlitAdapter.save_widget_value('exclude_samples', '_preserved_excluded_samples')
 
         names = st.session_state.get('sample_names')
+        upload_label = st.session_state.get('regroup_origin') or {}
         if not excluded:
             st.session_state.processing_sample_names = names
+            st.session_state.processing_origin = {
+                s: upload_label.get(s, s) for s in experiment.full_samples_list
+            }
             return experiment, df
         try:
             result = SampleGroupingService.exclude_samples(df, experiment, excluded)
         except ValueError as e:
             st.error(str(e))
             return None
+        st.session_state.processing_origin = {
+            _sample_label(new): upload_label.get(_sample_label(old), _sample_label(old))
+            for old, new in result.old_to_new.items()
+        }
         st.session_state.processing_sample_names = remap_names_after_regroup(
             names, result.old_to_new
         )

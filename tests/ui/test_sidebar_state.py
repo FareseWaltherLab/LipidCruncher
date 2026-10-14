@@ -173,3 +173,53 @@ class TestSidebarChangeAfterModule1:
         _go_to_quality_check(at)
         at.run()
         assert not any('Back to Data Processing' in w.value for w in at.warning)
+
+
+def _enter_protein_amounts(at, n_samples):
+    at.radio(key='norm_method_selection').set_value('Protein-based').run()
+    for i in range(1, n_samples + 1):
+        at.number_input(key=f'protein_s{i}').set_value(float(i * 10))
+    at.run()
+    assert not at.exception
+
+
+def _confirm(at):
+    checkbox = at.sidebar.checkbox(key='confirm_checkbox')
+    if not checkbox.value:
+        checkbox.check().run()
+    assert not at.exception
+
+
+def _concentrations(at, sample):
+    df = at.session_state['normalized_df'].set_index('LipidMolec')
+    return df[f'concentration[{sample}]']
+
+
+class TestProteinAmountsFollowTheirSample:
+    """Protein amounts are entered per sample; renumbering samples in the
+    sidebar must not hand one sample's amount to another."""
+
+    def test_amounts_survive_sidebar_exclusion(self):
+        """Regression: excluding s1 renumbered old s2 to s1, which then read
+        protein_s1 (old s1's amount, 10 instead of 20): its normalized values
+        came out exactly 2x."""
+        at = _load_sample()
+        _enter_protein_amounts(at, 12)
+        before = _concentrations(at, 's2')
+
+        at.sidebar.multiselect(key='exclude_samples').set_value(['s1']).run()
+        assert not at.exception
+
+        after = _concentrations(at, 's1')  # the same sample, renumbered
+        pd.testing.assert_series_equal(after, before, check_names=False)
+
+    def test_amounts_survive_sidebar_regroup(self):
+        at = _load_sample()
+        _enter_protein_amounts(at, 12)
+        before = _concentrations(at, 's1')
+
+        _swap_first_samples(at)  # old s1 becomes s5
+        _confirm(at)
+
+        after = _concentrations(at, 's5')
+        pd.testing.assert_series_equal(after, before, check_names=False)

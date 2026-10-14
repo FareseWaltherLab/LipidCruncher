@@ -61,7 +61,7 @@ class SessionState:
       experiment_config.py → workbench_conditions, workbench_samples
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
                              processing_df, processing_sample_names, _preserved_excluded_samples,
-                             original_column_order
+                             original_column_order, regroup_origin, processing_origin
       confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
       data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
                              pre_filter_df, grade_config, last_quality_config,
@@ -129,6 +129,13 @@ class SessionState:
     processing_df: Optional[pd.DataFrame] = None
     processing_sample_names: Optional[Dict[str, str]] = None
     _preserved_excluded_samples: List[str] = field(default_factory=list)
+    # Where each sample came from in the uploaded file (its s-label before any
+    # regroup), so per-sample inputs such as protein amounts can be keyed by
+    # sample rather than by a label that regroup/exclusion renumber.
+    # regroup_origin: sidebar label -> upload label (None when not regrouped);
+    # processing_origin: Module 1 label -> upload label.
+    regroup_origin: Optional[Dict[str, str]] = None
+    processing_origin: Optional[Dict[str, str]] = None
     # BQC answers, kept for runs where the BQC widgets are not drawn (e.g. a
     # manual regroup is mid-edit) and Streamlit drops their keys.
     _preserved_sidebar_bqc_radio: Optional[str] = None
