@@ -81,6 +81,7 @@ def _store_workbench_result(result) -> Optional[pd.DataFrame]:
     """
     if result.success:
         st.session_state.standardized_df = result.standardized_df
+        st.session_state.column_mapping = result.column_mapping
         if result.workbench_conditions:
             st.session_state.workbench_conditions = result.workbench_conditions
         if result.workbench_samples:

@@ -251,3 +251,15 @@ class TestExclusionFollowsItsSample:
         kept = [c for c in processing.columns if c.startswith('intensity[')]
         assert len(kept) == 11
         assert not any(np.allclose(_values(processing, c), excluded_data) for c in kept)
+
+
+class TestWorkbenchSampleNames:
+
+    def test_original_sample_names_are_seeded(self):
+        """Regression: the Workbench parser kept the file's sample names but
+        set no column mapping, so "Original names" still showed s1..sN in
+        every table, plot and download."""
+        at = _load_sample('Metabolomics Workbench')
+        samples = at.session_state['workbench_samples']
+        assert samples, "the bundled Workbench file names its samples"
+        assert at.session_state['sample_names'] == samples

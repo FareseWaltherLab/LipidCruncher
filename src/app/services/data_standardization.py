@@ -1001,11 +1001,16 @@ class DataStandardizationService:
             wb_samples = {
                 f's{i + 1}': name.strip() for i, name in enumerate(sample_names)
             }
+            column_mapping = pd.DataFrame({
+                'standardized_name': ['LipidMolec'] + intensity_cols,
+                'original_name': [samples_line[0].strip()] + [name.strip() for name in sample_names],
+            })
 
             return StandardizationResult(
                 success=True,
                 message="Data successfully standardized",
                 standardized_df=df,
+                column_mapping=column_mapping,
                 n_intensity_cols=len(sample_names),
                 workbench_conditions=wb_conditions,
                 workbench_samples=wb_samples,
