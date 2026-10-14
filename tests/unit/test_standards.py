@@ -1170,6 +1170,23 @@ class TestProcessStandardsFileCompleteMode:
             )
 
 
+    def test_complete_mode_extra_sample_column_error(self, basic_lipid_df):
+        """Regression: a table with more value columns than samples (e.g. made
+        before a sample was excluded) was silently cut to the first N columns,
+        so every value after the excluded sample went to its neighbour."""
+        n_samples = sum(c.startswith('intensity[') for c in basic_lipid_df.columns)
+        uploaded_df = pd.DataFrame({'LipidMolec': ['Standard1'], 'ClassKey': ['PC']})
+        for i in range(n_samples + 1):
+            uploaded_df[f'value{i}'] = [100.0 + i]
+
+        with pytest.raises(ValueError, match=f"{n_samples + 1} intensity columns.*{n_samples} samples"):
+            StandardsService.process_standards_file(
+                uploaded_df,
+                basic_lipid_df,
+                standards_in_dataset=False
+            )
+
+
 # =============================================================================
 # Test: process_standards_file - Edge Cases
 # =============================================================================
