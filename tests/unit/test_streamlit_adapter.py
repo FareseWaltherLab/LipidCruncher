@@ -1105,7 +1105,8 @@ class TestSessionStateFieldCompleteness:
         # + 1 (_preserved_pca_groups_remove, PCA group exclusion, reset with QC) = 90
         # + 3 (processing_df, processing_sample_names, _preserved_excluded_samples;
         #      sidebar sample exclusion) = 93
-        assert len(field_names) == 93
+        # + 2 (_preserved_bqc_radio, _preserved_bqc_label_radio) = 95
+        assert len(field_names) == 95
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""

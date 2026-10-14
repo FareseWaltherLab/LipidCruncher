@@ -99,6 +99,10 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
         # underneath differs.
         if st.session_state.get('_pre_regroup_df') is not None:
             df = st.session_state['_pre_regroup_df'].copy()
+            # Commit the restored data now: if Confirm is unchecked this run,
+            # display_sample_grouping returns before writing standardized_df,
+            # and the next run would regroup-restore from the regrouped frame.
+            st.session_state.standardized_df = df
             # Clean up regrouping state so it doesn't persist
             del st.session_state['_pre_regroup_df']
             st.session_state.pop('original_column_order', None)

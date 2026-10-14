@@ -62,6 +62,7 @@ class SessionState:
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
                              processing_df, processing_sample_names, _preserved_excluded_samples,
                              original_column_order
+      confirm_inputs.py    → _preserved_bqc_radio, _preserved_bqc_label_radio
       data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
                              pre_filter_df, grade_config, last_quality_config,
                              msdial_quality_config, msdial_use_normalized,
@@ -128,6 +129,10 @@ class SessionState:
     processing_df: Optional[pd.DataFrame] = None
     processing_sample_names: Optional[Dict[str, str]] = None
     _preserved_excluded_samples: List[str] = field(default_factory=list)
+    # BQC answers, kept for runs where the BQC widgets are not drawn (e.g. a
+    # manual regroup is mid-edit) and Streamlit drops their keys.
+    _preserved_bqc_radio: Optional[str] = None
+    _preserved_bqc_label_radio: Optional[str] = None
     # 'original' shows those names in tables, plots, pickers and downloads;
     # 'standardized' shows s1, s2, ... instead (sidebar switch).
     sample_label_mode: str = 'original'
