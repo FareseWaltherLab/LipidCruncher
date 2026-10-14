@@ -191,6 +191,11 @@ class TestStandardizeLipidName:
     def test_space_separated(self):
         assert DataStandardizationService.standardize_lipid_name('LPC O-17:4') == 'LPC O-17:4'
 
+    def test_lyso_phantom_chain_removed(self):
+        """The docstring's example: a lyso species' empty 0:0 chain is dropped."""
+        assert DataStandardizationService.standardize_lipid_name('LPC(20:0_0:0)') == 'LPC 20:0'
+        assert DataStandardizationService.standardize_lipid_name('LPE(0:0_18:1)') == 'LPE 18:1'
+
     def test_space_separated_pc(self):
         assert DataStandardizationService.standardize_lipid_name('PC 16:0_18:1') == 'PC 16:0_18:1'
 

@@ -888,6 +888,20 @@ class TestExcludeSamples:
             'intensity[s6]': 'intensity[s5]',
         }
 
+    def test_more_than_nine_samples_keep_numeric_order(self):
+        """With 10+ samples, survivors must be renumbered in numeric order
+        (s10 after s9), not string order (s10 before s2)."""
+        exp = make_experiment(2, 6)  # s1-s6, s7-s12
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)'], 'ClassKey': ['PC'],
+            **{f'intensity[s{i}]': [float(i)] for i in range(1, 13)},
+        })
+        result = SampleGroupingService.exclude_samples(df, exp, ['s3'])
+        cols = [c for c in result.updated_df.columns if c.startswith('intensity[')]
+        assert cols == [f'intensity[s{i}]' for i in range(1, 12)]
+        values = [result.updated_df[c].iloc[0] for c in cols]
+        assert values == [1.0, 2.0] + [float(i) for i in range(4, 13)]
+
     def test_experiment_counts_shrink(self):
         result = SampleGroupingService.exclude_samples(self.df, self.exp, ['s2', 's6'])
         exp = result.updated_experiment

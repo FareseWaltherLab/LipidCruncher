@@ -936,26 +936,6 @@ class TestMissingColumns:
 class TestNonBQCThreshold:
     """Tests for non-BQC threshold behavior."""
 
-    def test_exactly_at_threshold_fails(self, simple_experiment_2x3):
-        """Test that exactly at non-BQC threshold fails."""
-        pd.DataFrame({
-            'LipidMolec': ['Lipid1'],
-            'ClassKey': ['PC'],
-            # Control: 75% zeros (at threshold)
-            'intensity[s1]': [0.0],
-            'intensity[s2]': [0.0],
-            'intensity[s3]': [100.0],
-            # Treatment: 75% zeros (at threshold)
-            'intensity[s4]': [0.0],
-            'intensity[s5]': [0.0],
-            'intensity[s6]': [100.0],
-        })
-
-        # Wait, 2/3 = 67% not 75%. Let me recalculate
-        # Actually with 3 samples, we can't get exactly 75%
-        # Let me use 4 samples per condition
-        pass
-
     def test_all_conditions_above_threshold_fails(self, simple_experiment_2x3):
         """Test all conditions above threshold fails."""
         df = pd.DataFrame({
