@@ -806,15 +806,19 @@ class TestLipidSearchGradeFiltering:
     """Tests for grade filtering in LipidSearch."""
 
     def test_default_grade_filter(self):
-        """Test default grade filtering (A, B, C)."""
+        """Default: A/B for every class, plus C only for LPC and SM (docs S2).
+
+        Regression: the grade-filter step defaulted to A/B/C for every class
+        and AUC selection then dropped the C rows of other classes, so the
+        grade-filter message under-reported what grade filtering removed.
+        """
         df = pd.DataFrame({
-            'LipidMolec': ['PC1', 'PC2', 'PC3', 'PC4'],
-            'ClassKey': ['PC', 'PC', 'PC', 'PC'],
-            'TotalGrade': ['A', 'B', 'C', 'D'],
+            'LipidMolec': ['PC1', 'PC2', 'PC3', 'PC4', 'LPC1', 'SM1', 'LPC2'],
+            'ClassKey': ['PC', 'PC', 'PC', 'PC', 'LPC', 'SM', 'LPC'],
+            'TotalGrade': ['A', 'B', 'C', 'D', 'C', 'C', 'D'],
         })
         result = LipidSearchCleaner._apply_grade_filter(df)
-        assert len(result) == 3
-        assert 'D' not in result['TotalGrade'].values
+        assert sorted(result['LipidMolec']) == ['LPC1', 'PC1', 'PC2', 'SM1']
 
     def test_custom_grade_filter(self):
         """Test custom grade filtering."""
