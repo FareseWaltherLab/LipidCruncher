@@ -67,15 +67,13 @@ class SessionState:
       confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
       data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
                              pre_filter_df, grade_config, last_quality_config,
-                             msdial_quality_config, msdial_use_normalized,
-                             msdial_data_type_index
-      internal_standards.py → original_auto_intsta_df, preserved_intsta_df,
-                              preserved_standards_mode, custom_standards_df,
+                             msdial_use_normalized, msdial_data_type_index
+      internal_standards.py → original_auto_intsta_df, custom_standards_df,
                               custom_standards_mode, standards_source
       standards_plots.py   → standards_consistency_figs
       zero_filtering.py    → _zero_filter_format, _preserved_zero_filter_*
-      normalization.py     → normalized_df, normalization_method, normalization_inputs,
-                             selected_classes, create_norm_dataset, norm_method_selection,
+      normalization.py     → normalized_df, normalization_method,
+                             selected_classes, norm_method_selection,
                              _preserved_norm_method_selection, normalization_result,
                              class_standard_map, standard_concentrations, protein_df,
                              protein_input_method, protein_input_method_prev
@@ -156,14 +154,11 @@ class SessionState:
     ingestion_result: Optional[IngestionResult] = None
     grade_config: Optional[GradeFilterConfig] = None
     last_quality_config: Optional[QualityFilterConfig] = None
-    msdial_quality_config: Optional[QualityFilterConfig] = None
     msdial_use_normalized: bool = False
     msdial_data_type_index: int = 0  # 0 = raw, 1 = pre-normalized
 
     # --- Internal standards (owner: internal_standards.py) ---
     original_auto_intsta_df: Optional[pd.DataFrame] = None
-    preserved_intsta_df: Optional[pd.DataFrame] = None
-    preserved_standards_mode: Optional[str] = None
     custom_standards_df: Optional[pd.DataFrame] = None
     custom_standards_mode: Optional[str] = None
     # Which samples a 'complete' table's columns were mapped to (by position);
@@ -184,9 +179,7 @@ class SessionState:
     # --- Normalization (owner: normalization.py) ---
     normalized_df: Optional[pd.DataFrame] = None
     normalization_method: str = 'None'
-    normalization_inputs: Dict[str, Any] = field(default_factory=dict)
     selected_classes: List[str] = field(default_factory=list)
-    create_norm_dataset: bool = False
     norm_method_selection: Optional[str] = None
     _preserved_norm_method_selection: Optional[str] = None
     normalization_result: Optional[NormalizationWorkflowResult] = None
@@ -231,7 +224,6 @@ class SessionState:
     analysis_chain_length_fig: Optional[go.Figure] = None
     analysis_fach_fig: Optional[go.Figure] = None
     analysis_pathway_fig: Optional[go.Figure] = None
-    analysis_pathway_active_classes: Optional[List[str]] = None
     analysis_pathway_added_edges: List[Tuple[str, str]] = field(default_factory=list)
     analysis_pathway_removed_edges: List[Tuple[str, str]] = field(default_factory=list)
     analysis_pathway_custom_nodes: Dict[str, Tuple[float, float]] = field(default_factory=dict)

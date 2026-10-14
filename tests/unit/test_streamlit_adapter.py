@@ -81,9 +81,7 @@ class TestSessionStateDefaults:
         """Test default normalization settings."""
         state = SessionState()
         assert state.normalization_method == 'None'
-        assert state.normalization_inputs == {}
         assert state.selected_classes == []
-        assert state.create_norm_dataset is False
 
     def test_default_grade_config(self):
         """Test default grade configuration."""
@@ -93,7 +91,6 @@ class TestSessionStateDefaults:
     def test_default_msdial_config(self):
         """Test default MS-DIAL configuration."""
         state = SessionState()
-        assert state.msdial_quality_config is None
         assert state.msdial_features is None
         assert state.msdial_use_normalized is False
         assert state.msdial_data_type_index == 0
@@ -102,8 +99,6 @@ class TestSessionStateDefaults:
         """Test default standards settings."""
         state = SessionState()
         assert state.original_auto_intsta_df is None
-        assert state.preserved_intsta_df is None
-        assert state.preserved_standards_mode is None
 
     def test_default_qc_settings(self):
         """Test default quality check settings."""
@@ -175,12 +170,6 @@ class TestSessionStateCreation:
         """Test creating SessionState with custom page."""
         state = SessionState(page='analysis')
         assert state.page == 'analysis'
-
-    def test_create_with_normalization_inputs(self):
-        """Test creating SessionState with normalization inputs."""
-        inputs = {'method': 'log2', 'param1': 5}
-        state = SessionState(normalization_inputs=inputs)
-        assert state.normalization_inputs == inputs
 
     def test_create_with_grade_config(self):
         """Test creating SessionState with grade config."""
@@ -261,10 +250,10 @@ class TestSessionStateDataIntegrity:
         state1 = SessionState()
         state2 = SessionState()
 
-        state1.normalization_inputs['key'] = 'value'
+        state1.lsi_manual_fields['key'] = 'value'
 
         # state2 should not be affected
-        assert 'key' not in state2.normalization_inputs
+        assert 'key' not in state2.lsi_manual_fields
 
     def test_list_defaults_independent(self):
         """Test that list defaults are independent per instance."""
@@ -1083,7 +1072,8 @@ class TestSessionStateFieldCompleteness:
         """Test total number of analysis fields (guard against accidental deletion)."""
         field_names = [f.name for f in fields(SessionState)]
         analysis_fields = [f for f in field_names if f.startswith('analysis_')]
-        assert len(analysis_fields) == 17
+        # 17 - 1 (analysis_pathway_active_classes: nothing read or wrote it)
+        assert len(analysis_fields) == 16
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
@@ -1112,7 +1102,8 @@ class TestSessionStateFieldCompleteness:
         # + 2 (regroup_origin, processing_origin; sample identity) = 100
         # + 1 (custom_standards_sample_set) = 101
         # + 1 (_preserved_excluded_regroup_origin) = 102
-        assert len(field_names) == 102
+        # - 6 (fields nothing read or wrote) = 96
+        assert len(field_names) == 96
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""
