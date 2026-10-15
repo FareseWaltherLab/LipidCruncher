@@ -196,10 +196,6 @@ def render_viz_chat(analysis_df, experiment) -> None:
                             result.sandbox_result.figure
                         )
 
-                    if result.sandbox_result.stdout:
-                        with st.expander("Output"):
-                            st.text(result.sandbox_result.stdout)
-
                 _sr = result.sandbox_result
                 record_turn(
                     "visualization",

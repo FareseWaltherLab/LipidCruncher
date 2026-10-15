@@ -678,10 +678,6 @@ class AIChatWorkflow:
                         f"{explanation}\n\n"
                         f"Here's the visualization you requested."
                     )
-                    if sandbox_result.methods:
-                        assistant_text += (
-                            "\n\n" + _methods_note(sandbox_result.methods)
-                        )
             elif sandbox_result.success and sandbox_result.figure is None:
                 assistant_text = (
                     f"{explanation}\n\n"
@@ -695,6 +691,17 @@ class AIChatWorkflow:
                     f"{sandbox_result.error_message}\n\n"
                     f"Please describe what you'd like changed and I'll fix it."
                 )
+            if sandbox_result.success:
+                # Kept in the message, fenced as in the other tabs, so the
+                # transcript and later turns see what the code printed.
+                if sandbox_result.stdout.strip():
+                    assistant_text += (
+                        f"\n\n```\n{sandbox_result.stdout.strip()}\n```"
+                    )
+                if sandbox_result.methods:
+                    assistant_text += (
+                        "\n\n" + _methods_note(sandbox_result.methods)
+                    )
         else:
             assistant_text = explanation
 

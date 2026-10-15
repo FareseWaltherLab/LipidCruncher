@@ -266,3 +266,24 @@ class TestFigureHasData:
         assert result.sandbox_result.figure is not None
         assert "empty figure" not in result.assistant_message
         assert "Here's the visualization" in result.assistant_message
+
+
+class TestVizKeepsPrintedOutput:
+    """Regression (AQ7): Custom Viz showed printed output only in an
+    expander drawn just before a rerun, and never put it in the message, so
+    it vanished at once and later turns could not see it."""
+
+    def test_printed_output_is_part_of_the_answer(self):
+        from app.models.chat import ChatMode, ChatSession, SandboxConfig
+        from app.workflows.ai_chat import AIChatWorkflow
+        from tests.evals import reference_analysis as ref
+
+        result = AIChatWorkflow._finalize_viz(
+            ChatSession(mode=ChatMode.VISUALIZATION),
+            "Plotting.",
+            "print('rows plotted: 24')\n"
+            "fig = px.bar(df, x='ClassKey', y='concentration[s1]')",
+            ref.load_canonical(), SandboxConfig(), None, None,
+        )
+        assert "```\nrows plotted: 24\n```" in result.assistant_message
+        assert "rows plotted: 24" in result.session.messages[-1].content
