@@ -204,3 +204,65 @@ class TestStatisticalChoicesAreShown:
             ref.load_canonical(), SandboxConfig(), None, None,
         )
         assert "Statistical choices" not in result.assistant_message
+
+
+class TestFigureHasData:
+    """Regression (AQ2): only x/y were checked, so pies, treemaps, heatmaps
+    and other non-cartesian figures (including lc.pie_charts()) were told
+    to the user as "an empty figure (no data was plotted)"."""
+
+    @pytest.fixture
+    def frame(self):
+        import pandas as pd
+        return pd.DataFrame({"a": ["x", "y"], "b": ["p", "q"], "v": [1, 2]})
+
+    def test_non_cartesian_figures_have_data(self, frame):
+        import numpy as np
+        import pandas as pd
+        import plotly.express as px
+        import plotly.graph_objects as go
+
+        from app.workflows.ai_chat import figure_has_data
+
+        figures = [
+            px.pie(values=[1, 2], names=["a", "b"]),
+            px.imshow(np.ones((2, 2))),
+            go.Figure(go.Heatmap(z=[[1, 2]])),
+            px.treemap(frame, path=["a", "b"], values="v"),
+            px.sunburst(frame, path=["a", "b"], values="v"),
+            px.parallel_coordinates(pd.DataFrame({"x": [1, 2], "y": [3, 4]})),
+            go.Figure(go.Table(header={"values": ["a"]},
+                               cells={"values": [[1, 2]]})),
+            px.scatter(x=[1], y=[2]),
+        ]
+        assert all(figure_has_data(f) for f in figures)
+
+    def test_empty_figures_have_none(self):
+        import plotly.graph_objects as go
+
+        from app.workflows.ai_chat import figure_has_data
+
+        assert not figure_has_data(go.Figure(go.Scatter(x=[], y=[])))
+        assert not figure_has_data(go.Figure())
+        assert not figure_has_data(None)
+
+    def test_lc_pie_chart_is_not_called_empty(self):
+        from app.models.chat import ChatMode, ChatSession, SandboxConfig
+        from app.models.experiment import ExperimentConfig
+        from app.workflows.ai_chat import AIChatWorkflow
+        from tests.evals import reference_analysis as ref
+
+        result = AIChatWorkflow._finalize_viz(
+            ChatSession(mode=ChatMode.VISUALIZATION),
+            "A pie chart of WT.",
+            "fig = lc.pie_charts()['WT'].figure",
+            ref.load_canonical(),
+            SandboxConfig(),
+            None,
+            ExperimentConfig(
+                conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
+            ),
+        )
+        assert result.sandbox_result.figure is not None
+        assert "empty figure" not in result.assistant_message
+        assert "Here's the visualization" in result.assistant_message

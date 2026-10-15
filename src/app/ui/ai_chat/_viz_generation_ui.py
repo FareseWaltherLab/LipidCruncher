@@ -8,6 +8,7 @@ inline with export buttons.
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.workflows.ai_chat import figure_has_data
 from ._interaction_log import record_turn, render_feedback
 from ._safe_markdown import safe_markdown, safe_stream
 from ._turn_errors import clear_failure, record_failure, render_failure
@@ -22,18 +23,6 @@ _EXAMPLE_PROMPTS = [
     "Top 15 most abundant lipids",
     "CV distribution across lipids",
 ]
-
-
-def _figure_has_data(fig) -> bool:
-    """True if the figure has at least one trace with non-empty x or y."""
-    if fig is None or not getattr(fig, "data", None):
-        return False
-    for trace in fig.data:
-        x = getattr(trace, "x", None)
-        y = getattr(trace, "y", None)
-        if (x is not None and len(x) > 0) or (y is not None and len(y) > 0):
-            return True
-    return False
 
 
 _ABOUT_TAB = """
@@ -89,7 +78,7 @@ def _render_messages(session) -> None:
         if msg.role == "assistant" and msg.code:
             label = (
                 "Show generated code (for troubleshooting)"
-                if not _figure_has_data(fig)
+                if not figure_has_data(fig)
                 else "View code"
             )
             with st.expander(label):

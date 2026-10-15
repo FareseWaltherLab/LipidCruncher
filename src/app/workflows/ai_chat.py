@@ -663,7 +663,7 @@ class AIChatWorkflow:
             )
 
             if sandbox_result.success and sandbox_result.figure is not None:
-                if _figure_is_empty(sandbox_result.figure):
+                if not figure_has_data(sandbox_result.figure):
                     assistant_text = (
                         f"{explanation}\n\n"
                         f"The code ran without errors but produced an empty "
@@ -1259,16 +1259,27 @@ def _methods_note(methods) -> str:
     )
 
 
-def _figure_is_empty(fig) -> bool:
-    """True if the figure has no traces or every trace has empty x and y."""
-    if fig is None or not getattr(fig, "data", None):
-        return True
-    for trace in fig.data:
-        x = getattr(trace, "x", None)
-        y = getattr(trace, "y", None)
-        if (x is not None and len(x) > 0) or (y is not None and len(y) > 0):
-            return False
-    return True
+# Trace attributes that carry plotted data. Only x/y was checked before, so
+# pies, sunbursts and treemaps (values/labels), heatmaps and images (z) and
+# parallel coordinates (dimensions) were all reported as empty figures.
+_TRACE_DATA_ATTRS = (
+    "x", "y", "z", "values", "labels", "r", "lat", "lon", "dimensions", "cells",
+)
+
+
+def figure_has_data(fig) -> bool:
+    """True if any trace of ``fig`` holds at least one data point."""
+    for trace in getattr(fig, "data", None) or ():
+        for attr in _TRACE_DATA_ATTRS:
+            value = getattr(trace, attr, None)
+            if attr == "cells":  # go.Table: the data is in cells.values
+                value = getattr(value, "values", None)
+            try:
+                if value is not None and len(value) > 0:
+                    return True
+            except TypeError:
+                continue
+    return False
 
 
 def _looks_like_generic_format(df: pd.DataFrame) -> bool:
