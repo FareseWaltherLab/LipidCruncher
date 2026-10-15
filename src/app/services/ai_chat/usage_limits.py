@@ -25,6 +25,12 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Optional
 
+# Starting values for the first rollout to a few users (2026-10), not
+# measured. Before changing them, check real use in the turn records
+# (scripts/pull_ai_logs.py): turns per session_id, turns per day, and how
+# often a refusal is hit. Things to weigh: everyone behind one institutional
+# NAT shares one client allowance; the global cap bounds the daily API bill
+# (claude-sonnet-4-6, at most 4 round trips per turn) only per process.
 SESSION_MESSAGES = 50
 SESSION_EXECUTIONS = 20
 CLIENT_DAILY_MESSAGES = 150
