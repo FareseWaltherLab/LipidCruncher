@@ -7,6 +7,7 @@ and visualizations in one conversation. No tabs, no "view code".
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from ._safe_markdown import safe_markdown
 
 # Rate limits per session
 MAX_MESSAGES = 50
@@ -17,7 +18,7 @@ def _render_messages(session) -> None:
     """Render all chat messages with inline figures and result tables."""
     for i, msg in enumerate(session.messages):
         with st.chat_message(msg.role):
-            st.markdown(msg.content)
+            st.markdown(safe_markdown(msg.content))
 
         # Check for stored figure
         fig_key = f"chat_fig_{i}"
@@ -115,7 +116,7 @@ def render_unified_chat(source_df) -> None:
 
                     # Display response
                     if result.assistant_message:
-                        st.markdown(result.assistant_message)
+                        st.markdown(safe_markdown(result.assistant_message))
                     else:
                         logger.warning("AI returned empty assistant_message")
                         # Don't just show a transient warning — the rerun

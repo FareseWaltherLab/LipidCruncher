@@ -9,6 +9,7 @@ import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from ._interaction_log import record_turn, render_feedback
+from ._safe_markdown import safe_markdown, safe_stream
 
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
@@ -72,7 +73,7 @@ def _render_messages(session) -> None:
     """
     for i, msg in enumerate(session.messages):
         with st.chat_message(msg.role):
-            st.markdown(msg.content)
+            st.markdown(safe_markdown(msg.content))
             render_feedback(msg)
 
         # Check if there's a stored figure for this message
@@ -170,7 +171,7 @@ def render_viz_chat(analysis_df, experiment) -> None:
                         analysis_df=analysis_df,
                         experiment=experiment,
                     )
-                    streamed = st.write_stream(gen)
+                    streamed = st.write_stream(safe_stream(gen))
                 result = finalize()
 
                 # If the turn produced neither text nor a figure, say so

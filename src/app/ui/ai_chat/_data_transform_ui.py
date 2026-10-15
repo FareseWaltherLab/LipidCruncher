@@ -10,6 +10,7 @@ import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from ._interaction_log import record_turn, render_feedback
+from ._safe_markdown import safe_markdown, safe_stream
 
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
@@ -57,7 +58,7 @@ def _render_messages(session) -> None:
     """Render all chat messages in the session."""
     for msg in session.messages:
         with st.chat_message(msg.role):
-            st.markdown(msg.content)
+            st.markdown(safe_markdown(msg.content))
             if msg.code:
                 with st.expander("View code"):
                     st.code(msg.code, language="python")
@@ -171,7 +172,7 @@ def render_transform_chat(source_df) -> None:
                         session=session,
                         source_df=source_df,
                     )
-                    streamed = st.write_stream(gen)
+                    streamed = st.write_stream(safe_stream(gen))
                 result = finalize()
 
                 # If the turn produced nothing at all, say so rather than

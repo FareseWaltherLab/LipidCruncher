@@ -11,6 +11,7 @@ import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from ._interaction_log import record_turn, render_feedback
+from ._safe_markdown import safe_markdown, safe_stream
 
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
@@ -51,7 +52,7 @@ def _render_messages(session) -> None:
     """Render all chat messages in the session."""
     for msg in session.messages:
         with st.chat_message(msg.role):
-            st.markdown(msg.content)
+            st.markdown(safe_markdown(msg.content))
             render_feedback(msg)
 
 
@@ -129,7 +130,7 @@ def render_lc_questions_chat() -> None:
 
         if cached_answer is not None:
             with st.chat_message("assistant"):
-                st.markdown(cached_answer)
+                st.markdown(safe_markdown(cached_answer))
             st.session_state.chat_lc_questions_session = (
                 session
                 .add_message(ChatMessage(role="user", content=user_input))
@@ -162,14 +163,14 @@ def render_lc_questions_chat() -> None:
                             session=session,
                         )
                     )
-                    full_text = st.write_stream(stream)
+                    full_text = st.write_stream(safe_stream(stream))
 
                 if not (full_text or "").strip():
                     full_text = (
                         "I wasn't able to generate a response. "
                         "Please try rephrasing your question."
                     )
-                    st.markdown(full_text)
+                    st.markdown(safe_markdown(full_text))
                 elif is_example:
                     # Cache the canonical answer for instant reuse / fallback.
                     StreamlitAdapter.set_cached_lc_answer(user_input, full_text)
@@ -208,7 +209,7 @@ def render_lc_questions_chat() -> None:
                     "showing a previously cached answer.)_"
                 )
                 with st.chat_message("assistant"):
-                    st.markdown(fallback_text)
+                    st.markdown(safe_markdown(fallback_text))
                 st.session_state.chat_lc_questions_session = (
                     session
                     .add_message(ChatMessage(role="user", content=user_input))
