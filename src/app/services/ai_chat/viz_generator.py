@@ -1,7 +1,7 @@
 """
 AI-powered visualization generation service.
 
-Generates custom Plotly/Matplotlib visualizations from natural language
+Generates custom Plotly visualizations from natural language
 requests. All methods are stateless static methods — no Streamlit imports.
 """
 from typing import Callable, List, Optional, Tuple
@@ -48,11 +48,9 @@ Only generate visualization code when the user asks you to create, plot, or show
    - `np` — numpy
    - `px` — plotly.express
    - `go` — plotly.graph_objects
-   - `plt` — matplotlib.pyplot (use only if the user specifically requests matplotlib)
-   - `sns` — seaborn (use only if needed with matplotlib)
    - `math`, `statistics` — standard library math modules
    - `re` — standard library regex module (useful for parsing lipid names, e.g. extracting fatty acid chain composition like C16/C18)
-6. Modules are pre-loaded; `scipy`, `statsmodels` and `sklearn` may also be imported when you genuinely need an analysis `lc` does not cover. Nothing else is importable.
+6. Modules are pre-loaded; `scipy`, `statsmodels` and `sklearn` may also be imported when you genuinely need an analysis `lc` does not cover. Nothing else is importable — in particular not matplotlib or seaborn, so if the user asks for one of those, say so and draw the plot with Plotly.
 7. The result MUST be a Plotly figure assigned to `fig`. For example:
    ```
    fig = px.bar(df, x='ClassKey', y='intensity[s1]')
@@ -70,7 +68,7 @@ Use these colors for consistency with the rest of the application:
 - For composition: use pie charts or stacked bar charts
 - For distributions: use histograms, KDE plots, or box plots
 - For relationships: use scatter plots or heatmaps
-- For volcano plots: use scatter with -log10(p-value) vs log2(fold-change)
+- For volcano plots: use `lc.volcano(...)`, the app's own volcano plot
 - Always add clear titles, axis labels, and legends
 - Use `fig.update_layout()` for customization (font size, margins, etc.)
 - Handle missing/NaN values gracefully

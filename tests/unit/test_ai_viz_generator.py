@@ -252,3 +252,26 @@ class TestHandleVizMessage:
         mock_loop.return_value = "Sure."
         r2 = AIChatWorkflow.handle_viz_message("Second", r1.session, analysis_df, experiment)
         assert len(r2.session.messages) == 4
+
+
+class TestPromptMatchesTheSandbox:
+    """Regression (AQ6): the prompt listed `plt` and `sns` as available, but
+    the sandbox binds neither and refuses to import them, so a matplotlib
+    request was a guaranteed failed execution."""
+
+    def test_every_advertised_variable_exists_in_the_sandbox(self):
+        import re
+
+        import pandas as pd
+
+        from app.services.ai_chat.sandbox import build_sandbox_globals
+        from app.services.ai_chat.viz_generator import _viz_system_prompt
+
+        prompt = _viz_system_prompt()
+        section = prompt.split("Available variables", 1)[1].split("\n6.", 1)[0]
+        advertised = set()
+        for line in re.findall(r"^\s+- (.+)$", section, flags=re.M):
+            advertised.update(re.findall(r"`(\w+)`", line.split(" — ")[0]))
+        available = build_sandbox_globals(pd.DataFrame({"a": [1]}))
+        assert advertised, "no variables found in the prompt"
+        assert advertised <= set(available), advertised - set(available)
