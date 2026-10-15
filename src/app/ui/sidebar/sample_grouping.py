@@ -32,6 +32,15 @@ logger = logging.getLogger(__name__)
 # UI Components
 # =============================================================================
 
+def _live_selections() -> dict:
+    """The per-condition sample pickers' current values (``select_*``)."""
+    return {
+        k: tuple(st.session_state[k] or ())
+        for k in st.session_state
+        if isinstance(k, str) and k.startswith('select_')
+    }
+
+
 def _invalidate_confirmation_if_grouping_changed() -> None:
     """Detect a user change to the 'samples properly grouped?' radio
     *or* to any of the per-condition sample multiselects since the
@@ -60,15 +69,10 @@ def _invalidate_confirmation_if_grouping_changed() -> None:
     # widget GC rather than a user intent change.
     selects_changed = False
     if current_radio == 'No':
-        current_selects = {
-            k: tuple(st.session_state[k] or ())
-            for k in st.session_state
-            if isinstance(k, str) and k.startswith('select_')
-        }
         last_selects = st.session_state.get('_last_seen_selects')
         selects_changed = (
             last_selects is not None
-            and current_selects != last_selects
+            and _live_selections() != last_selects
         )
 
     if grouping_changed or selects_changed:
@@ -290,11 +294,7 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
     # user-driven change. Taken before the all_correct branch so the
     # baseline updates on every render of this function, including
     # mid-edit (invalid-count) runs.
-    st.session_state['_last_seen_selects'] = {
-        k: tuple(st.session_state[k] or ())
-        for k in st.session_state
-        if isinstance(k, str) and k.startswith('select_')
-    }
+    st.session_state['_last_seen_selects'] = _live_selections()
 
     # Verify all conditions have correct number of samples
     all_correct = all(
