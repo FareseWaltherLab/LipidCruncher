@@ -50,6 +50,14 @@ from ..workflows.normalization import NormalizationWorkflow, NormalizationWorkfl
 from ..workflows.isotope_tracing import IsotopeTracingWorkflow, IsotopeTracingResult
 
 
+class _UncachedResult(Exception):
+    """Carries a result out of a cached function without it being cached."""
+
+    def __init__(self, result):
+        super().__init__()
+        self.result = result
+
+
 def _normalize_lc_question(question: str) -> str:
     """Canonical cache key for a LipidCruncher-questions prompt."""
     return " ".join(question.split()).lower()
@@ -869,20 +877,18 @@ class StreamlitAdapter:
     # ==================== Cached Isotope Tracing Wrapper ====================
 
     @staticmethod
-    @st.cache_data(
-        show_spinner="Running IsoCorrectoR...",
-        hash_funcs={IsotopeCorrectionConfig: hash},
-    )
     def run_isotope_correction(
         measurement_df: pd.DataFrame,
         molecule_df: pd.DataFrame,
         element_df: pd.DataFrame,
         config: IsotopeCorrectionConfig,
     ) -> IsotopeTracingResult:
-        """Cached isotope tracing workflow wrapper.
+        """Isotope tracing workflow, cached on success.
 
         Keyed on the three input DataFrames and the config, so re-running with
-        unchanged inputs skips the (slow) R subprocess.
+        unchanged inputs skips the (slow) R subprocess. A run that failed in R
+        (a timeout, a crash, inputs IsoCorrectoR rejected) is not cached, so
+        retrying really re-runs it.
 
         Args:
             measurement_df: Measurement file.
@@ -894,9 +900,30 @@ class StreamlitAdapter:
             IsotopeTracingResult — success with the correction, or failure with
             validation_errors / error_message.
         """
-        return IsotopeTracingWorkflow.run(
+        try:
+            return StreamlitAdapter._run_isotope_correction_cached(
+                measurement_df, molecule_df, element_df, config
+            )
+        except _UncachedResult as uncached:
+            return uncached.result
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Running IsoCorrectoR...",
+        hash_funcs={IsotopeCorrectionConfig: hash},
+    )
+    def _run_isotope_correction_cached(
+        measurement_df: pd.DataFrame,
+        molecule_df: pd.DataFrame,
+        element_df: pd.DataFrame,
+        config: IsotopeCorrectionConfig,
+    ) -> IsotopeTracingResult:
+        result = IsotopeTracingWorkflow.run(
             measurement_df, molecule_df, element_df, config
         )
+        if result.error_message:
+            raise _UncachedResult(result)  # Streamlit does not cache exceptions
+        return result
 
     # ==================== Cached QC Wrappers ====================
 

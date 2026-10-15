@@ -59,3 +59,52 @@ class TestRFailuresAreReadable:
             _run()
         assert "the real cause" in str(err.value)
         assert len(str(err.value)) < 1000
+
+
+class TestFailedRunsAreNotCached:
+    """Regression (IQ5): the cached adapter stored failed results too, so a
+    timeout or R crash was replayed instantly on every retry."""
+
+    @pytest.fixture
+    def workflow_calls(self, monkeypatch):
+        from app.adapters.streamlit_adapter import StreamlitAdapter
+        from app.workflows.isotope_tracing import (
+            IsotopeTracingResult,
+            IsotopeTracingWorkflow,
+        )
+
+        calls = []
+        outcome = {"result": IsotopeTracingResult(
+            success=False, error_message="IsoCorrectoR did not finish",
+        )}
+
+        def _run(*args):
+            calls.append(args)
+            return outcome["result"]
+
+        monkeypatch.setattr(IsotopeTracingWorkflow, "run", staticmethod(_run))
+        StreamlitAdapter._run_isotope_correction_cached.clear()
+        yield calls, outcome
+        StreamlitAdapter._run_isotope_correction_cached.clear()
+
+    def _call(self):
+        from app.adapters.streamlit_adapter import StreamlitAdapter
+
+        df = pd.DataFrame({"a": [1]})
+        return StreamlitAdapter.run_isotope_correction(
+            df, df, df, IsotopeCorrectionConfig(),
+        )
+
+    def test_a_failed_run_is_retried(self, workflow_calls):
+        calls, _ = workflow_calls
+        first, second = self._call(), self._call()
+        assert len(calls) == 2
+        assert first.error_message == second.error_message
+
+    def test_a_successful_run_is_cached(self, workflow_calls):
+        from app.workflows.isotope_tracing import IsotopeTracingResult
+
+        calls, outcome = workflow_calls
+        outcome["result"] = IsotopeTracingResult(success=True)
+        assert self._call().success and self._call().success
+        assert len(calls) == 1
