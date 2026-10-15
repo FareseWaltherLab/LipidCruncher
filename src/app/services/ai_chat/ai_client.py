@@ -7,7 +7,7 @@ All methods are pure — no Streamlit imports, no instance state.
 import logging
 import os
 import re
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from ...models.chat import AIConfig
 from .exceptions import AIClientError
@@ -157,47 +157,6 @@ class AIClientService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def send_message_with_tools(
-        messages: list,
-        system_prompt: str,
-        config: AIConfig,
-        tools: List[dict],
-        tool_choice: Optional[dict] = None,
-    ):
-        """Send a conversation with tool definitions and return the full response.
-
-        Args:
-            messages: List of message dicts with 'role' and 'content' keys.
-            system_prompt: System prompt providing context and instructions.
-            config: AI configuration (model, max_tokens, temperature).
-            tools: List of tool definition dicts (Anthropic API format).
-            tool_choice: Optional tool_choice parameter (e.g. {"type": "auto"}).
-
-        Returns:
-            The full Anthropic Message object (not just the text).
-
-        Raises:
-            AIClientError: On any API communication failure.
-        """
-        try:
-            client = AIClientService.create_client()
-            kwargs: dict[str, Any] = dict(
-                model=config.model,
-                max_tokens=config.max_tokens,
-                temperature=config.temperature,
-                system=AIClientService._system_blocks(system_prompt),
-                messages=messages,
-                tools=tools,
-            )
-            if tool_choice is not None:
-                kwargs["tool_choice"] = tool_choice
-            return client.messages.create(**kwargs)
-        except AIClientError:
-            raise
-        except Exception as e:
-            raise _friendly_error(e) from e
-
-    @staticmethod
     def extract_tool_use_blocks(response) -> List[dict]:
         """Extract tool_use content blocks from an API response.
 
@@ -219,128 +178,6 @@ class AIClientService:
         return tool_calls
 
     @staticmethod
-    def extract_text_from_response(response) -> str:
-        """Extract concatenated text content from an API response.
-
-        Args:
-            response: Anthropic Message object.
-
-        Returns:
-            All text blocks joined together. Empty string if no text blocks.
-        """
-        parts = []
-        for block in response.content:
-            if block.type == "text":
-                parts.append(block.text)
-        return "\n".join(parts)
-
-    @staticmethod
-    def execute_tool_loop(
-        messages: list,
-        system_prompt: str,
-        config: AIConfig,
-        tools: List[dict],
-        tool_executor: Callable[[str, dict], str],
-        max_iterations: int = _DEFAULT_MAX_TOOL_ITERATIONS,
-        on_tool_call: Optional[Callable[[str, dict], None]] = None,
-    ) -> str:
-        """Run the tool-use loop until the AI produces a final text response.
-
-        Sends the conversation with tools. If the AI requests a tool call,
-        executes it locally via ``tool_executor``, appends the result, and
-        calls the API again — repeating until the AI responds with text only
-        (stop_reason == "end_turn") or the iteration cap is reached.
-
-        Args:
-            messages: Conversation history (will NOT be mutated — a copy is used).
-            system_prompt: System prompt.
-            config: AI configuration.
-            tools: Tool definitions for the API.
-            tool_executor: Callable(name, input_dict) -> result_string.
-                This is typically ``codebase_tools.execute_tool``.
-            max_iterations: Maximum number of API round-trips (default 5).
-            on_tool_call: Optional callback invoked with (tool_name, tool_input)
-                before each tool execution. Useful for UI status updates.
-
-        Returns:
-            The final text response from the AI (after all tool calls complete).
-
-        Raises:
-            AIClientError: On any API communication failure.
-        """
-        # Work on a copy so caller's list is not mutated
-        loop_messages = list(messages)
-
-        for iteration in range(max_iterations):
-            logger.info("Tool loop iteration %d/%d", iteration + 1, max_iterations)
-            response = AIClientService.send_message_with_tools(
-                loop_messages, system_prompt, config, tools,
-            )
-
-            # Log what we got back
-            block_types = [b.type for b in response.content]
-            logger.info("Response blocks: %s, stop_reason: %s",
-                        block_types, response.stop_reason)
-
-            # If the AI didn't request any tools, we're done
-            tool_calls = AIClientService.extract_tool_use_blocks(response)
-            if not tool_calls:
-                text = AIClientService.extract_text_from_response(response)
-                logger.info("Final text response: %d chars", len(text))
-                return text
-
-            # Append the assistant's response (with tool_use blocks) to messages
-            loop_messages.append({
-                "role": "assistant",
-                "content": response.content,
-            })
-
-            # Execute each tool and build tool_result blocks
-            tool_results = []
-            for tool_call in tool_calls:
-                if on_tool_call is not None:
-                    on_tool_call(tool_call["name"], tool_call["input"])
-
-                try:
-                    result_text = tool_executor(
-                        tool_call["name"], tool_call["input"]
-                    )
-                except Exception as e:
-                    logger.warning("Tool %s failed: %s", tool_call["name"], e)
-                    result_text = f"Error executing tool: {e}"
-
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_call["id"],
-                    "content": result_text,
-                })
-
-            # Append tool results as user message
-            loop_messages.append({
-                "role": "user",
-                "content": tool_results,
-            })
-
-        # If we exhausted iterations, make one final call with tools still
-        # present (required because the conversation contains tool_result
-        # messages) but ask the model to stop using them.
-        logger.warning(
-            "Tool loop reached %d iterations — forcing final response",
-            max_iterations,
-        )
-        loop_messages.append({
-            "role": "user",
-            "content": (
-                "Please provide your final answer now based on what you've "
-                "found so far. Do not make any more tool calls."
-            ),
-        })
-        response = AIClientService.send_message_with_tools(
-            loop_messages, system_prompt, config, tools,
-        )
-        return AIClientService.extract_text_from_response(response)
-
-    @staticmethod
     def stream_tool_loop(
         messages: list,
         system_prompt: str,
@@ -350,13 +187,15 @@ class AIClientService:
         max_iterations: int = _DEFAULT_MAX_TOOL_ITERATIONS,
         on_tool_call: Optional[Callable[[str, dict], None]] = None,
     ):
-        """Streaming variant of ``execute_tool_loop``.
+        """Run the tool-use loop, streaming the assistant's text.
 
-        Runs the same tool-use loop, but streams each model turn and yields
-        text chunks as they arrive (suitable for ``st.write_stream``). Tool
-        calls between turns are executed locally via ``tool_executor`` and
-        appended, then the loop continues. Yields only ``str`` chunks — no
-        Streamlit, no session state — so the layer boundary is preserved.
+        Streams each model turn and yields text chunks as they arrive
+        (suitable for ``st.write_stream``). Tool calls between turns are
+        executed locally via ``tool_executor`` and their results sent back,
+        until a turn calls no tool or ``max_iterations`` round trips have
+        run (then one last turn is asked for a final answer). Yields only
+        ``str`` chunks — no Streamlit, no session state — so the layer
+        boundary is preserved. ``messages`` is not mutated.
 
         Text the model writes before a tool call ("Let me check the docs.")
         has already been shown by the time the call arrives, so it is kept,

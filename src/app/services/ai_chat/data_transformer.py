@@ -57,58 +57,6 @@ class DataTransformerService:
     """
 
     @staticmethod
-    def generate_transformation_code(
-        source_schema: str,
-        user_message: str,
-        history: list,
-        config: Optional[AIConfig] = None,
-        on_tool_call: Optional[Callable[[str, dict], None]] = None,
-    ) -> Tuple[str, str]:
-        """Ask the AI to generate transformation code.
-
-        Uses the tool-aware API so the AI can search/read the codebase
-        before generating code.
-
-        Args:
-            source_schema: Schema description of the source DataFrame.
-            user_message: The user's latest message/instructions.
-            history: Previous conversation messages in API format.
-            config: AI configuration. Uses defaults if None.
-            on_tool_call: Optional callback(tool_name, tool_input) for
-                UI status updates (e.g. "Searching codebase...").
-
-        Returns:
-            Tuple of (explanation, code).
-
-        Raises:
-            AIClientError: On API communication failure.
-        """
-        if config is None:
-            config = AIConfig()
-
-        target_schema = SchemaExtractorService.extract_generic_format_spec()
-        context = build_transform_context(source_schema, target_schema)
-
-        system_prompt = data_transform_system_prompt()
-
-        # Prepend context to the user's message — long-form data goes above
-        # the question (Anthropic long-context guidance).
-        augmented_message = f"{context}\n\n{user_message}"
-        messages = history + [{"role": "user", "content": augmented_message}]
-
-        # Use the tool loop so the AI can look up implementation details
-        response_text = AIClientService.execute_tool_loop(
-            messages=messages,
-            system_prompt=system_prompt,
-            config=config,
-            tools=TOOL_DEFINITIONS,
-            tool_executor=execute_tool,
-            on_tool_call=on_tool_call,
-        )
-
-        return AIClientService.extract_code_block(response_text)
-
-    @staticmethod
     def stream_transformation_code(
         source_schema: str,
         user_message: str,
@@ -117,18 +65,19 @@ class DataTransformerService:
         holder: dict,
         on_tool_call: Optional[Callable[[str, dict], None]] = None,
     ):
-        """Streaming variant of ``generate_transformation_code``.
+        """Ask the AI for transformation code, streaming its explanation.
 
-        Returns a generator that yields the explanation prose as it streams.
-        The complete raw response (explanation + code) is accumulated into
-        ``holder['full']`` so the caller can extract and execute the code
-        once streaming completes. Mirrors the message assembly of the
-        non-streaming method exactly.
+        Uses the tool-aware loop so the AI can search/read the codebase
+        before writing code. Returns a generator that yields the
+        explanation prose as it streams. The complete raw response
+        (explanation + code) is accumulated into ``holder['full']`` so the
+        caller can extract and execute the code once streaming completes.
         """
         target_schema = SchemaExtractorService.extract_generic_format_spec()
         context = build_transform_context(source_schema, target_schema)
         system_prompt = data_transform_system_prompt()
 
+        # Long-form data above the question (Anthropic long-context guidance).
         augmented_message = f"{context}\n\n{user_message}"
         messages = history + [{"role": "user", "content": augmented_message}]
 

@@ -4,7 +4,7 @@ AI-powered visualization generation service.
 Generates custom Plotly visualizations from natural language
 requests. All methods are stateless static methods — no Streamlit imports.
 """
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional
 
 import pandas as pd
 
@@ -184,59 +184,6 @@ class VizGeneratorService:
     """
 
     @staticmethod
-    def generate_viz_code(
-        user_request: str,
-        schema_context: str,
-        experiment: ExperimentConfig,
-        history: list,
-        config: Optional[AIConfig] = None,
-        on_tool_call: Optional[Callable[[str, dict], None]] = None,
-    ) -> Tuple[str, str]:
-        """Ask the AI to generate visualization code.
-
-        Uses the tool-aware API so the AI can search/read the codebase
-        before generating visualization code.
-
-        Args:
-            user_request: The user's visualization request.
-            schema_context: Schema description of the analysis DataFrame.
-            experiment: Experiment configuration (conditions, samples).
-            history: Previous conversation messages in API format.
-            config: AI configuration. Uses defaults if None.
-            on_tool_call: Optional callback(tool_name, tool_input) for
-                UI status updates (e.g. "Searching codebase...").
-
-        Returns:
-            Tuple of (explanation, code).
-
-        Raises:
-            AIClientError: On API communication failure.
-        """
-        if config is None:
-            config = AIConfig()
-
-        experiment_context = _build_experiment_context(experiment)
-        context = (
-            f"<dataframe_schema>\n{schema_context}\n</dataframe_schema>\n\n"
-            f"<experiment_structure>\n{experiment_context}\n</experiment_structure>"
-        )
-
-        # Long-form data above the question (Anthropic long-context guidance).
-        augmented_message = f"{context}\n\n{user_request}"
-        messages = history + [{"role": "user", "content": augmented_message}]
-
-        response_text = AIClientService.execute_tool_loop(
-            messages=messages,
-            system_prompt=_viz_system_prompt(),
-            config=config,
-            tools=TOOL_DEFINITIONS,
-            tool_executor=execute_tool,
-            on_tool_call=on_tool_call,
-        )
-
-        return AIClientService.extract_code_block(response_text)
-
-    @staticmethod
     def stream_viz_code(
         user_request: str,
         schema_context: str,
@@ -246,13 +193,13 @@ class VizGeneratorService:
         holder: dict,
         on_tool_call: Optional[Callable[[str, dict], None]] = None,
     ):
-        """Streaming variant of ``generate_viz_code``.
+        """Ask the AI for visualization code, streaming its explanation.
 
-        Returns a generator that yields the explanation prose as it streams.
-        The complete raw response (explanation + code) is accumulated into
-        ``holder['full']`` so the caller can extract and execute the code
-        once streaming completes. Mirrors the message assembly of the
-        non-streaming method exactly.
+        Uses the tool-aware loop so the AI can search/read the codebase
+        before writing code. Returns a generator that yields the
+        explanation prose as it streams. The complete raw response
+        (explanation + code) is accumulated into ``holder['full']`` so the
+        caller can extract and execute the code once streaming completes.
         """
         experiment_context = _build_experiment_context(experiment)
         context = (

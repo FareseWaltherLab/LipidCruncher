@@ -176,7 +176,7 @@ class TestDataQuestionsUsesRenamedColumns:
     """Regression (Q3): Data Questions now runs on the renamed frame, so the
     columns the sandbox pre-coerces must be the renamed ones too."""
 
-    def test_both_paths_pass_the_renamed_sample_columns(self):
+    def test_passes_the_renamed_sample_columns(self):
         session_state = {
             'chat_studio_sample_columns_original': ['intensity[A]'],
             'chat_studio_sample_columns_renamed': ['intensity[s1]'],
@@ -184,12 +184,8 @@ class TestDataQuestionsUsesRenamedColumns:
         }
         with patch("app.adapters.streamlit_adapter.st") as mock_st, \
              patch("app.workflows.ai_chat.AIChatWorkflow."
-                   "handle_data_questions_message") as run, \
-             patch("app.workflows.ai_chat.AIChatWorkflow."
                    "stream_data_questions_message") as stream:
             mock_st.session_state = session_state
-            StreamlitAdapter.run_ai_data_questions("q", None, pd.DataFrame())
             StreamlitAdapter.stream_ai_data_questions("q", None, pd.DataFrame())
 
-        assert run.call_args.kwargs['numeric_columns'] == ['intensity[s1]']
         assert stream.call_args.kwargs['numeric_columns'] == ['intensity[s1]']

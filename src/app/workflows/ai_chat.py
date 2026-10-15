@@ -279,62 +279,6 @@ class AIChatWorkflow:
         )
 
     @staticmethod
-    def handle_transform_message(
-        user_message: str,
-        session: ChatSession,
-        source_df: pd.DataFrame,
-        ai_config: Optional[AIConfig] = None,
-        sandbox_config: Optional[SandboxConfig] = None,
-        numeric_columns: Optional[List[str]] = None,
-    ) -> TransformStepResult:
-        """Handle one user message in a data transformation chat.
-
-        Flow:
-        1. Append user message to session.
-        2. Send conversation to AI to generate transformation code.
-        3. If code is returned, execute in sandbox and validate output.
-        4. Append assistant response to session.
-        5. Return updated session + transformation result.
-
-        Args:
-            user_message: The user's latest message.
-            session: Current chat session.
-            source_df: The user's original DataFrame.
-            ai_config: AI configuration. Uses defaults if None.
-            sandbox_config: Sandbox configuration. Uses defaults if None.
-            numeric_columns: Optional list of columns to pre-coerce to
-                numeric in the sandbox (typically the sample-intensity
-                columns the user specified in the sidebar).
-
-        Returns:
-            TransformStepResult with updated session and transformation outcome.
-        """
-        if ai_config is None:
-            ai_config = AIConfig()
-        if sandbox_config is None:
-            sandbox_config = SandboxConfig()
-
-        # 1. Append user message
-        user_msg = ChatMessage(role="user", content=user_message)
-        session = session.add_message(user_msg)
-
-        # 2. Generate transformation code via AI
-        history = session.to_api_messages()[:-1]  # exclude the latest (we pass it separately)
-
-        explanation, code = DataTransformerService.generate_transformation_code(
-            source_schema=session.schema_context,
-            user_message=user_message,
-            history=history,
-            config=ai_config,
-        )
-
-        # 3-4. Execute (if any) and append assistant message
-        return AIChatWorkflow._finalize_transform(
-            session, explanation, code, source_df,
-            sandbox_config, numeric_columns,
-        )
-
-    @staticmethod
     def _finalize_transform(
         session: ChatSession,
         explanation: str,
@@ -422,7 +366,7 @@ class AIChatWorkflow:
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
     ):
-        """Streaming variant of ``handle_transform_message``.
+        """Handle one user message in a data transformation chat.
 
         Appends the user message, then returns ``(explanation_generator,
         finalize)``. The caller streams the explanation (e.g. via
@@ -544,66 +488,6 @@ class AIChatWorkflow:
         )
 
     @staticmethod
-    def handle_viz_message(
-        user_message: str,
-        session: ChatSession,
-        analysis_df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        ai_config: Optional[AIConfig] = None,
-        sandbox_config: Optional[SandboxConfig] = None,
-        numeric_columns: Optional[List[str]] = None,
-    ) -> VizStepResult:
-        """Handle one user message in a visualization chat.
-
-        Flow:
-        1. Append user message to session.
-        2. Send conversation to AI to generate visualization code.
-        3. If code is returned, execute in sandbox.
-        4. Append assistant response to session.
-        5. Return updated session + sandbox result.
-
-        Args:
-            user_message: The user's latest message.
-            session: Current chat session.
-            analysis_df: The analysis-ready DataFrame.
-            experiment: Experiment configuration.
-            ai_config: AI configuration. Uses defaults if None.
-            sandbox_config: Sandbox configuration. Uses defaults if None.
-            numeric_columns: Optional list of columns to pre-coerce to
-                numeric in the sandbox (typically the renamed
-                intensity[*]/concentration[*] columns produced by the
-                apply step).
-
-        Returns:
-            VizStepResult with updated session and execution outcome.
-        """
-        if ai_config is None:
-            ai_config = AIConfig()
-        if sandbox_config is None:
-            sandbox_config = SandboxConfig()
-
-        # 1. Append user message
-        user_msg = ChatMessage(role="user", content=user_message)
-        session = session.add_message(user_msg)
-
-        # 2. Generate viz code via AI
-        history = session.to_api_messages()[:-1]
-
-        explanation, code = VizGeneratorService.generate_viz_code(
-            user_request=user_message,
-            schema_context=session.schema_context,
-            experiment=experiment,
-            history=history,
-            config=ai_config,
-        )
-
-        # 3-4. Execute (if any) and append assistant message
-        return AIChatWorkflow._finalize_viz(
-            session, explanation, code, analysis_df,
-            sandbox_config, numeric_columns, experiment,
-        )
-
-    @staticmethod
     def _finalize_viz(
         session: ChatSession,
         explanation: str,
@@ -694,7 +578,7 @@ class AIChatWorkflow:
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
     ):
-        """Streaming variant of ``handle_viz_message``.
+        """Handle one user message in the visualization chat.
 
         Appends the user message, then returns ``(explanation_generator,
         finalize)``. The caller streams the explanation, then calls
@@ -770,73 +654,6 @@ class AIChatWorkflow:
         return ChatSession(
             mode=ChatMode.DATA_QUESTIONS,
             schema_context=schema_context,
-        )
-
-    @staticmethod
-    def handle_data_questions_message(
-        user_message: str,
-        session: ChatSession,
-        source_df: pd.DataFrame,
-        ai_config: Optional[AIConfig] = None,
-        sandbox_config: Optional[SandboxConfig] = None,
-        numeric_columns: Optional[List[str]] = None,
-        experiment: Optional[ExperimentConfig] = None,
-    ) -> DataQuestionsStepResult:
-        """Handle one user message in a data questions chat.
-
-        Flow:
-        1. Append user message to session.
-        2. Send conversation to AI (with tools) to answer the question.
-        3. If code is returned, execute in sandbox to compute the answer.
-        4. Append assistant response to session.
-        5. Return updated session + optional result DataFrame.
-
-        Args:
-            user_message: The user's latest message.
-            session: Current chat session.
-            source_df: The user's DataFrame.
-            ai_config: AI configuration. Uses defaults if None.
-            sandbox_config: Sandbox configuration. Uses defaults if None.
-            numeric_columns: Optional list of columns to pre-coerce to
-                numeric in the sandbox (typically the sample-intensity
-                columns the user specified in the sidebar).
-
-        Returns:
-            DataQuestionsStepResult with updated session and answer.
-        """
-        if ai_config is None:
-            ai_config = AIConfig()
-        if sandbox_config is None:
-            sandbox_config = SandboxConfig()
-
-        # 1. Append user message
-        user_msg = ChatMessage(role="user", content=user_message)
-        session = session.add_message(user_msg)
-
-        # 2. Build context and call AI with tools — long-form data above the
-        # question (Anthropic long-context guidance).
-        context = f"<dataframe_schema>\n{session.schema_context}\n</dataframe_schema>"
-        exp_context = build_experiment_context(experiment)
-        if exp_context:
-            context = f"{context}\n\n{exp_context}"
-        augmented_message = f"{context}\n\n{user_message}"
-        history = session.to_api_messages()[:-1]
-        messages = history + [{"role": "user", "content": augmented_message}]
-
-        system_prompt = data_questions_system_prompt()
-
-        response_text = AIClientService.execute_tool_loop(
-            messages=messages,
-            system_prompt=system_prompt,
-            config=ai_config,
-            tools=TOOL_DEFINITIONS,
-            tool_executor=execute_tool,
-        )
-
-        # 3-4. Extract/execute code (if any) and append assistant message
-        return AIChatWorkflow._finalize_data_questions(
-            session, response_text, source_df,
-            sandbox_config, numeric_columns, experiment,
         )
 
     @staticmethod
@@ -926,7 +743,7 @@ class AIChatWorkflow:
         numeric_columns: Optional[List[str]] = None,
         experiment: Optional[ExperimentConfig] = None,
     ):
-        """Streaming variant of ``handle_data_questions_message``.
+        """Handle one user message in the data questions chat.
 
         Appends the user message, then returns ``(explanation_generator,
         finalize)``. The caller streams the explanation, then calls

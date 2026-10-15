@@ -1432,35 +1432,6 @@ class StreamlitAdapter:
     # ==================== AI Chat Wrappers (NOT cached — stateful) ====================
 
     @staticmethod
-    def run_ai_data_questions(
-        user_message: str,
-        session,
-        source_df: pd.DataFrame,
-    ):
-        """Run one turn of the AI data questions chat.
-
-        NOT cached because chat is inherently stateful.
-
-        Args:
-            user_message: The user's message.
-            session: Current ChatSession.
-            source_df: The user's DataFrame.
-
-        Returns:
-            DataQuestionsStepResult from the workflow.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.handle_data_questions_message(
-            user_message=user_message,
-            session=session,
-            source_df=source_df,
-            numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_renamed'
-            ),
-            experiment=st.session_state.get('chat_studio_experiment'),
-        )
-
-    @staticmethod
     def stream_ai_transform(
         user_message: str,
         session,
