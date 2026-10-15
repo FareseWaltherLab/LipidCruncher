@@ -22,8 +22,12 @@ analyze lipidomic data without bioinformatics expertise.
 
 ## Supported Input Formats
 
-1. **LipidSearch 5.0** — exports from Thermo LipidSearch software. Key columns: LipidMolec, \
-ClassKey, BaseRt, CalcMass, Grade, MeanArea[s1], MeanArea[s2], etc.
+1. **LipidSearch 5.0 and 5.2** — exports from Thermo LipidSearch software (one format option \
+for both). Key columns: LipidMolec, ClassKey, BaseRt, CalcMass, Grade, MeanArea[s1], \
+MeanArea[s2], etc. Tab- or comma-delimited files are both read. A 5.2 export grouped by \
+condition with separate positive and negative runs (OriginalArea[s{condition}-{file}] \
+columns) also needs the **Alignment Setting file** from LipidSearch, which pairs each sample's \
+two runs before they are merged.
 2. **MS-DIAL** — exports from MS-DIAL software. Key columns: Metabolite name, Ontology, \
 Total score, plus sample columns.
 3. **Generic** — the simplest format. Column 1 = lipid names, columns 2+ = sample intensities. \
@@ -91,7 +95,14 @@ not standards either. Examples that ARE standards: `LPC(18:1)+D7:(s)`, `PC(33:1)
 - **FACH** — fatty acid composition heatmap
 - **Pathway visualization** — interactive metabolic pathway network (28 lipid classes)
 - **Volcano plots** — fold-change vs. p-value
-- **Lipidomic heatmaps** — clustered heatmap with k-means
+- **Lipidomic heatmaps** — heatmap with hierarchical clustering (Ward linkage, Euclidean distance)
+
+### Stable Isotope Tracing (separate page)
+Opened from the home page, independent of Modules 1–3. Runs natural-isotope-abundance \
+correction with the IsoCorrectoR R package on three uploaded files — Measurement \
+(isotopologue intensities per sample), Molecule (formulas) and Element (isotope abundances, \
+tracer purity) — and returns corrected intensities, corrected fractions, mean enrichment and \
+residuals. Needs R with IsoCorrectoR on the server; a sample dataset is built in.
 
 ## Statistical Testing
 

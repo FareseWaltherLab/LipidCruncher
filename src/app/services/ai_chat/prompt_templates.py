@@ -282,7 +282,7 @@ def transform(df):
 
 ## SCOPE
 
-You are the **Data Transform** assistant. Your primary job is to help convert data into the \
+You are the **Transform to Generic** assistant. Your primary job is to help convert data into the \
 LipidCruncher Generic format and to apply user-requested transformations (filtering, deduplication, \
 custom normalization, etc.). Information-gathering steps that support transformation planning are \
 part of that job — see Instruction #10.

@@ -5,6 +5,8 @@ Verifies that each tab's system prompt contains a SCOPE section
 that instructs the AI to refuse out-of-scope requests and redirect
 users to the correct tab.
 """
+import re
+
 import pytest
 
 from app.models.chat import AIConfig
@@ -74,7 +76,25 @@ class TestPromptScopeEnforcement:
 
     def test_viz_prompt_redirects_to_transform(self):
         prompt = _viz_system_prompt()
-        assert "Data Transform" in prompt
+        assert "Transform to Generic" in prompt
+
+
+ALL_PROMPTS = [
+    data_transform_system_prompt, data_questions_system_prompt,
+    lipidcruncher_questions_system_prompt, _viz_system_prompt,
+]
+AI_STUDIO_TABS = {  # the labels ai_studio_page passes to st.tabs
+    "LipidCruncher Questions", "Data Questions", "Transform to Generic",
+    "Custom Visualization",
+}
+
+
+@pytest.mark.parametrize("prompt_fn", ALL_PROMPTS)
+def test_prompts_name_only_real_tabs(prompt_fn):
+    """AQ14: two prompts sent users to a "Data Transform" tab, which does
+    not exist (it is "Transform to Generic")."""
+    named = set(re.findall(r"\*\*([^*]+)\*\* tab", prompt_fn()))
+    assert named and named <= AI_STUDIO_TABS
 
 
 class TestPromptExamplesIncluded:

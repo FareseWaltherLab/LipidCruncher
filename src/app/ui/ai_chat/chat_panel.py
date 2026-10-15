@@ -112,11 +112,10 @@ def run_code_turn(
 
 
 def display_transform_chat(source_df) -> None:
-    """Display the AI-Assisted Import chat panel.
+    """Display the Transform to Generic tab's chat.
 
-    Renders inside an expander in the sidebar/main area. Creates a new
-    transform session if one doesn't exist, then delegates to the
-    transform-specific UI.
+    Creates a new transform session if one doesn't exist, then delegates
+    to the transform-specific UI.
 
     Args:
         source_df: The user's uploaded DataFrame (pre-standardization).
@@ -200,10 +199,9 @@ def display_transform_chat(source_df) -> None:
 
 
 def display_viz_chat(analysis_df, experiment) -> None:
-    """Display the AI Custom Visualization chat panel.
+    """Display the Custom Visualization tab's chat.
 
-    Renders inside an expander in the analysis section. Creates a new
-    viz session if one doesn't exist, then delegates to the
+    Creates a new viz session if one doesn't exist, then delegates to the
     viz-specific UI.
 
     Args:
