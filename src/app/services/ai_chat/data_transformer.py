@@ -11,6 +11,8 @@ from typing import Callable, List, Optional, Tuple
 import pandas as pd
 
 from ...models.chat import AIConfig, SandboxConfig
+from ..data_standardization import DataStandardizationService
+from ..format_detection import GENERIC_METADATA_NAME_PATTERNS
 from .ai_client import AIClientService
 from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .prompt_templates import build_transform_context, data_transform_system_prompt
@@ -222,9 +224,11 @@ class DataTransformerService:
     def validate_generic_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
         """Validate that a DataFrame conforms to the Generic upload format.
 
-        The Generic format is simple:
-          - Column 1: lipid names (string)
-          - Columns 2+: sample intensities (numeric)
+        Mirrors how the Generic reader (``DataStandardizationService``)
+        will read the uploaded file:
+          - Column 1: lipid names (text)
+          - Column 2: optionally a ClassKey column (the reader's own test)
+          - Remaining columns: sample intensities (numeric, not all empty)
 
         LipidCruncher handles all further standardization (renaming columns,
         extracting ClassKey, normalizing lipid names) after upload.
@@ -255,10 +259,22 @@ class DataTransformerService:
                 f"First column ('{df.columns[0]}') is entirely empty/NaN — "
                 f"it should contain lipid names."
             )
+        elif not first_col.astype(str).str.contains('[A-Za-z]').any():
+            errors.append(
+                f"First column ('{df.columns[0]}') has no text — it should "
+                f"contain lipid names, not numbers."
+            )
 
-        # Columns 2+ should be numeric (sample intensities)
+        sample_cols = DataTransformerService._sample_columns(df)
+        if not sample_cols:
+            errors.append(
+                "No sample intensity columns after the lipid names "
+                "(and ClassKey) columns."
+            )
+
+        # The sample columns should be numeric intensities
         non_numeric_cols = []
-        for col in df.columns[1:]:
+        for col in sample_cols:
             if not pd.api.types.is_numeric_dtype(df[col]):
                 non_numeric_cols.append(col)
 
@@ -271,21 +287,34 @@ class DataTransformerService:
                     + f", and {len(non_numeric_cols) - 3} more"
                 )
             errors.append(
-                f"Non-numeric columns found after column 1: {col_list}. "
-                f"Columns 2+ should contain only sample intensities. "
-                f"Remove any metadata columns (class, mass, score, etc.)."
+                f"Non-numeric sample columns: {col_list}. After the lipid "
+                f"names (and an optional ClassKey column) every column "
+                f"should be a sample intensity. Remove any metadata columns "
+                f"(mass, score, etc.)."
+            )
+
+        empty_cols = [
+            c for c in sample_cols
+            if c not in non_numeric_cols and df[c].isna().all()
+        ]
+        if empty_cols:
+            errors.append(
+                "Sample columns with no values: "
+                + ", ".join(f"'{c}'" for c in empty_cols[:3])
+                + (f", and {len(empty_cols) - 3} more" if len(empty_cols) > 3 else "")
+                + "."
             )
 
         return len(errors) == 0, errors
 
-    # Common metadata column name fragments that should not be in Generic format
-    _METADATA_PATTERNS = {
-        'score', 'grade', 'mass', 'mz', 'm/z', 'rt', 'retention',
-        'adduct', 'formula', 'inchi', 'smiles', 'comment', 'ontology',
-        'annotation', 'alignment', 'fill', 'assigned', 'spectrum',
-        'isotope', 'similarity', 'dot product', 'reference', 'modified',
-        'curation', 'fragment', 's/n', 'class', 'category', 'type',
-    }
+    @staticmethod
+    def _sample_columns(df: pd.DataFrame) -> List:
+        """The columns the Generic reader will treat as samples."""
+        has_classkey = (
+            len(df.columns) > 2
+            and DataStandardizationService._is_classkey_column(df, 1)
+        )
+        return list(df.columns[2 if has_classkey else 1:])
 
     @staticmethod
     def detect_metadata_columns(df: pd.DataFrame) -> List[str]:
@@ -302,10 +331,9 @@ class DataTransformerService:
             List of suspicious column names that may be metadata.
         """
         suspicious = []
-        for col in df.columns[1:]:
-            col_lower = col.lower().strip()
-            if any(p in col_lower
-                   for p in DataTransformerService._METADATA_PATTERNS):
+        for col in DataTransformerService._sample_columns(df):
+            col_lower = str(col).lower().strip()
+            if any(p in col_lower for p in GENERIC_METADATA_NAME_PATTERNS):
                 suspicious.append(col)
         return suspicious
 
@@ -320,7 +348,7 @@ class DataTransformerService:
             A summary string describing the result.
         """
         n_species = len(df)
-        n_samples = len(df.columns) - 1  # exclude lipid name column
+        n_samples = len(DataTransformerService._sample_columns(df))
         metadata_cols = DataTransformerService.detect_metadata_columns(df)
 
         # Check first column looks like lipid names

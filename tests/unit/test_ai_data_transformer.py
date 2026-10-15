@@ -70,13 +70,44 @@ class TestValidateGenericSchema:
     def test_non_numeric_column_after_first(self):
         df = pd.DataFrame({
             "Lipid": ["PC 34:1"],
-            "ClassKey": ["PC"],
+            "Comment": ["peak eluted late, check shape"],
             "Sample1": [100.0],
         })
         is_valid, errors = DataTransformerService.validate_generic_schema(df)
         assert is_valid is False
         assert any("non-numeric" in e.lower() for e in errors)
-        assert any("ClassKey" in e for e in errors)
+        assert any("Comment" in e for e in errors)
+
+    # Regression (AQ8): these disagreed with how the Generic reader
+    # (DataStandardizationService) reads the uploaded file.
+
+    def test_classkey_second_column_is_accepted(self):
+        """The reader takes an optional ClassKey column 2; the validator
+        rejected it, on exactly the raw-import case the tab is for."""
+        df = pd.DataFrame({
+            "LipidMolec": ["PC 34:1", "PE 36:2"],
+            "ClassKey": ["PC", "PE"],
+            "Sample1": [100.0, 200.0],
+        })
+        is_valid, errors = DataTransformerService.validate_generic_schema(df)
+        assert is_valid, errors
+        assert DataTransformerService.detect_metadata_columns(df) == []
+
+    def test_numeric_first_column_is_rejected(self):
+        df = pd.DataFrame({"Id": [1, 2], "Sample1": [100.0, 200.0]})
+        is_valid, errors = DataTransformerService.validate_generic_schema(df)
+        assert is_valid is False
+        assert any("lipid names" in e for e in errors)
+
+    def test_empty_sample_column_is_rejected(self):
+        df = pd.DataFrame({
+            "Lipid": ["PC 34:1", "PE 36:2"],
+            "Sample1": [100.0, 200.0],
+            "Sample2": [float("nan")] * 2,
+        })
+        is_valid, errors = DataTransformerService.validate_generic_schema(df)
+        assert is_valid is False
+        assert any("Sample2" in e and "no values" in e for e in errors)
 
     def test_multiple_non_numeric_columns_reported(self):
         df = pd.DataFrame({
