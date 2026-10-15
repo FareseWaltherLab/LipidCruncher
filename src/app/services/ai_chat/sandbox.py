@@ -605,8 +605,9 @@ class SandboxService:
 
         # Phase 2: Execute out-of-process. The AST validation above is
         # defense-in-depth, not the boundary — the boundary is the
-        # hardened child process (no filesystem writes, no network, no
-        # subprocesses, no inherited secrets, killable).
+        # hardened child process (see sandbox_runner._harden: OS limits on
+        # writes, processes, CPU and memory; Python-level hooks only for
+        # reads and network; no inherited secrets; killable).
         start_time = time.monotonic()
 
         if not _SLOTS.acquire(timeout=config.execution_timeout):

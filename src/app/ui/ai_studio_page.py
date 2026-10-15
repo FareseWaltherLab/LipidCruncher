@@ -66,8 +66,11 @@ executed here against your data, and you are shown what it returned. Every such
 answer carries a **View code** expander — that code *is* the method. Read it
 before you trust the number.
 
-Generated code runs in a locked-down child process: no network, no file writes,
-no subprocesses, a 10-second limit, and no access to the app's environment.
+Generated code runs in a separate, restricted process. It is not given the app's
+settings or keys, and the operating system stops it from writing files or starting
+other programs and limits it to 10 seconds and 1 GB of memory. Reading files and
+using the network are blocked inside Python itself rather than by the operating
+system, so treat those two as safeguards, not guarantees.
 
 **LipidCruncher Questions** works differently — no code, no data. It answers from
 LipidCruncher's own paper, supplementary methods, release notes, and source code,
