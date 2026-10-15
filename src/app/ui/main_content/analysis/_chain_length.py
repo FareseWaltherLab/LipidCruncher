@@ -81,7 +81,7 @@ def _display_chain_length_plots(
             )
             return
 
-        st.plotly_chart(result.figure, use_container_width=True)
+        st.plotly_chart(result.figure, width='stretch')
 
         st.session_state.analysis_chain_length_fig = result.figure
         st.session_state.analysis_all_plots['chain_length'] = result.figure

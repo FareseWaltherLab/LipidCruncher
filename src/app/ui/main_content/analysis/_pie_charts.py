@@ -43,7 +43,7 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
         st.session_state.analysis_pie_chart_figs = {}
         for condition, pie_result in results.items():
             st.markdown(f"###### {condition}")
-            st.plotly_chart(pie_result.figure, use_container_width=True)
+            st.plotly_chart(pie_result.figure, width='stretch')
             st.session_state.analysis_pie_chart_figs[condition] = pie_result.figure
             st.session_state.analysis_all_plots[f'pie_{condition}'] = pie_result.figure
 

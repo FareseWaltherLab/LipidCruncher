@@ -153,7 +153,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             "High percentages may indicate lower sensitivity or technical issues."
         )
 
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width='stretch')
 
         # Download buttons
         missing_values_df = pd.DataFrame({
@@ -176,7 +176,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
             "Box = IQR (25th-75th percentile), line = median, points = outliers."
         )
 
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
 
         # Download buttons
         display_export_buttons(
@@ -258,7 +258,7 @@ def _render_bqc_scatter(
         )
     )
 
-    st.plotly_chart(scatter_plot, use_container_width=True)
+    st.plotly_chart(scatter_plot, width='stretch')
 
     # Store for PDF report
     st.session_state.qc_bqc_plot = scatter_plot
@@ -420,7 +420,7 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
                 # Store first individual plot for PDF report (fallback)
                 if idx == 1:
                     st.session_state.qc_retention_time_plot = plot
-                st.plotly_chart(plot, use_container_width=True)
+                st.plotly_chart(plot, width='stretch')
 
                 display_export_buttons(
                     plot, retention_df,
@@ -452,7 +452,7 @@ def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) 
             if plot:
                 # Store comparison plot for PDF report (preferred over individual)
                 st.session_state.qc_retention_time_plot = plot
-                st.plotly_chart(plot, use_container_width=True)
+                st.plotly_chart(plot, width='stretch')
 
                 display_export_buttons(
                     plot, retention_df,
@@ -665,7 +665,7 @@ def _display_pca_analysis(
         pca_plot, pca_df = StreamlitAdapter.run_pca(
             df, experiment, display_names_for('qc'),
         )
-        st.plotly_chart(pca_plot, use_container_width=True)
+        st.plotly_chart(pca_plot, width='stretch')
         st.session_state.qc_pca_plot = pca_plot
 
         # Download buttons

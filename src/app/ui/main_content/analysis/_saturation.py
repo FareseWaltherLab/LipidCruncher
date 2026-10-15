@@ -124,7 +124,7 @@ def _render_saturation_results(
                 # Reset y-axis range that was expanded for annotations
                 _reset_y_range(display_fig)
             st.markdown(f"###### {lipid_class}")
-            st.plotly_chart(display_fig, use_container_width=True)
+            st.plotly_chart(display_fig, width='stretch')
             # Store and export the figure the user is actually looking at.
             # Storing `fig` here would put significance annotations the user
             # explicitly hid into both the PDF report and the SVG download.
