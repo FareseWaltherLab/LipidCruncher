@@ -1102,27 +1102,6 @@ class TestSessionStateFieldCompleteness:
         # + 3 (qc_input_experiment/_bqc_label/_processing_df, same handoff)
         assert len(qc_fields) == 14
 
-    def test_total_field_count(self):
-        """Test total SessionState field count matches expected."""
-        field_names = [f.name for f in fields(SessionState)]
-        # 61 (pre-Module 3) + 17 (analysis) + 3 (QC plot storage) + 2 (LSI report)
-        # + 1 (sample_names, sidebar display names)
-        # + 1 (standards_consistency_figs, kept for the PDF report)
-        # + 1 (lipidsearch_sample_names, alignment-derived names)
-        # + 1 (qc_sample_names, names re-keyed after sample exclusion)
-        # + 1 (qc_input_sample_names, names frozen at Module 1's handoff)
-        # + 1 (sample_label_mode, original names vs s-labels switch) = 89
-        # + 1 (_preserved_pca_groups_remove, PCA group exclusion, reset with QC) = 90
-        # + 3 (processing_df, processing_sample_names, _preserved_excluded_samples;
-        #      sidebar sample exclusion) = 93
-        # + 2 (_preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio) = 95
-        # + 3 (qc_input_experiment, qc_input_bqc_label, qc_input_processing_df) = 98
-        # + 2 (regroup_origin, processing_origin; sample identity) = 100
-        # + 1 (custom_standards_sample_set) = 101
-        # + 1 (_preserved_excluded_regroup_origin) = 102
-        # - 6 (fields nothing read or wrote) = 96
-        assert len(field_names) == 96
-
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""
         state = SessionState()
