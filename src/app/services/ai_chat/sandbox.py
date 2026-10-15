@@ -65,30 +65,50 @@ class SandboxResult:
 # AST Validator
 # ---------------------------------------------------------------------------
 
-# Imports that are safe to allow in sandbox code
-_WHITELISTED_IMPORTS: frozenset = frozenset({
-    "math", "statistics", "re",
-    # Already pre-loaded in globals as pd/np/px/go — but the AI sometimes
-    # adds defensive imports (e.g. `import pandas as pd`) after an error.
-    # Whitelist them so those imports are no-ops instead of fatal errors.
-    "pandas", "numpy", "plotly",
-    # Analysis libraries for questions the pipeline doesn't already cover.
-    # All are existing app dependencies. Prefer the `lc` namespace for
-    # anything LipidCruncher already implements — these are the fallback
-    # for genuinely novel analyses.
-    #
-    # NOTE: this allowlist is matched on the TOP-LEVEL package only, so
-    # every submodule comes with it (`scipy.io`, `sklearn.datasets`,
-    # `statsmodels.api.load` → pickle, ...). Do not read these entries as
-    # "compute-only". That is not a regression introduced here — `pd`/`np`
-    # are pre-bound in the exec globals below and already reach the same
-    # capabilities (`pd.read_pickle`, `pd.read_csv(<url>)`,
-    # `pd.compat.os`), because the AST validator restricts imports and
-    # dunder access but not ordinary attribute chains. Treat the sandbox
-    # as a guardrail against accidents, NOT as a boundary that contains a
-    # determined attacker; real isolation needs a separate process.
-    "scipy", "statsmodels", "sklearn",
+# Analysis modules generated code may import, for questions the pipeline
+# doesn't already cover (prefer the `lc` namespace for anything LipidCruncher
+# implements). Submodules, not whole packages: `import scipy` or
+# `from scipy import io` is refused, so readers and dataset downloaders such
+# as `scipy.io`, `sklearn.datasets` and `statsmodels.api` (`sm.load` unpickles)
+# are not an import away. Listed in the prompts as written here.
+ANALYSIS_MODULES: Tuple[str, ...] = (
+    "scipy.stats", "scipy.cluster.hierarchy", "scipy.spatial.distance",
+    "statsmodels.stats", "statsmodels.formula.api",
+    "sklearn.decomposition", "sklearn.preprocessing", "sklearn.cluster",
+    "sklearn.manifold", "sklearn.metrics",
+)
+
+# Every importable module (and its submodules). pandas/numpy/plotly are
+# pre-bound as pd/np/px/go; the AI sometimes adds defensive imports
+# (`import pandas as pd`) after an error, which stay harmless no-ops.
+#
+# This narrows what an import can reach; it does not contain the code.
+# `import scipy.stats` still binds `scipy`, whose other submodules load on
+# attribute access, and `pd`/`np` reach the same capabilities by ordinary
+# attribute chains (`pd.read_pickle`, `pd.compat.os`), which the AST
+# validator does not restrict. The child process is the boundary.
+_ALLOWED_MODULES: frozenset = frozenset({
+    "math", "statistics", "re", "pandas", "numpy", "plotly",
+    *ANALYSIS_MODULES,
 })
+
+
+def _module_allowed(name: str) -> bool:
+    return any(name == m or name.startswith(m + ".") for m in _ALLOWED_MODULES)
+
+
+def _import_allowed(module: str, names=()) -> bool:
+    """Whether ``import module`` / ``from module import names`` is allowed.
+
+    ``from scipy.stats import ttest_ind`` imports from an allowed module;
+    ``from scipy import stats`` imports allowed modules from their parent.
+    """
+    if _module_allowed(module):
+        return True
+    return bool(names) and all(
+        _module_allowed(f"{module}.{name}") for name in names
+    )
+
 
 # Dunder attributes that must never be accessed
 _BLOCKED_DUNDERS: frozenset = frozenset({
@@ -114,15 +134,14 @@ class _ASTValidator(ast.NodeVisitor):
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
-            module_name = alias.name.split(".")[0]
-            if module_name not in _WHITELISTED_IMPORTS:
+            if not _import_allowed(alias.name):
                 raise SandboxError(f"Import of '{alias.name}' is not allowed")
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module:
-            module_name = node.module.split(".")[0]
-            if module_name not in _WHITELISTED_IMPORTS:
+            names = [alias.name for alias in node.names]
+            if not _import_allowed(node.module, names):
                 raise SandboxError(f"Import from '{node.module}' is not allowed")
         else:
             raise SandboxError("Relative imports are not allowed")
@@ -210,14 +229,13 @@ _SAFE_BUILTINS: Dict[str, Any] = {
 
 
 def _restricted_import(name, *args, **kwargs):
-    """Import function that only allows whitelisted modules.
+    """Import function that only allows the modules in ``_ALLOWED_MODULES``.
 
-    Matches the AST validator's policy: the top-level package name must
-    be in ``_WHITELISTED_IMPORTS``. Submodules of whitelisted packages
-    (e.g. ``plotly.graph_objects``) are allowed.
+    Applies the AST validator's rule again at run time (``from X import a``
+    arrives as ``name=X, fromlist=('a',)``).
     """
-    top_level = name.split(".", 1)[0]
-    if top_level not in _WHITELISTED_IMPORTS:
+    fromlist = args[2] if len(args) > 2 else kwargs.get("fromlist")
+    if not _import_allowed(name, tuple(fromlist or ())):
         raise ImportError(f"Import of '{name}' is not allowed")
     return __builtins__.__import__(name, *args, **kwargs) if hasattr(__builtins__, '__import__') else __import__(name, *args, **kwargs)
 

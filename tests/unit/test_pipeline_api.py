@@ -8,6 +8,7 @@ pipeline" mean the same numbers the main app reports.
 import pytest
 
 from app.models.experiment import ExperimentConfig
+from app.services.ai_chat.sandbox import ANALYSIS_MODULES
 from app.workflows.pipeline_api import PipelineAPI
 
 from tests.evals import reference_analysis as ref
@@ -182,10 +183,53 @@ class TestSandboxIntegration:
         assert res.success, res.error_message
         assert "n_species" in res.result_df.columns
 
-    @pytest.mark.parametrize("module", ["scipy", "statsmodels", "sklearn"])
-    def test_fallback_libraries_are_importable(self, module, df):
+    @pytest.mark.parametrize("module", ANALYSIS_MODULES)
+    def test_every_advertised_analysis_module_imports(self, module, df):
         res = self._run(f"import {module}\nprint('ok')", df)
         assert res.success, res.error_message
+
+    def test_usual_import_forms_work(self, df):
+        res = self._run(
+            "from scipy.stats import ttest_ind\n"
+            "from sklearn.decomposition import PCA\n"
+            "from statsmodels.stats.multitest import multipletests\n"
+            "import statsmodels.formula.api as smf\n"
+            "from scipy.cluster import hierarchy\n"
+            "d = pd.DataFrame({'y': [1.0, 2.1, 2.9, 4.2], 'x': [1, 2, 3, 4]})\n"
+            "print(round(smf.ols('y ~ x', data=d).fit().params['x'], 2))",
+            df,
+        )
+        assert res.success, res.error_message
+        assert res.stdout.strip() == "1.04"
+
+    @pytest.mark.parametrize("code", [
+        "import scipy", "import statsmodels", "import sklearn",
+        "from scipy import io", "import scipy.io", "import sklearn.datasets",
+        "from sklearn import datasets", "import statsmodels.api",
+        "from statsmodels import api", "from scipy import stats, io",
+        "from scipy import *",
+    ])
+    def test_whole_packages_and_unlisted_submodules_are_refused(self, code, df):
+        """S10: the allowlist matched only the top-level package, so every
+        submodule (scipy.io, sklearn.datasets, statsmodels.api.load) came
+        with it."""
+        res = self._run(code, df)
+        assert not res.success
+        assert "not allowed" in res.error_message
+
+    @pytest.mark.parametrize("name, fromlist", [
+        ("scipy", None), ("scipy", ("io",)), ("sklearn.datasets", None),
+        ("statsmodels", ("api",)),
+    ])
+    def test_runtime_import_hook_applies_the_same_rule(self, name, fromlist):
+        from app.services.ai_chat.sandbox import _restricted_import
+        with pytest.raises(ImportError, match="not allowed"):
+            _restricted_import(name, None, None, fromlist, 0)
+
+    def test_runtime_import_hook_allows_listed_forms(self):
+        from app.services.ai_chat.sandbox import _restricted_import
+        assert _restricted_import("scipy", None, None, ("stats",), 0).stats
+        assert _restricted_import("scipy.stats", None, None, None, 0)
 
     @pytest.mark.parametrize("module", ["os", "sys", "subprocess", "socket",
                                         "requests", "pathlib", "shutil"])

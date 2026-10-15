@@ -11,6 +11,7 @@ from .prompt_examples import (
     get_lc_questions_examples,
     get_transform_examples,
 )
+from .sandbox import ANALYSIS_MODULES
 from .schema_extractor import SchemaExtractorService
 
 
@@ -205,6 +206,11 @@ DO NOT trigger this rule for unambiguous requests like "box plot of intensity by
 condition" or "scatter plot of class means" — only when methodology choices materially \
 affect the result.
 """
+
+
+def analysis_modules_text() -> str:
+    """The importable analysis submodules, as a prompt phrase."""
+    return ", ".join(f"`{m}`" for m in ANALYSIS_MODULES)
 
 
 def data_transform_system_prompt() -> str:
@@ -480,7 +486,7 @@ When you generate code, wrap it in a ```python block. The execution environment 
 - `math`, `statistics` — standard library math modules
 - `re` — standard library regex module (useful for parsing lipid names, e.g. extracting fatty acid chain composition)
 
-Pandas, numpy, plotly, `scipy`, `statsmodels` and `sklearn` may be imported if you genuinely need them for an analysis `lc` does not cover. Nothing else is importable.
+Pandas, numpy and plotly may be imported, and so may {analysis_modules_text()} if you genuinely need them for an analysis `lc` does not cover. Import those submodules themselves (`from scipy import stats`, not `import scipy`). Nothing else is importable.
 
 ### Output variables
 - `result_df` — a pandas DataFrame (for tables, summaries). The UI will show a download button.
