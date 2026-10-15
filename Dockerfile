@@ -41,6 +41,9 @@ RUN Rscript -e 'install.packages(c("BiocManager", "jsonlite"), repos="https://cl
     && Rscript -e 'stopifnot(requireNamespace("IsoCorrectoR", quietly=TRUE), requireNamespace("jsonlite", quietly=TRUE)); \
                    cat("IsoCorrectoR", as.character(packageVersion("IsoCorrectoR")), "OK\n")'
 
+# Unprivileged user the app runs as (see USER below).
+RUN useradd --create-home --uid 1000 app
+
 # Python deps.
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -54,6 +57,12 @@ COPY . .
 ENV STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1024
 
 EXPOSE 8501
+
+# Never run as root. Root is exempt from RLIMIT_NPROC, so the AI Studio
+# sandbox's "no new processes" limit did nothing, and any escape from the
+# sandbox had root in the container. The sandbox now refuses to run code as
+# root, so without this line the AI Studio cannot execute anything.
+USER app
 
 # The AI Studio reads ANTHROPIC_API_KEY from the environment at call time. It is
 # deliberately NOT baked in — inject it at run time (ECS `secrets` from Secrets

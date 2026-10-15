@@ -227,3 +227,92 @@ class TestParentNeverUnpicklesChildOutput:
         assert list(out.columns) == [("a", "mean"), ("a", "sum")]
         assert out.index.name == "ClassKey"
         assert out.loc["PC", ("a", "sum")] == 4
+
+
+def _run_child_script(script):
+    """Run ``script`` in a fresh interpreter, so limits never hit pytest."""
+    import subprocess
+    import sys
+
+    from app.services.ai_chat.sandbox import _child_env
+
+    done = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True,
+        env=_child_env(), timeout=120,
+    )
+    assert done.returncode == 0, done.stderr
+    return done.stdout.strip()
+
+
+_HARDEN = """
+import os, resource
+{patch}
+from app.services.ai_chat import sandbox_runner
+try:
+    sandbox_runner._harden(5)
+except Exception as e:
+    print('refused:', e)
+else:
+    print('applied')
+"""
+
+
+class TestHardeningFailsClosed:
+    """Regression: every control in ``_harden`` swallowed its own failure,
+    so the deployed container (root, which Linux exempts from
+    RLIMIT_NPROC) ran generated code with no process limit and nothing
+    said so. The child now checks the limits took effect and otherwise
+    refuses to run the code."""
+
+    def test_limits_apply_for_a_normal_user(self):
+        assert _run_child_script(_HARDEN.format(patch="")) == "applied"
+
+    def test_refuses_to_run_as_root(self):
+        out = _run_child_script(_HARDEN.format(patch="os.geteuid = lambda: 0"))
+        assert out.startswith("refused:") and "root" in out
+
+    def test_refuses_when_a_limit_cannot_be_set(self):
+        patch = (
+            "_set = resource.setrlimit\n"
+            "def _fail_nproc(which, value):\n"
+            "    if which == resource.RLIMIT_NPROC:\n"
+            "        raise ValueError('not permitted')\n"
+            "    _set(which, value)\n"
+            "resource.setrlimit = _fail_nproc"
+        )
+        out = _run_child_script(_HARDEN.format(patch=patch))
+        assert out.startswith("refused:")
+
+    def test_refuses_when_a_limit_is_silently_ignored(self):
+        patch = "resource.setrlimit = lambda which, value: None"
+        out = _run_child_script(_HARDEN.format(patch=patch))
+        assert out.startswith("refused:") and "did not take effect" in out
+
+    def test_code_is_not_run_when_hardening_fails(self):
+        script = (
+            "import io, json, os, pickle, sys\n"
+            "import pandas as pd\n"
+            "os.geteuid = lambda: 0\n"
+            "from app.services.ai_chat import sandbox_runner\n"
+            "r, w = os.pipe()\n"
+            "sys.argv = ['runner', str(w)]\n"
+            "request = {'code': \"print('ran')\", 'df': pd.DataFrame({'a': [1]})}\n"
+            "sys.stdin = io.TextIOWrapper(io.BytesIO(pickle.dumps(request)))\n"
+            "sandbox_runner.main()\n"
+            "print(os.read(r, 1 << 20).decode())\n"
+        )
+        response = __import__("json").loads(_run_child_script(script))
+        assert response["ok"] is False
+        assert response["stdout"] == ""
+        assert "was not run" in response["error"]
+
+
+class TestDockerImage:
+    def test_image_does_not_run_as_root(self):
+        from pathlib import Path
+
+        dockerfile = Path(__file__).parents[2] / "Dockerfile"
+        lines = [ln.split() for ln in dockerfile.read_text().splitlines()]
+        users = [ln[1] for ln in lines if ln and ln[0] == "USER"]
+        assert users, "Dockerfile has no USER line, so the app runs as root"
+        assert users[-1] not in ("root", "0")

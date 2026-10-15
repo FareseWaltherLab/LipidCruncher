@@ -83,40 +83,40 @@ def _harden(cpu_seconds: int) -> None:
     Applied in the child, after the heavy imports are already resolved, so
     the limits constrain the AI's code rather than our own start-up.
 
-    Best-effort by design: each control is independent, and a control that
-    is unavailable on the host must not prevent the others from applying.
+    Fails closed: raises if any control cannot be put in place, and
+    ``main`` then refuses to run the code. These used to be best-effort
+    with every error swallowed, which hid that the deployed container ran
+    as root and so had no process limit at all.
     """
-    # --- No filesystem writes -------------------------------------------
-    # RLIMIT_FSIZE caps the size of files the process may create; 0 means
-    # it may create none. This is what stops `df.to_csv('/…')`,
-    # `scipy.io.savemat`, and friends. Pipes are unaffected, so the result
-    # channel still works.
-    try:
-        import resource
-        resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
-    except Exception:
-        pass
+    import resource
 
-    # --- Bounded CPU ----------------------------------------------------
-    # Backstop for the parent's wall-clock timeout: a busy loop that
-    # ignores signals still dies here.
-    try:
-        import resource
-        resource.setrlimit(
-            resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds),
-        )
-    except Exception:
-        pass
+    # Root (CAP_SYS_RESOURCE) is exempt from RLIMIT_NPROC on Linux, so the
+    # "no new processes" limit below would be set and silently ignored.
+    if os.geteuid() == 0:
+        raise RuntimeError("running as root, which ignores the process limit")
 
-    # --- No new processes ------------------------------------------------
-    # Blocks os.system / subprocess even if the code reaches them through
-    # a library's module attributes (e.g. pd.compat.os), which the AST
-    # validator cannot see.
-    try:
-        import resource
-        resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
-    except Exception:
-        pass
+    limits = {
+        # --- No filesystem writes -----------------------------------------
+        # RLIMIT_FSIZE caps the size of files the process may create; 0
+        # means it may create none. This is what stops `df.to_csv('/…')`,
+        # `scipy.io.savemat`, and friends. Pipes are unaffected, so the
+        # result channel still works.
+        "RLIMIT_FSIZE": (0, 0),
+        # --- Bounded CPU --------------------------------------------------
+        # Backstop for the parent's wall-clock timeout: a busy loop that
+        # ignores signals still dies here.
+        "RLIMIT_CPU": (cpu_seconds, cpu_seconds),
+        # --- No new processes ---------------------------------------------
+        # Blocks os.system / subprocess even if the code reaches them
+        # through a library's module attributes (e.g. pd.compat.os), which
+        # the AST validator cannot see.
+        "RLIMIT_NPROC": (0, 0),
+    }
+    for name, value in limits.items():
+        which = getattr(resource, name)
+        resource.setrlimit(which, value)
+        if resource.getrlimit(which) != value:
+            raise RuntimeError(f"{name} did not take effect")
 
     # --- No reading files outside the libraries -------------------------
     # The child inherits no environment, but it could still *read*:
@@ -126,29 +126,23 @@ def _harden(cpu_seconds: int) -> None:
     # refuses every open or directory listing outside the interpreter's own
     # install, the site-packages, the app package (for lazy imports) and
     # matplotlib's cache.
-    try:
-        _install_read_guard()
-    except Exception:
-        pass
+    _install_read_guard()
 
     # --- No network ------------------------------------------------------
     # Neuter the already-imported socket module in place, so every existing
     # reference to it (including ones held inside pandas/urllib) sees the
     # blocked version. Covers `pd.read_csv('http://…')` exfiltration.
-    try:
-        import socket
+    import socket
 
-        def _blocked(*args, **kwargs):
-            raise OSError("Network access is disabled in the sandbox")
+    def _blocked(*args, **kwargs):
+        raise OSError("Network access is disabled in the sandbox")
 
-        socket.socket = _blocked
-        socket.create_connection = _blocked
-        socket.socketpair = _blocked
-        for _name in ("gethostbyname", "getaddrinfo", "create_server"):
-            if hasattr(socket, _name):
-                setattr(socket, _name, _blocked)
-    except Exception:
-        pass
+    socket.socket = _blocked
+    socket.create_connection = _blocked
+    socket.socketpair = _blocked
+    for _name in ("gethostbyname", "getaddrinfo", "create_server"):
+        if hasattr(socket, _name):
+            setattr(socket, _name, _blocked)
 
 
 def main() -> int:
@@ -167,8 +161,6 @@ def main() -> int:
         lc=request.get("lc"),
     )
 
-    _harden(cpu_seconds=int(request.get("cpu_seconds", 10)))
-
     response = {
         "ok": False,
         "error": "",
@@ -178,10 +170,18 @@ def main() -> int:
     }
 
     try:
-        exec(compile(request["code"], "<sandbox>", "exec"), exec_globals)
-        response["ok"] = True
-    except BaseException as e:  # noqa: BLE001 - report, never leak upward
-        response["error"] = f"{type(e).__name__}: {e}"
+        _harden(cpu_seconds=int(request.get("cpu_seconds", 10)))
+    except Exception as e:  # noqa: BLE001 - never run the code unconfined
+        response["error"] = (
+            f"The sandbox could not apply its safety limits ({e}), "
+            f"so the code was not run."
+        )
+    else:
+        try:
+            exec(compile(request["code"], "<sandbox>", "exec"), exec_globals)
+            response["ok"] = True
+        except BaseException as e:  # noqa: BLE001 - report, never leak upward
+            response["error"] = f"{type(e).__name__}: {e}"
 
     response["stdout"] = "\n".join(exec_globals.get("_captured_output", []))
 
