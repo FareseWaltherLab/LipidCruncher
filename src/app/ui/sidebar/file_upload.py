@@ -303,6 +303,7 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
 
     if uploaded_file is not None:
         StreamlitAdapter.reset_for_new_source(f"upload:{uploaded_file.file_id}")
+        st.session_state.upload_kept_across_pages = False
         try:
             if data_format == FORMAT_METABOLOMICS_WORKBENCH:
                 # Metabolomics Workbench needs raw text for parsing special markers
@@ -352,11 +353,15 @@ def display_file_upload(data_format: str) -> Optional[pd.DataFrame]:
             return None
 
     # The file_uploader widget loses its uploaded file when the main app
-    # page is unmounted (e.g. while the user is in AI Studio). Fall back
-    # to the previously stored raw_df so a round-trip back to the main
-    # pipeline doesn't appear to drop the dataset.
+    # page is unmounted (while the user is in AI Studio), so after that
+    # round-trip the previously stored raw_df stands in for it. Only then:
+    # an uploader emptied on this page (its ×) means the dataset is gone.
     cached_raw = st.session_state.get('raw_df')
-    if cached_raw is not None:
+    if cached_raw is not None and st.session_state.get('upload_kept_across_pages'):
+        st.sidebar.info(
+            "📁 Using the file you uploaded before opening AI Studio. "
+            "Upload a file to replace it."
+        )
         return cached_raw
 
     return None

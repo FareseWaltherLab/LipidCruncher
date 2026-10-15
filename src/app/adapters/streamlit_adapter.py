@@ -84,7 +84,8 @@ class SessionState:
     Use this as a reference for what keys exist in session state.
 
     Ownership model — each key is owned by one UI file:
-      file_upload.py       → raw_df, using_sample_data, sample_data_file
+      file_upload.py       → raw_df, using_sample_data, sample_data_file,
+                             upload_kept_across_pages
       column_mapping.py    → standardized_df, column_mapping, n_intensity_cols,
                              format_type, msdial_features, msdial_sample_names,
                              _msdial_override_samples, lipidsearch_sample_names
@@ -128,6 +129,9 @@ class SessionState:
     raw_df: Optional[pd.DataFrame] = None
     using_sample_data: bool = False
     sample_data_file: Optional[str] = None
+    # Set when the user leaves for AI Studio with an upload: the uploader
+    # comes back empty, and raw_df stands in for it until a new upload.
+    upload_kept_across_pages: bool = False
 
     # --- Column mapping (owner: column_mapping.py) ---
     standardized_df: Optional[pd.DataFrame] = None
@@ -347,7 +351,7 @@ _PRESERVE_ON_RESET = {'page'}
 # restarts from the Define Experiment step without having to re-upload.
 _SOFT_RESET_PRESERVE = frozenset({
     # Upload
-    'raw_df', 'using_sample_data', 'sample_data_file',
+    'raw_df', 'using_sample_data', 'sample_data_file', 'upload_kept_across_pages',
     # Standardization outputs (so column mapping need not be redone)
     'standardized_df', 'column_mapping', 'n_intensity_cols', 'format_type',
     'msdial_features', 'msdial_sample_names', '_msdial_override_samples',
@@ -360,6 +364,7 @@ _SOFT_RESET_PRESERVE = frozenset({
 # standardization, and everything computed from it, belong to the old format.
 _FORMAT_CHANGE_PRESERVE = frozenset({
     'raw_df', 'using_sample_data', 'sample_data_file', '_dataset_source_id',
+    'upload_kept_across_pages',
 })
 
 # Widget keys created by Streamlit widgets (not in SessionState dataclass).
@@ -716,6 +721,9 @@ class StreamlitAdapter:
         StreamlitAdapter._snapshot_widgets(
             _MAIN_APP_NAV_WIDGET_KEYS, _MAIN_APP_NAV_WIDGET_PREFIXES,
         )
+        # The file uploader cannot be snapshotted; it comes back empty.
+        if st.session_state.get('raw_df') is not None:
+            st.session_state['upload_kept_across_pages'] = True
 
     @staticmethod
     def preserve_ai_studio_widgets() -> None:
