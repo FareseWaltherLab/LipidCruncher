@@ -6,16 +6,20 @@ Run as ``python -m app.services.ai_chat.sandbox_runner <result_fd>``:
 1. reads a pickled request from **stdin**,
 2. applies process-level hardening (see ``_harden``),
 3. executes the AI-generated code against the restricted globals,
-4. writes a pickled response to **<result_fd>**.
+4. writes a JSON response to **<result_fd>**.
 
 The response goes to a dedicated pipe rather than stdout because stdout can
 be polluted by library chatter, and because ``RLIMIT_FSIZE`` is set to 0 —
 a pipe is not a file, so the result can still be written while the code
 itself is unable to create any file.
 
+The response is JSON, never pickle: the parent decodes it, and unpickling
+bytes that untrusted code could have shaped would run code in the parent.
+
 Nothing here trusts the code it runs. The parent (``sandbox.py``) owns the
 timeout and kills this process if it overruns.
 """
+import json
 import os
 import pickle
 import sys
@@ -154,7 +158,7 @@ def main() -> int:
 
     # Imported after the request is read so the cost is paid once, and so
     # a malformed request fails before any heavy work.
-    from app.services.ai_chat.sandbox import build_sandbox_globals
+    from app.services.ai_chat.sandbox import build_sandbox_globals, frame_to_wire
 
     exec_globals = build_sandbox_globals(
         df=request["df"],
@@ -191,15 +195,15 @@ def main() -> int:
             import plotly.graph_objects as go
 
             if isinstance(figure, go.Figure):
-                response["figure"] = figure
+                response["figure"] = figure.to_json()
             if isinstance(result_df, pd.DataFrame):
                 if max_rows is not None and len(result_df) > max_rows:
                     result_df = result_df.head(max_rows)
-                response["result_df"] = result_df
+                response["result_df"] = frame_to_wire(result_df)
         except Exception:
             pass
 
-    payload = pickle.dumps(response, protocol=pickle.HIGHEST_PROTOCOL)
+    payload = json.dumps(response, default=str).encode("utf-8")
     with os.fdopen(result_fd, "wb") as out:
         out.write(payload)
     return 0

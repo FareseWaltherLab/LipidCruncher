@@ -168,3 +168,62 @@ class TestValidatorStillApplies:
         res = run("import os", df)
         assert not res.success
         assert "not allowed" in res.error_message
+
+
+class TestParentNeverUnpicklesChildOutput:
+    """Regression: the parent unpickled the child's response, so code that
+    controlled those bytes ran in the app process. The response is JSON now;
+    these tests pin that and the fidelity the JSON form has to keep."""
+
+    def test_response_is_decoded_without_pickle(self, df, monkeypatch):
+        import pickle
+
+        def _refuse(*args, **kwargs):
+            raise AssertionError("parent unpickled the child's output")
+
+        monkeypatch.setattr(pickle, "loads", _refuse)
+        res = run("fig = px.bar(df, x='ClassKey', y='a')\nresult_df = df", df)
+        assert res.success, res.error_message
+        assert res.figure is not None
+        assert res.result_df is not None
+
+    def test_figure_comes_back_as_a_plotly_figure(self, df):
+        import plotly.graph_objects as go
+
+        res = run("fig = px.bar(df, x='ClassKey', y='a', title='T')", df)
+        assert isinstance(res.figure, go.Figure)
+        assert res.figure.layout.title.text == "T"
+        assert list(res.figure.data[0].y) == [1, 2, 3]
+
+    def test_result_df_keeps_dtypes_labels_and_exact_floats(self, df):
+        code = (
+            "result_df = pd.DataFrame({"
+            "'Lipid': ['PC 1', '02', None],"
+            "'s1': [1.2345678901234567e-20, 123456789.12345678, float('nan')],"
+            "'n': [1, 2, 3], 'flag': [True, False, True]},"
+            " index=pd.Index(['a', 'b', 'c'], name='k'))"
+        )
+        res = run(code, df)
+        assert res.success, res.error_message
+        out = res.result_df
+        assert out.index.name == "k"
+        assert list(out.index) == ["a", "b", "c"]
+        assert out["Lipid"].dtype == object
+        assert out["Lipid"].tolist()[:2] == ["PC 1", "02"]  # "02" stays text
+        assert out["Lipid"].isna().tolist() == [False, False, True]
+        assert out["s1"].dtype == "float64"
+        assert out["s1"].iloc[0] == 1.2345678901234567e-20
+        assert out["s1"].iloc[1] == 123456789.12345678
+        assert pd.isna(out["s1"].iloc[2])
+        assert out["n"].dtype == "int64"
+        assert out["flag"].dtype == bool
+
+    def test_result_df_keeps_multiindex_columns(self, df):
+        res = run(
+            "result_df = df.groupby('ClassKey')[['a']].agg(['mean', 'sum'])", df,
+        )
+        assert res.success, res.error_message
+        out = res.result_df
+        assert list(out.columns) == [("a", "mean"), ("a", "sum")]
+        assert out.index.name == "ClassKey"
+        assert out.loc["PC", ("a", "sum")] == 4

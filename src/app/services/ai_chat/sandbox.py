@@ -9,6 +9,7 @@ Defense model: the sandbox is the security boundary, not AI compliance.
 All AI output is treated as untrusted.
 """
 import ast
+import json
 import math
 import os
 import pickle
@@ -27,6 +28,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 
 from ...models.chat import SandboxConfig
 from .exceptions import SandboxError
@@ -299,6 +301,74 @@ def build_sandbox_globals(
 
 
 # ---------------------------------------------------------------------------
+# Child -> parent wire format
+# ---------------------------------------------------------------------------
+# Everything the child sends back is untrusted: the code it ran could have
+# replaced any function the encoder calls. So the parent only json-decodes
+# it and rebuilds plain pandas/plotly objects from the values. It must never
+# unpickle it — unpickling calls whatever the bytes name, in the app process.
+
+def _index_to_wire(index: pd.Index) -> Dict[str, Any]:
+    return {"values": index.tolist(), "names": list(index.names)}
+
+
+def _index_from_wire(wire: Dict[str, Any]) -> pd.Index:
+    names = wire["names"]
+    if len(names) > 1:
+        tuples = [tuple(v) for v in wire["values"]]
+        if not tuples:
+            return pd.MultiIndex.from_arrays([[]] * len(names), names=names)
+        return pd.MultiIndex.from_tuples(tuples, names=names)
+    return pd.Index(wire["values"], name=names[0])
+
+
+def frame_to_wire(df: pd.DataFrame) -> Dict[str, Any]:
+    """JSON-safe form of ``df`` that keeps labels, dtypes and exact floats.
+
+    Column-oriented so each column keeps its own dtype; missing values go
+    as ``null``. ``json`` writes floats with ``repr``, which round-trips
+    exactly (pandas' own ``to_json`` rounds to 15 digits).
+    """
+    return {
+        "columns": _index_to_wire(df.columns),
+        "index": _index_to_wire(df.index),
+        "dtypes": [str(t) for t in df.dtypes],
+        "data": [
+            col.astype(object).where(col.notna(), None).tolist()
+            for _, col in df.items()
+        ],
+    }
+
+
+def _wire_dtype(name: str) -> Any:
+    """Numeric and boolean dtypes are restored; anything else is object."""
+    try:
+        dtype = pd.api.types.pandas_dtype(name)
+    except TypeError:
+        return object
+    return dtype if dtype.kind in "biuf" else object
+
+
+def _frame_from_wire(wire: Dict[str, Any]) -> pd.DataFrame:
+    df = pd.DataFrame(
+        {i: pd.array(values, dtype=_wire_dtype(dtype))
+         for i, (values, dtype) in enumerate(zip(wire["data"], wire["dtypes"]))},
+        index=_index_from_wire(wire["index"]),
+    )
+    df.columns = _index_from_wire(wire["columns"])
+    return df
+
+
+def _decode_response(payload: bytes) -> Dict[str, Any]:
+    response = json.loads(payload)
+    if response.get("figure") is not None:
+        response["figure"] = pio.from_json(response["figure"])
+    if response.get("result_df") is not None:
+        response["result_df"] = _frame_from_wire(response["result_df"])
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Out-of-process execution
 # ---------------------------------------------------------------------------
 
@@ -406,7 +476,7 @@ def _run_in_subprocess(
         stderr = (proc.stderr.read() or b"").decode("utf-8", "replace")
         raise _SandboxCrash(stderr.strip()[-500:] or "no output")
 
-    return pickle.loads(b"".join(chunks))
+    return _decode_response(b"".join(chunks))
 
 
 class _SandboxTimeout(Exception):
