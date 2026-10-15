@@ -454,7 +454,7 @@ The stable isotope tracing module. Runs the real **IsoCorrectoR** R/Bioconductor
 | `run_isocorrector.R` | **Bundled, trusted** R wrapper: reads the JSON config, calls `IsoCorrection()`, writes outputs. The executed R is *ours*; the user supplies data files, not code (so the AI-sandbox boundary does not apply). Passed file-path **arguments**, never shell-interpolated. |
 | `validation.py` | Pure-Python structural validation of the three files *before* R runs (molecule-name consistency, numeric intensities, and a resolution-mode/ID-format check that catches UHR-vs-standard mismatches with an actionable message). |
 | `r_runtime.py` | `find_rscript()` / `check_isocorrector_available()` / `require_isocorrector()` — graceful detection so the rest of the app runs where R is absent. |
-| `exceptions.py` | `IsotopeError` → `RRuntimeError` (R missing/crashed) and `IsotopeInputError` (bad inputs). |
+| `exceptions.py` | `IsotopeError` → `RRuntimeError` (R missing, crashed or timed out; message ends with the tail of stderr) and `IsotopeInputError` (IsoCorrectoR rejected the inputs; message is its reason, from the wrapper's `ISOCORRECTOR_ERROR:` line). Structural problems are caught earlier by `validate_inputs`. |
 
 #### Plotting Services (`services/plotting/`)
 

@@ -16,7 +16,7 @@ from ..services.isotope_correction import (
     IsotopeCorrectionService,
     CorrectionResult,
     validate_inputs,
-    RRuntimeError,
+    IsotopeError,
 )
 
 
@@ -71,7 +71,7 @@ class IsotopeTracingWorkflow:
             correction = IsotopeCorrectionService.run_correction(
                 measurement_df, molecule_df, element_df, config
             )
-        except RRuntimeError as e:
+        except IsotopeError as e:  # rejected inputs or an R failure
             return IsotopeTracingResult(success=False, error_message=str(e))
 
         return IsotopeTracingResult(success=True, correction=correction)

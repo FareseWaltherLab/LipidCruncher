@@ -22,7 +22,7 @@ from typing import List, Optional
 import pandas as pd
 
 from app.models.isotope_tracing import IsotopeCorrectionConfig
-from .exceptions import RRuntimeError
+from .exceptions import IsotopeInputError, RRuntimeError
 from .r_runtime import require_isocorrector
 
 # Path to the bundled, trusted R wrapper (lives next to this module).
@@ -31,8 +31,15 @@ _WRAPPER_PATH = os.path.join(os.path.dirname(__file__), "run_isocorrector.R")
 # IsoCorrectoR can be slow on large measurement matrices; cap generously.
 _RUN_TIMEOUT_SECONDS = 600
 
-# Output file stem written by the wrapper (FileOut = "IsoCorrectoR_result").
+# Output file stem: the wrapper passes FileOut = "result" and IsoCorrectoR
+# prepends "IsoCorrectoR_".
 _RESULT_STEM = "IsoCorrectoR_result"
+
+# The wrapper's prefix for the reason IsoCorrectoR rejected the inputs.
+_ERROR_MARKER = "ISOCORRECTOR_ERROR: "
+
+# How much of stderr to show when R fails without that marker.
+_STDERR_TAIL_CHARS = 800
 
 
 @dataclass
@@ -87,7 +94,10 @@ class IsotopeCorrectionService:
             CorrectionResult with the parsed output tables and run log.
 
         Raises:
-            RRuntimeError: If R/IsoCorrectoR is unavailable or the run fails.
+            IsotopeInputError: If IsoCorrectoR rejects the inputs (e.g. a
+                formula element missing from the Element file).
+            RRuntimeError: If R/IsoCorrectoR is unavailable or the run fails
+                for any other reason.
         """
         rscript = require_isocorrector()
 
@@ -137,9 +147,17 @@ class IsotopeCorrectionService:
                 raise RRuntimeError(f"Failed to launch Rscript: {e}")
 
             if proc.returncode != 0 or "ISOCORRECTOR_OK" not in proc.stdout:
+                for line in proc.stderr.splitlines():
+                    if line.startswith(_ERROR_MARKER):
+                        raise IsotopeInputError(
+                            "IsoCorrectoR could not correct these files: "
+                            + line[len(_ERROR_MARKER):].strip()
+                        )
+                stderr = proc.stderr.strip()
+                if len(stderr) > _STDERR_TAIL_CHARS:
+                    stderr = "…" + stderr[-_STDERR_TAIL_CHARS:]
                 raise RRuntimeError(
-                    "IsoCorrectoR run failed.\n"
-                    f"stderr:\n{proc.stderr.strip()}"
+                    f"IsoCorrectoR run failed.\nstderr:\n{stderr}"
                 )
 
             return IsotopeCorrectionService._parse_outputs(output_dir)

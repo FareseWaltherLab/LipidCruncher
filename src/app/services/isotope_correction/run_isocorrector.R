@@ -10,8 +10,9 @@
 # interpolation) keeps the call injection-free.
 #
 # On success it prints "ISOCORRECTOR_OK" on the last line and exits 0; the
-# corrected CSVs are written to the output directory. On failure it prints the
-# error to stderr and exits non-zero so the Python layer can surface it.
+# corrected CSVs are written to the output directory. When IsoCorrectoR rejects
+# the inputs it prints "ISOCORRECTOR_ERROR: <reason>" to stderr and exits 1, so
+# the Python layer can show the reason rather than the whole of stderr.
 
 suppressMessages({
   ok <- requireNamespace("IsoCorrectoR", quietly = TRUE) &&
@@ -27,6 +28,10 @@ if (length(args) != 1L) {
 }
 
 cfg <- jsonlite::fromJSON(args[[1]])
+
+# readr otherwise prints a column specification for every input file, which
+# buries the one line that matters when something goes wrong.
+options(readr.show_col_types = FALSE)
 
 result <- IsoCorrectoR::IsoCorrection(
   MeasurementFile          = cfg$measurement_file,
@@ -51,7 +56,9 @@ result <- IsoCorrectoR::IsoCorrection(
 # but IsoCorrectoR logged a warning (e.g. a missing intensity or a missing
 # isotopologue row); the Python side reads those from the result log.
 if (!(as.character(result$success) %in% c("TRUE", "WARNINGS"))) {
-  stop("IsoCorrectoR reported failure; see the result log in the output directory.")
+  cat("ISOCORRECTOR_ERROR: ", paste(as.character(result$error), collapse = " "),
+      "\n", sep = "", file = stderr())
+  quit(status = 1)
 }
 
 cat("ISOCORRECTOR_OK\n")

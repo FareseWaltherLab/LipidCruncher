@@ -82,3 +82,24 @@ class TestRunsWithWarningsSucceed:
         result = self._run(*inputs)
         assert result.success
         assert result.correction.warnings == []
+
+
+@pytest.mark.skipif(
+    not check_isocorrector_available(),
+    reason="Rscript / IsoCorrectoR not available in this environment",
+)
+def test_rejected_inputs_say_why_in_one_line():
+    """Regression (IQ2): the reason was buried in ~1.7 KB of stderr."""
+    measurement, molecule, element = [pd.read_csv(DATA / f) for f in (
+        "MeasurementFile.csv", "MoleculeFile.csv", "ElementFile.csv",
+    )]
+    result = IsotopeTracingWorkflow.run(
+        measurement, molecule, element[element.Element != "N"],
+        IsotopeCorrectionConfig(ultra_high_res=True),
+    )
+    assert not result.success
+    assert result.error_message.startswith(
+        "IsoCorrectoR could not correct these files:"
+    )
+    assert "element file" in result.error_message
+    assert len(result.error_message) < 300

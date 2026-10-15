@@ -13,19 +13,17 @@ class IsotopeError(Exception):
 
 
 class RRuntimeError(IsotopeError):
-    """Raised when Rscript / IsoCorrectoR is missing or the R run fails.
-
-    This is an environmental failure, not a user-input problem. The UI should
-    surface it as an "R runtime unavailable" notice so the rest of the app
-    keeps working on hosts without R.
+    """Raised when Rscript / IsoCorrectoR is missing or the R run fails for a
+    reason IsoCorrectoR did not attribute to the inputs (a crash, a timeout).
     """
     pass
 
 
 class IsotopeInputError(IsotopeError):
-    """Raised when the three input files fail structural validation.
+    """Raised when IsoCorrectoR rejects the input files.
 
-    User-fixable: missing columns, molecule-name mismatch, non-numeric
-    intensities, etc. Surfaced before R is ever invoked.
+    User-fixable, e.g. a formula element missing from the Element file.
+    (Structural problems are caught earlier by ``validate_inputs``, which
+    returns messages rather than raising.)
     """
     pass
