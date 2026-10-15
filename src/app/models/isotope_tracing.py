@@ -21,7 +21,9 @@ class IsotopeCorrectionConfig(BaseModel):
         correct_tracer_element_core: Correct the tracer element in the core molecule.
         calculate_mean_enrichment: Also compute mean enrichment output.
         ultra_high_res: Ultra-high-resolution correction mode.
-        correct_also_monoisotopic: Apply correction to the monoisotopic peak too.
+        correct_also_monoisotopic: Also output IsoCorrectoR's monoisotopic
+            correction results (two extra tables; the main correction is
+            unchanged).
         calculation_threshold_uhr: Limit value used by the UHR calculation.
     """
     model_config = {"frozen": True}

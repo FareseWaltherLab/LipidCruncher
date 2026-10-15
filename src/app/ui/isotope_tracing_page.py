@@ -117,11 +117,13 @@ background, leaving the signal that reflects **only the label you fed in**.
 - **Ultra-high-resolution mode** — ON for high-resolution instruments (Orbitrap,
   FT-ICR) whose IDs label the specific element (`_C0`); OFF for standard resolution
   (`_0`). **The ID format must match this setting.**
-- **Also correct monoisotopic peak** / **UHR calculation limit** — advanced; the
-  defaults are appropriate for most data.
+- **Also output monoisotopic correction** — adds IsoCorrectoR's monoisotopic
+  correction results as two extra tables (Corrected Monoisotopic and its
+  fractions); the main correction is unchanged.
+- **UHR calculation limit** — advanced; the default is appropriate for most data.
 
 **Outputs** — corrected intensities, corrected fractions, mean enrichment, residuals,
-and raw data, each downloadable as CSV.
+and raw data (plus the monoisotopic tables when asked for), each downloadable as CSV.
 """
 
 
@@ -136,6 +138,7 @@ _OUTPUTS_DOC = """
 | **Raw Data** | Your measured intensities as IsoCorrectoR read them — use it to confirm the files were parsed the way you expected. |
 | **Residuals** | Measured minus back-calculated intensities: the part of the signal the correction model could not explain. |
 | **Relative Residuals** | The same discrepancy relative to the measured signal — the scale-free version, and the one worth reading. |
+| **Corrected Monoisotopic** / **… Fractions** | Only with *Also output monoisotopic correction*: IsoCorrectoR's monoisotopic correction results, as intensities and as fractions. |
 
 **What to look for**
 
@@ -172,6 +175,8 @@ _OUTPUT_TABLES = [
     ("raw_data", "Raw Data"),
     ("residuals", "Residuals"),
     ("relative_residuals", "Relative Residuals"),
+    ("corrected_monoisotopic", "Corrected Monoisotopic"),
+    ("corrected_monoisotopic_fractions", "Corrected Monoisotopic Fractions"),
 ]
 
 
@@ -270,7 +275,7 @@ def _display_sidebar(r_available: bool):
             st.checkbox("Correct tracer element in core molecule", key="iso_correct_tracer_element_core")
             st.checkbox("Calculate mean enrichment", key="iso_calculate_mean_enrichment")
             st.checkbox("Ultra-high-resolution mode", key="iso_ultra_high_res")
-            st.checkbox("Also correct monoisotopic peak", key="iso_correct_also_monoisotopic")
+            st.checkbox("Also output monoisotopic correction", key="iso_correct_also_monoisotopic")
             st.number_input("UHR calculation limit", min_value=0.0, step=1.0,
                             key="iso_calculation_threshold_uhr",
                             help="Limit value used by the ultra-high-resolution calculation.")

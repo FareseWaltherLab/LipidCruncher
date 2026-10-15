@@ -103,3 +103,26 @@ def test_rejected_inputs_say_why_in_one_line():
     )
     assert "element file" in result.error_message
     assert len(result.error_message) < 300
+
+
+@pytest.mark.skipif(
+    not check_isocorrector_available(),
+    reason="Rscript / IsoCorrectoR not available in this environment",
+)
+def test_monoisotopic_option_returns_its_tables():
+    """Regression (IQ3): with the option on, IsoCorrectoR wrote two extra
+    tables that were never read, so the setting had no visible effect."""
+    inputs = [pd.read_csv(DATA / f) for f in (
+        "MeasurementFile.csv", "MoleculeFile.csv", "ElementFile.csv",
+    )]
+    on = IsotopeTracingWorkflow.run(*inputs, IsotopeCorrectionConfig(
+        ultra_high_res=True, correct_also_monoisotopic=True,
+    )).correction
+    off = IsotopeTracingWorkflow.run(*inputs, IsotopeCorrectionConfig(
+        ultra_high_res=True,
+    )).correction
+    assert on.corrected_monoisotopic is not None
+    assert on.corrected_monoisotopic_fractions is not None
+    assert list(on.corrected_monoisotopic.columns) == list(on.corrected.columns)
+    assert off.corrected_monoisotopic is None
+    pd.testing.assert_frame_equal(on.corrected, off.corrected)

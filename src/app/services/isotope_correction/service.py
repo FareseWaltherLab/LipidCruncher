@@ -57,6 +57,8 @@ class CorrectionResult:
     mean_enrichment: Optional[pd.DataFrame] = None
     residuals: Optional[pd.DataFrame] = None
     relative_residuals: Optional[pd.DataFrame] = None
+    corrected_monoisotopic: Optional[pd.DataFrame] = None
+    corrected_monoisotopic_fractions: Optional[pd.DataFrame] = None
     log_text: str = ""
     warnings: List[str] = field(default_factory=list)
 
@@ -69,6 +71,9 @@ _OUTPUT_SUFFIXES = {
     "mean_enrichment": "MeanEnrichment",
     "residuals": "Residuals",
     "relative_residuals": "RelativeResiduals",
+    # Only with CorrectAlsoMonoisotopic.
+    "corrected_monoisotopic": "CorrectedMonoisotopic",
+    "corrected_monoisotopic_fractions": "CorrectedMonoisotopicFractions",
 }
 
 
