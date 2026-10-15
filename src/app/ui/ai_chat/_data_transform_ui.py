@@ -9,9 +9,15 @@ and upload it to the main pipeline.
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from ._interaction_log import record_turn, render_feedback
-from ._safe_markdown import safe_markdown, safe_stream
-from ._turn_errors import clear_failure, record_failure, render_failure
+from ._turn_errors import render_failure
+from .chat_panel import (
+    next_user_input,
+    render_example_prompts,
+    render_messages,
+    run_code_turn,
+    start_turn_refused,
+    usage_refused,
+)
 
 # Example prompts for this tab
 _EXAMPLE_PROMPTS = [
@@ -51,17 +57,6 @@ columns are which and ask it to redo the transform.
 """
 
 
-def _render_messages(session) -> None:
-    """Render all chat messages in the session."""
-    for msg in session.messages:
-        with st.chat_message(msg.role):
-            st.markdown(safe_markdown(msg.content))
-            if msg.code:
-                with st.expander("View code"):
-                    st.code(msg.code, language="python")
-            render_feedback(msg)
-
-
 def render_transform_chat(source_df) -> None:
     """Render the data transformation chat interface.
 
@@ -76,22 +71,17 @@ def render_transform_chat(source_df) -> None:
     # Show introductory message with format diagnostic
     if len(session.messages) == 0:
         diagnostic = st.session_state.get('chat_transform_diagnostic')
-        if diagnostic and diagnostic.is_supported:
-            with st.chat_message("assistant"):
+        with st.chat_message("assistant"):
+            if diagnostic:
                 st.markdown(diagnostic.message)
-        elif diagnostic and not diagnostic.is_supported:
-            with st.chat_message("assistant"):
-                st.markdown(diagnostic.message)
-        else:
-            with st.chat_message("assistant"):
+            else:
                 st.markdown(
                     "I can help you transform your data into LipidCruncher's "
                     "Generic format. Tell me about your data or ask me to "
                     "transform it."
                 )
 
-    # Render existing messages
-    _render_messages(session)
+    render_messages(session)
 
     # Show the last transformation result if successful (renders before
     # the example tiles so the full AI response — message, code,
@@ -118,107 +108,55 @@ def render_transform_chat(source_df) -> None:
                 "**Generic** format dataset to run it through the analysis pipeline."
             )
 
-    # Clickable example prompts (always visible, only for unsupported formats)
+    # Example prompts (only for formats that need transforming)
     diagnostic = st.session_state.get('chat_transform_diagnostic')
     if not diagnostic or not diagnostic.is_supported:
-        cols = st.columns(len(_EXAMPLE_PROMPTS))
-        for i, prompt in enumerate(_EXAMPLE_PROMPTS):
-            with cols[i]:
-                if st.button(
-                    prompt,
-                    key=f"tf_example_{i}",
-                    width='stretch',
-                ):
-                    st.session_state.chat_pending_prompt_transform = prompt
-                    st.rerun()
-
-    refusal = StreamlitAdapter.ai_usage_refusal()
-    if refusal:
-        st.warning(refusal)
+        render_example_prompts(
+            _EXAMPLE_PROMPTS, "tf", "chat_pending_prompt_transform",
+        )
+    if usage_refused():
         return
 
-    # Chat input (check for pending example prompt first)
-    user_input = st.session_state.pop('chat_pending_prompt_transform', None)
-    if user_input is None:
-        user_input = st.chat_input(
-            "Ask about your data or request a transformation...",
-            key="chat_input_transform",
-        )
-
+    user_input = next_user_input(
+        "chat_pending_prompt_transform",
+        "Ask about your data or request a transformation...",
+        "chat_input_transform",
+    )
     if user_input:
-        refusal = StreamlitAdapter.start_ai_turn()
-        if refusal:
-            st.warning(refusal)
+        if start_turn_refused():
             return
 
-        # Show user message immediately
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        # Run AI transformation (explanation streamed; code/preview render
-        # canonically after the rerun below)
-        with st.chat_message("assistant"):
-            try:
-                with st.spinner("Thinking..."):
-                    gen, finalize = StreamlitAdapter.stream_ai_transform(
-                        user_message=user_input,
-                        session=session,
-                        source_df=source_df,
-                    )
-                    streamed = st.write_stream(safe_stream(gen))
-                result = finalize()
-
-                # If the turn produced nothing at all, say so rather than
-                # leaving a blank assistant bubble.
-                if (not (streamed or "").strip()
-                        and result.transformation is None):
-                    st.info(
-                        "I couldn't produce a result for that. "
-                        "Please try rephrasing your request."
-                    )
-
-                # Update session state
-                st.session_state.chat_transform_session = result.session
-                clear_failure('transform')
-                if result.transformation and result.transformation.code:
-                    StreamlitAdapter.record_ai_execution()
-
-                # Store successful transformation result for download.
-                # Skip info-gathering turns (no result_df) so they
-                # don't clear the previous transform's preview.
-                if (result.transformation
-                        and result.transformation.success
-                        and not result.transformation.is_info_only):
-                    st.session_state.chat_transform_result = (
-                        result.transformation.result_df
-                    )
-                elif (result.transformation
-                        and not result.transformation.success):
-                    # Clear stale result on failed transformation
-                    st.session_state.chat_transform_result = None
-
-                _t = result.transformation
-                record_turn(
-                    "transform",
-                    user_input,
-                    result.assistant_message,
-                    assistant_msg=result.session.messages[-1],
-                    code=(_t.code if _t else None) or None,
-                    produced_table=bool(
-                        _t and _t.success and not _t.is_info_only
-                    ),
-                    history=session.messages,
-                    df=source_df,
+        def on_result(result, streamed):
+            t = result.transformation
+            if not streamed.strip() and t is None:
+                st.info(
+                    "I couldn't produce a result for that. "
+                    "Please try rephrasing your request."
                 )
+            st.session_state.chat_transform_session = result.session
+            if t and t.code:
+                StreamlitAdapter.record_ai_execution()
+            # Keep a successful transform for download. Info-gathering turns
+            # (no result_df) keep the previous preview; a failed transform
+            # clears it.
+            if t and t.success and not t.is_info_only:
+                st.session_state.chat_transform_result = t.result_df
+            elif t and not t.success:
+                st.session_state.chat_transform_result = None
+            return {"code": (t.code if t else None) or None,
+                    "produced_table": bool(
+                        t and t.success and not t.is_info_only)}
 
-            except Exception as e:
-                record_failure('transform', user_input, str(e))
-                record_turn(
-                    "transform", user_input, "", error=str(e),
-                    history=session.messages, df=source_df,
-                )
-
-        st.rerun()
+        run_code_turn(
+            "transform", "transform", user_input, session.messages,
+            lambda: StreamlitAdapter.stream_ai_transform(
+                user_message=user_input,
+                session=session,
+                source_df=source_df,
+            ),
+            on_result,
+            df=source_df,
+        )
 
     # Display persistent error from last attempt, with a one-click retry.
     render_failure('transform', 'chat_pending_prompt_transform')

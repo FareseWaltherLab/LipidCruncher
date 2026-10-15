@@ -9,9 +9,16 @@ import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.workflows.ai_chat import figure_has_data
-from ._interaction_log import record_turn, render_feedback
-from ._safe_markdown import safe_markdown, safe_stream
-from ._turn_errors import clear_failure, record_failure, render_failure
+from ._interaction_log import render_feedback
+from ._safe_markdown import safe_markdown
+from ._turn_errors import render_failure
+from .chat_panel import (
+    next_user_input,
+    render_example_prompts,
+    run_code_turn,
+    start_turn_refused,
+    usage_refused,
+)
 
 # Example prompts for this tab
 _EXAMPLE_PROMPTS = [
@@ -107,107 +114,53 @@ def render_viz_chat(analysis_df, experiment) -> None:
     # Render existing messages
     _render_messages(session)
 
-    # Clickable example prompts (always visible)
-    cols = st.columns(len(_EXAMPLE_PROMPTS))
-    for i, prompt in enumerate(_EXAMPLE_PROMPTS):
-        with cols[i]:
-            if st.button(
-                prompt,
-                key=f"viz_example_{i}",
-                width='stretch',
-            ):
-                st.session_state.chat_pending_prompt_viz = prompt
-                st.rerun()
-
-    refusal = StreamlitAdapter.ai_usage_refusal()
-    if refusal:
-        st.warning(refusal)
+    render_example_prompts(_EXAMPLE_PROMPTS, "viz", "chat_pending_prompt_viz")
+    if usage_refused():
         return
 
-    # Chat input (check for pending example prompt first)
-    user_input = st.session_state.pop('chat_pending_prompt_viz', None)
-    if user_input is None:
-        user_input = st.chat_input(
-            "Describe the visualization you want...",
-            key="chat_input_viz",
-        )
-
+    user_input = next_user_input(
+        "chat_pending_prompt_viz",
+        "Describe the visualization you want...",
+        "chat_input_viz",
+    )
     if user_input:
-        refusal = StreamlitAdapter.start_ai_turn()
-        if refusal:
-            st.warning(refusal)
+        if start_turn_refused():
             return
 
-        # Show user message immediately
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        # Run AI visualization (explanation streamed; figure/code render
-        # canonically after the rerun below)
-        with st.chat_message("assistant"):
-            try:
-                with st.spinner("Generating visualization..."):
-                    gen, finalize = StreamlitAdapter.stream_ai_viz(
-                        user_message=user_input,
-                        session=session,
-                        analysis_df=analysis_df,
-                        experiment=experiment,
-                    )
-                    streamed = st.write_stream(safe_stream(gen))
-                result = finalize()
-
-                # If the turn produced neither text nor a figure, say so
-                # rather than leaving a blank assistant bubble.
-                if (not (streamed or "").strip()
-                        and (result.sandbox_result is None
-                             or result.sandbox_result.figure is None)):
-                    st.info(
-                        "I couldn't produce a visualization for that. "
-                        "Please try rephrasing your request."
-                    )
-
-                # Update session state
-                st.session_state.chat_viz_session = result.session
-                clear_failure('viz')
-
-                # Count every run, as the other tabs do: failing code costs
-                # an execution too.
-                if result.sandbox_result:
-                    StreamlitAdapter.record_ai_execution()
-                if result.sandbox_result and result.sandbox_result.success:
-                    if result.sandbox_result.figure is not None:
-                        # Store figure for replay on rerun
-                        fig_index = len(result.session.messages) - 1
-                        fig_key = f"chat_viz_fig_{fig_index}"
-                        if 'chat_viz_figures' not in st.session_state:
-                            st.session_state.chat_viz_figures = {}
-                        st.session_state.chat_viz_figures[fig_key] = (
-                            result.sandbox_result.figure
-                        )
-
-                _sr = result.sandbox_result
-                record_turn(
-                    "visualization",
-                    user_input,
-                    result.assistant_message,
-                    assistant_msg=result.session.messages[-1],
-                    code=result.session.messages[-1].code,
-                    produced_figure=bool(_sr and _sr.figure is not None),
-                    history=session.messages,
-                    df=analysis_df,
-                    experiment=experiment,
-                    figure=_sr.figure if _sr else None,
+        def on_result(result, streamed):
+            sr = result.sandbox_result
+            if not streamed.strip() and (sr is None or sr.figure is None):
+                st.info(
+                    "I couldn't produce a visualization for that. "
+                    "Please try rephrasing your request."
                 )
-
-            except Exception as e:
-                record_failure('viz', user_input, str(e))
-                record_turn(
-                    "visualization", user_input, "", error=str(e),
-                    history=session.messages, df=analysis_df,
-                    experiment=experiment,
+            st.session_state.chat_viz_session = result.session
+            # Count every run: failing code costs an execution too.
+            if sr:
+                StreamlitAdapter.record_ai_execution()
+            if sr and sr.success and sr.figure is not None:
+                # Stored per message index for replay on rerun.
+                fig_key = f"chat_viz_fig_{len(result.session.messages) - 1}"
+                st.session_state.setdefault('chat_viz_figures', {})[fig_key] = (
+                    sr.figure
                 )
+            return {"code": result.session.messages[-1].code,
+                    "produced_figure": bool(sr and sr.figure is not None),
+                    "figure": sr.figure if sr else None}
 
-        st.rerun()
+        run_code_turn(
+            "viz", "visualization", user_input, session.messages,
+            lambda: StreamlitAdapter.stream_ai_viz(
+                user_message=user_input,
+                session=session,
+                analysis_df=analysis_df,
+                experiment=experiment,
+            ),
+            on_result,
+            spinner="Generating visualization...",
+            df=analysis_df,
+            experiment=experiment,
+        )
 
     # Display persistent error from last attempt, with a one-click retry.
     render_failure('viz', 'chat_pending_prompt_viz')

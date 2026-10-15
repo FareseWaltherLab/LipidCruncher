@@ -10,8 +10,15 @@ Purely conversational — no code execution, no data access.
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from ._interaction_log import record_turn, render_feedback
+from ._interaction_log import record_turn
 from ._safe_markdown import safe_markdown, safe_stream
+from .chat_panel import (
+    next_user_input,
+    render_example_prompts,
+    render_messages,
+    start_turn_refused,
+    usage_refused,
+)
 
 # Example prompts for this tab
 _EXAMPLE_PROMPTS = [
@@ -45,14 +52,6 @@ tab.
 """
 
 
-def _render_messages(session) -> None:
-    """Render all chat messages in the session."""
-    for msg in session.messages:
-        with st.chat_message(msg.role):
-            st.markdown(safe_markdown(msg.content))
-            render_feedback(msg)
-
-
 def render_lc_questions_chat() -> None:
     """Render the LipidCruncher questions chat interface."""
     session = st.session_state.chat_lc_questions_session
@@ -68,8 +67,7 @@ def render_lc_questions_chat() -> None:
                 "analysis options, and more."
             )
 
-    # Render existing messages
-    _render_messages(session)
+    render_messages(session)
 
     # Offer a one-click retry if the previous attempt failed.
     retry_input = st.session_state.get('chat_lc_retry_input')
@@ -78,37 +76,19 @@ def render_lc_questions_chat() -> None:
         st.session_state.chat_pending_prompt_lc = retry_input
         st.rerun()
 
-    # Clickable example prompts (always visible)
-    cols = st.columns(len(_EXAMPLE_PROMPTS))
-    for i, prompt in enumerate(_EXAMPLE_PROMPTS):
-        with cols[i]:
-            if st.button(
-                prompt,
-                key=f"lc_example_{i}",
-                width='stretch',
-            ):
-                st.session_state.chat_pending_prompt_lc = prompt
-                st.rerun()
-
-    refusal = StreamlitAdapter.ai_usage_refusal(runs_code=False)
-    if refusal:
-        st.warning(refusal)
+    render_example_prompts(_EXAMPLE_PROMPTS, "lc", "chat_pending_prompt_lc")
+    if usage_refused(runs_code=False):
         return
 
-    # Chat input (check for pending example prompt first)
-    user_input = st.session_state.pop('chat_pending_prompt_lc', None)
-    if user_input is None:
-        user_input = st.chat_input(
-            "Ask about LipidCruncher features, methods, or analysis options...",
-            key="chat_input_lc_questions",
-        )
-
+    user_input = next_user_input(
+        "chat_pending_prompt_lc",
+        "Ask about LipidCruncher features, methods, or analysis options...",
+        "chat_input_lc_questions",
+    )
     if user_input:
         from app.models.chat import ChatMessage
 
-        refusal = StreamlitAdapter.start_ai_turn(runs_code=False)
-        if refusal:
-            st.warning(refusal)
+        if start_turn_refused(runs_code=False):
             return
 
         # Show user message immediately

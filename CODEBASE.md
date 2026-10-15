@@ -222,7 +222,7 @@ LipidCruncher/
 │           ├── ai_studio_page.py            #   Standalone AI Studio page (4 tabs + sidebar data controls)
 │           ├── ai_chat/                     #   AI chat panels (per-tab UI)
 │           │   ├── __init__.py              #     Re-exports tab-specific display_* functions
-│           │   ├── chat_panel.py            #     Shared chat-rendering helpers
+│           │   ├── chat_panel.py            #     display_* entry points + helpers the tabs share
 │           │   ├── _lipidcruncher_questions_ui.py  # Tab 1: app Q&A
 │           │   ├── _data_questions_ui.py    #     Tab 2: dataset exploration
 │           │   ├── _data_transform_ui.py    #     Tab 3: CSV → Generic transformation
@@ -542,7 +542,7 @@ Located in `src/app/ui/`. Presentation layer that calls adapter/workflow (and in
 | File | Responsibility |
 |---|---|
 | `ai_studio_page.py` | Top-level page: data-source sidebar (upload / import from main pipeline), tab routing, round-trip navigation back to the main app. Locks data-dependent tabs behind a "Confirm" step. Carries the two page-level help expanders (*How to use the AI Studio*, *How the AI works — and its limits*); each tab module carries its own *About this tab* expander. |
-| `ai_chat/chat_panel.py` | Shared chat-rendering helpers used by every tab (message rendering, code expanders, example-prompt buttons, figure / table display). |
+| `ai_chat/chat_panel.py` | The `display_*` entry points (start each tab's conversation, then delegate to its `_*_ui.py`) and the helpers the tabs share: `render_messages`, `render_example_prompts`, `usage_refused` / `start_turn_refused` (usage limits), `next_user_input`, and `run_code_turn` (one streamed turn of Data Questions / Transform / Viz: stream, `finalize()`, the tab's `on_result`, logging, Retry on failure). |
 | `ai_chat/_lipidcruncher_questions_ui.py` | Tab 1 — Q&A about LipidCruncher itself. |
 | `ai_chat/_data_questions_ui.py` | Tab 2 — natural-language exploration of the loaded DataFrame. |
 | `ai_chat/_data_transform_ui.py` | Tab 3 — CSV → Generic format transformation, with download of the result. |
