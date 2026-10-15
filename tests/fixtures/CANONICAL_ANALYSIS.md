@@ -31,23 +31,24 @@ The direction is known by construction — no computation needed to assert it:
 ## Ground-truth answers
 
 **Statistical values are produced by the app's own `StatisticalTestingService`** (Welch's
-t-test on log10 concentrations, Benjamini-Hochberg correction, log2 fold change) — the
-documented method. They are reproduced by `reference_analysis.species_stats()` and pinned
+t-test on log10 concentrations, log2 fold change, and the main app's Volcano default of no
+multiple-testing correction) — the documented method. They are reproduced by `reference_analysis.species_stats()` and pinned
 in `tests/unit/test_canonical_analysis.py`. Descriptive values below are independent pandas
 and hand-checkable.
 
-### Significant changes (adj. p ≤ 0.05), most significant first
+### Significant changes (p ≤ 0.05, uncorrected), most significant first
 
-Exactly the six planted species are significant; all 18 others are not.
+Exactly the six planted species are significant; all 18 others are not (the next smallest
+p-value is 0.51). The same six stay significant with Benjamini-Hochberg correction.
 
-| Lipid | log2FC | adj. p |
+| Lipid | log2FC | p |
 |---|---|---|
-| `PE 18:0_20:4` | +1.99 | 2.6e-05 |
-| `SM d18:1_16:0` | −2.30 | 6.7e-05 |
-| `Cer d18:1_24:0` | −2.29 | 7.4e-05 |
-| `PC 16:0_18:1` | +1.97 | 1.3e-04 |
-| `PC 18:0_18:1` | −1.97 | 1.3e-04 |
-| `TG 16:0_18:1_18:1` | +2.54 | 2.3e-04 |
+| `PE 18:0_20:4` | +1.99 | 1.1e-06 |
+| `SM d18:1_16:0` | −2.30 | 5.6e-06 |
+| `Cer d18:1_24:0` | −2.29 | 9.3e-06 |
+| `PC 16:0_18:1` | +1.97 | 2.7e-05 |
+| `PC 18:0_18:1` | −1.97 | 2.7e-05 |
+| `TG 16:0_18:1_18:1` | +2.54 | 5.8e-05 |
 
 (Exact p-values are asserted with tolerance in the test — they track the app's method and
 will change intentionally if that method changes.)
@@ -84,5 +85,5 @@ will change intentionally if that method changes.)
 |---|---|
 | Reviewed by | _(name)_ |
 | Date | _(YYYY-MM-DD)_ |
-| Confirmed: significance test matches documented method (Welch's t-test / log10 / BH) | _(yes/no)_ |
+| Confirmed: significance test matches documented method (Welch's t-test / log10 / Volcano default: uncorrected) | _(yes/no)_ |
 | Confirmed: planted directions are biologically sensible | _(yes/no)_ |

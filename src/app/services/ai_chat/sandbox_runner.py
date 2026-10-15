@@ -183,6 +183,7 @@ def main() -> int:
         "figure": None,
         "result_df": None,
         "stdout": "",
+        "methods": [],
     }
 
     try:
@@ -221,6 +222,11 @@ def main() -> int:
                 response["result_df"] = frame_to_wire(result_df)
         except Exception:
             pass
+        try:
+            # The statistical choices `lc` made, for the app to show.
+            response["methods"] = list(exec_globals["lc"].methods_used)
+        except Exception:
+            pass  # no pipeline in this run (lc unavailable)
 
     payload = json.dumps(response, default=str).encode("utf-8")
     with os.fdopen(result_fd, "wb") as out:

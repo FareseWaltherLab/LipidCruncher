@@ -22,7 +22,7 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -49,6 +49,8 @@ class SandboxResult:
         stdout: Captured print output.
         error_message: Error description if execution failed.
         execution_time: Wall-clock seconds the code took to run.
+        methods: One line per statistical analysis the code ran through
+            ``lc``, saying which choices (test, correction, ...) were made.
     """
     success: bool
     figure: Optional[go.Figure] = None
@@ -56,6 +58,7 @@ class SandboxResult:
     stdout: str = ""
     error_message: str = ""
     execution_time: float = 0.0
+    methods: Tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -660,4 +663,7 @@ class SandboxService:
             result_df=response.get("result_df"),
             stdout=response.get("stdout", ""),
             execution_time=elapsed,
+            methods=tuple(
+                m for m in response.get("methods") or () if isinstance(m, str)
+            ),
         )

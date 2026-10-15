@@ -11,8 +11,10 @@ Two sources of ground truth, deliberately kept separate:
   and hand-verifiable against the values recorded in CANONICAL_ANALYSIS.md.
 
 - **Statistical** answers delegate to the app's own ``StatisticalTestingService``
-  — Welch's t-test on log10-transformed concentrations with Benjamini-Hochberg
-  correction and log2 fold change. That service *is* LipidCruncher's documented
+  with the Volcano page's defaults — Welch's t-test on log10-transformed
+  concentrations, no multiple-testing correction, and log2 fold change (the
+  config is spelled out here, not imported from ``lc``, so the oracle stays
+  independent of the code it checks). That service *is* LipidCruncher's documented
   method, so it defines "correct" by construction. It is independent of any
   AI-generated code path, so using it as the oracle for the AI eval is not
   circular. The dataset also carries a **planted effect** (see the module doc),
@@ -89,11 +91,16 @@ def species_stats(
 
     Returns a frame indexed by lipid with columns:
     ``log2fc`` (log2 fold change, KO / control), ``p_value``, ``adj_p``
-    (Benjamini-Hochberg), and ``significant`` (adj_p <= alpha).
+    (equal to ``p_value``: the Volcano default applies no correction), and
+    ``significant`` (adj_p <= alpha).
     """
     control = control or CONTROL_SAMPLES
     ko = ko or KO_SAMPLES
-    cfg = StatisticalTestConfig.create_auto()
+    cfg = StatisticalTestConfig.create_manual(
+        test_type='parametric',
+        correction_method='uncorrected',
+        posthoc_correction='uncorrected',
+    )
     summary = StatisticalTestingService.run_species_level_tests(df, control, ko, cfg)
     rows = [
         (lipid, r.effect_size, r.p_value, r.adjusted_p_value, r.significant)

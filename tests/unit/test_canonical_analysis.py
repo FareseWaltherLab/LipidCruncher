@@ -93,15 +93,16 @@ def test_top_significance_ranking_is_the_planted_set(df):
 
 # ── Statistical: pin exact values (regression against the documented method) ─
 
-# Tracks the app's own Welch/log10/BH pipeline; changes intentionally if that
-# method changes. Values from CANONICAL_ANALYSIS.md.
+# Tracks the app's own Welch/log10 pipeline with the Volcano page's default
+# (no multiple-testing correction, so adj. p = p); changes intentionally if
+# that method or default changes. Values from CANONICAL_ANALYSIS.md.
 _EXPECTED_STATS = {
-    "PE 18:0_20:4":      (+1.987, 2.56e-05),
-    "SM d18:1_16:0":     (-2.298, 6.66e-05),
-    "Cer d18:1_24:0":    (-2.294, 7.42e-05),
-    "PC 16:0_18:1":      (+1.965, 1.30e-04),
-    "PC 18:0_18:1":      (-1.965, 1.30e-04),
-    "TG 16:0_18:1_18:1": (+2.543, 2.31e-04),
+    "PE 18:0_20:4":      (+1.987, 1.07e-06),
+    "SM d18:1_16:0":     (-2.298, 5.55e-06),
+    "Cer d18:1_24:0":    (-2.294, 9.27e-06),
+    "PC 16:0_18:1":      (+1.965, 2.72e-05),
+    "PC 18:0_18:1":      (-1.965, 2.72e-05),
+    "TG 16:0_18:1_18:1": (+2.543, 5.76e-05),
 }
 
 

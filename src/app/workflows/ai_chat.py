@@ -678,6 +678,10 @@ class AIChatWorkflow:
                         f"{explanation}\n\n"
                         f"Here's the visualization you requested."
                     )
+                    if sandbox_result.methods:
+                        assistant_text += (
+                            "\n\n" + _methods_note(sandbox_result.methods)
+                        )
             elif sandbox_result.success and sandbox_result.figure is None:
                 assistant_text = (
                     f"{explanation}\n\n"
@@ -907,6 +911,8 @@ class AIChatWorkflow:
                 # which contradicts the table rendered alongside it.
                 if not parts and result_df is not None:
                     parts.append("Here's the result:")
+                if sandbox_result.methods:
+                    parts.append(_methods_note(sandbox_result.methods))
                 assistant_text = "\n\n".join(parts)
             else:
                 assistant_text = (
@@ -1242,6 +1248,15 @@ class AIChatWorkflow:
             code=code,
             is_transformation=is_transformation,
         )
+
+
+def _methods_note(methods) -> str:
+    """The statistical choices `lc` made, as a note under the answer."""
+    lines = "\n".join(f"- {m}" for m in methods)
+    return (
+        f"**Statistical choices** (ask if you want any of them changed):\n"
+        f"{lines}"
+    )
 
 
 def _figure_is_empty(fig) -> bool:

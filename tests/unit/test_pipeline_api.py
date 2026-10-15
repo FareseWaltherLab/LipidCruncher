@@ -457,3 +457,59 @@ class TestEveryPathSuppliesThePipeline:
         assert not res.success
         assert "lc.volcano is unavailable" in res.error_message
         assert "pipeline was not supplied" in res.error_message
+
+
+class TestMainAppDefaultsAndDisclosure:
+    """Regression (AQ5): `lc` ran species-level tests with Benjamini-Hochberg
+    correction while the app's Volcano page defaults to none, so the AI's
+    "significant" lipids disagreed with the app's volcano for the same data.
+    `lc` now uses each page's defaults and records the choices it made."""
+
+    def test_species_default_is_uncorrected_like_the_volcano_page(self, lc):
+        out = lc.compare_species("WT", "KO")
+        assert (out["adj_p_value"] == out["p_value"]).all()
+
+    def test_volcano_default_is_uncorrected(self, lc):
+        res = lc.volcano("WT", "KO")
+        assert res.raw.stat_summary.test_info["correction"] == "uncorrected"
+
+    def test_correction_can_be_requested(self, lc):
+        out = lc.compare_species("WT", "KO", correction="fdr_bh")
+        assert (out["adj_p_value"] >= out["p_value"]).all()
+        assert (out["adj_p_value"] > out["p_value"]).any()
+
+    def test_class_level_uses_auto_mode_like_the_bar_chart_page(
+        self, lc, monkeypatch,
+    ):
+        from app.services.statistical_testing import StatisticalTestingService
+
+        seen = []
+        real = StatisticalTestingService.run_class_level_tests
+
+        def spy(*args, **kwargs):
+            seen.append(kwargs["config"])
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(
+            StatisticalTestingService, "run_class_level_tests", spy,
+        )
+        lc.compare_classes(alpha=0.01)
+        assert seen[0].mode == "auto"
+        assert seen[0].alpha == 0.01
+
+    def test_each_analysis_records_its_choices(self, lc):
+        lc.compare_species("WT", "KO")
+        lc.compare_species("WT", "KO")  # recorded once
+        lc.compare_species("WT", "KO", correction="fdr_bh")
+        lc.compare_classes()
+        default, changed, auto = lc.methods_used
+        assert "no multiple-testing correction" in default
+        assert "main app's Volcano defaults" in default
+        assert "Benjamini-Hochberg" in changed
+        assert "Changed on request" in changed
+        assert "Auto mode" in auto
+
+    def test_descriptive_calls_record_nothing(self, lc):
+        lc.class_summary()
+        lc.pie_charts()
+        assert lc.methods_used == []

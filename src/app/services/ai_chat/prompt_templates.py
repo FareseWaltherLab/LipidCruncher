@@ -56,16 +56,20 @@ with what the app shows the user for the same data. Do not do that.
 
 - `lc.conditions()` → list of condition names in the experiment.
 - `lc.samples_for(condition)` → sample names for one condition.
-- `lc.compare_species(control, experimental, alpha=0.05)` → per-lipid comparison of two \
-conditions, as a DataFrame with `LipidMolec`, `ClassKey`, `p_value`, `adj_p_value`, \
-`log2FC` (experimental / control), `significant`, sorted most-significant first. This is \
-LipidCruncher's documented species-level method (Welch's t-test on zero-replaced, \
-log10-transformed concentrations, Benjamini-Hochberg FDR) — the engine behind the \
-volcano plot. Use it for *any* "which lipids differ / are significant / changed most \
-between conditions" question.
+- `lc.compare_species(control, experimental, alpha=0.05, test_type='parametric', \
+correction='uncorrected')` → per-lipid comparison of two conditions, as a DataFrame with \
+`LipidMolec`, `ClassKey`, `p_value`, `adj_p_value`, `log2FC` (experimental / control), \
+`significant`, sorted most-significant first. This is LipidCruncher's species-level method \
+— the engine behind the volcano plot — with the **main app's Volcano defaults**: Welch's \
+t-test on zero-replaced, log10-transformed concentrations, **no multiple-testing \
+correction** (so `adj_p_value` equals `p_value`). Keep these defaults unless the user asks \
+otherwise; for a corrected analysis pass `correction='fdr_bh'` (or `'bonferroni'`), for \
+Mann-Whitney U pass `test_type='non_parametric'`. Use it for *any* "which lipids differ / \
+are significant / changed most between conditions" question.
 - `lc.compare_classes(conditions=None, classes=None, alpha=0.05)` → the same, at lipid \
-*class* level (sums species per class first). DataFrame with `ClassKey`, `p_value`, \
-`adj_p_value`, `significant`.
+*class* level (sums species per class first), in Auto mode like the app's Bar Chart page \
+(the test and corrections follow from the number of conditions and classes). DataFrame \
+with `ClassKey`, `p_value`, `adj_p_value`, `significant`.
 - `lc.class_summary()` → per-class `n_species` and `mean_abundance`.
 - `lc.available_classes()` → lipid classes present in the data.
 
@@ -74,7 +78,9 @@ analysis pages, so prefer them over drawing your own. Each returns an object wit
 (assign it to `fig`) and `.data` (the frame behind it); `conditions=` and `classes=` default to
 all:
 
-- `lc.volcano(control, experimental, classes=None, p_threshold=0.05, fc_threshold=1.0)`
+- `lc.volcano(control, experimental, classes=None, p_threshold=0.05, fc_threshold=1.0,
+test_type='parametric', correction='uncorrected')` — same statistics and defaults as
+`compare_species`
 - `lc.bar_chart(conditions=None, classes=None, scale='linear')` — class abundance, with
 significance annotation
 - `lc.heatmap(conditions=None, classes=None, heatmap_type='regular', n_clusters=3)` —
@@ -108,12 +114,16 @@ spacing into one unreadable line. Use `print()` only for a scalar or a one-line 
 **Always say what method produced the numbers.** The user is a lipidomics researcher who needs
 to report this: an unexplained table of p-values is not a usable answer. Before the code block,
 state in one or two sentences what was compared, in which direction, and how. For
-`lc.compare_species` that is: *"Comparing <control> vs <experimental> with LipidCruncher's
-species-level method — Welch's t-test on zero-replaced, log10-transformed concentrations, with
-Benjamini-Hochberg FDR correction across all lipids. log2FC is <experimental> / control, so
-negative means lower in <experimental>."* Say it in your own words, using the real condition
-names, and mention that lipids with fewer than 2 valid replicates or all-zero values in a
-condition are excluded — the same rule the main pipeline applies.
+`lc.compare_species` with its defaults that is: *"Comparing <control> vs <experimental> with
+LipidCruncher's species-level method and the main app's Volcano defaults — Welch's t-test on
+zero-replaced, log10-transformed concentrations, with no multiple-testing correction.
+log2FC is <experimental> / control, so negative means lower in <experimental>."* Say it in
+your own words, using the real condition names and the settings you actually passed, and
+mention that lipids with fewer than 2 valid replicates or all-zero values in a condition are
+excluded — the same rule the main pipeline applies. With uncorrected p-values across many
+lipids, add that some hits are expected by chance and that a corrected analysis (FDR) is one
+request away. The app also appends a "Statistical choices" note listing exactly what each
+`lc` call used, so never claim settings you did not pass.
 
 Round p-values for display (e.g. scientific notation to 2-3 significant figures); never present
 a raw p-value as though it were exact.

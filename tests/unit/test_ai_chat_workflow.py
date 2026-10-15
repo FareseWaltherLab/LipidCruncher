@@ -165,3 +165,42 @@ class TestHandleTransformMessage:
 
         assistant_msg = result.session.messages[-1]
         assert assistant_msg.code == code
+
+
+class TestStatisticalChoicesAreShown:
+    """Regression (AQ5): the user was never told which statistical choices
+    `lc` made. The answer now ends with a note listing them."""
+
+    def test_data_questions_answer_lists_the_choices(self):
+        from app.models.chat import ChatMode, ChatSession, SandboxConfig
+        from app.models.experiment import ExperimentConfig
+        from app.workflows.ai_chat import AIChatWorkflow
+        from tests.evals import reference_analysis as ref
+
+        result = AIChatWorkflow._finalize_data_questions(
+            ChatSession(mode=ChatMode.DATA_QUESTIONS),
+            "Comparing WT and KO.\n\n```python\n"
+            "result_df = lc.compare_species('WT', 'KO')\n```",
+            ref.load_canonical(),
+            SandboxConfig(),
+            None,
+            ExperimentConfig(
+                conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
+            ),
+        )
+        assert result.result_df is not None
+        assert "**Statistical choices**" in result.assistant_message
+        assert "no multiple-testing correction" in result.assistant_message
+        assert "main app's Volcano defaults" in result.assistant_message
+
+    def test_no_note_when_lc_ran_no_statistics(self):
+        from app.models.chat import ChatMode, ChatSession, SandboxConfig
+        from app.workflows.ai_chat import AIChatWorkflow
+        from tests.evals import reference_analysis as ref
+
+        result = AIChatWorkflow._finalize_data_questions(
+            ChatSession(mode=ChatMode.DATA_QUESTIONS),
+            "Counting.\n\n```python\nprint(len(df))\n```",
+            ref.load_canonical(), SandboxConfig(), None, None,
+        )
+        assert "Statistical choices" not in result.assistant_message

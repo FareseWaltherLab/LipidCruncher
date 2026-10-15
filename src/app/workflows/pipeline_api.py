@@ -24,6 +24,48 @@ from ..models.statistics import StatisticalTestConfig
 from ..services.statistical_testing import StatisticalTestingService
 
 
+# The main app's own defaults, so `lc` answers match what the user sees on
+# the analysis pages: the Volcano page runs a parametric test with no
+# multiple-testing correction; the Bar Chart and Saturation pages run in
+# Auto mode. `tests/ui/test_pipeline_api_defaults.py` pins these to the
+# pages' untouched widgets.
+VOLCANO_STATS = StatisticalTestConfig.create_manual(
+    test_type='parametric',
+    correction_method='uncorrected',
+    posthoc_correction='uncorrected',
+)
+CLASS_STATS = StatisticalTestConfig.create_auto()
+
+_CORRECTION_TEXT = {
+    'uncorrected': 'no multiple-testing correction',
+    'fdr_bh': 'Benjamini-Hochberg FDR correction',
+    'bonferroni': 'Bonferroni correction',
+}
+_POSTHOC_TEXT = {
+    'uncorrected': 'uncorrected pairwise post-hoc tests',
+    'tukey': "Tukey's HSD post-hoc tests",
+    'bonferroni': 'Bonferroni-corrected pairwise post-hoc tests',
+}
+
+
+def describe_stats(what: str, summary, default_note: str) -> str:
+    """One plain-language line saying which statistical choices were made."""
+    info = summary.test_info if summary is not None else {}
+    tests = sorted({r.test_name for r in summary.results.values()}) \
+        if summary is not None else []
+    test = ", ".join(tests) or info.get('test_type', 'no test run')
+    if info.get('transform') == 'log10':
+        test += " on log10-transformed values (zeros replaced)"
+    parts = [test]
+    parts.append(_CORRECTION_TEXT.get(info.get('correction'), 'no correction'))
+    if summary is not None and summary.posthoc_results:
+        parts.append(_POSTHOC_TEXT.get(info.get('posthoc'), 'post-hoc tests'))
+    alpha = (summary.parameters.get('alpha') if summary is not None else None)
+    if alpha is not None:
+        parts.append(f"significance at p < {alpha:g}")
+    return f"{what}: " + "; ".join(parts) + f". {default_note}"
+
+
 def _sample_columns(df: pd.DataFrame, prefix: str) -> List[str]:
     return [c for c in df.columns
             if c.startswith(f'{prefix}[') and c.endswith(']')]
@@ -64,8 +106,11 @@ class LCResult:
 class PipelineAPI:
     """LipidCruncher pipeline capabilities, callable from sandbox code.
 
-    Exposed to AI-generated code as ``lc``. Every method returns a plain
-    pandas DataFrame so the generated code only has to present the result.
+    Exposed to AI-generated code as ``lc``. Statistics come back as plain
+    DataFrames, plots as ``LCResult`` (or a dict of them), introspection as
+    lists. Every method that runs statistics uses the main app's defaults
+    for that analysis and records the choices it made in
+    ``methods_used``, which the app shows the user with the answer.
     """
 
     def __init__(
@@ -75,6 +120,7 @@ class PipelineAPI:
     ):
         self._df = df
         self._experiment = experiment
+        self.methods_used: List[str] = []
 
     def with_dataframe(self, df: pd.DataFrame) -> "PipelineAPI":
         """Return a copy bound to ``df``.
@@ -111,18 +157,23 @@ class PipelineAPI:
         control: str,
         experimental: str,
         alpha: float = 0.05,
+        test_type: str = VOLCANO_STATS.test_type,
+        correction: str = VOLCANO_STATS.correction_method,
     ) -> pd.DataFrame:
         """Per-lipid statistical comparison between two conditions.
 
-        Runs LipidCruncher's documented species-level method — Welch's
-        t-test on zero-replaced, log10-transformed concentrations with
-        Benjamini-Hochberg FDR correction across all lipids. This is the
-        same engine behind the volcano plot.
+        Runs LipidCruncher's species-level method — the engine behind the
+        volcano plot — with the Volcano page's defaults: Welch's t-test on
+        zero-replaced, log10-transformed concentrations, no multiple-testing
+        correction.
 
         Args:
             control: Control condition name (e.g. 'WT').
             experimental: Experimental condition name (e.g. 'ADGAT-DKO').
             alpha: Significance threshold.
+            test_type: 'parametric' (Welch's t-test) or 'non_parametric'
+                (Mann-Whitney U).
+            correction: 'uncorrected', 'fdr_bh' or 'bonferroni'.
 
         Returns:
             DataFrame with one row per tested lipid and columns
@@ -134,13 +185,16 @@ class PipelineAPI:
         """
         self._require_experiment()
         frame = _as_concentration_frame(self._df)
-        config = StatisticalTestConfig(alpha=alpha)
+        config = self._species_config(test_type, correction, alpha)
 
         summary = StatisticalTestingService.run_species_level_tests(
             df=frame,
             control_samples=self.samples_for(control),
             experimental_samples=self.samples_for(experimental),
             config=config,
+        )
+        self._note_species(
+            f"Species comparison ({experimental} vs {control})", summary, config,
         )
 
         class_by_lipid = {}
@@ -177,7 +231,9 @@ class PipelineAPI:
 
         Sums species concentrations per class per sample, then compares
         across the given conditions using LipidCruncher's class-level
-        method (the engine behind the abundance bar chart).
+        method (the engine behind the abundance bar chart), in Auto mode
+        like the Bar Chart page: the test and corrections are chosen from
+        the number of conditions and classes.
 
         Args:
             conditions: Condition names to compare. Defaults to all.
@@ -201,8 +257,9 @@ class PipelineAPI:
             experiment=self._experiment,
             selected_conditions=conditions,
             selected_classes=classes,
-            config=StatisticalTestConfig(alpha=alpha),
+            config=CLASS_STATS.model_copy(update={'alpha': alpha}),
         )
+        self._note_class("Class comparison", summary)
 
         rows = [{
             'ClassKey': key,
@@ -251,6 +308,38 @@ class PipelineAPI:
         ).reset_index(drop=True)
 
     # -- internals ----------------------------------------------------
+
+    @staticmethod
+    def _species_config(
+        test_type: str, correction: str, alpha: float,
+    ) -> StatisticalTestConfig:
+        return VOLCANO_STATS.model_copy(update={
+            'test_type': test_type,
+            'correction_method': correction,
+            'alpha': alpha,
+        })
+
+    def _note(self, line: str) -> None:
+        if line not in self.methods_used:
+            self.methods_used.append(line)
+
+    def _note_species(self, what: str, summary, config) -> None:
+        if (config.test_type, config.correction_method) == (
+            VOLCANO_STATS.test_type, VOLCANO_STATS.correction_method,
+        ):
+            note = "These are the main app's Volcano defaults."
+        else:
+            note = ("Changed on request; the main app's Volcano page defaults "
+                    "to a parametric test with no correction.")
+        self._note(describe_stats(what, summary, note))
+
+    def _note_class(self, what: str, summary) -> None:
+        self._note(describe_stats(
+            what, summary,
+            "Auto mode, the main app's default on the Bar Chart and "
+            "Saturation pages, chose these from the number of conditions "
+            "and classes.",
+        ))
 
     def _require_experiment(self) -> None:
         if self._experiment is None:
@@ -315,10 +404,12 @@ class PipelineAPI:
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
-            stat_config=StatisticalTestConfig() if with_stats else None,
+            stat_config=CLASS_STATS if with_stats else None,
             scale=scale,
         )
         self._check(res, "Bar chart")
+        if with_stats:
+            self._note_class("Bar chart significance", res.stat_summary)
         return LCResult(res.figure, res.abundance_df, res)
 
     def pie_charts(
@@ -364,11 +455,13 @@ class PipelineAPI:
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
-            stat_config=StatisticalTestConfig(),
+            stat_config=CLASS_STATS,
             plot_type=plot_type,
             show_significance=show_significance,
         )
         self._check(res, "Saturation plot")
+        if show_significance:
+            self._note_class("Saturation significance", res.stat_summary)
         return {
             lipid_class: LCResult(figure, None, res)
             for lipid_class, figure in res.plots.items()
@@ -428,24 +521,32 @@ class PipelineAPI:
         classes: Optional[List[str]] = None,
         p_threshold: float = 0.05,
         fc_threshold: float = 1.0,
+        test_type: str = VOLCANO_STATS.test_type,
+        correction: str = VOLCANO_STATS.correction_method,
     ) -> LCResult:
         """The app's volcano plot for two conditions.
 
-        Same statistics as ``compare_species``; use this when the user wants
-        the plot, and ``compare_species`` when they want the numbers.
+        Same statistics and defaults as ``compare_species``; use this when
+        the user wants the plot, and ``compare_species`` when they want the
+        numbers.
         """
         self._require_experiment()
+        config = self._species_config(test_type, correction, p_threshold)
         res = self._analysis().run_volcano(
             df=_as_concentration_frame(self._df),
             experiment=self._experiment,
             control=control,
             experimental=experimental,
             selected_classes=self._classes_or_all(classes),
-            stat_config=StatisticalTestConfig(),
+            stat_config=config,
             p_threshold=p_threshold,
             fc_threshold=fc_threshold,
         )
         self._check(res, "Volcano plot")
+        self._note_species(
+            f"Volcano plot ({experimental} vs {control})",
+            res.stat_summary, config,
+        )
         return LCResult(res.figure, res.volcano_data, res)
 
     def heatmap(
