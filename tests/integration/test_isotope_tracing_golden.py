@@ -2,15 +2,20 @@
 Golden-dataset parity test for the isotope tracing pipeline.
 
 Acceptance gate (Phase 1): our pipeline must reproduce the superuser's
-IsoCorrectoR output bit-for-bit on the scientifically meaningful tables.
+IsoCorrectoR output on the scientifically meaningful tables: the same rows
+and columns, the same non-finite cells, and values within a per-table
+tolerance set from what is actually observed (IsoCorrectoR 1.30.0 against
+the golden 1.28.0 output): RawData and MeanEnrichment identical,
+CorrectedFractions within 1e-15, Corrected and Residuals within 3e-5 on
+intensities up to 1e11. Not bit-for-bit: floating-point noise near zero
+differs between versions.
 
 Gated on R availability — skipped where Rscript/IsoCorrectoR isn't installed,
 so CI without R still passes. Run it where R is installed.
 
-Note: RelativeResiduals is intentionally NOT asserted. It is numerically
-degenerate (residual / a corrected value of ~0 → ±Inf or huge values) and
-those cells differ between the IsoCorrectoR version that generated the golden
-output (1.28.0) and any other version. Every meaningful output matches exactly.
+RelativeResiduals values are not compared: they are numerically degenerate
+(residual / a corrected value of ~0 → ±Inf or huge values) and those cells
+differ between IsoCorrectoR versions. Its rows and columns are checked.
 """
 from pathlib import Path
 
@@ -44,30 +49,43 @@ GOLDEN_CONFIG = IsotopeCorrectionConfig(
     calculation_threshold_uhr=8,
 )
 
-# (CorrectionResult field, golden output-file suffix). RelativeResiduals omitted.
+# (CorrectionResult field, golden output-file suffix, absolute tolerance),
+# each a few times the difference observed (see the module docstring).
 PARITY_TABLES = [
-    ("corrected", "Corrected"),
-    ("corrected_fractions", "CorrectedFractions"),
-    ("mean_enrichment", "MeanEnrichment"),
-    ("residuals", "Residuals"),
-    ("raw_data", "RawData"),
+    ("corrected", "Corrected", 1e-4),
+    ("corrected_fractions", "CorrectedFractions", 1e-12),
+    ("mean_enrichment", "MeanEnrichment", 1e-12),
+    ("residuals", "Residuals", 1e-4),
+    ("raw_data", "RawData", 0.0),
 ]
 
 
-def _assert_parity(actual: pd.DataFrame, golden: pd.DataFrame, name: str):
-    """Non-finite masks must match; finite values must be close."""
-    aligned = actual.reindex(index=golden.index, columns=golden.columns)
-    a = aligned.values.astype(float)
+def _golden(suffix: str) -> pd.DataFrame:
+    return pd.read_csv(
+        GOLDEN_OUTPUT_DIR / f"IsoCorrectoR_result_{suffix}.csv", index_col=0
+    )
+
+
+def _assert_same_labels(actual: pd.DataFrame, golden: pd.DataFrame, name: str):
+    pd.testing.assert_index_equal(actual.index, golden.index, obj=f"{name} rows")
+    pd.testing.assert_index_equal(
+        actual.columns, golden.columns, obj=f"{name} columns",
+    )
+
+
+def _assert_parity(actual: pd.DataFrame, golden: pd.DataFrame, name: str,
+                   atol: float):
+    """Same labels and non-finite cells; finite values within ``atol``."""
+    _assert_same_labels(actual, golden, name)
+    a = actual.values.astype(float)
     g = golden.values.astype(float)
-
-    assert not np.isnan(a).all(), f"{name}: actual table did not align with golden index/columns"
-
-    a_nonfinite = ~np.isfinite(a)
-    g_nonfinite = ~np.isfinite(g)
-    assert np.array_equal(a_nonfinite, g_nonfinite), f"{name}: non-finite cell positions differ"
-
-    finite = np.isfinite(a) & np.isfinite(g)
-    assert np.allclose(a[finite], g[finite], rtol=1e-6, atol=1e-3), f"{name}: finite values differ"
+    assert np.array_equal(~np.isfinite(a), ~np.isfinite(g)), (
+        f"{name}: non-finite cell positions differ"
+    )
+    finite = np.isfinite(g)
+    np.testing.assert_allclose(
+        a[finite], g[finite], rtol=1e-12, atol=atol, err_msg=name,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -84,14 +102,17 @@ def correction_result():
     return result.correction
 
 
-@pytest.mark.parametrize("field_name,suffix", PARITY_TABLES)
-def test_table_matches_golden(correction_result, field_name, suffix):
+@pytest.mark.parametrize("field_name,suffix,atol", PARITY_TABLES)
+def test_table_matches_golden(correction_result, field_name, suffix, atol):
     actual = getattr(correction_result, field_name)
     assert actual is not None, f"{field_name} table was not produced"
-    golden = pd.read_csv(
-        GOLDEN_OUTPUT_DIR / f"IsoCorrectoR_result_{suffix}.csv", index_col=0
-    )
-    _assert_parity(actual, golden, field_name)
+    _assert_parity(actual, _golden(suffix), field_name, atol)
+
+
+def test_relative_residuals_have_the_golden_labels(correction_result):
+    actual = correction_result.relative_residuals
+    assert actual is not None
+    _assert_same_labels(actual, _golden("RelativeResiduals"), "relative_residuals")
 
 
 def test_run_log_captured(correction_result):
