@@ -42,21 +42,12 @@ class TestSessionStateChatKeys:
         state = SessionState()
         assert state.chat_viz_figures == {}
 
-    def test_chat_message_count_default_zero(self):
-        state = SessionState()
-        assert state.chat_message_count == 0
-
-    def test_chat_execution_count_default_zero(self):
-        state = SessionState()
-        assert state.chat_execution_count == 0
-
     def test_chat_keys_in_session_state_fields(self):
         """All chat_* fields exist in the SessionState dataclass."""
         field_names = {f.name for f in fields(SessionState)}
         expected = {
             'chat_transform_session', 'chat_viz_session', 'chat_mode',
             'chat_transform_result', 'chat_viz_figures',
-            'chat_message_count', 'chat_execution_count',
         }
         assert expected.issubset(field_names)
 

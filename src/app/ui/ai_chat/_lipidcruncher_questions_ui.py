@@ -13,9 +13,6 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from ._interaction_log import record_turn, render_feedback
 from ._safe_markdown import safe_markdown, safe_stream
 
-# Rate limits (mirrored from chat_panel to avoid circular import)
-MAX_MESSAGES = 50
-
 # Example prompts for this tab
 _EXAMPLE_PROMPTS = [
     "What normalization methods are available?",
@@ -93,14 +90,9 @@ def render_lc_questions_chat() -> None:
                 st.session_state.chat_pending_prompt_lc = prompt
                 st.rerun()
 
-    # Rate limit check
-    msg_count = st.session_state.get('chat_message_count', 0)
-    if msg_count >= MAX_MESSAGES:
-        st.warning("Message limit reached. Please start a new session.")
-        if st.button("Reset Chat", key="chat_reset_lc_questions"):
-            st.session_state.chat_lc_questions_session = None
-            st.session_state.chat_message_count = 0
-            st.rerun()
+    refusal = StreamlitAdapter.ai_usage_refusal(runs_code=False)
+    if refusal:
+        st.warning(refusal)
         return
 
     # Chat input (check for pending example prompt first)
@@ -113,6 +105,11 @@ def render_lc_questions_chat() -> None:
 
     if user_input:
         from app.models.chat import ChatMessage
+
+        refusal = StreamlitAdapter.start_ai_turn(runs_code=False)
+        if refusal:
+            st.warning(refusal)
+            return
 
         # Show user message immediately
         with st.chat_message("user"):
@@ -137,9 +134,6 @@ def render_lc_questions_chat() -> None:
                 session
                 .add_message(ChatMessage(role="user", content=user_input))
                 .add_message(ChatMessage(role="assistant", content=cached_answer))
-            )
-            st.session_state.chat_message_count = (
-                st.session_state.get('chat_message_count', 0) + 1
             )
             st.session_state.pop('chat_lc_retry_input', None)
             record_turn(
@@ -182,9 +176,6 @@ def render_lc_questions_chat() -> None:
                 st.session_state.chat_lc_questions_session = (
                     session_with_user.add_message(assistant_msg)
                 )
-                st.session_state.chat_message_count = (
-                    st.session_state.get('chat_message_count', 0) + 1
-                )
                 st.session_state.pop('chat_lc_retry_input', None)
                 record_turn(
                     "lc_questions", user_input, full_text,
@@ -218,9 +209,6 @@ def render_lc_questions_chat() -> None:
                     .add_message(
                         ChatMessage(role="assistant", content=fallback_text)
                     )
-                )
-                st.session_state.chat_message_count = (
-                    st.session_state.get('chat_message_count', 0) + 1
                 )
                 st.session_state.pop('chat_lc_retry_input', None)
                 record_turn(

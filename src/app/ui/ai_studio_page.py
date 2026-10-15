@@ -86,8 +86,9 @@ which it reads with tools while composing the answer.
   the code) so the exact analysis is on record.
 - The main pipeline's methods are validated and documented; AI Studio is an
   exploration tool. When both could answer a question, prefer the pipeline.
-- Each session is capped at **50 messages** and **20 code executions**. Use
-  **Reset Chat** in a tab to start fresh.
+- Each browser session is capped at **50 messages** and **20 code
+  executions**, across all four tabs, and there are daily limits per visitor
+  and for the whole site (they reset at midnight UTC).
 """
 
 
@@ -947,9 +948,6 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_questions_result_df = None
     st.session_state.chat_transform_result = None
     st.session_state.chat_viz_figures = {}
-    # Counters
-    st.session_state.chat_message_count = 0
-    st.session_state.chat_execution_count = 0
 
 
 # =============================================================================

@@ -13,10 +13,6 @@ from ._interaction_log import record_turn, render_feedback
 from ._safe_markdown import safe_markdown, safe_stream
 from ._turn_errors import clear_failure, record_failure, render_failure
 
-# Rate limits (mirrored from chat_panel to avoid circular import)
-MAX_MESSAGES = 50
-MAX_EXECUTIONS = 20
-
 # Example prompts for this tab
 _EXAMPLE_PROMPTS = [
     "Transform my data to Generic format",
@@ -136,18 +132,9 @@ def render_transform_chat(source_df) -> None:
                     st.session_state.chat_pending_prompt_transform = prompt
                     st.rerun()
 
-    # Rate limit check
-    msg_count = st.session_state.get('chat_message_count', 0)
-    exec_count = st.session_state.get('chat_execution_count', 0)
-    if msg_count >= MAX_MESSAGES or exec_count >= MAX_EXECUTIONS:
-        limit_type = "Message" if msg_count >= MAX_MESSAGES else "Execution"
-        st.warning(f"{limit_type} limit reached for this session. Please start a new session.")
-        if st.button("Reset Chat", key="chat_reset_transform"):
-            st.session_state.chat_transform_session = None
-            st.session_state.chat_transform_result = None
-            st.session_state.chat_message_count = 0
-            st.session_state.chat_execution_count = 0
-            st.rerun()
+    refusal = StreamlitAdapter.ai_usage_refusal()
+    if refusal:
+        st.warning(refusal)
         return
 
     # Chat input (check for pending example prompt first)
@@ -159,6 +146,11 @@ def render_transform_chat(source_df) -> None:
         )
 
     if user_input:
+        refusal = StreamlitAdapter.start_ai_turn()
+        if refusal:
+            st.warning(refusal)
+            return
+
         # Show user message immediately
         with st.chat_message("user"):
             st.markdown(user_input)
@@ -188,13 +180,8 @@ def render_transform_chat(source_df) -> None:
                 # Update session state
                 st.session_state.chat_transform_session = result.session
                 clear_failure('transform')
-                st.session_state.chat_message_count = (
-                    st.session_state.get('chat_message_count', 0) + 1
-                )
                 if result.transformation and result.transformation.code:
-                    st.session_state.chat_execution_count = (
-                        st.session_state.get('chat_execution_count', 0) + 1
-                    )
+                    StreamlitAdapter.record_ai_execution()
 
                 # Store successful transformation result for download.
                 # Skip info-gathering turns (no result_df) so they

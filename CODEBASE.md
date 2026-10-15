@@ -167,6 +167,7 @@ LipidCruncher/
 │       │   │   ├── sandbox.py               #     Sandboxed execution, parent side (validate → spawn child → time out)
 │       │   │   ├── sandbox_runner.py        #     Child-process entry point that actually runs the AI's code
 │       │   │   ├── interaction_logger.py    #     One JSON record per chat turn / feedback event (stdout → CloudWatch)
+│       │   │   ├── usage_limits.py          #     Per-session / per-client / global AI usage caps (in process)
 │       │   │   ├── schema_extractor.py      #     DataFrame → schema description for prompts
 │       │   │   ├── codebase_tools.py        #     search_codebase / read_file_section / list_files / read_documentation tools
 │       │   │   ├── knowledge_base.py        #     Condensed app knowledge embedded in system prompts
@@ -336,7 +337,7 @@ Reached via `Page.AI_STUDIO`. Independent of the main pipeline — users can upl
 
 All AI-generated code runs through `SandboxService`, which executes it in a hardened child process (`sandbox_runner.py`) with AST validation and curated builtins in front as defense-in-depth. The AI runs in a tool-use loop (`AIClientService.execute_tool_loop`, or `stream_tool_loop` for the token-by-token variant every tab uses) so it can `search_codebase`, `read_file_section`, `list_files`, or `read_documentation` before answering, and generated code can call into the pipeline itself through `PipelineAPI` (exposed as `lc`). Each turn — and each thumbs-up/down with optional comment — is logged as a JSON record by `interaction_logger`.
 
-In-app guidance sits alongside the tabs: page-level *How to use the AI Studio* and *How the AI works — and its limits* expanders (what reaches the API, where code runs, session caps of 50 messages / 20 executions), plus an *About this tab* expander in each of the four tabs.
+In-app guidance sits alongside the tabs: page-level *How to use the AI Studio* and *How the AI works — and its limits* expanders (what reaches the API, where code runs, usage limits), plus an *About this tab* expander in each of the four tabs.
 
 ### Stable Isotope Tracing (separate workflow)
 
@@ -435,6 +436,7 @@ All services are stateless static methods. The Anthropic API key is read from `A
 | `knowledge_base` | `knowledge_base.py` | `get_app_knowledge()` — condensed reference (formats, modules, terminology) injected into system prompts so the assistant doesn't need to query the codebase for basic context. |
 | `prompt_templates` | `prompt_templates.py` | Per-mode system prompts (`data_transform_system_prompt`, `data_questions_system_prompt`, `lipidcruncher_questions_system_prompt`) and `build_transform_context` / `build_diagnostic_context` helpers. Includes `METHODOLOGY_CLARIFICATION_RULES` so the AI clarifies methodology before running aggregations or ratios. |
 | `prompt_examples` | `prompt_examples.py` | Few-shot example prompts shown as clickable buttons in each AI Studio tab. |
+| `UsageLimitService` | `usage_limits.py` | AI Studio usage limits, counted in the app process (not session state, so "Reset Chat", a new conversation or a reload cannot reset them), per UTC day: 50 messages / 20 code executions per browser session, 150 messages per client address, 1,000 messages for the whole app. `refusal()` before rendering the input, `start_turn()` checks and counts atomically, `record_execution()`. The adapter supplies the session id and the client address (last `X-Forwarded-For` entry, which the ALB appends; `st.context.ip_address` is the ALB's own). In memory and per process, so not a spending cap: **set a spend limit on the Anthropic workspace** as the backstop. |
 | `interaction_logger` | `interaction_logger.py` | Emits one JSON record per chat turn and per feedback event to stdout (shipped to CloudWatch Logs by the container's `awslogs` driver). A turn record (schema 2) holds the question, answer, code, outcome flags, model id, a dataset descriptor (`describe_dataset` — shape and column names, never values), the prior conversation (last 20 messages, truncated) and the Plotly figure as JSON (`serialize_figure`, dropped above 120 KB so one record stays one CloudWatch event). Pure — the UI/adapter supplies the fields, including an anonymous session id; emission failures are swallowed so logging can never break a turn. `scripts/pull_ai_logs.py` + `scripts/feedback_viewer.py` read the records back. |
 
 Exception hierarchy in `ai_chat/exceptions.py`:

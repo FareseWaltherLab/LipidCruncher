@@ -92,8 +92,6 @@ def display_transform_chat(source_df) -> None:
                 'schema_context': session.schema_context + extra_note,
             })
         st.session_state.chat_transform_session = session
-        st.session_state.chat_message_count = 0
-        st.session_state.chat_execution_count = 0
 
     render_transform_chat(source_df)
 
@@ -117,8 +115,6 @@ def display_viz_chat(analysis_df, experiment) -> None:
         st.session_state.chat_viz_session = (
             AIChatWorkflow.start_viz_session(analysis_df, experiment)
         )
-        st.session_state.chat_message_count = 0
-        st.session_state.chat_execution_count = 0
 
     render_viz_chat(analysis_df, experiment)
 
@@ -150,8 +146,6 @@ def display_data_questions_chat(source_df) -> None:
                 source_df, format_label_override=format_label_override,
             )
         )
-        st.session_state.chat_message_count = 0
-        st.session_state.chat_execution_count = 0
 
     render_data_questions_chat(source_df)
 
@@ -170,7 +164,6 @@ def display_lipidcruncher_questions_chat() -> None:
         st.session_state.chat_lc_questions_session = (
             AIChatWorkflow.start_lc_questions_session()
         )
-        st.session_state.chat_message_count = 0
 
     render_lc_questions_chat()
 

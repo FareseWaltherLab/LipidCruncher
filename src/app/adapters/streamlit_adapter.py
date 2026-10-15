@@ -296,8 +296,6 @@ class SessionState:
     chat_mode: Optional[str] = None
     chat_transform_result: Optional[pd.DataFrame] = None
     chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
-    chat_message_count: int = 0
-    chat_execution_count: int = 0
 
     # --- AI Studio (owner: ai_studio_page.py) ---
     # `chat_studio_df_original` holds the dataframe with the user's
@@ -479,20 +477,16 @@ _STAGES: Tuple[_Stage, ...] = (
         fields=frozenset({
             'chat_transform_session', 'chat_viz_session',
             'chat_data_questions_session', 'chat_mode', 'chat_transform_result',
-            'chat_viz_figures', 'chat_message_count', 'chat_execution_count',
+            'chat_viz_figures',
             'chat_studio_df', 'chat_studio_df_original', 'chat_studio_experiment',
             'chat_studio_pipeline_source', 'chat_studio_detected_format',
             'chat_studio_sample_columns_original',
             'chat_studio_sample_columns_renamed',
         }),
         widgets=frozenset({
-            'chat_input', 'chat_apply_transform',
-            'chat_input_questions', 'chat_reset_questions',
-            'chat_input_transform', 'chat_reset_transform',
-            'chat_download_transform',
-            'chat_input_lc_questions', 'chat_reset_lc_questions',
-            'chat_retry_lc',
-            'chat_input_viz', 'chat_reset_viz',
+            'chat_input', 'chat_apply_transform', 'chat_download_transform',
+            'chat_input_questions', 'chat_input_transform',
+            'chat_input_lc_questions', 'chat_retry_lc', 'chat_input_viz',
             'ai_studio_file_uploader', 'ai_studio_import_pipeline',
             'ai_studio_pipeline_choice', 'studio_grouping_radio',
             'studio_n_conditions', 'studio_sample_cols_select',
@@ -1576,6 +1570,55 @@ class StreamlitAdapter:
             sid = uuid.uuid4().hex
             st.session_state["ai_log_session_id"] = sid
         return sid
+
+    # ------------------------------------------------------------------
+    # AI Studio usage limits
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _ai_client_id() -> Optional[str]:
+        """The visitor's address, for the per-client AI Studio limit.
+
+        Behind the AWS load balancer every connection comes from the
+        balancer, so ``st.context.ip_address`` is the same for everyone.
+        The balancer appends the address it saw to ``X-Forwarded-For``, so
+        the last entry is the one a visitor cannot forge (anything before
+        it is whatever the visitor sent). That holds for exactly one proxy
+        in front of the app; reached directly, the header is the visitor's
+        to set, and only the session and global limits really hold.
+        Locally there is neither, and the per-client limit is skipped.
+        """
+        forwarded = st.context.headers.get("X-Forwarded-For") or ""
+        last = forwarded.rsplit(",", 1)[-1].strip()
+        return last or st.context.ip_address
+
+    @staticmethod
+    def ai_usage_refusal(runs_code: bool = True) -> Optional[str]:
+        """Why this visitor may not start an AI turn now, or None."""
+        from ..services.ai_chat.usage_limits import UsageLimitService
+        return UsageLimitService.refusal(
+            StreamlitAdapter._ai_log_session_id(),
+            StreamlitAdapter._ai_client_id(),
+            runs_code=runs_code,
+        )
+
+    @staticmethod
+    def start_ai_turn(runs_code: bool = True) -> Optional[str]:
+        """Count one AI turn against every limit; the refusal, or None."""
+        from ..services.ai_chat.usage_limits import UsageLimitService
+        return UsageLimitService.start_turn(
+            StreamlitAdapter._ai_log_session_id(),
+            StreamlitAdapter._ai_client_id(),
+            runs_code=runs_code,
+        )
+
+    @staticmethod
+    def record_ai_execution() -> None:
+        """Count one execution of AI-generated code for this session."""
+        from ..services.ai_chat.usage_limits import UsageLimitService
+        UsageLimitService.record_execution(
+            StreamlitAdapter._ai_log_session_id(),
+        )
 
     @staticmethod
     def log_ai_turn(
