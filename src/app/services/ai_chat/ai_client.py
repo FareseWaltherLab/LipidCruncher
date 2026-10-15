@@ -358,13 +358,21 @@ class AIClientService:
         appended, then the loop continues. Yields only ``str`` chunks — no
         Streamlit, no session state — so the layer boundary is preserved.
 
+        Text the model writes before a tool call ("Let me check the docs.")
+        has already been shown by the time the call arrives, so it is kept,
+        and each turn's text starts a new paragraph: the turns' text joined
+        is "Let me check the docs.\n\nThe answer is 42.", not glued into one
+        sentence.
+
         Yields:
             Text fragments from the assistant as they are generated.
         """
         client = AIClientService.create_client()
         loop_messages = list(messages)
+        wrote_text = False
 
         def _stream_turn():
+            nonlocal wrote_text
             try:
                 with client.messages.stream(
                     model=config.model,
@@ -374,7 +382,12 @@ class AIClientService:
                     messages=loop_messages,
                     tools=tools,
                 ) as stream:
+                    first = True
                     for text in stream.text_stream:
+                        if first and wrote_text:
+                            yield "\n\n"
+                        first = False
+                        wrote_text = True
                         yield text
                     _stream_turn.final = stream.get_final_message()
             except AIClientError:

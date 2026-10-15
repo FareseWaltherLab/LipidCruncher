@@ -277,6 +277,44 @@ class TestStreamingWorkflowEndToEnd:
         assert len(result.session.messages) == 2
 
 
+class TestNarrationBeforeAToolCall:
+    """AQ4: text from a turn that then called a tool was glued onto the
+    answer ("Let me check the docs.The answer is 42.") in the transcript,
+    the LC answer cache and the logs. Each turn's text is a new paragraph."""
+
+    def _run(self, monkeypatch, turns):
+        fake = _FakeClient(turns)
+        monkeypatch.setattr(
+            AIClientService, "create_client", staticmethod(lambda: fake)
+        )
+        return "".join(AIClientService.stream_tool_loop(
+            messages=[{"role": "user", "content": "hi"}],
+            system_prompt="SYS", config=AIConfig(),
+            tools=[{"name": "search_codebase"}],
+            tool_executor=lambda name, inp: "result",
+        ))
+
+    def test_turns_are_separate_paragraphs(self, monkeypatch):
+        text = self._run(monkeypatch, [
+            (["Let me check ", "the docs."],
+             _final([_text_block("Let me check the docs."),
+                     _tool_block("t1", "search_codebase", {"query": "x"})])),
+            (["The answer ", "is 42."], _final([_text_block("The answer is 42.")])),
+        ])
+        assert text == "Let me check the docs.\n\nThe answer is 42."
+
+    def test_silent_tool_turn_adds_no_separator(self, monkeypatch):
+        text = self._run(monkeypatch, [
+            ([], _final([_tool_block("t1", "search_codebase", {"query": "x"})])),
+            (["Checking."],
+             _final([_text_block("Checking."),
+                     _tool_block("t2", "search_codebase", {"query": "y"})])),
+            ([], _final([_tool_block("t3", "search_codebase", {"query": "z"})])),
+            (["Done."], _final([_text_block("Done.")])),
+        ])
+        assert text == "Checking.\n\nDone."
+
+
 class TestStreamToolLoopExhaustion:
     """When tools never stop, the loop forces one final streamed answer."""
 
