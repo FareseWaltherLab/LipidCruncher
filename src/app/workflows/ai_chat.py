@@ -5,8 +5,8 @@ Orchestrates AI-powered data transformation, visualization
 generation, and data questions. Pure logic — no Streamlit dependencies.
 """
 import logging
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, replace
+from typing import List, Optional, Tuple
 
 import pandas as pd
 
@@ -271,6 +271,49 @@ class AIChatWorkflow:
             mode=ChatMode.DATA_TRANSFORM,
             schema_context=schema,
         )
+
+    @staticmethod
+    def start_transform_chat(
+        source_df: pd.DataFrame,
+        raw_pipeline_import: bool = False,
+    ) -> Tuple[FormatDiagnosticResult, ChatSession]:
+        """Diagnose the data and open the Transform tab's conversation.
+
+        Raw pipeline imports trip the Generic-shape detection (LipidMolec +
+        intensity[*]) but are still unfiltered and un-normalized, so the
+        usual "no transformation needed" diagnosis would mislead. For them
+        the diagnosis points at the main pipeline while keeping the tab
+        usable (``is_supported=False``), and the AI is told the data is
+        already Generic-shaped, so filter / normalize requests are not
+        framed as preprocessing before a conversion.
+
+        Returns:
+            ``(diagnostic, session)``.
+        """
+        diagnostic = AIChatWorkflow.diagnose_format(source_df)
+        if raw_pipeline_import:
+            diagnostic = replace(
+                diagnostic,
+                is_supported=False,
+                message=_RAW_IMPORT_MESSAGE,
+                lipid_name_column=(
+                    'LipidMolec' if 'LipidMolec' in source_df.columns else None
+                ),
+                intensity_columns=[
+                    c for c in source_df.columns
+                    if str(c).startswith('intensity[')
+                ],
+                # The extra columns (CalcMass, BaseRt, ...) of raw pipeline
+                # data aren't drop candidates the way they are in an
+                # arbitrary CSV.
+                metadata_columns=[],
+            )
+        session = AIChatWorkflow.start_transform_session(source_df, diagnostic)
+        if raw_pipeline_import:
+            session = session.model_copy(update={
+                'schema_context': session.schema_context + _RAW_IMPORT_NOTE,
+            })
+        return diagnostic, session
 
     @staticmethod
     def _finalize_transform(
@@ -833,6 +876,34 @@ class AIChatWorkflow:
             tool_executor=execute_tool,
         )
         return session, generator
+
+
+_RAW_IMPORT_MESSAGE = (
+    "This is **raw** data imported from the main pipeline "
+    "— column names are already standardized to "
+    "`intensity[*]`, but the data hasn't been filtered "
+    "or normalized.\n\n"
+    "For the standard workflow, run it through the main "
+    "pipeline (Cleaning → Zero Filtering → Normalization) "
+    "and re-import the **Normalized** version. Or, if you "
+    "want a custom filter/normalization, ask me here and "
+    "I'll generate the code."
+)
+
+_RAW_IMPORT_NOTE = (
+    "\n\n## Important context for this dataset\n"
+    "This data was imported from the LipidCruncher main "
+    "pipeline. It is **already in Generic shape** "
+    "(LipidMolec + intensity[*] columns) — no shape "
+    "transformation is needed. When the user asks for "
+    "filtering, deduplication, normalization, or other "
+    "content-level operations, treat those as standalone "
+    "tasks. Do NOT frame your response as 'preprocessing "
+    "before Generic conversion' — the data is already "
+    "Generic-shaped. The result_df should still be in "
+    "Generic shape (lipid name column + numeric sample "
+    "columns) so the user can download and re-upload it."
+)
 
 
 def _methods_note(methods) -> str:

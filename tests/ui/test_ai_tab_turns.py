@@ -185,3 +185,39 @@ def test_lc_turn(logged, monkeypatch):
     (log,) = logged
     assert log["tab"] == "lc_questions" and log["answer"] == "answer"
     assert _executions() == 0
+
+
+def raw_import_transform_script(source):
+    import pandas as pd
+    import streamlit as st
+
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.ui import ai_chat
+    StreamlitAdapter.initialize_session_state()
+
+    st.session_state.chat_studio_pipeline_source = source
+    df = pd.DataFrame({'LipidMolec': ['PC 34:1'], 'CalcMass': [760.5],
+                       'intensity[s1]': [1.0], 'intensity[s2]': [2.0]})
+    ai_chat.display_transform_chat(df)
+
+
+@pytest.mark.parametrize("source", ["raw", None])
+def test_transform_tab_explains_a_raw_pipeline_import(source):
+    """Raw pipeline data is Generic-shaped but unfiltered: the tab says so,
+    stays usable, and tells the AI not to treat it as a conversion."""
+    at = AppTest.from_function(
+        raw_import_transform_script, args=(source,), default_timeout=30,
+    ).run()
+    assert not at.exception
+    diagnostic = at.session_state.chat_transform_diagnostic
+    context = at.session_state.chat_transform_session.schema_context
+    if source == "raw":
+        assert not diagnostic.is_supported
+        assert "**raw** data imported from the main pipeline" in diagnostic.message
+        assert diagnostic.lipid_name_column == "LipidMolec"
+        assert diagnostic.intensity_columns == ["intensity[s1]", "intensity[s2]"]
+        assert diagnostic.metadata_columns == []
+        assert "already in Generic shape" in context
+    else:
+        assert diagnostic.is_supported
+        assert "already in Generic shape" not in context
