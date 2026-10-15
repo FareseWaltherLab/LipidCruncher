@@ -78,7 +78,7 @@ StreamlitAdapter.initialize_session_state()
 def _reset_qc_state() -> None:
     """Clear all Quality Check session state."""
     StreamlitAdapter.reset_module_state(
-        'qc_', '_preserved_bqc_', '_preserved_rt_', '_preserved_pca_',
+        'qc_', '_preserved_bqc_filter_', '_preserved_rt_', '_preserved_pca_',
     )
 
 
