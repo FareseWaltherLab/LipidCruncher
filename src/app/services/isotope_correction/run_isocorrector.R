@@ -47,7 +47,10 @@ result <- IsoCorrectoR::IsoCorrection(
   verbose                  = FALSE
 )
 
-if (!identical(result$success, "TRUE") && !isTRUE(result$success)) {
+# "WARNINGS" means the correction finished and every output was written,
+# but IsoCorrectoR logged a warning (e.g. a missing intensity or a missing
+# isotopologue row); the Python side reads those from the result log.
+if (!(as.character(result$success) %in% c("TRUE", "WARNINGS"))) {
   stop("IsoCorrectoR reported failure; see the result log in the output directory.")
 }
 

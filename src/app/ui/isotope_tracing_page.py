@@ -51,7 +51,7 @@ _HOW_TO_RUN_DOC = """
 |---------|------------|
 | *…do not match any molecule in the Molecule file* | Every measurement ID must begin with a molecule name from the Molecule file (`PC_34:1` → `PC_34:1_C0`). Check spelling and separators. |
 | *Measurement IDs use ultra-high-resolution / standard-resolution labeling* | The ID style and the *Ultra-high-resolution mode* setting disagree — flip the setting, or relabel the isotopologues. |
-| *…contains non-numeric intensity values* | Remove text (`N/A`, `n.d.`, thousands separators) from the sample columns; leave missing values blank. |
+| *…contains non-numeric intensity values* | Remove text (`N/A`, `n.d.`, thousands separators) from the sample columns; leave missing values blank (IsoCorrectoR then warns that results for that sample may be less accurate). |
 | *R runtime unavailable* | This deployment has no R + IsoCorrectoR installed. The rest of LipidCruncher is unaffected. |
 """
 
@@ -307,7 +307,14 @@ def _display_results(result) -> None:
         return
 
     correction = result.correction
-    st.success("Correction complete.")
+    if correction.warnings:
+        st.warning(
+            "Correction complete, but IsoCorrectoR warns the results may be "
+            "less accurate:\n\n"
+            + "\n".join(f"- {w}" for w in correction.warnings)
+        )
+    else:
+        st.success("Correction complete.")
 
     # How to read the tables, next to the tables themselves.
     with st.expander("📖 How to Read These Tables", expanded=False):

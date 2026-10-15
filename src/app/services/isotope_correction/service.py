@@ -13,10 +13,11 @@ code — so the AST sandbox does not apply here): we (a) validate inputs upstrea
 """
 import json
 import os
+import re
 import subprocess
 import tempfile
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 import pandas as pd
 
@@ -40,6 +41,8 @@ class CorrectionResult:
 
     Tables are None when IsoCorrectoR did not produce them for the given
     settings (e.g. ``mean_enrichment`` when CalculateMeanEnrichment is False).
+    ``warnings`` are the ones IsoCorrectoR logged for a run that completed
+    but "may be faulty" (missing intensities, missing isotopologue rows).
     """
     corrected: pd.DataFrame
     raw_data: pd.DataFrame
@@ -48,6 +51,7 @@ class CorrectionResult:
     residuals: Optional[pd.DataFrame] = None
     relative_residuals: Optional[pd.DataFrame] = None
     log_text: str = ""
+    warnings: List[str] = field(default_factory=list)
 
 
 # Maps a CorrectionResult field to the output-file suffix IsoCorrectoR writes.
@@ -164,7 +168,26 @@ class IsotopeCorrectionService:
                 f"in {result_dir}."
             )
 
-        return CorrectionResult(log_text=log_text, **tables)
+        return CorrectionResult(
+            log_text=log_text,
+            warnings=IsotopeCorrectionService.parse_log_warnings(log_text),
+            **tables,
+        )
+
+    @staticmethod
+    def parse_log_warnings(log_text: str) -> List[str]:
+        """The warnings in an IsoCorrectoR result log, one string each.
+
+        They sit between "WARNING(s):" and "FILES AND DIRECTORIES"; each
+        starts with "In <file>:" and may run over several lines.
+        """
+        start = log_text.find("WARNING(s):")
+        if start == -1:
+            return []
+        section = log_text[start + len("WARNING(s):"):]
+        section = section.split("FILES AND DIRECTORIES", 1)[0]
+        parts = re.split(r"\n(?=In )|\n\s*\n", section)
+        return [" ".join(p.split()) for p in parts if p.strip()]
 
     @staticmethod
     def _locate_result_dir(output_dir: str) -> str:
