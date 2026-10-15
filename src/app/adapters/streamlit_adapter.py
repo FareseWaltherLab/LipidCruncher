@@ -16,7 +16,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from app.constants import (
-    COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING, resolve_format_enum,
+    COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS,
+    resolve_format_enum,
 )
 
 from ..models.experiment import ExperimentConfig
@@ -341,112 +342,255 @@ class SessionState:
     iso_result_key: Optional[str] = None
 
 
-# Keys that should NOT be reset when starting a fresh analysis (app-level
-# routing). Not 'module': a fresh dataset always starts at Module 1.
-_PRESERVE_ON_RESET = {'page'}
+@dataclass(frozen=True)
+class _Stage:
+    """One step of the pipeline and every session key it owns.
 
-# Keys kept by reset_to_experiment_setup(): the uploaded data plus the
-# standardization outputs derived from it. Everything else (experiment config,
-# grouping, processing, normalization, QC, analysis) is cleared so the user
-# restarts from the Define Experiment step without having to re-upload.
-_SOFT_RESET_PRESERVE = frozenset({
-    # Upload
-    'raw_df', 'using_sample_data', 'sample_data_file', 'upload_kept_across_pages',
-    # Standardization outputs (so column mapping need not be redone)
-    'standardized_df', 'column_mapping', 'n_intensity_cols', 'format_type',
-    'msdial_features', 'msdial_sample_names', '_msdial_override_samples',
-    'lipidsearch_sample_names', 'sample_label_mode',
-    'msdial_use_normalized', 'msdial_data_type_index',
-    'workbench_conditions', 'workbench_samples',
-})
+    Invalidating a stage invalidates it and every later one (``_STAGES``
+    order), so a key belongs to the earliest stage whose change makes it
+    stale. Four kinds of key:
 
-# Keys kept by reset_format_derived_state(): only the upload itself. Its
-# standardization, and everything computed from it, belong to the old format.
-_FORMAT_CHANGE_PRESERVE = frozenset({
-    'raw_df', 'using_sample_data', 'sample_data_file', '_dataset_source_id',
-    'upload_kept_across_pages',
-})
+    - ``fields``: SessionState fields, reset to their dataclass default.
+    - ``widgets``: widget keys, popped (Streamlit forbids assigning to an
+      instantiated widget's key, but allows deleting it). A SessionState
+      field that a widget also writes goes here, not in ``fields``.
+    - ``plain``: other session keys, popped.
+    - ``prefixes``: keys built with f-strings (``protein_{sample}``),
+      popped. A SessionState field that happens to share the prefix
+      (``protein_df``, ``lsi_manual_fields``) is reset like any field, not
+      popped, so code later in the same run can still read it.
+    """
+    name: str
+    fields: frozenset = frozenset()
+    widgets: frozenset = frozenset()
+    plain: frozenset = frozenset()
+    prefixes: Tuple[str, ...] = ()
 
-# Widget keys created by Streamlit widgets (not in SessionState dataclass).
-# Must be removed on reset to prevent stale widget state.
-_WIDGET_KEYS = {
-    # Sidebar widgets (file_upload, experiment_config, sample_grouping, confirm_inputs)
-    'n_conditions',
-    'manual_sample_override', 'grouping_radio', 'exclude_samples',
-    'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
-    'sample_data_experiment', 'sample_names_editor', '_sample_label_mode_radio',
-    # Data processing widgets (data_processing.py)
-    'grade_filter_mode', 'grade_selections',
-    'grade_filter_mode_radio',
-    'msdial_quality_level', 'msdial_data_type_radio',
-    'msdial_quality_level_radio',
-    'msdial_custom_msms', 'msdial_show_custom_threshold', 'msdial_custom_score',
-    # Zero filtering widgets (zero_filtering.py)
-    'zero_filter_detection_threshold',
-    'non_bqc_zero_threshold', 'bqc_zero_threshold',
-    # Standards widgets (internal_standards.py)
-    'standards_source_radio', 'standards_location_radio', 'standards_conditions_select',
-    # Normalization widgets (normalization.py)
-    'temp_selected_classes',
-    'norm_method_selection', 'protein_input_method',
-    # Data processing widgets (continued)
-    'msdial_msms_only',
-    # Download/action button keys (various files)
-    'load_sample', 'clear_custom_standards',
-    'download_removed_species', 'download_auto_standards',
-    'download_custom_standards', 'download_filtered_data',
-    'download_normalized_data',
-    # Quality Check widgets (quality_check.py)
-    'bqc_cov_threshold', 'bqc_filter_choice', 'bqc_lipids_to_keep',
-    'bqc_csv_download', 'bqc_filtered_download',
-    'rt_viewing_mode', 'rt_class_selection',
-    'qc_rt_svg_comparison', 'rt_csv_comparison',
-    'corr_condition', 'corr_csv_download', 'qc_corr_svg',
-    'pca_samples_remove', 'pca_csv_download',
-    'qc_missing_values_svg', 'qc_missing_values_csv',
-    'qc_box_plot_svg', 'qc_box_plot_csv',
-    'qc_bqc_svg', 'qc_pca_svg',
-    # AI Chat widgets (ai_chat/)
-    'chat_input', 'chat_apply_transform',
-    # Analysis widgets (analysis.py)
-    'analysis_radio',
-    'bar_conditions', 'bar_classes', 'bar_scale_radio',
-    'bar_stats_mode', 'bar_detailed_stats',
-    'pie_classes',
-    'sat_conditions', 'sat_classes', 'sat_plot_type',
-    'sat_show_significance', 'sat_detailed_stats', 'sat_stats_mode',
-    'fach_class', 'fach_conditions',
-    'pathway_control', 'pathway_experimental',
-    'pathway_class_selector', 'pathway_add_node_name',
-    'pathway_add_node_x', 'pathway_add_node_y',
-    'pathway_add_edge_source', 'pathway_add_edge_target',
-    'volcano_control', 'volcano_experimental', 'volcano_classes',
-    'volcano_p_threshold', 'volcano_fc_threshold',
-    'volcano_hide_nonsig', 'volcano_top_n',
-    'volcano_additional_labels', 'volcano_stats_mode', 'volcano_detailed_stats',
-    'heatmap_conditions', 'heatmap_classes', 'heatmap_type',
-    'heatmap_n_clusters', 'heatmap_cluster_view',
-}
 
-# Prefixes for dynamic widget keys (created with f-strings like `protein_{sample}`).
-# All matching keys are removed on reset via pattern-based cleanup.
-_DYNAMIC_KEY_PREFIXES = (
-    'protein_',         # protein concentrations per sample (normalization.py)
-    'conc_',            # internal standard concentrations (normalization.py)
-    'standard_selection_',  # lipid class → standard mapping (normalization.py)
-    'grade_select_',    # grade selection per class (data_processing.py)
-    'cond_name_',       # condition names by index (experiment_config.py)
-    'n_samples_',       # samples per condition by index (experiment_config.py)
-    'select_',          # multiselect for condition samples (sample_grouping.py)
-    'standards_file_uploader_',  # keyed by dataset + sample set (internal_standards.py)
-    'lipidsearch_alignment_uploader_',  # keyed by dataset (file_upload.py)
-    'qc_rt_svg_individual_',  # individual RT SVG downloads (quality_check.py)
-    'rt_csv_individual_',     # individual RT CSV downloads (quality_check.py)
-    'volcano_label_x_',       # per-lipid label X position (analysis.py)
-    'volcano_label_y_',       # per-lipid label Y position (analysis.py)
-    'analysis_svg_',          # analysis SVG download buttons (analysis.py)
-    'analysis_csv_',          # analysis CSV download buttons (analysis.py)
-    '_nav_preserved_',  # cross-page widget snapshots (preserve_main_app_widgets)
+_STAGES: Tuple[_Stage, ...] = (
+    # The uploaded file. Only a new source (or Back to Home) clears it.
+    _Stage(
+        'upload',
+        fields=frozenset({'raw_df', 'using_sample_data', 'sample_data_file',
+                          'upload_kept_across_pages'}),
+        widgets=frozenset({'load_sample'}),
+        plain=frozenset({'_dataset_source_id'}),
+        prefixes=('lipidsearch_alignment_uploader_',),
+    ),
+    # The upload read under the selected format. A format switch clears it.
+    _Stage(
+        'standardize',
+        fields=frozenset({
+            'standardized_df', 'column_mapping', 'n_intensity_cols',
+            'format_type', 'msdial_features', 'msdial_sample_names',
+            '_msdial_override_samples', 'lipidsearch_sample_names',
+            'workbench_conditions', 'workbench_samples',
+            # Kept through "Reset session" with the standardized data they
+            # describe (their widgets below are not, and re-seed from them).
+            'sample_label_mode', 'msdial_use_normalized',
+            'msdial_data_type_index',
+        }),
+    ),
+    # Define Experiment, sample names, grouping, exclusion, BQC, Confirm.
+    # "Reset session" clears from here.
+    _Stage(
+        'experiment',
+        fields=frozenset({
+            'experiment', 'bqc_label', 'confirmed', 'grouping_complete',
+            'original_column_order', 'sample_names', 'processing_df',
+            'processing_sample_names', '_preserved_excluded_samples',
+            '_preserved_excluded_regroup_origin', 'regroup_origin',
+            'processing_origin', '_preserved_sidebar_bqc_radio',
+            '_preserved_sidebar_bqc_label_radio',
+            # What the grouping widgets showed last run (Confirm invalidation)
+            '_last_seen_grouping_radio', '_last_seen_selects',
+        }),
+        widgets=frozenset({
+            'n_conditions',
+            'manual_sample_override', 'grouping_radio', 'exclude_samples',
+            'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
+            'sample_data_experiment', 'sample_names_editor',
+            '_sample_label_mode_radio',
+        }),
+        # The regroup snapshot (restored by the grouping step's "Yes"), and
+        # the marker that stops the LipidSearch alignment pre-filling the
+        # experiment twice for the same file.
+        plain=frozenset({
+            '_pre_regroup_df', '_pre_regroup_sample_names',
+            '_ls_align_prefilled_for',
+        }),
+        # _nav_preserved_*: sidebar snapshots taken on the way to another
+        # page (preserve_main_app_widgets / preserve_ai_studio_widgets).
+        prefixes=('cond_name_', 'n_samples_', 'select_', '_nav_preserved_'),
+    ),
+    # Module 1 after the sidebar: cleaning, standards, zero filter,
+    # normalization.
+    _Stage(
+        'processing',
+        fields=frozenset({
+            'cleaned_df', 'intsta_df', 'continuation_df', 'pre_filter_df',
+            'ingestion_result', 'grade_config', 'last_quality_config',
+            'original_auto_intsta_df', 'custom_standards_df',
+            'custom_standards_mode', 'custom_standards_sample_set',
+            'standards_source', 'standards_consistency_figs',
+            '_zero_filter_format', '_preserved_zero_filter_detection_threshold',
+            '_preserved_non_bqc_zero_threshold', '_preserved_bqc_zero_threshold',
+            'normalized_df', 'normalization_method', 'selected_classes',
+            '_preserved_norm_method_selection', 'normalization_result',
+            'class_standard_map', 'standard_concentrations', 'protein_df',
+            'protein_input_method_prev',
+        }),
+        widgets=frozenset({
+            # data_processing.py
+            'grade_filter_mode', 'grade_selections', 'grade_filter_mode_radio',
+            'msdial_quality_level', 'msdial_data_type_radio',
+            'msdial_quality_level_radio', 'msdial_custom_msms',
+            'msdial_show_custom_threshold', 'msdial_custom_score',
+            'msdial_msms_only', 'download_removed_species',
+            # zero_filtering.py
+            'zero_filter_detection_threshold', 'non_bqc_zero_threshold',
+            'bqc_zero_threshold',
+            # internal_standards.py
+            'standards_source_radio', 'standards_location_radio',
+            'standards_conditions_select', 'clear_custom_standards',
+            'additional_istd_select', 'dataset_standards_select',
+            'download_auto_standards', 'download_custom_standards',
+            'download_selected_standards', 'download_combined_standards',
+            # normalization.py (two of these are also SessionState fields)
+            'temp_selected_classes', 'norm_method_selection',
+            'protein_input_method', 'download_filtered_data',
+            'download_normalized_data',
+        }),
+        prefixes=('protein_', 'conc_', 'standard_selection_', 'grade_select_',
+                  'standards_file_uploader_'),
+    ),
+    # The LSI compliance report's typed-in fields: kept across Next / Back,
+    # cleared with the experiment they describe.
+    _Stage(
+        'report',
+        fields=frozenset({'lsi_manual_fields', 'lsi_pdf_bytes'}),
+        widgets=frozenset({'lsi_download_csv', 'lsi_generate_pdf',
+                           'lsi_download_pdf'}),
+        prefixes=('lsi_manual_',),
+    ),
+    # The AI Studio and the isotope tracing page. Every main-app reset
+    # clears them (they sit before 'qc', so Next / Back do not); their own
+    # pages clear just their stage with clear_stage().
+    _Stage(
+        'ai_studio',
+        fields=frozenset({
+            'chat_transform_session', 'chat_viz_session',
+            'chat_data_questions_session', 'chat_unified_session',
+            'chat_result_tables', 'chat_mode', 'chat_transform_result',
+            'chat_viz_figures', 'chat_message_count', 'chat_execution_count',
+            'chat_studio_df', 'chat_studio_df_original', 'chat_studio_experiment',
+            'chat_studio_pipeline_source', 'chat_studio_detected_format',
+            'chat_studio_sample_columns_original',
+            'chat_studio_sample_columns_renamed',
+        }),
+        widgets=frozenset({
+            'chat_input', 'chat_apply_transform',
+            'chat_input_questions', 'chat_reset_questions',
+            'chat_input_transform', 'chat_reset_transform',
+            'chat_download_transform',
+            'chat_input_lc_questions', 'chat_reset_lc_questions',
+            'chat_retry_lc', 'chat_input_unified', 'chat_reset_unified',
+            'chat_input_viz', 'chat_reset_viz',
+            'ai_studio_file_uploader', 'ai_studio_import_pipeline',
+            'ai_studio_pipeline_choice', 'studio_grouping_radio',
+            'studio_n_conditions', 'studio_sample_cols_select',
+        }),
+        prefixes=('studio_cond_name_', 'studio_n_samples_', 'studio_select_'),
+    ),
+    _Stage(
+        'isotope',
+        fields=frozenset({
+            'iso_measurement_df', 'iso_molecule_df', 'iso_element_df',
+            'iso_result', 'iso_result_key',
+        }),
+        widgets=frozenset({
+            'iso_measurement_uploader', 'iso_molecule_uploader',
+            'iso_element_uploader', 'iso_load_sample', 'iso_run',
+            'iso_correct_tracer_impurity', 'iso_correct_tracer_element_core',
+            'iso_calculate_mean_enrichment', 'iso_ultra_high_res',
+            'iso_correct_also_monoisotopic', 'iso_calculation_threshold_uhr',
+        }),
+        prefixes=('iso_dl_',),
+    ),
+    # Module 2. Next and Back to Data Processing clear from here.
+    _Stage(
+        'qc',
+        fields=frozenset({
+            'qc_continuation_df', 'qc_box_plot_fig1', 'qc_box_plot_fig2',
+            'qc_experiment', 'qc_bqc_plot', 'qc_cov_threshold',
+            'qc_retention_time_plot',
+            'qc_correlation_plots', 'qc_pca_plot', 'qc_samples_removed',
+            'qc_input_sample_names', 'qc_input_experiment',
+            'qc_input_bqc_label', 'qc_input_processing_df', 'qc_sample_names',
+            '_preserved_bqc_filter_choice', '_preserved_rt_viewing_mode',
+            '_preserved_pca_samples_remove', '_preserved_pca_groups_remove',
+        }),
+        widgets=frozenset({
+            'bqc_cov_threshold', 'bqc_filter_choice', 'bqc_lipids_to_keep',
+            'bqc_csv_download', 'bqc_filtered_download', 'rt_viewing_mode',
+            'rt_class_selection', 'qc_rt_svg_comparison', 'rt_csv_comparison',
+            'corr_condition', 'corr_csv_download', 'qc_corr_svg',
+            'pca_samples_remove', 'pca_groups_remove', 'pca_csv_download',
+            'qc_missing_values_svg', 'qc_missing_values_csv',
+            'qc_box_plot_svg', 'qc_box_plot_csv', 'qc_bqc_svg', 'qc_pca_svg',
+        }),
+        prefixes=('qc_rt_svg_individual_', 'rt_csv_individual_'),
+    ),
+    # Module 3.
+    _Stage(
+        'analysis',
+        fields=frozenset({
+            'analysis_selection', 'analysis_bar_chart_fig',
+            'analysis_pie_chart_figs', 'analysis_saturation_figs',
+            'analysis_chain_length_fig', 'analysis_fach_fig',
+            'analysis_pathway_fig', 'analysis_pathway_added_edges',
+            'analysis_pathway_removed_edges', 'analysis_pathway_custom_nodes',
+            'analysis_pathway_position_overrides', 'analysis_volcano_fig',
+            'analysis_volcano_data', 'analysis_heatmap_fig',
+            'analysis_heatmap_clusters', 'analysis_all_plots',
+        }),
+        widgets=frozenset({
+            'analysis_radio', 'generate_pdf_report', 'download_pdf_report',
+            # bar chart / saturation (keys built from a 'bar' / 'sat' prefix)
+            'bar_conditions', 'bar_classes', 'bar_scale_radio',
+            'bar_stats_mode', 'bar_detailed_stats', 'bar_auto_transform',
+            'bar_test_type', 'bar_correction', 'bar_posthoc',
+            'pie_classes',
+            'sat_conditions', 'sat_classes', 'sat_plot_type',
+            'sat_show_significance', 'sat_detailed_stats', 'sat_stats_mode',
+            'sat_auto_transform', 'sat_test_type', 'sat_correction',
+            'sat_posthoc', 'sat_exclude_consolidated',
+            'clen_conditions', 'clen_classes',
+            'fach_class', 'fach_conditions',
+            'pathway_control', 'pathway_experimental', 'pathway_class_selector',
+            'pathway_add_node_name', 'pathway_add_node_x', 'pathway_add_node_y',
+            'pathway_add_node_btn', 'pathway_add_edge_source',
+            'pathway_add_edge_target', 'pathway_add_edge_btn',
+            'pathway_edge_to_remove_select', 'pathway_remove_edge_btn',
+            'pathway_move_node_select', 'pathway_move_node_x',
+            'pathway_move_node_y', 'pathway_move_node_btn', 'pathway_show_grid',
+            'pathway_start_all', 'pathway_start_default',
+            'pathway_start_scratch', 'pathway_upload_config',
+            'pathway_download_config', 'pathway_exclude_consolidated',
+            'volcano_control', 'volcano_experimental', 'volcano_classes',
+            'volcano_p_threshold', 'volcano_fc_threshold', 'volcano_hide_nonsig',
+            'volcano_top_n', 'volcano_additional_labels', 'volcano_stats_mode',
+            'volcano_detailed_stats', 'volcano_correction',
+            'volcano_auto_transform', 'volcano_enable_adjust',
+            'volcano_detail_class', 'volcano_detail_lipids',
+            'heatmap_conditions', 'heatmap_classes', 'heatmap_type',
+            'heatmap_n_clusters', 'heatmap_cluster_view', 'heatmap_color_scale',
+            'heatmap_control_condition', 'heatmap_species_page',
+            'heatmap_species_page_size', 'heatmap_species_sort',
+        }),
+        prefixes=('volcano_label_x_', 'volcano_label_y_', 'analysis_svg_',
+                  'analysis_csv_'),
+    ),
 )
 
 
@@ -472,6 +616,20 @@ _AI_STUDIO_NAV_WIDGET_PREFIXES = (
     'studio_cond_name_', 'studio_n_samples_', 'studio_select_',
 )
 _NAV_PRESERVE_PREFIX = '_nav_preserved_'
+
+_STAGE_NAMES = tuple(stage.name for stage in _STAGES)
+
+# App-level routing and navigation buttons: never invalidated, only set.
+_ROUTING_FIELDS = frozenset({'page', 'module'})
+_ROUTING_WIDGETS = frozenset({
+    'back_home_no_data', 'back_home_module1', 'back_home_module2',
+    'back_processing_error', 'back_processing_module2', 'reset_session',
+    'open_studio_module2', 'ai_studio_back_home', 'ai_studio_back_main',
+    'ai_studio_goto_main_from_advisory', 'iso_back_home',
+    # The format dropdown keeps its choice through every reset; a format
+    # change itself is what reset_format_derived_state() reacts to.
+    'data_format_select',
+})
 
 
 class StreamlitAdapter:
@@ -531,45 +689,55 @@ class StreamlitAdapter:
                 st.session_state[f.name] = getattr(defaults, f.name)
 
     @staticmethod
-    def reset_data_state() -> None:
-        """
-        Reset all data-related session state for a fresh upload.
+    def invalidate_from(stage: str) -> None:
+        """Clear ``stage`` and every later stage of ``_STAGES``.
 
-        Resets every SessionState field to its default except page/module
-        (app-level routing). Also removes Streamlit widget keys (both static
-        and dynamic) that may hold stale state from the previous dataset.
+        Fields go back to their defaults; widget, plain and prefixed keys are
+        popped (re-created by their widgets, or re-initialized from
+        ``SessionState`` on the next run).
+
+        Args:
+            stage: A ``_STAGES`` name ('upload', 'standardize', 'experiment',
+                'processing', 'report', 'ai_studio', 'isotope', 'qc',
+                'analysis').
         """
-        # Pop static widget keys first. Streamlit forbids assigning to a key
-        # instantiated as a widget during the current run, but allows deletion.
-        # Popped keys are reinitialized to dataclass defaults on the next rerun
-        # by initialize_session_state().
-        for key in _WIDGET_KEYS:
-            st.session_state.pop(key, None)
-        # Reset SessionState fields, skipping fields that are also widget keys
-        # (already popped above — re-assignment would raise if the widget
-        # rendered earlier this run).
+        StreamlitAdapter._clear(_STAGES[_STAGE_NAMES.index(stage):])
+
+    @staticmethod
+    def clear_stage(stage: str) -> None:
+        """Clear one stage only, for state no other stage depends on (the
+        AI Studio, the isotope tracing page)."""
+        StreamlitAdapter._clear((_STAGES[_STAGE_NAMES.index(stage)],))
+
+    @staticmethod
+    def _clear(stages) -> None:
+        # Pop widget and plain keys first: Streamlit forbids assigning to a
+        # key instantiated as a widget during the current run, but allows
+        # deletion.
+        for s in stages:
+            for key in s.widgets | s.plain:
+                st.session_state.pop(key, None)
         defaults = SessionState()
-        for f in fields(SessionState):
-            if f.name in _PRESERVE_ON_RESET or f.name in _WIDGET_KEYS:
-                continue
-            st.session_state[f.name] = getattr(defaults, f.name)
-        # Remove dynamic widget keys by prefix (e.g. protein_{sample}, conc_{std}).
-        # Runs after the SessionState reset so prefix-matching SessionState
-        # fields (e.g. protein_df) are also cleared.
-        dynamic_keys = [
-            key for key in list(st.session_state.keys())
-            if isinstance(key, str) and key.startswith(_DYNAMIC_KEY_PREFIXES)
-        ]
-        for key in dynamic_keys:
-            st.session_state.pop(key, None)
-        # Plain (non-field) keys tied to the previous grouping or upload. A
-        # leftover regroup snapshot would otherwise be restored over the next
-        # dataset by the grouping step's "Yes" branch, carrying the old names
-        # onto new data; the alignment marker would stop the experiment
-        # pre-fill from firing again for the same Alignment Setting file.
-        for key in ('_pre_regroup_df', '_pre_regroup_sample_names',
-                    '_ls_align_prefilled_for', '_dataset_source_id'):
-            st.session_state.pop(key, None)
+        for s in stages:
+            for name in s.fields:
+                st.session_state[name] = getattr(defaults, name)
+        prefixes = tuple(p for s in stages for p in s.prefixes)
+        if prefixes:
+            field_names = {f.name for f in fields(SessionState)}
+            for key in [k for k in list(st.session_state.keys())
+                        if isinstance(k, str) and k.startswith(prefixes)
+                        and k not in field_names]:
+                st.session_state.pop(key, None)
+
+    @staticmethod
+    def reset_data_state() -> None:
+        """Reset all data-related session state for a fresh upload.
+
+        Clears every stage and returns to Module 1; only ``page`` (app-level
+        routing) is kept.
+        """
+        StreamlitAdapter.invalidate_from('upload')
+        st.session_state['module'] = MODULE_DATA_PROCESSING
 
     @staticmethod
     def reset_for_new_source(source_id: str) -> bool:
@@ -605,16 +773,11 @@ class StreamlitAdapter:
         outputs, experiment setup and all downstream state are cleared, and
         the user returns to Module 1.
         """
-        preserved = {
-            key: st.session_state.get(key) for key in _FORMAT_CHANGE_PRESERVE
-        }
-        StreamlitAdapter.reset_data_state()
-        for key, value in preserved.items():
-            st.session_state[key] = value
+        StreamlitAdapter.invalidate_from('standardize')
         # Same reason as in reset_to_experiment_setup(): an explicit False
         # beats the checkbox's cached value on a pre-fill rerun.
         st.session_state['confirm_checkbox'] = False
-        st.session_state.module = MODULE_DATA_PROCESSING
+        st.session_state['module'] = MODULE_DATA_PROCESSING
 
     @staticmethod
     def reset_to_experiment_setup() -> None:
@@ -627,31 +790,50 @@ class StreamlitAdapter:
         this preserves the upload and standardization outputs so the user does
         not have to re-upload the file or re-map columns.
         """
-        preserved = {
-            key: st.session_state.get(key) for key in _SOFT_RESET_PRESERVE
-        }
         # A confirmed manual regroup leaves standardized_df renumbered, which no
         # longer matches the column mapping or the seeded sample names. Restore
         # the pre-regroup data, since the grouping itself is being reset.
-        if st.session_state.get('_pre_regroup_df') is not None:
-            preserved['standardized_df'] = st.session_state['_pre_regroup_df']
-        StreamlitAdapter.reset_data_state()
-        for key, value in preserved.items():
-            st.session_state[key] = value
-        # Force the confirm checkbox off. Popping its key (via reset_data_state)
-        # is not enough: the reset button renders before the confirm checkbox,
-        # and formats that pre-fill the experiment (LipidSearch 5.2 alignment,
-        # Metabolomics Workbench auto-detect) fire an extra st.rerun() in which
-        # Streamlit re-creates the checkbox with identical parameters and
-        # restores its cached 'checked' value. An explicit False in session
-        # state overrides that. Safe to set: the widget is not instantiated yet
-        # this run.
+        pre_regroup = st.session_state.get('_pre_regroup_df')
+        StreamlitAdapter.invalidate_from('experiment')
+        if pre_regroup is not None:
+            st.session_state['standardized_df'] = pre_regroup
+        # Force the confirm checkbox off. Popping its key is not enough: the
+        # reset button renders before the confirm checkbox, and formats that
+        # pre-fill the experiment (LipidSearch 5.2 alignment, Metabolomics
+        # Workbench auto-detect) fire an extra st.rerun() in which Streamlit
+        # re-creates the checkbox with identical parameters and restores its
+        # cached 'checked' value. An explicit False in session state overrides
+        # that. Safe to set: the widget is not instantiated yet this run.
         st.session_state['confirm_checkbox'] = False
         # Start from Module 1 so a re-confirmed experiment runs the pipeline
         # from the top rather than jumping into a stale QC/Analysis view.
-        st.session_state.module = MODULE_DATA_PROCESSING
+        st.session_state['module'] = MODULE_DATA_PROCESSING
         # Drop cached computations (box plots, PCA, heatmaps, ...).
         st.cache_data.clear()
+
+    # ==================== Navigation ====================
+
+    @staticmethod
+    def go_to_quality_check() -> None:
+        """Next: Module 1 -> Quality Check & Analysis.
+
+        QC and analysis start over, so Module 2/3 freeze the current Module 1
+        output (see the qc_input_* fields) rather than reuse a previous one.
+        """
+        StreamlitAdapter.invalidate_from('qc')
+        st.session_state['module'] = MODULE_QC_ANALYSIS
+
+    @staticmethod
+    def back_to_data_processing() -> None:
+        """Back from Quality Check & Analysis to Module 1."""
+        StreamlitAdapter.invalidate_from('qc')
+        st.session_state['module'] = MODULE_DATA_PROCESSING
+
+    @staticmethod
+    def back_to_home() -> None:
+        """Back to the landing page, dropping the dataset."""
+        st.session_state['page'] = PAGE_LANDING
+        StreamlitAdapter.reset_data_state()
 
     # ==================== Widget Preservation ====================
 
@@ -752,26 +934,6 @@ class StreamlitAdapter:
             target = key[prefix_len:]
             if target not in st.session_state:
                 st.session_state[target] = st.session_state[key]
-
-    # ==================== Module State Reset ====================
-
-    @staticmethod
-    def reset_module_state(*prefixes: str) -> None:
-        """Reset all SessionState fields matching any of the given prefixes.
-
-        Iterates over the SessionState dataclass fields and resets each field
-        whose name starts with one of the provided prefixes to its default value.
-
-        Args:
-            *prefixes: One or more string prefixes to match against field names.
-        """
-        import dataclasses
-        for f in fields(SessionState):
-            if any(f.name.startswith(p) for p in prefixes):
-                if f.default is not dataclasses.MISSING:
-                    st.session_state[f.name] = f.default
-                elif f.default_factory is not dataclasses.MISSING:
-                    st.session_state[f.name] = f.default_factory()
 
     # ==================== Service Wrappers ====================
 

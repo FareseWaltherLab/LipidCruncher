@@ -499,8 +499,9 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 - **`SessionState` dataclass** — defines all session state keys with defaults and documents ownership (which UI file manages which keys).
 - **`initialize_session_state()`** — populates `st.session_state` from `SessionState` defaults on first run.
-- **`reset_data_state()`** — clears all data keys (full reset on new upload).
-- **`reset_module_state(*prefixes)`** — clears keys matching given prefixes (e.g., `'qc_'`, `'analysis_'`).
+- **Stage registry (`_STAGES`) and `invalidate_from(stage)`** — every session key (SessionState field, widget key, plain key or f-string key prefix) belongs to one pipeline stage: `upload` → `standardize` → `experiment` → `processing` → `report` → `ai_studio` → `isotope` → `qc` → `analysis` (the AI Studio and isotope stages sit before `qc` so every main-app reset clears them but Next / Back do not). `invalidate_from(stage)` clears that stage and every later one. The resets below are built on it.
+- **`reset_data_state()`** — clears every stage (full reset on new upload / Back to Home); `reset_format_derived_state()` clears from `standardize`; `reset_to_experiment_setup()` from `experiment`.
+- **Navigation actions** — `go_to_quality_check()` (Next), `back_to_data_processing()` (both clear from `qc`) and `back_to_home()`; `main_app.py` and the UI test scripts call these rather than resetting state themselves.
 - **Widget value preservation** — `restore_widget_value()` / `save_widget_value()` persist widget selections across module navigation.
 - **Cached wrappers** — every workflow/service call that should be cached is wrapped with `@st.cache_data` and custom hash functions for Pydantic models and DataFrames.
 - **AI Studio state** — `chat_studio_df`, `chat_studio_df_original`, `chat_studio_experiment`, `chat_studio_pipeline_source`, `studio_applied_snapshot` (set when the user confirms the inputs; the gate the three data tabs check), plus per-mode session keys `chat_transform_session`, `chat_viz_session`, `chat_data_questions_session`, `chat_unified_session`, and result caches (`chat_transform_result`, `chat_viz_figures`, `chat_result_tables`).
@@ -582,8 +583,8 @@ Nomenclature functions live in `lipid_nomenclature.py`: `parse_lipid_name()`, `n
 
 All session state is managed through the `SessionState` dataclass in `streamlit_adapter.py`. Key principles:
 
-1. **Single ownership** — each key is owned by exactly one UI file (documented in `SessionState` docstring).
-2. **Prefixed resets** — `reset_module_state('qc_')` clears all QC keys without touching other modules.
+1. **Single ownership** — each key is owned by exactly one UI file (documented in `SessionState` docstring) and belongs to exactly one stage in `_STAGES`. A new widget key must be added to its stage; `tests/unit/test_streamlit_adapter.py::TestStageRegistry` fails on a literal `key='...'` that is not registered.
+2. **Stage invalidation** — `invalidate_from(stage)` clears a stage and everything after it; `clear_stage(stage)` clears one (the AI Studio and isotope pages use it for their own state). `tests/ui/test_reset_matrix.py` pins what each trigger clears (regenerate `reset_matrix.json` with `UPDATE_RESET_MATRIX=1` after an intended change).
 3. **Widget preservation** — when the user navigates between modules, widget values are saved to `_preserved_*` keys and restored on return. Cross-page navigation between the main app and AI Studio uses a separate `_nav_preserved_*` snapshot via `preserve_main_app_widgets()` / `preserve_ai_studio_widgets()` / `restore_navigation_widgets()`.
 4. **Cascade resets** — navigating back to Module 1 resets both QC and Analysis state. Going home resets everything.
 5. **Page routing** — the active page is controlled by a `Page` enum (`LANDING`, `APP`, `AI_STUDIO`, `ISOTOPE_TRACING`) stored in `st.session_state.page`; aliases `PAGE_LANDING`, `PAGE_APP`, `PAGE_AI_STUDIO`, `PAGE_ISOTOPE_TRACING` are exported from `constants.py` for backward compatibility.
@@ -596,7 +597,7 @@ raw_df → standardized_df → processing_df → cleaned_df → normalized_df �
 
 Each DataFrame flows forward through the pipeline. `processing_df` is `standardized_df` minus any samples excluded in the sidebar. In `_display_module2_and_3` (`main_app.py`) QC runs on `normalized_df` and its output goes straight to the analyses; `qc_continuation_df` is still written but nothing reads it. On entry to Module 2, `_module1_handoff` freezes the setup Module 1 ran with (`qc_input_experiment`, `qc_input_bqc_label`, `qc_input_processing_df`), so a later sidebar exclusion or regroup only shows a warning instead of being paired with the already-normalized data.
 
-Downstream state is cleared by explicit resets: a new upload or sample-data load calls `reset_for_new_source()` (which runs `reset_data_state()` and clears the cache), a format change calls `reset_format_derived_state()`, the sidebar "Reset session" button calls `reset_to_experiment_setup()`, "Back to Home" calls `reset_data_state()`, and the Next/Back buttons between modules call `_reset_qc_state()` / `_reset_analysis_state()` in `main_app.py`.
+Downstream state is cleared by explicit resets: a new upload or sample-data load calls `reset_for_new_source()` (which runs `reset_data_state()` and clears the cache), a format change calls `reset_format_derived_state()`, the sidebar "Reset session" button calls `reset_to_experiment_setup()`, "Back to Home" calls `reset_data_state()`, and the Next/Back buttons between modules call `go_to_quality_check()` / `back_to_data_processing()`, which clear the `qc` and `analysis` stages. Nothing clears a stage automatically when its inputs change; each trigger above is explicit.
 
 The isotope tracing page owns the `iso_`-prefixed keys (`iso_measurement_df`, `iso_molecule_df`, `iso_element_df`, `iso_config`, `iso_result`), cleared together via `reset_module_state('iso_')` when leaving the page.
 
@@ -784,19 +785,19 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 
 | Package | Version | Purpose |
 |---|---|---|
-| streamlit | 1.50.0 | UI framework |
+| streamlit | 1.54.0 | UI framework |
 | pandas | 1.5.3 | Data manipulation |
 | numpy | 1.24.3 | Numerical computing |
 | scipy | 1.13.1 | Statistical tests (Welch's t-test, Alexander-Govern, Mann-Whitney, Kruskal-Wallis); hierarchical clustering for the heatmap |
-| scikit-learn | 1.3.0 | PCA, StandardScaler |
+| scikit-learn | 1.5.2 | PCA, StandardScaler |
 | statsmodels | 0.14.0 | Multiple testing correction (FDR, Bonferroni), Tukey HSD |
 | plotly | 5.18.0 | Interactive visualizations |
 | matplotlib | 3.7.1 | Static plots (correlation heatmaps, volcano concentration distribution plot) |
 | seaborn | 0.12.2 | Statistical plot styling |
 | kaleido | 0.2.1 | Plotly static image export |
-| reportlab | 3.6.12 | PDF generation |
+| reportlab | 3.6.13 | PDF generation |
 | pdf2image | 1.17.0 | PDF to image conversion (landing-page module images; needs Poppler) |
-| pillow | 9.5.0 | Image processing |
+| pillow | 12.3.0 | Image processing |
 | anthropic | 0.96.0 | Claude API SDK for the AI Studio (chat completion + tool use). Reads `ANTHROPIC_API_KEY` from environment or `st.secrets`. |
 | pydantic | 2.11.3 | Frozen data models and configs |
-| pyarrow | 11.0.0 | Streamlit dependency, pinned to stay on numpy 1.x |
+| pyarrow | 23.0.1 | Streamlit dependency, pinned to stay on numpy 1.x |

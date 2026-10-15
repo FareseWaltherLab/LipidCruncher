@@ -187,7 +187,7 @@ def _go_home() -> None:
     Runs as an on_click callback — Streamlit reruns automatically afterward,
     so no explicit st.rerun() (which is illegal inside a callback).
     """
-    StreamlitAdapter.reset_module_state("iso_")
+    StreamlitAdapter.clear_stage('isotope')
     st.session_state.page = PAGE_LANDING
 
 

@@ -89,6 +89,6 @@ def display_standards_consistency_plots(
     if plots:
         st.session_state.standards_consistency_figs = plots
         for fig in plots:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     else:
         st.info("No standards data available for plotting.")

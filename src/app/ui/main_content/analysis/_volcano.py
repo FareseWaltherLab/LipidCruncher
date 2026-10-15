@@ -236,7 +236,7 @@ def _render_volcano_results(
 
     # Volcano plot
     st.markdown("###### Volcano Plot")
-    st.plotly_chart(result.figure, use_container_width=True)
+    st.plotly_chart(result.figure, width='stretch')
 
     if result.volcano_data and result.volcano_data.volcano_df is not None:
         display_export_buttons(
@@ -253,7 +253,7 @@ def _render_volcano_results(
     if result.concentration_plot is not None:
         st.markdown("---")
         st.markdown("###### Concentration vs. Fold Change")
-        st.plotly_chart(result.concentration_plot, use_container_width=True)
+        st.plotly_chart(result.concentration_plot, width='stretch')
         st.session_state.analysis_all_plots['conc_vs_fc'] = (
             result.concentration_plot
         )

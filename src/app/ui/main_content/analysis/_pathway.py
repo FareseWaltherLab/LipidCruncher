@@ -130,7 +130,7 @@ def _display_pathway_viz(
             st.warning("Could not generate pathway visualization.")
             return
 
-        st.plotly_chart(figure, use_container_width=True)
+        st.plotly_chart(figure, width='stretch')
         st.session_state.analysis_pathway_fig = figure
         st.session_state.analysis_all_plots['pathway'] = figure
 

@@ -89,18 +89,6 @@ StreamlitAdapter.initialize_session_state()
 # Main App Page
 # =============================================================================
 
-def _reset_qc_state() -> None:
-    """Clear all Quality Check session state."""
-    StreamlitAdapter.reset_module_state(
-        'qc_', '_preserved_bqc_', '_preserved_rt_', '_preserved_pca_',
-    )
-
-
-def _reset_analysis_state() -> None:
-    """Clear all Module 3 analysis session state."""
-    StreamlitAdapter.reset_module_state('analysis_')
-
-
 def _display_session_reset_button() -> None:
     """Sidebar control that soft-resets the session while keeping the upload.
 
@@ -266,14 +254,11 @@ def _display_module1_navigation() -> None:
     normalized_df = st.session_state.get('normalized_df')
     if normalized_df is not None:
         if st.button("Next: Quality Check, Visualization & Analysis →"):
-            _reset_qc_state()
-            _reset_analysis_state()
-            st.session_state.module = MODULE_QC_ANALYSIS
+            StreamlitAdapter.go_to_quality_check()
             st.rerun()
 
     if st.button("← Back to Home", key="back_home_module1"):
-        st.session_state.page = PAGE_LANDING
-        StreamlitAdapter.reset_data_state()
+        StreamlitAdapter.back_to_home()
         st.rerun()
 
 
@@ -396,9 +381,7 @@ def _display_module2_and_3(
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("← Back to Data Processing", key="back_processing_module2"):
-            _reset_qc_state()
-            _reset_analysis_state()
-            st.session_state.module = MODULE_DATA_PROCESSING
+            StreamlitAdapter.back_to_data_processing()
             st.rerun()
     with col2:
         # Hop to AI Studio without resetting the data, so the AI Studio's
@@ -409,8 +392,7 @@ def _display_module2_and_3(
             st.rerun()
     with col3:
         if st.button("← Back to Home", key="back_home_module2"):
-            st.session_state.page = PAGE_LANDING
-            StreamlitAdapter.reset_data_state()
+            StreamlitAdapter.back_to_home()
             st.rerun()
 
 

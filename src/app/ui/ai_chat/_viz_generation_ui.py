@@ -70,7 +70,7 @@ def _render_messages(session) -> None:
         fig_key = f"chat_viz_fig_{i}"
         fig = st.session_state.get('chat_viz_figures', {}).get(fig_key)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
         # Show generated code on every assistant turn. Use a different
         # label when the figure is missing/empty so it doubles as the

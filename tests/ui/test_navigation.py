@@ -5,7 +5,7 @@ Tests cover:
 1. "Next: Quality Check" button — sets module, resets QC state
 2. "Back to Data Processing" button — resets module, resets QC state
 3. "Back to Home" from Module 2 — resets page and data state
-4. _reset_qc_state() — clears all 6 QC session state keys
+4. QC reset — Next / Back clear the QC session state (adapter navigation)
 5. State preservation — normalized_df survives round-trip navigation
 6. Edge cases — no normalized_df hides Next button, Module 2 error gate
 

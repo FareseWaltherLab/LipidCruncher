@@ -72,7 +72,7 @@ def _display_fach_heatmaps(
             )
             return
 
-        st.plotly_chart(result.figure, use_container_width=True)
+        st.plotly_chart(result.figure, width='stretch')
         st.session_state.analysis_fach_fig = result.figure
         st.session_state.analysis_all_plots['fach'] = result.figure
 

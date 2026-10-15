@@ -54,7 +54,7 @@ def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
             stat_config=stat_config, scale=scale_value,
         )
 
-        st.plotly_chart(result.figure, use_container_width=True)
+        st.plotly_chart(result.figure, width='stretch')
         st.session_state.analysis_bar_chart_fig = result.figure
         st.session_state.analysis_all_plots['bar_chart'] = result.figure
 

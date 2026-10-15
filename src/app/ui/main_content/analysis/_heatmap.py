@@ -149,7 +149,9 @@ def _display_lipidomic_heatmap(
         # container-width stretching would undo. Clustered and Regular keep
         # their original stretched layout.
         square_celled = heatmap_type_value in ('class_grouped', 'class_aggregated')
-        st.plotly_chart(result.figure, use_container_width=not square_celled)
+        st.plotly_chart(
+            result.figure, width='content' if square_celled else 'stretch',
+        )
 
         if heatmap_type_value == 'class_grouped' and species_total > page_size:
             start, end = LipidomicHeatmapPlotterService.page_bounds(
