@@ -122,6 +122,8 @@ def render_lc_questions_chat() -> None:
         # their answers are cached and reused across sessions — instant on
         # repeat, and a fallback if the API is unavailable. Free-typed
         # questions always go live (they may depend on conversation context).
+        # An answer is only cached when the example opened the conversation:
+        # earlier turns can steer it, and the cache is served to every user.
         is_example = user_input in _EXAMPLE_PROMPTS
         cached_answer = (
             StreamlitAdapter.get_cached_lc_answer(user_input)
@@ -171,7 +173,7 @@ def render_lc_questions_chat() -> None:
                         "Please try rephrasing your question."
                     )
                     st.markdown(safe_markdown(full_text))
-                elif is_example:
+                elif is_example and not session.messages:
                     # Cache the canonical answer for instant reuse / fallback.
                     StreamlitAdapter.set_cached_lc_answer(user_input, full_text)
 
