@@ -68,14 +68,14 @@ class TestToolLoopIntegration:
         def track_tool_call(name, input_dict):
             tool_calls_made.append(name)
 
-        response = AIClientService.execute_tool_loop(
+        response = "".join(AIClientService.stream_tool_loop(
             messages=messages,
             system_prompt="You are a helpful assistant with access to the LipidCruncher codebase. Use your tools to answer questions accurately.",
             config=TEST_CONFIG,
             tools=TOOL_DEFINITIONS,
             tool_executor=execute_tool,
             on_tool_call=track_tool_call,
-        )
+        ))
 
         # The AI should have used at least one tool
         assert len(tool_calls_made) > 0
@@ -93,14 +93,14 @@ class TestToolLoopIntegration:
         def track_tool_call(name, input_dict):
             tool_calls_made.append(name)
 
-        response = AIClientService.execute_tool_loop(
+        response = "".join(AIClientService.stream_tool_loop(
             messages=messages,
             system_prompt="You are a helpful assistant. Use your tools to look up information.",
             config=TEST_CONFIG,
             tools=TOOL_DEFINITIONS,
             tool_executor=execute_tool,
             on_tool_call=track_tool_call,
-        )
+        ))
 
         assert "read_documentation" in tool_calls_made
         assert len(response) > 50
@@ -116,14 +116,14 @@ class TestToolLoopIntegration:
         def track_tool_call(name, input_dict):
             tool_calls_made.append(name)
 
-        response = AIClientService.execute_tool_loop(
+        response = "".join(AIClientService.stream_tool_loop(
             messages=messages,
             system_prompt="You are a helpful lipidomics assistant.",
             config=TEST_CONFIG,
             tools=TOOL_DEFINITIONS,
             tool_executor=execute_tool,
             on_tool_call=track_tool_call,
-        )
+        ))
 
         # Should respond without needing tools
         assert len(tool_calls_made) == 0
@@ -133,6 +133,15 @@ class TestToolLoopIntegration:
 # ---------------------------------------------------------------------------
 # Data transformer integration
 # ---------------------------------------------------------------------------
+
+def _transformation_code(**kwargs):
+    """Stream a transform turn's code generation; (explanation, code)."""
+    holder = {"full": ""}
+    list(DataTransformerService.stream_transformation_code(
+        holder=holder, **kwargs,
+    ))
+    return AIClientService.extract_code_block(holder["full"])
+
 
 class TestDataTransformerIntegration:
     """Test DataTransformerService with real API calls and tools."""
@@ -146,7 +155,7 @@ class TestDataTransformerIntegration:
         def track_tool_call(name, input_dict):
             tool_calls_made.append(name)
 
-        explanation, code = DataTransformerService.generate_transformation_code(
+        explanation, code = _transformation_code(
             source_schema=schema,
             user_message="Transform my data to Generic format. Column 'Lipid' has lipid names, Sample_A/B/C are intensities. Remove Class and Score columns.",
             history=[],
@@ -163,7 +172,7 @@ class TestDataTransformerIntegration:
         """The generated code should execute and produce valid output."""
         schema = SchemaExtractorService.extract_schema(sample_df)
 
-        explanation, code = DataTransformerService.generate_transformation_code(
+        explanation, code = _transformation_code(
             source_schema=schema,
             user_message="Transform my data to Generic format. Column 'Lipid' has lipid names, Sample_A/B/C are intensities. Remove the Class and Score columns.",
             history=[],
@@ -197,13 +206,13 @@ class TestToolExecutionEdgeCases:
         ]
 
         # Should not raise — the error message gets passed back to the AI
-        response = AIClientService.execute_tool_loop(
+        response = "".join(AIClientService.stream_tool_loop(
             messages=messages,
             system_prompt="You are a helpful assistant. Use tools as requested.",
             config=TEST_CONFIG,
             tools=TOOL_DEFINITIONS,
             tool_executor=execute_tool,
-        )
+        ))
 
         # AI should acknowledge the file wasn't found
         assert len(response) > 0
@@ -223,14 +232,14 @@ class TestToolExecutionEdgeCases:
         def track_tool_call(name, input_dict):
             tool_calls_made.append(name)
 
-        response = AIClientService.execute_tool_loop(
+        response = "".join(AIClientService.stream_tool_loop(
             messages=messages,
             system_prompt="You are a helpful assistant. Follow the user's instructions step by step using your tools.",
             config=TEST_CONFIG,
             tools=TOOL_DEFINITIONS,
             tool_executor=execute_tool,
             on_tool_call=track_tool_call,
-        )
+        ))
 
         # Should have made at least 2 tool calls
         assert len(tool_calls_made) >= 2

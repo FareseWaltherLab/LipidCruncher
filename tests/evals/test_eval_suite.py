@@ -20,6 +20,7 @@ import pytest
 from app.models.experiment import ExperimentConfig
 from app.workflows.ai_chat import AIChatWorkflow
 
+from tests.ai_turns import finish
 from tests.evals import cases as C
 from tests.evals import reference_analysis as ref
 from tests.evals.scorers import score_case
@@ -61,12 +62,12 @@ def run_case(case: C.EvalCase) -> dict:
     try:
         if case.tab == "visualization":
             session = AIChatWorkflow.start_viz_session(df, experiment)
-            result = AIChatWorkflow.handle_viz_message(
+            result = finish(AIChatWorkflow.stream_viz_message(
                 user_message=case.question,
                 session=session,
                 analysis_df=df,
                 experiment=experiment,
-            )
+            ))
             outcome["answer"] = result.assistant_message
             last = result.session.messages[-1]
             outcome["code"] = last.code or ""
@@ -76,12 +77,12 @@ def run_case(case: C.EvalCase) -> dict:
                     outcome["error"] = result.sandbox_result.error_message
         else:
             session = AIChatWorkflow.start_data_questions_session(df)
-            result = AIChatWorkflow.handle_data_questions_message(
+            result = finish(AIChatWorkflow.stream_data_questions_message(
                 user_message=case.question,
                 session=session,
                 source_df=df,
                 experiment=experiment,
-            )
+            ))
             outcome["answer"] = result.assistant_message
             outcome["code"] = result.code or ""
             outcome["result_df"] = result.result_df

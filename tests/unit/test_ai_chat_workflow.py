@@ -10,6 +10,7 @@ import pytest
 
 from app.models.chat import ChatMode
 from app.workflows.ai_chat import AIChatWorkflow, TransformStepResult
+from tests.ai_turns import canned_stream, finish
 
 
 # ---------------------------------------------------------------------------
@@ -74,14 +75,14 @@ class TestStartTransformSession:
 
 
 # ---------------------------------------------------------------------------
-# Handle Transform Message — with mocked AI
+# Transform turn — with mocked AI
 # ---------------------------------------------------------------------------
 
-class TestHandleTransformMessage:
+class TestTransformTurn:
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_successful_transformation(self, mock_send, source_df, transform_session):
-        mock_send.return_value = (
+        mock_send.side_effect = canned_stream(
             "I'll rename the columns to match the Generic format.\n\n"
             "```python\n"
             "result_df = pd.DataFrame()\n"
@@ -92,11 +93,11 @@ class TestHandleTransformMessage:
             "```"
         )
 
-        result = AIChatWorkflow.handle_transform_message(
+        result = finish(AIChatWorkflow.stream_transform_message(
             user_message="Transform my data",
             session=transform_session,
             source_df=source_df,
-        )
+        ))
 
         assert isinstance(result, TransformStepResult)
         assert result.transformation is not None
@@ -105,63 +106,63 @@ class TestHandleTransformMessage:
         assert "LipidMolec" in result.transformation.result_df.columns
         assert len(result.session.messages) == 2  # user + assistant
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_ai_asks_question(self, mock_send, source_df, transform_session):
-        mock_send.return_value = MOCK_QUESTION_RESPONSE
+        mock_send.side_effect = canned_stream(MOCK_QUESTION_RESPONSE)
 
-        result = AIChatWorkflow.handle_transform_message(
+        result = finish(AIChatWorkflow.stream_transform_message(
             user_message="Please transform my data",
             session=transform_session,
             source_df=source_df,
-        )
+        ))
 
         assert result.transformation is None
         assert "confirm" in result.assistant_message.lower()
         assert len(result.session.messages) == 2
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_failed_transformation_reports_errors(self, mock_send, source_df, transform_session):
-        mock_send.return_value = (
+        mock_send.side_effect = canned_stream(
             "Here's the transformation.\n\n"
             "```python\n"
             "result_df = pd.DataFrame({'wrong': [1]})\n"
             "```"
         )
 
-        result = AIChatWorkflow.handle_transform_message(
+        result = finish(AIChatWorkflow.stream_transform_message(
             user_message="Transform it",
             session=transform_session,
             source_df=source_df,
-        )
+        ))
 
         assert result.transformation is not None
         assert result.transformation.success is False
         assert len(result.transformation.validation_errors) > 0
         assert "issues" in result.assistant_message.lower()
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_session_accumulates_messages(self, mock_send, source_df, transform_session):
-        mock_send.return_value = "Got it."
+        mock_send.side_effect = canned_stream("Got it.")
 
-        result1 = AIChatWorkflow.handle_transform_message(
+        result1 = finish(AIChatWorkflow.stream_transform_message(
             "First message", transform_session, source_df
-        )
+        ))
         assert len(result1.session.messages) == 2
 
-        mock_send.return_value = "Sure."
-        result2 = AIChatWorkflow.handle_transform_message(
+        mock_send.side_effect = canned_stream("Sure.")
+        result2 = finish(AIChatWorkflow.stream_transform_message(
             "Second message", result1.session, source_df
-        )
+        ))
         assert len(result2.session.messages) == 4  # 2 from first turn + 2 from second
 
-    @patch("app.services.ai_chat.data_transformer.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_code_included_in_assistant_message(self, mock_send, source_df, transform_session):
         code = "result_df = df.rename(columns={'lipid_name': 'LipidMolec'})"
-        mock_send.return_value = f"Renaming columns.\n\n```python\n{code}\n```"
+        mock_send.side_effect = canned_stream(f"Renaming columns.\n\n```python\n{code}\n```")
 
-        result = AIChatWorkflow.handle_transform_message(
+        result = finish(AIChatWorkflow.stream_transform_message(
             "Transform", transform_session, source_df
-        )
+        ))
 
         assistant_msg = result.session.messages[-1]
         assert assistant_msg.code == code

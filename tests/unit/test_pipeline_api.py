@@ -11,6 +11,7 @@ from app.models.experiment import ExperimentConfig
 from app.services.ai_chat.sandbox import ANALYSIS_MODULES
 from app.workflows.pipeline_api import PipelineAPI
 
+from tests.ai_turns import canned_stream, finish
 from tests.evals import reference_analysis as ref
 
 
@@ -289,23 +290,18 @@ class TestExperimentContextReachesTheModel:
         from app.workflows.ai_chat import AIChatWorkflow
         from app.services.ai_chat import ai_client
 
-        captured = {}
-
-        def fake_tool_loop(messages, **kwargs):
-            captured["messages"] = messages
-            return "ok"
-
+        stream = canned_stream("ok")
         monkeypatch.setattr(
-            ai_client.AIClientService, "execute_tool_loop", fake_tool_loop
+            ai_client.AIClientService, "stream_tool_loop", stream
         )
         session = AIChatWorkflow.start_data_questions_session(df)
-        AIChatWorkflow.handle_data_questions_message(
+        finish(AIChatWorkflow.stream_data_questions_message(
             user_message="top 10 most significant lipids WT vs KO",
             session=session,
             source_df=df,
             experiment=experiment,
-        )
-        sent = captured["messages"][-1]["content"]
+        ))
+        sent = stream.calls[-1]["messages"][-1]["content"]
         assert "<experiment>" in sent
         assert "WT" in sent and "KO" in sent
 
@@ -337,14 +333,14 @@ class TestResultPresentation:
             "```"
         )
         monkeypatch.setattr(
-            ai_client.AIClientService, "execute_tool_loop",
-            lambda *a, **k: response,
+            ai_client.AIClientService, "stream_tool_loop",
+            canned_stream(response),
         )
         session = AIChatWorkflow.start_data_questions_session(df)
-        result = AIChatWorkflow.handle_data_questions_message(
+        result = finish(AIChatWorkflow.stream_data_questions_message(
             user_message="top lipids", session=session, source_df=df,
             experiment=experiment,
-        )
+        ))
         assert "```" in result.assistant_message
         # the table body must sit inside the fence
         body = result.assistant_message.split("```")[1]

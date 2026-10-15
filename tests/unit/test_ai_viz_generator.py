@@ -14,6 +14,7 @@ from app.models.chat import ChatMode
 from app.models.experiment import ExperimentConfig
 from app.services.ai_chat.viz_generator import VizGeneratorService, _build_experiment_context
 from app.workflows.ai_chat import AIChatWorkflow, VizStepResult
+from tests.ai_turns import canned_stream, finish
 
 
 # ---------------------------------------------------------------------------
@@ -156,29 +157,28 @@ class TestStartVizSession:
 
 
 # ---------------------------------------------------------------------------
-# Workflow — Handle Viz Message (mocked AI)
+# Workflow — Viz turn (mocked AI)
 # ---------------------------------------------------------------------------
 
-class TestHandleVizMessage:
-    """Tests mock execute_tool_loop which returns the full response text
-    (including code fences). extract_code_block then splits it into
-    explanation + code."""
+class TestVizTurn:
+    """Tests stream a canned full response (including code fences) from
+    stream_tool_loop; finalize() then splits it into explanation + code."""
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_successful_viz(self, mock_loop, analysis_df, experiment, viz_session):
-        mock_loop.return_value = (
+        mock_loop.side_effect = canned_stream(
             "Here's a bar chart of intensities.\n\n"
             "```python\n"
             "fig = px.bar(df, x='LipidMolec', y='intensity[s1]', title='Intensities')\n"
             "```"
         )
 
-        result = AIChatWorkflow.handle_viz_message(
+        result = finish(AIChatWorkflow.stream_viz_message(
             user_message="Show a bar chart of intensities",
             session=viz_session,
             analysis_df=analysis_df,
             experiment=experiment,
-        )
+        ))
 
         assert isinstance(result, VizStepResult)
         assert result.sandbox_result is not None
@@ -186,71 +186,71 @@ class TestHandleVizMessage:
         assert result.sandbox_result.figure is not None
         assert len(result.session.messages) == 2
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_ai_asks_clarification(self, mock_loop, analysis_df, experiment, viz_session):
-        mock_loop.return_value = (
+        mock_loop.side_effect = canned_stream(
             "Could you clarify which samples you'd like to compare?"
         )
 
-        result = AIChatWorkflow.handle_viz_message(
+        result = finish(AIChatWorkflow.stream_viz_message(
             "Show me a comparison",
             viz_session,
             analysis_df,
             experiment,
-        )
+        ))
 
         assert result.sandbox_result is None
         assert "clarify" in result.assistant_message.lower()
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_code_error_reported(self, mock_loop, analysis_df, experiment, viz_session):
-        mock_loop.return_value = (
+        mock_loop.side_effect = canned_stream(
             "Here's the chart.\n\n"
             "```python\n"
             "fig = px.bar(df, x='nonexistent', y='also_nonexistent')\n"
             "```"
         )
 
-        result = AIChatWorkflow.handle_viz_message(
+        result = finish(AIChatWorkflow.stream_viz_message(
             "Make a chart",
             viz_session,
             analysis_df,
             experiment,
-        )
+        ))
 
         assert result.sandbox_result is not None
         assert result.sandbox_result.success is False
         assert "error" in result.assistant_message.lower()
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_code_without_fig_reported(self, mock_loop, analysis_df, experiment, viz_session):
-        mock_loop.return_value = (
+        mock_loop.side_effect = canned_stream(
             "Computing mean.\n\n"
             "```python\n"
             "x = df['intensity[s1]'].mean()\n"
             "```"
         )
 
-        result = AIChatWorkflow.handle_viz_message(
+        result = finish(AIChatWorkflow.stream_viz_message(
             "Calculate mean",
             viz_session,
             analysis_df,
             experiment,
-        )
+        ))
 
         assert result.sandbox_result is not None
         assert result.sandbox_result.success is True
         assert result.sandbox_result.figure is None
         assert "didn't produce a figure" in result.assistant_message
 
-    @patch("app.services.ai_chat.viz_generator.AIClientService.execute_tool_loop")
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_session_accumulates(self, mock_loop, analysis_df, experiment, viz_session):
-        mock_loop.return_value = "Got it."
-        r1 = AIChatWorkflow.handle_viz_message("First", viz_session, analysis_df, experiment)
+        mock_loop.side_effect = canned_stream("Got it.")
+        r1 = finish(AIChatWorkflow.stream_viz_message("First", viz_session, analysis_df, experiment))
         assert len(r1.session.messages) == 2
 
-        mock_loop.return_value = "Sure."
-        r2 = AIChatWorkflow.handle_viz_message("Second", r1.session, analysis_df, experiment)
+        mock_loop.side_effect = canned_stream("Sure.")
+        r2 = finish(AIChatWorkflow.stream_viz_message("Second", r1.session, analysis_df, experiment))
         assert len(r2.session.messages) == 4
 
 

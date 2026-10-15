@@ -7,6 +7,7 @@ users to the correct tab.
 """
 import pytest
 
+from app.models.chat import AIConfig
 from app.models.experiment import ExperimentConfig
 from app.services.ai_chat import data_transformer as dt
 from app.services.ai_chat import viz_generator as viz
@@ -18,6 +19,7 @@ from app.services.ai_chat.prompt_templates import (
     lipidcruncher_questions_system_prompt,
 )
 from app.services.ai_chat.viz_generator import _viz_system_prompt
+from tests.ai_turns import canned_stream
 
 
 class TestPromptScopeEnforcement:
@@ -129,47 +131,35 @@ class TestDataContextStructure:
         assert "SRC_MARKER" in ctx and "TGT_MARKER" in ctx
 
     def test_transform_message_puts_schema_before_question(self, monkeypatch):
-        captured = {}
-
-        def fake_loop(messages, system_prompt, config, tools,
-                      tool_executor, on_tool_call=None):
-            captured["messages"] = messages
-            return "ok\n```python\nresult_df = df\n```"
-
+        stream = canned_stream("ok\n```python\nresult_df = df\n```")
         monkeypatch.setattr(
-            AIClientService, "execute_tool_loop", staticmethod(fake_loop)
+            AIClientService, "stream_tool_loop", staticmethod(stream)
         )
-        dt.DataTransformerService.generate_transformation_code(
+        list(dt.DataTransformerService.stream_transformation_code(
             source_schema="SRC_SCHEMA_MARKER",
             user_message="USER_QUESTION_MARKER",
-            history=[],
-        )
-        content = captured["messages"][-1]["content"]
+            history=[], config=AIConfig(), holder={"full": ""},
+        ))
+        content = stream.calls[-1]["messages"][-1]["content"]
         assert "<source_data_schema>" in content
         assert content.index("SRC_SCHEMA_MARKER") < content.index("USER_QUESTION_MARKER")
 
     def test_viz_message_puts_schema_before_question(self, monkeypatch):
-        captured = {}
-
-        def fake_loop(messages, system_prompt, config, tools,
-                      tool_executor, on_tool_call=None):
-            captured["messages"] = messages
-            return "ok\n```python\nfig = None\n```"
-
+        stream = canned_stream("ok\n```python\nfig = None\n```")
         monkeypatch.setattr(
-            AIClientService, "execute_tool_loop", staticmethod(fake_loop)
+            AIClientService, "stream_tool_loop", staticmethod(stream)
         )
         experiment = ExperimentConfig(
             conditions_list=["Control", "Treatment"],
             number_of_samples_list=[2, 2],
         )
-        viz.VizGeneratorService.generate_viz_code(
+        list(viz.VizGeneratorService.stream_viz_code(
             user_request="USER_REQUEST_MARKER",
             schema_context="SCHEMA_MARKER",
             experiment=experiment,
-            history=[],
-        )
-        content = captured["messages"][-1]["content"]
+            history=[], config=AIConfig(), holder={"full": ""},
+        ))
+        content = stream.calls[-1]["messages"][-1]["content"]
         assert "<dataframe_schema>" in content
         assert content.index("SCHEMA_MARKER") < content.index("USER_REQUEST_MARKER")
 
