@@ -786,8 +786,9 @@ def _display_studio_sidebar() -> None:
 
     # Read from the original (un-renamed) df so the sidebar always shows
     # the user's actual column names. The apply step below renames into
-    # `chat_studio_df` for Custom Viz; reading the original here also makes
-    # re-applies idempotent (we never rename already-renamed columns).
+    # `chat_studio_df` for the experiment-aware tabs; reading the original
+    # here also makes re-applies idempotent (we never rename
+    # already-renamed columns).
     studio_df = st.session_state.get('chat_studio_df_original')
     if studio_df is None:
         return
@@ -872,19 +873,21 @@ def _display_studio_sidebar() -> None:
     st.session_state.chat_studio_bqc_label = bqc_label
     # Persist the sample-column names so the sandbox can pre-coerce
     # them to numeric before exposing `df` to AI code. Two lists — one
-    # for the original df (used by Transform / Data Questions) and one
-    # for the renamed df (used by Custom Viz). The renamed names are
+    # for the original df (used by Transform) and one for the renamed df
+    # (used by Data Questions and Custom Viz). The renamed names are
     # always `{output_prefix}[s1..sN]` derived from the experiment.
     st.session_state.chat_studio_sample_columns_original = list(sample_columns)
     st.session_state.chat_studio_sample_columns_renamed = [
         f'{output_prefix}[{s}]' for s in experiment.full_samples_list
     ]
-    # Only Custom Viz reads the renamed df; Data Questions and Transform
-    # read the original (which doesn't change on apply), so their sessions
-    # don't need to be invalidated here. They are still cleared on a fresh
-    # upload via _clear_data_sessions().
+    # Data Questions and Custom Viz read the renamed df, whose columns
+    # change on apply, so their sessions start over. Transform reads the
+    # original (which doesn't change on apply); it is still cleared on a
+    # fresh upload via _clear_data_sessions().
     st.session_state.chat_viz_session = None
     st.session_state.chat_viz_figures = {}
+    st.session_state.chat_data_questions_session = None
+    st.session_state.chat_questions_result_df = None
     st.session_state.studio_applied_snapshot = snapshot
     st.rerun()
 
@@ -967,9 +970,10 @@ def display_ai_studio_page() -> None:
     # sidebar, mirroring the main app's layout.
     _display_studio_sidebar()
     # `studio_df_original` keeps the user's column names — used by the
-    # data preview, Data Questions, and Transform tabs.
-    # `studio_df_processed` is the renamed-to-`s1..sN` view used by Custom
-    # Viz, which equals the original until the user confirms an experiment.
+    # Transform tab. `studio_df_processed` is the renamed-to-`s1..sN` view
+    # that matches `chat_studio_experiment`, used by the data preview, Data
+    # Questions and Custom Viz; it equals the original until the user
+    # confirms an experiment.
     studio_df_original = st.session_state.get("chat_studio_df_original")
     studio_df_processed = st.session_state.get("chat_studio_df")
 
@@ -1104,7 +1108,10 @@ def display_ai_studio_page() -> None:
             elif not is_confirmed:
                 st.info(not_confirmed_msg)
             else:
-                display_data_questions_chat(studio_df_original)
+                # The renamed frame, not the original: the experiment (and
+                # so `lc` and the prompt's sample lists) uses the renamed
+                # s1..sN, which after a regroup are different columns.
+                display_data_questions_chat(studio_df_processed)
 
         with tab_transform:
             pipeline_source_for_transform = st.session_state.get(

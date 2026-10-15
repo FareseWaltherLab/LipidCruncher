@@ -514,3 +514,73 @@ class TestQCOptionHiddenWithoutQCData:
         ).run()
         options = at.sidebar.radio(key='ai_studio_pipeline_choice').options
         assert not any(o.startswith('QC-filtered') for o in options)
+
+
+def data_questions_regroup_script():
+    """Full AI Studio page over six samples whose values identify them, with
+    the Data Questions panel replaced by a recorder that prints what it got.
+    """
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('chat_studio_df_original') is None:
+        df = pd.DataFrame({'LipidMolec': ['PC 34:1']})
+        for i in range(1, 7):
+            df[f'intensity[s{i}]'] = [float(i)]  # value = original sample no.
+        st.session_state.chat_studio_df = df
+        st.session_state.chat_studio_df_original = df
+        st.session_state.chat_studio_file_id = '_pipeline_import_test'
+        st.session_state.chat_data_questions_session = 'stale session'
+
+    import app.ui.ai_studio_page as page
+
+    def _record(source_df):
+        experiment = st.session_state.chat_studio_experiment
+        first = experiment.individual_samples_list[0]
+        values = [source_df[f'intensity[{s}]'].iloc[0] for s in first]
+        st.text(f"dq_first_condition:{values}")
+        st.text(f"dq_session:{st.session_state.chat_data_questions_session}")
+
+    page.display_data_questions_chat = _record
+    page.display_ai_studio_page()
+
+
+def _marker_value(at, prefix):
+    for t in at.text:
+        if t.value.startswith(prefix):
+            return t.value[len(prefix):]
+    raise AssertionError(f"{prefix} marker not rendered")
+
+
+class TestDataQuestionsMatchesTheExperiment:
+    """Regression (Q3): Data Questions got the original, un-renamed frame
+    with the experiment built on the renamed s1..sN. After a regroup the
+    prompt's sample lists and every lc.* call pointed at other samples'
+    columns, so group comparisons were silently wrong."""
+
+    def test_regrouped_condition_reads_its_own_samples(self):
+        at = AppTest.from_function(
+            data_questions_regroup_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='studio_grouping_radio').set_value('No').run()
+        at.sidebar.multiselect(key='studio_select_0').set_value(
+            ['s4', 's5', 's6'],
+        ).run()
+        at.sidebar.multiselect(key='studio_select_1').set_value(
+            ['s1', 's2', 's3'],
+        ).run()
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+
+        # Condition 1 holds the original s4..s6, whatever they are called now.
+        assert _marker_value(at, 'dq_first_condition:') == '[4.0, 5.0, 6.0]'
+
+    def test_applying_an_experiment_restarts_the_data_questions_chat(self):
+        at = AppTest.from_function(
+            data_questions_regroup_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+
+        # The old conversation referred to the old column names.
+        assert _marker_value(at, 'dq_session:') == 'None'

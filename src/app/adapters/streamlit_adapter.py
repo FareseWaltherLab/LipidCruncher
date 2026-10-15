@@ -1325,7 +1325,7 @@ class StreamlitAdapter:
             session=session,
             source_df=source_df,
             numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_original'
+                'chat_studio_sample_columns_renamed'
             ),
             experiment=st.session_state.get('chat_studio_experiment'),
         )
@@ -1392,7 +1392,7 @@ class StreamlitAdapter:
             session=session,
             source_df=source_df,
             numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_original'
+                'chat_studio_sample_columns_renamed'
             ),
             experiment=st.session_state.get('chat_studio_experiment'),
         )
