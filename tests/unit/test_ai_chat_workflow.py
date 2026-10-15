@@ -288,3 +288,42 @@ class TestVizKeepsPrintedOutput:
         )
         assert "```\nrows plotted: 24\n```" in result.assistant_message
         assert "rows plotted: 24" in result.session.messages[-1].content
+
+
+class TestRegressions:
+    """AQ11: fixes that had no test."""
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_printing_without_a_result_is_an_info_turn(
+        self, mock_loop, source_df, transform_session,
+    ):
+        """8af20ad: a turn that prints what it found (to plan a transform)
+        and sets no result_df is a successful info-only turn, its output
+        shown as the answer, not a failed transformation."""
+        mock_loop.side_effect = canned_stream(
+            "Listing the classes.\n\n"
+            "```python\nprint(sorted(df['lipid_class'].unique()))\n```"
+        )
+        result = finish(AIChatWorkflow.stream_transform_message(
+            "Which classes are there?", transform_session, source_df,
+        ))
+        t = result.transformation
+        assert t.success and t.is_info_only
+        assert t.result_df is None
+        assert "['PC', 'PE', 'SM']" in result.assistant_message
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_bare_code_block_with_a_table_is_not_an_empty_answer(
+        self, mock_loop, source_df,
+    ):
+        """d9f3ac6: a reply that is only a code block setting result_df got
+        the "I wasn't able to generate a response" fallback."""
+        mock_loop.side_effect = canned_stream(
+            "```python\nresult_df = df.head(2)\n```"
+        )
+        session = AIChatWorkflow.start_data_questions_session(source_df)
+        result = finish(AIChatWorkflow.stream_data_questions_message(
+            "first two rows", session, source_df,
+        ))
+        assert result.result_df is not None and len(result.result_df) == 2
+        assert result.assistant_message == "Here's the result:"

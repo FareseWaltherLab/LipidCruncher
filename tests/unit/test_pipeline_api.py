@@ -557,3 +557,21 @@ class TestDuplicateLipidsAreRefused:
 
     def test_listing_classes_still_works(self, lc_dupes):
         assert lc_dupes.available_classes()
+
+
+class TestArgumentsAreHonoured:
+    """AQ11: ignoring these arguments broke no test."""
+
+    def test_compare_classes_uses_alpha(self, lc):
+        first = lc.compare_classes().iloc[0]
+        p = first["adj_p_value"]
+        assert 0 < p < 0.5
+        strict = lc.compare_classes(alpha=p / 2).set_index("ClassKey")
+        loose = lc.compare_classes(alpha=min(2 * p, 0.99)).set_index("ClassKey")
+        assert not strict.loc[first["ClassKey"], "significant"]
+        assert loose.loc[first["ClassKey"], "significant"]
+
+    def test_volcano_keeps_only_the_requested_classes(self, lc):
+        data = lc.volcano("WT", "KO", classes=["PC"]).data.volcano_df
+        assert len(data) > 0
+        assert set(data["ClassKey"]) == {"PC"}
