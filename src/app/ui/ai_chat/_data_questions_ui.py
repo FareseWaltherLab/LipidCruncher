@@ -10,6 +10,7 @@ import streamlit as st
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from ._interaction_log import record_turn, render_feedback
 from ._safe_markdown import safe_markdown, safe_stream
+from ._turn_errors import clear_failure, record_failure, render_failure
 
 # Rate limits (mirrored from chat_panel to avoid circular import)
 MAX_MESSAGES = 50
@@ -160,6 +161,7 @@ def render_data_questions_chat(source_df) -> None:
 
                 # Update session state
                 st.session_state.chat_data_questions_session = result.session
+                clear_failure('dq')
                 st.session_state.chat_message_count = (
                     st.session_state.get('chat_message_count', 0) + 1
                 )
@@ -186,8 +188,7 @@ def render_data_questions_chat(source_df) -> None:
                 )
 
             except Exception as e:
-                st.session_state.chat_last_error = str(e)
-                st.session_state.chat_last_failed_input = user_input
+                record_failure('dq', user_input, str(e))
                 record_turn(
                     "data_questions", user_input, "", error=str(e),
                     history=session.messages, df=source_df,
@@ -196,13 +197,4 @@ def render_data_questions_chat(source_df) -> None:
         st.rerun()
 
     # Display persistent error from last attempt, with a one-click retry.
-    last_error = st.session_state.pop('chat_last_error', None)
-    if last_error:
-        st.error(f"An error occurred: {last_error}")
-        failed_input = st.session_state.get('chat_last_failed_input')
-        if failed_input and st.button("Retry", key="chat_retry_dq"):
-            st.session_state.pop('chat_last_failed_input', None)
-            st.session_state.chat_pending_prompt_dq = failed_input
-            st.rerun()
-    else:
-        st.session_state.pop('chat_last_failed_input', None)
+    render_failure('dq', 'chat_pending_prompt_dq')
