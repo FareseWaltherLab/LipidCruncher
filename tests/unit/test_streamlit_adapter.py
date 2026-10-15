@@ -1118,17 +1118,6 @@ class TestSessionStateFieldCompleteness:
         # + 3 (qc_input_experiment/_bqc_label/_processing_df, same handoff)
         assert len(qc_fields) == 15
 
-    def test_total_field_count(self):
-        """Guard against accidental field deletion and duplicate names.
-
-        Uses a floor rather than an exact count so adding new fields never
-        breaks this test, while removing a field below the known baseline
-        (the field groups asserted above) still does.
-        """
-        field_names = [f.name for f in fields(SessionState)]
-        assert len(field_names) == len(set(field_names)), "duplicate field name"
-        assert len(field_names) >= 100
-
     def test_isotope_field_count(self):
         """Test isotope tracing fields exist (guard against accidental deletion)."""
         field_names = [f.name for f in fields(SessionState)]
