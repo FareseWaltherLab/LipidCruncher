@@ -29,8 +29,6 @@ from app.ui.st_helpers import dataset_widget_key
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 
 def _read_tabular(source: Union[str, Path, "io.IOBase"]) -> pd.DataFrame:
     """Read an uploaded CSV/TXT dataset, auto-detecting the delimiter.

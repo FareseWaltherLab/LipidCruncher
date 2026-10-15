@@ -9,7 +9,8 @@ DataFrames.
 Security boundary (the R code is OURS and trusted; the user supplies data, not
 code — so the AST sandbox does not apply here): we (a) validate inputs upstream,
 (b) pass file paths as a JSON config argument — never shell-interpolated — and
-(c) run in an isolated temp directory. No Streamlit imports.
+(c) keep every input and output in a per-run temp directory. No Streamlit
+imports.
 """
 import json
 import os
