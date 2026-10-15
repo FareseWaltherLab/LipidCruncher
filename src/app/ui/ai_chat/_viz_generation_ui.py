@@ -170,9 +170,11 @@ def render_viz_chat(analysis_df, experiment) -> None:
                 st.session_state.chat_viz_session = result.session
                 clear_failure('viz')
 
-                if result.sandbox_result and result.sandbox_result.success:
+                # Count every run, as the other tabs do: failing code costs
+                # an execution too.
+                if result.sandbox_result:
                     StreamlitAdapter.record_ai_execution()
-
+                if result.sandbox_result and result.sandbox_result.success:
                     if result.sandbox_result.figure is not None:
                         # Store figure for replay on rerun
                         fig_index = len(result.session.messages) - 1
