@@ -498,6 +498,14 @@ def _run_in_subprocess(
     return _decode_response(b"".join(chunks))
 
 
+# How many sandbox children may run at once in this app process. Each is a
+# full interpreter with pandas/numpy/plotly loaded plus up to
+# ``max_memory_bytes`` of its own, on a server every user shares; without a
+# cap, simultaneous requests could start enough of them to exhaust it.
+MAX_CONCURRENT_EXECUTIONS = 2
+_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_EXECUTIONS)
+
+
 class _SandboxTimeout(Exception):
     pass
 
@@ -601,6 +609,15 @@ class SandboxService:
         # subprocesses, no inherited secrets, killable).
         start_time = time.monotonic()
 
+        if not _SLOTS.acquire(timeout=config.execution_timeout):
+            return SandboxResult(
+                success=False,
+                error_message=(
+                    "The sandbox is busy with other requests; "
+                    "please try again in a moment."
+                ),
+                execution_time=time.monotonic() - start_time,
+            )
         try:
             response = _run_in_subprocess(
                 code, df, numeric_columns, experiment, config, lc=lc,
@@ -623,6 +640,8 @@ class SandboxService:
                 error_message=f"Runtime error: {type(e).__name__}: {e}",
                 execution_time=time.monotonic() - start_time,
             )
+        finally:
+            _SLOTS.release()
 
         elapsed = time.monotonic() - start_time
 

@@ -368,6 +368,37 @@ class TestOutputIsBounded:
         assert len(res.result_df) == 20
 
 
+class TestConcurrencyIsBounded:
+    """Regression: nothing limited how many sandbox children ran at once,
+    so simultaneous requests could start enough interpreters to exhaust
+    the shared server."""
+
+    @pytest.fixture
+    def one_slot(self, monkeypatch):
+        import threading
+
+        from app.services.ai_chat import sandbox
+
+        slots = threading.BoundedSemaphore(1)
+        monkeypatch.setattr(sandbox, "_SLOTS", slots)
+        return slots
+
+    def test_run_reports_busy_when_no_slot_frees_up(self, df, one_slot):
+        one_slot.acquire()  # another request holds the only slot
+        try:
+            res = run("print('ran')", df, config=SandboxConfig(execution_timeout=1))
+        finally:
+            one_slot.release()
+        assert not res.success
+        assert "busy" in res.error_message
+        assert res.stdout == ""
+
+    def test_slot_is_released_after_success_and_failure(self, df, one_slot):
+        assert run("1/0", df).error_message
+        assert run("print('ran')", df).stdout.strip() == "ran"
+        assert run("print('again')", df).stdout.strip() == "again"
+
+
 class TestDockerImage:
     def test_image_does_not_run_as_root(self):
         from pathlib import Path
