@@ -46,6 +46,20 @@ _AI_STUDIO_BLOCKED_FORMATS: frozenset = frozenset({
 })
 
 
+# Shown above the tabs, not in an expander: what leaves the browser session
+# and what the server keeps (InteractionLoggingService's turn records).
+_DATA_USE_NOTICE = (
+    "**How your data is used.** The AI gets your messages and, in the data "
+    "tabs, your dataset's column names, types and first 3 rows (not the "
+    "file), through Anthropic's API. Each turn is logged on this server to "
+    "review and improve the AI Studio: your question, the AI's answer and "
+    "code, the dataset's shape and column names, a description of any "
+    "figure (not its values), and your 👍/👎 feedback. Answers can quote "
+    "numbers computed from your data, so don't use the AI Studio for data "
+    "you can't share this way."
+)
+
+
 # Method / transparency documentation for the Studio as a whole. Kept next to
 # the "How to use" copy it sits beside in the UI.
 _HOW_AI_WORKS_DOC = """
@@ -981,6 +995,7 @@ def display_ai_studio_page() -> None:
             "Upload your data in the sidebar (left), then use the AI "
             "tabs below to explore, transform, or visualize it."
         )
+        st.info(_DATA_USE_NOTICE)
 
         with st.expander("How to use the AI Studio", expanded=False):
             st.markdown(

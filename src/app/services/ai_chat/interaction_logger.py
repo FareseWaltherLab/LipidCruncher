@@ -122,9 +122,13 @@ class InteractionLoggingService:
         data_format: Optional[str] = None,
         experiment=None,
     ) -> Optional[dict]:
-        """Describe the dataset a turn ran against — shape and column names,
-        never the values. ``experiment`` (an ExperimentConfig) adds the
-        condition → sample-count map when the tab has one."""
+        """Describe the dataset a turn ran against: its shape and column
+        names (which can carry sample names), not the table's values.
+        ``experiment`` (an ExperimentConfig) adds the condition →
+        sample-count map when the tab has one.
+
+        The rest of the turn record is not value-free: the answer, printed
+        output and earlier messages can quote numbers from the data."""
         if df is None:
             return None
         columns = [str(c) for c in df.columns]

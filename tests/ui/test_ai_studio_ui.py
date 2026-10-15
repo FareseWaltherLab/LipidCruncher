@@ -246,6 +246,17 @@ def studio_preview_script():
     display_ai_studio_page()
 
 
+def test_page_states_how_the_data_is_used():
+    """S8: the page never said that turns are logged on the server."""
+    at = AppTest.from_function(
+        studio_preview_script, default_timeout=DEFAULT_TIMEOUT,
+    ).run()
+    notice = [i.value for i in at.info if "How your data is used" in i.value]
+    assert len(notice) == 1
+    assert "logged on this server" in notice[0]
+    assert "first 3 rows" in notice[0]
+
+
 class TestDataPreviewReflectsReorder:
     """The Data Preview shows the processed (reordered + renamed) df."""
 
