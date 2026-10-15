@@ -91,10 +91,42 @@ class TestValidateInputs:
         errors = validate_inputs(measurement, wrong_molecule, element)
         assert any("do not match any molecule" in e for e in errors)
 
-    def test_prefix_matching_handles_underscores_in_molecule_name(self):
-        # "BMP_18:1_18:1_C1" must match molecule "BMP_18:1_18:1" despite underscores.
+    def test_blank_intensities_are_not_non_numeric(self):
+        """IsoCorrectoR accepts a blank cell (it warns), and the page's help
+        tells users to leave missing values blank."""
         measurement, molecule, element = _valid_inputs()
+        measurement = measurement.copy()
+        measurement["sample_a"] = [100, None, 200]
         assert validate_inputs(measurement, molecule, element) == []
+
+    def test_whitespace_around_names_is_ignored(self):
+        measurement, molecule, element = _valid_inputs()
+        measurement = measurement.copy()
+        measurement["Measurements/Samples"] = [
+            " BMP_18:1_18:1_C0", "BMP_18:1_18:1_C1 ", "PC_34:1_C0",
+        ]
+        molecule = molecule.copy()
+        molecule["Molecule"] = ["BMP_18:1_18:1 ", " PC_34:1"]
+        assert validate_inputs(measurement, molecule, element) == []
+
+    def test_unmatched_ids_list_five_and_count_the_rest(self):
+        measurement, molecule, element = _valid_inputs()
+        ids = [f"XX_{i}" for i in range(7)]
+        measurement = pd.DataFrame({"ID": ids, "s1": range(7)})
+        (error,) = validate_inputs(measurement, molecule, element)
+        assert error.startswith("7 measurement row(s) do not match")
+        assert "XX_0, XX_1, XX_2, XX_3, XX_4 (and 2 more)." in error
+        assert "XX_5" not in error
+
+    def test_mode_is_not_checked_while_ids_are_unmatched(self):
+        """The unmatched rows are the problem to fix first; their labels
+        say nothing about the mode."""
+        _, molecule, element = _valid_inputs()
+        measurement = pd.DataFrame({"ID": ["PC_34:1_C0", "XX_1"], "s1": [1, 2]})
+        errors = validate_inputs(measurement, molecule, element,
+                                 ultra_high_res=False)
+        assert len(errors) == 1
+        assert "do not match any molecule" in errors[0]
 
 
 class TestResolutionModeConsistency:
@@ -129,3 +161,27 @@ class TestResolutionModeConsistency:
     def test_mode_check_skipped_when_flag_is_none(self):
         # Default call (no flag) must not perform the mode check.
         assert validate_inputs(*_valid_inputs()) == []
+
+
+class TestResolutionStyleEdgeCases:
+    def test_longest_molecule_name_decides_the_labeling_style(self):
+        """With both "PC" and "PC_34:1", "PC_34:1_C0" belongs to PC_34:1
+        (suffix "C0": UHR), not to PC (suffix "34:1_C0", read as standard)."""
+        _, _, element = _valid_inputs()
+        measurement = pd.DataFrame(
+            {"ID": ["PC_34:1_C0", "PC_34:1_C1"], "s1": [1, 2]})
+        molecule = pd.DataFrame({"Molecule": ["PC", "PC_34:1"]})
+        assert validate_inputs(measurement, molecule, element,
+                               ultra_high_res=True) == []
+        assert validate_inputs(measurement, molecule, element,
+                               ultra_high_res=False) != []
+
+    @pytest.mark.parametrize("uhr", [True, False])
+    def test_mixed_labels_are_left_to_isocorrector(self, uhr):
+        measurement, molecule, element = _valid_inputs()
+        measurement = measurement.copy()
+        measurement["Measurements/Samples"] = [
+            "BMP_18:1_18:1_C0", "BMP_18:1_18:1_1", "PC_34:1_C0",
+        ]
+        assert validate_inputs(measurement, molecule, element,
+                               ultra_high_res=uhr) == []

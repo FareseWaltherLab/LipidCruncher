@@ -99,3 +99,25 @@ class TestSampleDataResetsTheSettings:
         at.button(key="iso_load_sample").click().run()
         at.button(key="iso_run").click().run()
         assert runs[-1] == IsotopeCorrectionConfig(ultra_high_res=True)
+
+
+def page_script_without_r():
+    import app.ui.isotope_tracing_page as page
+    import app.ui.landing_page as lp
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+    lp.PDF2IMAGE_AVAILABLE = False
+    page.display_isotope_tracing_page()
+
+
+def test_without_r_the_page_says_so_and_cannot_run(runs, monkeypatch):
+    import app.ui.isotope_tracing_page as page
+    monkeypatch.setattr(page, "check_isocorrector_available", lambda: False)
+    at = AppTest.from_function(page_script_without_r, default_timeout=30).run()
+    assert not at.exception
+    assert any("R runtime unavailable" in w.value for w in at.warning)
+    at.sidebar.button(key="iso_load_sample").click().run()
+    assert at.sidebar.button(key="iso_run").disabled
+    assert any("Run is disabled: R runtime unavailable." in c.value
+               for c in at.sidebar.caption)
+    assert runs == []
