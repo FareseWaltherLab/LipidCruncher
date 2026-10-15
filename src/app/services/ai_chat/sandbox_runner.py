@@ -77,7 +77,14 @@ def _install_read_guard() -> None:
     sys.addaudithook(_guard)
 
 
-def _harden(cpu_seconds: int) -> None:
+def _mapped_bytes() -> int:
+    """Address space this process maps now (Linux)."""
+    with open("/proc/self/statm") as f:
+        pages = int(f.read().split()[0])
+    return pages * os.sysconf("SC_PAGE_SIZE")
+
+
+def _harden(cpu_seconds: int, memory_bytes: int) -> None:
     """Reduce what this process can do before running untrusted code.
 
     Applied in the child, after the heavy imports are already resolved, so
@@ -112,6 +119,15 @@ def _harden(cpu_seconds: int) -> None:
         # the AST validator cannot see.
         "RLIMIT_NPROC": (0, 0),
     }
+    # --- Bounded memory ---------------------------------------------------
+    # Without it one `np.ones(10**10)` takes down the whole task and every
+    # user's session with it. The cap is what the code may map on top of
+    # what the process maps after its imports, so the base footprint (which
+    # varies with platform and BLAS build) does not eat into it. macOS
+    # cannot lower RLIMIT_AS, so there it is not applied.
+    if sys.platform.startswith("linux"):
+        cap = _mapped_bytes() + memory_bytes
+        limits["RLIMIT_AS"] = (cap, cap)
     for name, value in limits.items():
         which = getattr(resource, name)
         resource.setrlimit(which, value)
@@ -170,7 +186,10 @@ def main() -> int:
     }
 
     try:
-        _harden(cpu_seconds=int(request.get("cpu_seconds", 10)))
+        _harden(
+            cpu_seconds=int(request.get("cpu_seconds", 10)),
+            memory_bytes=int(request.get("memory_bytes", 1024 ** 3)),
+        )
     except Exception as e:  # noqa: BLE001 - never run the code unconfined
         response["error"] = (
             f"The sandbox could not apply its safety limits ({e}), "

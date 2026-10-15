@@ -11,6 +11,7 @@ They are deliberately written against the attack, not the implementation, so
 they keep their meaning if the hardening is rewritten.
 """
 import os
+import sys
 
 import pandas as pd
 import pytest
@@ -232,7 +233,6 @@ class TestParentNeverUnpicklesChildOutput:
 def _run_child_script(script):
     """Run ``script`` in a fresh interpreter, so limits never hit pytest."""
     import subprocess
-    import sys
 
     from app.services.ai_chat.sandbox import _child_env
 
@@ -249,7 +249,7 @@ import os, resource
 {patch}
 from app.services.ai_chat import sandbox_runner
 try:
-    sandbox_runner._harden(5)
+    sandbox_runner._harden(5, 1024 ** 3)
 except Exception as e:
     print('refused:', e)
 else:
@@ -305,6 +305,36 @@ class TestHardeningFailsClosed:
         assert response["ok"] is False
         assert response["stdout"] == ""
         assert "was not run" in response["error"]
+
+
+class TestMemoryIsBounded:
+    """Regression: no memory limit was set, so one large allocation in
+    generated code could exhaust the shared server."""
+
+    @pytest.mark.skipif(
+        not sys.platform.startswith("linux"),
+        reason="macOS cannot lower RLIMIT_AS; the limit applies on Linux only",
+    )
+    def test_allocation_beyond_the_cap_fails(self, df):
+        # np.zeros maps without touching pages, so the old code "succeeded"
+        # here without actually using 3 GiB.
+        res = run(
+            "a = np.zeros(3 * 2**30 // 8)\nprint(a.nbytes)", df,
+            config=SandboxConfig(max_memory_bytes=2**30),
+        )
+        assert not res.success
+        assert "MemoryError" in res.error_message
+
+    @pytest.mark.skipif(
+        not sys.platform.startswith("linux"),
+        reason="macOS cannot lower RLIMIT_AS; the limit applies on Linux only",
+    )
+    def test_allocation_under_the_cap_works(self, df):
+        res = run(
+            "a = np.zeros(2**28 // 8)\nprint(a.nbytes)", df,
+            config=SandboxConfig(max_memory_bytes=2**30),
+        )
+        assert res.success, res.error_message
 
 
 class TestDockerImage:

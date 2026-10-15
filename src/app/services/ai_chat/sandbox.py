@@ -418,6 +418,7 @@ def _run_in_subprocess(
         "lc": lc,
         "max_output_rows": config.max_output_rows,
         "cpu_seconds": max(1, config.execution_timeout),
+        "memory_bytes": config.max_memory_bytes,
     }, protocol=pickle.HIGHEST_PROTOCOL)
 
     proc = subprocess.Popen(

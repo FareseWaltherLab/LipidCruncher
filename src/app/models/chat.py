@@ -123,12 +123,19 @@ class SandboxConfig(BaseModel):
         execution_timeout: Maximum seconds for code execution.
         max_output_rows: Maximum rows in a result DataFrame.
         max_figure_size_bytes: Maximum figure size in bytes (10 MB default).
+        max_memory_bytes: Memory the executed code may allocate on top of
+            what the sandbox process already uses (Linux only; macOS
+            cannot lower the address-space limit).
     """
     model_config = {"frozen": True}
 
     execution_timeout: int = Field(default=10, ge=1, le=60, description="Execution timeout in seconds")
     max_output_rows: int = Field(default=50000, ge=1, description="Max rows in result DataFrame")
     max_figure_size_bytes: int = Field(default=10 * 1024 * 1024, ge=1, description="Max figure size in bytes")
+    max_memory_bytes: int = Field(default=1024 ** 3, ge=1, description="Max memory the code may allocate")
 
     def __hash__(self) -> int:
-        return hash((self.execution_timeout, self.max_output_rows, self.max_figure_size_bytes))
+        return hash((
+            self.execution_timeout, self.max_output_rows,
+            self.max_figure_size_bytes, self.max_memory_bytes,
+        ))
