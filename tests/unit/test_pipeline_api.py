@@ -513,3 +513,33 @@ class TestMainAppDefaultsAndDisclosure:
         lc.class_summary()
         lc.pie_charts()
         assert lc.methods_used == []
+
+
+class TestDuplicateLipidsAreRefused:
+    """Regression (AQ3): results were keyed by lipid name, so a second row
+    for the same LipidMolec silently replaced the first (a 4x effect came
+    back as p=NaN, log2FC=0) and class totals and counts double-counted it.
+    Raw imports have such rows (every LipidSearch candidate)."""
+
+    @pytest.fixture
+    def lc_dupes(self, df, experiment):
+        import pandas as pd
+        return PipelineAPI(
+            pd.concat([df, df.iloc[[0]]], ignore_index=True), experiment,
+        )
+
+    @pytest.mark.parametrize("call", [
+        lambda lc: lc.compare_species("WT", "KO"),
+        lambda lc: lc.compare_classes(),
+        lambda lc: lc.class_summary(),
+        lambda lc: lc.volcano("WT", "KO"),
+        lambda lc: lc.bar_chart(),
+        lambda lc: lc.pie_charts(),
+    ])
+    def test_analyses_refuse_duplicate_lipids(self, lc_dupes, df, call):
+        with pytest.raises(ValueError, match="more than one row") as err:
+            call(lc_dupes)
+        assert df.iloc[0]["LipidMolec"] in str(err.value)
+
+    def test_listing_classes_still_works(self, lc_dupes):
+        assert lc_dupes.available_classes()

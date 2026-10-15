@@ -184,7 +184,7 @@ class PipelineAPI:
             are absent, exactly as in the main pipeline.
         """
         self._require_experiment()
-        frame = _as_concentration_frame(self._df)
+        frame = self._frame()
         config = self._species_config(test_type, correction, alpha)
 
         summary = StatisticalTestingService.run_species_level_tests(
@@ -245,7 +245,7 @@ class PipelineAPI:
             ``significant``, sorted by ``adj_p_value`` ascending.
         """
         self._require_experiment()
-        frame = _as_concentration_frame(self._df)
+        frame = self._frame()
 
         if conditions is None:
             conditions = list(self._experiment.conditions_list)
@@ -286,7 +286,7 @@ class PipelineAPI:
             summed class concentration), sorted by ``n_species``
             descending.
         """
-        frame = _as_concentration_frame(self._df)
+        frame = self._frame()
         sample_cols = _sample_columns(frame, 'concentration')
         if 'ClassKey' not in frame.columns:
             raise ValueError(
@@ -308,6 +308,32 @@ class PipelineAPI:
         ).reset_index(drop=True)
 
     # -- internals ----------------------------------------------------
+
+    def _frame(self) -> pd.DataFrame:
+        """The bound data as a concentration frame, one row per lipid.
+
+        Every analysis here keys or sums by lipid, so two rows for one
+        LipidMolec were silently merged (the later overwriting the earlier)
+        or counted twice. Raw imports can have such rows: raw LipidSearch
+        keeps every grade/quality candidate until Module 1 picks one.
+        """
+        frame = _as_concentration_frame(self._df)
+        if 'LipidMolec' in frame.columns:
+            names = frame['LipidMolec']
+            dupes = names[names.duplicated()].unique()
+            if len(dupes):
+                examples = ", ".join(str(d) for d in dupes[:3])
+                raise ValueError(
+                    f"{len(dupes)} lipid(s) appear in more than one row "
+                    f"(e.g. {examples}), so per-lipid statistics and totals "
+                    f"would silently merge or double-count them. "
+                    f"LipidCruncher's pipeline keeps one row per lipid "
+                    f"(grade A>B>C>D, then highest TotalSmpIDRate(%)): use "
+                    f"the normalized or QC-filtered import from the main "
+                    f"pipeline, or build a one-row-per-lipid frame, say how, "
+                    f"and pass it to lc.with_dataframe(...)."
+                )
+        return frame
 
     @staticmethod
     def _species_config(
@@ -400,7 +426,7 @@ class PipelineAPI:
             LCResult with ``figure`` and ``data`` (mean/std per class).
         """
         res = self._analysis().run_bar_chart(
-            df=_as_concentration_frame(self._df),
+            df=self._frame(),
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
@@ -423,7 +449,7 @@ class PipelineAPI:
             Dict of condition name -> LCResult.
         """
         out = self._analysis().run_pie_charts(
-            df=_as_concentration_frame(self._df),
+            df=self._frame(),
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
@@ -451,7 +477,7 @@ class PipelineAPI:
             statistical summary is on each result's ``raw``.
         """
         res = self._analysis().run_saturation(
-            df=_as_concentration_frame(self._df),
+            df=self._frame(),
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
@@ -479,7 +505,7 @@ class PipelineAPI:
         these by parsing lipid names yourself.
         """
         res = self._analysis().run_chain_length(
-            df=_as_concentration_frame(self._df),
+            df=self._frame(),
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
@@ -494,7 +520,7 @@ class PipelineAPI:
     ) -> LCResult:
         """Fatty-acid composition heatmap (FACH) for one lipid class."""
         res = self._analysis().run_fach(
-            df=_as_concentration_frame(self._df),
+            df=self._frame(),
             experiment=self._experiment,
             selected_class=lipid_class,
             selected_conditions=self._conditions_or_all(conditions),
@@ -506,7 +532,7 @@ class PipelineAPI:
         """Lipid pathway visualization comparing two conditions."""
         self._require_experiment()
         res = self._analysis().run_pathway(
-            df=_as_concentration_frame(self._df),
+            df=self._frame(),
             experiment=self._experiment,
             control=control,
             experimental=experimental,
@@ -533,7 +559,7 @@ class PipelineAPI:
         self._require_experiment()
         config = self._species_config(test_type, correction, p_threshold)
         res = self._analysis().run_volcano(
-            df=_as_concentration_frame(self._df),
+            df=self._frame(),
             experiment=self._experiment,
             control=control,
             experimental=experimental,
@@ -563,7 +589,7 @@ class PipelineAPI:
             n_clusters: Cluster count when clustered.
         """
         res = self._analysis().run_heatmap(
-            df=_as_concentration_frame(self._df),
+            df=self._frame(),
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
