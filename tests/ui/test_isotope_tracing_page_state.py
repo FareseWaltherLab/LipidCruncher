@@ -83,3 +83,19 @@ class TestResultsMatchTheInputs:
         assert len(runs) == 2
         assert runs[1].correct_tracer_impurity is False
         assert _shows_results(at) and not _stale(at)
+
+
+class TestSampleDataResetsTheSettings:
+    """Regression (IQ8): Load sample data set only UHR mode, so a setting
+    changed earlier (e.g. tracer impurity off) carried over and the sample
+    run no longer reproduced the golden output it is meant to show."""
+
+    def test_every_setting_returns_to_the_golden_configuration(self, runs):
+        from app.models.isotope_tracing import IsotopeCorrectionConfig
+
+        at = AppTest.from_function(page_script, default_timeout=30).run()
+        at.checkbox(key="iso_correct_tracer_impurity").uncheck().run()
+        at.checkbox(key="iso_calculate_mean_enrichment").uncheck().run()
+        at.button(key="iso_load_sample").click().run()
+        at.button(key="iso_run").click().run()
+        assert runs[-1] == IsotopeCorrectionConfig(ultra_high_res=True)

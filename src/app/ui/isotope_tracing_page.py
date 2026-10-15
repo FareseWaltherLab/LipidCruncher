@@ -214,6 +214,8 @@ def _load_sample_data() -> None:
     st.session_state.iso_measurement_df = pd.read_csv(_SAMPLE_DIR / "MeasurementFile.csv")
     st.session_state.iso_molecule_df = pd.read_csv(_SAMPLE_DIR / "MoleculeFile.csv")
     st.session_state.iso_element_df = pd.read_csv(_SAMPLE_DIR / "ElementFile.csv")
+    for key, default in _SETTING_DEFAULTS.items():
+        st.session_state[key] = default
     st.session_state.iso_ultra_high_res = True
 
 
