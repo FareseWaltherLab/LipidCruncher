@@ -18,7 +18,6 @@ def page_script():
     from app.adapters.streamlit_adapter import StreamlitAdapter
     StreamlitAdapter.initialize_session_state()
     lp.PDF2IMAGE_AVAILABLE = False
-    page.check_isocorrector_available = lambda: True
     page.display_isotope_tracing_page()
 
 
@@ -35,6 +34,8 @@ def runs(monkeypatch):
 
     monkeypatch.setattr(StreamlitAdapter, "run_isotope_correction",
                         staticmethod(_run))
+    monkeypatch.setattr(StreamlitAdapter, "isocorrector_available",
+                        staticmethod(lambda: True))
     return runs
 
 
@@ -111,8 +112,8 @@ def page_script_without_r():
 
 
 def test_without_r_the_page_says_so_and_cannot_run(runs, monkeypatch):
-    import app.ui.isotope_tracing_page as page
-    monkeypatch.setattr(page, "check_isocorrector_available", lambda: False)
+    monkeypatch.setattr(StreamlitAdapter, "isocorrector_available",
+                        staticmethod(lambda: False))
     at = AppTest.from_function(page_script_without_r, default_timeout=30).run()
     assert not at.exception
     assert any("R runtime unavailable" in w.value for w in at.warning)
@@ -121,3 +122,27 @@ def test_without_r_the_page_says_so_and_cannot_run(runs, monkeypatch):
     assert any("Run is disabled: R runtime unavailable." in c.value
                for c in at.sidebar.caption)
     assert runs == []
+
+
+def test_r_is_probed_once_per_process(monkeypatch):
+    """IQ7: every rerun of the page started Rscript to check for R."""
+    import app.services.isotope_correction as iso
+    from app.adapters.streamlit_adapter import _isocorrector_available
+
+    probes = []
+
+    def _probe():
+        probes.append(1)
+        return False
+
+    monkeypatch.setattr(iso, "check_isocorrector_available", _probe)
+    _isocorrector_available.clear()
+    try:
+        at = AppTest.from_function(page_script_without_r, default_timeout=30)
+        at.run()
+        at.run()
+        AppTest.from_function(page_script_without_r, default_timeout=30).run()
+    finally:
+        _isocorrector_available.clear()
+    assert not at.exception
+    assert len(probes) == 1

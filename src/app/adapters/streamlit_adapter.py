@@ -76,6 +76,18 @@ def _lc_answer_cache() -> Dict[str, str]:
     return {}
 
 
+@st.cache_resource(show_spinner=False)
+def _isocorrector_available() -> bool:
+    """Whether R + IsoCorrectoR can run here, probed once per process.
+
+    The probe starts Rscript (~0.7 s), which every rerun of the isotope
+    tracing page used to pay. R comes with the image, so the answer cannot
+    change under a running process.
+    """
+    from ..services.isotope_correction import check_isocorrector_available
+    return check_isocorrector_available()
+
+
 @dataclass
 class SessionState:
     """
@@ -1036,6 +1048,11 @@ class StreamlitAdapter:
         )
 
     # ==================== Cached Isotope Tracing Wrapper ====================
+
+    @staticmethod
+    def isocorrector_available() -> bool:
+        """Whether the isotope tracing page can run (R + IsoCorrectoR)."""
+        return _isocorrector_available()
 
     @staticmethod
     def run_isotope_correction(

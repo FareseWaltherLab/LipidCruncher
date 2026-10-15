@@ -18,7 +18,6 @@ import streamlit as st
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import PAGE_LANDING
 from app.models.isotope_tracing import IsotopeCorrectionConfig
-from app.services.isotope_correction import check_isocorrector_available
 from app.ui.landing_page import display_logo
 
 # Golden sample dataset shipped with the repo (this file: src/app/ui/...).
@@ -365,7 +364,7 @@ def display_isotope_tracing_page() -> None:
     """Display the stable isotope tracing page."""
     _, center, _ = st.columns([1, 3, 1])
 
-    r_available = check_isocorrector_available()
+    r_available = StreamlitAdapter.isocorrector_available()
 
     measurement_df, molecule_df, element_df, run_clicked = _display_sidebar(r_available)
 
