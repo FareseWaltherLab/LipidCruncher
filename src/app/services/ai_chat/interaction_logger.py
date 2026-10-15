@@ -25,12 +25,16 @@ from typing import Optional
 SCHEMA_VERSION = 2
 
 # Size guards. The awslogs driver splits a stdout line above 256 KB into
-# several CloudWatch events, which would break the JSON, so every optional
-# blob is capped to keep a whole record comfortably under that.
+# several CloudWatch events, which would break the JSON (and the pull script
+# then drops the turn), so every blob is capped to keep a whole record
+# comfortably under that. Anything cut is named in the record's `truncated`.
 HISTORY_MAX_MESSAGES = 20        # last N prior messages (10 turns)
 HISTORY_MAX_CHARS = 1000         # per prior message
 FIGURE_MAX_BYTES = 120_000       # serialized Plotly figure
 DATASET_MAX_COLUMNS = 60         # column names listed in the descriptor
+TEXT_MAX_BYTES = 20_000          # question / answer / code / error / note,
+                                 # as serialized (non-ASCII escapes to 6 bytes)
+RECORD_MAX_BYTES = 200_000       # last resort: drop figure, then history
 
 _LOGGER_NAME = "ai_studio.interactions"
 
@@ -50,6 +54,29 @@ def _get_logger() -> logging.Logger:
         logger.propagate = False
         logger._ai_studio_configured = True
     return logger
+
+
+def _cap_text(record: dict, field: str) -> None:
+    text = record.get(field)
+    if not text:
+        return
+    size = len(json.dumps(text))
+    if size > TEXT_MAX_BYTES:
+        record[field] = text[:len(text) * TEXT_MAX_BYTES // size] + "…"
+        record.setdefault("truncated", []).append(field)
+
+
+def _fit(record: dict, fields) -> dict:
+    """Cap ``fields``, then drop the figure and history if still too big."""
+    for field in fields:
+        _cap_text(record, field)
+    for field in ("figure_json", "history"):
+        if len(json.dumps(record, default=str)) <= RECORD_MAX_BYTES:
+            break
+        if record.get(field) is not None:
+            record[field] = None
+            record.setdefault("truncated", []).append(field)
+    return record
 
 
 def _emit(record: dict) -> None:
@@ -155,7 +182,7 @@ class InteractionLoggingService:
         ``history`` is the conversation *before* this turn (so the record is
         self-contained when read back); ``dataset`` comes from
         ``describe_dataset``; ``figure_json`` from ``serialize_figure``."""
-        return {
+        return _fit({
             "event": "ai_turn",
             "schema": SCHEMA_VERSION,
             "ts": _now_iso(),
@@ -172,7 +199,7 @@ class InteractionLoggingService:
             "dataset": dataset,
             "history": InteractionLoggingService._compact_history(history),
             "figure_json": figure_json,
-        }
+        }, ("question", "answer", "code", "error"))
 
     @staticmethod
     def build_feedback_record(
@@ -183,7 +210,7 @@ class InteractionLoggingService:
         note: str = "",
     ) -> dict:
         """Build the feedback record dict (pure — no I/O)."""
-        return {
+        return _fit({
             "event": "ai_feedback",
             "schema": SCHEMA_VERSION,
             "ts": _now_iso(),
@@ -191,7 +218,7 @@ class InteractionLoggingService:
             "session_id": session_id,
             "verdict": verdict,
             "note": note,
-        }
+        }, ("note",))
 
     @staticmethod
     def log_turn(

@@ -225,3 +225,45 @@ class TestSchema2Context:
         assert payload["dataset"] == {"rows": 1}
         assert payload["history"] == [{"role": "user", "content": "hi"}]
         assert payload["figure_json"] == "{}"
+
+
+class TestRecordsFitOneLogEvent:
+    """Regression (AQ12): only history was capped, so one "print the table"
+    answer made a 359 KB record. awslogs splits lines over 256 KB, the
+    pieces no longer parse, and the pull script silently drops the turn."""
+
+    def _turn(self, **kw):
+        args = dict(turn_id="t", session_id="s", tab="data_questions",
+                    question="q", answer="a")
+        args.update(kw)
+        return InteractionLoggingService.build_turn_record(**args)
+
+    def test_long_answer_and_code_are_capped_and_marked(self):
+        rec = self._turn(answer="x" * 400_000, code="y" * 50_000)
+        assert len(rec["answer"]) < 25_000
+        assert len(rec["code"]) < 25_000
+        assert rec["truncated"] == ["answer", "code"]
+        assert len(json.dumps(rec)) < 256 * 1024
+
+    def test_whole_record_stays_under_the_line_limit(self):
+        history = [{"role": "user", "content": "é" * 1000}] * 20
+        rec = self._turn(
+            question="é" * 30_000, answer="é" * 30_000, code="é" * 30_000,
+            error="é" * 30_000, history=history,
+            figure_json='{"data": "' + "1" * 119_000 + '"}',
+        )
+        assert len(json.dumps(rec)) < 256 * 1024
+        assert rec["figure_json"] is None
+        assert "figure_json" in rec["truncated"]
+
+    def test_small_records_are_untouched(self):
+        rec = self._turn(answer="There are 24.")
+        assert rec["answer"] == "There are 24."
+        assert "truncated" not in rec
+
+    def test_feedback_note_is_capped(self):
+        rec = InteractionLoggingService.build_feedback_record(
+            turn_id="t", session_id="s", verdict="down", note="n" * 400_000,
+        )
+        assert len(json.dumps(rec)) < 256 * 1024
+        assert rec["truncated"] == ["note"]
