@@ -714,6 +714,24 @@ class TestSessionStateIntegration:
         mock_st.cache_data.clear.assert_called_once()
 
     @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_to_experiment_setup_keeps_the_upload_on_the_next_run(self, mock_st):
+        """Regression: the soft reset dropped _dataset_source_id, so on the
+        next rerun the still-uploaded file looked like a new source and
+        reset_for_new_source wiped the data the soft reset had kept."""
+        standardized = pd.DataFrame({'intensity[s1]': [1]})
+        mock_st.session_state = MockSessionState({
+            'raw_df': pd.DataFrame({'A': [1]}),
+            'standardized_df': standardized,
+            '_dataset_source_id': 'upload:file-1',
+        })
+
+        StreamlitAdapter.reset_to_experiment_setup()
+        wiped = StreamlitAdapter.reset_for_new_source('upload:file-1')
+
+        assert wiped is False
+        assert mock_st.session_state['standardized_df'] is standardized
+
+    @patch('app.adapters.streamlit_adapter.st')
     def test_reset_to_experiment_setup_undoes_confirmed_regroup(self, mock_st):
         """Regression: after a confirmed regroup the soft reset kept the
         renumbered standardized_df, so re-seeded names landed on the wrong data."""

@@ -248,8 +248,9 @@ _PRESERVE_ON_RESET = {'page'}
 # grouping, processing, normalization, QC, analysis) is cleared so the user
 # restarts from the Define Experiment step without having to re-upload.
 _SOFT_RESET_PRESERVE = frozenset({
-    # Upload
-    'raw_df', 'using_sample_data', 'sample_data_file',
+    # Upload (and its source id: without it the next rerun takes the same
+    # upload for a new file and wipes everything kept here)
+    'raw_df', 'using_sample_data', 'sample_data_file', '_dataset_source_id',
     # Standardization outputs (so column mapping need not be redone)
     'standardized_df', 'column_mapping', 'n_intensity_cols', 'format_type',
     'msdial_features', 'msdial_sample_names', '_msdial_override_samples',

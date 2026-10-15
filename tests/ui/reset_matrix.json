@@ -405,7 +405,6 @@
    "n_samples_1"
   ],
   "cleared": [
-   "_dataset_source_id",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_non_bqc_zero_threshold",
@@ -450,6 +449,7 @@
    "zero_filter_detection_threshold"
   ],
   "kept": [
+   "_dataset_source_id",
    "additional_dataset_standards",
    "column_mapping",
    "format_type",
@@ -1212,7 +1212,6 @@
    "n_samples_1"
   ],
   "cleared": [
-   "_dataset_source_id",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_non_bqc_zero_threshold",
@@ -1308,6 +1307,7 @@
    "standards_source"
   ],
   "kept": [
+   "_dataset_source_id",
    "additional_dataset_standards",
    "column_mapping",
    "format_type",
