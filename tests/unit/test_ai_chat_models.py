@@ -150,7 +150,7 @@ class TestSandboxConfig:
         config = SandboxConfig()
         assert config.execution_timeout == 10
         assert config.max_output_rows == 50000
-        assert config.max_figure_size_bytes == 10 * 1024 * 1024
+        assert config.max_output_bytes == 64 * 1024 ** 2
         assert config.max_memory_bytes == 1024 ** 3
 
     def test_timeout_bounds(self):

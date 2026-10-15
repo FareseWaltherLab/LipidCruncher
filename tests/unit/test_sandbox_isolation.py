@@ -337,6 +337,37 @@ class TestMemoryIsBounded:
         assert res.success, res.error_message
 
 
+class TestOutputIsBounded:
+    """Regression: the parent buffered everything the child wrote, for as
+    long as the timeout allowed, so one oversized result could exhaust the
+    app process."""
+
+    def test_oversized_result_is_stopped_and_reported(self, df):
+        res = run(
+            "result_df = pd.DataFrame({'x': ['y' * 1000] * 200})", df,
+            config=SandboxConfig(max_output_bytes=50_000),
+        )
+        assert not res.success
+        assert res.result_df is None
+        assert "larger than" in res.error_message
+
+    def test_oversized_printed_output_counts_too(self, df):
+        res = run(
+            "for i in range(200): print('y' * 1000)", df,
+            config=SandboxConfig(max_output_bytes=50_000),
+        )
+        assert not res.success
+        assert "larger than" in res.error_message
+
+    def test_result_under_the_cap_is_returned(self, df):
+        res = run(
+            "result_df = pd.DataFrame({'x': ['y' * 1000] * 20})", df,
+            config=SandboxConfig(max_output_bytes=50_000),
+        )
+        assert res.success, res.error_message
+        assert len(res.result_df) == 20
+
+
 class TestDockerImage:
     def test_image_does_not_run_as_root(self):
         from pathlib import Path

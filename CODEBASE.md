@@ -370,7 +370,7 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 | `ChatSession` | `chat.py` | Immutable chat history: `mode` (`ChatMode` enum), tuple of `ChatMessage`, and `schema_context` (pre-computed DataFrame schema). `add_message()` returns a new session; `to_api_messages()` formats history for the Anthropic API and re-injects each assistant message's stored `code` so the model sees its own previous attempts. |
 | `ChatMode` | `chat.py` | Enum: `DATA_TRANSFORM`, `VISUALIZATION`, `DATA_QUESTIONS`, `LIPIDCRUNCHER_QUESTIONS`. |
 | `AIConfig` | `chat.py` | Anthropic API config: `model`, `max_tokens` (1–8192), `temperature` (0.0–1.0). Defaults to a deterministic Sonnet call. |
-| `SandboxConfig` | `chat.py` | Limits for sandboxed execution: `execution_timeout` (seconds), `max_output_rows`, `max_figure_size_bytes`. |
+| `SandboxConfig` | `chat.py` | Limits for sandboxed execution: `execution_timeout` (seconds), `max_output_rows`, `max_output_bytes`, `max_memory_bytes`. |
 | `IsotopeCorrectionConfig` | `isotope_tracing.py` | One field per IsoCorrectoR `IsoCorrection()` setting (`correct_tracer_impurity`, `correct_tracer_element_core`, `calculate_mean_enrichment`, `ultra_high_res`, `correct_also_monoisotopic`, `calculation_threshold_uhr`). Used by the stable isotope tracing workflow. |
 
 ### Services

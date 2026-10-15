@@ -401,11 +401,13 @@ def _run_in_subprocess(
     The child cannot outlive ``config.execution_timeout``: if the result
     pipe has not closed by then the process is killed outright. Unlike the
     previous in-thread approach, a hung or runaway execution cannot survive
-    in the app process.
+    in the app process. Nor can its output: at most
+    ``config.max_output_bytes`` are read back before the child is killed.
 
     Raises:
         _SandboxTimeout: if the child overran its timeout.
-        _SandboxCrash: if the child died without returning a response.
+        _SandboxCrash: if the child died without returning a response, or
+            its response was too large.
     """
     read_fd, write_fd = os.pipe()
     workdir = tempfile.mkdtemp(prefix="lc_sandbox_")
@@ -435,12 +437,18 @@ def _run_in_subprocess(
     os.close(write_fd)
 
     chunks: List[bytes] = []
+    overflow = threading.Event()
 
     def _drain():
+        received = 0
         with os.fdopen(read_fd, "rb") as pipe:
             while True:
                 block = pipe.read(65536)
                 if not block:
+                    break
+                received += len(block)
+                if received > config.max_output_bytes:
+                    overflow.set()  # stop buffering; the child is killed below
                     break
                 chunks.append(block)
 
@@ -460,6 +468,16 @@ def _run_in_subprocess(
         proc.wait(timeout=5)
         raise _SandboxTimeout(
             f"Execution timed out after {config.execution_timeout} seconds"
+        )
+
+    if overflow.is_set():
+        proc.kill()
+        proc.wait(timeout=5)
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise _SandboxCrash(
+            f"the result is larger than the "
+            f"{config.max_output_bytes / 1024 ** 2:g} MB limit; return a "
+            f"smaller table or figure"
         )
 
     proc.wait(timeout=5)
