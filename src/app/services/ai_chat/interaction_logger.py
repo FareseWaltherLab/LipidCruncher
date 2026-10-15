@@ -22,7 +22,9 @@ from typing import Optional
 # can evolve the shape later without silently mis-parsing old logs.
 #   1 — question / answer / code / outcome flags
 #   2 — adds model, dataset descriptor, prior conversation, figure JSON
-SCHEMA_VERSION = 2
+#   3 — `figure` (trace types, names, point counts, titles) replaces
+#       `figure_json`: the plotted values are the user's data
+SCHEMA_VERSION = 3
 
 # Size guards. The awslogs driver splits a stdout line above 256 KB into
 # several CloudWatch events, which would break the JSON (and the pull script
@@ -30,7 +32,7 @@ SCHEMA_VERSION = 2
 # comfortably under that. Anything cut is named in the record's `truncated`.
 HISTORY_MAX_MESSAGES = 20        # last N prior messages (10 turns)
 HISTORY_MAX_CHARS = 1000         # per prior message
-FIGURE_MAX_BYTES = 120_000       # serialized Plotly figure
+FIGURE_MAX_TRACES = 50           # traces listed in the figure summary
 DATASET_MAX_COLUMNS = 60         # column names listed in the descriptor
 TEXT_MAX_BYTES = 20_000          # question / answer / code / error / note,
                                  # as serialized (non-ASCII escapes to 6 bytes)
@@ -70,7 +72,7 @@ def _fit(record: dict, fields) -> dict:
     """Cap ``fields``, then drop the figure and history if still too big."""
     for field in fields:
         _cap_text(record, field)
-    for field in ("figure_json", "history"):
+    for field in ("figure", "history"):
         if len(json.dumps(record, default=str)) <= RECORD_MAX_BYTES:
             break
         if record.get(field) is not None:
@@ -86,6 +88,18 @@ def _emit(record: dict) -> None:
         logging.getLogger(__name__).exception(
             "Failed to emit AI Studio interaction log"
         )
+
+
+def _trace_points(trace) -> Optional[int]:
+    """How many points a trace plots (its first data array's length)."""
+    for attr in ("x", "y", "values", "z", "r", "lat"):
+        value = getattr(trace, attr, None)
+        if value is not None:
+            try:
+                return len(value)
+            except TypeError:
+                continue
+    return None
 
 
 def _now_iso() -> str:
@@ -129,19 +143,27 @@ class InteractionLoggingService:
         return desc
 
     @staticmethod
-    def serialize_figure(fig) -> Optional[str]:
-        """Plotly figure → JSON string, or None if absent / too large to fit
-        in one log event (the flag ``produced_figure`` still records that a
-        figure existed)."""
+    def summarize_figure(fig) -> Optional[dict]:
+        """What a Plotly figure showed, without the plotted values: each
+        trace's type, name and point count, and the titles. The values (and
+        hover text) are the user's data, which the logs leave out."""
         if fig is None:
             return None
         try:
-            text = fig.to_json()
+            layout = fig.layout
+            traces = [
+                {"type": t.type, "name": t.name, "points": _trace_points(t)}
+                for t in fig.data
+            ]
+            return {
+                "n_traces": len(traces),
+                "traces": traces[:FIGURE_MAX_TRACES],
+                "title": layout.title.text,
+                "x_title": layout.xaxis.title.text,
+                "y_title": layout.yaxis.title.text,
+            }
         except Exception:
             return None
-        if len(text.encode("utf-8")) > FIGURE_MAX_BYTES:
-            return None
-        return text
 
     @staticmethod
     def _compact_history(history) -> Optional[list]:
@@ -174,14 +196,14 @@ class InteractionLoggingService:
         model: Optional[str] = None,
         dataset: Optional[dict] = None,
         history=None,
-        figure_json: Optional[str] = None,
+        figure: Optional[dict] = None,
     ) -> dict:
         """Build the turn record dict (pure — no I/O). Broken out so it can
         be unit-tested without capturing stdout.
 
         ``history`` is the conversation *before* this turn (so the record is
         self-contained when read back); ``dataset`` comes from
-        ``describe_dataset``; ``figure_json`` from ``serialize_figure``."""
+        ``describe_dataset``; ``figure`` from ``summarize_figure``."""
         return _fit({
             "event": "ai_turn",
             "schema": SCHEMA_VERSION,
@@ -198,7 +220,7 @@ class InteractionLoggingService:
             "error": error,
             "dataset": dataset,
             "history": InteractionLoggingService._compact_history(history),
-            "figure_json": figure_json,
+            "figure": figure,
         }, ("question", "answer", "code", "error"))
 
     @staticmethod
@@ -235,10 +257,11 @@ class InteractionLoggingService:
         model: Optional[str] = None,
         dataset: Optional[dict] = None,
         history=None,
-        figure_json: Optional[str] = None,
+        figure: Optional[dict] = None,
     ) -> None:
         """Emit one turn record (question, answer, tab, code, outcome, plus
-        the model, dataset descriptor, prior conversation and figure)."""
+        the model, dataset descriptor, prior conversation and a summary of
+        the figure)."""
         _emit(InteractionLoggingService.build_turn_record(
             turn_id=turn_id,
             session_id=session_id,
@@ -252,7 +275,7 @@ class InteractionLoggingService:
             model=model,
             dataset=dataset,
             history=history,
-            figure_json=figure_json,
+            figure=figure,
         ))
 
     @staticmethod

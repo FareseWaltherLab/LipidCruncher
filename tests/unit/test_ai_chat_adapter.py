@@ -153,7 +153,7 @@ class TestLogAiTurnContext:
         assert kwargs["dataset"]["rows"] == 1
         assert kwargs["dataset"]["conditions"] == {"WT": 1}
         assert kwargs["history"] is history
-        assert '"bar"' in kwargs["figure_json"]
+        assert kwargs["figure"]["traces"][0]["type"] == "bar"
 
     def test_pipeline_import_source_wins_over_file_id(self):
         from app.adapters.streamlit_adapter import StreamlitAdapter

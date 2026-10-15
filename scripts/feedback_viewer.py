@@ -6,8 +6,9 @@ Local viewer for AI Studio user feedback.
 
 Shows every logged turn with its thumbs verdict and comments, and for the
 selected turn the full context: the conversation leading up to it, the
-question and answer, the generated code, the figure, and the dataset it
-ran against. Runs entirely on your machine; nothing here is deployed.
+question and answer, the generated code, the figure (from schema 3 only a
+summary of it: the plotted values are not logged), and the dataset it ran
+against. Runs entirely on your machine; nothing here is deployed.
 """
 import sys
 from pathlib import Path
@@ -100,6 +101,28 @@ def _table(turns):
     return list(reversed(turns))[sel[0]] if sel else None
 
 
+def _figure_summary(fig: dict) -> str:
+    """One line for a schema-3 figure summary (no values were logged)."""
+    traces = []
+    for t in fig.get("traces", []):
+        label = t.get("type") or "trace"
+        if t.get("name"):
+            label += f" '{t['name']}'"
+        if t.get("points") is not None:
+            label += f" ({t['points']} points)"
+        traces.append(label)
+    hidden = fig.get("n_traces", len(traces)) - len(traces)
+    if hidden > 0:
+        traces.append(f"{hidden} more")
+    titles = ", ".join(
+        f"{k}: {fig[key]}" for k, key in
+        (("title", "title"), ("x", "x_title"), ("y", "y_title"))
+        if fig.get(key)
+    )
+    return (f"Figure (values not logged) — {titles + '; ' if titles else ''}"
+            f"{fig.get('n_traces', len(traces))} traces: {', '.join(traces)}")
+
+
 def _detail(turn, all_turns):
     r = turn.record
     st.divider()
@@ -135,9 +158,11 @@ def _detail(turn, all_turns):
             st.markdown(r.get("question", ""))
         with st.chat_message("assistant"):
             st.markdown(r.get("answer") or "_(empty answer)_")
-            if r.get("figure_json"):
+            if r.get("figure_json"):  # schema 2 logged the whole figure
                 st.plotly_chart(pio.from_json(r["figure_json"]),
                                 width="stretch")
+            elif r.get("figure"):
+                st.caption(_figure_summary(r["figure"]))
             elif r.get("produced_figure"):
                 st.caption(
                     "A figure was produced but was not logged "

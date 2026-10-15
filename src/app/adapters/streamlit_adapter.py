@@ -1667,7 +1667,7 @@ class StreamlitAdapter:
                 experiment=experiment,
             ),
             history=history,
-            figure_json=InteractionLoggingService.serialize_figure(figure),
+            figure=InteractionLoggingService.summarize_figure(figure),
         )
         return turn_id
 

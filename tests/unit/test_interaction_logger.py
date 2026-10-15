@@ -106,10 +106,11 @@ class TestEmission:
 
 class TestSchema2Context:
     """Schema 2 adds the model, a dataset descriptor, the prior conversation
-    and the figure, so a record can be reviewed on its own."""
+    and the figure, so a record can be reviewed on its own (schema 3: a
+    summary of the figure)."""
 
-    def test_schema_version_is_2(self):
-        assert SCHEMA_VERSION == 2
+    def test_schema_version_is_3(self):
+        assert SCHEMA_VERSION == 3
 
     def test_turn_record_carries_model_dataset_history_figure(self):
         rec = InteractionLoggingService.build_turn_record(
@@ -118,12 +119,12 @@ class TestSchema2Context:
             model="claude-x",
             dataset={"rows": 3},
             history=[{"role": "user", "content": "earlier"}],
-            figure_json='{"data": []}',
+            figure={"n_traces": 0, "traces": []},
         )
         assert rec["model"] == "claude-x"
         assert rec["dataset"] == {"rows": 3}
         assert rec["history"] == [{"role": "user", "content": "earlier"}]
-        assert rec["figure_json"] == '{"data": []}'
+        assert rec["figure"] == {"n_traces": 0, "traces": []}
         json.loads(json.dumps(rec))
 
     def test_context_fields_default_to_none(self):
@@ -134,7 +135,7 @@ class TestSchema2Context:
         assert rec["model"] is None
         assert rec["dataset"] is None
         assert rec["history"] is None
-        assert rec["figure_json"] is None
+        assert rec["figure"] is None
 
     def test_history_accepts_message_objects_and_is_capped(self):
         from app.models.chat import ChatMessage
@@ -196,17 +197,41 @@ class TestSchema2Context:
         assert "conditions" not in desc
         assert InteractionLoggingService.describe_dataset(None) is None
 
-    def test_serialize_figure_small_ok_large_dropped_none_passthrough(self):
+    def test_figure_summary_keeps_the_shape_not_the_values(self):
+        """Regression (S8): records carried the whole figure JSON, i.e. the
+        user's plotted data values, into CloudWatch."""
         import plotly.graph_objects as go
-        from app.services.ai_chat.interaction_logger import FIGURE_MAX_BYTES
-        small = go.Figure(data=[go.Bar(x=["a", "b"], y=[1, 2])])
-        text = InteractionLoggingService.serialize_figure(small)
-        assert text and json.loads(text)["data"][0]["type"] == "bar"
+        fig = go.Figure(data=[
+            go.Bar(x=["PC 34:1", "PE 36:2"], y=[123456.789, 987654.321],
+                   name="WT", hovertext=["secret-hover-1", "secret-hover-2"]),
+            go.Heatmap(z=[[0.31415, 0.27182]], name="corr"),
+        ])
+        fig.update_layout(title="Top lipids", xaxis_title="Lipid",
+                          yaxis_title="Intensity")
+        summary = InteractionLoggingService.summarize_figure(fig)
+        assert summary == {
+            "n_traces": 2,
+            "traces": [
+                {"type": "bar", "name": "WT", "points": 2},
+                {"type": "heatmap", "name": "corr", "points": 1},
+            ],
+            "title": "Top lipids", "x_title": "Lipid", "y_title": "Intensity",
+        }
+        text = json.dumps(InteractionLoggingService.build_turn_record(
+            turn_id="t", session_id="s", tab="visualization",
+            question="q", answer="a", figure=summary,
+        ))
+        for value in ("123456", "987654", "0.31415", "secret-hover", "PC 34:1"):
+            assert value not in text
 
-        big = go.Figure(data=[go.Scatter(y=list(range(FIGURE_MAX_BYTES // 4)))])
-        assert InteractionLoggingService.serialize_figure(big) is None
-
-        assert InteractionLoggingService.serialize_figure(None) is None
+    def test_figure_summary_lists_at_most_the_cap(self):
+        import plotly.graph_objects as go
+        from app.services.ai_chat.interaction_logger import FIGURE_MAX_TRACES
+        fig = go.Figure(data=[go.Scatter(y=[1]) for _ in range(80)])
+        summary = InteractionLoggingService.summarize_figure(fig)
+        assert summary["n_traces"] == 80
+        assert len(summary["traces"]) == FIGURE_MAX_TRACES
+        assert InteractionLoggingService.summarize_figure(None) is None
 
     def test_log_turn_emits_context_fields(self):
         handler = _capture()
@@ -215,16 +240,16 @@ class TestSchema2Context:
                 turn_id="t2", session_id="s2", tab="visualization",
                 question="plot", answer="done", model="claude-x",
                 dataset={"rows": 1}, history=[{"role": "user", "content": "hi"}],
-                figure_json="{}",
+                figure={"n_traces": 0, "traces": []},
             )
         finally:
             logging.getLogger(_LOGGER_NAME).removeHandler(handler)
         payload = json.loads(handler.records[0])
-        assert payload["schema"] == 2
+        assert payload["schema"] == 3
         assert payload["model"] == "claude-x"
         assert payload["dataset"] == {"rows": 1}
         assert payload["history"] == [{"role": "user", "content": "hi"}]
-        assert payload["figure_json"] == "{}"
+        assert payload["figure"] == {"n_traces": 0, "traces": []}
 
 
 class TestRecordsFitOneLogEvent:
@@ -250,11 +275,11 @@ class TestRecordsFitOneLogEvent:
         rec = self._turn(
             question="é" * 30_000, answer="é" * 30_000, code="é" * 30_000,
             error="é" * 30_000, history=history,
-            figure_json='{"data": "' + "1" * 119_000 + '"}',
+            figure={"n_traces": 1, "traces": [{"name": "1" * 119_000}]},
         )
         assert len(json.dumps(rec)) < 256 * 1024
-        assert rec["figure_json"] is None
-        assert "figure_json" in rec["truncated"]
+        assert rec["figure"] is None
+        assert "figure" in rec["truncated"]
 
     def test_small_records_are_untouched(self):
         rec = self._turn(answer="There are 24.")

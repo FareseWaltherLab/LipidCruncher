@@ -111,6 +111,34 @@ def test_schema1_figure_turn_explains_missing_figure(log_file):
     assert any("schema-1" in c.value for c in at.caption)
 
 
+def test_schema3_figure_turn_shows_the_summary(log_file):
+    """Schema 3 logs what the figure showed, not its values."""
+    def script(path):
+        import sys
+        sys.path.insert(0, "scripts")
+        from ai_feedback_records import join_feedback, parse_records
+        from feedback_viewer import _detail
+        with open(path) as fh:
+            turns = join_feedback(parse_records(fh))
+        turn = turns[1]
+        turn.record["schema"] = 3
+        del turn.record["figure_json"]
+        turn.record["figure"] = {
+            "n_traces": 1, "title": "Species per class",
+            "traces": [{"type": "bar", "name": "WT", "points": 2}],
+        }
+        _detail(turn, turns)
+
+    at = AppTest.from_function(script, args=(str(log_file),), default_timeout=30)
+    at.run()
+    assert not at.exception
+    assert len(at.get("plotly_chart")) == 0
+    assert (
+        "Figure (values not logged) — title: Species per class; "
+        "1 traces: bar 'WT' (2 points)"
+    ) in [c.value for c in at.caption]
+
+
 def test_missing_file_shows_hint(tmp_path):
     at = _run(tmp_path / "nope.jsonl")
     assert not at.exception
