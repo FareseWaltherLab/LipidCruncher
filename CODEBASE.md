@@ -584,18 +584,18 @@ The app runs on port 8501 by default.
 
 | Package | Version | Purpose |
 |---|---|---|
-| streamlit | 1.50.0 | UI framework |
+| streamlit | 1.54.0 | UI framework |
 | pandas | 1.5.3 | Data manipulation |
 | numpy | 1.24.3 | Numerical computing |
 | scipy | 1.13.1 | Statistical tests (Welch's t-test, Alexander-Govern, Mann-Whitney, Kruskal-Wallis); hierarchical clustering for the heatmap |
-| scikit-learn | 1.3.0 | PCA, StandardScaler |
+| scikit-learn | 1.5.2 | PCA, StandardScaler |
 | statsmodels | 0.14.0 | Multiple testing correction (FDR, Bonferroni), Tukey HSD |
 | plotly | 5.18.0 | Interactive visualizations |
 | matplotlib | 3.7.1 | Static plots (correlation heatmaps, volcano concentration distribution plot) |
 | seaborn | 0.12.2 | Statistical plot styling |
 | kaleido | 0.2.1 | Plotly static image export |
-| reportlab | 3.6.12 | PDF generation |
+| reportlab | 3.6.13 | PDF generation |
 | pdf2image | 1.17.0 | PDF to image conversion (landing-page module images; needs Poppler) |
-| pillow | 9.5.0 | Image processing |
+| pillow | 12.3.0 | Image processing |
 | pydantic | 2.11.3 | Frozen data models and configs |
-| pyarrow | 11.0.0 | Streamlit dependency, pinned to stay on numpy 1.x |
+| pyarrow | 23.0.1 | Streamlit dependency, pinned to stay on numpy 1.x |
