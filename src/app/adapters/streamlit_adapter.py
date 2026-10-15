@@ -1438,65 +1438,6 @@ class StreamlitAdapter:
     # ==================== AI Chat Wrappers (NOT cached — stateful) ====================
 
     @staticmethod
-    def run_ai_transform(
-        user_message: str,
-        session,
-        source_df: pd.DataFrame,
-    ):
-        """Run one turn of the AI data transformation chat.
-
-        NOT cached because chat is inherently stateful.
-
-        Args:
-            user_message: The user's message.
-            session: Current ChatSession.
-            source_df: The user's uploaded DataFrame.
-
-        Returns:
-            TransformStepResult from the workflow.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.handle_transform_message(
-            user_message=user_message,
-            session=session,
-            source_df=source_df,
-            numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_original'
-            ),
-        )
-
-    @staticmethod
-    def run_ai_viz(
-        user_message: str,
-        session,
-        analysis_df: pd.DataFrame,
-        experiment: ExperimentConfig,
-    ):
-        """Run one turn of the AI visualization chat.
-
-        NOT cached because chat is inherently stateful.
-
-        Args:
-            user_message: The user's message.
-            session: Current ChatSession.
-            analysis_df: The analysis-ready DataFrame.
-            experiment: Experiment configuration.
-
-        Returns:
-            VizStepResult from the workflow.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.handle_viz_message(
-            user_message=user_message,
-            session=session,
-            analysis_df=analysis_df,
-            experiment=experiment,
-            numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_renamed'
-            ),
-        )
-
-    @staticmethod
     def run_ai_data_questions(
         user_message: str,
         session,
@@ -1590,28 +1531,6 @@ class StreamlitAdapter:
                 'chat_studio_sample_columns_renamed'
             ),
             experiment=st.session_state.get('chat_studio_experiment'),
-        )
-
-    @staticmethod
-    def run_ai_lc_questions(
-        user_message: str,
-        session,
-    ):
-        """Run one turn of the LipidCruncher questions chat.
-
-        NOT cached because chat is inherently stateful.
-
-        Args:
-            user_message: The user's message.
-            session: Current ChatSession.
-
-        Returns:
-            LCQuestionsStepResult from the workflow.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.handle_lc_questions_message(
-            user_message=user_message,
-            session=session,
         )
 
     @staticmethod

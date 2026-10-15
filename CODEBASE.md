@@ -162,7 +162,7 @@ LipidCruncher/
 │       │   ├── lsi_report.py               #   LSI compliance checklist generation
 │       │   ├── ai_chat/                     #   AI Studio service layer (Anthropic API + sandbox)
 │       │   │   ├── __init__.py              #     Public API: re-exports AI services + exceptions
-│       │   │   ├── exceptions.py            #     AIChatError, AIClientError, SandboxError, TransformationError
+│       │   │   ├── exceptions.py            #     AIChatError, AIClientError, SandboxError
 │       │   │   ├── ai_client.py             #     Anthropic SDK wrapper + tool-use loop (blocking + streaming)
 │       │   │   ├── sandbox.py               #     Sandboxed execution, parent side (validate → spawn child → time out)
 │       │   │   ├── sandbox_runner.py        #     Child-process entry point that actually runs the AI's code
@@ -425,7 +425,7 @@ All services are stateless static methods. The Anthropic API key is read from `A
 
 | Service / Module | File | Purpose |
 |---|---|---|
-| `AIClientService` | `ai_client.py` | Anthropic SDK wrapper. `send_message()` for plain calls, `execute_tool_loop()` for tool-use (caps round-trips at 4), the streaming counterparts `stream_tool_loop()` / `stream_explanation()` that every tab renders through `st.write_stream`, and `extract_code_block()` to pull ` ```python ` blocks out of responses. System prompts are marked for prompt caching. |
+| `AIClientService` | `ai_client.py` | Anthropic SDK wrapper. `execute_tool_loop()` for tool-use (caps round-trips at 4), the streaming counterparts `stream_tool_loop()` / `stream_explanation()` that every tab renders through `st.write_stream`, and `extract_code_block()` to pull ` ```python ` blocks out of responses. System prompts are marked for prompt caching. |
 | `SandboxService` + `validate_code()` | `sandbox.py` | Runs AI-generated Python. **The security boundary is the child process**, not the parser: code executes via `sandbox_runner.py` in a separate process with no inherited environment (so `ANTHROPIC_API_KEY` is not passed to it), the limits listed under `sandbox_runner`, and a hard kill on timeout. The parent decodes the child's JSON response (never pickle), reads at most `max_output_bytes` of it, and runs at most `MAX_CONCURRENT_EXECUTIONS` (2) children at once. The AST validator (import whitelist — `math`, `statistics`, `re`, plus the pre-loaded `pd`/`np`/`px`/`go`; block-list of dunders and dangerous builtins) and the curated `_SAFE_BUILTINS` map run in front as defense-in-depth — never sufficient alone, since `pd`/`np` expose real modules by ordinary attribute access. Returns `SandboxResult(success, figure, result_df, stdout, error_message, execution_time)`. |
 | `sandbox_runner` | `sandbox_runner.py` | The child-process entry point (`python -m app.services.ai_chat.sandbox_runner <fd>`): reads a pickled request from stdin (written by the app), hardens itself, executes the code, and writes a JSON response to a dedicated pipe. Hardening fails closed: it refuses to run as root (exempt from `RLIMIT_NPROC`; the image runs as the unprivileged `app` user), sets `RLIMIT_FSIZE` 0 → no file writes, `RLIMIT_CPU`, `RLIMIT_NPROC` 0 → no new processes, `RLIMIT_AS` → memory cap (Linux only; macOS cannot lower it), reads each back, then installs an audit-hook read guard and neuters `socket` in place. If any step fails, the code is not run. The read guard and socket patch are in-process Python hooks, which native code could get around. Covered end to end by `tests/unit/test_sandbox_isolation.py`. |
 | `SchemaExtractorService` | `schema_extractor.py` | Builds a compact textual schema (column names, dtypes, example values) for inclusion in prompts — keeps raw data out of the API call. |
@@ -442,8 +442,7 @@ Exception hierarchy in `ai_chat/exceptions.py`:
 ```
 AIChatError (base)
 ├── AIClientError       — API authentication / SDK / network failures
-├── SandboxError        — code rejected by AST validator or runtime failure
-└── TransformationError — output failed Generic-format validation
+└── SandboxError        — code rejected by AST validator or runtime failure
 ```
 #### Isotope Correction (`services/isotope_correction/`)
 
@@ -490,7 +489,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 | `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. Also provides `suggest_standard_mappings()`, `validate_standard_mappings()`, `create_normalization_config()` and `preview_normalization()`, currently called only by tests. |
 | `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_all_correlations()`, `run_pca()`, `remove_samples()`, plus `run_non_interactive()`. Each step can be run independently. The app uses only `validate_inputs()`, `apply_bqc_filter()`, `check_retention_time_availability()`, `get_eligible_correlation_conditions()` and `remove_samples()`; the QC plots are built by the adapter calling `BoxPlotService`, `BQCPlotterService`, `CorrelationPlotterService` and `PCAPlotterService` directly, so the `run_*` methods are currently exercised only by tests. |
 | `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
-| `AIChatWorkflow` | One method per chat mode | Orchestrates the AI Studio chat loop. `diagnose_format()` decides if a CSV needs transformation; `validate_module1_output()` gates the viz tab. Per-mode session starters (`start_transform_session`, `start_viz_session`, `start_data_questions_session`, `start_lc_questions_session`) and message handlers (`handle_transform_message`, `handle_viz_message`, `handle_data_questions_message`, `handle_lc_questions_message`). Each handler appends user/assistant messages to an immutable `ChatSession`, calls `AIClientService` (with tools where appropriate), runs returned code in the sandbox, and returns a typed result dataclass (`FormatDiagnosticResult`, `Module1ValidationResult`, `TransformStepResult`, `VizStepResult`, `DataQuestionsStepResult`, `LCQuestionsStepResult`). |
+| `AIChatWorkflow` | One method per chat mode | Orchestrates the AI Studio chat loop. `diagnose_format()` decides if a CSV needs transformation; `validate_module1_output()` gates the viz tab. Per-mode session starters (`start_transform_session`, `start_viz_session`, `start_data_questions_session`, `start_lc_questions_session`) and message handlers (`handle_transform_message`, `handle_viz_message`, `handle_data_questions_message`, `stream_lc_questions_message`). Each handler appends user/assistant messages to an immutable `ChatSession`, calls `AIClientService` (with tools where appropriate), runs returned code in the sandbox, and returns a typed result dataclass (`FormatDiagnosticResult`, `Module1ValidationResult`, `TransformStepResult`, `VizStepResult`, `DataQuestionsStepResult`); the LC questions handler returns `(session, stream)`. |
 | `PipelineAPI` | Instance methods, injected as `lc` | Not a workflow but a workflow-layer facade: gives AI-generated sandbox code the pipeline's own analytics instead of re-invented heuristics — `conditions()`, `samples_for()`, `compare_species()`, `compare_classes()`, `class_summary()`, and one method per Module 3 analysis (`bar_chart()`, `pie_charts()`, `saturation()`, `chain_length()`, `fatty_acid_composition()`, `pathway()`, `volcano()`, `heatmap()`), each returning an `LCResult`. |
 | `IsotopeTracingWorkflow` | `run()` → `IsotopeTracingResult` | Validate the three input files → run `IsotopeCorrectionService` → typed result (success + `CorrectionResult`, or `validation_errors` / `error_message`). Separate from the lipidomics pipeline. |
 
@@ -744,7 +743,7 @@ The app runs on port 8501 by default. Server settings live in `.streamlit/config
 
 1. **Add a `ChatMode` enum value** in `models/chat.py` if the new tab has its own conversation type.
 2. **Add a system prompt** in `services/ai_chat/prompt_templates.py` that defines scope and tone.
-3. **Add session start + handler methods** to `AIChatWorkflow` in `workflows/ai_chat.py`. Use `AIClientService.execute_tool_loop` if the AI needs codebase / documentation tools, otherwise `send_message`.
+3. **Add session start + handler methods** to `AIChatWorkflow` in `workflows/ai_chat.py`. Use `AIClientService.execute_tool_loop` if the AI needs codebase / documentation tools.
 4. **Add a UI module** at `ui/ai_chat/_<tab>_ui.py` calling the workflow methods through the adapter.
 5. **Register the tab** in `ui/ai_studio_page.py` and re-export the display function from `ui/ai_chat/__init__.py`.
 6. **Add session-state keys** with the `chat_*` prefix in `SessionState` in `streamlit_adapter.py`.

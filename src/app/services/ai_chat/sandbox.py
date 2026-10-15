@@ -241,7 +241,6 @@ class _UnavailablePipelineAPI:
 def _build_globals(
     df: pd.DataFrame,
     numeric_columns: Optional[List[str]] = None,
-    experiment: Optional[Any] = None,
     lc: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Build the restricted globals dict for exec().
@@ -294,12 +293,11 @@ def _build_globals(
 def build_sandbox_globals(
     df: pd.DataFrame,
     numeric_columns: Optional[List[str]] = None,
-    experiment: Optional[Any] = None,
     lc: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Public entry to ``_build_globals`` for the child runner process."""
     return _build_globals(
-        df, numeric_columns=numeric_columns, experiment=experiment, lc=lc,
+        df, numeric_columns=numeric_columns, lc=lc,
     )
 
 
@@ -395,7 +393,6 @@ def _run_in_subprocess(
     code: str,
     df: pd.DataFrame,
     numeric_columns: Optional[List[str]],
-    experiment: Optional[Any],
     config: SandboxConfig,
     lc: Optional[Any] = None,
 ) -> Dict[str, Any]:
@@ -419,7 +416,6 @@ def _run_in_subprocess(
         "code": code,
         "df": df,
         "numeric_columns": numeric_columns,
-        "experiment": experiment,
         "lc": lc,
         "max_output_rows": config.max_output_rows,
         "cpu_seconds": max(1, config.execution_timeout),
@@ -517,47 +513,6 @@ class _SandboxCrash(Exception):
     pass
 
 
-class _TimeoutError(Exception):
-    pass
-
-
-def _exec_with_timeout(compiled, exec_globals, timeout_seconds):
-    """Execute compiled code in a thread with a timeout.
-
-    Args:
-        compiled: Compiled code object.
-        exec_globals: Globals dict for exec().
-        timeout_seconds: Maximum wall-clock seconds to allow.
-
-    Raises:
-        _TimeoutError: If execution exceeds the timeout.
-        Exception: Any exception raised by the executed code.
-    """
-    result = {"error": None}
-
-    def _target():
-        try:
-            exec(compiled, exec_globals)
-        except Exception as e:
-            result["error"] = e
-
-    thread = threading.Thread(target=_target, daemon=True)
-    thread.start()
-    thread.join(timeout=timeout_seconds)
-
-    if thread.is_alive():
-        # Thread is still running — we can't forcibly kill it, but
-        # the daemon flag ensures it won't block process exit.
-        raise _TimeoutError(f"Code execution timed out after {timeout_seconds} seconds")
-
-    if result["error"] is not None:
-        raise result["error"]
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
 class SandboxService:
     """Executes AI-generated code in a restricted environment.
 
@@ -570,7 +525,6 @@ class SandboxService:
         df: pd.DataFrame,
         config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
-        experiment: Optional[Any] = None,
         lc: Optional[Any] = None,
     ) -> SandboxResult:
         """Validate and execute code in the sandbox.
@@ -586,10 +540,10 @@ class SandboxService:
                 arithmetic doesn't fail with ``TypeError: unsupported
                 operand type(s) for /: 'str' and 'float'`` when the raw
                 CSV inferred string dtypes.
-            experiment: Optional ExperimentConfig. Enables the
-                condition-aware parts of the ``lc`` namespace (statistical
-                comparisons); without it those raise a message telling the
-                user to define the experiment first.
+            lc: Optional ``PipelineAPI`` bound into the code's globals as
+                ``lc`` (rebound to the prepared copy of ``df``). Without it,
+                every ``lc.*`` call explains that the pipeline is
+                unavailable.
 
         Returns:
             SandboxResult with execution outcome.
@@ -624,7 +578,7 @@ class SandboxService:
             )
         try:
             response = _run_in_subprocess(
-                code, df, numeric_columns, experiment, config, lc=lc,
+                code, df, numeric_columns, config, lc=lc,
             )
         except _SandboxTimeout as e:
             return SandboxResult(

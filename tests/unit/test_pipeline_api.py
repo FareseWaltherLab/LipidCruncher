@@ -161,8 +161,7 @@ class TestSandboxIntegration:
     def _run(self, code, df, experiment=None):
         from app.services.ai_chat.sandbox import SandboxService
         return SandboxService.execute(
-            code, df, experiment=experiment,
-            lc=PipelineAPI(df, experiment),
+            code, df, lc=PipelineAPI(df, experiment),
         )
 
     def test_lc_is_available_to_generated_code(self, df, experiment):
@@ -405,7 +404,7 @@ class TestPlotsReachTheSandbox:
         from app.services.ai_chat.sandbox import SandboxService
         res = SandboxService.execute(
             "fig = lc.volcano('WT', 'KO').figure",
-            df, experiment=experiment, lc=lc,
+            df, lc=lc,
         )
         assert res.success, res.error_message
         assert res.figure is not None

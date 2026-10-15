@@ -7,8 +7,7 @@ Hierarchy:
     ServiceError (from services.exceptions)
     └── AIChatError (base for all AI chat errors)
         ├── AIClientError    (API communication failures)
-        ├── SandboxError     (code execution failures)
-        └── TransformationError (invalid transformation output)
+        └── SandboxError     (code execution failures)
 """
 from ..exceptions import ServiceError
 
@@ -39,11 +38,3 @@ class SandboxError(AIChatError):
     """
     pass
 
-
-class TransformationError(AIChatError):
-    """Raised when AI-generated transformation produces invalid output.
-
-    Examples: output DataFrame missing required columns, wrong column
-    types, schema validation failures.
-    """
-    pass

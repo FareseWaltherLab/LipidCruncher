@@ -8,11 +8,6 @@ and data questions.
 import streamlit as st
 
 
-# Rate limits per session (from Phase 5 spec)
-MAX_MESSAGES = 50
-MAX_EXECUTIONS = 20
-
-
 def display_transform_chat(source_df) -> None:
     """Display the AI-Assisted Import chat panel.
 

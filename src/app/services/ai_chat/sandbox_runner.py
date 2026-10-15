@@ -173,7 +173,6 @@ def main() -> int:
     exec_globals = build_sandbox_globals(
         df=request["df"],
         numeric_columns=request.get("numeric_columns"),
-        experiment=request.get("experiment"),
         lc=request.get("lc"),
     )
 

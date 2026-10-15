@@ -130,18 +130,6 @@ class DataQuestionsStepResult:
     code: str = ""
 
 
-@dataclass(frozen=True)
-class LCQuestionsStepResult:
-    """Result of a single LipidCruncher questions conversation turn.
-
-    Attributes:
-        session: Updated chat session with new messages appended.
-        assistant_message: The full assistant response text for display.
-    """
-    session: ChatSession
-    assistant_message: str = ""
-
-
 class AIChatWorkflow:
     """Orchestrates AI chat interactions.
 
@@ -637,7 +625,6 @@ class AIChatWorkflow:
                 df=analysis_df,
                 sandbox_config=sandbox_config,
                 numeric_columns=numeric_columns,
-                experiment=experiment,
                 lc=PipelineAPI(analysis_df, experiment),
             )
 
@@ -873,7 +860,6 @@ class AIChatWorkflow:
             sandbox_result = SandboxService.execute(
                 code, source_df, sandbox_config,
                 numeric_columns=numeric_columns,
-                experiment=experiment,
                 lc=PipelineAPI(source_df, experiment),
             )
             if sandbox_result.success:
@@ -1001,73 +987,19 @@ class AIChatWorkflow:
         )
 
     @staticmethod
-    def handle_lc_questions_message(
-        user_message: str,
-        session: ChatSession,
-        ai_config: Optional[AIConfig] = None,
-    ) -> LCQuestionsStepResult:
-        """Handle one user message in the LipidCruncher questions chat.
-
-        Purely conversational — no code execution. Uses the tool loop
-        so the AI can search the codebase if needed.
-
-        Args:
-            user_message: The user's latest message.
-            session: Current chat session.
-            ai_config: AI configuration. Uses defaults if None.
-
-        Returns:
-            LCQuestionsStepResult with updated session and response.
-        """
-        if ai_config is None:
-            ai_config = AIConfig()
-
-        # 1. Append user message
-        user_msg = ChatMessage(role="user", content=user_message)
-        session = session.add_message(user_msg)
-
-        # 2. Call AI with tools (for codebase search)
-        history = session.to_api_messages()[:-1]
-        messages = history + [{"role": "user", "content": user_message}]
-
-        system_prompt = lipidcruncher_questions_system_prompt()
-
-        response_text = AIClientService.execute_tool_loop(
-            messages=messages,
-            system_prompt=system_prompt,
-            config=ai_config,
-            tools=TOOL_DEFINITIONS,
-            tool_executor=execute_tool,
-        )
-
-        assistant_text = response_text.strip()
-        if not assistant_text:
-            assistant_text = (
-                "I wasn't able to generate a response. "
-                "Please try rephrasing your question."
-            )
-
-        # 3. Append assistant message
-        assistant_msg = ChatMessage(role="assistant", content=assistant_text)
-        session = session.add_message(assistant_msg)
-
-        return LCQuestionsStepResult(
-            session=session,
-            assistant_message=assistant_text,
-        )
-
-    @staticmethod
     def stream_lc_questions_message(
         user_message: str,
         session: ChatSession,
         ai_config: Optional[AIConfig] = None,
     ):
-        """Streaming variant of ``handle_lc_questions_message``.
+        """Handle one user message in the LipidCruncher questions chat.
 
-        Appends the user message to the session, then returns a generator
-        that streams the assistant's answer token-by-token. The caller (UI)
-        consumes the generator — e.g. via ``st.write_stream`` — and appends
-        the assistant message to the session from the accumulated text.
+        Purely conversational — no code execution; the AI may search the
+        codebase and docs with tools. Appends the user message to the
+        session, then returns a generator that streams the assistant's
+        answer token-by-token. The caller (UI) consumes the generator —
+        e.g. via ``st.write_stream`` — and appends the assistant message to
+        the session from the accumulated text.
 
         Returns:
             Tuple of (session_with_user_message, text_chunk_generator).

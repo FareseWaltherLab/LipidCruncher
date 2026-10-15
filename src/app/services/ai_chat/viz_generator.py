@@ -278,7 +278,6 @@ class VizGeneratorService:
         df: pd.DataFrame,
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
-        experiment=None,
         lc=None,
     ) -> SandboxResult:
         """Execute visualization code in the sandbox.
@@ -289,8 +288,8 @@ class VizGeneratorService:
             sandbox_config: Sandbox configuration. Uses defaults if None.
             numeric_columns: Optional list of columns to pre-coerce to
                 numeric before exposing the DataFrame to user code.
-            experiment: Optional ExperimentConfig, enabling the
-                condition-aware ``lc`` statistics helpers.
+            lc: Optional ``PipelineAPI`` bound into the code's globals as
+                ``lc``.
 
         Returns:
             SandboxResult — check ``result.figure`` for the generated plot.
@@ -300,5 +299,5 @@ class VizGeneratorService:
 
         return SandboxService.execute(
             code, df, sandbox_config, numeric_columns=numeric_columns,
-            experiment=experiment, lc=lc,
+            lc=lc,
         )
