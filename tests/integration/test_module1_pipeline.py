@@ -2072,3 +2072,26 @@ class TestErrorHandling:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+@pytest.mark.parametrize("df_fixture, exp_fixture, data_format", [
+    ("lipidsearch_sample_df", "lipidsearch_experiment", DataFormat.LIPIDSEARCH),
+    ("msdial_sample_df", "msdial_experiment", DataFormat.MSDIAL),
+    ("generic_sample_df", "generic_experiment", DataFormat.GENERIC),
+    ("mw_sample_df", "mw_experiment", DataFormat.METABOLOMICS_WORKBENCH),
+])
+def test_lipidmolec_is_the_first_cleaned_column(
+    request, df_fixture, exp_fixture, data_format,
+):
+    """Every format's cleaned table starts with LipidMolec (the LipidSearch
+    cleaner once appended it last; it now orders it first itself)."""
+    config = IngestionConfig(
+        experiment=request.getfixturevalue(exp_fixture),
+        data_format=data_format,
+        apply_zero_filter=True,
+    )
+    result = DataIngestionWorkflow.run(
+        request.getfixturevalue(df_fixture), config,
+    )
+    assert result.is_valid, result.validation_errors
+    assert result.cleaned_df.columns[0] == 'LipidMolec'

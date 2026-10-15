@@ -87,16 +87,6 @@ class DataCleaningService:
 
         cleaned_df, messages = cleaner_cls.clean(df, experiment, **kwargs)
 
-        # Ensure LipidMolec is the leftmost column for every format.
-        if (
-            'LipidMolec' in cleaned_df.columns
-            and cleaned_df.columns[0] != 'LipidMolec'
-        ):
-            ordered_cols = ['LipidMolec'] + [
-                c for c in cleaned_df.columns if c != 'LipidMolec'
-            ]
-            cleaned_df = cleaned_df[ordered_cols]
-
         # Extract internal standards
         cleaned_df, internal_standards_df = BaseDataCleaner.extract_internal_standards(
             cleaned_df
