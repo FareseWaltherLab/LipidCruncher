@@ -9,6 +9,7 @@ Defense model: the sandbox is the security boundary, not AI compliance.
 All AI output is treated as untrusted.
 """
 import ast
+import ctypes
 import json
 import math
 import os
@@ -523,6 +524,36 @@ MAX_CONCURRENT_EXECUTIONS = 2
 _SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_EXECUTIONS)
 
 
+_PR_GET_DUMPABLE = 3
+_PR_SET_DUMPABLE = 4
+
+
+def make_this_process_private() -> bool:
+    """Stop other processes of this user reading this process's secrets.
+
+    The app process holds ANTHROPIC_API_KEY in its environment. Linux lets
+    any process of the same user read ``/proc/<pid>/environ`` and
+    ``/proc/<pid>/mem``, so a sandbox child that got past the Python-level
+    file guard could read the key there. Marking this process non-dumpable
+    makes the kernel refuse those reads to anything without
+    CAP_SYS_PTRACE (the child is never root). Side effect: no core dumps
+    and no debugger attaching to the app process. The child starts
+    dumpable again after exec, which is harmless: its environment is empty.
+
+    Returns:
+        True when the process is private (or there is no /proc to protect:
+        not Linux), False if the setting did not take.
+    """
+    if not sys.platform.startswith("linux"):
+        return True
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.prctl(_PR_SET_DUMPABLE, 0, 0, 0, 0)
+        return libc.prctl(_PR_GET_DUMPABLE, 0, 0, 0, 0) == 0
+    except (OSError, AttributeError):
+        return False
+
+
 class _SandboxTimeout(Exception):
     pass
 
@@ -584,6 +615,17 @@ class SandboxService:
         # writes, processes, CPU and memory; Python-level hooks only for
         # reads and network; no inherited secrets; killable).
         start_time = time.monotonic()
+
+        # Fail closed, like the child's own limits: never start untrusted
+        # code while the key is readable from this process.
+        if not make_this_process_private():
+            return SandboxResult(
+                success=False,
+                error_message=(
+                    "The sandbox could not protect the app process, so the "
+                    "code was not run."
+                ),
+            )
 
         if not _SLOTS.acquire(timeout=config.execution_timeout):
             return SandboxResult(

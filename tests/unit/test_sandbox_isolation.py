@@ -408,3 +408,63 @@ class TestDockerImage:
         users = [ln[1] for ln in lines if ln and ln[0] == "USER"]
         assert users, "Dockerfile has no USER line, so the app runs as root"
         assert users[-1] not in ("root", "0")
+
+
+class TestAppProcessIsPrivate:
+    """S2 option A: the app process holds the API key in its environment,
+    which Linux shows any process of the same user in /proc/<pid>/environ.
+    The sandbox marks the app process non-dumpable before running code, so
+    the kernel refuses that read even if the Python-level guard is beaten."""
+
+    def _holder(self, private):
+        import os
+        import subprocess
+        from pathlib import Path
+
+        src = Path(__file__).parents[2] / "src"
+        code = (
+            "from app.services.ai_chat.sandbox import make_this_process_private\n"
+            f"assert make_this_process_private() if {private} else True\n"
+            "print('ready', flush=True)\n"
+            "import time; time.sleep(60)\n"
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-c", code], stdout=subprocess.PIPE, text=True,
+            env={**os.environ, "PYTHONPATH": str(src),
+                 "LC_TEST_SECRET": "not-a-real-key"},
+        )
+        assert proc.stdout.readline().strip() == "ready"
+        return proc
+
+    def _read_environ(self, pid):
+        with open(f"/proc/{pid}/environ", "rb") as fh:
+            return fh.read()
+
+    @pytest.mark.skipif(not sys.platform.startswith("linux"),
+                        reason="/proc and prctl are Linux-only")
+    def test_environment_of_a_private_process_cannot_be_read(self):
+        proc = self._holder(private=True)
+        try:
+            with pytest.raises(PermissionError):
+                self._read_environ(proc.pid)
+        finally:
+            proc.kill()
+
+    @pytest.mark.skipif(not sys.platform.startswith("linux"),
+                        reason="/proc and prctl are Linux-only")
+    def test_control_an_ordinary_process_is_readable(self):
+        proc = self._holder(private=False)
+        try:
+            assert b"LC_TEST_SECRET=not-a-real-key" in self._read_environ(proc.pid)
+        finally:
+            proc.kill()
+
+    def test_code_is_not_run_if_the_app_process_cannot_be_made_private(
+        self, df, monkeypatch,
+    ):
+        from app.services.ai_chat import sandbox
+        monkeypatch.setattr(sandbox, "make_this_process_private", lambda: False)
+        res = run("print('ran')", df)
+        assert not res.success
+        assert "could not protect the app process" in res.error_message
+        assert res.stdout == ""
