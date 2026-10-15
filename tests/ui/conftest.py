@@ -441,7 +441,7 @@ def module1_nav_script():
     """Module 1 with navigation buttons (Next + Back to Home).
 
     Renders navigation buttons that appear when normalized_df is in session state.
-    Replicates main_app.py lines 214-226 navigation logic.
+    The buttons call the same adapter navigation actions as main_app.py.
 
     Expects session state keys:
         normalized_df: DataFrame (optional — controls Next button visibility)
@@ -449,19 +449,7 @@ def module1_nav_script():
     """
     import streamlit as st
     from app.adapters.streamlit_adapter import StreamlitAdapter
-    from app.constants import COV_THRESHOLD_DEFAULT
     StreamlitAdapter.initialize_session_state()
-
-    def _reset_qc_state():
-        st.session_state.qc_continuation_df = None
-        st.session_state.qc_bqc_plot = None
-        st.session_state.qc_cov_threshold = COV_THRESHOLD_DEFAULT
-        st.session_state.qc_correlation_plots = {}
-        st.session_state.qc_pca_plot = None
-        st.session_state.qc_samples_removed = []
-        st.session_state._preserved_bqc_filter_choice = 'No'
-        st.session_state._preserved_rt_viewing_mode = 'Comparison Mode'
-        st.session_state._preserved_pca_samples_remove = []
 
     current_module = st.session_state.get('module', 'Data Cleaning, Filtering, & Normalization')
     st.text(f"module:{current_module}")
@@ -470,20 +458,19 @@ def module1_nav_script():
     if normalized_df is not None:
         st.text(f"normalized_rows:{normalized_df.shape[0]}")
         if st.button("Next: Quality Check & Analysis →", key='next_module'):
-            _reset_qc_state()
-            st.session_state.module = "Quality Check & Analysis"
+            StreamlitAdapter.go_to_quality_check()
             st.rerun()
 
     if st.button("← Back to Home", key='back_home_m1'):
-        st.session_state.page = 'landing'
-        StreamlitAdapter.reset_data_state()
+        StreamlitAdapter.back_to_home()
         st.rerun()
 
 
 def module2_nav_script():
     """Module 2 with navigation buttons (Back to Data Processing + Back to Home).
 
-    Replicates main_app.py lines 236-266 navigation logic (without QC rendering).
+    The buttons call the same adapter navigation actions as main_app.py
+    (without QC rendering).
 
     Expects session state keys:
         normalized_df: DataFrame (required — Module 2 entry gate)
@@ -491,19 +478,7 @@ def module2_nav_script():
     """
     import streamlit as st
     from app.adapters.streamlit_adapter import StreamlitAdapter
-    from app.constants import COV_THRESHOLD_DEFAULT
     StreamlitAdapter.initialize_session_state()
-
-    def _reset_qc_state():
-        st.session_state.qc_continuation_df = None
-        st.session_state.qc_bqc_plot = None
-        st.session_state.qc_cov_threshold = COV_THRESHOLD_DEFAULT
-        st.session_state.qc_correlation_plots = {}
-        st.session_state.qc_pca_plot = None
-        st.session_state.qc_samples_removed = []
-        st.session_state._preserved_bqc_filter_choice = 'No'
-        st.session_state._preserved_rt_viewing_mode = 'Comparison Mode'
-        st.session_state._preserved_pca_samples_remove = []
 
     continuation_df = st.session_state.get('normalized_df')
     if continuation_df is None:
@@ -524,13 +499,11 @@ def module2_nav_script():
     col1, col2 = st.columns(2)
     with col1:
         if st.button("← Back to Data Processing", key='back_m1'):
-            _reset_qc_state()
-            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+            StreamlitAdapter.back_to_data_processing()
             st.rerun()
     with col2:
         if st.button("← Back to Home", key='back_home_m2'):
-            st.session_state.page = 'landing'
-            StreamlitAdapter.reset_data_state()
+            StreamlitAdapter.back_to_home()
             st.rerun()
 
 
@@ -1188,7 +1161,8 @@ def captured_downloads(monkeypatch):
 def module3_nav_script():
     """Combined Module 2+3 navigation buttons (Back to Data Processing + Back to Home).
 
-    Replicates main_app.py _display_module2_and_3() navigation logic (without rendering).
+    The buttons call the same adapter navigation actions as main_app.py's
+    _display_module2_and_3() (without rendering).
 
     Expects session state keys:
         qc_continuation_df: DataFrame (optional — analysis data source)
@@ -1198,24 +1172,6 @@ def module3_nav_script():
     import streamlit as st
     from app.adapters.streamlit_adapter import StreamlitAdapter
     StreamlitAdapter.initialize_session_state()
-
-    def _reset_qc_state():
-        StreamlitAdapter.reset_module_state(
-            'qc_', '_preserved_bqc_', '_preserved_rt_', '_preserved_pca_',
-        )
-
-    def _reset_analysis_state():
-        st.session_state.analysis_selection = None
-        st.session_state.analysis_bar_chart_fig = None
-        st.session_state.analysis_pie_chart_figs = {}
-        st.session_state.analysis_saturation_figs = {}
-        st.session_state.analysis_fach_fig = None
-        st.session_state.analysis_pathway_fig = None
-        st.session_state.analysis_volcano_fig = None
-        st.session_state.analysis_volcano_data = None
-        st.session_state.analysis_heatmap_fig = None
-        st.session_state.analysis_heatmap_clusters = None
-        st.session_state.analysis_all_plots = {}
 
     analysis_df = st.session_state.get('qc_continuation_df')
     if analysis_df is None:
@@ -1234,14 +1190,11 @@ def module3_nav_script():
     col1, col2 = st.columns(2)
     with col1:
         if st.button("← Back to Data Processing", key="back_processing_module2"):
-            _reset_qc_state()
-            _reset_analysis_state()
-            st.session_state.module = "Data Cleaning, Filtering, & Normalization"
+            StreamlitAdapter.back_to_data_processing()
             st.rerun()
     with col2:
         if st.button("← Back to Home", key="back_home_module2"):
-            st.session_state.page = 'landing'
-            StreamlitAdapter.reset_data_state()
+            StreamlitAdapter.back_to_home()
             st.rerun()
 
 

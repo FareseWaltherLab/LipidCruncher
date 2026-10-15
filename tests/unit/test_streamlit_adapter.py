@@ -14,9 +14,9 @@ from dataclasses import asdict, fields
 from app.adapters.streamlit_adapter import (
     SessionState,
     StreamlitAdapter,
-    _WIDGET_KEYS,
-    _DYNAMIC_KEY_PREFIXES,
-    _PRESERVE_ON_RESET,
+    _ROUTING_FIELDS,
+    _ROUTING_WIDGETS,
+    _STAGES,
 )
 from app.constants import MODULE_DATA_PROCESSING
 from app.models.experiment import ExperimentConfig
@@ -306,168 +306,168 @@ class TestSessionStateDataIntegrity:
 
 
 # =============================================================================
-# Widget Keys Registry Tests
+# Stage registry (which stage owns each session key)
 # =============================================================================
 
-class TestWidgetKeysRegistry:
-    """Tests for _WIDGET_KEYS completeness and structure."""
+def _stage_keys(stage):
+    return stage.fields | stage.widgets | stage.plain
 
-    def test_widget_keys_is_set(self):
-        """Test that _WIDGET_KEYS is a set (no duplicates)."""
-        assert isinstance(_WIDGET_KEYS, set)
 
-    def test_widget_keys_all_strings(self):
-        """Test that all widget keys are strings."""
-        for key in _WIDGET_KEYS:
-            assert isinstance(key, str), f"Widget key {key!r} is not a string"
+class TestStageRegistry:
+    """Every session key belongs to one stage, so invalidate_from() clears
+    it at the right time. This replaced four hand-kept lists that had
+    drifted: 37 rendered widget keys were in none of them."""
 
-    def test_analysis_radio_in_widget_keys(self):
-        """Test that the analysis radio widget key is registered."""
-        assert 'analysis_radio' in _WIDGET_KEYS
-
-    def test_bar_chart_widget_keys_registered(self):
-        """Test that bar chart widget keys are registered."""
-        expected = {'bar_conditions', 'bar_classes', 'bar_scale_radio',
-                    'bar_stats_mode', 'bar_detailed_stats'}
-        assert expected.issubset(_WIDGET_KEYS)
-
-    def test_pie_chart_widget_keys_registered(self):
-        """Test that pie chart widget keys are registered."""
-        assert 'pie_classes' in _WIDGET_KEYS
-
-    def test_saturation_widget_keys_registered(self):
-        """Test that saturation widget keys are registered."""
-        expected = {'sat_conditions', 'sat_classes', 'sat_plot_type',
-                    'sat_show_significance', 'sat_detailed_stats', 'sat_stats_mode'}
-        assert expected.issubset(_WIDGET_KEYS)
-
-    def test_fach_widget_keys_registered(self):
-        """Test that FACH widget keys are registered."""
-        expected = {'fach_class', 'fach_conditions'}
-        assert expected.issubset(_WIDGET_KEYS)
-
-    def test_pathway_widget_keys_registered(self):
-        """Test that pathway widget keys are registered."""
-        expected = {'pathway_control', 'pathway_experimental'}
-        assert expected.issubset(_WIDGET_KEYS)
-
-    def test_volcano_widget_keys_registered(self):
-        """Test that volcano widget keys are registered."""
-        expected = {'volcano_control', 'volcano_experimental', 'volcano_classes',
-                    'volcano_p_threshold', 'volcano_fc_threshold',
-                    'volcano_hide_nonsig', 'volcano_top_n',
-                    'volcano_additional_labels', 'volcano_stats_mode',
-                    'volcano_detailed_stats'}
-        assert expected.issubset(_WIDGET_KEYS)
-
-    def test_heatmap_widget_keys_registered(self):
-        """Test that heatmap widget keys are registered."""
-        expected = {'heatmap_conditions', 'heatmap_classes', 'heatmap_type',
-                    'heatmap_n_clusters', 'heatmap_cluster_view'}
-        assert expected.issubset(_WIDGET_KEYS)
-
-    def test_qc_widget_keys_still_registered(self):
-        """Test that existing QC widget keys are still present (no regression)."""
-        expected = {'bqc_cov_threshold', 'bqc_filter_choice', 'pca_samples_remove',
-                    'corr_condition', 'rt_viewing_mode'}
-        assert expected.issubset(_WIDGET_KEYS)
-
-    def test_sidebar_widget_keys_still_registered(self):
-        """Test that existing sidebar widget keys are still present (no regression)."""
-        expected = {'grouping_radio', 'bqc_radio', 'confirm_checkbox'}
-        assert expected.issubset(_WIDGET_KEYS)
-
-    def test_widget_keys_session_state_overlap_is_intentional(self):
-        """Test that only known widget keys overlap with SessionState field names.
-
-        Some keys (norm_method_selection, protein_input_method) intentionally
-        exist in both _WIDGET_KEYS and SessionState — they're widget keys that
-        also have session state backing for preservation across reruns.
-        """
+    def test_every_field_belongs_to_exactly_one_stage(self):
+        owners = {}
+        for stage in _STAGES:
+            for key in stage.fields | stage.widgets:
+                owners.setdefault(key, []).append(stage.name)
+        for name in _ROUTING_FIELDS:
+            owners.setdefault(name, []).append('routing')
         field_names = {f.name for f in fields(SessionState)}
-        overlap = _WIDGET_KEYS & field_names
-        expected_overlap = {'norm_method_selection', 'protein_input_method'}
-        assert overlap == expected_overlap, \
-            f"Unexpected overlap: {overlap - expected_overlap}"
+        unowned = sorted(n for n in field_names if n not in owners)
+        assert unowned == [], f"SessionState fields in no stage: {unowned}"
+        doubled = {k: v for k, v in owners.items() if len(v) > 1}
+        assert doubled == {}
+
+    def test_no_key_is_in_two_stages(self):
+        seen = {}
+        for stage in _STAGES:
+            for key in _stage_keys(stage):
+                assert key not in seen, f"{key} in {seen.get(key)} and {stage.name}"
+                seen[key] = stage.name
+
+    def test_stage_fields_are_session_state_fields(self):
+        field_names = {f.name for f in fields(SessionState)}
+        for stage in _STAGES:
+            assert stage.fields <= field_names, stage.fields - field_names
+
+    def test_fields_written_by_widgets_are_listed_as_widgets(self):
+        """norm_method_selection and protein_input_method are both fields and
+        widget keys: they must be popped, not assigned, on a reset."""
+        field_names = {f.name for f in fields(SessionState)}
+        widget_fields = {k for s in _STAGES for k in s.widgets} & field_names
+        assert widget_fields == {'norm_method_selection', 'protein_input_method'}
+
+    def test_prefixes_end_with_underscore(self):
+        for stage in _STAGES:
+            for prefix in stage.prefixes:
+                assert prefix.endswith('_'), prefix
+
+    def test_every_literal_widget_key_in_the_ui_is_registered(self):
+        """Scans the UI for key='...' literals: a widget keyed outside the
+        registry would survive every reset."""
+        import ast
+        from pathlib import Path
+
+        src = Path(__file__).parents[2] / 'src'
+        files = list((src / 'app' / 'ui').rglob('*.py')) + [src / 'main_app.py']
+        registered = set(_ROUTING_WIDGETS)
+        prefixes = ()
+        for stage in _STAGES:
+            registered |= _stage_keys(stage)
+            prefixes += stage.prefixes
+        unregistered = []
+        for path in files:
+            for node in ast.walk(ast.parse(path.read_text())):
+                if (isinstance(node, ast.keyword) and node.arg == 'key'
+                        and isinstance(node.value, ast.Constant)
+                        and isinstance(node.value.value, str)):
+                    key = node.value.value
+                    if key not in registered and not key.startswith(prefixes):
+                        unregistered.append(f"{path.name}:{key}")
+        assert unregistered == []
 
 
-class TestDynamicKeyPrefixes:
-    """Tests for _DYNAMIC_KEY_PREFIXES completeness and structure."""
+class TestInvalidateFrom:
+    """invalidate_from(stage) clears that stage and every later one."""
 
-    def test_dynamic_prefixes_is_tuple(self):
-        """Test that _DYNAMIC_KEY_PREFIXES is a tuple."""
-        assert isinstance(_DYNAMIC_KEY_PREFIXES, tuple)
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_clears_later_stages_and_keeps_earlier_ones(self, mock_st):
+        mock_st.session_state = MockSessionState({
+            'raw_df': pd.DataFrame({'a': [1]}),          # upload
+            'normalized_df': pd.DataFrame({'b': [1]}),   # processing
+            'lsi_manual_fields': {'Ion mode': 'neg'},    # report
+            'qc_pca_plot': object(),                     # qc
+            'pca_samples_remove': ['s1'],                # qc widget
+            'qc_rt_svg_individual_PC': b'svg',           # qc prefix
+            'analysis_bar_chart_fig': object(),          # analysis
+            'volcano_label_x_PC': 1.0,                   # analysis prefix
+            'page': 'app',                               # routing
+        })
 
-    def test_dynamic_prefixes_all_strings(self):
-        """Test that all dynamic prefixes are strings."""
-        for prefix in _DYNAMIC_KEY_PREFIXES:
-            assert isinstance(prefix, str), f"Prefix {prefix!r} is not a string"
+        StreamlitAdapter.invalidate_from('qc')
 
-    def test_dynamic_prefixes_end_with_underscore(self):
-        """Test that all dynamic prefixes end with underscore (convention)."""
-        for prefix in _DYNAMIC_KEY_PREFIXES:
-            assert prefix.endswith('_'), f"Prefix {prefix!r} doesn't end with '_'"
+        state = mock_st.session_state
+        assert state['raw_df'] is not None
+        assert state['normalized_df'] is not None
+        assert state['lsi_manual_fields'] == {'Ion mode': 'neg'}
+        assert state['qc_pca_plot'] is None
+        assert state['analysis_bar_chart_fig'] is None
+        for popped in ('pca_samples_remove', 'qc_rt_svg_individual_PC',
+                       'volcano_label_x_PC'):
+            assert popped not in state
+        assert state['page'] == 'app'
 
-    def test_volcano_label_prefixes_registered(self):
-        """Test that volcano label position prefixes are registered."""
-        assert 'volcano_label_x_' in _DYNAMIC_KEY_PREFIXES
-        assert 'volcano_label_y_' in _DYNAMIC_KEY_PREFIXES
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_reset_data_state_keeps_only_the_page(self, mock_st):
+        mock_st.session_state = MockSessionState({
+            'page': 'app', 'module': 'Quality Check & Analysis',
+            'raw_df': pd.DataFrame({'a': [1]}), '_dataset_source_id': 'x',
+            'lsi_manual_fields': {'Ion mode': 'neg'},
+        })
 
-    def test_analysis_download_prefixes_registered(self):
-        """Test that analysis download button prefixes are registered."""
-        assert 'analysis_svg_' in _DYNAMIC_KEY_PREFIXES
-        assert 'analysis_csv_' in _DYNAMIC_KEY_PREFIXES
+        StreamlitAdapter.reset_data_state()
 
-    def test_existing_prefixes_still_registered(self):
-        """Test that existing dynamic key prefixes are still present (no regression)."""
-        expected = ('protein_', 'conc_', 'standard_selection_', 'grade_select_',
-                    'cond_name_', 'n_samples_', 'select_',
-                    'qc_rt_svg_individual_', 'rt_csv_individual_')
-        for prefix in expected:
-            assert prefix in _DYNAMIC_KEY_PREFIXES, f"Missing prefix: {prefix}"
-
-    def test_dynamic_prefixes_dont_overlap_with_widget_keys(self):
-        """Test that no static widget key starts with a dynamic prefix.
-
-        Known exceptions: 'protein_input_method' starts with 'protein_' prefix
-        but is a static widget key, not a dynamic one.
-        """
-        known_exceptions = {'protein_input_method', 'protein_csv_upload'}
-        for key in _WIDGET_KEYS - known_exceptions:
-            for prefix in _DYNAMIC_KEY_PREFIXES:
-                assert not key.startswith(prefix), \
-                    f"Widget key {key!r} starts with dynamic prefix {prefix!r}"
-
-
-class TestPreserveOnReset:
-    """Tests for _PRESERVE_ON_RESET configuration."""
-
-    def test_preserve_on_reset_contains_page(self):
-        """Test that 'page' is preserved on reset."""
-        assert 'page' in _PRESERVE_ON_RESET
-
-    def test_preserve_on_reset_does_not_contain_module(self):
-        """A reset starts the next dataset at Module 1 (regression: keeping
-        'module' opened it on an empty Quality Check page)."""
-        assert 'module' not in _PRESERVE_ON_RESET
-
-    def test_preserve_on_reset_does_not_contain_analysis_keys(self):
-        """Test that analysis keys are NOT preserved on reset (they should reset)."""
-        analysis_keys = {
-            'analysis_selection', 'analysis_bar_chart_fig',
-            'analysis_pie_chart_figs', 'analysis_saturation_figs',
-            'analysis_fach_fig', 'analysis_pathway_fig',
-            'analysis_volcano_fig', 'analysis_volcano_data',
-            'analysis_heatmap_fig', 'analysis_heatmap_clusters',
-            'analysis_all_plots',
-        }
-        overlap = _PRESERVE_ON_RESET & analysis_keys
-        assert overlap == set(), f"Analysis keys should not be preserved on reset: {overlap}"
+        state = mock_st.session_state
+        assert state['page'] == 'app'
+        assert state['module'] == MODULE_DATA_PROCESSING
+        assert state['raw_df'] is None
+        assert '_dataset_source_id' not in state
+        assert state['lsi_manual_fields'] == {}
 
 
-# =============================================================================
-# StreamlitAdapter Utility Method Tests
-# =============================================================================
+class TestNavigationActions:
+    """Next / Back / Home live in the adapter, so the app and the UI test
+    scripts run the same code (the scripts used to copy main_app's resets,
+    and their copies had drifted)."""
+
+    def _state(self):
+        return MockSessionState({
+            'page': 'app', 'module': MODULE_DATA_PROCESSING,
+            'normalized_df': pd.DataFrame({'b': [1]}),
+            'qc_input_experiment': object(),
+            'analysis_volcano_fig': object(),
+        })
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_next_starts_qc_over(self, mock_st):
+        mock_st.session_state = self._state()
+        StreamlitAdapter.go_to_quality_check()
+        state = mock_st.session_state
+        assert state['module'] == 'Quality Check & Analysis'
+        assert state['qc_input_experiment'] is None
+        assert state['analysis_volcano_fig'] is None
+        assert state['normalized_df'] is not None
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_back_returns_to_module1_and_clears_qc(self, mock_st):
+        mock_st.session_state = self._state()
+        mock_st.session_state['module'] = 'Quality Check & Analysis'
+        StreamlitAdapter.back_to_data_processing()
+        state = mock_st.session_state
+        assert state['module'] == MODULE_DATA_PROCESSING
+        assert state['qc_input_experiment'] is None
+        assert state['normalized_df'] is not None
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_home_drops_the_dataset(self, mock_st):
+        mock_st.session_state = self._state()
+        StreamlitAdapter.back_to_home()
+        state = mock_st.session_state
+        assert state['page'] == 'landing'
+        assert state['normalized_df'] is None
 
 
 class TestConfigHashing:
@@ -792,13 +792,13 @@ class TestSessionStateIntegration:
         assert mock_st.session_state['_preserved_pca_samples_remove'] == []
 
     @patch('app.adapters.streamlit_adapter.st')
-    def test_reset_module_state_clears_pca_group_exclusion(self, mock_st):
-        """main_app's _reset_qc_state resets by the '_preserved_pca_' prefix."""
+    def test_qc_invalidation_clears_pca_group_exclusion(self, mock_st):
+        """Next / Back clear the QC stage, including the PCA group exclusion."""
         mock_st.session_state = MockSessionState({
             '_preserved_pca_groups_remove': ['Blank'],
         })
 
-        StreamlitAdapter.reset_module_state('_preserved_pca_')
+        StreamlitAdapter.invalidate_from('qc')
 
         assert mock_st.session_state['_preserved_pca_groups_remove'] == []
 
@@ -1131,23 +1131,6 @@ class TestSessionStateFieldCompleteness:
         assert 'analysis_all_plots' in state_dict
         assert 'analysis_heatmap_clusters' in state_dict
 
-    def test_widget_keys_count_includes_analysis(self):
-        """Test that _WIDGET_KEYS count includes analysis keys."""
-        analysis_widget_keys = {k for k in _WIDGET_KEYS if any(
-            k.startswith(p) for p in ('analysis_', 'bar_', 'pie_', 'sat_',
-                                       'fach_', 'pathway_', 'volcano_', 'heatmap_')
-        )}
-        # 1 (analysis_radio) + 5 (bar) + 1 (pie) + 6 (sat) + 2 (fach)
-        # + 8 (pathway) + 10 (volcano) + 5 (heatmap) = 38
-        assert len(analysis_widget_keys) == 38
-
-    def test_dynamic_prefix_count_includes_analysis(self):
-        """Test that _DYNAMIC_KEY_PREFIXES count includes analysis prefixes."""
-        # 9 (pre-Module 3) + 4 (analysis) = 13
-        # + 1 (standards_file_uploader_, keyed by sample set) = 14
-        # + 1 (lipidsearch_alignment_uploader_, keyed by dataset) = 15
-        assert len(_DYNAMIC_KEY_PREFIXES) == 15
-
 
 # =============================================================================
 # Edge Case Tests
@@ -1202,8 +1185,10 @@ class TestEdgeCases:
 
         StreamlitAdapter.reset_data_state()
 
+        prefixes = ('volcano_label_x_', 'volcano_label_y_', 'analysis_svg_',
+                    'analysis_csv_')
         remaining_dynamic = [k for k in mock_st.session_state
-                             if isinstance(k, str) and k.startswith(_DYNAMIC_KEY_PREFIXES)]
+                             if isinstance(k, str) and k.startswith(prefixes)]
         assert remaining_dynamic == []
 
     @patch('app.adapters.streamlit_adapter.st')

@@ -500,7 +500,6 @@
    "grouping_radio",
    "ingestion_result",
    "intsta_df",
-   "load_sample",
    "n_intensity_cols",
    "n_samples_0",
    "n_samples_1",
@@ -524,6 +523,7 @@
   "kept": [
    "_dataset_source_id",
    "additional_dataset_standards",
+   "load_sample",
    "page",
    "raw_df",
    "reset_session",
@@ -1373,7 +1373,6 @@
    "grouping_radio",
    "ingestion_result",
    "intsta_df",
-   "load_sample",
    "lsi_download_csv",
    "lsi_generate_pdf",
    "lsi_manual_Acquisition software",
@@ -1433,6 +1432,7 @@
   "kept": [
    "_dataset_source_id",
    "additional_dataset_standards",
+   "load_sample",
    "page",
    "raw_df",
    "reset_session",

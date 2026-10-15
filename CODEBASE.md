@@ -346,8 +346,9 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 - **`SessionState` dataclass** — defines all session state keys with defaults and documents ownership (which UI file manages which keys).
 - **`initialize_session_state()`** — populates `st.session_state` from `SessionState` defaults on first run.
-- **`reset_data_state()`** — clears all data keys (full reset on new upload).
-- **`reset_module_state(*prefixes)`** — clears keys matching given prefixes (e.g., `'qc_'`, `'analysis_'`).
+- **Stage registry (`_STAGES`) and `invalidate_from(stage)`** — every session key (SessionState field, widget key, plain key or f-string key prefix) belongs to one pipeline stage: `upload` → `standardize` → `experiment` → `processing` → `report` → `qc` → `analysis`. `invalidate_from(stage)` clears that stage and every later one. The resets below are built on it.
+- **`reset_data_state()`** — clears every stage (full reset on new upload / Back to Home); `reset_format_derived_state()` clears from `standardize`; `reset_to_experiment_setup()` from `experiment`.
+- **Navigation actions** — `go_to_quality_check()` (Next), `back_to_data_processing()` (both clear from `qc`) and `back_to_home()`; `main_app.py` and the UI test scripts call these rather than resetting state themselves.
 - **Widget value preservation** — `restore_widget_value()` / `save_widget_value()` persist widget selections across module navigation.
 - **Cached wrappers** — every workflow/service call that should be cached is wrapped with `@st.cache_data` and custom hash functions for Pydantic models and DataFrames.
 
@@ -412,8 +413,8 @@ Nomenclature functions live in `lipid_nomenclature.py`: `parse_lipid_name()`, `n
 
 All session state is managed through the `SessionState` dataclass in `streamlit_adapter.py`. Key principles:
 
-1. **Single ownership** — each key is owned by exactly one UI file (documented in `SessionState` docstring).
-2. **Prefixed resets** — `reset_module_state('qc_')` clears all QC keys without touching other modules.
+1. **Single ownership** — each key is owned by exactly one UI file (documented in `SessionState` docstring) and belongs to exactly one stage in `_STAGES`. A new widget key must be added to its stage; `tests/unit/test_streamlit_adapter.py::TestStageRegistry` fails on a literal `key='...'` that is not registered.
+2. **Stage invalidation** — `invalidate_from(stage)` clears a stage and everything after it; `tests/ui/test_reset_matrix.py` pins what each trigger clears (regenerate `reset_matrix.json` with `UPDATE_RESET_MATRIX=1` after an intended change).
 3. **Widget preservation** — when the user navigates between modules, widget values are saved to `_preserved_*` keys and restored on return.
 4. **Cascade resets** — navigating back to Module 1 resets both QC and Analysis state. Going home resets everything.
 
@@ -425,7 +426,7 @@ raw_df → standardized_df → processing_df → cleaned_df → normalized_df �
 
 Each DataFrame flows forward through the pipeline. `processing_df` is `standardized_df` minus any samples excluded in the sidebar. In `_display_module2_and_3` (`main_app.py`) QC runs on `normalized_df` and its output goes straight to the analyses; `qc_continuation_df` is still written but nothing reads it. On entry to Module 2, `_module1_handoff` freezes the setup Module 1 ran with (`qc_input_experiment`, `qc_input_bqc_label`, `qc_input_processing_df`), so a later sidebar exclusion or regroup only shows a warning instead of being paired with the already-normalized data.
 
-Downstream state is cleared by explicit resets: a new upload or sample-data load calls `reset_for_new_source()` (which runs `reset_data_state()` and clears the cache), a format change calls `reset_format_derived_state()`, the sidebar "Reset session" button calls `reset_to_experiment_setup()`, "Back to Home" calls `reset_data_state()`, and the Next/Back buttons between modules call `_reset_qc_state()` / `_reset_analysis_state()` in `main_app.py`.
+Downstream state is cleared by explicit resets: a new upload or sample-data load calls `reset_for_new_source()` (which runs `reset_data_state()` and clears the cache), a format change calls `reset_format_derived_state()`, the sidebar "Reset session" button calls `reset_to_experiment_setup()`, "Back to Home" calls `reset_data_state()`, and the Next/Back buttons between modules call `go_to_quality_check()` / `back_to_data_processing()`, which clear the `qc` and `analysis` stages. Nothing clears a stage automatically when its inputs change; each trigger above is explicit.
 
 ---
 
