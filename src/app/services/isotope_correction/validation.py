@@ -19,8 +19,6 @@ import pandas as pd
 
 def _nonempty_first_column(df: pd.DataFrame) -> List[str]:
     """Return stripped, non-empty values of the first column."""
-    if df.shape[1] == 0:
-        return []
     values = df.iloc[:, 0].dropna().astype(str).str.strip()
     return [v for v in values if v]
 
@@ -114,8 +112,6 @@ def validate_inputs(
             "Measurement file must have an ID column plus at least one sample "
             f"column; found {measurement_df.shape[1]} column(s)."
         )
-    if element_df.shape[1] < 1:
-        errors.append("Element file must have at least an element column.")
 
     measurement_ids = _nonempty_first_column(measurement_df)
     molecule_names = _nonempty_first_column(molecule_df)
@@ -147,13 +143,10 @@ def validate_inputs(
     # Every measurement ID must be claimed by a molecule name as a prefix.
     # Prefix-matching (not splitting on '_') because molecule names themselves
     # contain underscores, e.g. "BMP_18:1_18:1".
-    def claimed_by_molecule(measurement_id: str) -> bool:
-        return any(
-            measurement_id == name or measurement_id.startswith(name + "_")
-            for name in molecule_names
-        )
-
-    unmatched = [mid for mid in measurement_ids if not claimed_by_molecule(mid)]
+    unmatched = [
+        mid for mid in measurement_ids
+        if _matching_molecule(mid, molecule_names) is None
+    ]
     if unmatched:
         preview = ", ".join(unmatched[:5])
         more = f" (and {len(unmatched) - 5} more)" if len(unmatched) > 5 else ""

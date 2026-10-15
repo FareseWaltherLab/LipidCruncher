@@ -600,7 +600,7 @@ Each DataFrame flows forward through the pipeline. `processing_df` is `standardi
 
 Downstream state is cleared by explicit resets: a new upload or sample-data load calls `reset_for_new_source()` (which runs `reset_data_state()` and clears the cache), a format change calls `reset_format_derived_state()`, the sidebar "Reset session" button calls `reset_to_experiment_setup()`, "Back to Home" calls `reset_data_state()`, and the Next/Back buttons between modules call `go_to_quality_check()` / `back_to_data_processing()`, which clear the `qc` and `analysis` stages. Nothing clears a stage automatically when its inputs change; each trigger above is explicit.
 
-The isotope tracing page owns the `iso_`-prefixed keys (`iso_measurement_df`, `iso_molecule_df`, `iso_element_df`, `iso_config`, `iso_result`), cleared together via `reset_module_state('iso_')` when leaving the page.
+The isotope tracing page owns the `iso_`-prefixed keys (`iso_measurement_df`, `iso_molecule_df`, `iso_element_df`, `iso_result`, and `iso_result_key`, the inputs + settings the result belongs to), the `isotope` stage of `_STAGES`, cleared with `clear_stage('isotope')` when leaving the page.
 
 ---
 
