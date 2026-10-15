@@ -40,7 +40,7 @@ class TestIsotopeCorrectionConfig:
         assert config.correct_tracer_element_core is True
         assert config.calculate_mean_enrichment is True
         assert config.ultra_high_res is False
-        assert config.calculation_threshold_uhr == 8.0
+        assert config.calculation_threshold_uhr == 8
 
     def test_is_frozen_and_hashable(self):
         config = IsotopeCorrectionConfig()
@@ -51,6 +51,16 @@ class TestIsotopeCorrectionConfig:
     def test_rejects_negative_threshold(self):
         with pytest.raises(Exception):
             IsotopeCorrectionConfig(calculation_threshold_uhr=-1)
+
+    def test_threshold_must_be_a_whole_number(self):
+        """Regression (IQ6): the threshold was a float, and IsoCorrectoR
+        aborts on a non-integer one ("must be integer and non-negative"),
+        with the reason buried in R's stderr."""
+        with pytest.raises(Exception):
+            IsotopeCorrectionConfig(calculation_threshold_uhr=8.5)
+        config = IsotopeCorrectionConfig(calculation_threshold_uhr=8.0)
+        assert config.calculation_threshold_uhr == 8
+        assert isinstance(config.calculation_threshold_uhr, int)
 
 
 class TestValidateInputs:

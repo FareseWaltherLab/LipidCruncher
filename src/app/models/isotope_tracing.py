@@ -25,6 +25,7 @@ class IsotopeCorrectionConfig(BaseModel):
             correction results (two extra tables; the main correction is
             unchanged).
         calculation_threshold_uhr: Limit value used by the UHR calculation.
+            A whole number: IsoCorrectoR rejects anything else.
     """
     model_config = {"frozen": True}
 
@@ -33,4 +34,4 @@ class IsotopeCorrectionConfig(BaseModel):
     calculate_mean_enrichment: bool = True
     ultra_high_res: bool = False
     correct_also_monoisotopic: bool = False
-    calculation_threshold_uhr: float = Field(default=8.0, ge=0.0)
+    calculation_threshold_uhr: int = Field(default=8, ge=0)

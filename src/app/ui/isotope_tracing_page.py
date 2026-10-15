@@ -289,7 +289,7 @@ def _display_sidebar(r_available: bool):
             st.checkbox("Calculate mean enrichment", key="iso_calculate_mean_enrichment")
             st.checkbox("Ultra-high-resolution mode", key="iso_ultra_high_res")
             st.checkbox("Also output monoisotopic correction", key="iso_correct_also_monoisotopic")
-            st.number_input("UHR calculation limit", min_value=0.0, step=1.0,
+            st.number_input("UHR calculation limit", min_value=0, step=1,
                             key="iso_calculation_threshold_uhr",
                             help="Limit value used by the ultra-high-resolution calculation.")
 

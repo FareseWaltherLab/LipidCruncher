@@ -41,7 +41,7 @@ GOLDEN_CONFIG = IsotopeCorrectionConfig(
     calculate_mean_enrichment=True,
     ultra_high_res=True,
     correct_also_monoisotopic=False,
-    calculation_threshold_uhr=8.0,
+    calculation_threshold_uhr=8,
 )
 
 # (CorrectionResult field, golden output-file suffix). RelativeResiduals omitted.
