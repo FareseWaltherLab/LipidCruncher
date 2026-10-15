@@ -109,7 +109,7 @@ class SessionState:
                              analysis_heatmap_fig, analysis_heatmap_clusters,
                              analysis_all_plots
       isotope_tracing_page.py → iso_measurement_df, iso_molecule_df, iso_element_df,
-                             iso_config, iso_result
+                             iso_result, iso_result_key
       main_app.py          → page, module
     """
     # --- App-level routing (owner: main_app.py) ---
@@ -324,8 +324,9 @@ class SessionState:
     iso_measurement_df: Optional[pd.DataFrame] = None
     iso_molecule_df: Optional[pd.DataFrame] = None
     iso_element_df: Optional[pd.DataFrame] = None
-    iso_config: Optional[IsotopeCorrectionConfig] = None
     iso_result: Optional[IsotopeTracingResult] = None
+    # Fingerprint of the inputs + settings iso_result was computed from.
+    iso_result_key: Optional[str] = None
 
 
 # Keys that should NOT be reset when starting a fresh analysis (app-level

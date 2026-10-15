@@ -8,6 +8,7 @@ view and download the corrected tables.
 
 UI-layer only — all data work goes through StreamlitAdapter / the workflow.
 """
+import hashlib
 from pathlib import Path
 from typing import Optional
 
@@ -235,6 +236,18 @@ def _config_from_widgets() -> IsotopeCorrectionConfig:
     )
 
 
+def _inputs_key(measurement_df, molecule_df, element_df, config) -> Optional[str]:
+    """Fingerprint of the three inputs and the settings, to tell whether the
+    result on screen still belongs to what the sidebar shows."""
+    if measurement_df is None or molecule_df is None or element_df is None:
+        return None
+    digest = hashlib.sha256(config.model_dump_json().encode())
+    for df in (measurement_df, molecule_df, element_df):
+        digest.update(repr(list(df.columns)).encode())
+        digest.update(pd.util.hash_pandas_object(df, index=True).values.tobytes())
+    return digest.hexdigest()
+
+
 def _download_table(df: pd.DataFrame, label: str, key: str) -> None:
     """Download a result table as CSV, preserving the isotopologue-ID index."""
     st.download_button(
@@ -371,17 +384,26 @@ def display_isotope_tracing_page() -> None:
                 "unaffected — use **← Back to Home** to return to general lipidomics."
             )
 
+        config = _config_from_widgets()
+        current_key = _inputs_key(measurement_df, molecule_df, element_df, config)
         if run_clicked:
-            config = _config_from_widgets()
-            st.session_state.iso_config = config
             st.session_state.iso_measurement_df = measurement_df
             st.session_state.iso_molecule_df = molecule_df
             st.session_state.iso_element_df = element_df
             st.session_state.iso_result = StreamlitAdapter.run_isotope_correction(
                 measurement_df, molecule_df, element_df, config
             )
+            st.session_state.iso_result_key = current_key
 
-        if st.session_state.get("iso_result") is None and not run_clicked:
+        result = st.session_state.get("iso_result")
+        if result is None:
             st.info("Provide the three input files and click **Run correction** in the sidebar.")
-
-        _display_results(st.session_state.get("iso_result"))
+        elif st.session_state.get("iso_result_key") != current_key:
+            # A new upload, the sample data or a changed setting: the last
+            # result (and its downloads) no longer match the sidebar.
+            st.info(
+                "The input files or settings have changed since the last run. "
+                "Click **Run correction** to update the results."
+            )
+        else:
+            _display_results(result)
