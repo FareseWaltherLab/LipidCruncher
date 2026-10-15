@@ -33,7 +33,7 @@ from ..services.ai_chat.viz_generator import VizGeneratorService
 from ..services.format_detection import (
     FormatDetectionService,
     DataFormat,
-    GENERIC_METADATA_NAME_PATTERNS,
+    looks_like_metadata_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -168,12 +168,7 @@ class AIChatWorkflow:
         intensity_cols = []
         metadata_cols = []
 
-        # Reuse the shared pattern set from format_detection so the
-        # detector and the diagnostic stay aligned.
-        metadata_patterns = GENERIC_METADATA_NAME_PATTERNS
-
         for i, col in enumerate(df.columns):
-            col_lower = col.lower().strip()
             series = df[col]
 
             # First string column with letter content → likely lipid names
@@ -183,9 +178,8 @@ class AIChatWorkflow:
                     lipid_col = col
                     continue
 
-            # Check if column name matches metadata patterns
-            is_metadata = any(p in col_lower for p in metadata_patterns)
-            if is_metadata:
+            # The detector's own metadata-name rule, so the two agree.
+            if looks_like_metadata_name(col):
                 metadata_cols.append(col)
                 continue
 

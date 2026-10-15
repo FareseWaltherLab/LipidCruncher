@@ -3,19 +3,18 @@ Format detection service for lipid data.
 Automatically identifies the format of uploaded data based on column signatures.
 Pure logic - no Streamlit dependencies.
 """
+import re
 from enum import Enum
 from typing import Union, List, Set
 import pandas as pd
 
 
-# Metadata-name substrings (case-insensitive) that disqualify a column
-# from being treated as a sample intensity in Generic-format detection,
-# and that also drive the AI's column-role diagnosis. Single source of
-# truth — imported by AIChatWorkflow.diagnose_format.
-#
-# Substring matching is intentional, so e.g. 'PrecursorMZ' matches 'mz'.
+# Metadata-name patterns (case-insensitive) that disqualify a column from
+# being treated as a sample intensity in Generic-format detection, the AI's
+# column-role diagnosis and the Transform tab's output check. Matched by
+# looks_like_metadata_name(), at the start of a word of the column name.
 # Patterns must NOT collide with the canonical Generic intensity column
-# name 'intensity[sN]' (so no 'id', no 'in', no 'sit').
+# name 'intensity[sN]' (so no 'id', no 'in').
 GENERIC_METADATA_NAME_PATTERNS: frozenset = frozenset({
     'score', 'grade', 'mass', 'mz', 'm/z', 'rt', 'retention',
     'adduct', 'formula', 'inchi', 'smiles', 'comment', 'note',
@@ -23,6 +22,20 @@ GENERIC_METADATA_NAME_PATTERNS: frozenset = frozenset({
     'spectrum', 'isotope', 'similarity', 'dot product', 'reference',
     'modified', 'curation', 'fragment', 's/n', 'average rt', 'average mz',
 })
+
+
+def looks_like_metadata_name(name) -> bool:
+    """Whether a column name suggests metadata (RT, m/z, score, ...).
+
+    A pattern must start a word of the name, after splitting camelCase and
+    at anything but letters, digits and '/': 'PrecursorMZ', 'mzmed',
+    'INCHIKEY', 'Average Rt(min)' and 'Total score' match, while sample
+    names that merely contain a pattern ('Heart_1', 'Cortex_A' contain
+    'rt') do not.
+    """
+    text = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', str(name))
+    words = ' ' + ' '.join(re.sub(r'[^A-Za-z0-9/]+', ' ', text).lower().split())
+    return any(f' {p}' in words for p in GENERIC_METADATA_NAME_PATTERNS)
 
 
 class DataFormat(str, Enum):
@@ -291,8 +304,7 @@ class FormatDetectionService:
 
         any_numeric = False
         for col_idx in range(intensity_start, len(df.columns)):
-            col_name_lower = str(df.columns[col_idx]).lower().strip()
-            if any(p in col_name_lower for p in GENERIC_METADATA_NAME_PATTERNS):
+            if looks_like_metadata_name(df.columns[col_idx]):
                 return False
 
             col = df.iloc[:, col_idx]
@@ -305,33 +317,11 @@ class FormatDetectionService:
 
     @staticmethod
     def _looks_like_classkey_column(df: pd.DataFrame, col_idx: int) -> bool:
-        """Heuristic: does this column look like a ClassKey column?
-
-        Lightweight inline equivalent of
-        DataStandardizationService._is_classkey_column, kept local to avoid
-        a circular import (data_standardization imports from this module).
-        """
-        if col_idx >= len(df.columns):
-            return False
-        if str(df.columns[col_idx]).lower().strip() == 'classkey':
-            return True
-        col = df.iloc[:, col_idx]
-        try:
-            numeric_ratio = pd.to_numeric(col, errors='coerce').notna().sum() / max(len(col), 1)
-            if numeric_ratio > 0.5:
-                return False
-            str_values = col.astype(str)
-            total_len = str_values.str.len().sum()
-            if total_len == 0:
-                return False
-            avg_len = str_values.str.len().mean()
-            alpha_ratio = (
-                str_values.str.replace(r'[^A-Za-z]', '', regex=True).str.len().sum()
-                / total_len
-            )
-            return avg_len < 15 and alpha_ratio > 0.7
-        except (ValueError, TypeError, ZeroDivisionError):
-            return False
+        """Whether this column looks like a ClassKey column: the same rule
+        standardization applies. Imported at call time because
+        data_standardization imports this module."""
+        from .data_standardization import DataStandardizationService
+        return DataStandardizationService._is_classkey_column(df, col_idx)
 
     @staticmethod
     def get_format_display_name(format_type: DataFormat) -> str:

@@ -12,7 +12,7 @@ import pandas as pd
 
 from ...models.chat import AIConfig, SandboxConfig
 from ..data_standardization import DataStandardizationService
-from ..format_detection import GENERIC_METADATA_NAME_PATTERNS
+from ..format_detection import looks_like_metadata_name
 from .ai_client import AIClientService
 from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .prompt_templates import build_transform_context, data_transform_system_prompt
@@ -281,8 +281,7 @@ class DataTransformerService:
         """
         suspicious = []
         for col in DataTransformerService._sample_columns(df):
-            col_lower = str(col).lower().strip()
-            if any(p in col_lower for p in GENERIC_METADATA_NAME_PATTERNS):
+            if looks_like_metadata_name(col):
                 suspicious.append(col)
         return suspicious
 

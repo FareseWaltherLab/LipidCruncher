@@ -1604,3 +1604,48 @@ class TestSniffDelimiter:
     def test_empty_text_defaults_to_comma(self):
         """Empty input defaults to comma (backward-compatible)."""
         assert FormatDetectionService.sniff_delimiter("") == ','
+
+
+class TestMetadataNames:
+    """SQ6: patterns matched anywhere in a name, so sample names that merely
+    contain one ('Heart_1' and 'Cortex_A' contain 'rt') made a Generic file
+    detect as Unknown."""
+
+    @pytest.mark.parametrize("name", [
+        "PrecursorMZ", "mzmed", "rtmin", "INCHIKEY", "Average Rt(min)",
+        "Average Mz", "Total score", "TotalGrade", "CalcMass", "BaseRt",
+        "MolFormula", "Reference m/z", "S/N average", "Simple dot product",
+        "Alignment ID", "Fill %", "Notes", "Adduct type",
+    ])
+    def test_metadata_names_are_recognised(self, name):
+        from app.services.format_detection import looks_like_metadata_name
+        assert looks_like_metadata_name(name)
+
+    @pytest.mark.parametrize("name", [
+        "Heart_1", "Cortex_A", "Liver_ctrl", "intensity[s1]", "WT_rep2",
+        "Sample_A",
+    ])
+    def test_sample_names_are_not_metadata(self, name):
+        from app.services.format_detection import looks_like_metadata_name
+        assert not looks_like_metadata_name(name)
+
+    def test_tissue_named_samples_detect_as_generic(self):
+        df = pd.DataFrame({
+            "Lipid": ["PC(34:1)", "PE(36:2)"],
+            "Heart_1": [1.0, 2.0], "Heart_2": [1.5, 2.5],
+            "Cortex_A": [3.0, 4.0], "Cortex_B": [3.5, 4.5],
+        })
+        assert FormatDetectionService.detect_format(df) == DataFormat.GENERIC
+
+    def test_classkey_rule_is_standardizations(self):
+        """One ClassKey heuristic, not a copy that could drift."""
+        from app.services.data_standardization import (
+            DataStandardizationService,
+        )
+        df = pd.DataFrame({
+            "Lipid": ["PC 34:1", "PE 36:2"], "Class": ["PC", "PE"],
+            "Odd": ["PC 34:1 long name here", "x"], "s1": [1.0, 2.0],
+        })
+        for i in range(4):
+            assert FormatDetectionService._looks_like_classkey_column(df, i) \
+                == DataStandardizationService._is_classkey_column(df, i)
