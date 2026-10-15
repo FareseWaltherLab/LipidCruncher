@@ -307,3 +307,50 @@ class TestExecuteTool:
         # a small slack for the truncation notice when it triggers.
         result = execute_tool("read_documentation", {"doc_name": "CODEBASE"})
         assert len(result) <= _MAX_DOC_CHARS + 200
+
+
+class TestUntrackedDocsStayPrivate:
+    """Regression (S9): all of docs/ was readable, and on a local checkout
+    that folder also holds untracked notes (deployment details, runbooks).
+    Only the two tracked papers may be read."""
+
+    @pytest.fixture
+    def private_note(self):
+        import uuid
+
+        # Neither appears in any tracked file; the content token is kept
+        # out of the file name, which error messages echo back.
+        token = uuid.uuid4().hex
+        path = _PROJECT_ROOT / "docs" / f"_private_note_{uuid.uuid4().hex}.md"
+        path.write_text(f"account id {token}\n")
+        try:
+            yield path, token
+        finally:
+            path.unlink()
+
+    def test_untracked_doc_cannot_be_read(self, private_note):
+        path, _ = private_note
+        with pytest.raises(AIChatError, match="Access denied"):
+            execute_tool("read_file_section", {
+                "file_path": f"docs/{path.name}",
+            })
+
+    def test_untracked_doc_is_not_searched(self, private_note):
+        _, token = private_note
+        result = execute_tool("search_codebase", {"query": token})
+        assert "No matches found" in result
+
+    def test_docs_folder_cannot_be_listed(self, private_note):
+        path, _ = private_note
+        result = execute_tool("list_files", {"directory": "docs"})
+        assert path.name not in result
+
+    def test_papers_are_still_readable_and_searchable(self):
+        result = execute_tool("read_file_section", {
+            "file_path": "docs/supplementary_methods.md",
+        })
+        assert "Error" not in result.splitlines()[0]
+        found = execute_tool("search_codebase", {
+            "query": "Alexander-Govern", "file_pattern": "supplementary_methods.md",
+        })
+        assert "docs/supplementary_methods.md" in found

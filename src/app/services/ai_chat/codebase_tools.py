@@ -23,12 +23,15 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _ALLOWED_DIRS = [
     _PROJECT_ROOT / "src" / "app",
     _PROJECT_ROOT / "tests",
-    _PROJECT_ROOT / "docs",
 ]
 
-# Individual files the AI is allowed to read
+# Individual files the AI is allowed to read. The docs are listed one by
+# one, not as `docs/`: that folder also holds untracked local notes
+# (deployment, runbooks) that a local run would otherwise expose.
 _ALLOWED_FILES = [
     _PROJECT_ROOT / "CODEBASE.md",
+    _PROJECT_ROOT / "docs" / "lipidcruncher_paper.md",
+    _PROJECT_ROOT / "docs" / "supplementary_methods.md",
 ]
 
 # Patterns that are always blocked (case-insensitive match on path components)
@@ -249,6 +252,18 @@ def execute_tool(name: str, tool_input: dict[str, Any]) -> str:
 # Tool implementations
 # ---------------------------------------------------------------------------
 
+def _readable_files():
+    """Every file under the allowed directories, then the allowed files."""
+    for allowed_dir in _ALLOWED_DIRS:
+        if allowed_dir.exists():
+            for root, _dirs, files in os.walk(allowed_dir):
+                for fname in files:
+                    yield Path(root) / fname
+    for allowed_file in _ALLOWED_FILES:
+        if allowed_file.is_file():
+            yield allowed_file
+
+
 def _search_codebase(query: str, file_pattern: Optional[str] = None) -> str:
     """Search for a pattern across allowed project files.
 
@@ -265,44 +280,35 @@ def _search_codebase(query: str, file_pattern: Optional[str] = None) -> str:
     except re.error:
         return f"Error: invalid search pattern: {query}"
 
-    for allowed_dir in _ALLOWED_DIRS:
-        if not allowed_dir.exists():
+    for fpath in _readable_files():
+        if not _is_path_safe(fpath):
             continue
-        for root, _dirs, files in os.walk(allowed_dir):
-            for fname in files:
-                fpath = Path(root) / fname
-                if not _is_path_safe(fpath):
-                    continue
-                if file_pattern and not fnmatch.fnmatch(fname, file_pattern):
-                    continue
-                try:
-                    text = fpath.read_text(errors="replace")
-                except OSError:
-                    continue
-                rel = fpath.relative_to(_PROJECT_ROOT)
-                all_lines = text.splitlines()
-                for lineno, line in enumerate(all_lines):
-                    if pattern.search(line):
-                        n_matches += 1
-                        # Include context lines around the match
-                        start = max(0, lineno - _SEARCH_CONTEXT_LINES)
-                        end = min(len(all_lines), lineno + _SEARCH_CONTEXT_LINES + 1)
-                        context_block = []
-                        for i in range(start, end):
-                            marker = ">>>" if i == lineno else "   "
-                            context_block.append(
-                                f"{marker} {i + 1}: {all_lines[i].rstrip()}"
-                            )
-                        results.append(
-                            f"--- {rel}:{lineno + 1} ---\n"
-                            + "\n".join(context_block)
-                        )
-                        if n_matches >= _MAX_SEARCH_RESULTS:
-                            break
+        if file_pattern and not fnmatch.fnmatch(fpath.name, file_pattern):
+            continue
+        try:
+            text = fpath.read_text(errors="replace")
+        except OSError:
+            continue
+        rel = fpath.relative_to(_PROJECT_ROOT)
+        all_lines = text.splitlines()
+        for lineno, line in enumerate(all_lines):
+            if pattern.search(line):
+                n_matches += 1
+                # Include context lines around the match
+                start = max(0, lineno - _SEARCH_CONTEXT_LINES)
+                end = min(len(all_lines), lineno + _SEARCH_CONTEXT_LINES + 1)
+                context_block = []
+                for i in range(start, end):
+                    marker = ">>>" if i == lineno else "   "
+                    context_block.append(
+                        f"{marker} {i + 1}: {all_lines[i].rstrip()}"
+                    )
+                results.append(
+                    f"--- {rel}:{lineno + 1} ---\n"
+                    + "\n".join(context_block)
+                )
                 if n_matches >= _MAX_SEARCH_RESULTS:
                     break
-            if n_matches >= _MAX_SEARCH_RESULTS:
-                break
         if n_matches >= _MAX_SEARCH_RESULTS:
             break
 
