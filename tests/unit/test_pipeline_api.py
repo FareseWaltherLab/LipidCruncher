@@ -208,11 +208,10 @@ class TestSandboxIntegration:
 class TestPromptsAdvertisePipelineFirst:
     def test_all_code_generating_prompts_carry_the_rule(self):
         from app.services.ai_chat.prompt_templates import (
-            data_questions_system_prompt, unified_system_prompt,
+            data_questions_system_prompt,
         )
         from app.services.ai_chat.viz_generator import _viz_system_prompt
-        for prompt in (data_questions_system_prompt(),
-                       unified_system_prompt(), _viz_system_prompt()):
+        for prompt in (data_questions_system_prompt(), _viz_system_prompt()):
             assert "Pipeline first" in prompt
             assert "lc.compare_species" in prompt
 
@@ -424,30 +423,6 @@ class TestPlotsReachTheSandbox:
 
 class TestEveryPathSuppliesThePipeline:
     """Regression tests for two wiring bugs found during the layer move."""
-
-    def test_unified_path_passes_lc_to_the_sandbox(self, df, monkeypatch):
-        """handle_unified_message called the sandbox without `lc`, so that
-        tab silently had no access to LipidCruncher's pipeline."""
-        from app.workflows.ai_chat import AIChatWorkflow
-        from app.services.ai_chat import ai_client, sandbox
-
-        seen = {}
-        real_execute = sandbox.SandboxService.execute
-
-        def spy(code, df_, config=None, **kwargs):
-            seen["lc"] = kwargs.get("lc")
-            return real_execute(code, df_, config, **kwargs)
-
-        monkeypatch.setattr(sandbox.SandboxService, "execute", spy)
-        monkeypatch.setattr(
-            ai_client.AIClientService, "execute_tool_loop",
-            lambda *a, **k: "```python\nresult_df = df.head(1)\n```",
-        )
-        session = AIChatWorkflow.start_unified_session(df)
-        AIChatWorkflow.handle_unified_message(
-            user_message="show one row", session=session, source_df=df,
-        )
-        assert seen["lc"] is not None, "unified path lost the lc namespace"
 
     def test_missing_lc_explains_itself(self, df):
         """Binding None surfaced as \"'NoneType' object has no attribute

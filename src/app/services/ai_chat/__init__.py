@@ -14,7 +14,6 @@ from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .prompt_templates import (
     data_transform_system_prompt,
     data_questions_system_prompt,
-    unified_system_prompt,
     build_transform_context,
 )
 
@@ -35,6 +34,5 @@ __all__ = [
     "execute_tool",
     "data_transform_system_prompt",
     "data_questions_system_prompt",
-    "unified_system_prompt",
     "build_transform_context",
 ]

@@ -293,8 +293,6 @@ class SessionState:
     chat_transform_session: Optional[Any] = None
     chat_viz_session: Optional[Any] = None
     chat_data_questions_session: Optional[Any] = None
-    chat_unified_session: Optional[Any] = None
-    chat_result_tables: Dict[str, Any] = field(default_factory=dict)
     chat_mode: Optional[str] = None
     chat_transform_result: Optional[pd.DataFrame] = None
     chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
@@ -480,8 +478,7 @@ _STAGES: Tuple[_Stage, ...] = (
         'ai_studio',
         fields=frozenset({
             'chat_transform_session', 'chat_viz_session',
-            'chat_data_questions_session', 'chat_unified_session',
-            'chat_result_tables', 'chat_mode', 'chat_transform_result',
+            'chat_data_questions_session', 'chat_mode', 'chat_transform_result',
             'chat_viz_figures', 'chat_message_count', 'chat_execution_count',
             'chat_studio_df', 'chat_studio_df_original', 'chat_studio_experiment',
             'chat_studio_pipeline_source', 'chat_studio_detected_format',
@@ -494,7 +491,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'chat_input_transform', 'chat_reset_transform',
             'chat_download_transform',
             'chat_input_lc_questions', 'chat_reset_lc_questions',
-            'chat_retry_lc', 'chat_input_unified', 'chat_reset_unified',
+            'chat_retry_lc',
             'chat_input_viz', 'chat_reset_viz',
             'ai_studio_file_uploader', 'ai_studio_import_pipeline',
             'ai_studio_pipeline_choice', 'studio_grouping_radio',
@@ -1643,31 +1640,6 @@ class StreamlitAdapter:
     def set_cached_lc_answer(question: str, answer: str) -> None:
         """Store a canonical answer for a LipidCruncher-questions prompt."""
         _lc_answer_cache()[_normalize_lc_question(question)] = answer
-
-    @staticmethod
-    def run_ai_unified(
-        user_message: str,
-        session,
-        source_df: pd.DataFrame,
-    ):
-        """Run one turn of the unified AI Studio chat.
-
-        NOT cached because chat is inherently stateful.
-
-        Args:
-            user_message: The user's message.
-            session: Current ChatSession.
-            source_df: The user's DataFrame.
-
-        Returns:
-            UnifiedStepResult from the workflow.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.handle_unified_message(
-            user_message=user_message,
-            session=session,
-            source_df=source_df,
-        )
 
     # ------------------------------------------------------------------
     # AI Studio interaction logging (super-user preview)

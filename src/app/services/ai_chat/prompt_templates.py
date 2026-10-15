@@ -513,10 +513,3 @@ Never generate code that transforms the data into a new format or produces visua
 your output should ONLY be summaries, counts, statistics, or descriptions of the data.
 """
 
-
-def unified_system_prompt() -> str:
-    """Unified system prompt (legacy — kept for backward compatibility).
-
-    New code should use the tab-specific prompts instead.
-    """
-    return data_questions_system_prompt()

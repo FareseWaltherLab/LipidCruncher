@@ -179,27 +179,3 @@ def display_lipidcruncher_questions_chat() -> None:
 
     render_lc_questions_chat()
 
-
-def display_unified_chat(source_df) -> None:
-    """Display the unified AI Studio chat panel.
-
-    Single chat that handles data questions, transformations, and
-    visualizations in one conversation.
-
-    Args:
-        source_df: The user's uploaded DataFrame.
-    """
-    from app.workflows.ai_chat import AIChatWorkflow
-    from ._unified_chat_ui import render_unified_chat
-
-    # Initialize session if needed
-    if st.session_state.get('chat_unified_session') is None:
-        st.session_state.chat_unified_session = (
-            AIChatWorkflow.start_unified_session(source_df)
-        )
-        st.session_state.chat_message_count = 0
-        st.session_state.chat_execution_count = 0
-        st.session_state.chat_viz_figures = {}
-        st.session_state.chat_result_tables = {}
-
-    render_unified_chat(source_df)

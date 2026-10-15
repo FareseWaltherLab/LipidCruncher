@@ -25,7 +25,6 @@ from ..services.ai_chat.prompt_templates import (
     build_experiment_context,
     data_questions_system_prompt,
     lipidcruncher_questions_system_prompt,
-    unified_system_prompt,
 )
 from ..services.ai_chat.sandbox import SandboxResult, SandboxService
 from .pipeline_api import PipelineAPI
@@ -141,26 +140,6 @@ class LCQuestionsStepResult:
     """
     session: ChatSession
     assistant_message: str = ""
-
-
-@dataclass(frozen=True)
-class UnifiedStepResult:
-    """Result of a single unified chat conversation turn.
-
-    Attributes:
-        session: Updated chat session with new messages appended.
-        assistant_message: The full assistant response text for display.
-        result_df: Optional DataFrame (summary table or transformation result).
-        figure: Optional Plotly figure.
-        code: Code that was executed (if any).
-        is_transformation: True if result_df is a Generic format transformation.
-    """
-    session: ChatSession
-    assistant_message: str = ""
-    result_df: Optional[pd.DataFrame] = None
-    figure: object = None
-    code: str = ""
-    is_transformation: bool = False
 
 
 class AIChatWorkflow:
@@ -1112,150 +1091,6 @@ class AIChatWorkflow:
         )
         return session, generator
 
-    # ------------------------------------------------------------------
-    # Unified mode (single chat for all capabilities)
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def start_unified_session(df: pd.DataFrame) -> ChatSession:
-        """Initialize a unified AI Studio chat session.
-
-        Args:
-            df: The user's uploaded DataFrame.
-
-        Returns:
-            A new ChatSession in DATA_QUESTIONS mode with schema context.
-        """
-        schema = SchemaExtractorService.extract_schema(df)
-        return ChatSession(
-            mode=ChatMode.DATA_QUESTIONS,
-            schema_context=schema,
-        )
-
-    @staticmethod
-    def handle_unified_message(
-        user_message: str,
-        session: ChatSession,
-        source_df: pd.DataFrame,
-        ai_config: Optional[AIConfig] = None,
-        sandbox_config: Optional[SandboxConfig] = None,
-    ) -> UnifiedStepResult:
-        """Handle one user message in the unified chat.
-
-        The AI decides whether to answer a question, transform data,
-        or generate a visualization based on the user's request.
-
-        Args:
-            user_message: The user's latest message.
-            session: Current chat session.
-            source_df: The user's DataFrame.
-            ai_config: AI configuration. Uses defaults if None.
-            sandbox_config: Sandbox configuration. Uses defaults if None.
-
-        Returns:
-            UnifiedStepResult with updated session and results.
-        """
-        if ai_config is None:
-            ai_config = AIConfig()
-        if sandbox_config is None:
-            sandbox_config = SandboxConfig()
-
-        # 1. Append user message
-        user_msg = ChatMessage(role="user", content=user_message)
-        session = session.add_message(user_msg)
-
-        # 2. Build context and call AI with tools — long-form data above the
-        # question (Anthropic long-context guidance).
-        context = f"<dataframe_schema>\n{session.schema_context}\n</dataframe_schema>"
-        augmented_message = f"{context}\n\n{user_message}"
-        history = session.to_api_messages()[:-1]
-        messages = history + [{"role": "user", "content": augmented_message}]
-
-        system_prompt = unified_system_prompt()
-
-        logger.info("Calling AI with %d messages", len(messages))
-        response_text = AIClientService.execute_tool_loop(
-            messages=messages,
-            system_prompt=system_prompt,
-            config=ai_config,
-            tools=TOOL_DEFINITIONS,
-            tool_executor=execute_tool,
-        )
-        logger.info("AI response: %d chars, first 200: %s",
-                     len(response_text), response_text[:200])
-
-        # 3. Extract and execute code if present
-        explanation, code = AIClientService.extract_code_block(response_text)
-        result_df = None
-        figure = None
-        is_transformation = False
-
-        if code:
-            sandbox_result = SandboxService.execute(
-                code, source_df, sandbox_config,
-                lc=PipelineAPI(source_df, None),
-            )
-
-            if sandbox_result.success:
-                # Collect all outputs (figure and result_df can coexist)
-                figure = sandbox_result.figure
-                result_df = sandbox_result.result_df
-
-                # Build the text response
-                parts = []
-                if explanation.strip():
-                    parts.append(explanation)
-
-                if result_df is not None:
-                    is_transformation = _looks_like_generic_format(result_df)
-                    if is_transformation:
-                        parts.append(
-                            f"The transformation was successful! "
-                            f"The result has {len(result_df)} rows and "
-                            f"{len(result_df.columns)} columns. "
-                            f"You can download the transformed file below."
-                        )
-
-                # Include captured print output (e.g., statistics, summaries)
-                if sandbox_result.stdout.strip():
-                    parts.append(sandbox_result.stdout.strip())
-
-                if figure is not None and not parts:
-                    parts.append("Here's the visualization you requested.")
-
-                assistant_text = "\n\n".join(parts) if parts else "Done."
-            else:
-                assistant_text = (
-                    f"{explanation}\n\n"
-                    f"I encountered an error: {sandbox_result.error_message}"
-                ) if explanation.strip() else (
-                    f"I encountered an error: {sandbox_result.error_message}"
-                )
-        else:
-            assistant_text = explanation
-            code = ""
-
-        # Guard against empty response
-        if not assistant_text.strip():
-            logger.warning("Empty assistant_text — response_text was: %s", response_text[:500])
-            assistant_text = "I wasn't able to generate a response. Please try rephrasing your question."
-
-        # 4. Append assistant message
-        assistant_msg = ChatMessage(
-            role="assistant",
-            content=assistant_text,
-        )
-        session = session.add_message(assistant_msg)
-
-        return UnifiedStepResult(
-            session=session,
-            assistant_message=assistant_text,
-            result_df=result_df,
-            figure=figure,
-            code=code,
-            is_transformation=is_transformation,
-        )
-
 
 def _methods_note(methods) -> str:
     """The statistical choices `lc` made, as a note under the answer."""
@@ -1287,24 +1122,3 @@ def figure_has_data(fig) -> bool:
             except TypeError:
                 continue
     return False
-
-
-def _looks_like_generic_format(df: pd.DataFrame) -> bool:
-    """Heuristic: does this DataFrame look like a Generic format transformation?
-
-    Generic format = column 1 is strings (lipid names), columns 2+ are numeric.
-    A summary table (counts, stats) typically has few rows or non-lipid-like first column.
-    """
-    if df.empty or len(df.columns) < 3:
-        return False
-    # First column should be string-like
-    first_col = df.iloc[:, 0]
-    if not (first_col.dtype == object or first_col.dtype.name == 'string'):
-        return False
-    # Remaining columns should be mostly numeric
-    numeric_count = sum(
-        1 for col in df.columns[1:]
-        if pd.api.types.is_numeric_dtype(df[col])
-    )
-    # At least 2 numeric columns and most columns are numeric
-    return numeric_count >= 2 and numeric_count >= (len(df.columns) - 1) * 0.7

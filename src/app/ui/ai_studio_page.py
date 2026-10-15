@@ -947,9 +947,6 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_questions_result_df = None
     st.session_state.chat_transform_result = None
     st.session_state.chat_viz_figures = {}
-    st.session_state.chat_result_tables = {}
-    # Legacy unified session
-    st.session_state.chat_unified_session = None
     # Counters
     st.session_state.chat_message_count = 0
     st.session_state.chat_execution_count = 0
