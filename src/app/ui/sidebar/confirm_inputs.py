@@ -6,6 +6,8 @@ This module contains:
 - display_confirm_inputs: Input confirmation section with summary
 """
 
+from typing import Sequence
+
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
@@ -97,19 +99,29 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
     return bqc_label
 
 
-def display_confirm_inputs(experiment: ExperimentConfig) -> bool:
+def display_confirm_inputs(
+    experiment: ExperimentConfig, excluded: Sequence[str] = (),
+) -> bool:
     """
     Display confirm inputs section with summary.
 
     Args:
         experiment: ExperimentConfig with conditions and samples
+        excluded: Samples picked under "Exclude Samples". The summary counts
+            and lists only the samples that will be analysed, and names the
+            excluded ones, under the labels the sidebar uses.
 
     Returns:
         True if user confirms, False otherwise
     """
     st.sidebar.subheader("Confirm Inputs")
 
-    total_samples = sum(experiment.number_of_samples_list)
+    dropped = set(excluded)
+    kept = [
+        [s for s in samples if s not in dropped]
+        for samples in experiment.individual_samples_list
+    ]
+    total_samples = sum(len(samples) for samples in kept)
     n_conditions = len(experiment.conditions_list)
     st.sidebar.markdown(
         f"{total_samples} samples in {n_conditions} "
@@ -122,7 +134,7 @@ def display_confirm_inputs(experiment: ExperimentConfig) -> bool:
     names = display_names_for('upload')
     for i, condition in enumerate(experiment.conditions_list):
         if condition and condition.strip():
-            samples = [names.get(s, s) for s in experiment.individual_samples_list[i]]
+            samples = [names.get(s, s) for s in kept[i]]
             count = len(samples)
             st.sidebar.markdown(
                 f"**{_escape_markdown(condition)}** · "
@@ -134,6 +146,12 @@ def display_confirm_inputs(experiment: ExperimentConfig) -> bool:
             st.sidebar.caption(listed)
         else:
             st.sidebar.error(f"Empty condition found at index {i}")
+    excluded_here = [s for s in experiment.full_samples_list if s in dropped]
+    if excluded_here:
+        st.sidebar.caption(
+            "Excluded: "
+            + ', '.join(_escape_markdown(names.get(s, s)) for s in excluded_here)
+        )
 
     # Confirmation checkbox
     confirm_kwargs = {'key': 'confirm_checkbox'}
