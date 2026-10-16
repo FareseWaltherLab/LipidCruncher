@@ -122,7 +122,8 @@ def display_confirm_inputs(
         for samples in experiment.individual_samples_list
     ]
     total_samples = sum(len(samples) for samples in kept)
-    n_conditions = len(experiment.conditions_list)
+    # A condition whose samples are all excluded is dropped from the analysis.
+    n_conditions = sum(1 for samples in kept if samples)
     st.sidebar.markdown(
         f"{total_samples} samples in {n_conditions} "
         f"condition{'' if n_conditions == 1 else 's'}"
@@ -133,6 +134,8 @@ def display_confirm_inputs(
     # than a first-to-last range, which says nothing once samples have names.
     names = display_names_for('upload')
     for i, condition in enumerate(experiment.conditions_list):
+        if not kept[i]:
+            continue
         if condition and condition.strip():
             samples = [names.get(s, s) for s in kept[i]]
             count = len(samples)

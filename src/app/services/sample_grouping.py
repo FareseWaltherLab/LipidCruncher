@@ -270,9 +270,8 @@ class SampleGroupingService:
     ) -> SampleExclusionResult:
         """Drop samples before processing and renumber the survivors.
 
-        Every condition must keep at least one sample (excluding a whole
-        condition is Quality Check's job) and at least two samples must
-        remain overall.
+        Excluding every sample of a condition drops that condition. At least
+        two samples must remain overall.
 
         Args:
             df: Standardized DataFrame with intensity[sN] columns.
@@ -284,20 +283,13 @@ class SampleGroupingService:
             SampleExclusionResult.
 
         Raises:
-            ValueError: If nothing would be removed, a condition would be
-                emptied, or fewer than two samples would remain.
+            ValueError: If nothing would be removed or fewer than two samples
+                would remain.
         """
         full = experiment.full_samples_list
         removed = [s for s in full if s in samples_to_remove]
         if not removed:
             raise ValueError("No samples to exclude.")
-        for cond, samples in zip(experiment.conditions_list, experiment.individual_samples_list):
-            if all(s in removed for s in samples):
-                raise ValueError(
-                    f"Excluding these samples would leave condition '{cond}' with "
-                    "no samples. Keep at least one sample per condition; a whole "
-                    "condition can be excluded in Quality Check."
-                )
         if len(full) - len(removed) < 2:
             raise ValueError("At least two samples must remain after exclusion.")
 
