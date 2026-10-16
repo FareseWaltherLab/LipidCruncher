@@ -497,18 +497,44 @@ class TestSidebarSampleExclusion:
             assert at.session_state['processing_sample_names']['s2'] == full_names['s3']
             assert at.session_state['sample_names'] == full_names
 
-    def test_emptying_a_condition_blocks_confirm(self):
-        at = self._loaded()
-        # Build the full experiment from the widgets to find one condition's samples.
-        nconds = at.sidebar.number_input[0].value
-        counts = [at.sidebar.number_input[i + 1].value for i in range(nconds)]
-        first_cond_samples = [f's{i}' for i in range(1, counts[0] + 1)]
+    def test_excluding_a_whole_condition_drops_it(self):
+        """Regression: excluding every sample of a condition (here MS-DIAL's
+        single Blank) blocked Confirm with "would leave condition 'Blank'
+        with no samples"."""
+        at = AppTest.from_function(full_sidebar_script, default_timeout=60)
+        at.run()
+        at.sidebar.selectbox[0].set_value('MS-DIAL').run()
+        at.sidebar.button(key='load_sample').click().run()
+        at.sidebar.multiselect(key='exclude_samples').set_value(['s1']).run()
 
-        at.sidebar.multiselect(key='exclude_samples').set_value(first_cond_samples).run()
+        assert not at.exception
+        assert not at.error
+        text = [m.value for m in at.sidebar.markdown]
+        assert "6 samples in 2 conditions" in text
+        assert not any(t.startswith("**Blank**") for t in text)
+
+        at.sidebar.checkbox(key='confirm_checkbox').set_value(True).run()
+        assert not at.exception
+        assert at.session_state['confirmed'] is True
+        exp = at.session_state['experiment']
+        assert exp.conditions_list == ['fads2 KO', 'Wild-type']
+        assert exp.number_of_samples_list == [3, 3]
+        proc_cols = [c for c in at.session_state['processing_df'].columns if c.startswith('intensity[')]
+        assert proc_cols == [f'intensity[s{i}]' for i in range(1, 7)]
+
+    def test_excluding_the_bqc_condition_clears_bqc(self):
+        """With every BQC sample excluded, Module 1 must not get a BQC label
+        naming a condition its experiment no longer has."""
+        at = self._loaded()
+        assert at.session_state['bqc_label_radio'] == 'BQC'
+        at.sidebar.multiselect(key='exclude_samples').set_value(['s9', 's10', 's11', 's12']).run()
         at.sidebar.checkbox(key='confirm_checkbox').set_value(True).run()
 
-        assert at.session_state['confirmed'] is False
-        assert any("no samples" in e.value for e in at.error)
+        assert not at.exception
+        assert at.session_state['confirmed'] is True
+        assert at.session_state['experiment'].conditions_list == ['WT', 'ADGAT-DKO']
+        assert at.session_state['bqc_label'] is None
+        assert any("continuing without BQC" in w.value for w in at.sidebar.warning)
 
     @pytest.mark.parametrize("data_format", ["Generic", "LipidSearch"])
     def test_confirm_summary_counts_only_the_kept_samples(self, data_format):

@@ -918,9 +918,17 @@ class TestExcludeSamples:
         result = SampleGroupingService.exclude_samples(self.df, self.exp, ['s9', 's4'])
         assert result.removed_samples == ['s4']
 
-    def test_emptying_a_condition_raises(self):
-        with pytest.raises(ValueError, match="Cond_2.*no samples"):
-            SampleGroupingService.exclude_samples(self.df, self.exp, ['s4', 's5', 's6'])
+    def test_excluding_a_whole_condition_drops_it(self):
+        """Regression: excluding every sample of a condition used to raise."""
+        result = SampleGroupingService.exclude_samples(self.df, self.exp, ['s1', 's2', 's3'])
+        exp = result.updated_experiment
+        assert exp.conditions_list == ['Cond_2']
+        assert exp.number_of_samples_list == [3]
+        assert exp.full_samples_list == ['s1', 's2', 's3']
+        cols = [c for c in result.updated_df.columns if c.startswith('intensity[')]
+        assert cols == ['intensity[s1]', 'intensity[s2]', 'intensity[s3]']
+        # old s4 is now s1 and carries s4's values
+        assert result.updated_df['intensity[s1]'].tolist() == [40.0, 400.0]
 
     def test_nothing_to_exclude_raises(self):
         with pytest.raises(ValueError, match="No samples"):

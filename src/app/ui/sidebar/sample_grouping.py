@@ -340,9 +340,9 @@ def _display_sample_exclusion(
             format_func=labeler('upload'),
             help=(
                 "Dropped before cleaning, filtering and normalization — e.g. a "
-                "sample whose internal standard failed. Keep at least one sample "
-                "per condition (a whole condition can be excluded in Quality "
-                "Check). The remaining samples are renumbered s1, s2, …"
+                "sample whose internal standard failed. Excluding every sample "
+                "of a condition drops that condition. The remaining samples are "
+                "renumbered s1, s2, …"
             ),
             key='exclude_samples',
         )
@@ -450,6 +450,16 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
 
     # Step 3: BQC Section
     bqc_label = display_bqc_section(experiment)
+    # A BQC condition whose samples were all excluded no longer exists in the
+    # experiment Module 1 runs on.
+    if (
+        bqc_label is not None and exclusion is not None
+        and bqc_label not in exclusion[0].conditions_list
+    ):
+        st.sidebar.warning(
+            f"All '{bqc_label}' samples are excluded; continuing without BQC."
+        )
+        bqc_label = None
 
     # Step 4: Confirm Inputs
     confirmed = display_confirm_inputs(
