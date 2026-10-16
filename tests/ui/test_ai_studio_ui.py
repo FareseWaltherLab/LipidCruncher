@@ -527,6 +527,67 @@ class TestQCOptionHiddenWithoutQCData:
         assert not any(o.startswith('QC-filtered') for o in options)
 
 
+def pipeline_import_qc_dropped_bqc_script():
+    """Full AI Studio page after Quality Check's PCA removal dropped every
+    BQC sample: `qc_experiment` has no BQC condition, while the sidebar's
+    `bqc_label` (and the pre-QC `experiment`) still name it."""
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.models.experiment import ExperimentConfig
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('normalized_df') is None:
+        st.session_state.standardized_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1'],
+            **{f'intensity[s{i}]': [float(i)] for i in range(1, 7)},
+        })
+        st.session_state.normalized_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1'],
+            **{f'concentration[s{i}]': [float(i)] for i in range(1, 7)},
+        })
+        st.session_state.qc_continuation_df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1'],
+            **{f'concentration[s{i}]': [float(i)] for i in range(1, 5)},
+        })
+        st.session_state.experiment = ExperimentConfig(
+            conditions_list=['WT', 'KO', 'BQC'], number_of_samples_list=[2, 2, 2],
+        )
+        st.session_state.qc_experiment = ExperimentConfig(
+            conditions_list=['WT', 'KO'], number_of_samples_list=[2, 2],
+        )
+        st.session_state.bqc_label = 'BQC'
+
+    from app.ui.ai_studio_page import display_ai_studio_page
+    display_ai_studio_page()
+    st.text(f"bqc:{st.session_state.get('chat_studio_bqc_label')}")
+
+
+class TestPipelineImportBQC:
+    def test_qc_import_without_the_bqc_condition_has_no_bqc(self):
+        """Regression: the sidebar's 'BQC' label was copied into the Studio's
+        BQC radio, which falls back to its first option when the label is
+        missing, so WT was silently treated as the BQC condition."""
+        at = AppTest.from_function(
+            pipeline_import_qc_dropped_bqc_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.button(key='ai_studio_import_pipeline').click().run()
+        assert not at.exception
+        assert _marker(at, 'bqc:') == 'None'
+        assert at.session_state['studio_bqc_radio'] == 'No'
+
+    def test_normalized_import_keeps_bqc(self):
+        at = AppTest.from_function(
+            pipeline_import_qc_dropped_bqc_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='ai_studio_pipeline_choice').set_value(
+            'Normalized data (from pipeline)'
+        ).run()
+        at.sidebar.button(key='ai_studio_import_pipeline').click().run()
+        assert not at.exception
+        assert _marker(at, 'bqc:') == 'BQC'
+
+
 def data_questions_regroup_script():
     """Full AI Studio page over six samples whose values identify them, with
     the Data Questions panel replaced by a recorder that prints what it got.

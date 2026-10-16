@@ -371,6 +371,14 @@ def _offer_pipeline_import_sidebar() -> None:
             if qc_experiment is not None:
                 pipeline_experiment = qc_experiment
         pipeline_bqc_label = st.session_state.get('bqc_label')
+        # PCA removal can drop the whole BQC condition. Left in place, the
+        # Studio's BQC radio would fall back to its first option and treat
+        # an ordinary condition as BQC.
+        if (
+            pipeline_experiment is not None
+            and pipeline_bqc_label not in pipeline_experiment.conditions_list
+        ):
+            pipeline_bqc_label = None
 
         # Reset all studio state + sidebar widgets so the import starts
         # clean (no stale conditions, sample counts, or BQC selections
