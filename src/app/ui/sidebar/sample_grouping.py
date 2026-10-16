@@ -452,7 +452,9 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     bqc_label = display_bqc_section(experiment)
 
     # Step 4: Confirm Inputs
-    confirmed = display_confirm_inputs(experiment)
+    confirmed = display_confirm_inputs(
+        experiment, excluded=st.session_state.get('exclude_samples') or [],
+    )
 
     if confirmed:
         if exclusion is None:

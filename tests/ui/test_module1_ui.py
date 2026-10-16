@@ -19,6 +19,7 @@ Tests across 10 groups covering:
 """
 
 import pandas as pd
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from tests.ui.conftest import (
@@ -508,6 +509,29 @@ class TestSidebarSampleExclusion:
 
         assert at.session_state['confirmed'] is False
         assert any("no samples" in e.value for e in at.error)
+
+    @pytest.mark.parametrize("data_format", ["Generic", "LipidSearch"])
+    def test_confirm_summary_counts_only_the_kept_samples(self, data_format):
+        """Regression: the Confirm Inputs summary was built from the full
+        experiment, so after excluding s1 it still said "12 samples" and
+        listed s1 under its condition."""
+        from app.constants import FORMAT_GENERIC, FORMAT_LIPIDSEARCH
+
+        at = AppTest.from_function(full_sidebar_script, default_timeout=60)
+        at.run()
+        fmt = {"Generic": FORMAT_GENERIC, "LipidSearch": FORMAT_LIPIDSEARCH}
+        at.sidebar.selectbox[0].set_value(fmt[data_format]).run()
+        at.sidebar.button(key='load_sample').click().run()
+        at.sidebar.multiselect(key='exclude_samples').set_value(['s1']).run()
+
+        assert not at.exception
+        text = [m.value for m in at.sidebar.markdown]
+        captions = [c.value for c in at.sidebar.caption]
+        assert "11 samples in 3 conditions" in text
+        assert any(t.endswith("· 3 samples") for t in text)
+        first_condition = next(c for c in captions if "s2" in c)
+        assert "s1" not in first_condition.split(", ")
+        assert "Excluded: s1" in captions
 
     def test_no_exclusion_passes_data_through(self):
         at = self._loaded()
