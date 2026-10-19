@@ -4,6 +4,7 @@ Confirm Inputs UI Components for LipidCruncher sidebar.
 This module contains:
 - display_bqc_section: BQC (Batch Quality Control) sample specification
 - display_confirm_inputs: Input confirmation section with summary
+- render_confirm_summary: the summary itself, shared with the AI Studio sidebar
 """
 
 from typing import Sequence
@@ -99,6 +100,51 @@ def display_bqc_section(experiment: ExperimentConfig) -> str:
     return bqc_label
 
 
+def render_confirm_summary(
+    conditions: Sequence[str],
+    kept: Sequence[Sequence[str]],
+    excluded: Sequence[str] = (),
+) -> None:
+    """Render the Confirm Inputs summary; the AI Studio sidebar uses it too.
+
+    Args:
+        conditions: Condition labels, in order.
+        kept: kept[i] holds the display names of the samples of conditions[i]
+            that will be analysed. A condition with none is left out, since
+            excluding all its samples drops it from the analysis.
+        excluded: Display names of the excluded samples.
+    """
+    total_samples = sum(len(samples) for samples in kept)
+    n_conditions = sum(1 for samples in kept if samples)
+    st.sidebar.markdown(
+        f"{total_samples} samples in {n_conditions} "
+        f"condition{'' if n_conditions == 1 else 's'}"
+    )
+
+    # One heading per condition with its samples listed underneath. Every
+    # sample is listed rather than a first-to-last range, which says nothing
+    # once samples have names.
+    for i, (condition, samples) in enumerate(zip(conditions, kept)):
+        if not samples:
+            continue
+        if condition and condition.strip():
+            count = len(samples)
+            st.sidebar.markdown(
+                f"**{_escape_markdown(condition)}** · "
+                f"{count} sample{'' if count == 1 else 's'}"
+            )
+            listed = ', '.join(_escape_markdown(s) for s in samples[:MAX_LISTED_SAMPLES])
+            if count > MAX_LISTED_SAMPLES:
+                listed += f", … and {count - MAX_LISTED_SAMPLES} more"
+            st.sidebar.caption(listed)
+        else:
+            st.sidebar.error(f"Empty condition found at index {i}")
+    if excluded:
+        st.sidebar.caption(
+            "Excluded: " + ', '.join(_escape_markdown(s) for s in excluded)
+        )
+
+
 def display_confirm_inputs(
     experiment: ExperimentConfig, excluded: Sequence[str] = (),
 ) -> bool:
@@ -116,45 +162,17 @@ def display_confirm_inputs(
     """
     st.sidebar.subheader("Confirm Inputs")
 
+    # Samples are shown under the names the "Show samples as" switch picks.
     dropped = set(excluded)
-    kept = [
-        [s for s in samples if s not in dropped]
-        for samples in experiment.individual_samples_list
-    ]
-    total_samples = sum(len(samples) for samples in kept)
-    # A condition whose samples are all excluded is dropped from the analysis.
-    n_conditions = sum(1 for samples in kept if samples)
-    st.sidebar.markdown(
-        f"{total_samples} samples in {n_conditions} "
-        f"condition{'' if n_conditions == 1 else 's'}"
-    )
-
-    # One heading per condition with its samples listed underneath, under the
-    # names the "Show samples as" switch picks. Every sample is listed rather
-    # than a first-to-last range, which says nothing once samples have names.
     names = display_names_for('upload')
-    for i, condition in enumerate(experiment.conditions_list):
-        if not kept[i]:
-            continue
-        if condition and condition.strip():
-            samples = [names.get(s, s) for s in kept[i]]
-            count = len(samples)
-            st.sidebar.markdown(
-                f"**{_escape_markdown(condition)}** · "
-                f"{count} sample{'' if count == 1 else 's'}"
-            )
-            listed = ', '.join(_escape_markdown(s) for s in samples[:MAX_LISTED_SAMPLES])
-            if count > MAX_LISTED_SAMPLES:
-                listed += f", … and {count - MAX_LISTED_SAMPLES} more"
-            st.sidebar.caption(listed)
-        else:
-            st.sidebar.error(f"Empty condition found at index {i}")
-    excluded_here = [s for s in experiment.full_samples_list if s in dropped]
-    if excluded_here:
-        st.sidebar.caption(
-            "Excluded: "
-            + ', '.join(_escape_markdown(names.get(s, s)) for s in excluded_here)
-        )
+    render_confirm_summary(
+        experiment.conditions_list,
+        [
+            [names.get(s, s) for s in samples if s not in dropped]
+            for samples in experiment.individual_samples_list
+        ],
+        [names.get(s, s) for s in experiment.full_samples_list if s in dropped],
+    )
 
     # Confirmation checkbox
     confirm_kwargs = {'key': 'confirm_checkbox'}
