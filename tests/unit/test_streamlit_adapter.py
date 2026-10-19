@@ -117,7 +117,6 @@ class TestSessionStateDefaults:
         """Test that analysis fields storing single values default to None."""
         state = SessionState()
         assert state.analysis_selection is None
-        assert state.analysis_volcano_fig is None
         assert state.analysis_volcano_data is None
         assert state.analysis_heatmap_fig is None
         assert state.analysis_heatmap_clusters is None
@@ -254,12 +253,6 @@ class TestSessionStateDataIntegrity:
         state1.analysis_all_plots['bar'] = 'fig1'
 
         assert 'bar' not in state2.analysis_all_plots
-
-    def test_analysis_fig_reference_preserved(self):
-        """Test that analysis figure references are preserved."""
-        mock_fig = MagicMock()
-        state = SessionState(analysis_volcano_fig=mock_fig)
-        assert state.analysis_volcano_fig is mock_fig
 
     def test_analysis_heatmap_clusters_reference_preserved(self):
         """Test that analysis heatmap clusters DataFrame reference is preserved."""
@@ -401,7 +394,7 @@ class TestNavigationActions:
             'page': 'app', 'module': MODULE_DATA_PROCESSING,
             'normalized_df': pd.DataFrame({'b': [1]}),
             'qc_input_frame': object(),
-            'analysis_volcano_fig': object(),
+            'analysis_volcano_data': object(),
         })
 
     @patch('app.adapters.streamlit_adapter.st')
@@ -411,7 +404,7 @@ class TestNavigationActions:
         state = mock_st.session_state
         assert state['module'] == 'Quality Check & Analysis'
         assert state['qc_input_frame'] is None
-        assert state['analysis_volcano_fig'] is None
+        assert state['analysis_volcano_data'] is None
         assert state['normalized_df'] is not None
 
     @patch('app.adapters.streamlit_adapter.st')
@@ -766,7 +759,7 @@ class TestSessionStateIntegration:
 
         analysis_keys = [
             'analysis_selection',
-            'analysis_volcano_fig', 'analysis_volcano_data',
+            'analysis_volcano_data',
             'analysis_heatmap_fig', 'analysis_heatmap_clusters',
             'analysis_all_plots',
         ]
@@ -781,7 +774,6 @@ class TestSessionStateIntegration:
         StreamlitAdapter.initialize_session_state()
 
         assert mock_st.session_state['analysis_selection'] is None
-        assert mock_st.session_state['analysis_volcano_fig'] is None
         assert mock_st.session_state['analysis_volcano_data'] is None
         assert mock_st.session_state['analysis_heatmap_fig'] is None
         assert mock_st.session_state['analysis_heatmap_clusters'] is None
@@ -801,13 +793,13 @@ class TestSessionStateIntegration:
         mock_fig = MagicMock()
         mock_st.session_state = MockSessionState({
             'analysis_selection': 'Volcano Plot',
-            'analysis_volcano_fig': mock_fig,
+            'analysis_all_plots': {'volcano': mock_fig},
         })
 
         StreamlitAdapter.initialize_session_state()
 
         assert mock_st.session_state['analysis_selection'] == 'Volcano Plot'
-        assert mock_st.session_state['analysis_volcano_fig'] is mock_fig
+        assert mock_st.session_state['analysis_all_plots']['volcano'] is mock_fig
 
     @patch('app.adapters.streamlit_adapter.st')
     def test_reset_clears_analysis_state(self, mock_st):
@@ -815,7 +807,6 @@ class TestSessionStateIntegration:
         mock_fig = MagicMock()
         mock_st.session_state = MockSessionState({
             'analysis_selection': 'Bar Chart',
-            'analysis_volcano_fig': mock_fig,
             'analysis_volcano_data': {'some': 'data'},
             'analysis_heatmap_fig': mock_fig,
             'analysis_heatmap_clusters': pd.DataFrame({'C': [1]}),
@@ -825,7 +816,6 @@ class TestSessionStateIntegration:
         StreamlitAdapter.reset_data_state()
 
         assert mock_st.session_state['analysis_selection'] is None
-        assert mock_st.session_state['analysis_volcano_fig'] is None
         assert mock_st.session_state['analysis_volcano_data'] is None
         assert mock_st.session_state['analysis_heatmap_fig'] is None
         assert mock_st.session_state['analysis_heatmap_clusters'] is None
@@ -963,7 +953,7 @@ class TestSessionStateFieldCompleteness:
         state = SessionState()
         analysis_fields = [
             'analysis_selection',
-            'analysis_volcano_fig', 'analysis_volcano_data',
+            'analysis_volcano_data',
             'analysis_heatmap_fig', 'analysis_heatmap_clusters',
             'analysis_all_plots',
         ]
@@ -977,8 +967,8 @@ class TestSessionStateFieldCompleteness:
         # 17 - 1 (analysis_pathway_active_classes: nothing read or wrote it)
         # - the write-only per-page figure copies (the report reads
         #   analysis_all_plots): bar chart, pie charts, saturation, chain length,
-        #   FACH, pathway
-        assert len(analysis_fields) == 10
+        #   FACH, pathway, volcano
+        assert len(analysis_fields) == 9
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""

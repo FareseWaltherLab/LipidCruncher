@@ -14,7 +14,11 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
 
-from app.ui.main_content.analysis._shared import _clear_pdf_plots, _display_detailed_statistics
+from app.ui.main_content.analysis._shared import (
+    _clear_pdf_plots,
+    _display_detailed_statistics,
+    _publish,
+)
 from app.ui.sample_labels import names_for
 from typing import TYPE_CHECKING
 
@@ -224,9 +228,8 @@ def _render_volcano_results(
         st.warning("Could not generate volcano plot.")
         return
 
-    st.session_state.analysis_volcano_fig = result.figure
     st.session_state.analysis_volcano_data = result.volcano_data
-    st.session_state.analysis_all_plots['volcano'] = result.figure
+    _publish('volcano', result.figure)
 
     # Update additional labels multiselect options
     if result.volcano_data and result.volcano_data.volcano_df is not None:
@@ -254,9 +257,7 @@ def _render_volcano_results(
         st.markdown("---")
         st.markdown("###### Concentration vs. Fold Change")
         st.plotly_chart(result.concentration_plot, width='stretch')
-        st.session_state.analysis_all_plots['conc_vs_fc'] = (
-            result.concentration_plot
-        )
+        _publish('conc_vs_fc', result.concentration_plot)
 
         if result.concentration_df is not None:
             display_export_buttons(
@@ -376,7 +377,7 @@ def _display_individual_lipid_analysis(
         )
 
     st.pyplot(dist_fig)
-    st.session_state.analysis_all_plots['lipid_distribution'] = dist_fig
+    _publish('lipid_distribution', dist_fig)
 
     dist_data = _build_distribution_csv(
         df, detail_lipids, experiment, selected_conditions,

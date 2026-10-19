@@ -85,7 +85,7 @@ class SessionState:
       analysis.py          → analysis_selection,
                             
                             
-                             analysis_volcano_fig, analysis_volcano_data,
+                             analysis_volcano_data,
                              analysis_heatmap_fig, analysis_heatmap_clusters,
                              analysis_all_plots
       main_app.py          → page, module
@@ -216,7 +216,6 @@ class SessionState:
     analysis_pathway_removed_edges: List[Tuple[str, str]] = field(default_factory=list)
     analysis_pathway_custom_nodes: Dict[str, Tuple[float, float]] = field(default_factory=dict)
     analysis_pathway_position_overrides: Dict[str, Tuple[float, float]] = field(default_factory=dict)
-    analysis_volcano_fig: Optional[go.Figure] = None
     analysis_volcano_data: Optional[VolcanoData] = None
     analysis_heatmap_fig: Optional[go.Figure] = None
     analysis_heatmap_clusters: Optional[pd.DataFrame] = None
@@ -383,7 +382,7 @@ _STAGES: Tuple[_Stage, ...] = (
             
             'analysis_pathway_added_edges',
             'analysis_pathway_removed_edges', 'analysis_pathway_custom_nodes',
-            'analysis_pathway_position_overrides', 'analysis_volcano_fig',
+            'analysis_pathway_position_overrides', 
             'analysis_volcano_data', 'analysis_heatmap_fig',
             'analysis_heatmap_clusters', 'analysis_all_plots',
         }),

@@ -623,7 +623,7 @@ class TestVolcanoUI:
     def test_volcano_stores_figure_in_session(self, analysis_generic_app):
         """Volcano plot figure is stored in session state."""
         at = self._switch_to_volcano(analysis_generic_app)
-        assert at.session_state['analysis_volcano_fig'] is not None
+        assert 'volcano' in at.session_state['analysis_all_plots']
 
     def test_volcano_hide_nonsig_default_unchecked(self, analysis_generic_app):
         """Hide non-significant checkbox defaults to unchecked."""
@@ -642,21 +642,21 @@ class TestVolcanoUI:
         at = self._switch_to_volcano(analysis_generic_app)
         at.selectbox(key='volcano_stats_mode').set_value("non_parametric").run()
         assert not at.exception
-        assert at.session_state['analysis_volcano_fig'] is not None
+        assert 'volcano' in at.session_state['analysis_all_plots']
 
     def test_volcano_uncorrected(self, analysis_generic_app):
         """Switching volcano to uncorrected renders without error."""
         at = self._switch_to_volcano(analysis_generic_app)
         at.selectbox(key='volcano_correction').set_value("uncorrected").run()
         assert not at.exception
-        assert at.session_state['analysis_volcano_fig'] is not None
+        assert 'volcano' in at.session_state['analysis_all_plots']
 
     def test_volcano_bonferroni(self, analysis_generic_app):
         """Switching volcano to bonferroni correction renders without error."""
         at = self._switch_to_volcano(analysis_generic_app)
         at.selectbox(key='volcano_correction').set_value("bonferroni").run()
         assert not at.exception
-        assert at.session_state['analysis_volcano_fig'] is not None
+        assert 'volcano' in at.session_state['analysis_all_plots']
 
     def test_conc_vs_fc_reaches_the_report(self, analysis_generic_app):
         """The Concentration vs. Fold Change plot is displayed and offered as
@@ -1172,7 +1172,6 @@ class TestAnalysisNavigation:
         """Clicking 'Back to Data Processing' clears all analysis session state."""
         at = module3_nav_app
         at.button(key='back_processing_module2').click().run()
-        assert at.session_state['analysis_volcano_fig'] is None
         assert at.session_state['analysis_all_plots'] == {}
 
     def test_back_to_home_resets_page(self, module3_nav_app):
