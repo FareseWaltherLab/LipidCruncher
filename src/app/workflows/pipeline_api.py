@@ -529,16 +529,21 @@ class PipelineAPI:
         return LCResult(res.figure, res.data_dict, res)
 
     def pathway(self, control: str, experimental: str) -> LCResult:
-        """Lipid pathway visualization comparing two conditions."""
+        """Lipid pathway visualization comparing two conditions (the pathway
+        page's data, drawn with its default layout)."""
+        from ..services.plotting.pathway_viz import PathwayVizPlotterService
+
         self._require_experiment()
-        res = self._analysis().run_pathway(
+        data = self._analysis().compute_pathway_data(
             df=self._frame(),
             experiment=self._experiment,
             control=control,
             experimental=experimental,
         )
-        self._check(res, "Pathway plot")
-        return LCResult(res.figure, res.fold_change_df, res)
+        figure, _ = PathwayVizPlotterService.create_pathway_viz(
+            data.fold_change_df, data.saturation_df,
+        )
+        return LCResult(figure, data.fold_change_df, data)
 
     def volcano(
         self,

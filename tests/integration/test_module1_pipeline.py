@@ -38,6 +38,7 @@ from tests.integration.conftest import (
     load_generic_sample,
     load_mw_sample,
     get_intensity_columns,
+    zero_filter_as_app,
 )
 
 
@@ -356,7 +357,6 @@ class TestLipidSearchPipeline:
         config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
@@ -379,7 +379,6 @@ class TestLipidSearchPipeline:
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
             grade_config=grade_config,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
@@ -398,7 +397,6 @@ class TestLipidSearchPipeline:
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
             grade_config=grade_config,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
@@ -416,36 +414,27 @@ class TestLipidSearchPipeline:
         config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=True,
-            zero_filter_config=zero_config,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
-
-        assert result.zero_filtered
-        # Strict filtering should remove more species
-        assert result.species_before_filter >= result.species_after_filter
-
-    def test_full_pipeline_zero_filter_disabled(self, lipidsearch_sample_df, lipidsearch_experiment):
-        """Test pipeline with zero filtering disabled."""
-        config = IngestionConfig(
-            experiment=lipidsearch_experiment,
-            data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=False,
+        strict = zero_filter_as_app(
+            result.cleaned_df, lipidsearch_experiment, DataFormat.LIPIDSEARCH,
+            config=zero_config,
+        )
+        default = zero_filter_as_app(
+            result.cleaned_df, lipidsearch_experiment, DataFormat.LIPIDSEARCH,
+            config=ZeroFilterConfig(detection_threshold=0.0),
         )
 
-        result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
-
-        assert result.is_valid, result.validation_errors
-        assert not result.zero_filtered
-        assert result.species_removed_count == 0
+        # Strict thresholds remove at least as many species as the defaults
+        assert strict.species_before == len(result.cleaned_df)
+        assert strict.species_after <= default.species_after
 
     def test_full_pipeline_standards_auto_detected(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Verify internal standards are automatically detected."""
         config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
@@ -455,28 +444,11 @@ class TestLipidSearchPipeline:
         assert result.internal_standards_df is not None
         assert len(result.internal_standards_df) > 0
 
-    def test_full_pipeline_external_standards(self, lipidsearch_sample_df, lipidsearch_experiment, basic_intsta_df):
-        """Test pipeline with external standards provided."""
-        config = IngestionConfig(
-            experiment=lipidsearch_experiment,
-            data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=False,
-            use_external_standards=True,
-            external_standards_df=basic_intsta_df,
-        )
-
-        result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
-
-        # External standards should be used
-        assert result.internal_standards_df is not None
-        assert len(result.internal_standards_df) > 0
-
     def test_cleaning_preserves_essential_columns(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Verify CalcMass and BaseRt columns are preserved through pipeline."""
         config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
@@ -491,7 +463,6 @@ class TestLipidSearchPipeline:
         config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
@@ -509,21 +480,21 @@ class TestLipidSearchPipeline:
         config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
+        filtered = zero_filter_as_app(
+            result.cleaned_df, lipidsearch_experiment, DataFormat.LIPIDSEARCH,
+        )
 
-        # Filtering should typically reduce species count
-        assert result.zero_filtered
-        assert result.species_before_filter >= result.species_after_filter
+        assert len(result.cleaned_df) <= len(lipidsearch_sample_df)
+        assert filtered.species_after <= filtered.species_before
 
     def test_explicit_format_specification(self, lipidsearch_sample_df, lipidsearch_experiment):
         """Verify explicit format specification works correctly."""
         config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,  # Explicit format
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(lipidsearch_sample_df, config)
@@ -545,7 +516,6 @@ class TestMSDIALPipeline:
         config = IngestionConfig(
             experiment=msdial_experiment,
             data_format=DataFormat.MSDIAL,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
@@ -565,7 +535,6 @@ class TestMSDIALPipeline:
             experiment=msdial_experiment,
             data_format=DataFormat.MSDIAL,
             quality_config=quality_config,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
@@ -583,7 +552,6 @@ class TestMSDIALPipeline:
             experiment=msdial_experiment,
             data_format=DataFormat.MSDIAL,
             quality_config=quality_config,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
@@ -602,7 +570,6 @@ class TestMSDIALPipeline:
             experiment=msdial_experiment,
             data_format=DataFormat.MSDIAL,
             quality_config=quality_config,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
@@ -620,7 +587,6 @@ class TestMSDIALPipeline:
             experiment=msdial_experiment,
             data_format=DataFormat.MSDIAL,
             quality_config=quality_config,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
@@ -639,21 +605,20 @@ class TestMSDIALPipeline:
             experiment=msdial_experiment,
             data_format=DataFormat.MSDIAL,
             quality_config=quality_config,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
 
         # Both filters applied
         assert result.is_valid and result.cleaned_df is not None
-        assert result.zero_filtered
+        filtered = zero_filter_as_app(result.cleaned_df, msdial_experiment, DataFormat.MSDIAL)
+        assert 0 < filtered.species_after <= filtered.species_before
 
     def test_output_structure(self, msdial_sample_df, msdial_experiment):
         """Verify output DataFrame has expected structure."""
         config = IngestionConfig(
             experiment=msdial_experiment,
             data_format=DataFormat.MSDIAL,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
@@ -669,7 +634,6 @@ class TestMSDIALPipeline:
         config = IngestionConfig(
             experiment=msdial_experiment,
             data_format=DataFormat.MSDIAL,  # Explicit format
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(msdial_sample_df, config)
@@ -691,7 +655,6 @@ class TestGenericPipeline:
         config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(generic_sample_df, config)
@@ -705,32 +668,18 @@ class TestGenericPipeline:
         config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(generic_sample_df, config)
+        filtered = zero_filter_as_app(result.cleaned_df, generic_experiment, DataFormat.GENERIC)
 
-        assert result.zero_filtered
-
-    def test_full_pipeline_zero_filter_disabled(self, generic_sample_df, generic_experiment):
-        """Test pipeline with zero filtering disabled."""
-        config = IngestionConfig(
-            experiment=generic_experiment,
-            data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
-        )
-
-        result = DataIngestionWorkflow.run(generic_sample_df, config)
-
-        assert result.is_valid, result.validation_errors
-        assert not result.zero_filtered
+        assert 0 < filtered.species_after <= filtered.species_before
 
     def test_output_structure(self, generic_sample_df, generic_experiment):
         """Verify output DataFrame has expected structure."""
         config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(generic_sample_df, config)
@@ -747,7 +696,6 @@ class TestGenericPipeline:
         config = IngestionConfig(
             experiment=generic_experiment,
             data_format=None,  # Auto-detect
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(generic_sample_df, config)
@@ -759,7 +707,6 @@ class TestGenericPipeline:
         config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(generic_sample_df, config)
@@ -782,7 +729,6 @@ class TestMetabolomicsWorkbenchPipeline:
         config = IngestionConfig(
             experiment=mw_experiment,
             data_format=DataFormat.GENERIC,  # MW uses Generic cleaner
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(mw_sample_df, config)
@@ -795,7 +741,6 @@ class TestMetabolomicsWorkbenchPipeline:
         config = IngestionConfig(
             experiment=mw_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(mw_sample_df, config)
@@ -810,20 +755,18 @@ class TestMetabolomicsWorkbenchPipeline:
         config = IngestionConfig(
             experiment=mw_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(mw_sample_df, config)
+        filtered = zero_filter_as_app(result.cleaned_df, mw_experiment, DataFormat.GENERIC)
 
-        assert result.zero_filtered
-        assert result.species_before_filter >= result.species_after_filter
+        assert 0 < filtered.species_after <= filtered.species_before
 
     def test_output_structure(self, mw_sample_df, mw_experiment):
         """Verify output DataFrame has expected structure."""
         config = IngestionConfig(
             experiment=mw_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(mw_sample_df, config)
@@ -846,7 +789,6 @@ class TestNormalizationNone:
         ingestion_config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(generic_sample_df, ingestion_config)
         assert ingestion_result.is_valid
@@ -874,7 +816,6 @@ class TestNormalizationNone:
         ingestion_config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(generic_sample_df, ingestion_config)
 
@@ -898,7 +839,6 @@ class TestNormalizationNone:
         ingestion_config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(generic_sample_df, ingestion_config)
 
@@ -926,7 +866,6 @@ class TestNormalizationNone:
         ingestion_config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(lipidsearch_sample_df, ingestion_config)
         assert ingestion_result.is_valid
@@ -1134,7 +1073,6 @@ class TestNormalizationInternalStandard:
         ingestion_config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(lipidsearch_sample_df, ingestion_config)
 
@@ -1191,7 +1129,6 @@ class TestNormalizationProtein:
         ingestion_config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(generic_sample_df, ingestion_config)
         assert ingestion_result.is_valid
@@ -1450,7 +1387,6 @@ class TestIngestionNormalizationIntegration:
         ingestion_config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=True,
         )
         ingestion_result = DataIngestionWorkflow.run(lipidsearch_sample_df, ingestion_config)
         assert ingestion_result.is_valid
@@ -1476,7 +1412,6 @@ class TestIngestionNormalizationIntegration:
         ingestion_config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(generic_sample_df, ingestion_config)
         assert ingestion_result.is_valid
@@ -1509,7 +1444,6 @@ class TestIngestionNormalizationIntegration:
         ingestion_config = IngestionConfig(
             experiment=mw_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(mw_sample_df, ingestion_config)
         assert ingestion_result.is_valid
@@ -1534,7 +1468,6 @@ class TestIngestionNormalizationIntegration:
         ingestion_config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(generic_sample_df, ingestion_config)
 
@@ -1562,7 +1495,6 @@ class TestIngestionNormalizationIntegration:
         ingestion_config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(generic_sample_df, ingestion_config)
 
@@ -1590,7 +1522,6 @@ class TestIngestionNormalizationIntegration:
         ingestion_config = IngestionConfig(
             experiment=lipidsearch_experiment,
             data_format=DataFormat.LIPIDSEARCH,
-            apply_zero_filter=False,
         )
         ingestion_result = DataIngestionWorkflow.run(lipidsearch_sample_df, ingestion_config)
 
@@ -1622,26 +1553,28 @@ class TestIngestionNormalizationIntegration:
         ingestion_config = IngestionConfig(
             experiment=generic_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=True,
         )
         ingestion_result = DataIngestionWorkflow.run(generic_sample_df, ingestion_config)
         assert ingestion_result.is_valid
+        filtered = zero_filter_as_app(
+            ingestion_result.cleaned_df, generic_experiment, DataFormat.GENERIC,
+        )
 
         # Normalization
         norm_config = NormalizationWorkflowConfig(
             experiment=generic_experiment,
             normalization=NormalizationConfig(
                 method='none',
-                selected_classes=list(ingestion_result.cleaned_df['ClassKey'].unique())
+                selected_classes=list(filtered.filtered_df['ClassKey'].unique())
             ),
             data_format=DataFormat.GENERIC
         )
 
-        result = NormalizationWorkflow.run(ingestion_result.cleaned_df, norm_config)
+        result = NormalizationWorkflow.run(filtered.filtered_df, norm_config)
 
         assert result.success
-        # Should have fewer or equal lipids due to zero filtering
-        assert len(result.normalized_df) <= len(generic_sample_df)
+        # The zero filter's survivors are what gets normalized
+        assert len(result.normalized_df) == filtered.species_after
 
 
 # =============================================================================
@@ -1656,7 +1589,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(single_row_df, config)
@@ -1669,21 +1601,19 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(partial_zeros_df, config)
 
         assert result.is_valid and result.cleaned_df is not None
         # Rows with all zeros should be filtered
-        assert result.species_removed_count >= 0
+        assert (result.cleaned_df.filter(like='intensity[') != 0).any(axis=1).all()
 
     def test_nan_values_handling(self, nan_values_df, simple_experiment_2x2):
         """Test handling of NaN values in intensity columns."""
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(nan_values_df, config)
@@ -1696,7 +1626,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(duplicate_lipids_df, config)
@@ -1709,7 +1638,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(standards_only_df, config)
@@ -1722,7 +1650,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(mixed_standards_df, config)
@@ -1746,7 +1673,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(data, config)
@@ -1767,7 +1693,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(data, config)
@@ -1791,7 +1716,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(data, config)
@@ -1820,7 +1744,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(df, config)
@@ -1843,7 +1766,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=unequal_samples_experiment,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(df, config)
@@ -1867,7 +1789,6 @@ class TestEdgeCases:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(df, config)
@@ -1888,7 +1809,6 @@ class TestErrorHandling:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(empty_df, config)
@@ -1910,7 +1830,6 @@ class TestErrorHandling:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(data, config)
@@ -1932,7 +1851,6 @@ class TestErrorHandling:
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         result = DataIngestionWorkflow.run(data, config)
@@ -2023,11 +1941,10 @@ class TestErrorHandling:
         assert not result.success or 'not found' in str(result.validation_errors).lower()
 
     def test_all_zeros_zero_filtering(self, all_zeros_df, simple_experiment_2x2):
-        """Test zero filtering on data with all zeros."""
+        """All-zero data is rejected before any zero filtering."""
         config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=True,
         )
 
         result = DataIngestionWorkflow.run(all_zeros_df, config)
@@ -2044,7 +1961,6 @@ class TestErrorHandling:
         ingestion_config = IngestionConfig(
             experiment=simple_experiment_2x2,
             data_format=DataFormat.GENERIC,
-            apply_zero_filter=False,
         )
 
         ingestion_result = DataIngestionWorkflow.run(data, ingestion_config)
@@ -2088,7 +2004,6 @@ def test_lipidmolec_is_the_first_cleaned_column(
     config = IngestionConfig(
         experiment=request.getfixturevalue(exp_fixture),
         data_format=data_format,
-        apply_zero_filter=True,
     )
     result = DataIngestionWorkflow.run(
         request.getfixturevalue(df_fixture), config,

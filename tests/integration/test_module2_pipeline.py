@@ -6,9 +6,10 @@ processed through Module 1 (ingestion + normalization) first:
 Box plots → BQC assessment → BQC filter → Retention time →
 Pairwise correlation → PCA → Sample removal
 
-Multi-step chains validate cascading effects (BQC filter → correlation
-on filtered data, PCA → sample removal → re-run PCA) that unit tests
-do not cover.
+Each step runs the way the app runs it (the services behind the adapter's
+QC methods, see ``tests/integration/conftest.py``). Multi-step chains
+validate cascading effects (BQC filter → correlation on filtered data,
+PCA → sample removal → re-run PCA) that unit tests do not cover.
 """
 import pytest
 import pandas as pd
@@ -32,12 +33,8 @@ from app.workflows.quality_check import (
 
 # Result dataclasses (for type assertions)
 from app.services.quality_check import (
-    BoxPlotResult,
-    BQCPrepareResult,
     BQCFilterResult,
     RetentionTimeDataResult,
-    CorrelationResult,
-    PCAResult,
     SampleRemovalResult,
 )
 
@@ -55,7 +52,14 @@ from tests.integration.conftest import (
     load_generic_sample,
     load_mw_sample,
     get_concentration_columns,
+    qc_box_plot_data,
+    qc_bqc_assessment,
+    qc_correlation,
+    qc_pca,
+    zero_filter_as_app,
 )
+
+
 
 
 def get_sample_names(df: pd.DataFrame) -> list:
@@ -84,12 +88,16 @@ def run_module1_pipeline(
     ingestion_config = IngestionConfig(
         experiment=experiment,
         data_format=data_format,
-        apply_zero_filter=True,
     )
     ingestion_result = DataIngestionWorkflow.run(raw_df, ingestion_config)
     assert ingestion_result.is_valid, (
         f"Ingestion failed: {ingestion_result.validation_errors}"
     )
+
+    # Zero filtering, as the Data Processing page applies it
+    cleaned_df = zero_filter_as_app(
+        ingestion_result.cleaned_df, experiment, data_format,
+    ).filtered_df
 
     # Step 2: Normalization (method='none' renames intensity[] -> concentration[])
     norm_config = NormalizationWorkflowConfig(
@@ -97,13 +105,13 @@ def run_module1_pipeline(
         normalization=NormalizationConfig(
             method='none',
             selected_classes=list(
-                ingestion_result.cleaned_df['ClassKey'].unique()
+                cleaned_df['ClassKey'].unique()
             ),
         ),
         data_format=data_format,
     )
     norm_result = NormalizationWorkflow.run(
-        ingestion_result.cleaned_df, norm_config
+        cleaned_df, norm_config
     )
     assert norm_result.success, (
         f"Normalization failed: {norm_result.validation_errors}"
@@ -267,42 +275,20 @@ def mw_normalized_df():
 
 @pytest.fixture
 def lipidsearch_qc_config():
-    """QC config for LipidSearch format with BQC."""
-    return QualityCheckConfig(
-        bqc_label='BQC',
-        format_type=DataFormat.LIPIDSEARCH,
-        cov_threshold=30.0,
-    )
+    """QC config for LipidSearch format."""
+    return QualityCheckConfig(format_type=DataFormat.LIPIDSEARCH)
 
 
 @pytest.fixture
 def generic_qc_config():
-    """QC config for Generic format with BQC."""
-    return QualityCheckConfig(
-        bqc_label='BQC',
-        format_type=DataFormat.GENERIC,
-        cov_threshold=30.0,
-    )
+    """QC config for Generic format."""
+    return QualityCheckConfig(format_type=DataFormat.GENERIC)
 
 
 @pytest.fixture
 def msdial_qc_config():
-    """QC config for MS-DIAL format (no BQC in test dataset)."""
-    return QualityCheckConfig(
-        bqc_label=None,
-        format_type=DataFormat.MSDIAL,
-        cov_threshold=30.0,
-    )
-
-
-@pytest.fixture
-def no_bqc_config():
-    """QC config with no BQC label."""
-    return QualityCheckConfig(
-        bqc_label=None,
-        format_type=DataFormat.GENERIC,
-        cov_threshold=30.0,
-    )
+    """QC config for MS-DIAL format."""
+    return QualityCheckConfig(format_type=DataFormat.MSDIAL)
 
 
 # =============================================================================
@@ -356,6 +342,8 @@ def high_cov_all_df():
     )
 
 
+
+
 # =============================================================================
 # TEST CLASS: TestLipidSearchEndToEnd
 # =============================================================================
@@ -373,51 +361,46 @@ class TestLipidSearchEndToEnd:
 
     def test_box_plots_all_samples(self, lipidsearch_normalized_df, lipidsearch_experiment):
         """Box plots return data for all 12 samples."""
-        result = QualityCheckWorkflow.run_box_plots(
+        samples, mean_area_df, missing = qc_box_plot_data(
             lipidsearch_normalized_df, lipidsearch_experiment
         )
 
-        assert isinstance(result, BoxPlotResult)
-        assert len(result.available_samples) == 12
-        assert result.mean_area_df.shape[1] == 12
-        assert len(result.missing_values_percent) == 12
-        assert all(p >= 0 for p in result.missing_values_percent)
+        assert len(samples) == 12
+        assert mean_area_df.shape[1] == 12
+        assert len(missing) == 12
+        assert all(p >= 0 for p in missing)
 
-    def test_bqc_assessment_identifies_bqc(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+    def test_bqc_assessment_computes_cov(
+        self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
-        """BQC assessment identifies BQC condition and computes CoV data."""
-        result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        """BQC assessment computes CoV and mean for every lipid."""
+        prepared_df, reliable_pct, _ = qc_bqc_assessment(
+            lipidsearch_normalized_df, lipidsearch_experiment, 'BQC'
         )
 
-        assert result is not None
-        assert isinstance(result, BQCPrepareResult)
-        assert len(result.bqc_samples) == 4
-        # BQC is the 3rd condition (index 2)
-        assert result.bqc_sample_index == 2
-        assert 'cov' in result.prepared_df.columns
-        assert 'mean' in result.prepared_df.columns
-        assert 0 <= result.reliable_data_percent <= 100
+        assert 'cov' in prepared_df.columns
+        assert 'mean' in prepared_df.columns
+        assert len(prepared_df) == len(lipidsearch_normalized_df)
+        assert 0 <= reliable_pct <= 100
 
     def test_bqc_filter_removes_high_cov(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
         """BQC filter removes high-CoV lipids when no lipids are kept."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        _, _, high_cov = qc_bqc_assessment(
+            lipidsearch_normalized_df, lipidsearch_experiment, 'BQC'
         )
 
-        if not bqc_result.high_cov_lipids:
+        if not high_cov:
             pytest.skip("No high-CoV lipids found in LipidSearch dataset")
 
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
+            lipidsearch_normalized_df, high_cov
         )
 
         assert isinstance(filter_result, BQCFilterResult)
         assert filter_result.lipids_after < filter_result.lipids_before
-        assert filter_result.removed_count == len(bqc_result.high_cov_lipids)
+        assert filter_result.removed_count == len(high_cov)
         # Filtered DataFrame should not contain any removed lipids
         remaining_lipids = set(filter_result.filtered_df['LipidMolec'].tolist())
         for removed in filter_result.removed_lipids:
@@ -438,42 +421,39 @@ class TestLipidSearchEndToEnd:
     def test_correlation_all_conditions(
         self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
-        """Correlation computed for all 3 conditions (all have >1 replicate)."""
-        results = QualityCheckWorkflow.run_all_correlations(
-            lipidsearch_normalized_df, lipidsearch_experiment, bqc_label='BQC'
+        """Correlation computed for all 3 conditions (all have >1 replicate);
+        only the BQC condition uses the technical-replicate threshold."""
+        eligible = QualityCheckWorkflow.get_eligible_correlation_conditions(
+            lipidsearch_experiment
         )
+        assert eligible == ['WT', 'ADGAT_DKO', 'BQC']
 
-        assert len(results) == 3
-        for condition, corr_result in results.items():
-            assert isinstance(corr_result, CorrelationResult)
-            assert corr_result.condition == condition
+        for condition in eligible:
+            sample_type = (
+                'technical replicates' if condition == 'BQC'
+                else 'biological replicates'
+            )
+            correlation_df, threshold = qc_correlation(
+                lipidsearch_normalized_df, lipidsearch_experiment,
+                condition, sample_type,
+            )
             # Each condition has 4 samples -> 4x4 correlation matrix
-            assert corr_result.correlation_df.shape == (4, 4)
-            # Diagonal should be 1.0
-            diag = np.diag(corr_result.correlation_df.values)
-            np.testing.assert_allclose(diag, 1.0)
-            # bqc_label is set so all conditions use technical threshold
-            assert corr_result.threshold == 0.8
-            assert corr_result.sample_type == 'technical replicates'
+            assert correlation_df.shape == (4, 4)
+            np.testing.assert_allclose(np.diag(correlation_df.values), 1.0)
+            assert threshold == (0.8 if condition == 'BQC' else 0.7)
 
     def test_pca_all_samples(self, lipidsearch_normalized_df, lipidsearch_experiment):
         """PCA includes all 12 samples with correct condition mapping."""
-        result = QualityCheckWorkflow.run_pca(
-            lipidsearch_normalized_df, lipidsearch_experiment
+        pca_df = qc_pca(lipidsearch_normalized_df, lipidsearch_experiment)
+
+        assert pca_df[['PC1', 'PC2']].shape == (12, 2)
+        assert pca_df['Sample'].tolist() == lipidsearch_experiment.full_samples_list
+        assert pca_df['Condition'].tolist() == (
+            lipidsearch_experiment.extensive_conditions_list
         )
 
-        assert isinstance(result, PCAResult)
-        assert result.pc_df.shape == (12, 2)
-        assert len(result.available_samples) == 12
-        assert len(result.conditions) == 12
-        assert set(result.conditions) == {'WT', 'ADGAT_DKO', 'BQC'}
-        # PC labels should contain percentage
-        for label in result.pc_labels:
-            assert 'PC' in label
-            assert '%' in label
-
     def test_full_interactive_pipeline(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
         """Full interactive chain: box plots -> BQC -> filter -> correlation -> PCA."""
         df = lipidsearch_normalized_df
@@ -481,36 +461,27 @@ class TestLipidSearchEndToEnd:
         original_lipid_count = len(df)
 
         # Step 1: Box plots
-        box_result = QualityCheckWorkflow.run_box_plots(df, experiment)
-        assert len(box_result.available_samples) == 12
+        samples, _, _ = qc_box_plot_data(df, experiment)
+        assert len(samples) == 12
 
         # Step 2: BQC assessment
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            df, experiment, lipidsearch_qc_config
-        )
-        assert bqc_result is not None
+        _, _, high_cov = qc_bqc_assessment(df, experiment, 'BQC')
 
         # Step 3: BQC filter
-        if bqc_result.high_cov_lipids:
-            filter_result = QualityCheckWorkflow.apply_bqc_filter(
-                df, bqc_result.high_cov_lipids
-            )
+        if high_cov:
+            filter_result = QualityCheckWorkflow.apply_bqc_filter(df, high_cov)
             filtered_df = filter_result.filtered_df
             assert len(filtered_df) < original_lipid_count
         else:
             filtered_df = df
 
         # Step 4: Correlation on filtered data
-        corr_results = QualityCheckWorkflow.run_all_correlations(
-            filtered_df, experiment, bqc_label='BQC'
-        )
-        assert len(corr_results) == 3
-        for corr in corr_results.values():
-            assert corr.correlation_df.shape == (4, 4)
+        for condition in experiment.conditions_list:
+            correlation_df, _ = qc_correlation(filtered_df, experiment, condition)
+            assert correlation_df.shape == (4, 4)
 
         # Step 5: PCA on filtered data (same samples, fewer lipids)
-        pca_result = QualityCheckWorkflow.run_pca(filtered_df, experiment)
-        assert pca_result.pc_df.shape == (12, 2)
+        assert len(qc_pca(filtered_df, experiment)) == 12
 
 
 # =============================================================================
@@ -531,22 +502,13 @@ class TestMSDIALEndToEnd:
 
     def test_box_plots_seven_samples(self, msdial_normalized_df, msdial_experiment):
         """Box plots return data for all 7 samples."""
-        result = QualityCheckWorkflow.run_box_plots(
+        samples, mean_area_df, missing = qc_box_plot_data(
             msdial_normalized_df, msdial_experiment
         )
 
-        assert len(result.available_samples) == 7
-        assert result.mean_area_df.shape[1] == 7
-        assert len(result.missing_values_percent) == 7
-
-    def test_bqc_assessment_none_without_bqc(
-        self, msdial_normalized_df, msdial_experiment, msdial_qc_config
-    ):
-        """BQC assessment returns None when no BQC label is configured."""
-        result = QualityCheckWorkflow.run_bqc_assessment(
-            msdial_normalized_df, msdial_experiment, msdial_qc_config
-        )
-        assert result is None
+        assert len(samples) == 7
+        assert mean_area_df.shape[1] == 7
+        assert len(missing) == 7
 
     def test_retention_time_available(self, msdial_normalized_df, msdial_qc_config):
         """Retention time data is available for MS-DIAL format."""
@@ -565,31 +527,21 @@ class TestMSDIALEndToEnd:
             msdial_experiment
         )
 
-        assert 'Blank' not in eligible
-        assert len(eligible) == 2
-        assert 'fads2_KO' in eligible
-        assert 'WT' in eligible
-
-        results = QualityCheckWorkflow.run_all_correlations(
-            msdial_normalized_df, msdial_experiment
-        )
-        assert len(results) == 2
+        assert eligible == ['fads2_KO', 'WT']
         # fads2_KO and WT each have 3 samples -> 3x3 matrices
-        for corr_result in results.values():
-            assert corr_result.correlation_df.shape == (3, 3)
-            # No bqc_label -> biological thresholds
-            assert corr_result.threshold == 0.7
-            assert corr_result.sample_type == 'biological replicates'
+        for condition in eligible:
+            correlation_df, threshold = qc_correlation(
+                msdial_normalized_df, msdial_experiment, condition
+            )
+            assert correlation_df.shape == (3, 3)
+            assert threshold == 0.7
 
     def test_pca_all_samples(self, msdial_normalized_df, msdial_experiment):
         """PCA includes all 7 samples with correct condition mapping."""
-        result = QualityCheckWorkflow.run_pca(
-            msdial_normalized_df, msdial_experiment
-        )
+        pca_df = qc_pca(msdial_normalized_df, msdial_experiment)
 
-        assert result.pc_df.shape == (7, 2)
-        assert len(result.available_samples) == 7
-        assert set(result.conditions) == {'Blank', 'fads2_KO', 'WT'}
+        assert len(pca_df) == 7
+        assert set(pca_df['Condition']) == {'Blank', 'fads2_KO', 'WT'}
 
 
 # =============================================================================
@@ -597,8 +549,7 @@ class TestMSDIALEndToEnd:
 # =============================================================================
 
 class TestGenericEndToEnd:
-    """Full QC pipeline for Generic format. No retention time data.
-    Tests biological vs technical replicate correlation thresholds."""
+    """Full QC pipeline for Generic format. No retention time data."""
 
     def test_validation_passes(self, generic_normalized_df, generic_experiment):
         """Normalized Generic data passes QC validation."""
@@ -617,47 +568,21 @@ class TestGenericEndToEnd:
         assert result.available is False
         assert result.lipid_classes == []
 
-    def test_bqc_assessment_with_bqc(
-        self, generic_normalized_df, generic_experiment, generic_qc_config
-    ):
+    def test_bqc_assessment_with_bqc(self, generic_normalized_df, generic_experiment):
         """BQC assessment works for Generic format with BQC condition."""
-        result = QualityCheckWorkflow.run_bqc_assessment(
-            generic_normalized_df, generic_experiment, generic_qc_config
+        prepared_df, _, high_cov = qc_bqc_assessment(
+            generic_normalized_df, generic_experiment, 'BQC'
         )
 
-        assert result is not None
-        assert isinstance(result, BQCPrepareResult)
-        # BQC is the 3rd condition (index 2)
-        assert result.bqc_sample_index == 2
-        assert isinstance(result.high_cov_lipids, list)
-
-    def test_correlation_threshold_with_vs_without_bqc_label(
-        self, generic_normalized_df, generic_experiment
-    ):
-        """With bqc_label set: all conditions use technical threshold (0.8).
-        Without bqc_label: all conditions use biological threshold (0.7)."""
-        # With bqc_label
-        corr_with_bqc = QualityCheckWorkflow.run_correlation(
-            generic_normalized_df, generic_experiment, 'WT', bqc_label='BQC'
-        )
-        assert corr_with_bqc.threshold == 0.8
-        assert corr_with_bqc.sample_type == 'technical replicates'
-
-        # Without bqc_label
-        corr_without_bqc = QualityCheckWorkflow.run_correlation(
-            generic_normalized_df, generic_experiment, 'WT', bqc_label=None
-        )
-        assert corr_without_bqc.threshold == 0.7
-        assert corr_without_bqc.sample_type == 'biological replicates'
+        assert len(prepared_df) == len(generic_normalized_df)
+        assert isinstance(high_cov, list)
 
     def test_pca_twelve_samples(self, generic_normalized_df, generic_experiment):
         """PCA includes all 12 samples."""
-        result = QualityCheckWorkflow.run_pca(
-            generic_normalized_df, generic_experiment
-        )
+        pca_df = qc_pca(generic_normalized_df, generic_experiment)
 
-        assert result.pc_df.shape == (12, 2)
-        assert set(result.conditions) == {'WT', 'ADGAT_DKO', 'BQC'}
+        assert len(pca_df) == 12
+        assert set(pca_df['Condition']) == {'WT', 'ADGAT_DKO', 'BQC'}
 
 
 # =============================================================================
@@ -677,217 +602,133 @@ class TestMWEndToEnd:
 
     def test_box_plots_44_samples(self, mw_normalized_df, mw_experiment):
         """Box plots handle 44 samples."""
-        result = QualityCheckWorkflow.run_box_plots(
-            mw_normalized_df, mw_experiment
-        )
+        samples, mean_area_df, _ = qc_box_plot_data(mw_normalized_df, mw_experiment)
 
-        assert len(result.available_samples) == 44
-        assert result.mean_area_df.shape[1] == 44
+        assert len(samples) == 44
+        assert mean_area_df.shape[1] == 44
 
     def test_correlation_large_matrices(self, mw_normalized_df, mw_experiment):
         """Correlation produces 22x22 matrices for each condition."""
-        results = QualityCheckWorkflow.run_all_correlations(
-            mw_normalized_df, mw_experiment
-        )
-
-        assert len(results) == 2
+        assert QualityCheckWorkflow.get_eligible_correlation_conditions(
+            mw_experiment
+        ) == ['Normal', 'HFD']
         for condition in ['Normal', 'HFD']:
-            assert condition in results
-            corr = results[condition]
-            assert corr.correlation_df.shape == (22, 22)
-            # Diagonal should be 1.0
-            diag = np.diag(corr.correlation_df.values)
-            np.testing.assert_allclose(diag, 1.0)
+            correlation_df, _ = qc_correlation(mw_normalized_df, mw_experiment, condition)
+            assert correlation_df.shape == (22, 22)
+            np.testing.assert_allclose(np.diag(correlation_df.values), 1.0)
 
     def test_pca_44_samples(self, mw_normalized_df, mw_experiment):
         """PCA handles 44 samples with correct condition mapping."""
-        result = QualityCheckWorkflow.run_pca(
-            mw_normalized_df, mw_experiment
-        )
+        pca_df = qc_pca(mw_normalized_df, mw_experiment)
 
-        assert result.pc_df.shape == (44, 2)
-        assert len(result.available_samples) == 44
-        assert set(result.conditions) == {'Normal', 'HFD'}
+        assert len(pca_df) == 44
+        assert set(pca_df['Condition']) == {'Normal', 'HFD'}
 
 
 # =============================================================================
 # TEST CLASS: TestBQCCascadingEffects
 # =============================================================================
 
+@pytest.fixture
+def lipidsearch_high_cov(lipidsearch_normalized_df, lipidsearch_experiment):
+    """The lipids the BQC filter removes from the LipidSearch sample data."""
+    _, _, high_cov = qc_bqc_assessment(
+        lipidsearch_normalized_df, lipidsearch_experiment, 'BQC'
+    )
+    if not high_cov:
+        pytest.skip("No high-CoV lipids in dataset")
+    return high_cov
+
+
 class TestBQCCascadingEffects:
     """Tests cascading effects of BQC filtering on downstream QC steps.
     Uses LipidSearch data (has BQC condition)."""
 
     def test_bqc_filter_reduces_lipid_count(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_high_cov
     ):
         """BQC filter reduces lipid count when high-CoV lipids exist."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
         assert filter_result.lipids_after < filter_result.lipids_before
         assert filter_result.removed_count > 0
 
     def test_filtered_df_used_in_correlation(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_high_cov
     ):
-        """Correlation on BQC-filtered data uses fewer lipids."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
+        """Correlation on BQC-filtered data keeps the same samples."""
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
 
-        # Correlation on original vs filtered
-        corr_original = QualityCheckWorkflow.run_correlation(
+        corr_original, _ = qc_correlation(
             lipidsearch_normalized_df, lipidsearch_experiment, 'WT'
         )
-        corr_filtered = QualityCheckWorkflow.run_correlation(
+        corr_filtered, _ = qc_correlation(
             filter_result.filtered_df, lipidsearch_experiment, 'WT'
         )
 
         # Both should be 4x4 (same samples), but values may differ
-        assert corr_original.correlation_df.shape == (4, 4)
-        assert corr_filtered.correlation_df.shape == (4, 4)
+        assert corr_original.shape == (4, 4)
+        assert corr_filtered.shape == (4, 4)
 
     def test_filtered_df_used_in_pca(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_high_cov
     ):
-        """PCA on BQC-filtered data: same samples, potentially different variance explained."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
+        """PCA on BQC-filtered data: same samples."""
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
 
-        pca_before = QualityCheckWorkflow.run_pca(
-            lipidsearch_normalized_df, lipidsearch_experiment
-        )
-        pca_after = QualityCheckWorkflow.run_pca(
-            filter_result.filtered_df, lipidsearch_experiment
-        )
-
-        # Same number of samples (12) but variance explained likely differs
-        assert pca_before.pc_df.shape == (12, 2)
-        assert pca_after.pc_df.shape == (12, 2)
+        assert len(qc_pca(lipidsearch_normalized_df, lipidsearch_experiment)) == 12
+        assert len(qc_pca(filter_result.filtered_df, lipidsearch_experiment)) == 12
 
     def test_filtered_df_used_in_box_plots(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_high_cov
     ):
         """Box plots on BQC-filtered data have fewer rows."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
 
-        box_before = QualityCheckWorkflow.run_box_plots(
-            lipidsearch_normalized_df, lipidsearch_experiment
-        )
-        box_after = QualityCheckWorkflow.run_box_plots(
-            filter_result.filtered_df, lipidsearch_experiment
-        )
+        _, before, _ = qc_box_plot_data(lipidsearch_normalized_df, lipidsearch_experiment)
+        _, after, _ = qc_box_plot_data(filter_result.filtered_df, lipidsearch_experiment)
 
-        assert box_after.mean_area_df.shape[0] < box_before.mean_area_df.shape[0]
+        assert after.shape[0] < before.shape[0]
 
     def test_keeping_some_high_cov_lipids(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_high_cov
     ):
         """Keeping some high-CoV lipids retains them in filtered DataFrame."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
-        keep_one = [bqc_result.high_cov_lipids[0]]
+        keep_one = [lipidsearch_high_cov[0]]
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids,
+            lipidsearch_normalized_df, lipidsearch_high_cov,
             lipids_to_keep=keep_one,
         )
 
         assert filter_result.kept_despite_high_cov == keep_one
-        expected_removed = len(bqc_result.high_cov_lipids) - 1
-        assert filter_result.removed_count == expected_removed
+        assert filter_result.removed_count == len(lipidsearch_high_cov) - 1
+        assert keep_one[0] in set(filter_result.filtered_df['LipidMolec'])
 
     def test_keeping_all_high_cov_lipids(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_high_cov
     ):
         """Keeping all high-CoV lipids results in no removal."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids,
-            lipids_to_keep=bqc_result.high_cov_lipids,
+            lipidsearch_normalized_df, lipidsearch_high_cov,
+            lipids_to_keep=lipidsearch_high_cov,
         )
 
         assert filter_result.lipids_after == filter_result.lipids_before
         assert filter_result.removed_count == 0
 
-    def test_bqc_filter_then_correlation_then_pca(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-    ):
-        """Full downstream chain: BQC filter -> correlation -> PCA all succeed."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
-        # Filter
-        filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
-        )
-        filtered_df = filter_result.filtered_df
-
-        # Correlation on filtered
-        corr_results = QualityCheckWorkflow.run_all_correlations(
-            filtered_df, lipidsearch_experiment, bqc_label='BQC'
-        )
-        assert len(corr_results) == 3
-        for corr in corr_results.values():
-            assert corr.correlation_df.shape == (4, 4)
-
-        # PCA on filtered
-        pca_result = QualityCheckWorkflow.run_pca(
-            filtered_df, lipidsearch_experiment
-        )
-        assert pca_result.pc_df.shape == (12, 2)
-
     def test_filter_preserves_non_concentration_columns(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_high_cov
     ):
         """BQC filter preserves LipidMolec, ClassKey, and concentration columns."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
 
         assert 'LipidMolec' in filter_result.filtered_df.columns
@@ -897,17 +738,11 @@ class TestBQCCascadingEffects:
         assert len(conc_cols_after) == len(conc_cols_before)
 
     def test_filter_result_computed_properties(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_high_cov
     ):
         """BQC filter result computed properties are correct."""
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
 
         assert filter_result.removed_count == (
@@ -964,27 +799,27 @@ class TestPCASampleRemoval:
             samples_to_remove=['s1'],
         )
 
-        # WT was first condition with 4 samples, now has 3
-        assert result.updated_experiment.number_of_samples_list[0] == 3
-        # Other conditions unchanged
-        assert result.updated_experiment.number_of_samples_list[1] == 4
-        assert result.updated_experiment.number_of_samples_list[2] == 4
+        assert result.updated_experiment.number_of_samples_list == [3, 4, 4]
         assert result.updated_experiment.conditions_list == ['WT', 'ADGAT_DKO', 'BQC']
 
     def test_column_renaming_after_removal(
         self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
-        """Concentration columns renumbered sequentially after removal."""
+        """Concentration columns renumbered sequentially after removal, each
+        survivor keeping its own data."""
         result = QualityCheckWorkflow.remove_samples(
             lipidsearch_normalized_df, lipidsearch_experiment,
             samples_to_remove=['s1'],
         )
 
         conc_cols = get_concentration_columns(result.updated_df)
-        assert len(conc_cols) == 11
-        # Columns should be sequentially named s1..s11
-        expected_cols = [f'concentration[s{i}]' for i in range(1, 12)]
-        assert conc_cols == expected_cols
+        assert conc_cols == [f'concentration[s{i}]' for i in range(1, 12)]
+        assert result.old_to_new['concentration[s2]'] == 'concentration[s1]'
+        pd.testing.assert_series_equal(
+            result.updated_df['concentration[s1]'],
+            lipidsearch_normalized_df['concentration[s2]'],
+            check_names=False,
+        )
 
     def test_pca_after_removal(
         self, lipidsearch_normalized_df, lipidsearch_experiment
@@ -995,12 +830,10 @@ class TestPCASampleRemoval:
             samples_to_remove=['s1'],
         )
 
-        pca_result = QualityCheckWorkflow.run_pca(
-            removal.updated_df, removal.updated_experiment
-        )
+        pca_df = qc_pca(removal.updated_df, removal.updated_experiment)
 
-        assert pca_result.pc_df.shape == (11, 2)
-        assert len(pca_result.available_samples) == 11
+        assert len(pca_df) == 11
+        assert pca_df['Condition'].tolist() == ['WT'] * 3 + ['ADGAT_DKO'] * 4 + ['BQC'] * 4
 
     def test_correlation_after_removal(
         self, lipidsearch_normalized_df, lipidsearch_experiment
@@ -1010,23 +843,17 @@ class TestPCASampleRemoval:
             lipidsearch_normalized_df, lipidsearch_experiment,
             samples_to_remove=['s1'],
         )
+        experiment = removal.updated_experiment
 
-        results = QualityCheckWorkflow.run_all_correlations(
-            removal.updated_df, removal.updated_experiment
-        )
-
-        assert len(results) == 3
-        # WT now has 3 samples -> 3x3 matrix
-        assert results['WT'].correlation_df.shape == (3, 3)
-        # Others still have 4 -> 4x4
-        assert results['ADGAT_DKO'].correlation_df.shape == (4, 4)
-        assert results['BQC'].correlation_df.shape == (4, 4)
+        # WT now has 3 samples -> 3x3 matrix; others still have 4
+        assert qc_correlation(removal.updated_df, experiment, 'WT')[0].shape == (3, 3)
+        assert qc_correlation(removal.updated_df, experiment, 'ADGAT_DKO')[0].shape == (4, 4)
+        assert qc_correlation(removal.updated_df, experiment, 'BQC')[0].shape == (4, 4)
 
     def test_remove_then_remove_again(
         self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
         """Two successive removals work correctly."""
-        # First removal
         result1 = QualityCheckWorkflow.remove_samples(
             lipidsearch_normalized_df, lipidsearch_experiment,
             samples_to_remove=['s1'],
@@ -1046,29 +873,23 @@ class TestPCASampleRemoval:
         self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
         """Removing all samples from BQC condition drops that condition."""
-        # BQC samples are s9, s10, s11, s12
         result = QualityCheckWorkflow.remove_samples(
             lipidsearch_normalized_df, lipidsearch_experiment,
             samples_to_remove=['s9', 's10', 's11', 's12'],
         )
 
         assert result.samples_after == 8
-        assert result.updated_experiment.n_conditions == 2
-        assert 'BQC' not in result.updated_experiment.conditions_list
         assert result.updated_experiment.conditions_list == ['WT', 'ADGAT_DKO']
 
     def test_remove_preserves_lipid_data(
         self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
         """Sample removal does not change the number of lipid rows."""
-        original_lipid_count = len(lipidsearch_normalized_df)
-
         result = QualityCheckWorkflow.remove_samples(
             lipidsearch_normalized_df, lipidsearch_experiment,
             samples_to_remove=['s1'],
         )
 
-        assert len(result.updated_df) == original_lipid_count
         assert (
             result.updated_df['LipidMolec'].tolist()
             == lipidsearch_normalized_df['LipidMolec'].tolist()
@@ -1131,20 +952,14 @@ class TestFormatSpecificBehavior:
         assert result.available is False
 
     def test_lipidsearch_preserves_calcmass_basert(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_high_cov
     ):
         """CalcMass and BaseRt columns survive BQC filtering for LipidSearch."""
         assert 'CalcMass' in lipidsearch_normalized_df.columns
         assert 'BaseRt' in lipidsearch_normalized_df.columns
 
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if not bqc_result.high_cov_lipids:
-            pytest.skip("No high-CoV lipids in dataset")
-
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            lipidsearch_normalized_df, bqc_result.high_cov_lipids
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
 
         assert 'CalcMass' in filter_result.filtered_df.columns
@@ -1160,40 +975,29 @@ class TestDataIntegrity:
     Verifies column preservation, sample count consistency, and non-negative values."""
 
     def test_concentration_columns_preserved_through_pipeline(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_high_cov
     ):
         """Concentration column count is preserved through QC steps (no sample removal)."""
         original_conc_count = len(get_concentration_columns(lipidsearch_normalized_df))
 
-        # Box plots don't modify DataFrame but we verify the result references correct samples
-        box_result = QualityCheckWorkflow.run_box_plots(
+        _, mean_area_df, _ = qc_box_plot_data(
             lipidsearch_normalized_df, lipidsearch_experiment
         )
-        assert box_result.mean_area_df.shape[1] == original_conc_count
+        assert mean_area_df.shape[1] == original_conc_count
 
-        # BQC filter (if applicable) preserves concentration columns
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        filter_result = QualityCheckWorkflow.apply_bqc_filter(
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
-        if bqc_result and bqc_result.high_cov_lipids:
-            filter_result = QualityCheckWorkflow.apply_bqc_filter(
-                lipidsearch_normalized_df, bqc_result.high_cov_lipids
-            )
-            conc_after_filter = len(get_concentration_columns(filter_result.filtered_df))
-            assert conc_after_filter == original_conc_count
+        assert len(get_concentration_columns(filter_result.filtered_df)) == original_conc_count
 
     def test_sample_count_consistent_across_results(
         self, lipidsearch_normalized_df, lipidsearch_experiment
     ):
-        """Available sample count is consistent between box plots and PCA."""
-        box_result = QualityCheckWorkflow.run_box_plots(
-            lipidsearch_normalized_df, lipidsearch_experiment
-        )
-        pca_result = QualityCheckWorkflow.run_pca(
-            lipidsearch_normalized_df, lipidsearch_experiment
-        )
+        """Box plots and PCA see the same samples."""
+        samples, _, _ = qc_box_plot_data(lipidsearch_normalized_df, lipidsearch_experiment)
+        pca_df = qc_pca(lipidsearch_normalized_df, lipidsearch_experiment)
 
-        assert box_result.available_samples == pca_result.available_samples
+        assert samples == pca_df['Sample'].tolist()
 
     def test_non_negative_concentration_values(self, lipidsearch_normalized_df):
         """All concentration values are non-negative."""
@@ -1203,47 +1007,20 @@ class TestDataIntegrity:
                 f"Negative values found in {col}"
             )
 
-    def test_lipidmolec_preserved_after_all_steps(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+    def test_identifier_columns_preserved_after_all_steps(
+        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_high_cov
     ):
-        """LipidMolec column is present after BQC filter and sample removal."""
-        # After BQC filter
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
+        """LipidMolec and ClassKey are present after BQC filter and sample removal."""
+        filter_result = QualityCheckWorkflow.apply_bqc_filter(
+            lipidsearch_normalized_df, lipidsearch_high_cov
         )
-        if bqc_result and bqc_result.high_cov_lipids:
-            filter_result = QualityCheckWorkflow.apply_bqc_filter(
-                lipidsearch_normalized_df, bqc_result.high_cov_lipids
-            )
-            assert 'LipidMolec' in filter_result.filtered_df.columns
-
-        # After sample removal
         removal_result = QualityCheckWorkflow.remove_samples(
-            lipidsearch_normalized_df, lipidsearch_experiment,
+            filter_result.filtered_df, lipidsearch_experiment,
             samples_to_remove=['s1'],
         )
-        assert 'LipidMolec' in removal_result.updated_df.columns
-
-    def test_classkey_preserved_after_all_steps(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-    ):
-        """ClassKey column is present after BQC filter and sample removal."""
-        # After BQC filter
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        if bqc_result and bqc_result.high_cov_lipids:
-            filter_result = QualityCheckWorkflow.apply_bqc_filter(
-                lipidsearch_normalized_df, bqc_result.high_cov_lipids
-            )
-            assert 'ClassKey' in filter_result.filtered_df.columns
-
-        # After sample removal
-        removal_result = QualityCheckWorkflow.remove_samples(
-            lipidsearch_normalized_df, lipidsearch_experiment,
-            samples_to_remove=['s1'],
-        )
-        assert 'ClassKey' in removal_result.updated_df.columns
+        for column in ('LipidMolec', 'ClassKey'):
+            assert column in filter_result.filtered_df.columns
+            assert column in removal_result.updated_df.columns
 
 
 # =============================================================================
@@ -1255,44 +1032,34 @@ class TestEdgeCases:
 
     def test_single_lipid_box_plots(self, single_lipid_df, four_sample_experiment):
         """Box plots work with a single lipid species."""
-        result = QualityCheckWorkflow.run_box_plots(
+        samples, mean_area_df, _ = qc_box_plot_data(
             single_lipid_df, four_sample_experiment
         )
-        assert result.mean_area_df.shape[0] == 1
-        assert len(result.available_samples) == 4
+        assert mean_area_df.shape[0] == 1
+        assert len(samples) == 4
 
     def test_single_lipid_pca_raises(self, single_lipid_df, four_sample_experiment):
         """PCA with a single lipid (1 feature) raises ValueError because
         n_components=2 exceeds min(n_samples, n_features)=1."""
         with pytest.raises(ValueError):
-            QualityCheckWorkflow.run_pca(
-                single_lipid_df, four_sample_experiment
-            )
+            qc_pca(single_lipid_df, four_sample_experiment)
 
     def test_two_samples_minimum_pca(self, two_sample_df, two_sample_experiment):
         """PCA works at minimum boundary (2 samples)."""
-        result = QualityCheckWorkflow.run_pca(
-            two_sample_df, two_sample_experiment
-        )
-        assert result.pc_df.shape == (2, 2)
+        assert len(qc_pca(two_sample_df, two_sample_experiment)) == 2
 
     def test_uniform_data_bqc(self, uniform_df):
         """Uniform data (all identical values) has CoV=0, so no high-CoV lipids."""
-        # Need a BQC experiment for the uniform_df (4 samples -> 2 BQC + 2 other)
         experiment = ExperimentConfig(
             n_conditions=2,
             conditions_list=['Control', 'BQC'],
             number_of_samples_list=[2, 2],
         )
-        config = QualityCheckConfig(bqc_label='BQC', cov_threshold=30.0)
 
-        result = QualityCheckWorkflow.run_bqc_assessment(
-            uniform_df, experiment, config
-        )
+        _, reliable_pct, high_cov = qc_bqc_assessment(uniform_df, experiment, 'BQC')
 
-        assert result is not None
-        assert result.high_cov_lipids == []
-        assert result.reliable_data_percent == 100.0
+        assert high_cov == []
+        assert reliable_pct == 100.0
 
     def test_high_cov_all_lipids_filter(self, high_cov_all_df):
         """When all lipids have high CoV, filtering removes them all."""
@@ -1301,38 +1068,13 @@ class TestEdgeCases:
             conditions_list=['Control', 'BQC'],
             number_of_samples_list=[2, 2],
         )
-        config = QualityCheckConfig(bqc_label='BQC', cov_threshold=30.0)
 
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            high_cov_all_df, experiment, config
-        )
+        _, _, high_cov = qc_bqc_assessment(high_cov_all_df, experiment, 'BQC')
+        assert len(high_cov) == 3  # All 3 lipids
 
-        assert bqc_result is not None
-        assert len(bqc_result.high_cov_lipids) == 3  # All 3 lipids
-
-        filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            high_cov_all_df, bqc_result.high_cov_lipids
-        )
+        filter_result = QualityCheckWorkflow.apply_bqc_filter(high_cov_all_df, high_cov)
         assert filter_result.lipids_after == 0
         assert len(filter_result.filtered_df) == 0
-
-    def test_single_replicate_correlation_raises(self):
-        """Correlation on a condition with 1 replicate raises ValueError."""
-        df = make_qc_dataframe(
-            ['PC(16:0_18:1)', 'PE(18:0_20:4)'],
-            ['PC', 'PE'],
-            n_samples=3,
-        )
-        experiment = ExperimentConfig(
-            n_conditions=2,
-            conditions_list=['Solo', 'Pair'],
-            number_of_samples_list=[1, 2],
-        )
-
-        with pytest.raises(ValueError, match="at least 2"):
-            QualityCheckWorkflow.run_correlation(
-                df, experiment, 'Solo'
-            )
 
 
 # =============================================================================
@@ -1356,110 +1098,7 @@ class TestErrorHandling:
         errors = QualityCheckWorkflow.validate_inputs(df, four_sample_experiment)
         assert len(errors) > 0
 
-    def test_invalid_bqc_label(
-        self, lipidsearch_normalized_df, lipidsearch_experiment
-    ):
-        """BQC assessment returns None when label not in experiment."""
-        config = QualityCheckConfig(bqc_label='NonExistent')
-
-        result = QualityCheckWorkflow.run_bqc_assessment(
-            lipidsearch_normalized_df, lipidsearch_experiment, config
-        )
-        assert result is None
-
-    def test_single_replicate_correlation_error(
-        self, msdial_normalized_df, msdial_experiment
-    ):
-        """Correlation on Blank condition (1 replicate) raises ValueError."""
-        with pytest.raises(ValueError):
-            QualityCheckWorkflow.run_correlation(
-                msdial_normalized_df, msdial_experiment, 'Blank'
-            )
-
     def test_empty_dataframe_validation(self, four_sample_experiment):
         """Validation fails on empty DataFrame."""
-        df = pd.DataFrame()
-
-        errors = QualityCheckWorkflow.validate_inputs(df, four_sample_experiment)
+        errors = QualityCheckWorkflow.validate_inputs(pd.DataFrame(), four_sample_experiment)
         assert len(errors) > 0
-
-
-# =============================================================================
-# TEST CLASS: TestNonInteractivePipeline
-# =============================================================================
-
-class TestNonInteractivePipeline:
-    """Tests the run_non_interactive method for batch execution."""
-
-    def test_non_interactive_returns_all_fields(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-    ):
-        """run_non_interactive returns dataclass with all expected fields."""
-        result = QualityCheckWorkflow.run_non_interactive(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-
-        assert hasattr(result, 'box_plot')
-        assert hasattr(result, 'bqc')
-        assert hasattr(result, 'retention_time')
-        assert hasattr(result, 'correlations')
-        assert hasattr(result, 'pca')
-        assert hasattr(result, 'validation_errors')
-        assert result.validation_errors == []
-
-        # All results should be populated for LipidSearch with BQC
-        assert result.box_plot is not None
-        assert result.bqc is not None
-        assert result.retention_time is not None
-        assert len(result.correlations) > 0
-        assert result.pca is not None
-
-    def test_non_interactive_consistent_with_individual_calls(
-        self, lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-    ):
-        """run_non_interactive results match calling each method individually."""
-        ni_result = QualityCheckWorkflow.run_non_interactive(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-
-        # Compare box plots
-        box_individual = QualityCheckWorkflow.run_box_plots(
-            lipidsearch_normalized_df, lipidsearch_experiment
-        )
-        assert (
-            ni_result.box_plot.available_samples
-            == box_individual.available_samples
-        )
-
-        # Compare PCA
-        pca_individual = QualityCheckWorkflow.run_pca(
-            lipidsearch_normalized_df, lipidsearch_experiment
-        )
-        assert ni_result.pca.pc_df.shape == pca_individual.pc_df.shape
-
-        # Compare correlation count
-        corr_individual = QualityCheckWorkflow.run_all_correlations(
-            lipidsearch_normalized_df, lipidsearch_experiment, bqc_label='BQC'
-        )
-        assert len(ni_result.correlations) == len(corr_individual)
-
-    def test_non_interactive_lipidsearch_vs_generic(
-        self,
-        lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config,
-        generic_normalized_df, generic_experiment, generic_qc_config,
-    ):
-        """Non-interactive: LipidSearch has RT, Generic does not. Both have BQC."""
-        ls_result = QualityCheckWorkflow.run_non_interactive(
-            lipidsearch_normalized_df, lipidsearch_experiment, lipidsearch_qc_config
-        )
-        gen_result = QualityCheckWorkflow.run_non_interactive(
-            generic_normalized_df, generic_experiment, generic_qc_config
-        )
-
-        # RT availability differs
-        assert ls_result.retention_time.available is True
-        assert gen_result.retention_time.available is False
-
-        # Both have BQC results
-        assert ls_result.bqc is not None
-        assert gen_result.bqc is not None

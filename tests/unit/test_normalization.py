@@ -24,7 +24,6 @@ def single_sample_experiment():
     )
 
 
-
 @pytest.fixture
 def basic_lipid_df(simple_experiment_2x3):
     """Basic lipid DataFrame with intensity values."""

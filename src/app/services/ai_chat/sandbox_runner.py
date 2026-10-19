@@ -19,6 +19,7 @@ bytes that untrusted code could have shaped would run code in the parent.
 Nothing here trusts the code it runs. The parent (``sandbox.py``) owns the
 timeout and kills this process if it overruns.
 """
+import importlib
 import json
 import os
 import pickle
@@ -168,7 +169,16 @@ def main() -> int:
 
     # Imported after the request is read so the cost is paid once, and so
     # a malformed request fails before any heavy work.
-    from app.services.ai_chat.sandbox import build_sandbox_globals, frame_to_wire
+    from app.services.ai_chat.sandbox import (
+        ANALYSIS_MODULES, build_sandbox_globals, frame_to_wire,
+    )
+
+    # Resolve the modules the code may import before _harden: imported after
+    # it, a library that subclasses socket.socket (ssl, which scikit-learn
+    # reaches through joblib and asyncio) fails, because _harden replaces
+    # socket.socket with a function.
+    for module in ANALYSIS_MODULES:
+        importlib.import_module(module)
 
     exec_globals = build_sandbox_globals(
         df=request["df"],

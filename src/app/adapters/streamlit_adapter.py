@@ -42,7 +42,6 @@ from ..workflows.analysis import (
     FACHResult,
     HeatmapResult,
     PathwayDataResult,
-    PathwayResult,
     SaturationResult,
     VolcanoData,
     VolcanoResult,
@@ -935,21 +934,6 @@ class StreamlitAdapter:
 
     # ==================== Service Wrappers ====================
 
-    @staticmethod
-    def detect_format(df: pd.DataFrame) -> DataFormat:
-        """
-        Detect data format from DataFrame.
-
-        This is a thin wrapper around FormatDetectionService.
-        Not cached because format detection is fast (just column checks).
-
-        Args:
-            df: DataFrame to detect format for
-
-        Returns:
-            Detected DataFormat
-        """
-        return FormatDetectionService.detect_format(df)
 
     @staticmethod
     def detect_format_mismatch(df: pd.DataFrame, data_format: str) -> Optional[DataFormat]:
@@ -974,8 +958,6 @@ class StreamlitAdapter:
         df: pd.DataFrame,
         experiment: ExperimentConfig,
         data_format: Optional[DataFormat] = None,
-        bqc_label: Optional[str] = None,
-        apply_zero_filter: bool = False,
         grade_config: Optional[GradeFilterConfig] = None,
         quality_config: Optional[QualityFilterConfig] = None
     ) -> IngestionResult:
@@ -986,8 +968,6 @@ class StreamlitAdapter:
             df: Raw DataFrame to process
             experiment: Experiment configuration
             data_format: Data format enum
-            bqc_label: BQC condition label
-            apply_zero_filter: Whether to apply zero filtering
             grade_config: Grade filter config (LipidSearch only)
             quality_config: Quality filter config (MS-DIAL only)
 
@@ -997,8 +977,6 @@ class StreamlitAdapter:
         config = IngestionConfig(
             experiment=experiment,
             data_format=data_format,
-            bqc_label=bqc_label,
-            apply_zero_filter=apply_zero_filter,
             grade_config=grade_config,
             quality_config=quality_config,
         )
@@ -1360,22 +1338,6 @@ class StreamlitAdapter:
         return AnalysisWorkflow.compute_pathway_data(
             df, experiment, control, experimental,
             saturation_source_df=saturation_source_df,
-        )
-
-    @staticmethod
-    @st.cache_data(
-        show_spinner="Generating pathway visualization...",
-        hash_funcs={ExperimentConfig: hash},
-    )
-    def run_pathway(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        control: str,
-        experimental: str,
-    ) -> PathwayResult:
-        """Cached pathway visualization (default layout)."""
-        return AnalysisWorkflow.run_pathway(
-            df, experiment, control, experimental,
         )
 
     @staticmethod

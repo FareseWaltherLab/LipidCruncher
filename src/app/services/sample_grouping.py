@@ -182,22 +182,6 @@ class SampleGroupingService:
             expected_samples=expected,
         )
 
-    @staticmethod
-    def extract_sample_names(df: pd.DataFrame) -> List[str]:
-        """Extract sample names from intensity[...] columns.
-
-        Args:
-            df: DataFrame with intensity[sample_name] columns.
-
-        Returns:
-            List of sample names extracted from column headers.
-        """
-        names = []
-        for col in df.columns:
-            match = re.match(r"intensity\[(.+)\]$", col)
-            if match:
-                names.append(match.group(1))
-        return names
 
     @staticmethod
     def _extract_sample_numbers(df: pd.DataFrame) -> List[int]:

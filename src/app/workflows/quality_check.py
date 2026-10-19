@@ -1,8 +1,10 @@
 """
 Quality check workflow.
 
-Orchestrates the quality check pipeline steps:
-Box plots → BQC assessment → Retention time → Correlation → PCA
+The Quality Check page's decisions: input validation, the BQC CoV filter,
+retention time availability, which conditions can be correlated, and PCA
+sample removal. The plots come from the plotter services through
+StreamlitAdapter.
 
 Unlike DataIngestionWorkflow/NormalizationWorkflow, this workflow does NOT
 have a single run() method. Quality check is interactive — users make
@@ -12,23 +14,17 @@ is called individually from the UI layer.
 All methods are pure logic (no Streamlit dependencies).
 """
 from dataclasses import dataclass
-from dataclasses import field as dataclass_field
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import pandas as pd
 
-from app.constants import COV_THRESHOLD_DEFAULT
 from ..models.experiment import ExperimentConfig
 from ..services.format_detection import DataFormat
 from ..services.validation import get_matching_concentration_columns
 from ..services.quality_check import (
     QualityCheckService,
-    BoxPlotResult,
-    BQCPrepareResult,
     BQCFilterResult,
     RetentionTimeDataResult,
-    CorrelationResult,
-    PCAResult,
     SampleRemovalResult,
 )
 
@@ -38,33 +34,9 @@ class QualityCheckConfig:
     """Configuration for the quality check workflow.
 
     Attributes:
-        bqc_label: Label of the BQC condition, or None if no BQC.
         format_type: Data format (affects retention time availability).
-        cov_threshold: CoV threshold for BQC assessment (default 30%).
     """
-    bqc_label: Optional[str] = None
     format_type: DataFormat = DataFormat.GENERIC
-    cov_threshold: float = float(COV_THRESHOLD_DEFAULT)
-
-
-@dataclass
-class QualityCheckNonInteractiveResult:
-    """Result of running all QC steps without user interaction.
-
-    Attributes:
-        box_plot: BoxPlotResult or None.
-        bqc: BQCPrepareResult or None (None if no BQC samples).
-        retention_time: RetentionTimeDataResult or None.
-        correlations: Dict mapping condition name to CorrelationResult.
-        pca: PCAResult or None.
-        validation_errors: List of validation error strings.
-    """
-    box_plot: Optional[BoxPlotResult] = None
-    bqc: Optional[BQCPrepareResult] = None
-    retention_time: Optional[RetentionTimeDataResult] = None
-    correlations: Dict[str, CorrelationResult] = dataclass_field(default_factory=dict)
-    pca: Optional[PCAResult] = None
-    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 class QualityCheckWorkflow:
@@ -140,63 +112,14 @@ class QualityCheckWorkflow:
         return errors
 
     # ------------------------------------------------------------------
-    # Section 1: Box Plots
+    # BQC filter
     # ------------------------------------------------------------------
 
     @staticmethod
-    def run_box_plots(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-    ) -> BoxPlotResult:
-        """Prepare data for box plots (missing values + concentration distributions).
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration.
-
-        Returns:
-            BoxPlotResult with mean_area_df and missing_values_percent.
-
-        Raises:
-            ValueError: If inputs are invalid.
-        """
-        return QualityCheckService.prepare_box_plot_data(df, experiment)
-
-    # ------------------------------------------------------------------
-    # Section 2: BQC Quality Assessment
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def run_bqc_assessment(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        config: QualityCheckConfig,
-    ) -> Optional[BQCPrepareResult]:
-        """Run BQC quality assessment if BQC samples exist.
-
-        Returns None if no BQC label is configured or BQC label is not
-        found in the experiment's conditions.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration.
-            config: Quality check configuration with bqc_label and cov_threshold.
-
-        Returns:
-            BQCPrepareResult with CoV data and high-CoV lipids, or None.
-        """
-        if config.bqc_label is None:
-            return None
-
-        if config.bqc_label not in experiment.conditions_list:
-            return None
-
-        return QualityCheckService.prepare_bqc_data(
-            df=df,
-            experiment=experiment,
-            bqc_label=config.bqc_label,
-            cov_threshold=config.cov_threshold,
-        )
+    def high_cov_lipids(prepared_df: pd.DataFrame, cov_threshold: float) -> List[str]:
+        """Lipids whose BQC CoV is at or above the threshold (the ones the
+        filter removes)."""
+        return QualityCheckService.high_cov_lipids(prepared_df, cov_threshold)
 
     @staticmethod
     def apply_bqc_filter(
@@ -221,7 +144,7 @@ class QualityCheckWorkflow:
         )
 
     # ------------------------------------------------------------------
-    # Section 3: Retention Time
+    # Retention Time
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -247,7 +170,7 @@ class QualityCheckWorkflow:
         return QualityCheckService.check_retention_time_availability(df)
 
     # ------------------------------------------------------------------
-    # Section 4: Pairwise Correlation
+    # Pairwise Correlation
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -266,88 +189,9 @@ class QualityCheckWorkflow:
             experiment
         )
 
-    @staticmethod
-    def run_correlation(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        condition: str,
-        bqc_label: Optional[str] = None,
-    ) -> CorrelationResult:
-        """Compute pairwise correlation for a single condition.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration.
-            condition: Condition to analyze.
-            bqc_label: If set, uses technical replicate thresholds.
-
-        Returns:
-            CorrelationResult with correlation matrix and heatmap params.
-
-        Raises:
-            ValueError: If condition not found or has <2 replicates.
-        """
-        return QualityCheckService.compute_correlation(
-            df=df,
-            experiment=experiment,
-            condition=condition,
-            bqc_label=bqc_label,
-        )
-
-    @staticmethod
-    def run_all_correlations(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        bqc_label: Optional[str] = None,
-    ) -> Dict[str, CorrelationResult]:
-        """Compute correlations for all eligible conditions at once.
-
-        Convenience method that runs correlation for every condition
-        with >1 replicate.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration.
-            bqc_label: If set, uses technical replicate thresholds.
-
-        Returns:
-            Dictionary mapping condition label to CorrelationResult.
-        """
-        eligible = QualityCheckService.get_correlation_eligible_conditions(
-            experiment
-        )
-        results = {}
-        for condition in eligible:
-            results[condition] = QualityCheckService.compute_correlation(
-                df=df,
-                experiment=experiment,
-                condition=condition,
-                bqc_label=bqc_label,
-            )
-        return results
-
     # ------------------------------------------------------------------
-    # Section 5: PCA Analysis
+    # PCA Sample Removal
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def run_pca(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-    ) -> PCAResult:
-        """Run PCA analysis on concentration data.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration.
-
-        Returns:
-            PCAResult with PC scores, labels, and condition mapping.
-
-        Raises:
-            ValueError: If fewer than 2 samples available.
-        """
-        return QualityCheckService.compute_pca(df, experiment)
 
     @staticmethod
     def remove_samples(
@@ -376,60 +220,3 @@ class QualityCheckWorkflow:
             experiment=experiment,
             samples_to_remove=samples_to_remove,
         )
-
-    # ------------------------------------------------------------------
-    # Full Pipeline (non-interactive)
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def run_non_interactive(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        config: QualityCheckConfig,
-    ) -> QualityCheckNonInteractiveResult:
-        """Run all QC steps without user interaction.
-
-        Useful for integration tests and batch processing. Runs each
-        step that is applicable and returns all results.
-
-        Does NOT apply BQC filtering or sample removal — those require
-        user decisions.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration.
-            config: Quality check configuration.
-
-        Returns:
-            QualityCheckNonInteractiveResult with all QC step results.
-        """
-        result = QualityCheckNonInteractiveResult()
-
-        # Validate
-        errors = QualityCheckWorkflow.validate_inputs(df, experiment)
-        if errors:
-            result.validation_errors = errors
-            return result
-
-        # Box plots
-        result.box_plot = QualityCheckWorkflow.run_box_plots(df, experiment)
-
-        # BQC assessment
-        result.bqc = QualityCheckWorkflow.run_bqc_assessment(
-            df, experiment, config
-        )
-
-        # Retention time
-        result.retention_time = (
-            QualityCheckWorkflow.check_retention_time_availability(df, config)
-        )
-
-        # Correlations
-        result.correlations = QualityCheckWorkflow.run_all_correlations(
-            df, experiment, bqc_label=config.bqc_label
-        )
-
-        # PCA
-        result.pca = QualityCheckWorkflow.run_pca(df, experiment)
-
-        return result

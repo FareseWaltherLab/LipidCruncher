@@ -184,7 +184,6 @@ LipidCruncher/
 │       │   │   └── exceptions.py            #     IsotopeError hierarchy
 │       │   └── plotting/                    #   Visualization services
 │       │       ├── __init__.py              #     Public API: re-exports all plotters + shared utils
-│       │       ├── base.py                  #     PlotterServiceProtocol (interface contract)
 │       │       ├── _shared.py               #     Shared utilities (colors, significance, validation)
 │       │       ├── box_plot.py
 │       │       ├── bqc_plotter.py
@@ -415,7 +414,7 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | `DataStandardizationService` | `data_standardization.py` | Converts format-specific column names to standard `intensity[*]` naming. For LipidSearch 5.2 dual-polarity exports, merges each sample's positive/negative files via the alignment map. |
 | `lipidsearch_alignment` | `lipidsearch_alignment.py` | Parses the LipidSearch Alignment Setting file, pairs each biological sample's positive/negative runs by raw-filename base, and merges their per-file `OriginalArea[s{cond}-{file}]` columns into flat `intensity[s1..sN]`. |
 | `NormalizationService` | `normalization.py` | Four methods: internal standard (divide by standard intensity), protein (divide by protein concentration), internal standards + protein (standard then protein), total intensity (divide by per-sample total, scale by median). |
-| `QualityCheckService` | `quality_check.py` | Box plot data prep, BQC CoV calculation and filtering, RT availability check, pairwise Pearson correlation, PCA (via scikit-learn), sample removal. In the app only the BQC filter, RT check, correlation-eligibility check and sample removal are used (via `QualityCheckWorkflow`); the QC plots and their data come from the plotter services (see below). |
+| `QualityCheckService` | `quality_check.py` | The QC decisions that change the data or the choices: the BQC high-CoV rule (`high_cov_lipids`, CoV ≥ threshold) and filter, RT availability check, correlation-eligible conditions, PCA sample removal (with `old_to_new`). The QC plots and their data come from the plotter services (see below). |
 | `StatisticalTestingService` | `statistical_testing.py` | Parametric (Welch's t-test, Alexander-Govern ANOVA) and non-parametric (Mann-Whitney, Kruskal-Wallis) tests with two-level correction (between-class and post-hoc). Auto mode selects parametric with log10 transform, FDR for 2+ classes, Tukey for 3+ conditions. Uses dataset-wide zero replacement for consistent detection-floor handling. |
 | `ZeroFilteringService` | `zero_filtering.py` | Removes lipids exceeding configurable zero-value thresholds (default: 75% for non-BQC, 50% for BQC samples). |
 | `StandardsService` | `standards.py` | Standards extraction, validation, and class-to-standard mapping. |
@@ -462,7 +461,7 @@ The stable isotope tracing module. Runs the real **IsoCorrectoR** R/Bioconductor
 
 #### Plotting Services (`services/plotting/`)
 
-Each module provides a static service class that returns Plotly or Matplotlib figures. `PlotterServiceProtocol` (`base.py`) documents the shared conventions (static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`); its one method, `generate_color_mapping()`, is defined by five plotters (bar chart, pie chart, saturation, chain length, volcano), and none inherit from it.
+Each module provides a static service class that returns Plotly or Matplotlib figures. They share conventions: static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`.
 
 Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment: classes from the 20-color `CLASS_COLORS`, conditions from the 10-color `CONDITION_COLORS` in `constants.py`), and `validate_dataframe()` (non-null, non-empty, required columns).
 
@@ -489,10 +488,10 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 | Workflow | Key Method | What It Does |
 |---|---|---|
-| `DataIngestionWorkflow` | `run()` → `IngestionResult` | Format detection (only if no format is given) → cleaning → optional zero filtering → standards validation. Returns cleaned DataFrame + internal standards + messages. The app passes the format and `apply_zero_filter=False` (`data_processing.py`); zero filtering runs in `ui/zero_filtering.py`, called from `main_app.py`, so the workflow's own zero-filter branch is used only by tests. |
-| `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. Also provides `suggest_standard_mappings()`, `validate_standard_mappings()`, `create_normalization_config()` and `preview_normalization()`, currently called only by tests. |
-| `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_all_correlations()`, `run_pca()`, `remove_samples()`, plus `run_non_interactive()`. Each step can be run independently. The app uses only `validate_inputs()`, `apply_bqc_filter()`, `check_retention_time_availability()`, `get_eligible_correlation_conditions()` and `remove_samples()`; the QC plots are built by the adapter calling `BoxPlotService`, `BQCPlotterService`, `CorrelationPlotterService` and `PCAPlotterService` directly, so the `run_*` methods are currently exercised only by tests. |
-| `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
+| `DataIngestionWorkflow` | `run()` → `IngestionResult` | Format detection (only if no format is given) → cleaning → standards validation. Returns cleaned DataFrame + internal standards + messages. Zero filtering is not part of it: it runs afterwards in `ui/zero_filtering.py`, called from `main_app.py`, with thresholds the user adjusts. |
+| `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. |
+| `QualityCheckWorkflow` | Individual step methods | Non-sequential: `validate_inputs()`, `high_cov_lipids()`, `apply_bqc_filter()`, `check_retention_time_availability()`, `get_eligible_correlation_conditions()`, `remove_samples()`. The QC plots are built by the adapter calling `BoxPlotService`, `BQCPlotterService`, `CorrelationPlotterService` and `PCAPlotterService`; `tests/integration/test_module2_pipeline.py` drives that same path. |
+| `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `compute_pathway_data()` (the pathway page draws the diagram itself, with the user's layout edits), `run_volcano()`, `run_heatmap()`. |
 | `AIChatWorkflow` | One method per chat mode | Orchestrates the AI Studio chat loop. `diagnose_format()` decides if a CSV needs transformation; `validate_module1_output()` gates the viz tab. Per-mode session starters (`start_transform_session`, `start_viz_session`, `start_data_questions_session`, `start_lc_questions_session`) and streaming message handlers (`stream_transform_message`, `stream_viz_message`, `stream_data_questions_message`, `stream_lc_questions_message`). Each appends the user message to an immutable `ChatSession` and returns `(text_generator, finalize)`: the UI streams the generator, then `finalize()` runs any returned code in the sandbox, appends the assistant message and returns a typed result (`TransformStepResult`, `VizStepResult`, `DataQuestionsStepResult`); the LC questions handler returns `(session, stream)` and the UI appends the answer. `diagnose_format()` / `validate_module1_output()` return `FormatDiagnosticResult` / `Module1ValidationResult`. Tests drive turns the same way (`tests/ai_turns.py`). |
 | `PipelineAPI` | Instance methods, injected as `lc` | Not a workflow but a workflow-layer facade: gives AI-generated sandbox code the pipeline's own analytics instead of re-invented heuristics — `conditions()`, `samples_for()`, `compare_species()`, `compare_classes()`, `class_summary()`, and one method per Module 3 analysis (`bar_chart()`, `pie_charts()`, `saturation()`, `chain_length()`, `fatty_acid_composition()`, `pathway()`, `volcano()`, `heatmap()`), each returning an `LCResult`. |
 | `IsotopeTracingWorkflow` | `run()` → `IsotopeTracingResult` | Validate the three input files → run `IsotopeCorrectionService` → typed result (success + `CorrectionResult`, or `validation_errors` / `error_message`). Separate from the lipidomics pipeline. |
@@ -764,12 +763,11 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 
 ### Adding a New QC Step
 
-1. **Add a method** to `QualityCheckService` in `services/quality_check.py`.
-2. **Add an orchestration method** to `QualityCheckWorkflow` in `workflows/quality_check.py`.
-3. **Add a cached wrapper** in `StreamlitAdapter` if needed.
-4. **Add UI rendering** in `ui/main_content/quality_check.py`.
-5. **Add session state keys** to `SessionState` with the `qc_` prefix.
-6. **Add tests**.
+1. **Add the computation** to a plotter service under `services/plotting/` (a plot) or to `QualityCheckService` (a decision that changes the data), with a `QualityCheckWorkflow` method for the latter.
+2. **Add a cached wrapper** in `StreamlitAdapter` if needed.
+3. **Add UI rendering** in `ui/main_content/quality_check.py`.
+4. **Add session state keys** to `SessionState` with the `qc_` prefix.
+5. **Add tests** on the path the app runs.
 
 ### Key Conventions
 
@@ -779,7 +777,7 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 - **Immutable collections** — constants use `Tuple` and `frozenset` instead of mutable `List`/`set` to prevent accidental mutation in cached contexts.
 - **Enum-based routing** — `Page` and `Module` enums in `constants.py` replace raw strings for type-safe page/module navigation. Backward-compatible aliases (`PAGE_LANDING`, `MODULE_DATA_PROCESSING`, etc.) are provided.
 - **Prefix session state keys** — by module: `qc_*`, `analysis_*`, `_preserved_*`, etc.
-- **Plotting services return figures** — the UI layer handles rendering with `st.plotly_chart()` or `st.pyplot()`. `PlotterServiceProtocol` (`plotting/base.py`) documents the conventions; five plotters define its `generate_color_mapping()`.
+- **Plotting services return figures** — the UI layer handles rendering with `st.plotly_chart()` or `st.pyplot()`.
 - **Constants go in `constants.py`** — thresholds, regex patterns, format mappings. Nomenclature functions live in `lipid_nomenclature.py`.
 
 ---

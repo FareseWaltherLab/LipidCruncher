@@ -9,7 +9,6 @@ import pandas as pd
 
 from app.ui.sample_names import (
     build_names_from_mapping,
-    display_label,
     name_samples_for_csv,
     names_from_editor,
 )
@@ -58,17 +57,6 @@ class TestBuildNamesFromMapping:
     def test_handles_missing_or_empty(self):
         assert build_names_from_mapping(None) == {}
         assert build_names_from_mapping(pd.DataFrame()) == {}
-
-
-class TestDisplayFormatting:
-    """display_label renders 's3 — name'."""
-
-    def test_display_label_with_name(self):
-        assert display_label('s3', {'s3': 'mouse liver #5'}) == 's3 — mouse liver #5'
-
-    def test_display_label_without_name(self):
-        assert display_label('s3', {'s1': 'x'}) == 's3'
-        assert display_label('s3', None) == 's3'
 
 
 class TestNamesFromEditor:

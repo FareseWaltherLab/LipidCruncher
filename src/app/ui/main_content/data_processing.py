@@ -372,7 +372,7 @@ def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):
     return grade_config, quality_config, quality_config_dict
 
 
-def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
+def run_ingestion_pipeline(df, experiment, data_format,
                            grade_config, quality_config, quality_config_dict):
     """
     Execute the ingestion workflow and update session state.
@@ -383,7 +383,6 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
     Args:
         df: Standardized DataFrame
         experiment: ExperimentConfig
-        bqc_label: BQC label string or None
         data_format: The selected data format string
         grade_config: GradeFilterConfig or None
         quality_config: QualityFilterConfig or None
@@ -402,8 +401,6 @@ def run_ingestion_pipeline(df, experiment, bqc_label, data_format,
             df=df,
             experiment=experiment,
             data_format=format_enum,
-            bqc_label=bqc_label,
-            apply_zero_filter=False,
             grade_config=grade_config,
             quality_config=quality_config,
         )

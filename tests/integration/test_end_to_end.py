@@ -36,6 +36,10 @@ from app.workflows.analysis import (
 from tests.integration.conftest import (
     load_lipidsearch_sample,
     load_generic_sample,
+    qc_box_plot_data,
+    qc_bqc_assessment,
+    qc_pca,
+    zero_filter_as_app,
 )
 
 
@@ -49,25 +53,29 @@ def run_module1(raw_df, experiment, data_format):
     ingestion_config = IngestionConfig(
         experiment=experiment,
         data_format=data_format,
-        apply_zero_filter=True,
     )
     ingestion_result = DataIngestionWorkflow.run(raw_df, ingestion_config)
     assert ingestion_result.is_valid, (
         f"Ingestion failed: {ingestion_result.validation_errors}"
     )
 
+    # Zero filtering, as the Data Processing page applies it
+    cleaned_df = zero_filter_as_app(
+        ingestion_result.cleaned_df, experiment, data_format,
+    ).filtered_df
+
     norm_config = NormalizationWorkflowConfig(
         experiment=experiment,
         normalization=NormalizationConfig(
             method='none',
             selected_classes=list(
-                ingestion_result.cleaned_df['ClassKey'].unique()
+                cleaned_df['ClassKey'].unique()
             ),
         ),
         data_format=data_format,
     )
     norm_result = NormalizationWorkflow.run(
-        ingestion_result.cleaned_df, norm_config
+        cleaned_df, norm_config
     )
     assert norm_result.success, (
         f"Normalization failed: {norm_result.validation_errors}"
@@ -76,40 +84,29 @@ def run_module1(raw_df, experiment, data_format):
 
 
 def run_module2_qc(normalized_df, experiment, bqc_label=None, data_format=DataFormat.GENERIC):
-    """Module 2: QC pipeline — box plots, BQC, correlation, PCA."""
+    """Module 2: QC pipeline — box plots, BQC, retention time, PCA."""
     # Box plots
-    box_result = QualityCheckWorkflow.run_box_plots(normalized_df, experiment)
-    assert box_result is not None
-    assert len(box_result.available_samples) > 0
+    samples, _, _ = qc_box_plot_data(normalized_df, experiment)
+    assert len(samples) > 0
 
-    # BQC (if applicable)
+    # BQC (if applicable): remove every high-CoV lipid
     qc_df = normalized_df
-    config = QualityCheckConfig(
-        bqc_label=bqc_label,
-        format_type=data_format,
-        cov_threshold=30.0,
-    )
     if bqc_label and bqc_label in experiment.conditions_list:
-        bqc_result = QualityCheckWorkflow.run_bqc_assessment(
-            normalized_df, experiment, config,
-        )
-        assert bqc_result is not None
-        # Apply BQC filter
+        _, _, high_cov = qc_bqc_assessment(normalized_df, experiment, bqc_label)
         filter_result = QualityCheckWorkflow.apply_bqc_filter(
-            normalized_df,
-            bqc_result.high_cov_lipids,
-            lipids_to_keep=[],
+            normalized_df, high_cov, lipids_to_keep=[],
         )
         qc_df = filter_result.filtered_df
 
     # Retention time
-    QualityCheckWorkflow.check_retention_time_availability(qc_df, config)
+    QualityCheckWorkflow.check_retention_time_availability(
+        qc_df, QualityCheckConfig(format_type=data_format),
+    )
 
     # PCA
-    pca_result = QualityCheckWorkflow.run_pca(qc_df, experiment)
-    assert pca_result is not None
-    assert 'PC1' in pca_result.pc_df.columns
-    assert 'PC2' in pca_result.pc_df.columns
+    pca_df = qc_pca(qc_df, experiment)
+    assert 'PC1' in pca_df.columns
+    assert 'PC2' in pca_df.columns
 
     return qc_df
 

@@ -13,23 +13,19 @@ import pytest
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import matplotlib.pyplot as plt
 
 from app.workflows.analysis import (
     AnalysisWorkflow,
-    AnalysisConfig,
     BarChartResult,
     PieChartResult,
     SaturationResult,
     FACHResult,
     PathwayDataResult,
-    PathwayResult,
     VolcanoResult,
     HeatmapResult,
 )
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
-from app.services.format_detection import DataFormat
 from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
 from app.services.statistical_testing import StatisticalTestSummary
 
@@ -166,28 +162,6 @@ def auto_stat_config():
 
 
 # =============================================================================
-# AnalysisConfig Tests
-# =============================================================================
-
-
-class TestAnalysisConfig:
-    """Tests for AnalysisConfig dataclass."""
-
-    def test_default_values(self):
-        config = AnalysisConfig()
-        assert config.format_type == DataFormat.GENERIC
-        assert config.bqc_label is None
-
-    def test_custom_values(self):
-        config = AnalysisConfig(
-            format_type=DataFormat.LIPIDSEARCH,
-            bqc_label='BQC',
-        )
-        assert config.format_type == DataFormat.LIPIDSEARCH
-        assert config.bqc_label == 'BQC'
-
-
-# =============================================================================
 # Result Dataclass Tests
 # =============================================================================
 
@@ -239,13 +213,6 @@ class TestResultDataclasses:
         assert result.data_dict == {}
         assert result.unparsable_lipids == []
         assert result.weighted_averages == {}
-
-    def test_pathway_result_defaults(self):
-        result = PathwayResult()
-        assert result.figure is None
-        assert result.pathway_dict == {}
-        assert isinstance(result.fold_change_df, pd.DataFrame)
-        assert isinstance(result.saturation_df, pd.DataFrame)
 
     def test_volcano_result_defaults(self):
         result = VolcanoResult()
@@ -843,68 +810,36 @@ class TestRunFACH:
 # =============================================================================
 
 
-class TestRunPathway:
-    """Tests for AnalysisWorkflow.run_pathway."""
+class TestComputePathwayData:
+    """Tests for AnalysisWorkflow.compute_pathway_data (the pathway page's data)."""
 
     def test_basic(self, multi_species_df, exp_2x3):
-        result = AnalysisWorkflow.run_pathway(
+        result = AnalysisWorkflow.compute_pathway_data(
             multi_species_df, exp_2x3,
             control='Control',
             experimental='Treatment',
         )
-        assert isinstance(result, PathwayResult)
-        assert isinstance(result.pathway_dict, dict)
         assert isinstance(result.fold_change_df, pd.DataFrame)
         assert isinstance(result.saturation_df, pd.DataFrame)
-        plt.close('all')
-
-    def test_figure_type(self, multi_species_df, exp_2x3):
-        result = AnalysisWorkflow.run_pathway(
-            multi_species_df, exp_2x3,
-            control='Control',
-            experimental='Treatment',
-        )
-        if result.figure is not None:
-            assert isinstance(result.figure, go.Figure)
+        assert not result.fold_change_df.empty
 
     def test_empty_control_raises(self, multi_species_df, exp_2x3):
         with pytest.raises(ValueError, match='Control'):
-            AnalysisWorkflow.run_pathway(
+            AnalysisWorkflow.compute_pathway_data(
                 multi_species_df, exp_2x3, '', 'Treatment',
             )
 
     def test_empty_experimental_raises(self, multi_species_df, exp_2x3):
         with pytest.raises(ValueError, match='Experimental'):
-            AnalysisWorkflow.run_pathway(
+            AnalysisWorkflow.compute_pathway_data(
                 multi_species_df, exp_2x3, 'Control', '',
             )
 
     def test_same_conditions_raises(self, multi_species_df, exp_2x3):
         with pytest.raises(ValueError, match='different'):
-            AnalysisWorkflow.run_pathway(
+            AnalysisWorkflow.compute_pathway_data(
                 multi_species_df, exp_2x3, 'Control', 'Control',
             )
-
-    def test_fold_change_df_not_empty(self, multi_species_df, exp_2x3):
-        result = AnalysisWorkflow.run_pathway(
-            multi_species_df, exp_2x3,
-            control='Control',
-            experimental='Treatment',
-        )
-        assert not result.fold_change_df.empty
-        plt.close('all')
-
-    def test_pathway_dict_structure(self, multi_species_df, exp_2x3):
-        result = AnalysisWorkflow.run_pathway(
-            multi_species_df, exp_2x3,
-            control='Control',
-            experimental='Treatment',
-        )
-        if result.pathway_dict:
-            assert 'class' in result.pathway_dict
-            assert 'abundance ratio' in result.pathway_dict
-            assert 'saturated fatty acids ratio' in result.pathway_dict
-        plt.close('all')
 
 
 # =============================================================================
@@ -1849,11 +1784,10 @@ class TestCrossAnalysis:
         )
         assert isinstance(fach, FACHResult)
 
-        pathway = AnalysisWorkflow.run_pathway(
+        pathway = AnalysisWorkflow.compute_pathway_data(
             multi_species_df, exp_2x3, 'Control', 'Treatment',
         )
-        assert isinstance(pathway, PathwayResult)
-        plt.close('all')
+        assert not pathway.fold_change_df.empty
 
         volcano = AnalysisWorkflow.run_volcano(
             multi_species_df, exp_2x3, 'Control', 'Treatment',
@@ -1948,11 +1882,10 @@ class TestEdgeCases:
         lipids = ['CustomClass1 16:0_18:1', 'CustomClass2 18:0_20:4']
         df = _make_conc_df(n_lipids=2, n_samples=6,
                            classes=classes, lipids=lipids)
-        result = AnalysisWorkflow.run_pathway(
+        result = AnalysisWorkflow.compute_pathway_data(
             df, exp_2x3, 'Control', 'Treatment',
         )
-        assert isinstance(result, PathwayResult)
-        plt.close('all')
+        assert isinstance(result.fold_change_df, pd.DataFrame)
 
 
 # =============================================================================
@@ -2013,12 +1946,11 @@ class TestTypeCoercion:
 
     def test_pathway_fold_change_is_dataframe(self, multi_species_df,
                                                exp_2x3):
-        result = AnalysisWorkflow.run_pathway(
+        result = AnalysisWorkflow.compute_pathway_data(
             multi_species_df, exp_2x3, 'Control', 'Treatment',
         )
         assert isinstance(result.fold_change_df, pd.DataFrame)
         assert isinstance(result.saturation_df, pd.DataFrame)
-        plt.close('all')
 
 
 # =============================================================================
@@ -2059,11 +1991,10 @@ class TestImmutability:
 
     def test_pathway_preserves_input(self, multi_species_df, exp_2x3):
         original = multi_species_df.copy()
-        AnalysisWorkflow.run_pathway(
+        AnalysisWorkflow.compute_pathway_data(
             multi_species_df, exp_2x3, 'Control', 'Treatment',
         )
         pd.testing.assert_frame_equal(multi_species_df, original)
-        plt.close('all')
 
     def test_volcano_preserves_input(self, multi_species_df, exp_2x3,
                                       manual_stat_config):

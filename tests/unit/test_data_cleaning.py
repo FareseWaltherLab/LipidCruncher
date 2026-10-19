@@ -14,6 +14,7 @@ from app.services.data_cleaning import (
     ConfigurationError,
     EmptyDataError,
 )
+from app.constants import MSDIAL_QUALITY_PRESETS
 from app.services.format_detection import DataFormat
 from app.models.experiment import ExperimentConfig
 
@@ -99,20 +100,17 @@ class TestGradeFilterConfig:
     def test_default_config(self):
         """Test default grade config."""
         config = GradeFilterConfig()
-        assert config.is_default is True
         assert config.grade_config is None
 
     def test_custom_config(self):
         """Test custom grade config."""
         grade_dict = {'PC': ['A', 'B'], 'PE': ['A']}
         config = GradeFilterConfig(grade_config=grade_dict)
-        assert config.is_default is False
         assert config.grade_config == grade_dict
 
     def test_empty_dict_config(self):
         """Test empty dict is not default."""
         config = GradeFilterConfig(grade_config={})
-        assert config.is_default is False
         assert config.grade_config == {}
 
     def test_config_with_all_grades(self):
@@ -149,14 +147,14 @@ class TestQualityFilterConfig:
         assert config.require_msms is True
 
     @pytest.mark.parametrize("preset,expected_threshold,expected_msms", [
-        ("strict", 80, True),
-        ("moderate", 60, False),
-        ("permissive", 40, False),
-        ("no_filtering", 0, False),
+        ('Strict (Score ≥80, MS/MS required)', 80, True),
+        ('Moderate (Score ≥60)', 60, False),
+        ('Permissive (Score ≥40)', 40, False),
+        ('No filtering', 0, False),
     ])
     def test_quality_filter_presets(self, preset, expected_threshold, expected_msms):
-        """Test all QualityFilterConfig factory presets."""
-        config = getattr(QualityFilterConfig, preset)()
+        """The MS-DIAL quality presets the sidebar offers build valid configs."""
+        config = QualityFilterConfig(**MSDIAL_QUALITY_PRESETS[preset])
         assert config.total_score_threshold == expected_threshold
         assert config.require_msms is expected_msms
 
@@ -1041,13 +1039,13 @@ class TestMSDIALQualityFiltering:
 
     def test_combined_filters(self, msdial_df, simple_experiment_2x2):
         """Test combined score and MS/MS filtering."""
-        config = QualityFilterConfig.strict()
+        config = QualityFilterConfig(**MSDIAL_QUALITY_PRESETS['Strict (Score ≥80, MS/MS required)'])
         cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 2
 
     def test_no_filtering(self, msdial_df, simple_experiment_2x2):
         """Test with no quality filtering."""
-        config = QualityFilterConfig.no_filtering()
+        config = QualityFilterConfig(**MSDIAL_QUALITY_PRESETS['No filtering'])
         cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 3
 
@@ -1290,36 +1288,6 @@ class TestDataCleaningServiceDispatch:
         assert isinstance(result, CleaningResult)
 
 
-class TestDataCleaningServiceConvenience:
-    """Tests for convenience methods."""
-
-    def test_clean_lipidsearch_convenience(self, lipidsearch_df, simple_experiment_2x2):
-        """Test clean_lipidsearch convenience method."""
-        result = DataCleaningService.clean_lipidsearch(lipidsearch_df, simple_experiment_2x2)
-        assert isinstance(result, CleaningResult)
-
-    def test_clean_msdial_convenience(self, msdial_df, simple_experiment_2x2):
-        """Test clean_msdial convenience method."""
-        result = DataCleaningService.clean_msdial(msdial_df, simple_experiment_2x2)
-        assert isinstance(result, CleaningResult)
-
-    def test_clean_generic_convenience(self, generic_df, simple_experiment_2x2):
-        """Test clean_generic convenience method."""
-        result = DataCleaningService.clean_generic(generic_df, simple_experiment_2x2)
-        assert isinstance(result, CleaningResult)
-
-    def test_clean_lipidsearch_with_grade_config(self, lipidsearch_df, simple_experiment_2x2):
-        """Test clean_lipidsearch with grade config."""
-        config = GradeFilterConfig(grade_config={'PC': ['A'], 'PE': ['A', 'B'], 'TG': ['A']})
-        result = DataCleaningService.clean_lipidsearch(lipidsearch_df, simple_experiment_2x2, config)
-        assert isinstance(result, CleaningResult)
-
-    def test_clean_msdial_with_quality_config(self, msdial_df, simple_experiment_2x2):
-        """Test clean_msdial with quality config."""
-        config = QualityFilterConfig.moderate()
-        result = DataCleaningService.clean_msdial(msdial_df, simple_experiment_2x2, config)
-        assert isinstance(result, CleaningResult)
-
 
 class TestDataCleaningServiceInternalStandards:
     """Tests for internal standards extraction via service."""
@@ -1339,7 +1307,7 @@ class TestDataCleaningServiceInternalStandards:
             'intensity[s3]': [1200, 600, 2200],
             'intensity[s4]': [1300, 650, 2300],
         })
-        result = DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.LIPIDSEARCH)
 
         assert len(result.cleaned_df) == 2
         assert len(result.internal_standards_df) == 1
@@ -1355,7 +1323,7 @@ class TestDataCleaningServiceInternalStandards:
             'intensity[s3]': [1200, 600, 2200],
             'intensity[s4]': [1300, 650, 2300],
         })
-        result = DataCleaningService.clean_msdial(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.MSDIAL)
 
         assert len(result.cleaned_df) == 2
         assert len(result.internal_standards_df) == 1
@@ -1370,7 +1338,7 @@ class TestDataCleaningServiceInternalStandards:
             'intensity[s3]': [1200, 600, 2200],
             'intensity[s4]': [1300, 650, 2300],
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.GENERIC)
 
         assert len(result.cleaned_df) == 2
         assert len(result.internal_standards_df) == 1
@@ -1393,7 +1361,7 @@ class TestEdgeCases:
             'intensity[s3]': [1200.0],
             'intensity[s4]': [1300.0],
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.GENERIC)
         assert len(result.cleaned_df) == 1
 
     def test_all_zero_data_raises(self, simple_experiment_2x2):
@@ -1407,7 +1375,7 @@ class TestEdgeCases:
             'intensity[s4]': [0.0],
         })
         with pytest.raises(EmptyDataError, match="non-zero"):
-            DataCleaningService.clean_generic(df, simple_experiment_2x2)
+            DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.GENERIC)
 
     def test_all_invalid_lipids_raises(self, simple_experiment_2x2):
         """Test that all invalid lipid names raises error."""
@@ -1420,7 +1388,7 @@ class TestEdgeCases:
             'intensity[s4]': [1300.0, 2300.0, 3300.0],
         })
         with pytest.raises(EmptyDataError, match="invalid"):
-            DataCleaningService.clean_generic(df, simple_experiment_2x2)
+            DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.GENERIC)
 
     def test_missing_required_column_raises(self, simple_experiment_2x2):
         """Test that missing required column raises error."""
@@ -1433,7 +1401,7 @@ class TestEdgeCases:
             'intensity[s4]': [1300.0],
         })
         with pytest.raises(KeyError, match="ClassKey"):
-            DataCleaningService.clean_generic(df, simple_experiment_2x2)
+            DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.GENERIC)
 
     def test_case_insensitive_columns(self, simple_experiment_2x2):
         """Test that column names are matched case-insensitively."""
@@ -1445,7 +1413,7 @@ class TestEdgeCases:
             'Intensity[s3]': [1200.0],
             'intensity[s4]': [1300.0],
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.GENERIC)
         assert len(result.cleaned_df) == 1
 
     def test_large_dataset(self, simple_experiment_2x2):
@@ -1459,7 +1427,7 @@ class TestEdgeCases:
             'intensity[s3]': np.random.rand(n_rows) * 10000,
             'intensity[s4]': np.random.rand(n_rows) * 10000,
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.GENERIC)
         assert len(result.cleaned_df) == n_rows
 
     def test_unicode_lipid_names(self, simple_experiment_2x2):
@@ -1472,7 +1440,7 @@ class TestEdgeCases:
             'intensity[s3]': [1200, 2200, 3200],
             'intensity[s4]': [1300, 2300, 3300],
         })
-        result = DataCleaningService.clean_generic(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.GENERIC)
         assert len(result.cleaned_df) == 3
 
 
@@ -1495,7 +1463,7 @@ class TestLipidSearchEdgeCases:
             'intensity[s4]': [1300.0],
         })
         with pytest.raises(ConfigurationError, match="grade"):
-            DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
+            DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.LIPIDSEARCH)
 
     def test_all_missing_fakey_raises(self, simple_experiment_2x2):
         """Test that all missing FA keys raises error (non-Ch)."""
@@ -1513,7 +1481,7 @@ class TestLipidSearchEdgeCases:
             'intensity[s4]': [1300.0, 2300.0],
         })
         with pytest.raises(EmptyDataError, match="FA"):
-            DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
+            DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.LIPIDSEARCH)
 
     def test_only_cholesterol_data(self, simple_experiment_2x2):
         """Test with only cholesterol data (no FA keys needed)."""
@@ -1530,7 +1498,7 @@ class TestLipidSearchEdgeCases:
             'intensity[s3]': [1200.0, 1300.0],
             'intensity[s4]': [1300.0, 1400.0],
         })
-        result = DataCleaningService.clean_lipidsearch(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.LIPIDSEARCH)
         assert len(result.cleaned_df) == 1  # Deduplicated
 
 
@@ -1550,7 +1518,7 @@ class TestMSDIALEdgeCases:
         })
         config = QualityFilterConfig(total_score_threshold=80)
         with pytest.raises(ConfigurationError, match="quality"):
-            DataCleaningService.clean_msdial(df, simple_experiment_2x2, config)
+            DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.MSDIAL, quality_config=config)
 
     def test_missing_total_score_column(self, simple_experiment_2x2):
         """Test cleaning without Total score column."""
@@ -1562,7 +1530,7 @@ class TestMSDIALEdgeCases:
             'intensity[s3]': [1200.0, 2200.0],
             'intensity[s4]': [1300.0, 2300.0],
         })
-        result = DataCleaningService.clean_msdial(df, simple_experiment_2x2)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.MSDIAL)
         assert len(result.cleaned_df) == 2
 
     def test_missing_msms_column(self, simple_experiment_2x2):
@@ -1578,7 +1546,7 @@ class TestMSDIALEdgeCases:
         })
         config = QualityFilterConfig(require_msms=True)
         # Should not raise, MS/MS filter just won't apply
-        result = DataCleaningService.clean_msdial(df, simple_experiment_2x2, config)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.MSDIAL, quality_config=config)
         assert len(result.cleaned_df) == 2
 
     def test_invalid_score_values(self, simple_experiment_2x2):
@@ -1594,7 +1562,7 @@ class TestMSDIALEdgeCases:
         })
         config = QualityFilterConfig(total_score_threshold=80)
         # 'invalid' should be coerced to NaN, so only 90.0 remains
-        result = DataCleaningService.clean_msdial(df, simple_experiment_2x2, config)
+        result = DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.MSDIAL, quality_config=config)
         assert len(result.cleaned_df) == 1
 
 

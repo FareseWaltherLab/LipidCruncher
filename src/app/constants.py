@@ -196,19 +196,3 @@ CONDITION_COLORS: Tuple[str, ...] = (
     '#bcbd22',  # olive
     '#17becf',  # cyan
 )
-
-
-# =============================================================================
-# Correlation Thresholds
-# =============================================================================
-
-CORRELATION_VMIN: float = 0.5
-CORRELATION_THRESHOLD_BIOLOGICAL: float = 0.7
-CORRELATION_THRESHOLD_TECHNICAL: float = 0.8
-
-
-# =============================================================================
-# PCA Constants
-# =============================================================================
-
-PCA_N_COMPONENTS: int = 2

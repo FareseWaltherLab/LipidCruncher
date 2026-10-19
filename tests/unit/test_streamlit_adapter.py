@@ -548,66 +548,6 @@ class TestConfigHashing:
 
 
 # =============================================================================
-# StreamlitAdapter Service Wrapper Tests (with mocking)
-# =============================================================================
-
-class TestDetectFormat:
-    """Tests for detect_format wrapper."""
-
-    def test_detect_lipidsearch_format(self):
-        """Test detecting LipidSearch format."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
-            'ClassKey': ['PC'],
-            'CalcMass': [760.5],
-            'BaseRt': [10.5],
-            'TotalGrade': ['A'],
-            'TotalSmpIDRate(%)': [100.0],
-            'FAKey': ['16:0_18:1'],
-            'MeanArea[s1]': [1e6],
-        })
-
-        result = StreamlitAdapter.detect_format(df)
-
-        assert result == DataFormat.LIPIDSEARCH
-
-    def test_detect_msdial_format(self):
-        """Test detecting MS-DIAL format."""
-        df = pd.DataFrame({
-            'Metabolite name': ['PC 32:1'],
-            'Ontology': ['PC'],
-            'Average Mz': [760.5],
-            'Total score': [90.0],
-            's1': [1e6],
-        })
-
-        result = StreamlitAdapter.detect_format(df)
-
-        assert result == DataFormat.MSDIAL
-
-    def test_detect_generic_format(self):
-        """Test detecting Generic format."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
-            'Sample1': [1e6],
-        })
-
-        result = StreamlitAdapter.detect_format(df)
-
-        assert result == DataFormat.GENERIC
-
-    def test_detect_unknown_format(self):
-        """Test detecting Unknown format."""
-        df = pd.DataFrame({
-            'random_column': [1, 2, 3],
-        })
-
-        result = StreamlitAdapter.detect_format(df)
-
-        assert result == DataFormat.UNKNOWN
-
-
-# =============================================================================
 # SessionState Integration Tests (with mocked st.session_state)
 # =============================================================================
 
@@ -1148,20 +1088,6 @@ class TestEdgeCases:
         )
         assert isinstance(hash(experiment), int)
 
-    def test_detect_format_empty_dataframe(self):
-        """Test format detection with empty DataFrame."""
-        df = pd.DataFrame()
-        result = StreamlitAdapter.detect_format(df)
-        assert result == DataFormat.UNKNOWN
-
-    def test_detect_format_single_row(self):
-        """Test format detection with single row."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0_18:1)'],
-            'Sample1': [1e6],
-        })
-        result = StreamlitAdapter.detect_format(df)
-        assert result == DataFormat.GENERIC
 
     @patch('app.adapters.streamlit_adapter.st')
     def test_reset_with_no_dynamic_keys(self, mock_st):

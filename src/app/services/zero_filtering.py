@@ -5,7 +5,6 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import List, Optional
 
-from app.constants import LIPIDSEARCH_DETECTION_THRESHOLD
 from ..models.experiment import ExperimentConfig
 
 
@@ -34,21 +33,6 @@ class ZeroFilterConfig:
             raise ValueError("bqc_threshold must be between 0 and 1")
         if not 0 <= self.non_bqc_threshold <= 1:
             raise ValueError("non_bqc_threshold must be between 0 and 1")
-
-    @classmethod
-    def for_lipidsearch(cls) -> "ZeroFilterConfig":
-        """Create config optimized for LipidSearch data (higher noise floor)."""
-        return cls(detection_threshold=LIPIDSEARCH_DETECTION_THRESHOLD)
-
-    @classmethod
-    def strict(cls) -> "ZeroFilterConfig":
-        """Create strict config (lower zero-fraction thresholds = remove more species)."""
-        return cls(bqc_threshold=0.25, non_bqc_threshold=0.50)
-
-    @classmethod
-    def permissive(cls) -> "ZeroFilterConfig":
-        """Create permissive config (higher zero-fraction thresholds = keep more species)."""
-        return cls(bqc_threshold=0.75, non_bqc_threshold=0.90)
 
 
 @dataclass
@@ -252,65 +236,3 @@ class ZeroFilteringService:
         subset = df[cols]
         zero_counts = (subset.isna() | (subset <= detection_threshold)).sum(axis=1)
         return zero_counts / len(cols)
-
-    @staticmethod
-    def get_zero_statistics(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        config: Optional[ZeroFilterConfig] = None
-    ) -> pd.DataFrame:
-        """
-        Get zero value statistics for each lipid species.
-
-        Useful for understanding the data before applying filtering.
-
-        Args:
-            df: DataFrame with LipidMolec and intensity columns.
-            experiment: Experiment configuration.
-            config: Zero filtering config (for detection_threshold). Uses defaults if None.
-
-        Returns:
-            DataFrame with columns:
-            - LipidMolec: Lipid species name
-            - total_zeros: Total count of zeros across all samples
-            - total_samples: Total number of samples
-            - zero_percentage: Percentage of zeros overall
-            - zeros_per_condition: Dict of {condition: zero_count}
-        """
-        if config is None:
-            config = ZeroFilterConfig()
-
-        ZeroFilteringService._validate_input(df, experiment)
-
-        total_samples = sum(experiment.number_of_samples_list)
-
-        # Compute zero counts per condition (vectorized)
-        condition_zero_counts = {}
-        total_zeros = pd.Series(0, index=df.index)
-
-        for cond_idx, cond_samples in enumerate(experiment.individual_samples_list):
-            condition_name = experiment.conditions_list[cond_idx]
-            cols = [f'intensity[{s}]' for s in cond_samples if f'intensity[{s}]' in df.columns]
-            if cols:
-                subset = df[cols]
-                cond_zeros = (subset.isna() | (subset <= config.detection_threshold)).sum(axis=1)
-            else:
-                cond_zeros = pd.Series(0, index=df.index)
-            condition_zero_counts[condition_name] = cond_zeros
-            total_zeros = total_zeros + cond_zeros
-
-        zero_percentage = (total_zeros / total_samples * 100).round(2) if total_samples > 0 else 0
-
-        stats_df = pd.DataFrame({
-            'LipidMolec': df['LipidMolec'].values,
-            'total_zeros': total_zeros.values,
-            'total_samples': total_samples,
-            'zero_percentage': zero_percentage if isinstance(zero_percentage, pd.Series) else 0,
-            'zeros_per_condition': [
-                {cond: int(condition_zero_counts[cond].iloc[i])
-                 for cond in experiment.conditions_list}
-                for i in range(len(df))
-            ]
-        })
-
-        return stats_df

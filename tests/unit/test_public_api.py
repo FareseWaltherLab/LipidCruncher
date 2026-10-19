@@ -41,16 +41,11 @@ class TestServicesPublicAPI:
         'NormalizationService',
         'NormalizationResult',
         'StandardsService',
-        'StandardsExtractionResult',
         'StandardsValidationResult',
         'StandardsProcessingResult',
         'QualityCheckService',
-        'BoxPlotResult',
-        'BQCPrepareResult',
         'BQCFilterResult',
         'RetentionTimeDataResult',
-        'CorrelationResult',
-        'PCAResult',
         'SampleRemovalResult',
     ])
     def test_services_exports(self, name):

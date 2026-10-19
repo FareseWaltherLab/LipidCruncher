@@ -85,10 +85,7 @@ def display_quality_check_module(
     qc_df = _display_bqc_assessment(qc_df, experiment, bqc_label)
 
     # Section 3: Retention Time (read-only)
-    config = QualityCheckConfig(
-        bqc_label=bqc_label,
-        format_type=format_enum,
-    )
+    config = QualityCheckConfig(format_type=format_enum)
     _display_retention_time_plots(qc_df, config)
 
     # Section 4: Correlation (read-only)
@@ -306,8 +303,8 @@ def _render_bqc_filtering(
     StreamlitAdapter.save_widget_value('bqc_filter_choice', '_preserved_bqc_filter_choice')
 
     # Identify high-CoV lipids
-    high_cov_mask = prepared_df['cov'] >= cov_threshold
-    high_cov_lipids = prepared_df.loc[high_cov_mask, 'LipidMolec'].tolist()
+    high_cov_lipids = QualityCheckWorkflow.high_cov_lipids(prepared_df, cov_threshold)
+    high_cov_mask = prepared_df['LipidMolec'].isin(high_cov_lipids)
 
     lipids_to_keep = []
     if filter_cov == "Yes" and high_cov_lipids:

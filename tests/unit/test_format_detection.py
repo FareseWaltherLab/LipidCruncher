@@ -816,59 +816,6 @@ class TestFormatPriority:
 
 
 # =============================================================================
-# Helper Methods Tests
-# =============================================================================
-
-class TestHelperMethods:
-    """Tests for helper methods."""
-
-    def test_get_format_display_name_all_formats(self):
-        """Test getting display name for all formats."""
-        assert FormatDetectionService.get_format_display_name(DataFormat.LIPIDSEARCH) == "LipidSearch"
-        assert FormatDetectionService.get_format_display_name(DataFormat.MSDIAL) == "MS-DIAL"
-        assert FormatDetectionService.get_format_display_name(DataFormat.GENERIC) == "Generic Format"
-        assert FormatDetectionService.get_format_display_name(DataFormat.METABOLOMICS_WORKBENCH) == "Metabolomics Workbench"
-        assert FormatDetectionService.get_format_display_name(DataFormat.UNKNOWN) == "Unknown"
-
-    def test_get_all_formats_count(self):
-        """Test getting all supported formats count."""
-        formats = FormatDetectionService.get_all_formats()
-        assert len(formats) == 4
-
-    def test_get_all_formats_excludes_unknown(self):
-        """Test that UNKNOWN is not in supported formats."""
-        formats = FormatDetectionService.get_all_formats()
-        assert DataFormat.UNKNOWN not in formats
-
-    def test_get_all_formats_includes_all_valid(self):
-        """Test all valid formats are included."""
-        formats = FormatDetectionService.get_all_formats()
-        assert DataFormat.LIPIDSEARCH in formats
-        assert DataFormat.MSDIAL in formats
-        assert DataFormat.METABOLOMICS_WORKBENCH in formats
-        assert DataFormat.GENERIC in formats
-
-    def test_get_format_from_string_all_valid(self):
-        """Test converting all valid format strings."""
-        assert FormatDetectionService.get_format_from_string("LipidSearch 5.0") == DataFormat.LIPIDSEARCH
-        assert FormatDetectionService.get_format_from_string("lipidsearch") == DataFormat.LIPIDSEARCH
-        assert FormatDetectionService.get_format_from_string("MS-DIAL") == DataFormat.MSDIAL
-        assert FormatDetectionService.get_format_from_string("msdial") == DataFormat.MSDIAL
-        assert FormatDetectionService.get_format_from_string("Generic Format") == DataFormat.GENERIC
-        assert FormatDetectionService.get_format_from_string("generic") == DataFormat.GENERIC
-        assert FormatDetectionService.get_format_from_string("Metabolomics Workbench") == DataFormat.METABOLOMICS_WORKBENCH
-        assert FormatDetectionService.get_format_from_string("metabolomics_workbench") == DataFormat.METABOLOMICS_WORKBENCH
-
-    def test_get_format_from_string_invalid(self):
-        """Test converting invalid format strings."""
-        assert FormatDetectionService.get_format_from_string("invalid") == DataFormat.UNKNOWN
-        assert FormatDetectionService.get_format_from_string("") == DataFormat.UNKNOWN
-        assert FormatDetectionService.get_format_from_string("LIPIDSEARCH") == DataFormat.UNKNOWN  # Case sensitive
-        assert FormatDetectionService.get_format_from_string("LipidSearch5.0") == DataFormat.UNKNOWN  # Missing space
-        assert FormatDetectionService.get_format_from_string(" LipidSearch 5.0") == DataFormat.UNKNOWN  # Leading space
-
-
-# =============================================================================
 # MS-DIAL Header Row Detection Tests
 # =============================================================================
 
@@ -1538,17 +1485,6 @@ class TestTypeSafety:
 class TestServiceClassStructure:
     """Tests for service class structure and design."""
 
-    def test_all_public_methods_are_static(self):
-        """Test that all public methods are static."""
-        public_methods = [
-            'detect_format',
-            'get_format_display_name',
-            'get_all_formats',
-            'get_format_from_string',
-        ]
-        for method_name in public_methods:
-            method = getattr(FormatDetectionService, method_name)
-            assert isinstance(method, staticmethod) or callable(method)
 
     def test_class_constants_are_defined(self):
         """Test that required class constants are defined."""
