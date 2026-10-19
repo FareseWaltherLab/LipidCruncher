@@ -9,7 +9,7 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._utils import _check_fa_compatibility
-from app.ui.main_content.analysis._shared import _clear_pdf_plots
+from app.ui.main_content.analysis._shared import _clear_pdf_plots, _publish
 
 
 def _display_fach_heatmaps(
@@ -73,8 +73,7 @@ def _display_fach_heatmaps(
             return
 
         st.plotly_chart(result.figure, width='stretch')
-        st.session_state.analysis_fach_fig = result.figure
-        st.session_state.analysis_all_plots['fach'] = result.figure
+        _publish('fach', result.figure)
 
         # Build combined CSV from all conditions
         combined_rows = []

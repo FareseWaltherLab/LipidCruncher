@@ -117,7 +117,6 @@ class TestSessionStateDefaults:
         """Test that analysis fields storing single values default to None."""
         state = SessionState()
         assert state.analysis_selection is None
-        assert state.analysis_fach_fig is None
         assert state.analysis_pathway_fig is None
         assert state.analysis_volcano_fig is None
         assert state.analysis_volcano_data is None
@@ -768,7 +767,7 @@ class TestSessionStateIntegration:
 
         analysis_keys = [
             'analysis_selection',
-            'analysis_fach_fig', 'analysis_pathway_fig',
+            'analysis_pathway_fig',
             'analysis_volcano_fig', 'analysis_volcano_data',
             'analysis_heatmap_fig', 'analysis_heatmap_clusters',
             'analysis_all_plots',
@@ -784,7 +783,6 @@ class TestSessionStateIntegration:
         StreamlitAdapter.initialize_session_state()
 
         assert mock_st.session_state['analysis_selection'] is None
-        assert mock_st.session_state['analysis_fach_fig'] is None
         assert mock_st.session_state['analysis_pathway_fig'] is None
         assert mock_st.session_state['analysis_volcano_fig'] is None
         assert mock_st.session_state['analysis_volcano_data'] is None
@@ -820,7 +818,6 @@ class TestSessionStateIntegration:
         mock_fig = MagicMock()
         mock_st.session_state = MockSessionState({
             'analysis_selection': 'Bar Chart',
-            'analysis_fach_fig': mock_fig,
             'analysis_pathway_fig': mock_fig,
             'analysis_volcano_fig': mock_fig,
             'analysis_volcano_data': {'some': 'data'},
@@ -832,7 +829,6 @@ class TestSessionStateIntegration:
         StreamlitAdapter.reset_data_state()
 
         assert mock_st.session_state['analysis_selection'] is None
-        assert mock_st.session_state['analysis_fach_fig'] is None
         assert mock_st.session_state['analysis_pathway_fig'] is None
         assert mock_st.session_state['analysis_volcano_fig'] is None
         assert mock_st.session_state['analysis_volcano_data'] is None
@@ -972,7 +968,7 @@ class TestSessionStateFieldCompleteness:
         state = SessionState()
         analysis_fields = [
             'analysis_selection',
-            'analysis_fach_fig', 'analysis_pathway_fig',
+            'analysis_pathway_fig',
             'analysis_volcano_fig', 'analysis_volcano_data',
             'analysis_heatmap_fig', 'analysis_heatmap_clusters',
             'analysis_all_plots',
@@ -986,8 +982,9 @@ class TestSessionStateFieldCompleteness:
         analysis_fields = [f for f in field_names if f.startswith('analysis_')]
         # 17 - 1 (analysis_pathway_active_classes: nothing read or wrote it)
         # - the write-only per-page figure copies (the report reads
-        #   analysis_all_plots): bar chart, pie charts, saturation, chain length
-        assert len(analysis_fields) == 12
+        #   analysis_all_plots): bar chart, pie charts, saturation, chain length,
+        #   FACH
+        assert len(analysis_fields) == 11
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
