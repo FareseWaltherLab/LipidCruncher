@@ -290,7 +290,8 @@ class NormalizationService:
                 )
 
             intsta_auc = NormalizationService._compute_intsta_auc(
-                intsta_df, standard_name, full_samples_list
+                intsta_df, standard_name, full_samples_list,
+                [c for c in selected_classes if config.get_standard_for_class(c) == standard_name],
             )
             class_df = NormalizationService._compute_normalized_auc(
                 selected_df, full_samples_list, lipid_class, intsta_auc, concentration
@@ -437,7 +438,8 @@ class NormalizationService:
     def _compute_intsta_auc(
         intsta_df: pd.DataFrame,
         intsta_species: str,
-        full_samples_list: List[str]
+        full_samples_list: List[str],
+        lipid_classes: List[str],
     ) -> np.ndarray:
         """
         Compute AUC values for the selected internal standard.
@@ -446,6 +448,8 @@ class NormalizationService:
             intsta_df: DataFrame with internal standards
             intsta_species: Name of the standard to use
             full_samples_list: List of sample IDs
+            lipid_classes: Classes normalized by this standard, named in the
+                zero-intensity error
 
         Returns:
             Array of AUC values for each sample
@@ -477,11 +481,12 @@ class NormalizationService:
         # dividing by it would silently zero every species in the class.
         bad = [s for s, v in zip(full_samples_list, auc) if not v > 0]
         if bad:
+            classes = ', '.join(lipid_classes)
             raise ValidationError(
                 f"Internal standard '{intsta_species}' has zero intensity in "
                 f"sample(s) {', '.join(bad)}. Choose a different standard for "
-                "that class, exclude the sample(s) under 'Exclude Samples' in "
-                "the sidebar, deselect the class, or upload a corrected "
+                f"{classes}, exclude the sample(s) under 'Exclude Samples' in "
+                f"the sidebar, deselect {classes}, or upload a corrected "
                 "standards table."
             )
 

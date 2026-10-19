@@ -719,6 +719,33 @@ class TestInternalStandardZeroHandling:
                 multi_class_df, config, simple_experiment_2x3, intsta_df=intsta_df_all_zeros
             )
 
+    def test_zero_standard_error_names_the_classes_using_it(
+        self, multi_class_df, simple_experiment_2x3, intsta_df_all_zeros
+    ):
+        """Regression: the error said "choose a different standard for that
+        class" without saying which classes use the failed standard."""
+        intsta = pd.concat([intsta_df_all_zeros, pd.DataFrame({
+            'LipidMolec': ['TG(17:0_17:0_17:0)_IS'], 'ClassKey': ['TG'],
+            **{f'intensity[s{i}]': [500.0] for i in range(1, 7)},
+        })], ignore_index=True)
+        config = NormalizationConfig(
+            method='internal_standard',
+            selected_classes=['PC', 'PE', 'TG'],
+            internal_standards={
+                'PC': 'PC(15:0_15:0)_IS', 'PE': 'PC(15:0_15:0)_IS',
+                'TG': 'TG(17:0_17:0_17:0)_IS',
+            },
+            intsta_concentrations={'PC(15:0_15:0)_IS': 10.0, 'TG(17:0_17:0_17:0)_IS': 10.0},
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            NormalizationService.normalize(
+                multi_class_df, config, simple_experiment_2x3, intsta_df=intsta
+            )
+        msg = str(excinfo.value)
+        assert "Choose a different standard for PC, PE," in msg
+        assert "deselect PC, PE," in msg
+        assert "TG" not in msg
+
     def test_zero_standard_in_unselected_class_is_ignored(
         self, multi_class_df, simple_experiment_2x3, intsta_df_with_zeros
     ):
