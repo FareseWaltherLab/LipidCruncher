@@ -118,3 +118,18 @@ class TestExternalStandardsCsv:
         from file' instead of the message written for it."""
         at = _standards_csv(intsta_with_standards_app, fake_uploads, _csv(''))
         assert any('appears to be empty' in e for e in _errors(at))
+
+    def test_clearing_returns_to_automatic_detection(
+        self, intsta_with_standards_app, fake_uploads,
+    ):
+        """Regression: Clear Custom Standards set standards_source back to
+        Automatic Detection, but the radio kept its own key, so the page
+        stayed on Upload Custom Standards with no standards active."""
+        at = _standards_csv(intsta_with_standards_app, fake_uploads, _csv(_COMPLETE))
+        fake_uploads.clear()
+        at.run()
+        at.button(key='clear_custom_standards').click().run()
+        assert not at.exception
+        assert at.session_state['custom_standards_df'] is None
+        assert at.radio(key='standards_source_radio').value == 'Automatic Detection'
+        assert at.session_state['standards_source'] == 'Automatic Detection'

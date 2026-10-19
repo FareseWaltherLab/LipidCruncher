@@ -367,6 +367,9 @@ def _display_preserved_custom_standards() -> pd.DataFrame:
         st.session_state.custom_standards_df = None
         st.session_state.custom_standards_mode = None
         st.session_state.standards_source = "Automatic Detection"
+        # The radio keeps its own key; drop it so the next run restores it
+        # from standards_source.
+        st.session_state.pop('standards_source_radio', None)
         st.rerun()
 
     return st.session_state.custom_standards_df
