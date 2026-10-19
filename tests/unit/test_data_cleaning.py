@@ -14,6 +14,7 @@ from app.services.data_cleaning import (
     ConfigurationError,
     EmptyDataError,
 )
+from app.constants import MSDIAL_QUALITY_PRESETS
 from app.services.format_detection import DataFormat
 from app.models.experiment import ExperimentConfig
 
@@ -146,14 +147,14 @@ class TestQualityFilterConfig:
         assert config.require_msms is True
 
     @pytest.mark.parametrize("preset,expected_threshold,expected_msms", [
-        ("strict", 80, True),
-        ("moderate", 60, False),
-        ("permissive", 40, False),
-        ("no_filtering", 0, False),
+        ('Strict (Score ≥80, MS/MS required)', 80, True),
+        ('Moderate (Score ≥60)', 60, False),
+        ('Permissive (Score ≥40)', 40, False),
+        ('No filtering', 0, False),
     ])
     def test_quality_filter_presets(self, preset, expected_threshold, expected_msms):
-        """Test all QualityFilterConfig factory presets."""
-        config = getattr(QualityFilterConfig, preset)()
+        """The MS-DIAL quality presets the sidebar offers build valid configs."""
+        config = QualityFilterConfig(**MSDIAL_QUALITY_PRESETS[preset])
         assert config.total_score_threshold == expected_threshold
         assert config.require_msms is expected_msms
 
@@ -1038,13 +1039,13 @@ class TestMSDIALQualityFiltering:
 
     def test_combined_filters(self, msdial_df, simple_experiment_2x2):
         """Test combined score and MS/MS filtering."""
-        config = QualityFilterConfig.strict()
+        config = QualityFilterConfig(**MSDIAL_QUALITY_PRESETS['Strict (Score ≥80, MS/MS required)'])
         cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 2
 
     def test_no_filtering(self, msdial_df, simple_experiment_2x2):
         """Test with no quality filtering."""
-        config = QualityFilterConfig.no_filtering()
+        config = QualityFilterConfig(**MSDIAL_QUALITY_PRESETS['No filtering'])
         cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 3
 

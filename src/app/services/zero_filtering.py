@@ -34,16 +34,6 @@ class ZeroFilterConfig:
         if not 0 <= self.non_bqc_threshold <= 1:
             raise ValueError("non_bqc_threshold must be between 0 and 1")
 
-    @classmethod
-    def strict(cls) -> "ZeroFilterConfig":
-        """Create strict config (lower zero-fraction thresholds = remove more species)."""
-        return cls(bqc_threshold=0.25, non_bqc_threshold=0.50)
-
-    @classmethod
-    def permissive(cls) -> "ZeroFilterConfig":
-        """Create permissive config (higher zero-fraction thresholds = keep more species)."""
-        return cls(bqc_threshold=0.75, non_bqc_threshold=0.90)
-
 
 @dataclass
 class ZeroFilteringResult:

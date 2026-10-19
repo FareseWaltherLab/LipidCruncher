@@ -55,26 +55,6 @@ class QualityFilterConfig(BaseModel):
     def __hash__(self) -> int:
         return hash((self.total_score_threshold, self.require_msms))
 
-    @classmethod
-    def strict(cls) -> "QualityFilterConfig":
-        """Create strict quality config (Score >= 80, MS/MS required)."""
-        return cls(total_score_threshold=80, require_msms=True)
-
-    @classmethod
-    def moderate(cls) -> "QualityFilterConfig":
-        """Create moderate quality config (Score >= 60)."""
-        return cls(total_score_threshold=60, require_msms=False)
-
-    @classmethod
-    def permissive(cls) -> "QualityFilterConfig":
-        """Create permissive quality config (Score >= 40)."""
-        return cls(total_score_threshold=40, require_msms=False)
-
-    @classmethod
-    def no_filtering(cls) -> "QualityFilterConfig":
-        """Create config with no quality filtering."""
-        return cls(total_score_threshold=0, require_msms=False)
-
 
 @dataclass
 class CleaningResult:

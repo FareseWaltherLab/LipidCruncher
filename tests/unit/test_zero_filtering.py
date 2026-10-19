@@ -242,40 +242,6 @@ class TestZeroFilterConfigValidation:
         assert config.non_bqc_threshold == 1.0
 
 
-class TestZeroFilterConfigFactories:
-    """Tests for ZeroFilterConfig factory methods."""
-
-    def test_strict_bqc_threshold(self):
-        """Test strict factory BQC threshold."""
-        config = ZeroFilterConfig.strict()
-        assert config.bqc_threshold == 0.25
-
-    def test_strict_non_bqc_threshold(self):
-        """Test strict factory non-BQC threshold."""
-        config = ZeroFilterConfig.strict()
-        assert config.non_bqc_threshold == 0.50
-
-    def test_strict_detection_threshold(self):
-        """Test strict factory uses default detection threshold."""
-        config = ZeroFilterConfig.strict()
-        assert config.detection_threshold == 0.0
-
-    def test_permissive_bqc_threshold(self):
-        """Test permissive factory BQC threshold."""
-        config = ZeroFilterConfig.permissive()
-        assert config.bqc_threshold == 0.75
-
-    def test_permissive_non_bqc_threshold(self):
-        """Test permissive factory non-BQC threshold."""
-        config = ZeroFilterConfig.permissive()
-        assert config.non_bqc_threshold == 0.90
-
-    def test_permissive_detection_threshold(self):
-        """Test permissive factory uses default detection threshold."""
-        config = ZeroFilterConfig.permissive()
-        assert config.detection_threshold == 0.0
-
-
 # =============================================================================
 # ZeroFilteringResult Tests
 # =============================================================================
@@ -977,8 +943,8 @@ class TestNonBQCThreshold:
         result_default = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3)
         assert len(result_default.filtered_df) == 1
 
-        # Strict 50% threshold -> fails
-        config = ZeroFilterConfig.strict()
+        # Stricter 50% threshold -> fails
+        config = ZeroFilterConfig(bqc_threshold=0.25, non_bqc_threshold=0.50)
         result_strict = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert len(result_strict.filtered_df) == 0
 
