@@ -5,7 +5,6 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import List, Optional
 
-from app.constants import LIPIDSEARCH_DETECTION_THRESHOLD
 from ..models.experiment import ExperimentConfig
 
 
@@ -34,11 +33,6 @@ class ZeroFilterConfig:
             raise ValueError("bqc_threshold must be between 0 and 1")
         if not 0 <= self.non_bqc_threshold <= 1:
             raise ValueError("non_bqc_threshold must be between 0 and 1")
-
-    @classmethod
-    def for_lipidsearch(cls) -> "ZeroFilterConfig":
-        """Create config optimized for LipidSearch data (higher noise floor)."""
-        return cls(detection_threshold=LIPIDSEARCH_DETECTION_THRESHOLD)
 
     @classmethod
     def strict(cls) -> "ZeroFilterConfig":

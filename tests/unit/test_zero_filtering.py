@@ -7,6 +7,7 @@ from app.services.zero_filtering import (
     ZeroFilterConfig,
     ZeroFilteringResult,
 )
+from app.constants import LIPIDSEARCH_DETECTION_THRESHOLD
 from app.models.experiment import ExperimentConfig
 
 # =============================================================================
@@ -243,21 +244,6 @@ class TestZeroFilterConfigValidation:
 
 class TestZeroFilterConfigFactories:
     """Tests for ZeroFilterConfig factory methods."""
-
-    def test_for_lipidsearch_detection_threshold(self):
-        """Test LipidSearch factory detection threshold."""
-        config = ZeroFilterConfig.for_lipidsearch()
-        assert config.detection_threshold == 30000.0
-
-    def test_for_lipidsearch_bqc_threshold(self):
-        """Test LipidSearch factory BQC threshold."""
-        config = ZeroFilterConfig.for_lipidsearch()
-        assert config.bqc_threshold == 0.5
-
-    def test_for_lipidsearch_non_bqc_threshold(self):
-        """Test LipidSearch factory non-BQC threshold."""
-        config = ZeroFilterConfig.for_lipidsearch()
-        assert config.non_bqc_threshold == 0.75
 
     def test_strict_bqc_threshold(self):
         """Test strict factory BQC threshold."""
@@ -778,7 +764,7 @@ class TestDetectionThresholdPresets:
             'intensity[s6]': [25000.0, 50000.0],
         })
 
-        config = ZeroFilterConfig.for_lipidsearch()
+        config = ZeroFilterConfig(detection_threshold=LIPIDSEARCH_DETECTION_THRESHOLD)
         result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
 
         assert len(result.filtered_df) == 1
@@ -797,7 +783,7 @@ class TestDetectionThresholdPresets:
             'intensity[s6]': [50000.0],
         })
 
-        config = ZeroFilterConfig.for_lipidsearch()
+        config = ZeroFilterConfig(detection_threshold=LIPIDSEARCH_DETECTION_THRESHOLD)
         result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert len(result.filtered_df) == 1
 
@@ -1399,7 +1385,7 @@ class TestIntegration:
             'intensity[s6]': [44000.0, 31000.0],
         })
 
-        config = ZeroFilterConfig.for_lipidsearch()
+        config = ZeroFilterConfig(detection_threshold=LIPIDSEARCH_DETECTION_THRESHOLD)
         result = ZeroFilteringService.filter_zeros(df, simple_experiment_2x3, config=config)
         assert result.species_after == 2
 

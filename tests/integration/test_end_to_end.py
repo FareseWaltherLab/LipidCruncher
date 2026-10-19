@@ -39,6 +39,7 @@ from tests.integration.conftest import (
     qc_box_plot_data,
     qc_bqc_assessment,
     qc_pca,
+    zero_filter_as_app,
 )
 
 
@@ -52,25 +53,29 @@ def run_module1(raw_df, experiment, data_format):
     ingestion_config = IngestionConfig(
         experiment=experiment,
         data_format=data_format,
-        apply_zero_filter=True,
     )
     ingestion_result = DataIngestionWorkflow.run(raw_df, ingestion_config)
     assert ingestion_result.is_valid, (
         f"Ingestion failed: {ingestion_result.validation_errors}"
     )
 
+    # Zero filtering, as the Data Processing page applies it
+    cleaned_df = zero_filter_as_app(
+        ingestion_result.cleaned_df, experiment, data_format,
+    ).filtered_df
+
     norm_config = NormalizationWorkflowConfig(
         experiment=experiment,
         normalization=NormalizationConfig(
             method='none',
             selected_classes=list(
-                ingestion_result.cleaned_df['ClassKey'].unique()
+                cleaned_df['ClassKey'].unique()
             ),
         ),
         data_format=data_format,
     )
     norm_result = NormalizationWorkflow.run(
-        ingestion_result.cleaned_df, norm_config
+        cleaned_df, norm_config
     )
     assert norm_result.success, (
         f"Normalization failed: {norm_result.validation_errors}"

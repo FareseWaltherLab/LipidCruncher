@@ -189,7 +189,7 @@ def display_app_page() -> None:
 
     if current_module == MODULE_DATA_PROCESSING:
         with center:
-            _display_module1(df, raw_df, experiment, bqc_label, data_format)
+            _display_module1(df, raw_df, experiment, data_format)
 
     elif current_module == MODULE_QC_ANALYSIS:
         with center:
@@ -246,7 +246,6 @@ def _display_module1(
     df: pd.DataFrame,
     raw_df: pd.DataFrame,
     experiment: 'ExperimentConfig',
-    bqc_label: Optional[str],
     data_format: str,
 ) -> None:
     """Display Module 1: Data Standardization, Filtering, and Normalization."""
@@ -260,7 +259,7 @@ def _display_module1(
 
     # Step 3: Run ingestion pipeline (cached)
     result = run_ingestion_pipeline(
-        df, experiment, bqc_label, data_format,
+        df, experiment, data_format,
         grade_config, quality_config, quality_config_dict
     )
     if result is None:

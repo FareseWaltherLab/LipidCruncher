@@ -121,3 +121,31 @@ def qc_pca(df: pd.DataFrame, experiment) -> pd.DataFrame:
         df, experiment.full_samples_list, experiment.extensive_conditions_list,
     )
     return pca_df
+
+
+def zero_filter_as_app(df: pd.DataFrame, experiment, data_format: DataFormat,
+                       bqc_label=None, config=None):
+    """Zero filtering as the Data Processing page applies it
+    (``ui/zero_filtering.py``), by default with its default thresholds.
+
+    Returns the ZeroFilteringResult.
+    """
+    from app.constants import (
+        LIPIDSEARCH_DETECTION_THRESHOLD,
+        ZERO_FILTER_BQC_DEFAULT,
+        ZERO_FILTER_NON_BQC_DEFAULT,
+    )
+    from app.services.zero_filtering import ZeroFilterConfig, ZeroFilteringService
+
+    if config is None:
+        config = ZeroFilterConfig(
+            detection_threshold=(
+                LIPIDSEARCH_DETECTION_THRESHOLD
+                if data_format == DataFormat.LIPIDSEARCH else 0.0
+            ),
+            bqc_threshold=ZERO_FILTER_BQC_DEFAULT / 100,
+            non_bqc_threshold=ZERO_FILTER_NON_BQC_DEFAULT / 100,
+        )
+    return ZeroFilteringService.filter_zeros(
+        df=df, experiment=experiment, config=config, bqc_label=bqc_label,
+    )

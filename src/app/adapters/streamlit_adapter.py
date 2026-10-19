@@ -717,8 +717,6 @@ class StreamlitAdapter:
         df: pd.DataFrame,
         experiment: ExperimentConfig,
         data_format: Optional[DataFormat] = None,
-        bqc_label: Optional[str] = None,
-        apply_zero_filter: bool = False,
         grade_config: Optional[GradeFilterConfig] = None,
         quality_config: Optional[QualityFilterConfig] = None
     ) -> IngestionResult:
@@ -729,8 +727,6 @@ class StreamlitAdapter:
             df: Raw DataFrame to process
             experiment: Experiment configuration
             data_format: Data format enum
-            bqc_label: BQC condition label
-            apply_zero_filter: Whether to apply zero filtering
             grade_config: Grade filter config (LipidSearch only)
             quality_config: Quality filter config (MS-DIAL only)
 
@@ -740,8 +736,6 @@ class StreamlitAdapter:
         config = IngestionConfig(
             experiment=experiment,
             data_format=data_format,
-            bqc_label=bqc_label,
-            apply_zero_filter=apply_zero_filter,
             grade_config=grade_config,
             quality_config=quality_config,
         )
