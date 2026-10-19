@@ -316,6 +316,27 @@ sandbox_runner._syscall_filter_applies = lambda: True
 """
 
 
+class TestMatplotlibLoadsBeforeTheLimits:
+    """Regression: on Linux, threads count toward RLIMIT_NPROC, and
+    matplotlib's font manager starts a thread while it builds its font
+    cache (always, in a fresh container). It was loaded after the limits,
+    failed silently, and every later matplotlib import in the sandbox
+    failed ("can't start new thread"): lc.volcano() and any plot needing
+    matplotlib broke on the server, never on macOS."""
+
+    def test_font_manager_is_loaded_before_any_limit(self):
+        patch = (
+            "import sys\n"
+            "_set = resource.setrlimit\n"
+            "def _record(which, value):\n"
+            "    print('font manager loaded:', 'matplotlib.font_manager' in sys.modules)\n"
+            "    _set(which, value)\n"
+            "resource.setrlimit = _record"
+        )
+        out = _run_child_script(_HARDEN.format(patch=patch)).splitlines()
+        assert out[0] == "font manager loaded: True"
+
+
 class TestNetworkIsBlockedByTheKernel:
     """S2 option B: on Linux x86_64 the child installs a seccomp filter, so
     the kernel refuses sockets (and ptrace / process_vm_*) whatever route

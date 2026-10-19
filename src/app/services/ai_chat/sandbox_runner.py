@@ -51,15 +51,6 @@ def _install_read_guard() -> None:
     """Refuse file opens and directory listings outside the readable roots."""
     roots = _readable_roots()
 
-    # Load matplotlib's font list now, while files may still be read: on
-    # first use it reads (or rebuilds, scanning the system font folders) a
-    # cache that the sandbox keeps in the system temp dir, which the guard
-    # must not open up. Drawing afterwards only reads matplotlib's own fonts.
-    try:
-        import matplotlib.font_manager  # noqa: F401
-    except Exception:
-        pass
-
     def _allowed(path) -> bool:
         if isinstance(path, int):
             return True  # an already-open descriptor, e.g. the result pipe
@@ -188,6 +179,14 @@ def _harden(cpu_seconds: int, memory_bytes: int) -> None:
     as root and so had no process limit at all.
     """
     import resource
+
+    # Load matplotlib's font list before any limit. On first use it reads
+    # (or rebuilds, scanning the system font folders) a cache that the
+    # sandbox keeps in the system temp dir, which the read guard must not
+    # open up; and the rebuild starts a thread, which RLIMIT_NPROC forbids on
+    # Linux, where threads count as processes. Drawing afterwards only reads
+    # matplotlib's own fonts.
+    import matplotlib.font_manager  # noqa: F401
 
     # Root (CAP_SYS_RESOURCE) is exempt from RLIMIT_NPROC on Linux, so the
     # "no new processes" limit below would be set and silently ignored.
