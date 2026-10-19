@@ -19,10 +19,13 @@ bytes that untrusted code could have shaped would run code in the parent.
 Nothing here trusts the code it runs. The parent (``sandbox.py``) owns the
 timeout and kills this process if it overruns.
 """
+import ctypes
+import errno
 import importlib
 import json
 import os
 import pickle
+import platform
 import sys
 
 
@@ -76,6 +79,94 @@ def _install_read_guard() -> None:
             )
 
     sys.addaudithook(_guard)
+
+
+# --- Kernel syscall filter (seccomp) ----------------------------------------
+# x86_64 syscall numbers the filter refuses. The child needs none of them:
+# its result goes over an inherited pipe.
+_DENIED_SYSCALLS = {
+    "socket": 41,
+    "socketpair": 53,
+    "ptrace": 101,
+    "process_vm_readv": 310,
+    "process_vm_writev": 311,
+    "io_uring_setup": 425,  # io_uring can open sockets without socket()
+}
+_AUDIT_ARCH_X86_64 = 0xC000003E
+_X32_SYSCALL_BIT = 0x40000000
+_PR_SET_NO_NEW_PRIVS = 38
+_PR_SET_SECCOMP = 22
+_SECCOMP_MODE_FILTER = 2
+_SECCOMP_RET_ALLOW = 0x7FFF0000
+_SECCOMP_RET_ERRNO = 0x00050000
+# Classic BPF opcodes.
+_LD_W_ABS = 0x20     # BPF_LD | BPF_W | BPF_ABS
+_JEQ_K = 0x15        # BPF_JMP | BPF_JEQ | BPF_K
+_JGE_K = 0x35        # BPF_JMP | BPF_JGE | BPF_K
+_RET_K = 0x06        # BPF_RET | BPF_K
+
+
+class _SockFilter(ctypes.Structure):
+    _fields_ = [("code", ctypes.c_ushort), ("jt", ctypes.c_ubyte),
+                ("jf", ctypes.c_ubyte), ("k", ctypes.c_uint)]
+
+
+class _SockFprog(ctypes.Structure):
+    _fields_ = [("len", ctypes.c_ushort), ("filter", ctypes.POINTER(_SockFilter))]
+
+
+def _syscall_filter_applies() -> bool:
+    """The filter is written for Linux x86_64, what Fargate runs."""
+    return sys.platform.startswith("linux") and platform.machine() == "x86_64"
+
+
+def _syscall_filter() -> list:
+    """The BPF program: refuse _DENIED_SYSCALLS with EPERM, allow the rest.
+
+    Anything other than the native x86_64 ABI (i386 via int 0x80, x32) is
+    refused outright: there the numbers above mean other calls.
+    """
+    deny = _SECCOMP_RET_ERRNO | errno.EPERM
+    checks = [(_JGE_K, _X32_SYSCALL_BIT)] + [
+        (_JEQ_K, nr) for nr in _DENIED_SYSCALLS.values()
+    ]
+    # 0: arch, 1: arch == x86_64 ? 3 : 2, 2: deny, 3: syscall number,
+    # 4..: one check each (match -> deny), then allow, then deny.
+    program = [
+        (_LD_W_ABS, 0, 0, 4),
+        (_JEQ_K, 1, 0, _AUDIT_ARCH_X86_64),
+        (_RET_K, 0, 0, deny),
+        (_LD_W_ABS, 0, 0, 0),
+    ]
+    deny_at = len(program) + len(checks) + 1
+    for code, value in checks:
+        program.append((code, deny_at - len(program) - 1, 0, value))
+    program += [(_RET_K, 0, 0, _SECCOMP_RET_ALLOW), (_RET_K, 0, 0, deny)]
+    return program
+
+
+def _install_syscall_filter() -> None:
+    """Have the kernel refuse network sockets and reads of other processes.
+
+    The Python-level socket patch below sits in the same interpreter as the
+    untrusted code, which can reach libc through the bound modules. A
+    seccomp filter cannot be removed by the process, and needs no privilege
+    once no_new_privs is set. Raises if it does not take.
+    """
+    program = _syscall_filter()
+    filters = (_SockFilter * len(program))(*(_SockFilter(*ins) for ins in program))
+    fprog = _SockFprog(len(program), filters)
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(_PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
+        raise RuntimeError(f"no_new_privs failed (errno {ctypes.get_errno()})")
+    if libc.prctl(_PR_SET_SECCOMP, _SECCOMP_MODE_FILTER, ctypes.byref(fprog), 0, 0) != 0:
+        raise RuntimeError(f"seccomp filter failed (errno {ctypes.get_errno()})")
+    import _socket
+    try:
+        _socket.socket()
+    except OSError:
+        return
+    raise RuntimeError("seccomp filter did not take effect")
 
 
 def _mapped_bytes() -> int:
@@ -144,6 +235,12 @@ def _harden(cpu_seconds: int, memory_bytes: int) -> None:
     # install, the site-packages, the app package (for lazy imports) and
     # matplotlib's cache.
     _install_read_guard()
+
+    # --- No network, no reading other processes (kernel) ----------------
+    # On Linux x86_64 the kernel itself refuses socket(), ptrace() and
+    # process_vm_readv/writev(), whatever path the code finds to libc.
+    if _syscall_filter_applies():
+        _install_syscall_filter()
 
     # --- No network ------------------------------------------------------
     # Neuter the already-imported socket module in place, so every existing

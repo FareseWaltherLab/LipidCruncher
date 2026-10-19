@@ -307,6 +307,58 @@ class TestHardeningFailsClosed:
         assert "was not run" in response["error"]
 
 
+_FAKE_PRCTL = """
+class _Libc:
+    def prctl(self, *args):
+        return {result}
+sandbox_runner.ctypes.CDLL = lambda *a, **k: _Libc()
+sandbox_runner._syscall_filter_applies = lambda: True
+"""
+
+
+class TestNetworkIsBlockedByTheKernel:
+    """S2 option B: on Linux x86_64 the child installs a seccomp filter, so
+    the kernel refuses sockets (and ptrace / process_vm_*) whatever route
+    the code takes to libc, not only the Python socket module."""
+
+    _PROBE = """
+import _socket
+from app.services.ai_chat import sandbox_runner
+sandbox_runner._harden(5, 1024 ** 3)
+for name, make in (('socket', _socket.socket), ('socketpair', _socket.socketpair)):
+    try:
+        make()
+    except PermissionError:
+        print(name, 'refused')
+    else:
+        print(name, 'opened')
+"""
+
+    @pytest.mark.skipif(
+        not (sys.platform.startswith("linux") and __import__("platform").machine() == "x86_64"),
+        reason="the filter is written for Linux x86_64",
+    )
+    def test_the_kernel_refuses_sockets(self):
+        assert _run_child_script(self._PROBE).splitlines() == [
+            "socket refused", "socketpair refused",
+        ]
+
+    def test_refuses_to_run_if_the_filter_cannot_be_installed(self):
+        script = _HARDEN.format(patch="").replace(
+            "try:", "exec(" + repr(_FAKE_PRCTL.format(result=-1)) + ")\ntry:", 1,
+        )
+        out = _run_child_script(script)
+        assert out.startswith("refused:") and "no_new_privs" in out
+
+    def test_refuses_to_run_if_the_filter_does_not_take(self):
+        """prctl reports success but sockets still open: refuse."""
+        script = _HARDEN.format(patch="").replace(
+            "try:", "exec(" + repr(_FAKE_PRCTL.format(result=0)) + ")\ntry:", 1,
+        )
+        out = _run_child_script(script)
+        assert out.startswith("refused:") and "did not take effect" in out
+
+
 class TestMemoryIsBounded:
     """Regression: no memory limit was set, so one large allocation in
     generated code could exhaust the shared server."""
