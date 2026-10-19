@@ -90,7 +90,7 @@ class TestHeatmapCsvRowLabels:
         _select(heatmap_app, 'heatmap_type', 'Clustered')
         out = _csv(captured_downloads, 'analysis_csv_heatmap')
         assert list(out.columns[:3]) == ['LipidMolec', 'ClassKey', 'Cluster']
-        y = heatmap_app.session_state['analysis_heatmap_fig'].data[0].y
+        y = heatmap_app.session_state['analysis_all_plots']['heatmap'].data[0].y
         species = list(y[-1]) if isinstance(y[0], (list, tuple)) else list(y)
         assert out['LipidMolec'].tolist() == species
 

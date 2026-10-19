@@ -86,7 +86,7 @@ class SessionState:
                             
                             
                              analysis_volcano_data,
-                             analysis_heatmap_fig, analysis_heatmap_clusters,
+                            
                              analysis_all_plots
       main_app.py          → page, module
     """
@@ -217,8 +217,6 @@ class SessionState:
     analysis_pathway_custom_nodes: Dict[str, Tuple[float, float]] = field(default_factory=dict)
     analysis_pathway_position_overrides: Dict[str, Tuple[float, float]] = field(default_factory=dict)
     analysis_volcano_data: Optional[VolcanoData] = None
-    analysis_heatmap_fig: Optional[go.Figure] = None
-    analysis_heatmap_clusters: Optional[pd.DataFrame] = None
     analysis_all_plots: Dict[str, Union[go.Figure, matplotlib.figure.Figure]] = field(default_factory=dict)
 
     # --- LSI Compliance Report (owner: lsi_report.py) ---
@@ -383,8 +381,8 @@ _STAGES: Tuple[_Stage, ...] = (
             'analysis_pathway_added_edges',
             'analysis_pathway_removed_edges', 'analysis_pathway_custom_nodes',
             'analysis_pathway_position_overrides', 
-            'analysis_volcano_data', 'analysis_heatmap_fig',
-            'analysis_heatmap_clusters', 'analysis_all_plots',
+            'analysis_volcano_data', 
+            'analysis_all_plots',
         }),
         widgets=frozenset({
             'analysis_radio', 'generate_pdf_report', 'download_pdf_report',

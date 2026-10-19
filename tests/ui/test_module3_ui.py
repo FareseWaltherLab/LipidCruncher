@@ -729,13 +729,13 @@ class TestHeatmapUI:
         at = self._switch_to_heatmap(analysis_generic_app)
         at.radio(key='heatmap_type').set_value("Grouped by Class").run()
         assert not at.exception
-        assert at.session_state['analysis_heatmap_fig'] is not None
+        assert 'heatmap' in at.session_state['analysis_all_plots']
 
     def test_heatmap_aggregated_by_class_renders(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
         at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
         assert not at.exception
-        assert at.session_state['analysis_heatmap_fig'] is not None
+        assert 'heatmap' in at.session_state['analysis_all_plots']
 
     @staticmethod
     def _big_analysis_app(n_lipids):
@@ -768,7 +768,7 @@ class TestHeatmapUI:
         assert not at.exception
         pager = at.selectbox(key='heatmap_species_page')
         assert len(pager.options) == 2
-        assert at.session_state['analysis_heatmap_fig'] is not None
+        assert 'heatmap' in at.session_state['analysis_all_plots']
 
     def test_species_pager_switches_pages(self):
         from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
@@ -779,7 +779,7 @@ class TestHeatmapUI:
         at.selectbox(key='heatmap_species_page').set_value(1).run()
 
         assert not at.exception
-        heatmap = at.session_state['analysis_heatmap_fig']
+        heatmap = at.session_state['analysis_all_plots']['heatmap']
         assert len(heatmap.data[0].y) == 40  # the remainder page
 
     def test_smaller_pages_for_full_screen(self):
@@ -796,7 +796,7 @@ class TestHeatmapUI:
 
         assert not at.exception
         assert len(at.selectbox(key='heatmap_species_page').options) == 4
-        heatmap = at.session_state['analysis_heatmap_fig']
+        heatmap = at.session_state['analysis_all_plots']['heatmap']
         assert len(heatmap.data[0].y) == 50
 
     def test_changing_page_size_returns_to_the_first_page(self):
@@ -811,7 +811,7 @@ class TestHeatmapUI:
 
         assert not at.exception
         assert at.selectbox(key='heatmap_species_page').value == 0
-        heatmap = at.session_state['analysis_heatmap_fig']
+        heatmap = at.session_state['analysis_all_plots']['heatmap']
         assert len(heatmap.data[0].y) == 100
 
     def test_no_pager_when_species_fit_on_one_page(self, analysis_generic_app):
@@ -830,7 +830,7 @@ class TestHeatmapUI:
         at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
 
         assert not at.exception
-        assert at.session_state['analysis_heatmap_fig'] is not None
+        assert 'heatmap' in at.session_state['analysis_all_plots']
 
     def test_color_scale_defaults_to_zscore(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
@@ -860,17 +860,17 @@ class TestHeatmapUI:
         at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
 
         assert not at.exception
-        fig = at.session_state['analysis_heatmap_fig']
+        fig = at.session_state['analysis_all_plots']['heatmap']
         assert fig.data[0].colorbar.title.text == 'log2FC'
 
     def test_switching_control_changes_the_reference(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
         at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
         at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
-        first = at.session_state['analysis_heatmap_fig'].data[0].z
+        first = at.session_state['analysis_all_plots']['heatmap'].data[0].z
 
         at.selectbox(key='heatmap_control_condition').set_value('Treatment').run()
-        second = at.session_state['analysis_heatmap_fig'].data[0].z
+        second = at.session_state['analysis_all_plots']['heatmap'].data[0].z
 
         assert not at.exception
         assert not np.allclose(np.asarray(first), np.asarray(second))
@@ -884,7 +884,7 @@ class TestHeatmapUI:
             at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
 
             assert not at.exception, mode
-            fig = at.session_state['analysis_heatmap_fig']
+            fig = at.session_state['analysis_all_plots']['heatmap']
             assert fig.data[0].colorbar.title.text == 'log2FC', mode
 
     def test_clustered_log2fc_notes_what_it_clusters_on(self, analysis_generic_app):
@@ -931,7 +931,7 @@ class TestHeatmapUI:
 
     def test_species_sort_ranks_rows_by_fold_change(self, analysis_generic_app):
         at = self._grouped_log2fc(analysis_generic_app)
-        fig = at.session_state['analysis_heatmap_fig']
+        fig = at.session_state['analysis_all_plots']['heatmap']
         classes = [row[0] for row in fig.data[0].customdata]
         values = np.asarray(fig.data[0].z, dtype=float)
 
@@ -943,12 +943,12 @@ class TestHeatmapUI:
 
     def test_reversing_the_sort_reverses_each_block(self, analysis_generic_app):
         at = self._grouped_log2fc(analysis_generic_app)
-        first = list(at.session_state['analysis_heatmap_fig'].data[0].y)
+        first = list(at.session_state['analysis_all_plots']['heatmap'].data[0].y)
 
         at.selectbox(key='heatmap_species_sort').set_value('asc').run()
 
         assert not at.exception
-        second = list(at.session_state['analysis_heatmap_fig'].data[0].y)
+        second = list(at.session_state['analysis_all_plots']['heatmap'].data[0].y)
         assert second != first
         assert sorted(second) == sorted(first)
 
@@ -1011,7 +1011,7 @@ class TestHeatmapUI:
         assert not at.exception
         warnings = ' '.join(w.value for w in at.warning)
         assert 'needs a control condition' in warnings
-        fig = at.session_state['analysis_heatmap_fig']
+        fig = at.session_state['analysis_all_plots']['heatmap']
         assert fig.data[0].colorbar.title.text == 'Z-score'
 
     def test_fallback_hides_the_control_selector(self, analysis_generic_app):
@@ -1035,7 +1035,7 @@ class TestHeatmapUI:
         ).run()
 
         assert not at.exception
-        fig = at.session_state['analysis_heatmap_fig']
+        fig = at.session_state['analysis_all_plots']['heatmap']
         assert fig.data[0].colorbar.title.text == 'log2FC'
 
     @pytest.mark.parametrize(
@@ -1132,27 +1132,28 @@ class TestHeatmapUI:
         if slider_found:
             # If the slider exists, it might be a stale widget — check that
             # the heatmap figure was still generated
-            assert at.session_state['analysis_heatmap_fig'] is not None
+            assert 'heatmap' in at.session_state['analysis_all_plots']
         else:
             assert True
 
-    def test_heatmap_total_concentration_view(self, analysis_generic_app):
+    def test_heatmap_total_concentration_view(self, analysis_generic_app, captured_downloads):
         """Switching cluster view to Total Concentration renders without error."""
         at = self._switch_to_heatmap(analysis_generic_app)
+        captured_downloads.clear()
         at.radio(key='heatmap_cluster_view').set_value("Total Concentration").run()
         assert not at.exception
-        assert at.session_state['analysis_heatmap_clusters'] is not None
+        assert 'analysis_csv_cluster' in captured_downloads
 
     def test_heatmap_stores_figure_in_session(self, analysis_generic_app):
-        """Heatmap figure is stored in session state."""
+        """The heatmap reaches the PDF report."""
         at = self._switch_to_heatmap(analysis_generic_app)
-        assert at.session_state['analysis_heatmap_fig'] is not None
         assert 'heatmap' in at.session_state['analysis_all_plots']
 
-    def test_heatmap_cluster_composition_stored(self, analysis_generic_app):
-        """Cluster composition DataFrame is stored in session state."""
-        at = self._switch_to_heatmap(analysis_generic_app)
-        assert at.session_state['analysis_heatmap_clusters'] is not None
+    def test_heatmap_cluster_composition_offered(self, analysis_generic_app, captured_downloads):
+        """The cluster composition table is offered as a CSV."""
+        captured_downloads.clear()
+        self._switch_to_heatmap(analysis_generic_app)
+        assert 'analysis_csv_cluster' in captured_downloads
 
 
 # =============================================================================

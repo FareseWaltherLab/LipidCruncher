@@ -118,8 +118,6 @@ class TestSessionStateDefaults:
         state = SessionState()
         assert state.analysis_selection is None
         assert state.analysis_volcano_data is None
-        assert state.analysis_heatmap_fig is None
-        assert state.analysis_heatmap_clusters is None
 
     def test_default_analysis_dict_fields(self):
         """Test that analysis dict fields default to empty dicts."""
@@ -200,13 +198,6 @@ class TestSessionStateCreation:
         state = SessionState(analysis_selection='Abundance Bar Chart')
         assert state.analysis_selection == 'Abundance Bar Chart'
 
-    def test_create_with_analysis_heatmap_clusters(self):
-        """Test creating SessionState with heatmap clusters DataFrame."""
-        df = pd.DataFrame({'Cluster': [1, 2], 'Count': [5, 3]})
-        state = SessionState(analysis_heatmap_clusters=df)
-        assert state.analysis_heatmap_clusters is not None
-        assert len(state.analysis_heatmap_clusters) == 2
-
     def test_create_with_analysis_all_plots(self):
         """Test creating SessionState with all_plots dict."""
         plots = {'bar_chart': MagicMock(), 'pie_charts': MagicMock()}
@@ -253,13 +244,6 @@ class TestSessionStateDataIntegrity:
         state1.analysis_all_plots['bar'] = 'fig1'
 
         assert 'bar' not in state2.analysis_all_plots
-
-    def test_analysis_heatmap_clusters_reference_preserved(self):
-        """Test that analysis heatmap clusters DataFrame reference is preserved."""
-        df = pd.DataFrame({'Cluster': [1, 2]})
-        state = SessionState(analysis_heatmap_clusters=df)
-        assert state.analysis_heatmap_clusters is df
-
 
 # =============================================================================
 # Stage registry (which stage owns each session key)
@@ -760,7 +744,6 @@ class TestSessionStateIntegration:
         analysis_keys = [
             'analysis_selection',
             'analysis_volcano_data',
-            'analysis_heatmap_fig', 'analysis_heatmap_clusters',
             'analysis_all_plots',
         ]
         for key in analysis_keys:
@@ -775,8 +758,6 @@ class TestSessionStateIntegration:
 
         assert mock_st.session_state['analysis_selection'] is None
         assert mock_st.session_state['analysis_volcano_data'] is None
-        assert mock_st.session_state['analysis_heatmap_fig'] is None
-        assert mock_st.session_state['analysis_heatmap_clusters'] is None
 
     @patch('app.adapters.streamlit_adapter.st')
     def test_initialize_analysis_dict_defaults(self, mock_st):
@@ -808,8 +789,6 @@ class TestSessionStateIntegration:
         mock_st.session_state = MockSessionState({
             'analysis_selection': 'Bar Chart',
             'analysis_volcano_data': {'some': 'data'},
-            'analysis_heatmap_fig': mock_fig,
-            'analysis_heatmap_clusters': pd.DataFrame({'C': [1]}),
             'analysis_all_plots': {'bar': mock_fig},
         })
 
@@ -817,8 +796,6 @@ class TestSessionStateIntegration:
 
         assert mock_st.session_state['analysis_selection'] is None
         assert mock_st.session_state['analysis_volcano_data'] is None
-        assert mock_st.session_state['analysis_heatmap_fig'] is None
-        assert mock_st.session_state['analysis_heatmap_clusters'] is None
         assert mock_st.session_state['analysis_all_plots'] == {}
 
     @patch('app.adapters.streamlit_adapter.st')
@@ -949,12 +926,11 @@ class TestSessionStateFieldCompleteness:
     """Tests ensuring all expected fields exist in SessionState."""
 
     def test_all_analysis_fields_exist(self):
-        """Test that all 11 analysis fields exist in SessionState."""
+        """Test that the analysis fields exist in SessionState."""
         state = SessionState()
         analysis_fields = [
             'analysis_selection',
             'analysis_volcano_data',
-            'analysis_heatmap_fig', 'analysis_heatmap_clusters',
             'analysis_all_plots',
         ]
         for field_name in analysis_fields:
@@ -967,8 +943,8 @@ class TestSessionStateFieldCompleteness:
         # 17 - 1 (analysis_pathway_active_classes: nothing read or wrote it)
         # - the write-only per-page figure copies (the report reads
         #   analysis_all_plots): bar chart, pie charts, saturation, chain length,
-        #   FACH, pathway, volcano
-        assert len(analysis_fields) == 9
+        #   FACH, pathway, volcano, heatmap (figure and cluster table)
+        assert len(analysis_fields) == 7
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
@@ -984,7 +960,6 @@ class TestSessionStateFieldCompleteness:
         state_dict = asdict(state)
         assert 'analysis_selection' in state_dict
         assert 'analysis_all_plots' in state_dict
-        assert 'analysis_heatmap_clusters' in state_dict
 
 
 # =============================================================================
