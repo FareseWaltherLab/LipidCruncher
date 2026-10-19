@@ -299,7 +299,16 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
             },
             key='sample_names_editor',
         )
-        st.session_state.sample_names = names_from_editor(edited)
+        names = names_from_editor(edited)
+        st.session_state.sample_names = names
+        # While regrouped, the names are rebuilt every run from the
+        # pre-regroup snapshot: store the edit there too, under each sample's
+        # upload label, or a changed or undone regroup drops it.
+        regroup_origin = st.session_state.get('regroup_origin')
+        if regroup_origin and '_pre_regroup_sample_names' in st.session_state:
+            st.session_state['_pre_regroup_sample_names'] = {
+                regroup_origin.get(s, s): name for s, name in names.items()
+            }
 
 
 def _display_sample_exclusion(

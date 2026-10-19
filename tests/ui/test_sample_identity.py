@@ -298,3 +298,53 @@ class TestProteinAmounts:
         sc.regroup()
         sc.exclude_in_sidebar('s1')  # now in ADGAT-DKO, labelled s5
         self._assert_amounts_follow(sc)
+
+
+class TestNameEdits:
+    """A name typed into the sidebar's Sample Names editor stays with its
+    sample. AppTest cannot type into a data_editor, so the editor is patched
+    to apply one edit, as a user's typing would."""
+
+    @staticmethod
+    def _type_name(monkeypatch, sc, label, name):
+        import streamlit
+
+        original = streamlit.data_editor
+        pending = [(label, name)]
+
+        def _editor(data, *args, key=None, **kwargs):
+            if key == 'sample_names_editor' and pending:
+                edited_label, edited_name = pending.pop()
+                data = data.copy()
+                data.loc[data['sample'] == edited_label, 'name'] = edited_name
+            return original(data, *args, key=key, **kwargs)
+
+        monkeypatch.setattr(streamlit, 'data_editor', _editor)
+        sc.at.run()
+        sc._ok()
+
+    def test_edit_during_a_regroup_survives_undoing_it(self, monkeypatch, captured_downloads):
+        """Regression: names were rebuilt from the pre-regroup snapshot on
+        every run, so a name typed while regrouped was lost on undo."""
+        sc = _scenario(captured_downloads)
+        sc.regroup()  # upload s5 is now sidebar s1
+        self._type_name(monkeypatch, sc, 's1', 'Edited')
+        assert sc.at.session_state['sample_names']['s1'] == 'Edited'
+
+        sc.undo_regroup()
+        assert sc.at.session_state['sample_names']['s5'] == 'Edited'
+        assert sc.at.session_state['sample_names']['s1'] == 'N1'
+
+    def test_edit_during_a_regroup_survives_changing_it(self, monkeypatch, captured_downloads):
+        sc = _scenario(captured_downloads)
+        sc.regroup()
+        self._type_name(monkeypatch, sc, 's1', 'Edited')  # upload s5
+
+        sc.regroup({
+            'WT': ['s1', 's2', 's3', 's4'],
+            'ADGAT-DKO': ['s5', 's6', 's7', 's8'],
+            'BQC': ['s9', 's10', 's11', 's12'],
+        })
+        assert sc.at.session_state['sample_names']['s5'] == 'Edited'
+        sc.next()
+        assert 'Edited' in set(sc.csv('pca_csv_download')['Sample'])
