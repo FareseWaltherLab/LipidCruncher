@@ -138,3 +138,27 @@ def test_pages_keep_each_others_figures(at):
     _open(at, 'Bar Chart')
     _set(at, 'bar_classes', [])
     assert _keys(at) == everything - {'heatmap', 'bar_chart'}
+
+
+def _publish_script():
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.ui.main_content.analysis._shared import _publish
+    StreamlitAdapter.initialize_session_state()
+    _publish(st.session_state['_key'], 'figure')
+
+
+@pytest.mark.parametrize('key, accepted', [
+    ('bar_chart', True), ('pie_Control', True), ('sat_percentage_PC', True),
+    ('barchart', False), ('volcano_plot', False),
+])
+def test_publish_takes_only_keys_the_report_renders(key, accepted):
+    at = AppTest.from_function(_publish_script, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['_key'] = key
+    at.run()
+    if accepted:
+        assert not at.exception
+        assert at.session_state['analysis_all_plots'] == {key: 'figure'}
+    else:
+        assert at.exception
+        assert 'has no page' in at.exception[0].message

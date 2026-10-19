@@ -82,12 +82,9 @@ class SessionState:
                              qc_correlation_plots, qc_pca_plot, qc_samples_removed,
                              _preserved_bqc_filter_choice, _preserved_rt_viewing_mode,
                              _preserved_pca_samples_remove, _preserved_pca_groups_remove
-      analysis.py          → analysis_selection,
-                            
-                            
-                             analysis_volcano_data,
-                            
-                             analysis_all_plots
+      analysis/            → analysis_selection, analysis_volcano_data,
+                             analysis_pathway_*, analysis_all_plots (figures
+                             for the PDF, written only by _publish)
       main_app.py          → page, module
     """
     # --- App-level routing (owner: main_app.py) ---
