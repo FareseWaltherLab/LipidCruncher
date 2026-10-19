@@ -417,34 +417,8 @@ class TestNormalizationWorkflowResult:
         assert result.success is True
         assert result.method_applied == "None"
         assert result.removed_standards == []
-        assert result.classes_in_input == []
-        assert result.classes_normalized == []
         assert result.validation_errors == []
         assert result.validation_warnings == []
-        assert result.lipids_before == 0
-        assert result.lipids_after == 0
-        assert result.samples_processed == 0
-
-    def test_lipids_removed_count(self):
-        """Test lipids removed count property."""
-        result = NormalizationWorkflowResult(lipids_before=10, lipids_after=8)
-        assert result.lipids_removed_count == 2
-
-    def test_lipids_removed_count_zero(self):
-        """Test lipids removed when none removed."""
-        result = NormalizationWorkflowResult(lipids_before=10, lipids_after=10)
-        assert result.lipids_removed_count == 0
-
-    def test_has_warnings_true(self):
-        """Test has_warnings when warnings exist."""
-        result = NormalizationWorkflowResult(validation_warnings=["Warning 1"])
-        assert result.has_warnings is True
-
-    def test_has_warnings_false(self):
-        """Test has_warnings when no warnings."""
-        result = NormalizationWorkflowResult()
-        assert result.has_warnings is False
-
 
 class TestNormalizationWorkflowConfig:
     """Tests for NormalizationWorkflowConfig dataclass."""
@@ -673,174 +647,6 @@ class TestGetStandardsByClass:
         assert by_class == {}
 
 
-class TestSuggestStandardMappings:
-    """Tests for suggest_standard_mappings method."""
-
-    def test_class_specific_suggestions(self, basic_intsta_df):
-        """Test suggestions use class-specific standards."""
-        mappings = NormalizationWorkflow.suggest_standard_mappings(
-            ['PC', 'PE'], basic_intsta_df
-        )
-        assert mappings['PC'] == 'PC(15:0_18:1-d7)'
-        assert mappings['PE'] == 'PE(17:0_20:4-d7)'
-
-    def test_fallback_to_first_available(self, single_standard_df):
-        """Test fallback when no class-specific standard."""
-        mappings = NormalizationWorkflow.suggest_standard_mappings(
-            ['PE', 'TG'], single_standard_df  # Only PC standard available
-        )
-        # Both should fall back to the only available standard
-        assert mappings['PE'] == 'PC(15:0_18:1-d7)'
-        assert mappings['TG'] == 'PC(15:0_18:1-d7)'
-
-    def test_no_standards_available(self):
-        """Test when no standards available."""
-        mappings = NormalizationWorkflow.suggest_standard_mappings(
-            ['PC', 'PE'], pd.DataFrame()
-        )
-        assert mappings['PC'] is None
-        assert mappings['PE'] is None
-
-    def test_none_intsta_df(self):
-        """Test with None intsta_df."""
-        mappings = NormalizationWorkflow.suggest_standard_mappings(
-            ['PC', 'PE'], None
-        )
-        assert mappings['PC'] is None
-        assert mappings['PE'] is None
-
-
-class TestValidateStandardMappings:
-    """Tests for validate_standard_mappings method."""
-
-    def test_valid_mappings(self, basic_intsta_df):
-        """Test validation of valid mappings."""
-        mappings = {'PC': 'PC(15:0_18:1-d7)', 'PE': 'PE(17:0_20:4-d7)'}
-        is_valid, errors = NormalizationWorkflow.validate_standard_mappings(
-            mappings, basic_intsta_df, ['PC', 'PE']
-        )
-        assert is_valid is True
-        assert errors == []
-
-    def test_missing_class_mapping(self, basic_intsta_df):
-        """Test validation with missing class mapping."""
-        mappings = {'PC': 'PC(15:0_18:1-d7)'}  # Missing PE
-        is_valid, errors = NormalizationWorkflow.validate_standard_mappings(
-            mappings, basic_intsta_df, ['PC', 'PE']
-        )
-        assert is_valid is False
-        assert any('PE' in e for e in errors)
-
-    def test_invalid_standard_name(self, basic_intsta_df):
-        """Test validation with invalid standard name."""
-        mappings = {'PC': 'INVALID_STANDARD', 'PE': 'PE(17:0_20:4-d7)'}
-        is_valid, errors = NormalizationWorkflow.validate_standard_mappings(
-            mappings, basic_intsta_df, ['PC', 'PE']
-        )
-        assert is_valid is False
-        assert any('INVALID_STANDARD' in e for e in errors)
-
-    def test_none_intsta_df(self):
-        """Test validation with None intsta_df."""
-        mappings = {'PC': 'PC(15:0_18:1-d7)'}
-        is_valid, errors = NormalizationWorkflow.validate_standard_mappings(
-            mappings, None, ['PC']
-        )
-        assert is_valid is False
-
-
-class TestCreateNormalizationConfig:
-    """Tests for create_normalization_config helper."""
-
-    def test_create_none_config(self):
-        """Test creating none config."""
-        config = NormalizationWorkflow.create_normalization_config(
-            method='none',
-            selected_classes=['PC', 'PE']
-        )
-        assert config.method == 'none'
-        assert config.selected_classes == ['PC', 'PE']
-
-    def test_create_protein_config(self, protein_concentrations):
-        """Test creating protein config."""
-        config = NormalizationWorkflow.create_normalization_config(
-            method='protein',
-            selected_classes=['PC'],
-            protein_concentrations=protein_concentrations
-        )
-        assert config.method == 'protein'
-        assert config.protein_concentrations == protein_concentrations
-
-    def test_create_is_config(self):
-        """Test creating internal standard config."""
-        config = NormalizationWorkflow.create_normalization_config(
-            method='internal_standard',
-            selected_classes=['PC'],
-            internal_standards={'PC': 'PC_d7'},
-            intsta_concentrations={'PC_d7': 1.0}
-        )
-        assert config.method == 'internal_standard'
-        assert config.internal_standards == {'PC': 'PC_d7'}
-
-    def test_create_both_config(self, protein_concentrations):
-        """Test creating combined config."""
-        config = NormalizationWorkflow.create_normalization_config(
-            method='both',
-            selected_classes=['PC'],
-            internal_standards={'PC': 'PC_d7'},
-            intsta_concentrations={'PC_d7': 1.0},
-            protein_concentrations=protein_concentrations
-        )
-        assert config.method == 'both'
-
-    def test_invalid_config_raises(self):
-        """Test that invalid config raises ValueError."""
-        with pytest.raises(ValueError):
-            NormalizationWorkflow.create_normalization_config(
-                method='internal_standard',
-                selected_classes=['PC']
-                # Missing internal_standards and intsta_concentrations
-            )
-
-
-class TestGetIntensityColumnSamples:
-    """Tests for get_intensity_column_samples method."""
-
-    def test_basic_extraction(self, basic_df):
-        """Test basic sample extraction."""
-        samples = NormalizationWorkflow.get_intensity_column_samples(basic_df)
-        assert set(samples) == {'s1', 's2', 's3', 's4'}
-
-    def test_empty_dataframe(self):
-        """Test with empty DataFrame."""
-        samples = NormalizationWorkflow.get_intensity_column_samples(pd.DataFrame())
-        assert samples == []
-
-    def test_no_intensity_columns(self, df_no_intensity_columns):
-        """Test with no intensity columns."""
-        samples = NormalizationWorkflow.get_intensity_column_samples(df_no_intensity_columns)
-        assert samples == []
-
-
-class TestGetConcentrationColumnSamples:
-    """Tests for get_concentration_column_samples method."""
-
-    def test_basic_extraction(self):
-        """Test basic sample extraction from concentration columns."""
-        df = pd.DataFrame({
-            'LipidMolec': ['PC'],
-            'concentration[s1]': [1.0],
-            'concentration[s2]': [2.0]
-        })
-        samples = NormalizationWorkflow.get_concentration_column_samples(df)
-        assert set(samples) == {'s1', 's2'}
-
-    def test_empty_dataframe(self):
-        """Test with empty DataFrame."""
-        samples = NormalizationWorkflow.get_concentration_column_samples(pd.DataFrame())
-        assert samples == []
-
-
 class TestStoreAndRestoreEssentialColumns:
     """Tests for _store_essential_columns and _restore_essential_columns methods."""
 
@@ -888,62 +694,6 @@ class TestStoreAndRestoreEssentialColumns:
         """Test restore with no stored columns."""
         restored = NormalizationWorkflow._restore_essential_columns(basic_df, {})
         pd.testing.assert_frame_equal(restored, basic_df)
-
-
-class TestPreviewNormalization:
-    """Tests for preview_normalization method."""
-
-    def test_preview_none_method(self, basic_df, simple_experiment_2x2, none_config):
-        """Test preview for none method."""
-        config = NormalizationWorkflowConfig(
-            experiment=simple_experiment_2x2,
-            normalization=none_config
-        )
-        preview = NormalizationWorkflow.preview_normalization(basic_df, config)
-
-        assert preview.method == 'none'
-        assert preview.can_proceed is True
-        assert set(preview.classes_to_process) == {'PC', 'PE', 'TG', 'SM'}
-        assert preview.samples_to_normalize == 4
-
-    def test_preview_with_class_filter(self, basic_df, simple_experiment_2x2):
-        """Test preview with class filter."""
-        norm_config = NormalizationConfig(
-            method='none',
-            selected_classes=['PC', 'PE']
-        )
-        config = NormalizationWorkflowConfig(
-            experiment=simple_experiment_2x2,
-            normalization=norm_config
-        )
-        preview = NormalizationWorkflow.preview_normalization(basic_df, config)
-
-        assert preview.classes_to_process == ['PC', 'PE']
-
-    def test_preview_with_standards_removal(
-        self, basic_df, simple_experiment_2x2, internal_standard_config, basic_intsta_df
-    ):
-        """Test preview shows standards to be removed."""
-        config = NormalizationWorkflowConfig(
-            experiment=simple_experiment_2x2,
-            normalization=internal_standard_config
-        )
-        preview = NormalizationWorkflow.preview_normalization(
-            basic_df, config, basic_intsta_df
-        )
-
-        assert len(preview.standards_to_remove) > 0
-
-    def test_preview_with_validation_errors(self, empty_df, simple_experiment_2x2, none_config):
-        """Test preview with validation errors."""
-        config = NormalizationWorkflowConfig(
-            experiment=simple_experiment_2x2,
-            normalization=none_config
-        )
-        preview = NormalizationWorkflow.preview_normalization(empty_df, config)
-
-        assert preview.can_proceed is False
-        assert len(preview.validation_errors) > 0
 
 
 class TestRunWorkflowNoneMethod:
@@ -1123,7 +873,7 @@ class TestRunWorkflowInternalStandardMethod:
         result = NormalizationWorkflow.run(basic_df, config, basic_intsta_df)
 
         assert result.success is True
-        assert set(result.classes_normalized) == {'PC', 'PE'}
+        assert set(result.normalized_df['ClassKey']) == {'PC', 'PE'}
 
 
 class TestRunWorkflowBothMethod:
@@ -1250,9 +1000,8 @@ class TestRunWorkflowTotalIntensity:
         )
         result = NormalizationWorkflow.run(basic_df, config)
 
-        assert result.lipids_before == 4
-        assert result.lipids_after == 4
-        assert result.samples_processed == 4
+        assert len(result.normalized_df) == 4
+        assert sum(c.startswith('concentration[') for c in result.normalized_df.columns) == 4
 
 
 class TestRunWorkflowEdgeCases:
@@ -1312,7 +1061,7 @@ class TestRunWorkflowEdgeCases:
         result = NormalizationWorkflow.run(single_class_df, config)
 
         assert result.success is True
-        assert result.classes_normalized == ['PC']
+        assert result.normalized_df['ClassKey'].unique().tolist() == ['PC']
 
     def test_run_many_classes(self, many_classes_df, simple_experiment_2x2, none_config):
         """Test run with many classes."""
@@ -1323,7 +1072,7 @@ class TestRunWorkflowEdgeCases:
         result = NormalizationWorkflow.run(many_classes_df, config)
 
         assert result.success is True
-        assert len(result.classes_normalized) == 10
+        assert result.normalized_df['ClassKey'].nunique() == 10
 
     def test_run_with_special_chars(self, df_with_special_chars, simple_experiment_2x2, none_config):
         """Test run with special characters in names."""
@@ -1337,49 +1086,48 @@ class TestRunWorkflowEdgeCases:
         assert len(result.normalized_df) == 3
 
 
-class TestRunWorkflowStatistics:
-    """Tests for run method statistics tracking."""
+class TestRunWorkflowOutputShape:
+    """Tests for which lipids, classes and samples the run outputs."""
 
-    def test_tracks_lipids_before_after(self, basic_df, simple_experiment_2x2, none_config):
-        """Test that lipid counts are tracked."""
+    def test_keeps_every_lipid(self, basic_df, simple_experiment_2x2, none_config):
+        """Test that no lipid is dropped."""
         config = NormalizationWorkflowConfig(
             experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
 
-        assert result.lipids_before == 4
-        assert result.lipids_after == 4
+        assert len(result.normalized_df) == 4
 
-    def test_tracks_classes_in_input(self, basic_df, simple_experiment_2x2, none_config):
-        """Test that input classes are tracked."""
+    def test_keeps_every_class(self, basic_df, simple_experiment_2x2, none_config):
+        """Test that every input class is normalized."""
         config = NormalizationWorkflowConfig(
             experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
 
-        assert set(result.classes_in_input) == {'PC', 'PE', 'TG', 'SM'}
+        assert set(result.normalized_df['ClassKey']) == {'PC', 'PE', 'TG', 'SM'}
 
-    def test_tracks_classes_normalized(self, basic_df, simple_experiment_2x2, none_config_filtered):
-        """Test that normalized classes are tracked."""
+    def test_only_selected_classes(self, basic_df, simple_experiment_2x2, none_config_filtered):
+        """Test that only the selected classes come out."""
         config = NormalizationWorkflowConfig(
             experiment=simple_experiment_2x2,
             normalization=none_config_filtered
         )
         result = NormalizationWorkflow.run(basic_df, config)
 
-        assert set(result.classes_normalized) == {'PC', 'PE'}
+        assert set(result.normalized_df['ClassKey']) == {'PC', 'PE'}
 
-    def test_tracks_samples_processed(self, basic_df, simple_experiment_2x2, none_config):
-        """Test that sample count is tracked."""
+    def test_every_sample_normalized(self, basic_df, simple_experiment_2x2, none_config):
+        """Test that every sample gets a concentration column."""
         config = NormalizationWorkflowConfig(
             experiment=simple_experiment_2x2,
             normalization=none_config
         )
         result = NormalizationWorkflow.run(basic_df, config)
 
-        assert result.samples_processed == 4
+        assert sum(c.startswith('concentration[') for c in result.normalized_df.columns) == 4
 
 
 class TestRunWorkflowDataFormats:
@@ -1676,7 +1424,7 @@ class TestWorkflowWithVariousExperiments:
         result = NormalizationWorkflow.run(df, config)
 
         assert result.success is True
-        assert result.samples_processed == 6
+        assert sum(c.startswith('concentration[') for c in result.normalized_df.columns) == 6
 
     def test_unequal_samples_experiment(self, simple_experiment_2x2, none_config):
         """Test workflow with unequal sample counts."""
@@ -1715,4 +1463,4 @@ class TestWorkflowWithVariousExperiments:
         result = NormalizationWorkflow.run(df, config)
 
         assert result.success is True
-        assert result.samples_processed == n_samples
+        assert sum(c.startswith('concentration[') for c in result.normalized_df.columns) == n_samples

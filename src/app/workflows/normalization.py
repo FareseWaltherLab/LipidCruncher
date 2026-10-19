@@ -8,7 +8,7 @@ This workflow handles the business logic flow while leaving UI concerns to the U
 All methods are pure logic (no Streamlit dependencies).
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -52,48 +52,9 @@ class NormalizationWorkflowResult:
     method_applied: str = "None"
     removed_standards: List[str] = field(default_factory=list)
 
-    # Class information
-    classes_in_input: List[str] = field(default_factory=list)
-    classes_normalized: List[str] = field(default_factory=list)
-
     # Validation status
     validation_errors: List[str] = field(default_factory=list)
     validation_warnings: List[str] = field(default_factory=list)
-
-    # Statistics
-    lipids_before: int = 0
-    lipids_after: int = 0
-    samples_processed: int = 0
-
-    @property
-    def lipids_removed_count(self) -> int:
-        """Number of lipids removed (usually standards)."""
-        return self.lipids_before - self.lipids_after
-
-    @property
-    def has_warnings(self) -> bool:
-        """Check if there are any warnings."""
-        return len(self.validation_warnings) > 0
-
-
-@dataclass
-class NormalizationPreview:
-    """Preview of what normalization will do before committing.
-
-    Attributes:
-        method: Normalization method name.
-        classes_to_process: Classes that will be normalized.
-        standards_to_remove: Standards that will be removed from the dataset.
-        samples_to_normalize: Number of samples to process.
-        validation_errors: Errors that would prevent normalization.
-        can_proceed: Whether normalization can proceed without errors.
-    """
-    method: str = "none"
-    classes_to_process: List[str] = field(default_factory=list)
-    standards_to_remove: List[str] = field(default_factory=list)
-    samples_to_normalize: int = 0
-    validation_errors: List[str] = field(default_factory=list)
-    can_proceed: bool = True
 
 
 class NormalizationWorkflow:
@@ -135,10 +96,6 @@ class NormalizationWorkflow:
         """
         result = NormalizationWorkflowResult()
 
-        # Track input stats
-        result.lipids_before = len(df) if df is not None else 0
-        result.classes_in_input = list(df['ClassKey'].unique()) if df is not None and 'ClassKey' in df.columns else []
-
         # Step 1: Validate inputs
         validation_errors = NormalizationWorkflow.validate_config(
             df, config, intsta_df
@@ -176,18 +133,6 @@ class NormalizationWorkflow:
             result.normalized_df = NormalizationWorkflow._restore_essential_columns(
                 result.normalized_df, stored_columns
             )
-
-        # Step 5: Collect final statistics
-        if result.normalized_df is not None:
-            result.lipids_after = len(result.normalized_df)
-            result.classes_normalized = list(result.normalized_df['ClassKey'].unique())
-
-            # Count samples processed
-            concentration_cols = [
-                col for col in result.normalized_df.columns
-                if col.startswith('concentration[')
-            ]
-            result.samples_processed = len(concentration_cols)
 
         return result
 
@@ -299,123 +244,6 @@ class NormalizationWorkflow:
         """
         return NormalizationService.get_standards_by_class(intsta_df)
 
-    @staticmethod
-    def suggest_standard_mappings(
-        selected_classes: List[str],
-        intsta_df: Optional[pd.DataFrame]
-    ) -> Dict[str, Optional[str]]:
-        """
-        Suggest default standard-to-class mappings based on available standards.
-
-        Priority:
-        1. Class-specific standard (same ClassKey)
-        2. First available standard
-
-        Args:
-            selected_classes: List of classes needing standards
-            intsta_df: Internal standards DataFrame
-
-        Returns:
-            Dictionary mapping class -> suggested standard (or None if no standards)
-        """
-        if intsta_df is None or intsta_df.empty:
-            return {cls: None for cls in selected_classes}
-
-        standards_by_class = NormalizationWorkflow.get_standards_by_class(intsta_df)
-        all_standards = NormalizationWorkflow.get_available_standards(intsta_df)
-
-        mappings = {}
-        for lipid_class in selected_classes:
-            # Try class-specific standard first
-            class_standards = standards_by_class.get(lipid_class, [])
-            if class_standards:
-                mappings[lipid_class] = class_standards[0]
-            elif all_standards:
-                # Fall back to first available standard
-                mappings[lipid_class] = all_standards[0]
-            else:
-                mappings[lipid_class] = None
-
-        return mappings
-
-    @staticmethod
-    def validate_standard_mappings(
-        internal_standards: Dict[str, str],
-        intsta_df: Optional[pd.DataFrame],
-        selected_classes: List[str]
-    ) -> Tuple[bool, List[str]]:
-        """
-        Validate that all standard mappings are valid.
-
-        Args:
-            internal_standards: Mapping of class -> standard name
-            intsta_df: Internal standards DataFrame
-            selected_classes: Classes that need mappings
-
-        Returns:
-            Tuple of (is_valid, list of error messages)
-        """
-        errors = []
-
-        if intsta_df is None or intsta_df.empty:
-            errors.append(
-                "Internal standards DataFrame is required for validation. "
-                "Ensure standards were detected or uploaded during data ingestion."
-            )
-            return False, errors
-
-        available_standards = set(NormalizationWorkflow.get_available_standards(intsta_df))
-
-        # Check all classes have mappings
-        missing_classes = set(selected_classes) - set(internal_standards.keys())
-        if missing_classes:
-            errors.append(
-                f"Missing standard mappings for classes: {', '.join(sorted(missing_classes))}. "
-                f"Mapped classes: {', '.join(sorted(internal_standards.keys())) or 'none'}"
-            )
-
-        # Check all mapped standards exist
-        for lipid_class, standard in internal_standards.items():
-            if standard not in available_standards:
-                errors.append(
-                    f"Standard '{standard}' for class '{lipid_class}' "
-                    f"not found in standards DataFrame. "
-                    f"Available standards: {', '.join(sorted(available_standards))}"
-                )
-
-        return len(errors) == 0, errors
-
-    @staticmethod
-    def create_normalization_config(
-        method: str,
-        selected_classes: List[str],
-        internal_standards: Optional[Dict[str, str]] = None,
-        intsta_concentrations: Optional[Dict[str, float]] = None,
-        protein_concentrations: Optional[Dict[str, float]] = None
-    ) -> NormalizationConfig:
-        """
-        Helper to create a NormalizationConfig with proper validation.
-
-        Args:
-            method: Normalization method ('none', 'internal_standard', 'protein', 'both')
-            selected_classes: List of classes to normalize
-            internal_standards: Class -> standard name mapping
-            intsta_concentrations: Standard -> concentration mapping
-            protein_concentrations: Sample -> protein concentration mapping
-
-        Returns:
-            Validated NormalizationConfig
-
-        Raises:
-            ValueError: If configuration is invalid
-        """
-        return NormalizationConfig(
-            method=method,
-            selected_classes=selected_classes,
-            internal_standards=internal_standards,
-            intsta_concentrations=intsta_concentrations,
-            protein_concentrations=protein_concentrations
-        )
 
     @staticmethod
     def _store_essential_columns(
@@ -474,87 +302,3 @@ class NormalizationWorkflow:
                 result[col_name] = col_data.reindex(result['LipidMolec'].values).values
 
         return result
-
-    @staticmethod
-    def get_column_samples(df: pd.DataFrame, prefix: str = 'intensity') -> List[str]:
-        """
-        Extract sample names from columns with a given prefix.
-
-        Looks for columns matching ``prefix[sample_name]`` and returns the
-        sample names.
-
-        Args:
-            df: DataFrame with prefixed columns (e.g. intensity[s1], concentration[s1])
-            prefix: Column prefix to match (default: 'intensity')
-
-        Returns:
-            List of sample names (e.g., ['s1', 's2', 's3'])
-        """
-        tag = f'{prefix}['
-        return [
-            col[len(tag):-1]
-            for col in df.columns
-            if col.startswith(tag) and col.endswith(']')
-        ]
-
-    @staticmethod
-    def get_intensity_column_samples(df: pd.DataFrame) -> List[str]:
-        """Extract sample names from intensity[...] columns."""
-        return NormalizationWorkflow.get_column_samples(df, 'intensity')
-
-    @staticmethod
-    def get_concentration_column_samples(df: pd.DataFrame) -> List[str]:
-        """Extract sample names from concentration[...] columns."""
-        return NormalizationWorkflow.get_column_samples(df, 'concentration')
-
-    @staticmethod
-    def preview_normalization(
-        df: pd.DataFrame,
-        config: NormalizationWorkflowConfig,
-        intsta_df: Optional[pd.DataFrame] = None
-    ) -> NormalizationPreview:
-        """
-        Preview what normalization will do without actually applying it.
-
-        Useful for showing users what will happen before they commit.
-
-        Args:
-            df: Input DataFrame
-            config: Workflow configuration
-            intsta_df: Internal standards DataFrame
-
-        Returns:
-            NormalizationPreview with method, classes, standards, and validation info.
-        """
-        preview = NormalizationPreview(method=config.normalization.method)
-
-        # Validate configuration
-        errors = NormalizationWorkflow.validate_config(df, config, intsta_df)
-        if errors:
-            preview = NormalizationPreview(
-                method=config.normalization.method,
-                validation_errors=errors,
-                can_proceed=False,
-            )
-            return preview
-
-        # Determine classes to process
-        if config.normalization.selected_classes:
-            classes = list(config.normalization.selected_classes)
-        else:
-            classes = list(df['ClassKey'].unique()) if 'ClassKey' in df.columns else []
-
-        # Determine standards to remove
-        standards = []
-        if config.normalization.internal_standards:
-            standards = list(set(config.normalization.internal_standards.values()))
-
-        # Count samples
-        intensity_cols = [col for col in df.columns if col.startswith('intensity[')]
-
-        return NormalizationPreview(
-            method=config.normalization.method,
-            classes_to_process=classes,
-            standards_to_remove=standards,
-            samples_to_normalize=len(intensity_cols),
-        )
