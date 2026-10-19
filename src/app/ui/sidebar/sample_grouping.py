@@ -19,7 +19,6 @@ from app.services.sample_grouping import DatasetValidationResult, SampleGrouping
 from app.ui.sample_names import (
     build_names_from_mapping,
     names_from_editor,
-    remap_names_after_regroup,
     sample_display_map,
 )
 from app.ui.sample_labels import labeler, render_sample_label_switch, showing_original_names
@@ -32,11 +31,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # UI Components
 # =============================================================================
-
-def _sample_label(column: str) -> str:
-    """'intensity[s3]' -> 's3'."""
-    return column[len('intensity['):-1]
-
 
 def _detected_sample_column_names() -> List[str]:
     """Original (pre-rename) names of the columns taken as sample intensities.
@@ -310,14 +304,14 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
 
 def _display_sample_exclusion(
     df: pd.DataFrame, experiment: ExperimentConfig
-) -> Optional[Tuple[ExperimentConfig, pd.DataFrame]]:
+) -> Optional[SampleFrame]:
     """Optional sidebar step: drop samples before any processing.
 
     For a sample that should not enter the analysis at all — e.g. one whose
     internal-standard spike failed, which would otherwise stop normalization.
-    Returns the (experiment, df) Module 1 should run on: the originals when
-    nothing is excluded, None when the selection is invalid. Also keeps
-    ``processing_sample_names`` in step with the renumbered survivors.
+    Returns the frame Module 1 should run on: the sidebar's samples when
+    nothing is excluded, the renumbered survivors otherwise, None when the
+    selection is invalid.
     """
     # Exclusions are kept by the sample's upload label, so a regroup that
     # renumbers samples keeps excluding the same samples. When the regroup
@@ -351,32 +345,27 @@ def _display_sample_exclusion(
         ]
         st.session_state['_preserved_excluded_regroup_origin'] = regroup_origin
 
-        names = st.session_state.get('sample_names')
-        upload_label = st.session_state.get('regroup_origin') or {}
+        frame = SampleFrame(
+            df=df,
+            experiment=experiment,
+            names=st.session_state.get('sample_names') or {},
+            origin={s: regroup_origin.get(s, s) for s in experiment.full_samples_list},
+        )
         if not excluded:
-            st.session_state.processing_sample_names = names
-            st.session_state.processing_origin = {
-                s: upload_label.get(s, s) for s in experiment.full_samples_list
-            }
-            return experiment, df
+            return frame
         try:
             result = SampleGroupingService.exclude_samples(df, experiment, excluded)
         except ValueError as e:
             st.error(str(e))
             return None
-        st.session_state.processing_origin = {
-            _sample_label(new): upload_label.get(_sample_label(old), _sample_label(old))
-            for old, new in result.old_to_new.items()
-        }
-        st.session_state.processing_sample_names = remap_names_after_regroup(
-            names, result.old_to_new
-        )
         remaining = result.updated_experiment.full_samples_list
         st.info(
             f"{len(result.removed_samples)} sample(s) excluded; "
             f"{len(remaining)} remain, renumbered s1–s{len(remaining)}."
         )
-        return result.updated_experiment, result.updated_df
+        return frame.renumbered(
+            result.updated_df, result.updated_experiment, result.old_to_new,
+        )
 
 
 def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optional[ExperimentConfig], Optional[str]]:
@@ -445,16 +434,16 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     render_sample_label_switch()
 
     # Step 2c: Optional sample exclusion. The sidebar keeps the full df and
-    # experiment; Module 1 runs on the reduced pair.
-    exclusion = _display_sample_exclusion(updated_df, experiment)
+    # experiment; Module 1 runs on the reduced frame.
+    processing = _display_sample_exclusion(updated_df, experiment)
 
     # Step 3: BQC Section
     bqc_label = display_bqc_section(experiment)
     # A BQC condition whose samples were all excluded no longer exists in the
     # experiment Module 1 runs on.
     if (
-        bqc_label is not None and exclusion is not None
-        and bqc_label not in exclusion[0].conditions_list
+        bqc_label is not None and processing is not None
+        and bqc_label not in processing.experiment.conditions_list
     ):
         st.sidebar.warning(
             f"All '{bqc_label}' samples are excluded; continuing without BQC."
@@ -467,17 +456,16 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
     )
 
     if confirmed:
-        if exclusion is None:
+        if processing is None:
             st.sidebar.error("Fix the sample exclusion above before confirming.")
             st.session_state.confirmed = False
             return None, None
-        processing_experiment, processing_df = exclusion
-        st.session_state.experiment = processing_experiment
+        st.session_state.experiment = processing.experiment
         st.session_state.bqc_label = bqc_label
         st.session_state.confirmed = True
         st.session_state.standardized_df = updated_df
-        st.session_state.processing_df = processing_df
-        return processing_experiment, bqc_label
+        st.session_state.processing_frame = processing
+        return processing.experiment, bqc_label
     else:
         # Checkbox unchecked - clear confirmed state
         st.session_state.confirmed = False

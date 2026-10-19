@@ -300,7 +300,7 @@ def _display_custom_upload(
     # sidebar has renumbered the samples since it was loaded, that mapping no
     # longer holds: drop the table, and key the uploader to the sample set so
     # a file still in it is not silently re-mapped onto the new order.
-    sample_set = _sample_set_id(st.session_state.get('processing_origin'))
+    sample_set = _sample_set_id(_processing_origin())
     if (st.session_state.custom_standards_df is not None and
             st.session_state.custom_standards_sample_set not in (None, sample_set)):
         st.session_state.custom_standards_df = None
@@ -341,9 +341,14 @@ def _display_custom_upload(
     return pd.DataFrame()
 
 
+def _processing_origin() -> Optional[Dict[str, str]]:
+    frame = st.session_state.get('processing_frame')
+    return frame.origin if frame is not None else None
+
+
 def _sample_set_id(origin: Optional[Dict[str, str]]) -> str:
     """Short id of which uploaded sample sits under each Module 1 label."""
-    return hashlib.sha1(repr(list((origin or {}).items())).encode()).hexdigest()[:10]
+    return hashlib.sha1(repr(sorted((origin or {}).items())).encode()).hexdigest()[:10]
 
 
 def _display_preserved_custom_standards() -> pd.DataFrame:
@@ -394,7 +399,7 @@ def _process_uploaded_standards(
         st.session_state.custom_standards_df = result.standards_df
         st.session_state.custom_standards_mode = current_mode
         st.session_state.custom_standards_sample_set = _sample_set_id(
-            st.session_state.get('processing_origin')
+            _processing_origin()
         )
 
         # For external standards, remove them from main dataset if present

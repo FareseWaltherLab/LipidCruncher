@@ -488,13 +488,13 @@ class TestSidebarSampleExclusion:
         assert at.session_state['confirmed'] is True
         exp = at.session_state['experiment']
         assert len(exp.full_samples_list) == n_full - 1
-        proc_cols = [c for c in at.session_state['processing_df'].columns if c.startswith('intensity[')]
+        proc_cols = [c for c in at.session_state['processing_frame'].df.columns if c.startswith('intensity[')]
         assert proc_cols == [f'intensity[s{i}]' for i in range(1, n_full)]
         std_cols = [c for c in at.session_state['standardized_df'].columns if c.startswith('intensity[')]
         assert len(std_cols) == n_full  # sidebar data untouched
         # the old s3 is the new s2, and so is its name
         if full_names:
-            assert at.session_state['processing_sample_names']['s2'] == full_names['s3']
+            assert at.session_state['processing_frame'].names['s2'] == full_names['s3']
             assert at.session_state['sample_names'] == full_names
 
     def test_excluding_a_whole_condition_drops_it(self):
@@ -519,7 +519,7 @@ class TestSidebarSampleExclusion:
         exp = at.session_state['experiment']
         assert exp.conditions_list == ['fads2 KO', 'Wild-type']
         assert exp.number_of_samples_list == [3, 3]
-        proc_cols = [c for c in at.session_state['processing_df'].columns if c.startswith('intensity[')]
+        proc_cols = [c for c in at.session_state['processing_frame'].df.columns if c.startswith('intensity[')]
         assert proc_cols == [f'intensity[s{i}]' for i in range(1, 7)]
 
     def test_excluding_the_bqc_condition_clears_bqc(self):
@@ -563,10 +563,10 @@ class TestSidebarSampleExclusion:
         at = self._loaded()
         at.sidebar.checkbox(key='confirm_checkbox').set_value(True).run()
         assert at.session_state['confirmed'] is True
-        pd.testing.assert_frame_equal(
-            at.session_state['processing_df'], at.session_state['standardized_df']
-        )
-        assert at.session_state['processing_sample_names'] == at.session_state['sample_names']
+        frame = at.session_state['processing_frame']
+        pd.testing.assert_frame_equal(frame.df, at.session_state['standardized_df'])
+        assert frame.names == at.session_state['sample_names']
+        assert frame.origin == {s: s for s in frame.experiment.full_samples_list}
 
 
 class TestRegroupConfirmWithNames:

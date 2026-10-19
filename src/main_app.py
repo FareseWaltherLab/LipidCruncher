@@ -180,7 +180,7 @@ def display_app_page() -> None:
     # After sample grouping, use the frame Module 1 should run on: the
     # (possibly regrouped) standardized data minus any samples excluded in
     # the sidebar, with survivors renumbered to match `experiment`.
-    df = st.session_state.processing_df
+    df = st.session_state.processing_frame.df
 
     # ==========================================================================
     # Main area: Module routing
@@ -301,11 +301,11 @@ def _module1_handoff(
     if state.get('qc_input_experiment') is None:
         state.qc_input_experiment = experiment
         state.qc_input_bqc_label = bqc_label
-        state.qc_input_processing_df = state.processing_df
+        state.qc_input_processing_df = state.processing_frame.df
     elif (
         experiment != state.qc_input_experiment
         or bqc_label != state.qc_input_bqc_label
-        or not state.processing_df.equals(state.qc_input_processing_df)
+        or not state.processing_frame.df.equals(state.qc_input_processing_df)
     ):
         st.warning(
             "The sidebar setup changed after Module 1 ran. Quality Check and "

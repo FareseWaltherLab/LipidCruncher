@@ -23,7 +23,7 @@ from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_names import remap_names_after_exclusion
-from app.ui.sample_labels import display_names_for, labeler, names_for
+from app.ui.sample_labels import display_names_for, labeler, names_for, processing_names
 from app.ui.st_helpers import (
     display_export_buttons,
     data_selection_header,
@@ -67,12 +67,7 @@ def display_quality_check_module(
     # later sidebar regroup re-keys sample_names but not continuation_df, so
     # live names would land on other samples' columns.
     if st.session_state.get('qc_input_sample_names') is None:
-        # An empty map is a real answer (every named sample was excluded),
-        # not a reason to fall back to the upload-space names.
-        names = st.session_state.get('processing_sample_names')
-        if names is None:
-            names = st.session_state.get('sample_names')
-        st.session_state.qc_input_sample_names = names or {}
+        st.session_state.qc_input_sample_names = processing_names() or {}
     # Names for CSVs produced after this module, re-keyed by the PCA section
     # if it excludes samples (exclusion renumbers the survivors).
     st.session_state.qc_sample_names = st.session_state.qc_input_sample_names

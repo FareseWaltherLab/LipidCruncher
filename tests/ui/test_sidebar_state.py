@@ -246,7 +246,7 @@ class TestExclusionFollowsItsSample:
             at.sidebar.multiselect(key=f'select_{condition}').set_value(samples).run()
         _confirm(at)
 
-        processing = at.session_state['processing_df']
+        processing = at.session_state['processing_frame'].df
         excluded_data = _values(original, 'intensity[s1]')
         kept = [c for c in processing.columns if c.startswith('intensity[')]
         assert len(kept) == 11

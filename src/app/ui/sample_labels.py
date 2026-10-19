@@ -12,7 +12,7 @@ Label spaces (each keyed by the s-labels its data uses):
 - ``'upload'``: the sidebar — ``sample_names``, keyed by the full dataset's
   labels.
 - ``'processing'``: Data Processing, Internal Standards and Normalization —
-  ``processing_sample_names``, re-keyed for the renumbering that the
+  the names of ``processing_frame``, re-keyed for the renumbering that the
   sidebar's sample exclusion causes (equal to ``sample_names`` when nothing
   is excluded).
 - ``'qc_input'``: Quality Check before PCA sample exclusion — the names
@@ -36,7 +36,6 @@ _MODE_LABELS = {
 }
 _MAP_KEYS = {
     'upload': 'sample_names',
-    'processing': 'processing_sample_names',
     'qc_input': 'qc_input_sample_names',
     'qc': 'qc_sample_names',
 }
@@ -56,12 +55,21 @@ def names_for(space: str) -> Optional[Dict[str, str]]:
     """
     if not showing_original_names():
         return None
-    names = st.session_state.get(_MAP_KEYS[space])
-    if names is None and space == 'processing':
-        # No sidebar exclusion step has run (nothing excluded, or a page
-        # rendered without the sidebar): Module 1 uses the full names.
-        names = st.session_state.get('sample_names')
+    if space == 'processing':
+        names = processing_names()
+    else:
+        names = st.session_state.get(_MAP_KEYS[space])
     return names or None
+
+
+def processing_names() -> Optional[Dict[str, str]]:
+    """Names keyed by Module 1's labels, whichever labels are shown.
+
+    The sidebar's names when no processing frame exists (a page rendered
+    without the sidebar).
+    """
+    frame = st.session_state.get('processing_frame')
+    return frame.names if frame is not None else st.session_state.get('sample_names')
 
 
 def display_names_for(space: str) -> Dict[str, str]:

@@ -289,22 +289,26 @@ class TestPCA:
 class TestQcInputNames:
 
     def test_empty_processing_names_are_not_replaced_by_upload_names(self):
-        """Regression: `processing_sample_names or sample_names` treated an
+        """Regression: `processing names or sample_names` treated an
         empty map (every named sample excluded in the sidebar) as missing and
         froze the upload-space names, which are keyed by different s-labels."""
         from app.models.experiment import ExperimentConfig
+        from app.models.sample_frame import SampleFrame
         from tests.ui.conftest import make_qc_dataframe
 
         at = AppTest.from_function(qc_module_script, default_timeout=DEFAULT_TIMEOUT)
-        at.session_state['_test_df'] = make_qc_dataframe(n_lipids=20, n_samples=6)
-        at.session_state['_test_experiment'] = ExperimentConfig(
+        experiment = ExperimentConfig(
             n_conditions=2, conditions_list=['Control', 'Treatment'],
             number_of_samples_list=[3, 3],
         )
+        at.session_state['_test_df'] = make_qc_dataframe(n_lipids=20, n_samples=6)
+        at.session_state['_test_experiment'] = experiment
         at.session_state['_test_bqc_label'] = None
         at.session_state['_test_format_type'] = 'Generic Format'
         at.session_state['sample_names'] = {'s1': 'Named upload sample'}
-        at.session_state['processing_sample_names'] = {}
+        at.session_state['processing_frame'] = SampleFrame.from_upload(
+            at.session_state['_test_df'], experiment, {},
+        )
         at.run()
 
         assert not at.exception
