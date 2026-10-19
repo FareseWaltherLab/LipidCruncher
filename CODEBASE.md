@@ -142,7 +142,14 @@ LipidCruncher/
 │       │   ├── __init__.py                  #   Public API: re-exports services + exceptions
 │       │   ├── exceptions.py                #   Typed exception hierarchy (ServiceError, etc.)
 │       │   ├── format_detection.py          #   DataFormat enum + detection
-│       │   ├── data_standardization.py      #   Column name standardization
+│       │   ├── data_standardization.py      #   Standardization entry point (DataStandardizationService)
+│       │   ├── lipid_names.py               #   Lipid name → LIPID MAPS shorthand, class inference
+│       │   ├── standardization/             #   One standardizer per format
+│       │   │   ├── result.py                #     StandardizationResult
+│       │   │   ├── lipidsearch.py           #     MeanArea exports + dual-polarity alignment merge
+│       │   │   ├── msdial.py                #     Header/sample detection, sample override
+│       │   │   ├── generic.py               #     Name + optional ClassKey + samples
+│       │   │   └── workbench.py             #     MS_METABOLITE_DATA block
 │       │   ├── lipidsearch_alignment.py     #   LipidSearch 5.2 dual-polarity pairing + merge
 │       │   ├── data_cleaning/               #   Format-specific cleaning
 │       │   │   ├── __init__.py              #     Registry dispatch (DataCleaningService)
@@ -411,7 +418,7 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | Service | File | Purpose |
 |---|---|---|
 | `FormatDetectionService` | `format_detection.py` | Detects a `DataFormat` from column signatures, most-specific first (LipidSearch → MS-DIAL → Generic); Metabolomics Workbench is recognised only from raw text by its start/end markers, not from a DataFrame. In the app it only feeds the sidebar format-mismatch warning (`StreamlitAdapter.detect_format_mismatch()`); the format itself comes from the sidebar dropdown. |
-| `DataStandardizationService` | `data_standardization.py` | Converts format-specific column names to standard `intensity[*]` naming. For LipidSearch 5.2 dual-polarity exports, merges each sample's positive/negative files via the alignment map. |
+| `DataStandardizationService` | `data_standardization.py` | Entry point that converts each format to the common schema (`LipidMolec`, `ClassKey`, `intensity[*]`); the work is in `lipid_names.py` (name standardization, class inference) and one module per format under `standardization/`. For LipidSearch 5.2 dual-polarity exports, merges each sample's positive/negative files via the alignment map. |
 | `lipidsearch_alignment` | `lipidsearch_alignment.py` | Parses the LipidSearch Alignment Setting file, pairs each biological sample's positive/negative runs by raw-filename base, and merges their per-file `OriginalArea[s{cond}-{file}]` columns into flat `intensity[s1..sN]`. |
 | `NormalizationService` | `normalization.py` | Four methods: internal standard (divide by standard intensity), protein (divide by protein concentration), internal standards + protein (standard then protein), total intensity (divide by per-sample total, scale by median). |
 | `QualityCheckService` | `quality_check.py` | The QC decisions that change the data or the choices: the BQC high-CoV rule (`high_cov_lipids`, CoV ≥ threshold) and filter, RT availability check, correlation-eligible conditions, PCA sample removal (with `old_to_new`). The QC plots and their data come from the plotter services (see below). |
@@ -736,7 +743,7 @@ The app runs on port 8501 by default. Server settings live in `.streamlit/config
 2. **Add detection logic** in `FormatDetectionService.detect_format()` — place it in the correct priority order (it feeds the sidebar format-mismatch warning).
 3. **Create a cleaner** in `services/data_cleaning/` extending `BaseDataCleaner`.
 4. **Register the cleaner** in `_CLEANER_REGISTRY` in `data_cleaning/__init__.py`.
-5. **Add standardization logic** in `services/data_standardization.py`.
+5. **Add standardization logic** as a module in `services/standardization/` and dispatch to it from `DataStandardizationService.validate_and_standardize`.
 6. **Update the format display mapping** in `constants.py` (`get_format_display_to_enum()`) and add the format to `FORMAT_OPTIONS` (the sidebar dropdown).
 7. **Add a sample dataset** in `sample_datasets/`.
 8. **Add format requirements** in `ui/format_requirements.py`.

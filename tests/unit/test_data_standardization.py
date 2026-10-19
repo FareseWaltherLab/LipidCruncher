@@ -1,6 +1,7 @@
 """Unit tests for DataStandardizationService."""
 import pandas as pd
 import numpy as np
+import pytest
 from app.services.data_standardization import (
     DataStandardizationService,
     MSDIALFeatures,
@@ -949,6 +950,26 @@ class TestMetabolomicsWorkbenchStandardization:
         )
         result = DataStandardizationService._process_metabolomics_workbench(text)
         assert result.success is False
+
+    @pytest.mark.parametrize("bad_row", [
+        "1,2-DAG 34:1,300,400",   # unquoted comma in the name: one field too many
+        "PE 18:0_20:4,300",        # one value missing
+    ])
+    def test_row_with_wrong_field_count_is_reported_not_dropped(self, bad_row):
+        """Regression: a data row whose field count did not match the sample
+        row was silently dropped, so that lipid vanished from the analysis."""
+        text = (
+            "MS_METABOLITE_DATA_START\n"
+            "Samples,s1,s2\n"
+            "Factors,Condition:A,Condition:B\n"
+            "PC 16:0_18:1,100,200\n"
+            f"{bad_row}\n"
+            "MS_METABOLITE_DATA_END"
+        )
+        result = DataStandardizationService._process_metabolomics_workbench(text)
+        assert result.success is False
+        assert bad_row.split(',')[0] in result.message
+        assert '3 fields' in result.message
 
 
 # =============================================================================
