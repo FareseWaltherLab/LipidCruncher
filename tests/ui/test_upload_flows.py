@@ -154,3 +154,18 @@ class TestSwitchingFormatAfterUploading:
         select.set_value('Metabolomics Workbench').run()
         assert not at.exception
         assert len(at.session_state['workbench_samples']) == 58
+
+    def test_switch_away_from_workbench_restandardizes(self, fake_uploads):
+        """Regression: a Workbench upload never recorded its format, so a
+        later format change did not reset anything and the new format's
+        cleaner ran on the Workbench-standardized data."""
+        at = _app('Metabolomics Workbench', fake_uploads, dataset=FakeUpload(
+            'mw.csv', (SAMPLES / 'mw_test_dataset.csv').read_bytes(),
+        ))
+        assert at.session_state['format_type'] == 'Metabolomics Workbench'
+
+        select = at.sidebar.selectbox[0]
+        select.set_value('MS-DIAL').run()
+        assert not at.exception
+        assert at.session_state['workbench_conditions'] is None
+        assert at.session_state['cleaned_df'] is None

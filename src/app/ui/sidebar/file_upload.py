@@ -82,6 +82,10 @@ def _store_workbench_result(result) -> Optional[pd.DataFrame]:
     """
     if result.success:
         st.session_state.standardized_df = result.standardized_df
+        # Recorded here because standardize_uploaded_data, which records it
+        # for the other formats, does not run for an already-parsed file; a
+        # later format change could not tell the data came from Workbench.
+        st.session_state.format_type = FORMAT_METABOLOMICS_WORKBENCH
         st.session_state.column_mapping = result.column_mapping
         if result.workbench_conditions:
             st.session_state.workbench_conditions = result.workbench_conditions
