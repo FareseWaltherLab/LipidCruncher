@@ -7,7 +7,7 @@ No Streamlit, no AWS — so it is unit-testable (tests/unit/test_ai_feedback_rec
 """
 import json
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional
+from typing import Iterable, List
 
 
 @dataclass
