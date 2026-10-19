@@ -197,18 +197,15 @@ class SessionState:
     qc_correlation_plots: Dict[str, matplotlib.figure.Figure] = field(default_factory=dict)
     qc_pca_plot: Optional[go.Figure] = None
     qc_samples_removed: List[str] = field(default_factory=list)
-    # sample_names as of Module 1's handoff, so a later regroup cannot
-    # relabel the data QC/analysis already hold.
-    qc_input_sample_names: Optional[Dict[str, str]] = None
-    # The sidebar setup that produced normalized_df, frozen at the same
-    # handoff: the sidebar keeps running on Module 2/3, and a later exclusion
-    # or regroup must not be paired with Module 1's already-computed data.
-    qc_input_experiment: Optional[ExperimentConfig] = None
+    # processing_frame (Module 1's input, experiment, names, origins) and the
+    # BQC label that produced normalized_df, frozen at Module 1's handoff:
+    # the sidebar keeps running on Module 2/3, and a later exclusion or
+    # regroup must not be paired with Module 1's already-computed data.
+    qc_input_frame: Optional[SampleFrame] = None
     qc_input_bqc_label: Optional[str] = None
-    qc_input_processing_df: Optional[pd.DataFrame] = None
-    # sample_names re-keyed into the label space left after PCA sample
-    # exclusion (which renumbers survivors); used by post-QC CSV downloads.
-    qc_sample_names: Optional[Dict[str, str]] = None
+    # The samples left after PCA sample exclusion (which renumbers
+    # survivors); None when nothing is excluded.
+    qc_frame: Optional[SampleFrame] = None
     _preserved_bqc_filter_choice: str = 'No'
     _preserved_rt_viewing_mode: str = 'Comparison Mode'
     _preserved_pca_samples_remove: List[str] = field(default_factory=list)
@@ -369,8 +366,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'qc_continuation_df', 'qc_box_plot_fig1', 'qc_box_plot_fig2',
             'qc_bqc_plot', 'qc_cov_threshold', 'qc_retention_time_plot',
             'qc_correlation_plots', 'qc_pca_plot', 'qc_samples_removed',
-            'qc_input_sample_names', 'qc_input_experiment',
-            'qc_input_bqc_label', 'qc_input_processing_df', 'qc_sample_names',
+            'qc_input_frame', 'qc_input_bqc_label', 'qc_frame',
             '_preserved_bqc_filter_choice', '_preserved_rt_viewing_mode',
             '_preserved_pca_samples_remove', '_preserved_pca_groups_remove',
         }),

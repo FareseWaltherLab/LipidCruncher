@@ -437,7 +437,7 @@ class TestNavigationActions:
         return MockSessionState({
             'page': 'app', 'module': MODULE_DATA_PROCESSING,
             'normalized_df': pd.DataFrame({'b': [1]}),
-            'qc_input_experiment': object(),
+            'qc_input_frame': object(),
             'analysis_volcano_fig': object(),
         })
 
@@ -447,7 +447,7 @@ class TestNavigationActions:
         StreamlitAdapter.go_to_quality_check()
         state = mock_st.session_state
         assert state['module'] == 'Quality Check & Analysis'
-        assert state['qc_input_experiment'] is None
+        assert state['qc_input_frame'] is None
         assert state['analysis_volcano_fig'] is None
         assert state['normalized_df'] is not None
 
@@ -458,7 +458,7 @@ class TestNavigationActions:
         StreamlitAdapter.back_to_data_processing()
         state = mock_st.session_state
         assert state['module'] == MODULE_DATA_PROCESSING
-        assert state['qc_input_experiment'] is None
+        assert state['qc_input_frame'] is None
         assert state['normalized_df'] is not None
 
     @patch('app.adapters.streamlit_adapter.st')
@@ -1097,10 +1097,9 @@ class TestSessionStateFieldCompleteness:
         """Test that QC fields count hasn't changed (no regression)."""
         field_names = [f.name for f in fields(SessionState)]
         qc_fields = [f for f in field_names if f.startswith('qc_')]
-        # 9 + 1 (qc_sample_names, names re-keyed after sample exclusion)
-        # + 1 (qc_input_sample_names, names frozen at Module 1's handoff)
-        # + 3 (qc_input_experiment/_bqc_label/_processing_df, same handoff)
-        assert len(qc_fields) == 14
+        # 9 + qc_input_frame and qc_input_bqc_label (frozen at Module 1's
+        # handoff) + qc_frame (the samples left after PCA exclusion)
+        assert len(qc_fields) == 12
 
     def test_asdict_includes_analysis_fields(self):
         """Test that asdict() includes all analysis fields."""

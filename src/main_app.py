@@ -298,21 +298,20 @@ def _module1_handoff(
     the change.
     """
     state = st.session_state
-    if state.get('qc_input_experiment') is None:
-        state.qc_input_experiment = experiment
+    if state.get('qc_input_frame') is None:
+        state.qc_input_frame = state.processing_frame
         state.qc_input_bqc_label = bqc_label
-        state.qc_input_processing_df = state.processing_frame.df
     elif (
-        experiment != state.qc_input_experiment
+        experiment != state.qc_input_frame.experiment
         or bqc_label != state.qc_input_bqc_label
-        or not state.processing_frame.df.equals(state.qc_input_processing_df)
+        or not state.processing_frame.df.equals(state.qc_input_frame.df)
     ):
         st.warning(
             "The sidebar setup changed after Module 1 ran. Quality Check and "
             "the analyses below still use the samples and grouping Module 1 "
             "processed; go **← Back to Data Processing** to apply the change."
         )
-    return state.qc_input_experiment, state.qc_input_bqc_label
+    return state.qc_input_frame.experiment, state.qc_input_bqc_label
 
 
 def _display_module2_and_3(

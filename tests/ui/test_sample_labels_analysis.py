@@ -17,6 +17,7 @@ Covers:
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from app.models.sample_frame import SampleFrame
 from tests.ui.conftest import (
     DEFAULT_TIMEOUT,
     analysis_module_script,
@@ -56,7 +57,9 @@ def _heatmap_app(mode='original'):
     at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
     at.session_state['_test_df'] = make_analysis_dataframe(n_lipids=20, n_samples=6)
     at.session_state['_test_experiment'] = _experiment()
-    at.session_state['qc_sample_names'] = dict(NAMES)
+    at.session_state['qc_frame'] = SampleFrame.from_upload(
+        at.session_state['_test_df'], _experiment(), dict(NAMES),
+    )
     at.session_state['sample_label_mode'] = mode
     at.run()
     assert not at.exception

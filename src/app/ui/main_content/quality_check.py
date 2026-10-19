@@ -19,11 +19,12 @@ import pandas as pd
 import streamlit as st
 
 from app.constants import resolve_format_enum
+from app.models.sample_frame import SampleFrame
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
-from app.ui.sample_names import remap_names_after_exclusion
-from app.ui.sample_labels import display_names_for, labeler, names_for, processing_names
+from app.ui.sample_names import sample_display_map
+from app.ui.sample_labels import display_names_for, labeler, names_for, qc_input_names
 from app.ui.st_helpers import (
     display_export_buttons,
     data_selection_header,
@@ -63,14 +64,9 @@ def display_quality_check_module(
     # Resolve format_type to DataFormat enum
     format_enum = resolve_format_enum(format_type)
 
-    # Freeze the names on the first run after Module 1 hands over its data: a
-    # later sidebar regroup re-keys sample_names but not continuation_df, so
-    # live names would land on other samples' columns.
-    if st.session_state.get('qc_input_sample_names') is None:
-        st.session_state.qc_input_sample_names = processing_names() or {}
-    # Names for CSVs produced after this module, re-keyed by the PCA section
-    # if it excludes samples (exclusion renumbers the survivors).
-    st.session_state.qc_sample_names = st.session_state.qc_input_sample_names
+    # The samples after PCA exclusion, set by the PCA section if it excludes
+    # any (exclusion renumbers the survivors); None means none excluded.
+    st.session_state.qc_frame = None
 
     # Validate inputs
     errors = QualityCheckWorkflow.validate_inputs(continuation_df, experiment)
@@ -555,6 +551,17 @@ def _display_correlation_analysis(
 # Section 5: PCA Analysis
 # =============================================================================
 
+def _qc_input_frame(df: pd.DataFrame, experiment: 'ExperimentConfig') -> SampleFrame:
+    """The samples Module 1 handed over, as frozen at Next.
+
+    Built from ``df`` when the page runs without main_app's handoff.
+    """
+    frame = st.session_state.get('qc_input_frame')
+    if frame is None:
+        frame = SampleFrame.from_upload(df, experiment, qc_input_names())
+    return frame
+
+
 def _display_pca_analysis(
     df: pd.DataFrame,
     experiment: 'ExperimentConfig',
@@ -638,11 +645,15 @@ def _display_pca_analysis(
             removal_result = QualityCheckWorkflow.remove_samples(
                 df, experiment, combined_removal
             )
-            st.session_state.qc_sample_names = remap_names_after_exclusion(
-                st.session_state.get('qc_input_sample_names'),
-                experiment.full_samples_list,
-                removal_result.removed_samples,
-                removal_result.updated_experiment.full_samples_list,
+            # A shared name keeps the label it had before the exclusion
+            # ("QC (s5)"), so its text does not change with the renumbering.
+            before = _qc_input_frame(df, experiment)
+            st.session_state.qc_frame = before.model_copy(
+                update={'names': sample_display_map(before.names)}
+            ).renumbered(
+                removal_result.updated_df,
+                removal_result.updated_experiment,
+                removal_result.old_to_new,
             )
             df = removal_result.updated_df
             experiment = removal_result.updated_experiment

@@ -6,7 +6,7 @@ Handles box plot data preparation, BQC quality assessment, retention time
 availability, pairwise correlation, and PCA analysis.
 """
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -159,12 +159,15 @@ class SampleRemovalResult:
         removed_samples: Sample labels that were actually removed.
         samples_before: Total sample count before removal.
         samples_after: Total sample count after removal.
+        old_to_new: Mapping of ``concentration[s_old] -> concentration[s_new]``
+            for every surviving sample (identity entries included).
     """
     updated_df: pd.DataFrame
     updated_experiment: ExperimentConfig
     removed_samples: List[str]
     samples_before: int
     samples_after: int
+    old_to_new: Dict[str, str]
 
 
 # ============================================================
@@ -613,6 +616,9 @@ class QualityCheckService:
         updated_df = QualityCheckService._drop_and_rename_columns(
             df, experiment, new_experiment, actual_to_remove
         )
+        survivors = [
+            s for s in experiment.full_samples_list if s not in actual_to_remove
+        ]
 
         return SampleRemovalResult(
             updated_df=updated_df,
@@ -620,6 +626,10 @@ class QualityCheckService:
             removed_samples=actual_to_remove,
             samples_before=total_samples,
             samples_after=len(new_experiment.full_samples_list),
+            old_to_new={
+                f'concentration[{old}]': f'concentration[{new}]'
+                for old, new in zip(survivors, new_experiment.full_samples_list)
+            },
         )
 
     @staticmethod

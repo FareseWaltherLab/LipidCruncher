@@ -312,4 +312,5 @@ class TestQcInputNames:
         at.run()
 
         assert not at.exception
-        assert at.session_state['qc_input_sample_names'] == {}
+        options = at.multiselect(key='pca_samples_remove').options
+        assert options == [f's{i}' for i in range(1, 7)]
