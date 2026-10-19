@@ -5,6 +5,7 @@ Wrapper functions are used with AppTest.from_function() to test UI components
 without importing main_app.py (which has st.set_page_config() at module level).
 """
 
+import io
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -1136,6 +1137,47 @@ def qc_and_analysis_script():
         bqc_label=None,
         format_type='Generic Format',
     )
+
+
+class FakeUpload(io.BytesIO):
+    """What st.file_uploader returns for an uploaded file: readable like a
+    file, with getvalue(), a name and a file_id."""
+
+    def __init__(self, name: str, data: bytes):
+        super().__init__(data)
+        self.name = name
+        self.file_id = f"fake-{name}-{len(data)}"
+
+
+@pytest.fixture
+def fake_uploads(monkeypatch):
+    """Files to hand to file uploaders, keyed by a fragment of the label.
+
+    AppTest cannot upload files, but it runs the app in this process, so
+    every file_uploader (st. and st.sidebar.) goes through the patched
+    DeltaGenerator method: the widget still renders, and an uploader whose
+    label contains a key of the returned dict gets that FakeUpload.
+    """
+    import streamlit
+    from streamlit.delta_generator import DeltaGenerator
+
+    uploads = {}
+    original = DeltaGenerator.file_uploader
+
+    def _file_uploader(self, label, *args, **kwargs):
+        rendered = original(self, label, *args, **kwargs)
+        for fragment, upload in uploads.items():
+            if fragment in label:
+                return upload
+        return rendered
+
+    monkeypatch.setattr(DeltaGenerator, 'file_uploader', _file_uploader)
+    # st.file_uploader was bound to the main container at import time.
+    monkeypatch.setattr(
+        streamlit, 'file_uploader',
+        lambda *args, **kwargs: _file_uploader(streamlit._main, *args, **kwargs),
+    )
+    return uploads
 
 
 @pytest.fixture

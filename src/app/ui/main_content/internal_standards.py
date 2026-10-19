@@ -367,6 +367,9 @@ def _display_preserved_custom_standards() -> pd.DataFrame:
         st.session_state.custom_standards_df = None
         st.session_state.custom_standards_mode = None
         st.session_state.standards_source = "Automatic Detection"
+        # The radio keeps its own key; drop it so the next run restores it
+        # from standards_source.
+        st.session_state.pop('standards_source_radio', None)
         st.rerun()
 
     return st.session_state.custom_standards_df
@@ -433,10 +436,8 @@ def _process_uploaded_standards(
 
         return result.standards_df
 
-    except ValueError as ve:
-        logger.error("Standards validation error: %s", ve)
-        st.error(str(ve))
-        return _fallback_standards(auto_detected_df)
+    # UnicodeDecodeError, EmptyDataError and ParserError are ValueErrors, so
+    # they are caught first; ValueError itself (a validation message) last.
     except UnicodeDecodeError as e:
         logger.error("Standards file encoding error: %s", e)
         st.error(
@@ -453,6 +454,10 @@ def _process_uploaded_standards(
             "Could not parse the standards file. Please ensure it is a properly formatted CSV with consistent columns. "
             "If the issue persists after refreshing the app, contact abdih@mskcc.org."
         )
+        return _fallback_standards(auto_detected_df)
+    except ValueError as ve:
+        logger.error("Standards validation error: %s", ve)
+        st.error(str(ve))
         return _fallback_standards(auto_detected_df)
 
 
