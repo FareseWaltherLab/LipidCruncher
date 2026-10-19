@@ -10,6 +10,7 @@ from app.ui.st_helpers import display_export_buttons, section_header
 from app.ui.main_content.analysis._shared import (
     _clear_pdf_plots,
     _display_condition_class_selectors,
+    _publish,
 )
 
 
@@ -83,8 +84,7 @@ def _display_chain_length_plots(
 
         st.plotly_chart(result.figure, width='stretch')
 
-        st.session_state.analysis_chain_length_fig = result.figure
-        st.session_state.analysis_all_plots['chain_length'] = result.figure
+        _publish('chain_length', result.figure)
 
         # Build combined CSV from all conditions
         csv_rows = []

@@ -84,7 +84,7 @@ class SessionState:
                              _preserved_pca_samples_remove, _preserved_pca_groups_remove
       analysis.py          → analysis_selection,
                             
-                             analysis_chain_length_fig, analysis_fach_fig, analysis_pathway_fig,
+                             analysis_fach_fig, analysis_pathway_fig,
                              analysis_volcano_fig, analysis_volcano_data,
                              analysis_heatmap_fig, analysis_heatmap_clusters,
                              analysis_all_plots
@@ -212,7 +212,6 @@ class SessionState:
 
     # --- Analysis (owner: analysis.py) ---
     analysis_selection: Optional[str] = None
-    analysis_chain_length_fig: Optional[go.Figure] = None
     analysis_fach_fig: Optional[go.Figure] = None
     analysis_pathway_fig: Optional[go.Figure] = None
     analysis_pathway_added_edges: List[Tuple[str, str]] = field(default_factory=list)
@@ -383,7 +382,7 @@ _STAGES: Tuple[_Stage, ...] = (
         fields=frozenset({
             'analysis_selection', 
             
-            'analysis_chain_length_fig', 'analysis_fach_fig',
+            'analysis_fach_fig',
             'analysis_pathway_fig', 'analysis_pathway_added_edges',
             'analysis_pathway_removed_edges', 'analysis_pathway_custom_nodes',
             'analysis_pathway_position_overrides', 'analysis_volcano_fig',

@@ -398,8 +398,7 @@ class TestChainLengthUI:
     def test_chain_length_figure_stored_in_session(self, analysis_generic_app):
         """Chain length figure is stored in session state."""
         at = self._switch_to_chain_length(analysis_generic_app)
-        assert 'analysis_chain_length_fig' in at.session_state
-        assert at.session_state['analysis_chain_length_fig'] is not None
+        assert 'chain_length' in at.session_state['analysis_all_plots']
 
     def test_chain_length_explains_how_bubbles_are_computed(
         self, analysis_generic_app,

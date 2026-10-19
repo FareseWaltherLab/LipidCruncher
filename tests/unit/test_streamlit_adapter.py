@@ -986,8 +986,8 @@ class TestSessionStateFieldCompleteness:
         analysis_fields = [f for f in field_names if f.startswith('analysis_')]
         # 17 - 1 (analysis_pathway_active_classes: nothing read or wrote it)
         # - the write-only per-page figure copies (the report reads
-        #   analysis_all_plots): bar chart, pie charts, saturation
-        assert len(analysis_fields) == 13
+        #   analysis_all_plots): bar chart, pie charts, saturation, chain length
+        assert len(analysis_fields) == 12
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
