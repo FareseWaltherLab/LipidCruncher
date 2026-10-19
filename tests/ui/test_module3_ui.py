@@ -229,19 +229,18 @@ class TestPieChartUI:
         assert 'PE' in ms.value
 
     def test_pie_stores_figures_in_session(self, analysis_generic_app):
-        """Pie chart figures are stored in session state per condition."""
+        """Each condition's pie chart reaches the PDF report."""
         at = self._switch_to_pie(analysis_generic_app)
-        figs = at.session_state['analysis_pie_chart_figs']
-        assert 'Control' in figs
-        assert 'Treatment' in figs
+        plots = at.session_state['analysis_all_plots']
+        assert 'pie_Control' in plots
+        assert 'pie_Treatment' in plots
 
     def test_pie_deselect_class_updates_figures(self, analysis_generic_app):
         """Deselecting a class re-renders pie charts with remaining classes."""
         at = self._switch_to_pie(analysis_generic_app)
         at.multiselect(key='pie_classes').set_value(['PC']).run()
         assert not at.exception
-        figs = at.session_state['analysis_pie_chart_figs']
-        assert 'Control' in figs
+        assert 'pie_Control' in at.session_state['analysis_all_plots']
 
     def test_pie_deselect_all_classes_shows_warning(self, analysis_generic_app):
         """Deselecting all classes shows a warning."""
