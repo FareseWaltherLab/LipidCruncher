@@ -4,9 +4,8 @@ Sample display-name helpers.
 Original sample names (e.g. the uploaded column headers like "mouse liver #5")
 survive only in the ``column_mapping`` table (LipidSearch 5.2 alignment uploads
 take theirs from the Alignment Setting file instead). These helpers turn that mapping
-into a ``{internal_label -> display_name}`` dict, format labels for the
-sidebar sample selectors as ``"s3 — mouse liver #5"``, and put the names into
-CSV downloads. ``SampleFrame.renumbered`` keeps the map in step when samples
+into a ``{internal_label -> display_name}`` dict, and put the names into CSV
+downloads. ``SampleFrame.renumbered`` keeps the map in step when samples
 are regrouped or excluded.
 
 Pure logic — no Streamlit dependencies.
@@ -71,15 +70,6 @@ def build_names_from_mapping(
         if cleaned and cleaned != label:
             names[label] = cleaned
     return names
-
-
-def display_label(label: str, names: Optional[Dict[str, str]]) -> str:
-    """Format a single sample label as ``"s3 — name"`` when a name exists."""
-    if names:
-        name = names.get(label)
-        if name and name != label:
-            return f"{label} — {name}"
-    return label
 
 
 def names_from_editor(edited: pd.DataFrame) -> Dict[str, str]:

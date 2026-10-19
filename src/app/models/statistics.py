@@ -103,21 +103,6 @@ class StatisticalTestConfig(BaseModel):
         """Check if using parametric tests."""
         return self.test_type == 'parametric'
 
-    def is_non_parametric(self) -> bool:
-        """Check if using non-parametric tests."""
-        return self.test_type == 'non_parametric'
-
-    def requires_posthoc(self, n_conditions: int) -> bool:
-        """
-        Check if post-hoc tests are needed (3+ conditions and correction enabled).
-
-        Args:
-            n_conditions: Number of conditions being compared
-
-        Returns:
-            True if post-hoc tests should be performed
-        """
-        return n_conditions > 2 and self.posthoc_correction != 'uncorrected'
 
     def get_correction_display_name(self) -> str:
         """Get human-readable name for the correction method."""

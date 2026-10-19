@@ -99,20 +99,17 @@ class TestGradeFilterConfig:
     def test_default_config(self):
         """Test default grade config."""
         config = GradeFilterConfig()
-        assert config.is_default is True
         assert config.grade_config is None
 
     def test_custom_config(self):
         """Test custom grade config."""
         grade_dict = {'PC': ['A', 'B'], 'PE': ['A']}
         config = GradeFilterConfig(grade_config=grade_dict)
-        assert config.is_default is False
         assert config.grade_config == grade_dict
 
     def test_empty_dict_config(self):
         """Test empty dict is not default."""
         config = GradeFilterConfig(grade_config={})
-        assert config.is_default is False
         assert config.grade_config == {}
 
     def test_config_with_all_grades(self):

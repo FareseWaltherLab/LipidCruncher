@@ -278,37 +278,6 @@ class TestHelperMethods:
         config = StatisticalTestConfig(test_type='non_parametric')
         assert config.is_parametric() is False
 
-    def test_is_non_parametric_true(self):
-        """Test is_non_parametric returns True for non-parametric tests."""
-        config = StatisticalTestConfig(test_type='non_parametric')
-        assert config.is_non_parametric() is True
-
-    def test_is_non_parametric_false(self):
-        """Test is_non_parametric returns False for parametric tests."""
-        config = StatisticalTestConfig(test_type='parametric')
-        assert config.is_non_parametric() is False
-
-    def test_requires_posthoc_two_conditions(self):
-        """Test requires_posthoc returns False for 2 conditions."""
-        config = StatisticalTestConfig(posthoc_correction='tukey')
-        assert config.requires_posthoc(2) is False
-
-    def test_requires_posthoc_three_conditions_with_correction(self):
-        """Test requires_posthoc returns True for 3+ conditions with correction."""
-        config = StatisticalTestConfig(posthoc_correction='tukey')
-        assert config.requires_posthoc(3) is True
-
-    def test_requires_posthoc_three_conditions_uncorrected(self):
-        """Test requires_posthoc returns False when uncorrected."""
-        config = StatisticalTestConfig(posthoc_correction='uncorrected')
-        assert config.requires_posthoc(3) is False
-
-    def test_requires_posthoc_four_conditions(self):
-        """Test requires_posthoc returns True for 4 conditions."""
-        config = StatisticalTestConfig(posthoc_correction='bonferroni')
-        assert config.requires_posthoc(4) is True
-
-
 class TestDisplayNames:
     """Tests for display name methods."""
 
@@ -596,30 +565,6 @@ class TestDisplayNamesAutoMode:
         assert config.get_posthoc_display_name() == 'Auto'
 
 
-class TestRequiresPosthocEdgeCases:
-    """Additional tests for requires_posthoc method."""
-
-    def test_requires_posthoc_one_condition(self):
-        """Test requires_posthoc with 1 condition."""
-        config = StatisticalTestConfig(posthoc_correction='tukey')
-        assert config.requires_posthoc(1) is False
-
-    def test_requires_posthoc_zero_conditions(self):
-        """Test requires_posthoc with 0 conditions."""
-        config = StatisticalTestConfig(posthoc_correction='tukey')
-        assert config.requires_posthoc(0) is False
-
-    def test_requires_posthoc_negative_conditions(self):
-        """Test requires_posthoc with negative (edge case)."""
-        config = StatisticalTestConfig(posthoc_correction='tukey')
-        assert config.requires_posthoc(-1) is False
-
-    def test_requires_posthoc_many_conditions(self):
-        """Test requires_posthoc with many conditions."""
-        config = StatisticalTestConfig(posthoc_correction='bonferroni')
-        assert config.requires_posthoc(10) is True
-
-
 class TestRealWorldScenarios:
     """Tests simulating real-world usage patterns."""
 
@@ -632,18 +577,6 @@ class TestRealWorldScenarios:
             conditions_to_compare=[('Control', 'Treatment')]
         )
         assert config.is_parametric() is True
-        assert config.requires_posthoc(2) is False
-
-    def test_two_group_comparison_non_parametric(self):
-        """Test two-group non-parametric comparison (Mann-Whitney U)."""
-        config = StatisticalTestConfig.create_manual(
-            test_type='non_parametric',
-            correction_method='uncorrected',
-            posthoc_correction='uncorrected',
-            conditions_to_compare=[('Control', 'Treatment')]
-        )
-        assert config.is_non_parametric() is True
-        assert config.requires_posthoc(2) is False
 
     def test_multi_group_anova_with_posthoc(self):
         """Test multi-group ANOVA with Tukey's HSD post-hoc."""
@@ -660,19 +593,7 @@ class TestRealWorldScenarios:
             posthoc_correction='tukey',
             conditions_to_compare=pairs
         )
-
-        assert config.requires_posthoc(4) is True
         assert len(config.conditions_to_compare) == 6  # 4C2 = 6 pairs
-
-    def test_multi_group_kruskal_wallis_with_bonferroni(self):
-        """Test multi-group Kruskal-Wallis with Bonferroni correction."""
-        config = StatisticalTestConfig.create_manual(
-            test_type='non_parametric',
-            correction_method='bonferroni',
-            posthoc_correction='bonferroni'
-        )
-        assert config.is_non_parametric() is True
-        assert config.requires_posthoc(3) is True
 
     def test_exploratory_analysis_auto_mode(self):
         """Test exploratory analysis using auto mode."""
@@ -730,7 +651,6 @@ class TestRealWorldScenarios:
 
         assert config.is_parametric() is True
         assert config.auto_transform is True
-        assert config.requires_posthoc(3) is True
         assert config.get_correction_display_name() == 'FDR (Benjamini-Hochberg)'
         assert config.get_posthoc_display_name() == "Tukey's HSD"
 

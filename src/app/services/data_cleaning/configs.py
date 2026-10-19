@@ -39,11 +39,6 @@ class GradeFilterConfig(BaseModel):
             return hash(None)
         return hash(tuple(sorted((k, tuple(v)) for k, v in self.grade_config.items())))
 
-    @property
-    def is_default(self) -> bool:
-        """Check if using default filtering."""
-        return self.grade_config is None
-
 
 class QualityFilterConfig(BaseModel):
     """Configuration for MS-DIAL quality filtering.

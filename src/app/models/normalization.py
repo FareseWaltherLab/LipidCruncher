@@ -113,13 +113,6 @@ class NormalizationConfig(BaseModel):
 
         return self
 
-    def requires_internal_standards(self) -> bool:
-        """Check if this method needs internal standard data."""
-        return self.method in ('internal_standard', 'both')
-
-    def requires_protein(self) -> bool:
-        """Check if this method needs protein concentration data."""
-        return self.method in ('protein', 'both')
 
     def get_standard_for_class(self, lipid_class: str) -> Optional[str]:
         """

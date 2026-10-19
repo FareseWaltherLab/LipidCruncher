@@ -210,62 +210,6 @@ class TestNormalizationConfigValidation:
 class TestNormalizationConfigHelperMethods:
     """Tests for helper methods."""
 
-    def test_requires_internal_standards_true(self):
-        """Test requires_internal_standards for methods that need it."""
-        config_is = NormalizationConfig(
-            method='internal_standard',
-            internal_standards={'PC': 'PC(15:0/18:1)'},
-            intsta_concentrations={'PC(15:0/18:1)': 1.0}
-        )
-        assert config_is.requires_internal_standards() is True
-
-        config_both = NormalizationConfig(
-            method='both',
-            internal_standards={'PC': 'PC(15:0/18:1)'},
-            intsta_concentrations={'PC(15:0/18:1)': 1.0},
-            protein_concentrations={'s1': 2.5}
-        )
-        assert config_both.requires_internal_standards() is True
-
-    def test_requires_internal_standards_false(self):
-        """Test requires_internal_standards for methods that don't need it."""
-        config_none = NormalizationConfig(method='none')
-        assert config_none.requires_internal_standards() is False
-
-        config_protein = NormalizationConfig(
-            method='protein',
-            protein_concentrations={'s1': 2.5}
-        )
-        assert config_protein.requires_internal_standards() is False
-
-    def test_requires_protein_true(self):
-        """Test requires_protein for methods that need it."""
-        config_protein = NormalizationConfig(
-            method='protein',
-            protein_concentrations={'s1': 2.5}
-        )
-        assert config_protein.requires_protein() is True
-
-        config_both = NormalizationConfig(
-            method='both',
-            internal_standards={'PC': 'PC(15:0/18:1)'},
-            intsta_concentrations={'PC(15:0/18:1)': 1.0},
-            protein_concentrations={'s1': 2.5}
-        )
-        assert config_both.requires_protein() is True
-
-    def test_requires_protein_false(self):
-        """Test requires_protein for methods that don't need it."""
-        config_none = NormalizationConfig(method='none')
-        assert config_none.requires_protein() is False
-
-        config_is = NormalizationConfig(
-            method='internal_standard',
-            internal_standards={'PC': 'PC(15:0/18:1)'},
-            intsta_concentrations={'PC(15:0/18:1)': 1.0}
-        )
-        assert config_is.requires_protein() is False
-
     def test_get_standard_for_class_exists(self):
         """Test getting standard for a mapped class."""
         config = NormalizationConfig(
@@ -670,37 +614,8 @@ class TestNormalizationConfigRealWorldScenarios:
             selected_classes=['PC', 'PE', 'TG'],
             protein_concentrations=protein_data
         )
-
-        assert config.requires_protein() is True
-        assert config.requires_internal_standards() is False
         assert config.get_protein_concentration('s1') == 1.2
         assert config.get_protein_concentration('s12') == 1.2
-
-    def test_lipidomics_workflow_combined(self):
-        """Test combined IS + protein normalization workflow."""
-        standards = {
-            'PC': 'PC(17:0/17:0)',
-            'PE': 'PE(17:0/17:0)',
-        }
-        concentrations = {
-            'PC(17:0/17:0)': 0.5,
-            'PE(17:0/17:0)': 0.5,
-        }
-        protein_data = {
-            's1': 1.2, 's2': 1.3, 's3': 1.1,
-            's4': 1.4, 's5': 1.5, 's6': 1.3,
-        }
-
-        config = NormalizationConfig(
-            method='both',
-            selected_classes=['PC', 'PE'],
-            internal_standards=standards,
-            intsta_concentrations=concentrations,
-            protein_concentrations=protein_data
-        )
-
-        assert config.requires_protein() is True
-        assert config.requires_internal_standards() is True
 
     def test_changing_method_requires_new_config(self):
         """Test that changing normalization method requires creating new config."""
