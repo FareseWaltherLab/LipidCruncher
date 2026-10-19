@@ -106,6 +106,14 @@ def display_app_page() -> None:
         st.markdown("Process, analyze and visualize lipidomic data from multiple sources.")
         display_format_requirements(data_format)
 
+    # A format change re-standardizes the same upload; state derived from the
+    # previous format's standardization would otherwise be reused. Before the
+    # upload step, which itself parses Metabolomics Workbench text: run after
+    # it, the reset wiped that parse in the same run.
+    cached_format = st.session_state.get('format_type')
+    if cached_format is not None and cached_format != data_format:
+        StreamlitAdapter.reset_format_derived_state()
+
     # Sidebar: File upload
     raw_df = display_file_upload(data_format)
 
@@ -118,12 +126,6 @@ def display_app_page() -> None:
                 st.session_state.page = PAGE_LANDING
                 st.rerun()
         return
-
-    # A format change re-standardizes the same upload; state derived from the
-    # previous format's standardization would otherwise be reused.
-    cached_format = st.session_state.get('format_type')
-    if cached_format is not None and cached_format != data_format:
-        StreamlitAdapter.reset_format_derived_state()
 
     # Workbench uploads are parsed from text before this point, so there is
     # no raw table left to compare.

@@ -138,3 +138,19 @@ class TestLipidSearchAlignment:
         ]
         assert at.session_state['cond_name_0'] == 'Control'
         assert at.session_state['cond_name_1'] == 'Treated'
+
+
+class TestSwitchingFormatAfterUploading:
+
+    def test_switch_to_workbench_after_uploading_reads_the_file(self, fake_uploads):
+        """Regression: with a Workbench file uploaded under Generic, choosing
+        Metabolomics Workbench parsed the file, then the format-change reset
+        in the same run wiped what it had parsed, and the sidebar crashed
+        reading the missing sample list."""
+        at = _app(None, fake_uploads, dataset=FakeUpload(
+            'mw.csv', (SAMPLES / 'mw_test_dataset.csv').read_bytes(),
+        ))
+        select = at.sidebar.selectbox[0]
+        select.set_value('Metabolomics Workbench').run()
+        assert not at.exception
+        assert len(at.session_state['workbench_samples']) == 58
