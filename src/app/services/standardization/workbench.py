@@ -56,10 +56,22 @@ def process(
                 cond = cond.replace('Condition:', '').strip()
             cleaned_conditions.append(cond)
 
-        data_rows = []
-        for values in parsed[2:]:
-            if len(values) == len(sample_names) + 1:
-                data_rows.append(values)
+        # A row with another field count cannot be lined up with the
+        # samples; dropping it silently lost that lipid from the analysis.
+        n_fields = len(sample_names) + 1
+        misaligned = [values for values in parsed[2:] if len(values) != n_fields]
+        if misaligned:
+            listed = '; '.join(
+                f"'{values[0]}' ({len(values)} fields)" for values in misaligned[:5]
+            )
+            more = f" and {len(misaligned) - 5} more" if len(misaligned) > 5 else ""
+            return StandardizationResult(
+                False,
+                f"{len(misaligned)} data row(s) do not have {n_fields} fields "
+                f"(the lipid name plus one value per sample): {listed}{more}. "
+                "A lipid name that contains a comma must be quoted.",
+            )
+        data_rows = parsed[2:]
 
         if not data_rows:
             return StandardizationResult(False, "No valid data rows found")
