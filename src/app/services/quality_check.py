@@ -352,6 +352,20 @@ class QualityCheckService:
         return reliable_pct, high_cov_lipids, high_cov_details
 
     @staticmethod
+    def high_cov_lipids(prepared_df: pd.DataFrame, cov_threshold: float) -> List[str]:
+        """Lipids whose BQC CoV is at or above the threshold.
+
+        These are the lipids the BQC filter removes; the CoV scatter plot
+        draws the same ones red. A lipid without a CoV (NaN) is not one.
+
+        Args:
+            prepared_df: DataFrame with 'LipidMolec' and 'cov' columns (from
+                the BQC CoV plot).
+            cov_threshold: CoV threshold in percent.
+        """
+        return prepared_df.loc[prepared_df['cov'] >= cov_threshold, 'LipidMolec'].tolist()
+
+    @staticmethod
     def filter_by_bqc(
         df: pd.DataFrame,
         high_cov_lipids: List[str],

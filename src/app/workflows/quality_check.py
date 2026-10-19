@@ -199,6 +199,12 @@ class QualityCheckWorkflow:
         )
 
     @staticmethod
+    def high_cov_lipids(prepared_df: pd.DataFrame, cov_threshold: float) -> List[str]:
+        """Lipids whose BQC CoV is at or above the threshold (the ones the
+        filter removes)."""
+        return QualityCheckService.high_cov_lipids(prepared_df, cov_threshold)
+
+    @staticmethod
     def apply_bqc_filter(
         df: pd.DataFrame,
         high_cov_lipids: List[str],

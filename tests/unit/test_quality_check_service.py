@@ -680,6 +680,20 @@ class TestPrepareBQCData:
 # TestFilterByBQC
 # =============================================================================
 
+class TestHighCovLipids:
+    """high_cov_lipids(): the rule the BQC filter applies."""
+
+    def test_a_lipid_at_the_threshold_is_high_cov(self):
+        """Pinned: >= threshold, the same boundary the scatter plot draws red."""
+        values = [10.0, 12.0, 14.0]
+        cov = float(np.std(values, ddof=1) / np.mean(values) * 100)
+        prepared = pd.DataFrame({
+            'LipidMolec': ['at', 'below', 'above', 'no_cov'],
+            'cov': [cov, cov - 1e-9, cov + 1, np.nan],
+        })
+        assert QualityCheckService.high_cov_lipids(prepared, cov) == ['at', 'above']
+
+
 class TestFilterByBQC:
     """Tests for filter_by_bqc()."""
 
