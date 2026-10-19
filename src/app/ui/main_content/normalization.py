@@ -170,8 +170,8 @@ def _protein_key(sample: str) -> str:
     s-label: sidebar regroup and exclusion renumber samples, and an amount
     keyed by label would then belong to a different sample.
     """
-    origin = st.session_state.get('processing_origin') or {}
-    return origin.get(sample, sample)
+    frame = st.session_state.get('processing_frame')
+    return frame.origin.get(sample, sample) if frame is not None else sample
 
 
 def _display_bulk_protein_fill(sample_names: list) -> None:

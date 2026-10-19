@@ -487,12 +487,13 @@ def pipeline_import_no_qc_script():
 
 def pipeline_import_excluded_script():
     """Sample s4 was excluded in the sidebar before Module 1: `experiment`
-    and `processing_df` hold the 3 survivors, `standardized_df` still holds
-    all 4 samples."""
+    and `processing_frame` hold the 3 survivors, `standardized_df` still
+    holds all 4 samples."""
     import streamlit as st
     import pandas as pd
     from app.adapters.streamlit_adapter import StreamlitAdapter
     from app.models.experiment import ExperimentConfig
+    from app.models.sample_frame import SampleFrame
     StreamlitAdapter.initialize_session_state()
 
     if st.session_state.get('standardized_df') is None:
@@ -501,13 +502,16 @@ def pipeline_import_excluded_script():
             'intensity[s1]': [1.0], 'intensity[s2]': [3.0],
             'intensity[s3]': [5.0], 'intensity[s4]': [7.0],
         })
-        st.session_state.processing_df = pd.DataFrame({
-            'LipidMolec': ['PC 34:1'],
-            'intensity[s1]': [1.0], 'intensity[s2]': [3.0],
-            'intensity[s3]': [5.0],
-        })
         st.session_state.experiment = ExperimentConfig(
             conditions_list=['WT', 'KO'], number_of_samples_list=[2, 1],
+        )
+        st.session_state.processing_frame = SampleFrame.from_upload(
+            pd.DataFrame({
+                'LipidMolec': ['PC 34:1'],
+                'intensity[s1]': [1.0], 'intensity[s2]': [3.0],
+                'intensity[s3]': [5.0],
+            }),
+            st.session_state.experiment,
         )
 
     from app.ui.ai_studio_page import _offer_pipeline_import_sidebar

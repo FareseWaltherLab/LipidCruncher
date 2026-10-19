@@ -1,8 +1,8 @@
 """
 Tests for sample display-name handling.
 
-Covers the pure helpers in ``app.ui.sample_names`` that build, format, and
-remap the ``{internal label -> display name}`` map used by the sidebar.
+Covers the pure helpers in ``app.ui.sample_names`` that build and format
+the ``{internal label -> display name}`` map used by the sidebar.
 """
 
 import pandas as pd
@@ -12,8 +12,6 @@ from app.ui.sample_names import (
     display_label,
     name_samples_for_csv,
     names_from_editor,
-    remap_names_after_exclusion,
-    remap_names_after_regroup,
 )
 
 
@@ -73,17 +71,6 @@ class TestDisplayFormatting:
         assert display_label('s3', None) == 's3'
 
 
-class TestRemapAfterRegroup:
-    """Names follow the intensity-column rename map from regrouping."""
-
-    def test_permutation(self):
-        # regroup moves old s4 -> new s1, old s1 -> new s2.
-        old_to_new = {'intensity[s4]': 'intensity[s1]', 'intensity[s1]': 'intensity[s2]'}
-        assert remap_names_after_regroup({'s1': 'a', 's4': 'd'}, old_to_new) == {
-            's1': 'd', 's2': 'a',
-        }
-
-
 class TestNamesFromEditor:
     """names_from_editor reads the sidebar editor's rows."""
 
@@ -95,42 +82,6 @@ class TestNamesFromEditor:
             'name': [None, float('nan'), '  ', ' ID_04 '],
         })
         assert names_from_editor(edited) == {'s4': 'ID_04'}
-
-
-class TestRemapAfterExclusion:
-    """Names follow the survivors when sample exclusion renumbers them."""
-
-    def test_survivors_take_the_freed_labels(self):
-        # Excluding s2 renumbers old s3 -> s2 and old s4 -> s3; the name must
-        # travel with the sample, not stay on the label.
-        names = {'s1': 'A', 's2': 'B', 's3': 'C', 's4': 'D'}
-        assert remap_names_after_exclusion(
-            names, ['s1', 's2', 's3', 's4'], ['s2'], ['s1', 's2', 's3'],
-        ) == {'s1': 'A', 's2': 'C', 's3': 'D'}
-
-    def test_several_removed_and_unnamed_survivor(self):
-        names = {'s1': 'A', 's4': 'D', 's5': 'E'}
-        assert remap_names_after_exclusion(
-            names, ['s1', 's2', 's3', 's4', 's5'], ['s1', 's3'],
-            ['s1', 's2', 's3'],
-        ) == {'s2': 'D', 's3': 'E'}
-
-    def test_shared_name_keeps_its_original_label(self):
-        """Regression: the suffix used the post-exclusion label, so
-        'QC (s4)' meant original s4 before the exclusion and original s5
-        after it."""
-        names = {'s4': 'QC', 's5': 'QC'}
-        labels = ['s1', 's2', 's3', 's4', 's5']
-        remapped = remap_names_after_exclusion(names, labels, ['s1'], labels[:4])
-        assert remapped == {'s3': 'QC (s4)', 's4': 'QC (s5)'}
-        post = pd.DataFrame(columns=['concentration[s3]', 'concentration[s4]'])
-        assert list(name_samples_for_csv(post, remapped).columns) == [
-            'concentration[QC (s4)]', 'concentration[QC (s5)]',
-        ]
-
-    def test_no_names(self):
-        assert remap_names_after_exclusion(None, ['s1', 's2'], ['s1'], ['s1']) == {}
-        assert remap_names_after_exclusion({}, ['s1', 's2'], ['s1'], ['s1']) == {}
 
 
 class TestNameSamplesForCsv:

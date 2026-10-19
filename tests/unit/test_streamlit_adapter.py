@@ -437,7 +437,7 @@ class TestNavigationActions:
         return MockSessionState({
             'page': 'app', 'module': MODULE_DATA_PROCESSING,
             'normalized_df': pd.DataFrame({'b': [1]}),
-            'qc_input_experiment': object(),
+            'qc_input_frame': object(),
             'analysis_volcano_fig': object(),
         })
 
@@ -447,7 +447,7 @@ class TestNavigationActions:
         StreamlitAdapter.go_to_quality_check()
         state = mock_st.session_state
         assert state['module'] == 'Quality Check & Analysis'
-        assert state['qc_input_experiment'] is None
+        assert state['qc_input_frame'] is None
         assert state['analysis_volcano_fig'] is None
         assert state['normalized_df'] is not None
 
@@ -458,7 +458,7 @@ class TestNavigationActions:
         StreamlitAdapter.back_to_data_processing()
         state = mock_st.session_state
         assert state['module'] == MODULE_DATA_PROCESSING
-        assert state['qc_input_experiment'] is None
+        assert state['qc_input_frame'] is None
         assert state['normalized_df'] is not None
 
     @patch('app.adapters.streamlit_adapter.st')
@@ -1112,11 +1112,10 @@ class TestSessionStateFieldCompleteness:
         field_names = [f.name for f in fields(SessionState)]
         qc_fields = [f for f in field_names if f.startswith('qc_')]
         # 9 original + qc_experiment (the post-QC ExperimentConfig, needed
-        # because PCA sample removal renumbers the surviving samples).
-        # + 1 (qc_sample_names, names re-keyed after sample exclusion)
-        # + 1 (qc_input_sample_names, names frozen at Module 1's handoff)
-        # + 3 (qc_input_experiment/_bqc_label/_processing_df, same handoff)
-        assert len(qc_fields) == 15
+        # because PCA sample removal renumbers the surviving samples)
+        # + qc_input_frame and qc_input_bqc_label (frozen at Module 1's
+        # handoff) + qc_frame (the samples left after PCA exclusion)
+        assert len(qc_fields) == 13
 
     def test_isotope_field_count(self):
         """Test isotope tracing fields exist (guard against accidental deletion)."""

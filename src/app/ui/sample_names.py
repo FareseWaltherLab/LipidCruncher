@@ -4,16 +4,17 @@ Sample display-name helpers.
 Original sample names (e.g. the uploaded column headers like "mouse liver #5")
 survive only in the ``column_mapping`` table (LipidSearch 5.2 alignment uploads
 take theirs from the Alignment Setting file instead). These helpers turn that mapping
-into a ``{internal_label -> display_name}`` dict, keep it in sync when samples
-are regrouped or excluded, format labels for the sidebar sample selectors as
-``"s3 — mouse liver #5"``, and put the names into CSV downloads.
+into a ``{internal_label -> display_name}`` dict, format labels for the
+sidebar sample selectors as ``"s3 — mouse liver #5"``, and put the names into
+CSV downloads. ``SampleFrame.renumbered`` keeps the map in step when samples
+are regrouped or excluded.
 
 Pure logic — no Streamlit dependencies.
 """
 
 import re
 from collections import Counter
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import pandas as pd
 
@@ -24,8 +25,6 @@ _INTENSITY_LABEL_RE = re.compile(r"^intensity\[(s\d+)\]$")
 # expression like "OriginalArea[s1-1] + OriginalArea[s1-2]") does not match and
 # is left intact rather than mangled by a greedy capture.
 _WRAPPED_HEADER_RE = re.compile(r"^\w+\[([^\]]+)\]$")
-# Matches a standardized intensity column in a regroup rename map key/value.
-_INTENSITY_ANY_RE = re.compile(r"^intensity\[(s\d+)\]$")
 # Matches any per-sample column, e.g. "concentration[s3]" -> ("concentration", "s3").
 _SAMPLE_COLUMN_RE = re.compile(r"^(\w+)\[(s\d+)\]$")
 # Matches a bare internal sample label, e.g. "s3".
@@ -93,64 +92,6 @@ def names_from_editor(edited: pd.DataFrame) -> Dict[str, str]:
         row['sample']: str(row['name']).strip()
         for _, row in edited.iterrows()
         if not pd.isna(row['name']) and str(row['name']).strip()
-    }
-
-
-def remap_names_after_regroup(
-    names: Optional[Dict[str, str]],
-    old_to_new: Dict[str, str],
-) -> Optional[Dict[str, str]]:
-    """Remap names when manual regrouping permutes/renames the intensity columns.
-
-    Args:
-        names: Current ``{s-label -> name}`` map.
-        old_to_new: Mapping of ``intensity[s_old] -> intensity[s_new]`` produced
-            by ``SampleGroupingService.regroup_samples``.
-    """
-    if not names:
-        return names
-    remapped: Dict[str, str] = {}
-    for old_col, new_col in old_to_new.items():
-        old_match = _INTENSITY_ANY_RE.match(str(old_col))
-        new_match = _INTENSITY_ANY_RE.match(str(new_col))
-        if old_match and new_match:
-            old_label = old_match.group(1)
-            if old_label in names:
-                remapped[new_match.group(1)] = names[old_label]
-    return remapped
-
-
-def remap_names_after_exclusion(
-    names: Optional[Dict[str, str]],
-    labels_before: List[str],
-    removed: List[str],
-    labels_after: List[str],
-) -> Dict[str, str]:
-    """Re-key names into the label space left by Quality Check's sample exclusion.
-
-    Excluding samples renumbers the survivors (remove s2 and the old s3 becomes
-    s2), so every frame produced after the exclusion needs the names re-keyed
-    the same way. Mirrors ``QualityCheckService._drop_and_rename_columns``: the
-    survivors, in their original order, take ``labels_after`` in turn.
-
-    Returns the CSV display text, disambiguated in the original label space
-    first, so a shared name keeps its original label (``"QC (s5)"``) in every
-    CSV rather than picking up the survivor's new one.
-
-    Args:
-        names: ``{s-label -> name}`` in the pre-exclusion label space.
-        labels_before: Sample labels before the exclusion, in order.
-        removed: Labels that were excluded.
-        labels_after: Sample labels after the exclusion, in order.
-    """
-    if not names:
-        return {}
-    names = _csv_display_names(names)
-    survivors = [label for label in labels_before if label not in removed]
-    return {
-        new: names[old]
-        for old, new in zip(survivors, labels_after)
-        if old in names
     }
 
 

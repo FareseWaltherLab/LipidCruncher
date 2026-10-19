@@ -15,9 +15,11 @@ Covers:
 5. The sidebar's Confirm Inputs summary and manual-regroup pickers.
 """
 
+import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from app.models.sample_frame import SampleFrame
 from tests.ui.conftest import (
     DEFAULT_TIMEOUT,
     full_sidebar_script,
@@ -193,7 +195,9 @@ class TestLsiOutlierSummary:
     def test_removed_samples_follow_the_switch(self, mode, expected):
         """Regression: the LSI PDF/CSV listed s-labels even with names on."""
         at = AppTest.from_function(_lsi_summary_script, default_timeout=DEFAULT_TIMEOUT)
-        at.session_state['qc_input_sample_names'] = dict(NAMES)
+        at.session_state['qc_input_frame'] = SampleFrame.from_upload(
+            pd.DataFrame(), _experiment(), dict(NAMES),
+        )
         at.session_state['qc_samples_removed'] = ['s1', 's4']
         at.session_state['sample_label_mode'] = mode
         at.run()

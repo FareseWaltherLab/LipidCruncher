@@ -23,6 +23,7 @@ from app.constants import (
 from ..models.experiment import ExperimentConfig
 from ..services.data_standardization import MSDIALFeatures
 from ..models.normalization import NormalizationConfig
+from ..models.sample_frame import SampleFrame
 from ..models.statistics import StatisticalTestConfig
 from ..models.isotope_tracing import IsotopeCorrectionConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
@@ -104,8 +105,8 @@ class SessionState:
                              _msdial_override_samples, lipidsearch_sample_names
       experiment_config.py → workbench_conditions, workbench_samples
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
-                             processing_df, processing_sample_names, _preserved_excluded_samples,
-                             original_column_order, regroup_origin, processing_origin
+                             processing_frame, _preserved_excluded_samples,
+                             original_column_order, regroup_origin
       confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
       data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
                              pre_filter_df, grade_config, last_quality_config,
@@ -181,21 +182,17 @@ class SessionState:
     # auto-seeded from the uploaded column headers and editable in the sidebar.
     sample_names: Optional[Dict[str, str]] = None
     # Module 1's input after the sidebar's optional sample exclusion:
-    # standardized_df without the excluded columns (survivors renumbered) and
-    # sample_names re-keyed the same way. Equal to the originals when nothing
-    # is excluded. The sidebar keeps using the full dataset and experiment.
-    processing_df: Optional[pd.DataFrame] = None
-    processing_sample_names: Optional[Dict[str, str]] = None
+    # standardized_df without the excluded columns (survivors renumbered),
+    # with the experiment, sample_names re-keyed the same way and each
+    # sample's upload label (so per-sample inputs such as protein amounts
+    # can be keyed by sample rather than by a label that regroup/exclusion
+    # renumber). The sidebar keeps using the full dataset and experiment.
+    processing_frame: Optional[SampleFrame] = None
     # Sidebar exclusions as upload labels, and the regroup they were saved under.
     _preserved_excluded_samples: List[str] = field(default_factory=list)
     _preserved_excluded_regroup_origin: Optional[Dict[str, str]] = None
-    # Where each sample came from in the uploaded file (its s-label before any
-    # regroup), so per-sample inputs such as protein amounts can be keyed by
-    # sample rather than by a label that regroup/exclusion renumber.
-    # regroup_origin: sidebar label -> upload label (None when not regrouped);
-    # processing_origin: Module 1 label -> upload label.
+    # Sidebar label -> upload label (None when not regrouped).
     regroup_origin: Optional[Dict[str, str]] = None
-    processing_origin: Optional[Dict[str, str]] = None
     # BQC answers, kept for runs where the BQC widgets are not drawn (e.g. a
     # manual regroup is mid-edit) and Streamlit drops their keys.
     _preserved_sidebar_bqc_radio: Optional[str] = None
@@ -262,18 +259,15 @@ class SessionState:
     qc_correlation_plots: Dict[str, matplotlib.figure.Figure] = field(default_factory=dict)
     qc_pca_plot: Optional[go.Figure] = None
     qc_samples_removed: List[str] = field(default_factory=list)
-    # sample_names as of Module 1's handoff, so a later regroup cannot
-    # relabel the data QC/analysis already hold.
-    qc_input_sample_names: Optional[Dict[str, str]] = None
-    # The sidebar setup that produced normalized_df, frozen at the same
-    # handoff: the sidebar keeps running on Module 2/3, and a later exclusion
-    # or regroup must not be paired with Module 1's already-computed data.
-    qc_input_experiment: Optional[ExperimentConfig] = None
+    # processing_frame (Module 1's input, experiment, names, origins) and the
+    # BQC label that produced normalized_df, frozen at Module 1's handoff:
+    # the sidebar keeps running on Module 2/3, and a later exclusion or
+    # regroup must not be paired with Module 1's already-computed data.
+    qc_input_frame: Optional[SampleFrame] = None
     qc_input_bqc_label: Optional[str] = None
-    qc_input_processing_df: Optional[pd.DataFrame] = None
-    # sample_names re-keyed into the label space left after PCA sample
-    # exclusion (which renumbers survivors); used by post-QC CSV downloads.
-    qc_sample_names: Optional[Dict[str, str]] = None
+    # The samples left after PCA sample exclusion (which renumbers
+    # survivors); None when nothing is excluded.
+    qc_frame: Optional[SampleFrame] = None
     _preserved_bqc_filter_choice: str = 'No'
     _preserved_rt_viewing_mode: str = 'Comparison Mode'
     _preserved_pca_samples_remove: List[str] = field(default_factory=list)
@@ -405,10 +399,10 @@ _STAGES: Tuple[_Stage, ...] = (
         'experiment',
         fields=frozenset({
             'experiment', 'bqc_label', 'confirmed', 'grouping_complete',
-            'original_column_order', 'sample_names', 'processing_df',
-            'processing_sample_names', '_preserved_excluded_samples',
+            'original_column_order', 'sample_names', 'processing_frame',
+            '_preserved_excluded_samples',
             '_preserved_excluded_regroup_origin', 'regroup_origin',
-            'processing_origin', '_preserved_sidebar_bqc_radio',
+            '_preserved_sidebar_bqc_radio',
             '_preserved_sidebar_bqc_label_radio',
             # What the grouping widgets showed last run (Confirm invalidation)
             '_last_seen_grouping_radio', '_last_seen_selects',
@@ -529,8 +523,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'qc_experiment', 'qc_bqc_plot', 'qc_cov_threshold',
             'qc_retention_time_plot',
             'qc_correlation_plots', 'qc_pca_plot', 'qc_samples_removed',
-            'qc_input_sample_names', 'qc_input_experiment',
-            'qc_input_bqc_label', 'qc_input_processing_df', 'qc_sample_names',
+            'qc_input_frame', 'qc_input_bqc_label', 'qc_frame',
             '_preserved_bqc_filter_choice', '_preserved_rt_viewing_mode',
             '_preserved_pca_samples_remove', '_preserved_pca_groups_remove',
         }),

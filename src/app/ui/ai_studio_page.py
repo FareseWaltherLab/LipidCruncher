@@ -291,11 +291,15 @@ def _offer_pipeline_import_sidebar() -> None:
     # `MeanArea[s1]` → `intensity[s1]`), which lets AI Studio's auto-
     # detection + experiment pre-populate run end-to-end. Fall back to
     # `raw_df` only if standardization hasn't happened yet. Once inputs are
-    # confirmed, `processing_df` comes first: `experiment` describes it, not
-    # `standardized_df`, when samples were excluded in the sidebar.
+    # confirmed, `processing_frame` comes first: `experiment` describes it,
+    # not `standardized_df`, when samples were excluded in the sidebar.
+    processing = st.session_state.get("processing_frame")
     raw_for_studio = next(
-        (st.session_state.get(k) for k in ("processing_df", "standardized_df", "raw_df")
-         if st.session_state.get(k) is not None),
+        (df for df in (
+            processing.df if processing is not None else None,
+            st.session_state.get("standardized_df"),
+            st.session_state.get("raw_df"),
+        ) if df is not None),
         None,
     )
     if normalized_df is None and raw_for_studio is None and qc_df is None:

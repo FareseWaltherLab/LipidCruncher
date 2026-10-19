@@ -11,6 +11,20 @@ Tests cover:
 """
 
 
+def _frame(origin):
+    """A processing frame of six samples with the given upload labels."""
+    import pandas as pd
+    from app.models.experiment import ExperimentConfig
+    from app.models.sample_frame import SampleFrame
+
+    return SampleFrame(
+        df=pd.DataFrame(),
+        experiment=ExperimentConfig(
+            conditions_list=['A', 'B'], number_of_samples_list=[3, 3],
+        ),
+        origin=origin,
+    )
+
 
 # =============================================================================
 # Zero Filtering Tests
@@ -315,7 +329,7 @@ class TestInternalStandards:
         import pandas as pd
         from app.ui.main_content.internal_standards import _sample_set_id
 
-        at.session_state['processing_origin'] = origin
+        at.session_state['processing_frame'] = _frame(origin)
         at.session_state['custom_standards_df'] = pd.DataFrame({
             'LipidMolec': ['STD 1'], 'ClassKey': ['PC'],
             **{f'intensity[s{i}]': [float(i)] for i in range(1, 7)},
@@ -334,7 +348,7 @@ class TestInternalStandards:
         assert at.session_state['custom_standards_df'] is not None
 
         regrouped = dict(identity, s1='s2', s2='s1')
-        at.session_state['processing_origin'] = regrouped
+        at.session_state['processing_frame'] = _frame(regrouped)
         at.run()
 
         assert not at.exception
