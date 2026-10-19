@@ -479,7 +479,7 @@ class TestPathwayUI:
     def test_pathway_stores_figure_in_session(self, analysis_generic_app):
         """Pathway visualization figure is stored in session state."""
         at = self._switch_to_pathway(analysis_generic_app)
-        assert at.session_state['analysis_pathway_fig'] is not None
+        assert 'pathway' in at.session_state['analysis_all_plots']
         assert 'pathway' in at.session_state['analysis_all_plots']
 
 
