@@ -83,7 +83,7 @@ class SessionState:
                              _preserved_bqc_filter_choice, _preserved_rt_viewing_mode,
                              _preserved_pca_samples_remove, _preserved_pca_groups_remove
       analysis.py          → analysis_selection,
-                             analysis_saturation_figs,
+                            
                              analysis_chain_length_fig, analysis_fach_fig, analysis_pathway_fig,
                              analysis_volcano_fig, analysis_volcano_data,
                              analysis_heatmap_fig, analysis_heatmap_clusters,
@@ -212,7 +212,6 @@ class SessionState:
 
     # --- Analysis (owner: analysis.py) ---
     analysis_selection: Optional[str] = None
-    analysis_saturation_figs: Dict[str, go.Figure] = field(default_factory=dict)
     analysis_chain_length_fig: Optional[go.Figure] = None
     analysis_fach_fig: Optional[go.Figure] = None
     analysis_pathway_fig: Optional[go.Figure] = None
@@ -383,7 +382,7 @@ _STAGES: Tuple[_Stage, ...] = (
         'analysis',
         fields=frozenset({
             'analysis_selection', 
-            'analysis_saturation_figs',
+            
             'analysis_chain_length_fig', 'analysis_fach_fig',
             'analysis_pathway_fig', 'analysis_pathway_added_edges',
             'analysis_pathway_removed_edges', 'analysis_pathway_custom_nodes',

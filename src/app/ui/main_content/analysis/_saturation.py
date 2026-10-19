@@ -17,6 +17,7 @@ from app.ui.main_content.analysis._shared import (
     _display_condition_class_selectors,
     _display_statistical_options,
     _display_detailed_statistics,
+    _publish,
 )
 from app.ui.main_content.analysis._utils import (
     _check_fa_compatibility,
@@ -80,7 +81,6 @@ def _display_saturation_plots(
             working_df = df[~df['LipidMolec'].isin(excluded_lipids)].copy()
 
         # Generate plots for each plot type needed
-        st.session_state.analysis_saturation_figs = {}
         _render_saturation_results(
             working_df, experiment, selected_conditions, selected_classes,
             stat_config, plot_type, show_sig,
@@ -128,12 +128,7 @@ def _render_saturation_results(
             # Store and export the figure the user is actually looking at.
             # Storing `fig` here would put significance annotations the user
             # explicitly hid into both the PDF report and the SVG download.
-            st.session_state.analysis_saturation_figs[
-                f"{lipid_class}_{ptype}"
-            ] = display_fig
-            st.session_state.analysis_all_plots[
-                f'sat_{ptype}_{lipid_class}'
-            ] = display_fig
+            _publish(f'sat_{ptype}_{lipid_class}', display_fig)
 
             display_export_buttons(
                 display_fig,

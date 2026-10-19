@@ -288,18 +288,18 @@ class TestSaturationUI:
         at = self._switch_to_saturation(analysis_generic_app)
         at.radio(key='sat_plot_type').set_value("Percentage").run()
         assert not at.exception
-        # Percentage plots stored in session
-        figs = at.session_state['analysis_saturation_figs']
-        assert any('percentage' in k for k in figs)
+        # Percentage plots reach the report
+        plots = at.session_state['analysis_all_plots']
+        assert any(k.startswith('sat_percentage_') for k in plots)
 
     def test_saturation_switch_to_both(self, analysis_generic_app):
         """Switching to Both plot type renders concentration and percentage."""
         at = self._switch_to_saturation(analysis_generic_app)
         at.radio(key='sat_plot_type').set_value("Both").run()
         assert not at.exception
-        figs = at.session_state['analysis_saturation_figs']
-        assert any('concentration' in k for k in figs)
-        assert any('percentage' in k for k in figs)
+        plots = at.session_state['analysis_all_plots']
+        assert any(k.startswith('sat_concentration_') for k in plots)
+        assert any(k.startswith('sat_percentage_') for k in plots)
 
     def test_hiding_significance_hides_it_in_the_stored_figure(
         self, analysis_significant_app,
@@ -315,8 +315,8 @@ class TestSaturationUI:
         # a dataset with nothing significant to mark.
         at.checkbox(key='sat_show_significance').set_value(True).run()
         assert not at.exception
-        shown = at.session_state['analysis_saturation_figs']
-        conc_keys = [k for k in shown if k.endswith('_concentration')]
+        shown = at.session_state['analysis_all_plots']
+        conc_keys = [k for k in shown if k.startswith('sat_concentration_')]
         assert conc_keys, "no concentration saturation figure was stored"
         assert any(len(shown[k].layout.annotations) > 0 for k in conc_keys), (
             "fixture produced no significant results, so this test cannot "
@@ -326,14 +326,10 @@ class TestSaturationUI:
         # Unchecking must strip them from the stored copy too.
         at.checkbox(key='sat_show_significance').set_value(False).run()
         assert not at.exception
-        hidden = at.session_state['analysis_saturation_figs']
+        hidden = at.session_state['analysis_all_plots']
         for key in conc_keys:
             assert len(hidden[key].layout.annotations) == 0
             assert len(hidden[key].layout.shapes) == 0
-            report_fig = at.session_state['analysis_all_plots'][
-                f"sat_concentration_{key.rsplit('_', 1)[0]}"
-            ]
-            assert len(report_fig.layout.annotations) == 0
 
     def test_saturation_pdf_follows_plot_type(self, analysis_generic_app):
         """Regression: switching from Both to Concentration left the
@@ -353,8 +349,7 @@ class TestSaturationUI:
         at = self._switch_to_saturation(analysis_generic_app)
         at.radio(key='sat_stats_mode').set_value("Manual").run()
         assert not at.exception
-        figs = at.session_state['analysis_saturation_figs']
-        assert len(figs) > 0
+        assert any(k.startswith('sat_') for k in at.session_state['analysis_all_plots'])
 
     def test_saturation_detailed_fa_no_consolidated_warning(self, analysis_detailed_fa_app):
         """Detailed FA names do not trigger consolidated warning."""

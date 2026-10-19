@@ -127,13 +127,11 @@ class TestSessionStateDefaults:
     def test_default_analysis_dict_fields(self):
         """Test that analysis dict fields default to empty dicts."""
         state = SessionState()
-        assert state.analysis_saturation_figs == {}
         assert state.analysis_all_plots == {}
 
     def test_default_analysis_dict_fields_are_dicts(self):
         """Test that analysis dict fields are actually dict instances."""
         state = SessionState()
-        assert isinstance(state.analysis_saturation_figs, dict)
         assert isinstance(state.analysis_all_plots, dict)
 
 
@@ -249,15 +247,6 @@ class TestSessionStateDataIntegrity:
         # state2 should not be affected
         assert 'PC' not in state2.selected_classes
 
-
-    def test_analysis_saturation_figs_independent(self):
-        """Test that analysis_saturation_figs dict defaults are independent per instance."""
-        state1 = SessionState()
-        state2 = SessionState()
-
-        state1.analysis_saturation_figs['PC'] = 'fig1'
-
-        assert 'PC' not in state2.analysis_saturation_figs
 
     def test_analysis_all_plots_independent(self):
         """Test that analysis_all_plots dict defaults are independent per instance."""
@@ -779,7 +768,6 @@ class TestSessionStateIntegration:
 
         analysis_keys = [
             'analysis_selection',
-            'analysis_saturation_figs',
             'analysis_fach_fig', 'analysis_pathway_fig',
             'analysis_volcano_fig', 'analysis_volcano_data',
             'analysis_heatmap_fig', 'analysis_heatmap_clusters',
@@ -810,7 +798,6 @@ class TestSessionStateIntegration:
 
         StreamlitAdapter.initialize_session_state()
 
-        assert mock_st.session_state['analysis_saturation_figs'] == {}
         assert mock_st.session_state['analysis_all_plots'] == {}
 
     @patch('app.adapters.streamlit_adapter.st')
@@ -833,7 +820,6 @@ class TestSessionStateIntegration:
         mock_fig = MagicMock()
         mock_st.session_state = MockSessionState({
             'analysis_selection': 'Bar Chart',
-            'analysis_saturation_figs': {'PC': mock_fig},
             'analysis_fach_fig': mock_fig,
             'analysis_pathway_fig': mock_fig,
             'analysis_volcano_fig': mock_fig,
@@ -846,7 +832,6 @@ class TestSessionStateIntegration:
         StreamlitAdapter.reset_data_state()
 
         assert mock_st.session_state['analysis_selection'] is None
-        assert mock_st.session_state['analysis_saturation_figs'] == {}
         assert mock_st.session_state['analysis_fach_fig'] is None
         assert mock_st.session_state['analysis_pathway_fig'] is None
         assert mock_st.session_state['analysis_volcano_fig'] is None
@@ -987,7 +972,6 @@ class TestSessionStateFieldCompleteness:
         state = SessionState()
         analysis_fields = [
             'analysis_selection',
-            'analysis_saturation_figs',
             'analysis_fach_fig', 'analysis_pathway_fig',
             'analysis_volcano_fig', 'analysis_volcano_data',
             'analysis_heatmap_fig', 'analysis_heatmap_clusters',
@@ -1002,8 +986,8 @@ class TestSessionStateFieldCompleteness:
         analysis_fields = [f for f in field_names if f.startswith('analysis_')]
         # 17 - 1 (analysis_pathway_active_classes: nothing read or wrote it)
         # - the write-only per-page figure copies (the report reads
-        #   analysis_all_plots): bar chart, pie charts
-        assert len(analysis_fields) == 14
+        #   analysis_all_plots): bar chart, pie charts, saturation
+        assert len(analysis_fields) == 13
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
