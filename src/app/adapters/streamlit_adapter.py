@@ -678,21 +678,6 @@ class StreamlitAdapter:
 
     # ==================== Service Wrappers ====================
 
-    @staticmethod
-    def detect_format(df: pd.DataFrame) -> DataFormat:
-        """
-        Detect data format from DataFrame.
-
-        This is a thin wrapper around FormatDetectionService.
-        Not cached because format detection is fast (just column checks).
-
-        Args:
-            df: DataFrame to detect format for
-
-        Returns:
-            Detected DataFormat
-        """
-        return FormatDetectionService.detect_format(df)
 
     @staticmethod
     def detect_format_mismatch(df: pd.DataFrame, data_format: str) -> Optional[DataFormat]:

@@ -146,35 +146,6 @@ class DataIngestionWorkflow:
 
         return result
 
-    @staticmethod
-    def detect_format_only(df: pd.DataFrame) -> Tuple[DataFormat, str]:
-        """
-        Detect format without running the full pipeline.
-
-        Useful for showing format info to user before they configure the experiment.
-
-        Args:
-            df: DataFrame to detect format for
-
-        Returns:
-            Tuple of (DataFormat, confidence level)
-        """
-        detected = FormatDetectionService.detect_format(df)
-
-        # Determine confidence based on how many signature columns matched
-        if detected == DataFormat.LIPIDSEARCH:
-            # LipidSearch has strict requirements, so high confidence
-            confidence = "high"
-        elif detected == DataFormat.MSDIAL:
-            # MS-DIAL detection is also quite reliable
-            confidence = "high"
-        elif detected == DataFormat.GENERIC:
-            # Generic is a fallback, medium confidence
-            confidence = "medium"
-        else:
-            confidence = "low"
-
-        return detected, confidence
 
     @staticmethod
     def validate_for_format(
