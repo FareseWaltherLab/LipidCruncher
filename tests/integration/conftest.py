@@ -66,3 +66,58 @@ def get_intensity_columns(df: pd.DataFrame) -> list:
 def get_concentration_columns(df: pd.DataFrame) -> list:
     """Get list of concentration column names from DataFrame."""
     return [col for col in df.columns if col.startswith('concentration[')]
+
+
+# =============================================================================
+# Quality Check steps as the app runs them (StreamlitAdapter.run_box_plots /
+# run_bqc_scatter / run_correlation / run_pca, without the caching)
+# =============================================================================
+
+def qc_box_plot_data(df: pd.DataFrame, experiment):
+    """Returns (samples, mean_area_df, missing_values_percent)."""
+    from app.services.plotting.box_plot import BoxPlotService
+    from app.services.validation import get_matching_concentration_columns
+
+    samples = get_matching_concentration_columns(df, experiment)
+    mean_area_df = BoxPlotService.create_mean_area_df(df, samples)
+    return samples, mean_area_df, BoxPlotService.calculate_missing_values_percentage(mean_area_df)
+
+
+def qc_bqc_assessment(df: pd.DataFrame, experiment, bqc_label: str, cov_threshold: float = 30):
+    """Returns (prepared_df, reliable_data_percent, high_cov_lipids): the CoV
+    plot data and the lipids the BQC filter removes."""
+    from app.services.plotting.bqc_plotter import BQCPlotterService
+    from app.workflows.quality_check import QualityCheckWorkflow
+
+    _, prepared_df, reliable_pct, _ = BQCPlotterService.generate_and_display_cov_plot(
+        df, experiment, experiment.conditions_list.index(bqc_label),
+        cov_threshold=cov_threshold,
+    )
+    return prepared_df, reliable_pct, QualityCheckWorkflow.high_cov_lipids(
+        prepared_df, cov_threshold,
+    )
+
+
+def qc_correlation(df: pd.DataFrame, experiment, condition: str,
+                   sample_type: str = 'biological replicates'):
+    """Returns (correlation_df, threshold) for one condition."""
+    from app.services.plotting.correlation import CorrelationPlotterService
+
+    mean_area_df = CorrelationPlotterService.prepare_data_for_correlation(
+        df, experiment.individual_samples_list,
+        experiment.conditions_list.index(condition),
+    )
+    correlation_df, _, threshold = CorrelationPlotterService.compute_correlation(
+        mean_area_df, sample_type,
+    )
+    return correlation_df, threshold
+
+
+def qc_pca(df: pd.DataFrame, experiment) -> pd.DataFrame:
+    """Returns the PCA table (PC1, PC2, Sample, Condition)."""
+    from app.services.plotting.pca import PCAPlotterService
+
+    _, pca_df = PCAPlotterService.plot_pca(
+        df, experiment.full_samples_list, experiment.extensive_conditions_list,
+    )
+    return pca_df
