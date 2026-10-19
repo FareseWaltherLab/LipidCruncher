@@ -4,7 +4,7 @@ Automatically identifies the format of uploaded data based on column signatures.
 Pure logic - no Streamlit dependencies.
 """
 from enum import Enum
-from typing import Union, List, Set
+from typing import Union, Set
 import pandas as pd
 
 
@@ -251,55 +251,3 @@ class FormatDetectionService:
                 return True
 
         return False
-
-    @staticmethod
-    def get_format_display_name(format_type: DataFormat) -> str:
-        """
-        Get the user-friendly display name for a format.
-
-        Args:
-            format_type: DataFormat enum value
-
-        Returns:
-            User-friendly string name
-        """
-        return format_type.value
-
-    @staticmethod
-    def get_all_formats() -> List[DataFormat]:
-        """
-        Get list of all supported formats (excluding UNKNOWN).
-
-        Returns:
-            List of DataFormat values
-        """
-        return [
-            DataFormat.GENERIC,
-            DataFormat.METABOLOMICS_WORKBENCH,
-            DataFormat.LIPIDSEARCH,
-            DataFormat.MSDIAL
-        ]
-
-    @staticmethod
-    def get_format_from_string(format_string: str) -> DataFormat:
-        """
-        Convert a format string to DataFormat enum.
-
-        Args:
-            format_string: Format name as string
-
-        Returns:
-            Corresponding DataFormat enum value, or UNKNOWN if not recognized
-        """
-        format_mapping = {
-            'LipidSearch': DataFormat.LIPIDSEARCH,
-            'LipidSearch 5.0': DataFormat.LIPIDSEARCH,  # backward-compat alias
-            'lipidsearch': DataFormat.LIPIDSEARCH,
-            'MS-DIAL': DataFormat.MSDIAL,
-            'msdial': DataFormat.MSDIAL,
-            'Metabolomics Workbench': DataFormat.METABOLOMICS_WORKBENCH,
-            'metabolomics_workbench': DataFormat.METABOLOMICS_WORKBENCH,
-            'Generic Format': DataFormat.GENERIC,
-            'generic': DataFormat.GENERIC,
-        }
-        return format_mapping.get(format_string, DataFormat.UNKNOWN)

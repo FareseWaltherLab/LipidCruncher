@@ -126,7 +126,6 @@ LipidCruncher/
 │       │   ├── lsi_report.py               #   LSI compliance checklist generation
 │       │   └── plotting/                    #   Visualization services
 │       │       ├── __init__.py              #     Public API: re-exports all plotters + shared utils
-│       │       ├── base.py                  #     PlotterServiceProtocol (interface contract)
 │       │       ├── _shared.py               #     Shared utilities (colors, significance, validation)
 │       │       ├── box_plot.py
 │       │       ├── bqc_plotter.py
@@ -310,7 +309,7 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 
 #### Plotting Services (`services/plotting/`)
 
-Each module provides a static service class that returns Plotly or Matplotlib figures. `PlotterServiceProtocol` (`base.py`) documents the shared conventions (static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`); its one method, `generate_color_mapping()`, is defined by five plotters (bar chart, pie chart, saturation, chain length, volcano), and none inherit from it.
+Each module provides a static service class that returns Plotly or Matplotlib figures. They share conventions: static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`.
 
 Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment: classes from the 20-color `CLASS_COLORS`, conditions from the 10-color `CONDITION_COLORS` in `constants.py`), and `validate_dataframe()` (non-null, non-empty, required columns).
 
@@ -577,7 +576,7 @@ The app runs on port 8501 by default.
 - **Immutable collections** — constants use `Tuple` and `frozenset` instead of mutable `List`/`set` to prevent accidental mutation in cached contexts.
 - **Enum-based routing** — `Page` and `Module` enums in `constants.py` replace raw strings for type-safe page/module navigation. Backward-compatible aliases (`PAGE_LANDING`, `MODULE_DATA_PROCESSING`, etc.) are provided.
 - **Prefix session state keys** — by module: `qc_*`, `analysis_*`, `_preserved_*`, etc.
-- **Plotting services return figures** — the UI layer handles rendering with `st.plotly_chart()` or `st.pyplot()`. `PlotterServiceProtocol` (`plotting/base.py`) documents the conventions; five plotters define its `generate_color_mapping()`.
+- **Plotting services return figures** — the UI layer handles rendering with `st.plotly_chart()` or `st.pyplot()`.
 - **Constants go in `constants.py`** — thresholds, regex patterns, format mappings. Nomenclature functions live in `lipid_nomenclature.py`.
 
 ---

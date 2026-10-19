@@ -177,62 +177,6 @@ class TestValidateDataset:
 
 
 # =============================================================================
-# TestExtractSampleNames
-# =============================================================================
-
-
-class TestExtractSampleNames:
-    def test_basic_extraction(self):
-        df = make_df(3)
-        names = SampleGroupingService.extract_sample_names(df)
-        assert names == ['s1', 's2', 's3']
-
-    def test_non_standard_names(self):
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)'],
-            'intensity[WT_rep1]': [1.0],
-            'intensity[KO_rep1]': [2.0],
-        })
-        names = SampleGroupingService.extract_sample_names(df)
-        assert names == ['WT_rep1', 'KO_rep1']
-
-    def test_no_intensity_columns(self):
-        df = pd.DataFrame({'LipidMolec': ['PC(16:0)'], 'other': [1.0]})
-        names = SampleGroupingService.extract_sample_names(df)
-        assert names == []
-
-    def test_preserves_column_order(self):
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)'],
-            'intensity[s3]': [3.0],
-            'intensity[s1]': [1.0],
-            'intensity[s2]': [2.0],
-        })
-        names = SampleGroupingService.extract_sample_names(df)
-        assert names == ['s3', 's1', 's2']  # order from columns
-
-    def test_mixed_columns(self):
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)'],
-            'ClassKey': ['PC'],
-            'intensity[s1]': [1.0],
-            'other_col': [99],
-            'intensity[s2]': [2.0],
-        })
-        names = SampleGroupingService.extract_sample_names(df)
-        assert names == ['s1', 's2']
-
-    def test_special_characters_in_names(self):
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)'],
-            'intensity[sample (1)]': [1.0],
-            'intensity[sample-2]': [2.0],
-        })
-        names = SampleGroupingService.extract_sample_names(df)
-        assert names == ['sample (1)', 'sample-2']
-
-
-# =============================================================================
 # TestExtractSampleNumbers
 # =============================================================================
 
@@ -809,12 +753,6 @@ class TestImmutability:
         df = make_df(6)
         orig = df.copy()
         SampleGroupingService.build_group_df(df, exp)
-        pd.testing.assert_frame_equal(df, orig)
-
-    def test_extract_sample_names_does_not_mutate(self):
-        df = make_df(4)
-        orig = df.copy()
-        SampleGroupingService.extract_sample_names(df)
         pd.testing.assert_frame_equal(df, orig)
 
 

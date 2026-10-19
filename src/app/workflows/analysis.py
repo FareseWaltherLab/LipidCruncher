@@ -20,7 +20,6 @@ import plotly.graph_objects as go
 
 from ..models.experiment import ExperimentConfig
 from ..models.statistics import StatisticalTestConfig
-from ..services.format_detection import DataFormat
 from ..services.statistical_testing import (
     StatisticalTestingService,
     StatisticalTestSummary,
@@ -53,23 +52,6 @@ from ..services.plotting.lipidomic_heatmap import (
     GROUPED_PAGE_SIZE,
     LipidomicHeatmapPlotterService,
 )
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Configuration
-# ═══════════════════════════════════════════════════════════════════════
-
-
-@dataclass
-class AnalysisConfig:
-    """Configuration for the analysis workflow.
-
-    Attributes:
-        format_type: Data format (affects available analyses).
-        bqc_label: Label of the BQC condition, or None if no BQC.
-    """
-    format_type: DataFormat = DataFormat.GENERIC
-    bqc_label: Optional[str] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════

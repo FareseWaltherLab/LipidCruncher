@@ -16,7 +16,6 @@ import plotly.graph_objects as go
 
 from app.workflows.analysis import (
     AnalysisWorkflow,
-    AnalysisConfig,
     BarChartResult,
     PieChartResult,
     SaturationResult,
@@ -27,7 +26,6 @@ from app.workflows.analysis import (
 )
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
-from app.services.format_detection import DataFormat
 from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
 from app.services.statistical_testing import StatisticalTestSummary
 
@@ -161,28 +159,6 @@ def manual_stat_config():
 def auto_stat_config():
     """Auto-mode statistical test config."""
     return StatisticalTestConfig.create_auto()
-
-
-# =============================================================================
-# AnalysisConfig Tests
-# =============================================================================
-
-
-class TestAnalysisConfig:
-    """Tests for AnalysisConfig dataclass."""
-
-    def test_default_values(self):
-        config = AnalysisConfig()
-        assert config.format_type == DataFormat.GENERIC
-        assert config.bqc_label is None
-
-    def test_custom_values(self):
-        config = AnalysisConfig(
-            format_type=DataFormat.LIPIDSEARCH,
-            bqc_label='BQC',
-        )
-        assert config.format_type == DataFormat.LIPIDSEARCH
-        assert config.bqc_label == 'BQC'
 
 
 # =============================================================================

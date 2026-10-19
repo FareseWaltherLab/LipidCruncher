@@ -12,7 +12,6 @@ Users can toggle classes on/off and add/remove nodes and edges.
 
 import math
 import re
-from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -115,13 +114,6 @@ DEFAULT_PATHWAY_CLASSES: List[str] = [
 # All 28 curated classes.
 ALL_PATHWAY_CLASSES: List[str] = list(ALL_PATHWAY_NODES.keys())
 
-# Backward-compatibility aliases.
-PATHWAY_CLASSES: List[str] = list(DEFAULT_PATHWAY_CLASSES)
-PATHWAY_COORDS: List[Tuple[float, float]] = [
-    (ALL_PATHWAY_NODES[c][0], ALL_PATHWAY_NODES[c][1])
-    for c in DEFAULT_PATHWAY_CLASSES
-]
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Visualization Constants
@@ -160,21 +152,6 @@ NODE_LABEL_FONT_SIZE = 14
 # ═══════════════════════════════════════════════════════════════════════
 # Result dataclass
 # ═══════════════════════════════════════════════════════════════════════
-
-
-@dataclass
-class PathwayData:
-    """Result container for pathway visualization data.
-
-    Attributes:
-        pathway_dict: Dict with keys 'class', 'abundance ratio',
-            'saturated fatty acids ratio'.
-        fold_change_df: Per-class fold-change DataFrame.
-        saturation_ratio_df: Per-class saturation ratio DataFrame.
-    """
-    pathway_dict: Dict[str, list] = field(default_factory=dict)
-    fold_change_df: pd.DataFrame = field(default_factory=pd.DataFrame)
-    saturation_ratio_df: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 # ═══════════════════════════════════════════════════════════════════════

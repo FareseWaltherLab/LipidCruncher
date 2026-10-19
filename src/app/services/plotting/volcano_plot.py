@@ -481,31 +481,6 @@ class VolcanoPlotterService:
         """
         return generate_class_color_mapping(classes)
 
-    @staticmethod
-    def get_most_abundant_lipid(
-        df: pd.DataFrame, selected_class: str
-    ) -> Optional[str]:
-        """Find the most abundant lipid in a class.
-
-        Args:
-            df: DataFrame with LipidMolec and concentration columns.
-            selected_class: Class to filter by.
-
-        Returns:
-            Lipid name with highest total concentration, or None.
-        """
-        class_df = df[df['ClassKey'] == selected_class]
-        if class_df.empty:
-            return None
-
-        conc_cols = [c for c in class_df.columns if c.startswith('concentration[')]
-        if not conc_cols:
-            return None
-
-        totals = class_df[conc_cols].sum(axis=1)
-        idx = totals.idxmax()
-        return class_df.loc[idx, 'LipidMolec']
-
 
 # ── Private helpers ────────────────────────────────────────────────────
 

@@ -23,9 +23,6 @@ from app.services.plotting.pathway_viz import (
     DEFAULT_PATHWAY_CLASSES,
     MAX_LOG2_SIZE,
     MIN_LOG2_SIZE,
-    PATHWAY_CLASSES,
-    PATHWAY_COORDS,
-    PathwayData,
     PathwayVizPlotterService,
     UNIT_CIRCLE_RADIUS,
     _auto_label_pos,
@@ -473,14 +470,14 @@ class TestCreatePathwayDictionary:
         sat_df = _make_saturation_df(['PC', 'PE'], [0.6, 0.3])
         result = PathwayVizPlotterService.create_pathway_dictionary(fc_df, sat_df)
         assert len(result['class']) == 18
-        assert result['class'] == list(PATHWAY_CLASSES)
+        assert result['class'] == list(DEFAULT_PATHWAY_CLASSES)
 
     def test_missing_classes_get_zero(self):
         """Classes not in the data should get 0."""
         fc_df = _make_fold_change_df(['PC'], [2.0])
         sat_df = _make_saturation_df(['PC'], [0.5])
         result = PathwayVizPlotterService.create_pathway_dictionary(fc_df, sat_df)
-        tg_idx = PATHWAY_CLASSES.index('TG')
+        tg_idx = DEFAULT_PATHWAY_CLASSES.index('TG')
         assert result['abundance ratio'][tg_idx] == 0
         assert result['saturated fatty acids ratio'][tg_idx] == 0
 
@@ -488,8 +485,8 @@ class TestCreatePathwayDictionary:
         fc_df = _make_fold_change_df(['TG', 'PC'], [3.0, 1.5])
         sat_df = _make_saturation_df(['TG', 'PC'], [0.8, 0.5])
         result = PathwayVizPlotterService.create_pathway_dictionary(fc_df, sat_df)
-        tg_idx = PATHWAY_CLASSES.index('TG')
-        pc_idx = PATHWAY_CLASSES.index('PC')
+        tg_idx = DEFAULT_PATHWAY_CLASSES.index('TG')
+        pc_idx = DEFAULT_PATHWAY_CLASSES.index('PC')
         assert result['abundance ratio'][tg_idx] == pytest.approx(3.0)
         assert result['abundance ratio'][pc_idx] == pytest.approx(1.5)
         assert result['saturated fatty acids ratio'][tg_idx] == pytest.approx(0.8)
@@ -507,7 +504,7 @@ class TestCreatePathwayDictionary:
         fc_df = _make_fold_change_df(['PC'], [2.0])
         sat_df = pd.DataFrame(columns=['ClassKey', 'saturation_ratio'])
         result = PathwayVizPlotterService.create_pathway_dictionary(fc_df, sat_df)
-        pc_idx = PATHWAY_CLASSES.index('PC')
+        pc_idx = DEFAULT_PATHWAY_CLASSES.index('PC')
         assert result['abundance ratio'][pc_idx] == pytest.approx(2.0)
         assert result['saturated fatty acids ratio'][pc_idx] == 0
 
@@ -515,13 +512,13 @@ class TestCreatePathwayDictionary:
         fc_df = pd.DataFrame(columns=['ClassKey', 'fold_change'])
         sat_df = _make_saturation_df(['PE'], [0.4])
         result = PathwayVizPlotterService.create_pathway_dictionary(fc_df, sat_df)
-        pe_idx = PATHWAY_CLASSES.index('PE')
+        pe_idx = DEFAULT_PATHWAY_CLASSES.index('PE')
         assert result['abundance ratio'][pe_idx] == 0
         assert result['saturated fatty acids ratio'][pe_idx] == pytest.approx(0.4)
 
     def test_all_18_classes_present(self):
-        fc_df = _make_fold_change_df(PATHWAY_CLASSES, [1.0] * 18)
-        sat_df = _make_saturation_df(PATHWAY_CLASSES, [0.5] * 18)
+        fc_df = _make_fold_change_df(DEFAULT_PATHWAY_CLASSES, [1.0] * 18)
+        sat_df = _make_saturation_df(DEFAULT_PATHWAY_CLASSES, [0.5] * 18)
         result = PathwayVizPlotterService.create_pathway_dictionary(fc_df, sat_df)
         assert all(v == pytest.approx(1.0) for v in result['abundance ratio'])
         assert all(v == pytest.approx(0.5) for v in result['saturated fatty acids ratio'])
@@ -532,7 +529,7 @@ class TestCreatePathwayDictionary:
         sat_df = _make_saturation_df(['PC', 'UnknownClass'], [0.5, 0.9])
         result = PathwayVizPlotterService.create_pathway_dictionary(fc_df, sat_df)
         assert 'UnknownClass' not in result['class']
-        pc_idx = PATHWAY_CLASSES.index('PC')
+        pc_idx = DEFAULT_PATHWAY_CLASSES.index('PC')
         assert result['abundance ratio'][pc_idx] == pytest.approx(2.0)
 
 
@@ -625,7 +622,7 @@ class TestCreatePathwayViz:
         sat_df = _make_saturation_df(['PC', 'TG'], [0.5, 0.8])
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         assert len(pathway_dict['class']) == 18
-        pc_idx = PATHWAY_CLASSES.index('PC')
+        pc_idx = DEFAULT_PATHWAY_CLASSES.index('PC')
         assert pathway_dict['abundance ratio'][pc_idx] == pytest.approx(1.5)
 
     def test_data_circle_sizes_scale_with_fold_change(self):
@@ -652,7 +649,7 @@ class TestCreatePathwayViz:
                         if isinstance(t, go.Scatter)
                         and t.mode == 'markers'][0]
         # PC should appear in one of the hover texts
-        pc_idx = PATHWAY_CLASSES.index('PC')
+        pc_idx = DEFAULT_PATHWAY_CLASSES.index('PC')
         assert '<b>PC</b>' in data_scatter.text[pc_idx]
         assert 'Fold Change' in data_scatter.text[pc_idx]
         assert 'Saturation Ratio' in data_scatter.text[pc_idx]
@@ -669,35 +666,6 @@ class TestCreatePathwayViz:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# TestPathwayData dataclass
-# ═══════════════════════════════════════════════════════════════════════
-
-
-class TestPathwayData:
-    """Tests for the PathwayData result dataclass."""
-
-    def test_default_values(self):
-        data = PathwayData()
-        assert data.pathway_dict == {}
-        assert data.fold_change_df.empty
-        assert data.saturation_ratio_df.empty
-
-    def test_custom_values(self):
-        fc_df = _make_fold_change_df(['PC'], [1.5])
-        sat_df = _make_saturation_df(['PC'], [0.6])
-        pathway_dict = {'class': ['PC'], 'abundance ratio': [1.5],
-                        'saturated fatty acids ratio': [0.6]}
-        data = PathwayData(
-            pathway_dict=pathway_dict,
-            fold_change_df=fc_df,
-            saturation_ratio_df=sat_df,
-        )
-        assert data.pathway_dict['class'] == ['PC']
-        assert len(data.fold_change_df) == 1
-        assert len(data.saturation_ratio_df) == 1
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # TestConstants
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -706,21 +674,15 @@ class TestConstants:
     """Verify pathway constants are consistent."""
 
     def test_pathway_classes_count(self):
-        assert len(PATHWAY_CLASSES) == 18
+        assert len(DEFAULT_PATHWAY_CLASSES) == 18
 
-    def test_pathway_coords_count(self):
-        assert len(PATHWAY_COORDS) == 18
-
-    def test_coords_are_tuples_of_two(self):
-        for coord in PATHWAY_COORDS:
-            assert len(coord) == 2
 
     def test_classes_unique(self):
-        assert len(set(PATHWAY_CLASSES)) == 18
+        assert len(set(DEFAULT_PATHWAY_CLASSES)) == 18
 
     def test_known_classes_present(self):
         for cls in ['TG', 'DG', 'PA', 'PC', 'PE', 'SM', 'Cer', 'PI', 'PG', 'PS']:
-            assert cls in PATHWAY_CLASSES
+            assert cls in DEFAULT_PATHWAY_CLASSES
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -739,8 +701,8 @@ class TestEndToEnd:
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         assert isinstance(fig, go.Figure)
         assert len(pathway_dict['class']) == 18
-        pc_idx = PATHWAY_CLASSES.index('PC')
-        pe_idx = PATHWAY_CLASSES.index('PE')
+        pc_idx = DEFAULT_PATHWAY_CLASSES.index('PC')
+        pe_idx = DEFAULT_PATHWAY_CLASSES.index('PE')
         assert pathway_dict['abundance ratio'][pc_idx] > 0
         assert pathway_dict['abundance ratio'][pe_idx] > 0
 
@@ -754,7 +716,7 @@ class TestEndToEnd:
         assert isinstance(fig, go.Figure)
         # All 4 present classes should have non-zero values
         for cls in ['TG', 'PC', 'PE', 'SM']:
-            idx = PATHWAY_CLASSES.index(cls)
+            idx = DEFAULT_PATHWAY_CLASSES.index(cls)
             assert pathway_dict['abundance ratio'][idx] > 0
 
 
@@ -773,9 +735,8 @@ class TestEndToEnd:
             df, experiment_3x2, 'Control', 'Vehicle',
         )
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
-        pc_idx = PATHWAY_CLASSES.index('PC')
+        pc_idx = DEFAULT_PATHWAY_CLASSES.index('PC')
         assert pathway_dict['abundance ratio'][pc_idx] == pytest.approx(3.0)
-
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -872,12 +833,11 @@ class TestEdgeCases:
         sat_df = _make_saturation_df(['TG'], [0.7])
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         assert isinstance(fig, go.Figure)
-        tg_idx = PATHWAY_CLASSES.index('TG')
+        tg_idx = DEFAULT_PATHWAY_CLASSES.index('TG')
         assert pathway_dict['abundance ratio'][tg_idx] == pytest.approx(2.5)
         # Other classes should be 0
-        pc_idx = PATHWAY_CLASSES.index('PC')
+        pc_idx = DEFAULT_PATHWAY_CLASSES.index('PC')
         assert pathway_dict['abundance ratio'][pc_idx] == 0
-
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -966,7 +926,6 @@ class TestTypeCoercion:
         assert isinstance(fig, go.Figure)
 
 
-
 # ═══════════════════════════════════════════════════════════════════════
 # TestImmutability
 # ═══════════════════════════════════════════════════════════════════════
@@ -1031,8 +990,8 @@ class TestLargeDataset:
     def test_fold_change_many_classes(self):
         """20 different classes."""
         exp = make_experiment(2, 3)
-        lipids = [f'{cls} 16:0_18:1' for cls in PATHWAY_CLASSES[:18]]
-        classes = list(PATHWAY_CLASSES[:18])
+        lipids = [f'{cls} 16:0_18:1' for cls in DEFAULT_PATHWAY_CLASSES[:18]]
+        classes = list(DEFAULT_PATHWAY_CLASSES[:18])
         values = [list(np.random.rand(18) * 1000) for _ in range(6)]
         df = _make_df(lipids, classes, values)
         result = PathwayVizPlotterService.calculate_class_fold_change(
@@ -1042,11 +1001,11 @@ class TestLargeDataset:
 
     def test_viz_with_all_18_classes(self):
         fc_df = _make_fold_change_df(
-            list(PATHWAY_CLASSES),
+            list(DEFAULT_PATHWAY_CLASSES),
             list(np.random.rand(18) * 5),
         )
         sat_df = _make_saturation_df(
-            list(PATHWAY_CLASSES),
+            list(DEFAULT_PATHWAY_CLASSES),
             list(np.random.rand(18)),
         )
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
@@ -1058,7 +1017,7 @@ class TestLargeDataset:
     def test_large_lipid_count_full_pipeline(self):
         """500 lipids across 10 classes."""
         exp = make_experiment(2, 3)
-        classes_pool = PATHWAY_CLASSES[:10]
+        classes_pool = DEFAULT_PATHWAY_CLASSES[:10]
         lipids = [f'{classes_pool[i % 10]} {16 + i % 5}:0_{18 + i % 3}:{i % 4}'
                   for i in range(500)]
         classes = [classes_pool[i % 10] for i in range(500)]
@@ -1071,7 +1030,6 @@ class TestLargeDataset:
         )
         fig, pathway_dict = PathwayVizPlotterService.create_pathway_viz(fc_df, sat_df)
         assert isinstance(fig, go.Figure)
-
 
 
 # ═══════════════════════════════════════════════════════════════════════

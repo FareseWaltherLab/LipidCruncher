@@ -98,57 +98,6 @@ class DataCleaningService:
             filter_messages=messages
         )
 
-    @staticmethod
-    def clean_lipidsearch(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        grade_config: Optional[GradeFilterConfig] = None
-    ) -> CleaningResult:
-        """
-        Clean LipidSearch format data.
-
-        Convenience method for direct LipidSearch cleaning.
-        """
-        return DataCleaningService.clean_data(
-            df, experiment, DataFormat.LIPIDSEARCH, grade_config=grade_config
-        )
-
-    @staticmethod
-    def clean_msdial(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        quality_config: Optional[QualityFilterConfig] = None
-    ) -> CleaningResult:
-        """
-        Clean MS-DIAL format data.
-
-        Convenience method for direct MS-DIAL cleaning.
-        """
-        return DataCleaningService.clean_data(
-            df, experiment, DataFormat.MSDIAL, quality_config=quality_config
-        )
-
-    @staticmethod
-    def clean_generic(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig
-    ) -> CleaningResult:
-        """
-        Clean Generic format data.
-
-        Convenience method for direct Generic cleaning.
-        """
-        return DataCleaningService.clean_data(df, experiment, DataFormat.GENERIC)
-
-    @staticmethod
-    def extract_internal_standards(df: pd.DataFrame):
-        """
-        Extract internal standards from a cleaned dataframe.
-
-        Delegates to BaseDataCleaner.extract_internal_standards().
-        """
-        return BaseDataCleaner.extract_internal_standards(df)
-
 
 # Public API
 __all__ = [

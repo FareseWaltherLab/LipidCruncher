@@ -985,47 +985,6 @@ class TestGenerateColorMapping:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# get_most_abundant_lipid
-# ═══════════════════════════════════════════════════════════════════════
-
-
-class TestGetMostAbundantLipid:
-    """Tests for get_most_abundant_lipid."""
-
-    def test_returns_most_abundant(self):
-        df = _make_df(
-            lipids=['PC(14:0)', 'PC(16:0)', 'PC(18:0)'],
-            classes=['PC', 'PC', 'PC'],
-            n_samples=3,
-            values_per_sample=[
-                [10, 100, 50],   # s1
-                [20, 200, 60],   # s2
-                [30, 300, 70],   # s3
-            ],
-        )
-        result = VolcanoPlotterService.get_most_abundant_lipid(df, 'PC')
-        assert result == 'PC(16:0)'
-
-    def test_empty_class_returns_none(self):
-        df = _make_df(lipids=['PC(16:0)'], classes=['PC'], n_samples=3)
-        result = VolcanoPlotterService.get_most_abundant_lipid(df, 'PE')
-        assert result is None
-
-    def test_no_concentration_columns_returns_none(self):
-        df = pd.DataFrame({
-            'LipidMolec': ['PC(16:0)'],
-            'ClassKey': ['PC'],
-        })
-        result = VolcanoPlotterService.get_most_abundant_lipid(df, 'PC')
-        assert result is None
-
-    def test_single_lipid(self):
-        df = _make_df(lipids=['PC(16:0)'], classes=['PC'], n_samples=3)
-        result = VolcanoPlotterService.get_most_abundant_lipid(df, 'PC')
-        assert result == 'PC(16:0)'
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # Private Helpers
 # ═══════════════════════════════════════════════════════════════════════
 

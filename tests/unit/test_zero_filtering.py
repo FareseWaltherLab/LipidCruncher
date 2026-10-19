@@ -1234,115 +1234,12 @@ class TestEdgeCases:
 
 
 # =============================================================================
-# get_zero_statistics Tests
-# =============================================================================
-
-class TestGetZeroStatistics:
-    """Tests for ZeroFilteringService.get_zero_statistics method."""
-
-    def test_returns_dataframe(self, simple_experiment_2x3, clean_df):
-        """Test that method returns a DataFrame."""
-        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment_2x3)
-        assert isinstance(stats, pd.DataFrame)
-
-    def test_has_required_columns(self, simple_experiment_2x3, clean_df):
-        """Test that result has required columns."""
-        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment_2x3)
-        assert 'LipidMolec' in stats.columns
-        assert 'total_zeros' in stats.columns
-        assert 'total_samples' in stats.columns
-        assert 'zero_percentage' in stats.columns
-        assert 'zeros_per_condition' in stats.columns
-
-    def test_correct_row_count(self, simple_experiment_2x3, clean_df):
-        """Test that result has correct number of rows."""
-        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment_2x3)
-        assert len(stats) == len(clean_df)
-
-    def test_statistics_values_no_zeros(self, simple_experiment_2x3, clean_df):
-        """Test statistics with no zeros."""
-        stats = ZeroFilteringService.get_zero_statistics(clean_df, simple_experiment_2x3)
-        assert all(stats['total_zeros'] == 0)
-        assert all(stats['zero_percentage'] == 0.0)
-
-    def test_statistics_values_all_zeros(self, simple_experiment_2x3, df_all_zeros):
-        """Test statistics with all zeros."""
-        stats = ZeroFilteringService.get_zero_statistics(df_all_zeros, simple_experiment_2x3)
-        assert all(stats['total_zeros'] == 6)
-        assert all(stats['zero_percentage'] == 100.0)
-
-    def test_statistics_values_mixed(self, simple_experiment_2x3):
-        """Test statistics with mixed values."""
-        df = pd.DataFrame({
-            'LipidMolec': ['Lipid1'],
-            'ClassKey': ['PC'],
-            'intensity[s1]': [0.0],
-            'intensity[s2]': [100.0],
-            'intensity[s3]': [0.0],
-            'intensity[s4]': [0.0],
-            'intensity[s5]': [0.0],
-            'intensity[s6]': [100.0],
-        })
-
-        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment_2x3)
-        assert stats.iloc[0]['total_zeros'] == 4
-        assert stats.iloc[0]['total_samples'] == 6
-        assert stats.iloc[0]['zero_percentage'] == pytest.approx(66.67, rel=0.01)
-
-    def test_zeros_per_condition(self, simple_experiment_2x3):
-        """Test zeros_per_condition dict."""
-        df = pd.DataFrame({
-            'LipidMolec': ['Lipid1'],
-            'ClassKey': ['PC'],
-            'intensity[s1]': [0.0],
-            'intensity[s2]': [100.0],
-            'intensity[s3]': [0.0],
-            'intensity[s4]': [0.0],
-            'intensity[s5]': [0.0],
-            'intensity[s6]': [100.0],
-        })
-
-        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment_2x3)
-        zeros_per_cond = stats.iloc[0]['zeros_per_condition']
-        assert zeros_per_cond['Control'] == 2
-        assert zeros_per_cond['Treatment'] == 2
-
-    def test_statistics_with_threshold(self, simple_experiment_2x3):
-        """Test statistics with custom detection threshold."""
-        df = pd.DataFrame({
-            'LipidMolec': ['Lipid1'],
-            'ClassKey': ['PC'],
-            'intensity[s1]': [50.0],
-            'intensity[s2]': [150.0],
-            'intensity[s3]': [50.0],
-            'intensity[s4]': [50.0],
-            'intensity[s5]': [150.0],
-            'intensity[s6]': [50.0],
-        })
-
-        config = ZeroFilterConfig(detection_threshold=100.0)
-        stats = ZeroFilteringService.get_zero_statistics(df, simple_experiment_2x3, config)
-        assert stats.iloc[0]['total_zeros'] == 4
-
-    def test_statistics_empty_df(self, simple_experiment_2x3):
-        """Test statistics on empty DataFrame."""
-        empty_df = pd.DataFrame(columns=['LipidMolec', 'intensity[s1]'])
-        stats = ZeroFilteringService.get_zero_statistics(empty_df, simple_experiment_2x3)
-        assert len(stats) == 0
-
-    def test_statistics_missing_lipidmolec(self, simple_experiment_2x3):
-        """Test error when LipidMolec missing."""
-        df = pd.DataFrame({'SomeColumn': ['A']})
-        with pytest.raises(ValueError, match="LipidMolec"):
-            ZeroFilteringService.get_zero_statistics(df, simple_experiment_2x3)
-
-
-# =============================================================================
 # Integration Tests
 # =============================================================================
 
 class TestIntegration:
     """Integration tests for ZeroFilteringService."""
+
 
     def test_full_workflow_with_bqc(self, experiment_with_bqc):
         """Test complete filtering workflow with BQC."""
@@ -1360,9 +1257,6 @@ class TestIntegration:
             'intensity[s9]': [51000.0, 0.0, 0.0, 0.0],
             'intensity[s10]': [48000.0, 23000.0, 0.0, 0.0],
         })
-
-        stats = ZeroFilteringService.get_zero_statistics(df, experiment_with_bqc)
-        assert len(stats) == 4
 
         result = ZeroFilteringService.filter_zeros(
             df, experiment_with_bqc, bqc_label='BQC'
