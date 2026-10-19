@@ -5,6 +5,7 @@ Wrapper functions are used with AppTest.from_function() to test UI components
 without importing main_app.py (which has st.set_page_config() at module level).
 """
 
+import io
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -1138,16 +1139,14 @@ def qc_and_analysis_script():
     )
 
 
-class FakeUpload:
-    """What st.file_uploader returns for an uploaded file."""
+class FakeUpload(io.BytesIO):
+    """What st.file_uploader returns for an uploaded file: readable like a
+    file, with getvalue(), a name and a file_id."""
 
     def __init__(self, name: str, data: bytes):
+        super().__init__(data)
         self.name = name
         self.file_id = f"fake-{name}-{len(data)}"
-        self._data = data
-
-    def getvalue(self) -> bytes:
-        return self._data
 
 
 @pytest.fixture
