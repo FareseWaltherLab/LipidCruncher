@@ -14,6 +14,7 @@ import pandas as pd
 
 from app.constants import FORMAT_MSDIAL
 from app.models.experiment import ExperimentConfig
+from app.models.sample_frame import SampleFrame
 from app.services.sample_grouping import DatasetValidationResult, SampleGroupingService
 from app.ui.sample_names import (
     build_names_from_mapping,
@@ -245,16 +246,15 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
             base_df, group_df, selections, experiment,
         )
         # Keep display names in sync with the renumbered/reordered samples.
-        # Remap from the stable pre-regroup snapshot (not the live, possibly
+        # Renumber from the stable pre-regroup snapshot (not the live, possibly
         # already-remapped map) so the result is identical on every rerun.
-        st.session_state.sample_names = remap_names_after_regroup(
-            st.session_state.get('_pre_regroup_sample_names'),
-            regroup_result.old_to_new,
+        regrouped = SampleFrame.from_upload(
+            base_df, experiment, st.session_state.get('_pre_regroup_sample_names'),
+        ).renumbered(
+            regroup_result.reordered_df, experiment, regroup_result.old_to_new,
         )
-        st.session_state.regroup_origin = {
-            _sample_label(new): _sample_label(old)
-            for old, new in regroup_result.old_to_new.items()
-        }
+        st.session_state.sample_names = regrouped.names
+        st.session_state.regroup_origin = regrouped.origin
         st.session_state.grouping_complete = True
         st.sidebar.write("New sample order after regrouping:")
         st.sidebar.dataframe(regroup_result.name_df, width='stretch')
