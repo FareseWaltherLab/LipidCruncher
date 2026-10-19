@@ -9,6 +9,8 @@ Multi-step chains validate cross-analysis consistency (same input →
 consistent class totals across bar chart and pie chart), cascading
 parameter effects, and edge case behavior that unit tests do not cover.
 """
+from types import SimpleNamespace
+
 import matplotlib.pyplot as plt
 import pytest
 import pandas as pd
@@ -34,7 +36,6 @@ from app.workflows.analysis import (
     SaturationResult,
     ChainLengthResult,
     FACHResult,
-    PathwayResult,
     VolcanoResult,
     HeatmapResult,
 )
@@ -44,6 +45,7 @@ from app.services.statistical_testing import (
     StatisticalTestSummary,
     PostHocResult,
 )
+from app.services.plotting.pathway_viz import PathwayVizPlotterService
 from app.services.plotting.volcano_plot import VolcanoData
 
 # Models
@@ -62,6 +64,18 @@ from tests.integration.conftest import (
     load_mw_sample,
     get_concentration_columns,
 )
+
+
+def run_pathway(df, experiment, control, experimental):
+    """The pathway page's path: pathway data, then the diagram."""
+    data = AnalysisWorkflow.compute_pathway_data(df, experiment, control, experimental)
+    figure, pathway_dict = PathwayVizPlotterService.create_pathway_viz(
+        data.fold_change_df, data.saturation_df,
+    )
+    return SimpleNamespace(
+        figure=figure, pathway_dict=pathway_dict,
+        fold_change_df=data.fold_change_df, saturation_df=data.saturation_df,
+    )
 
 
 def get_sample_names(df: pd.DataFrame) -> list:
@@ -1052,11 +1066,10 @@ class TestPathwayEndToEnd:
         """Pathway analysis on LipidSearch data."""
         df = lipidsearch_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, lipidsearch_experiment, 'WT', 'ADGAT_DKO',
         )
 
-        assert isinstance(result, PathwayResult)
         assert isinstance(result.pathway_dict, dict)
         assert not result.fold_change_df.empty
         assert 'ClassKey' in result.fold_change_df.columns
@@ -1069,7 +1082,7 @@ class TestPathwayEndToEnd:
         """Fold change values are positive (ratio, not log)."""
         df = lipidsearch_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, lipidsearch_experiment, 'WT', 'ADGAT_DKO',
         )
 
@@ -1081,7 +1094,7 @@ class TestPathwayEndToEnd:
         """Saturation ratios are between 0 and 1."""
         df = lipidsearch_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, lipidsearch_experiment, 'WT', 'ADGAT_DKO',
         )
 
@@ -1095,7 +1108,7 @@ class TestPathwayEndToEnd:
         """Pathway generates a Plotly figure."""
         df = lipidsearch_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, lipidsearch_experiment, 'WT', 'ADGAT_DKO',
         )
 
@@ -1108,10 +1121,10 @@ class TestPathwayEndToEnd:
         """Swapping control/experimental inverts fold changes."""
         df = lipidsearch_normalized_df
 
-        result_forward = AnalysisWorkflow.run_pathway(
+        result_forward = run_pathway(
             df, lipidsearch_experiment, 'WT', 'ADGAT_DKO',
         )
-        result_reverse = AnalysisWorkflow.run_pathway(
+        result_reverse = run_pathway(
             df, lipidsearch_experiment, 'ADGAT_DKO', 'WT',
         )
 
@@ -1131,11 +1144,10 @@ class TestPathwayEndToEnd:
         """MW format pathway analysis."""
         df = mw_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, mw_experiment, 'Normal', 'HFD',
         )
 
-        assert isinstance(result, PathwayResult)
         assert not result.fold_change_df.empty
         plt.close('all')
 
@@ -1145,11 +1157,10 @@ class TestPathwayEndToEnd:
         """Generic format pathway analysis."""
         df = generic_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, generic_experiment, 'WT', 'ADGAT_DKO',
         )
 
-        assert isinstance(result, PathwayResult)
         assert isinstance(result.pathway_dict, dict)
         assert not result.fold_change_df.empty
         assert 'ClassKey' in result.fold_change_df.columns
@@ -1162,7 +1173,7 @@ class TestPathwayEndToEnd:
         """Generic format: fold change values are positive."""
         df = generic_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, generic_experiment, 'WT', 'ADGAT_DKO',
         )
 
@@ -1174,7 +1185,7 @@ class TestPathwayEndToEnd:
         """Generic format: saturation ratios are between 0 and 1."""
         df = generic_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, generic_experiment, 'WT', 'ADGAT_DKO',
         )
 
@@ -1188,7 +1199,7 @@ class TestPathwayEndToEnd:
         """Generic format: pathway generates a Plotly figure."""
         df = generic_normalized_df
 
-        result = AnalysisWorkflow.run_pathway(
+        result = run_pathway(
             df, generic_experiment, 'WT', 'ADGAT_DKO',
         )
 
@@ -1608,7 +1619,7 @@ class TestCrossAnalysis:
         pie = AnalysisWorkflow.run_pie_charts(df, exp, conditions, classes)
         sat = AnalysisWorkflow.run_saturation(df, exp, conditions, classes)
         fach = AnalysisWorkflow.run_fach(df, exp, classes[0], conditions)
-        pathway = AnalysisWorkflow.run_pathway(df, exp, 'WT', 'ADGAT_DKO')
+        pathway = run_pathway(df, exp, 'WT', 'ADGAT_DKO')
         volcano = AnalysisWorkflow.run_volcano(
             df, exp, 'WT', 'ADGAT_DKO', classes, auto_stat_config,
         )
@@ -1618,7 +1629,7 @@ class TestCrossAnalysis:
         assert isinstance(pie, dict) and len(pie) > 0
         assert isinstance(sat, SaturationResult)
         assert isinstance(fach, FACHResult)
-        assert isinstance(pathway, PathwayResult)
+        assert not pathway.fold_change_df.empty
         assert isinstance(volcano, VolcanoResult)
         assert isinstance(heatmap, HeatmapResult)
         plt.close('all')
@@ -1886,7 +1897,7 @@ class TestErrorHandling:
         """Same control and experimental condition raises ValueError."""
         df = lipidsearch_normalized_df
         with pytest.raises(ValueError, match="different"):
-            AnalysisWorkflow.run_pathway(
+            run_pathway(
                 df, lipidsearch_experiment, 'WT', 'WT',
             )
 
@@ -1942,7 +1953,7 @@ class TestErrorHandling:
         """Empty control condition raises ValueError."""
         df = lipidsearch_normalized_df
         with pytest.raises(ValueError, match="[Cc]ontrol"):
-            AnalysisWorkflow.run_pathway(
+            run_pathway(
                 df, lipidsearch_experiment, '', 'ADGAT_DKO',
             )
 

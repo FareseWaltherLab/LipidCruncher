@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Dict, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -186,30 +185,6 @@ class PathwayDataResult:
     saturation_df: pd.DataFrame = dataclass_field(
         default_factory=pd.DataFrame
     )
-
-
-@dataclass
-class PathwayResult:
-    """Result from pathway visualization.
-
-    Attributes:
-        figure: Matplotlib pathway figure (None if no data).
-        pathway_dict: Dict with class, abundance ratio, saturation ratio.
-        fold_change_df: Per-class fold change DataFrame.
-        saturation_df: Per-class saturation ratio DataFrame.
-        success: Whether the analysis completed successfully.
-        validation_errors: List of error messages if analysis failed.
-    """
-    figure: Optional[plt.Figure] = None
-    pathway_dict: Dict[str, list] = dataclass_field(default_factory=dict)
-    fold_change_df: pd.DataFrame = dataclass_field(
-        default_factory=pd.DataFrame
-    )
-    saturation_df: pd.DataFrame = dataclass_field(
-        default_factory=pd.DataFrame
-    )
-    success: bool = True
-    validation_errors: List[str] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -752,45 +727,6 @@ class AnalysisWorkflow:
         return PathwayDataResult(
             fold_change_df=fold_change_df,
             saturation_df=saturation_df,
-        )
-
-    @staticmethod
-    def run_pathway(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        control: str,
-        experimental: str,
-    ) -> PathwayResult:
-        """Run lipid pathway visualization.
-
-        Computes per-class fold change and saturation ratios, then
-        renders the pathway diagram.
-
-        Args:
-            df: DataFrame with LipidMolec, ClassKey, concentration columns.
-            experiment: Experiment configuration.
-            control: Name of the control condition.
-            experimental: Name of the experimental condition.
-
-        Returns:
-            PathwayResult with figure, pathway dict, and data.
-
-        Raises:
-            ValueError: If inputs are invalid.
-        """
-        data = AnalysisWorkflow.compute_pathway_data(
-            df, experiment, control, experimental,
-        )
-
-        figure, pathway_dict = PathwayVizPlotterService.create_pathway_viz(
-            data.fold_change_df, data.saturation_df,
-        )
-
-        return PathwayResult(
-            figure=figure,
-            pathway_dict=pathway_dict,
-            fold_change_df=data.fold_change_df,
-            saturation_df=data.saturation_df,
         )
 
     # ------------------------------------------------------------------

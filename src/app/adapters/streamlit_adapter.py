@@ -40,7 +40,6 @@ from ..workflows.analysis import (
     FACHResult,
     HeatmapResult,
     PathwayDataResult,
-    PathwayResult,
     SaturationResult,
     VolcanoData,
     VolcanoResult,
@@ -1048,22 +1047,6 @@ class StreamlitAdapter:
         return AnalysisWorkflow.compute_pathway_data(
             df, experiment, control, experimental,
             saturation_source_df=saturation_source_df,
-        )
-
-    @staticmethod
-    @st.cache_data(
-        show_spinner="Generating pathway visualization...",
-        hash_funcs={ExperimentConfig: hash},
-    )
-    def run_pathway(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        control: str,
-        experimental: str,
-    ) -> PathwayResult:
-        """Cached pathway visualization (default layout)."""
-        return AnalysisWorkflow.run_pathway(
-            df, experiment, control, experimental,
         )
 
     @staticmethod
