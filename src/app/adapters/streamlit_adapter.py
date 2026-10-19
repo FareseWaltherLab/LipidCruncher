@@ -500,10 +500,11 @@ _STAGES: Tuple[_Stage, ...] = (
             'chat_input_questions', 'chat_input_transform',
             'chat_input_lc_questions', 'chat_retry_lc', 'chat_input_viz',
             'ai_studio_file_uploader', 'ai_studio_import_pipeline',
-            'ai_studio_pipeline_choice', 'studio_grouping_radio',
-            'studio_n_conditions', 'studio_sample_cols_select',
+            'ai_studio_pipeline_choice', 'studio_sample_family',
+            'studio_sample_cols_select', 'studio_conditions_editor',
+            'studio_exclude_samples',
         }),
-        prefixes=('studio_cond_name_', 'studio_n_samples_', 'studio_select_'),
+        plain=frozenset({'studio_conditions'}),
     ),
     _Stage(
         'isotope',
@@ -609,15 +610,16 @@ _MAIN_APP_NAV_WIDGET_KEYS = (
 _MAIN_APP_NAV_WIDGET_PREFIXES = (
     'cond_name_', 'n_samples_', 'select_',
 )
+# The Assign Conditions table is not listed: Streamlit refuses to restore a
+# data_editor through session state, so its values are kept in the plain
+# 'studio_conditions' key instead, which navigation does not drop.
 _AI_STUDIO_NAV_WIDGET_KEYS = (
-    'studio_sample_cols_radio', 'studio_sample_cols_select',
-    'studio_n_conditions', 'studio_grouping_radio',
+    'studio_sample_cols_radio', 'studio_sample_family',
+    'studio_sample_cols_select',
     'studio_bqc_radio', 'studio_bqc_label_radio',
-    'studio_confirm_checkbox',
+    'studio_exclude_samples', 'studio_confirm_checkbox',
 )
-_AI_STUDIO_NAV_WIDGET_PREFIXES = (
-    'studio_cond_name_', 'studio_n_samples_', 'studio_select_',
-)
+_AI_STUDIO_NAV_WIDGET_PREFIXES = ()
 _NAV_PRESERVE_PREFIX = '_nav_preserved_'
 
 _STAGE_NAMES = tuple(stage.name for stage in _STAGES)

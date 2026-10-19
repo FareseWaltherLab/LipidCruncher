@@ -24,7 +24,9 @@ from app.services.format_detection import (
     DataFormat,
     FormatDetectionService,
 )
+from app.services.sample_inference import SampleInferenceService
 from app.ui.landing_page import display_logo
+from app.ui.sidebar.confirm_inputs import render_confirm_summary
 from app.ui.ai_chat import (
     display_lipidcruncher_questions_chat,
     display_data_questions_chat,
@@ -49,14 +51,16 @@ _AI_STUDIO_BLOCKED_FORMATS: frozenset = frozenset({
 # Shown above the tabs, not in an expander: what leaves the browser session
 # and what the server keeps (InteractionLoggingService's turn records).
 _DATA_USE_NOTICE = (
-    "**How your data is used.** The AI gets your messages and, in the data "
-    "tabs, your dataset's column names, types and first 3 rows (not the "
-    "file), through Anthropic's API. Each turn is logged on this server to "
-    "review and improve the AI Studio: your question, the AI's answer and "
-    "code, the dataset's shape and column names, a description of any "
-    "figure (not its values), and your 👍/👎 feedback. Answers can quote "
-    "numbers computed from your data, so don't use the AI Studio for data "
-    "you can't share this way."
+    "**How your data is used.** The AI runs on Anthropic's API. Anthropic "
+    "receives your conversation with the AI, including any results the AI's "
+    "code computes from your data, and, in the data tabs, your dataset's "
+    "column names, types and first 3 rows (not the whole file). Under its "
+    "API terms, Anthropic does not use this data to train its models and "
+    "deletes it within 30 days. To improve the AI Studio, each conversation "
+    "is also saved on the LipidCruncher server: your "
+    "questions, the AI's answers and code, your dataset's size and column "
+    "names, a description of any figure (not its values), and your 👍/👎 "
+    "feedback."
 )
 
 
@@ -150,18 +154,6 @@ def _detect_sample_prefix(df: pd.DataFrame) -> Optional[str]:
     if any(c.startswith('concentration[') and c.endswith(']') for c in df.columns):
         return 'concentration'
     return None
-
-
-def _extract_sample_name(col_name: str, prefix: Optional[str]) -> str:
-    """Strip the {prefix}[...] wrapper from col_name if present, otherwise
-    return col_name unchanged. Used to derive a human-readable sample name
-    from either pipeline-shaped columns (e.g. 'intensity[A1]' → 'A1') or
-    raw user-picked columns (e.g. 'S1_treated' → 'S1_treated')."""
-    if prefix is not None:
-        head = f'{prefix}['
-        if col_name.startswith(head) and col_name.endswith(']'):
-            return col_name[len(head):-1]
-    return col_name
 
 
 def _apply_user_experiment(
@@ -411,16 +403,12 @@ def _offer_pipeline_import_sidebar() -> None:
         # 'raw' (the data hasn't been cleaned/zero-filtered/normalized).
         if pipeline_experiment is not None:
             st.session_state.studio_sample_cols_radio = "Yes"
-            st.session_state.studio_n_conditions = (
-                pipeline_experiment.n_conditions
-            )
-            for i, name in enumerate(pipeline_experiment.conditions_list):
-                st.session_state[f'studio_cond_name_{i}'] = name
-            for i, n in enumerate(
-                pipeline_experiment.number_of_samples_list
-            ):
-                st.session_state[f'studio_n_samples_{i}'] = int(n)
-            st.session_state.studio_grouping_radio = "Yes"
+            # The pipeline's columns are {prefix}[s1..sN], so the Assign
+            # Conditions table's samples are the experiment's s-labels.
+            st.session_state.studio_conditions = dict(zip(
+                pipeline_experiment.full_samples_list,
+                pipeline_experiment.extensive_conditions_list,
+            ))
             st.session_state.studio_bqc_radio = (
                 "Yes" if pipeline_bqc_label else "No"
             )
@@ -431,182 +419,118 @@ def _offer_pipeline_import_sidebar() -> None:
         st.rerun()
 
 
-def _display_define_experiment_sidebar(sample_names: list) -> tuple:
-    """Render the 'Define Experiment' sidebar block, mirroring the main
-    app's pattern: number of conditions + per-condition (name, count).
-    Validates that the per-condition counts sum to the detected sample
-    count.
+def _display_assign_conditions_sidebar(sample_names: list) -> Optional[tuple]:
+    """Render the 'Assign Conditions' sidebar block: one editable row per
+    sample with its condition, pre-filled by guessing the condition from the
+    sample name ('KO-1' → 'KO'), or 'Condition_1' for every sample when the
+    names show no grouping. Samples with the same condition form a group;
+    conditions keep the order they first appear in.
+
+    The table's values live in ``studio_conditions`` (sample → condition),
+    so they survive navigation, which drops the editor's own state.
 
     Returns:
-        (condition_names, sample_counts) when valid, or (None, None).
+        (condition_names, samples_per_condition), or None while a sample
+        has no condition.
     """
-    st.sidebar.subheader("Define Experiment")
+    st.sidebar.subheader("Assign Conditions")
 
-    n_conditions = st.sidebar.number_input(
-        "Number of conditions",
-        min_value=1, max_value=20,
-        value=int(st.session_state.get('studio_n_conditions', 2)),
-        step=1, key='studio_n_conditions',
-    )
-
-    condition_names = []
-    sample_counts = []
-    for i in range(int(n_conditions)):
-        col1, col2 = st.sidebar.columns([1, 1])
-        with col1:
-            name_key = f'studio_cond_name_{i}'
-            name = st.text_input(
-                f"Condition {i + 1}",
-                value=st.session_state.get(name_key, f"Condition_{i + 1}"),
-                key=name_key,
-            )
-        with col2:
-            count_key = f'studio_n_samples_{i}'
-            count = st.number_input(
-                "Samples",
-                min_value=1, max_value=len(sample_names),
-                value=int(
-                    st.session_state.get(count_key, min(3, len(sample_names)))
-                ),
-                step=1, key=count_key,
-            )
-        condition_names.append(name)
-        sample_counts.append(int(count))
-
-    if not all((n or '').strip() for n in condition_names):
-        st.sidebar.error("All condition labels must be non-empty.")
-        return None, None
-    if len(set(condition_names)) != len(condition_names):
-        st.sidebar.error("Condition names must be unique.")
-        return None, None
-
-    total = sum(sample_counts)
-    if total != len(sample_names):
-        st.sidebar.warning(
-            f"Assigned {total} samples but dataset has {len(sample_names)}. "
-            "Please adjust the sample counts so they sum to "
-            f"{len(sample_names)}."
+    stored = st.session_state.get('studio_conditions') or {}
+    if list(stored) != list(sample_names):
+        # Other sample columns were picked: start again from a guess. The
+        # editor's edits refer to rows of the old table, so drop them too.
+        st.session_state.pop('studio_conditions_editor', None)
+        guesses = (
+            SampleInferenceService.guess_conditions(sample_names)
+            or ['Condition_1'] * len(sample_names)
         )
-        return None, None
+        stored = dict(zip(sample_names, guesses))
 
-    return condition_names, sample_counts
-
-
-def _display_group_samples_sidebar(
-    sample_names: list, condition_names: list, sample_counts: list,
-) -> Optional[list]:
-    """Render the 'Group Samples' sidebar block. Auto-assigns the first N1
-    samples to condition A, next N2 to B, etc., shows the resulting table,
-    asks the user to confirm. If the user picks 'No', shows multi-select
-    widgets so they can manually reassign.
-
-    Returns:
-        samples_per_condition (list[list[str]]) when ready, or None if the
-        user is mid-edit / hasn't completed manual assignment.
-    """
-    st.sidebar.subheader("Group Samples")
-
-    # Auto-assign assuming samples are ordered by condition.
-    auto_assignment = []
-    idx = 0
-    for count in sample_counts:
-        auto_assignment.append(sample_names[idx:idx + count])
-        idx += count
-
-    group_df = pd.DataFrame({
-        'sample': sample_names,
-        'condition': [
-            cond
-            for cond, samples in zip(condition_names, auto_assignment)
-            for _ in samples
-        ],
-    })
-    st.sidebar.dataframe(group_df, width='stretch', hide_index=True)
-
-    grouping_correct = st.sidebar.radio(
-        "Are your samples properly grouped together?",
-        ["Yes", "No"],
-        key='studio_grouping_radio',
+    st.sidebar.caption(
+        "Pre-filled from the sample names. Edit any condition; samples with "
+        "the same condition are grouped together."
     )
-
-    if grouping_correct == "Yes":
-        return auto_assignment
-
-    # Manual reassignment via multiselect, mirroring the main app.
-    st.sidebar.write(
-        "Pick the samples that belong to each condition. Each condition "
-        "needs exactly the count you set above."
+    edited = st.sidebar.data_editor(
+        pd.DataFrame({
+            'sample': sample_names,
+            'condition': [stored[s] for s in sample_names],
+        }),
+        hide_index=True,
+        width='stretch',
+        disabled=['sample'],
+        column_config={
+            'sample': st.column_config.TextColumn('Sample'),
+            'condition': st.column_config.TextColumn('Condition'),
+        },
+        key='studio_conditions_editor',
     )
-    manual = []
-    remaining = list(sample_names)
-    for i, (cond, count) in enumerate(zip(condition_names, sample_counts)):
-        selected = st.sidebar.multiselect(
-            f"Pick {count} sample(s) for **{cond}**",
-            options=remaining,
-            key=f'studio_select_{i}',
-        )
-        manual.append(selected)
-        # Once a condition is fully assigned, drop its samples from the
-        # options offered to later conditions — mirrors the main pipeline,
-        # so a sample can't be picked twice (no duplicate-error needed).
-        if len(selected) == count:
-            remaining = [s for s in remaining if s not in selected]
+    conditions = [
+        str(c).strip() if pd.notna(c) else '' for c in edited['condition']
+    ]
+    st.session_state.studio_conditions = dict(zip(sample_names, conditions))
 
-    flat = [s for group in manual for s in group]
-    if len(set(flat)) != len(flat):
-        return None  # mid-edit duplicate; resolves as options shrink
-    if len(flat) != len(sample_names):
-        return None  # mid-edit; don't show errors yet
-    if any(len(g) != c for g, c in zip(manual, sample_counts)):
+    if not all(conditions):
+        st.sidebar.error("Every sample needs a condition.")
         return None
 
-    # Show the old → new sample-name mapping, mirroring the main pipeline's
-    # "New sample order after regrouping:" table. Samples are renamed to
-    # s1..sN walking the conditions in order, then samples within each.
-    new_order = [s for group in manual for s in group]
-    name_df = pd.DataFrame({
-        'old name': new_order,
-        'updated name': [f's{i + 1}' for i in range(len(new_order))],
-        'condition': [
-            cond
-            for cond, group in zip(condition_names, manual)
-            for _ in group
-        ],
-    })
-    st.sidebar.write("New sample order after regrouping:")
-    st.sidebar.dataframe(name_df, width='stretch', hide_index=True)
-
-    return manual
+    condition_names = list(dict.fromkeys(conditions))
+    samples_per_condition = [
+        [s for s, c in zip(sample_names, conditions) if c == name]
+        for name in condition_names
+    ]
+    return condition_names, samples_per_condition
 
 
-def _non_numeric_sample_columns(df: pd.DataFrame, columns: list) -> list:
-    """Return picked columns that hold no numeric values.
-
-    Sample columns must carry intensity/concentration measurements. The
-    sandbox later coerces them with ``pd.to_numeric(errors='coerce')``, so a
-    fully non-numeric pick (e.g. the lipid-names column) would silently
-    become all-NaN instead of erroring. Flag those columns here so the user
-    can correct the selection.
-    """
-    offenders = []
-    for c in columns:
-        if pd.to_numeric(df[c], errors='coerce').notna().sum() == 0:
-            offenders.append(c)
-    return offenders
-
-
-def _warn_non_numeric_sample_columns(df: pd.DataFrame, columns: list) -> bool:
-    """Render a sidebar error for any non-numeric picks. Returns True when
-    the selection is valid (all columns numeric), False otherwise."""
-    offenders = _non_numeric_sample_columns(df, columns)
-    if not offenders:
-        return True
-    st.sidebar.error(
-        "These columns have no numeric values and can't be sample "
-        f"columns: {', '.join(offenders)}. Pick columns that hold "
-        "intensity or concentration measurements."
+def _pick_sample_columns(numeric: list, guess: list) -> list:
+    """The 'Pick the columns that are samples' multiselect over the numeric
+    columns (only those can hold sample values), starting from ``guess``
+    the first time it renders."""
+    key = 'studio_sample_cols_select'
+    if key not in st.session_state:
+        st.session_state[key] = guess
+    else:
+        st.session_state[key] = [c for c in st.session_state[key] if c in numeric]
+    return st.sidebar.multiselect(
+        "Pick the columns that are samples", options=numeric, key=key,
     )
-    return False
+
+
+def _guess_sample_columns_sidebar(numeric: list) -> list:
+    """Guess which numeric columns are samples, for a file with no
+    intensity[...] / concentration[...] columns.
+
+    When the columns form measurement families (Area[...], Height[...]), the
+    user picks the family that holds the sample values and its columns are
+    the guess. Otherwise the guess is every numeric column whose name does
+    not look like metadata (RT, m/z, score, ...).
+    """
+    families = SampleInferenceService.column_families(numeric)
+    if len(families) == 1:
+        return next(iter(families.values()))
+    if not families:
+        return [
+            c for c in numeric
+            if not SampleInferenceService.looks_like_metadata(c)
+        ]
+
+    own_pick = "Pick columns myself"
+    labels = {
+        f"{name}[…] ({len(cols)} columns)": cols
+        for name, cols in families.items()
+    }
+
+    def _select_family():
+        # Choosing a family replaces the picked columns with its columns.
+        choice = st.session_state.studio_sample_family
+        st.session_state.studio_sample_cols_select = labels.get(choice, [])
+
+    choice = st.sidebar.radio(
+        "Which measurement holds the sample values?",
+        list(labels) + [own_pick],
+        key='studio_sample_family',
+        on_change=_select_family,
+    )
+    return labels.get(choice, [])
 
 
 def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
@@ -617,8 +541,9 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
     'intensity' or 'concentration'. The detected prefix becomes the output
     prefix used when applying the experiment (so 'concentration[*]' inputs
     stay 'concentration[s1..sN]'). When neither prefix is detected, the
-    output prefix defaults to 'intensity' and the user must pick the
-    sample columns manually.
+    output prefix defaults to 'intensity' and the user picks the sample
+    columns, starting from a guess (see _guess_sample_columns_sidebar).
+    Only columns holding numbers are offered.
 
     Returns:
         (output_prefix, sample_columns) where sample_columns is a list of
@@ -638,17 +563,12 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
         auto_cols = []
 
     output_prefix = detected_prefix or 'intensity'
+    numeric = SampleInferenceService.numeric_columns(df)
 
     if not auto_cols:
-        selected = st.sidebar.multiselect(
-            "Pick the columns that are samples",
-            options=list(df.columns),
-            default=[],
-            key='studio_sample_cols_select',
-        )
+        guess = _guess_sample_columns_sidebar(numeric)
+        selected = _pick_sample_columns(numeric, guess)
         if not selected:
-            return None
-        if not _warn_non_numeric_sample_columns(df, selected):
             return None
         return output_prefix, selected
 
@@ -670,17 +590,42 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
     if correct == 'Yes':
         return output_prefix, auto_cols
 
-    selected = st.sidebar.multiselect(
-        "Pick the columns that are samples",
-        options=list(df.columns),
-        default=auto_cols,
-        key='studio_sample_cols_select',
+    selected = _pick_sample_columns(
+        [c for c in df.columns if c in auto_cols or c in numeric], auto_cols,
     )
     if not selected:
         return None
-    if not _warn_non_numeric_sample_columns(df, selected):
-        return None
     return output_prefix, selected
+
+
+def _display_studio_exclusion_sidebar(sample_names: list) -> list:
+    """Render the optional 'Exclude Samples' block, mirroring the main app.
+
+    Excluded samples are left out of the experiment and of the data the Data
+    Questions and Custom Visualization tabs see; excluding every sample of a
+    condition drops that condition. Returns the excluded sample names.
+    """
+    key = 'studio_exclude_samples'
+    # A changed sample list (other columns picked) must not leave a selection
+    # the multiselect no longer offers.
+    if key in st.session_state:
+        st.session_state[key] = [
+            s for s in st.session_state[key] if s in sample_names
+        ]
+    with st.sidebar.expander(
+        '🚫 Exclude Samples (optional)',
+        expanded=bool(st.session_state.get(key)),
+    ):
+        return st.multiselect(
+            'Samples to exclude',
+            sample_names,
+            help=(
+                "Left out of Data Questions and Custom Visualization. "
+                "Excluding every sample of a condition drops that condition. "
+                "The remaining samples are renumbered s1, s2, …"
+            ),
+            key=key,
+        )
 
 
 def _display_studio_bqc_sidebar(
@@ -722,32 +667,16 @@ def _display_studio_bqc_sidebar(
 
 
 def _display_studio_confirm_inputs_sidebar(
-    condition_names: list, sample_counts: list,
+    condition_names: list, kept: list, excluded: list,
 ) -> bool:
-    """Render the 'Confirm Inputs' sidebar block: total-samples line,
-    a per-condition summary of the planned post-apply layout (samples are
-    renamed to contiguous s1..sN per condition when applied), and a
-    confirmation checkbox.
+    """Render the 'Confirm Inputs' sidebar block: the main sidebar's summary
+    (each condition with the samples it keeps, under the dataset's own
+    sample names, and the excluded ones) and a confirmation checkbox.
 
     Returns True if the box is checked.
     """
     st.sidebar.subheader("Confirm Inputs")
-
-    total_samples = sum(sample_counts)
-    st.sidebar.write(f"There are a total of {total_samples} samples.")
-
-    idx = 1
-    for cond, count in zip(condition_names, sample_counts):
-        if count > 5:
-            display_text = (
-                f"• s{idx} to s{idx + count - 1} "
-                f"(total {count}) correspond to {cond}"
-            )
-        else:
-            samples_str = '-'.join(f's{idx + j}' for j in range(count))
-            display_text = f"• {samples_str} correspond to {cond}"
-        st.sidebar.text(display_text)
-        idx += count
+    render_confirm_summary(condition_names, kept, excluded)
 
     confirm_kwargs = {'key': 'studio_confirm_checkbox'}
     if 'studio_confirm_checkbox' not in st.session_state:
@@ -802,8 +731,8 @@ def _render_standard_format_advisory_main(file_name: str) -> None:
 
 def _display_studio_sidebar() -> None:
     """Render the full AI Studio sidebar, mirroring the main app:
-    upload + pipeline import → Define Experiment → Group Samples →
-    Specify Label of BQC Samples → Confirm Inputs."""
+    upload + pipeline import → Sample Columns → Assign Conditions →
+    Exclude Samples → Specify Label of BQC Samples → Confirm Inputs."""
     _handle_file_upload_sidebar()
     _offer_pipeline_import_sidebar()
 
@@ -833,7 +762,7 @@ def _display_studio_sidebar() -> None:
     output_prefix, sample_columns = sample_cols_result
 
     sample_names = [
-        _extract_sample_name(c, output_prefix) for c in sample_columns
+        SampleInferenceService.sample_name(c) for c in sample_columns
     ]
     if len(set(sample_names)) != len(sample_names):
         st.sidebar.error(
@@ -843,22 +772,32 @@ def _display_studio_sidebar() -> None:
         return
     sample_to_col = dict(zip(sample_names, sample_columns))
 
-    condition_names, sample_counts = _display_define_experiment_sidebar(
-        sample_names,
-    )
-    if condition_names is None:
+    assignment = _display_assign_conditions_sidebar(sample_names)
+    if assignment is None:
         return
+    condition_names, samples_per_condition = assignment
+    sample_counts = [len(samples) for samples in samples_per_condition]
 
-    samples_per_condition = _display_group_samples_sidebar(
-        sample_names, condition_names, sample_counts,
-    )
-    if samples_per_condition is None:
+    excluded = _display_studio_exclusion_sidebar(sample_names)
+    kept = [
+        [s for s in samples if s not in excluded]
+        for samples in samples_per_condition
+    ]
+    if excluded and sum(len(samples) for samples in kept) < 2:
+        st.sidebar.error("At least two samples must remain after exclusion.")
         return
 
     bqc_label = _display_studio_bqc_sidebar(condition_names, sample_counts)
+    # Same rule as the main sidebar: a BQC condition whose samples were all
+    # excluded is not in the experiment the tabs get.
+    if bqc_label is not None and not kept[condition_names.index(bqc_label)]:
+        st.sidebar.warning(
+            f"All '{bqc_label}' samples are excluded; continuing without BQC."
+        )
+        bqc_label = None
 
     confirmed = _display_studio_confirm_inputs_sidebar(
-        condition_names, sample_counts,
+        condition_names, kept, [s for s in sample_names if s in excluded],
     )
     if not confirmed:
         # Unchecking the box must re-lock the data-dependent tabs, which gate
@@ -871,12 +810,14 @@ def _display_studio_sidebar() -> None:
     # True across reruns, so we'd otherwise rebuild the experiment and wipe
     # per-tab chat sessions on every rerun. Only re-apply when the inputs
     # actually change by comparing a snapshot.
+    kept_conditions = [c for c, samples in zip(condition_names, kept) if samples]
+    kept_samples = [samples for samples in kept if samples]
     snapshot = (
         st.session_state.get('chat_studio_file_id'),
         output_prefix,
         tuple(sample_columns),
-        tuple(condition_names),
-        tuple(tuple(s) for s in samples_per_condition),
+        tuple(kept_conditions),
+        tuple(tuple(s) for s in kept_samples),
         bqc_label,
     )
     if st.session_state.get('studio_applied_snapshot') == snapshot:
@@ -884,8 +825,8 @@ def _display_studio_sidebar() -> None:
 
     try:
         reordered_df, experiment = _apply_user_experiment(
-            studio_df, condition_names, samples_per_condition,
-            sample_to_col, output_prefix,
+            studio_df.drop(columns=[sample_to_col[s] for s in excluded]),
+            kept_conditions, kept_samples, sample_to_col, output_prefix,
         )
     except (ValueError, TypeError, KeyError) as e:
         st.sidebar.error(str(e))
@@ -931,25 +872,17 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_studio_sample_columns_original = None
     st.session_state.chat_studio_sample_columns_renamed = None
     st.session_state.studio_applied_snapshot = None
-    # Sidebar widget keys: pop static ones explicitly + dynamic ones by
-    # prefix. Pre-populated values from a pipeline import would otherwise
-    # leak into a subsequent fresh upload or different import.
+    # Sidebar widget keys, and the Assign Conditions table's values.
+    # Pre-populated values from a pipeline import would otherwise leak into
+    # a subsequent fresh upload or different import.
     static_widget_keys = (
-        'studio_sample_cols_radio', 'studio_sample_cols_select',
-        'studio_n_conditions', 'studio_grouping_radio',
+        'studio_sample_cols_radio', 'studio_sample_family',
+        'studio_sample_cols_select', 'studio_conditions',
+        'studio_conditions_editor',
         'studio_bqc_radio', 'studio_bqc_label_radio',
-        'studio_confirm_checkbox',
+        'studio_exclude_samples', 'studio_confirm_checkbox',
     )
     for key in static_widget_keys:
-        st.session_state.pop(key, None)
-    dynamic_widget_prefixes = (
-        'studio_cond_name_', 'studio_n_samples_', 'studio_select_',
-    )
-    dynamic_keys = [
-        key for key in list(st.session_state.keys())
-        if isinstance(key, str) and key.startswith(dynamic_widget_prefixes)
-    ]
-    for key in dynamic_keys:
         st.session_state.pop(key, None)
     # Cross-page snapshots written by preserve_ai_studio_widgets() would
     # otherwise re-populate the sidebar on the next rerun via
@@ -1011,10 +944,10 @@ def display_ai_studio_page() -> None:
 **Quick start**
 
 1. Upload your CSV in the sidebar (or import from the main pipeline).
-2. Define your experiment in the sidebar — sample columns, conditions,
-   groupings, and BQC label.
-3. Check **Confirm the inputs by checking this box** to unlock the
-   data-dependent tabs.
+2. Define your experiment in the sidebar — sample columns, each
+   sample's condition, any samples to exclude, and BQC label.
+3. Check **Confirm the inputs by checking this box** to unlock Data
+   Questions and Custom Visualization.
 
 **Tabs**
 
@@ -1023,8 +956,9 @@ def display_ai_studio_page() -> None:
 - **Data Questions** — Explore your dataset with the AI (summaries,
   filters, distributions). Requires data + confirm.
 - **Transform to Generic** — Ask the AI to convert non-LipidCruncher
-  data into the Generic format the main pipeline accepts. Requires
-  data + confirm. Use this when your data isn't ready for the main
+  data into the Generic format the main pipeline accepts. Needs only
+  the upload, no experiment setup, so you can reshape a file before its
+  samples are defined. Use this when your data isn't ready for the main
   pipeline yet.
 - **Custom Visualization** — Generate custom Plotly charts beyond what
   the built-in modules offer. Requires data that has been **processed
@@ -1089,11 +1023,12 @@ def display_ai_studio_page() -> None:
 
         st.markdown("---")
 
-        # The three data-dependent tabs are locked until the user finishes
-        # the sidebar flow and checks "Confirm Inputs". `studio_applied_
+        # Data Questions and Custom Visualization are locked until the user
+        # finishes the sidebar flow and checks "Confirm Inputs". `studio_applied_
         # snapshot` is set by the apply step the moment the box is first
         # checked, and persists for the rest of the session unless the
-        # data is cleared. LC Questions is exempt — it doesn't need data.
+        # data is cleared. LC Questions needs no data and Transform only the
+        # uploaded file.
         is_confirmed = st.session_state.get('studio_applied_snapshot') is not None
         not_confirmed_msg = (
             "Configure your experiment in the sidebar and check "
@@ -1161,9 +1096,10 @@ def display_ai_studio_page() -> None:
                     "Questions** to explore it, or **Custom "
                     "Visualization** to plot it."
                 )
-            elif not is_confirmed:
-                st.info(not_confirmed_msg)
             else:
+                # No confirm needed: Transform works on the file as
+                # uploaded, which may not have sample columns yet (e.g. one
+                # row per lipid and sample).
                 display_transform_chat(studio_df_original)
 
         with tab_viz:

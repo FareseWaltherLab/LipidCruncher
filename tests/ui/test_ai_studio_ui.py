@@ -111,20 +111,16 @@ def _returned_selection(at):
 
 
 class TestSampleColumnNumericValidation:
-    """Picking a non-numeric column as a sample must be rejected."""
+    """A column without numbers can't be a sample column."""
 
-    def test_non_numeric_pick_is_rejected(self):
-        """Regression: selecting the text 'lipids' column produced no error
-        and was accepted as a sample column."""
+    def test_text_columns_are_not_offered(self):
+        """Regression: the text 'lipids' column could be picked as a sample
+        column (the sandbox would have turned it into all-NaN)."""
         at = AppTest.from_function(
             sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
         ).run()
-        at.sidebar.multiselect(
-            key='studio_sample_cols_select',
-        ).set_value(['lipids']).run()
-
-        assert len(at.sidebar.error) > 0
-        assert _returned_selection(at) is False
+        ms = at.sidebar.multiselect(key='studio_sample_cols_select')
+        assert 'lipids' not in ms.options
 
     def test_numeric_picks_are_accepted(self):
         at = AppTest.from_function(
@@ -139,18 +135,18 @@ class TestSampleColumnNumericValidation:
 
 
 class TestSampleColumnPreselection:
-    """The picker starts empty — the user hand-picks every sample column."""
+    """The picker starts from a guess the user reviews: the numeric columns
+    whose names don't look like metadata."""
 
-    def test_no_columns_are_preselected(self):
+    def test_numeric_non_metadata_columns_are_preselected(self):
         at = AppTest.from_function(
             sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
         ).run()
         ms = at.sidebar.multiselect(key='studio_sample_cols_select')
-        # Nothing pre-checked: the default is an empty selection.
-        assert ms.value == []
+        assert ms.value == ['Sample1', 'Sample2']
 
     def test_all_columns_stay_selectable(self):
-        """Every column remains an option (AI Studio accepts any input)."""
+        """Numeric metadata is not preselected but stays an option."""
         at = AppTest.from_function(
             sample_columns_picker_script, default_timeout=DEFAULT_TIMEOUT,
         ).run()
@@ -159,64 +155,80 @@ class TestSampleColumnPreselection:
         assert 'Sample1' in ms.options
 
 
-def group_samples_script():
-    """Render only the Group Samples block (manual reassignment path) over a
-    4-sample / 2-condition setup."""
+def assign_conditions_script():
+    """Render only the Assign Conditions block over the sample names held
+    in session state (default: KO-1, KO-2, WT-1, WT-2)."""
     import streamlit as st
     from app.adapters.streamlit_adapter import StreamlitAdapter
     StreamlitAdapter.initialize_session_state()
 
-    from app.ui.ai_studio_page import _display_group_samples_sidebar
-    result = _display_group_samples_sidebar(
-        ['s1', 's2', 's3', 's4'], ['A', 'B'], [2, 2],
-    )
-    st.text(f"group_result:{result}")
+    names = st.session_state.get('_test_names', ['KO-1', 'KO-2', 'WT-1', 'WT-2'])
+    from app.ui.ai_studio_page import _display_assign_conditions_sidebar
+    st.text(f"assignment:{_display_assign_conditions_sidebar(names)}")
 
 
-class TestGroupSamplesNoDuplicates:
-    """A fully-assigned sample drops out of the other conditions' options,
-    so it can't be picked twice (no duplicate-error needed)."""
+def _edit_conditions(at, edits):
+    """Edit Assign Conditions cells: edits maps row index → new condition."""
+    at.session_state['studio_conditions_editor'] = {
+        'edited_rows': {i: {'condition': c} for i, c in edits.items()},
+        'added_rows': [], 'deleted_rows': [],
+    }
+    return at.run()
 
-    def test_assigned_samples_leave_later_options(self):
+
+class TestAssignConditions:
+    """One editable sample → condition table replaces the counts and the
+    per-condition pickers."""
+
+    def test_conditions_are_guessed_from_the_names(self):
         at = AppTest.from_function(
-            group_samples_script, default_timeout=DEFAULT_TIMEOUT,
+            assign_conditions_script, default_timeout=DEFAULT_TIMEOUT,
         ).run()
-        at.sidebar.radio(key='studio_grouping_radio').set_value('No').run()
-        # Fully assign condition A; its samples must vanish from B's options.
-        at.sidebar.multiselect(
-            key='studio_select_0',
-        ).set_value(['s1', 's2']).run()
+        assert _marker_value(at, 'assignment:') == (
+            "(['KO', 'WT'], [['KO-1', 'KO-2'], ['WT-1', 'WT-2']])"
+        )
 
-        assert at.sidebar.multiselect(key='studio_select_1').options == [
-            's3', 's4',
-        ]
-        # No duplicate-error is rendered for the manual flow.
-        assert len(at.sidebar.error) == 0
-
-    def test_regrouping_shows_old_to_new_name_table(self):
-        """A completed manual regroup renders an old → new name table,
-        mirroring the main pipeline's 'New sample order after regrouping:'."""
+    def test_names_without_a_pattern_start_in_one_condition(self):
         at = AppTest.from_function(
-            group_samples_script, default_timeout=DEFAULT_TIMEOUT,
-        ).run()
-        at.sidebar.radio(key='studio_grouping_radio').set_value('No').run()
-        at.sidebar.multiselect(
-            key='studio_select_0',
-        ).set_value(['s2', 's1']).run()
-        at.sidebar.multiselect(
-            key='studio_select_1',
-        ).set_value(['s4', 's3']).run()
+            assign_conditions_script, default_timeout=DEFAULT_TIMEOUT,
+        )
+        at.session_state['_test_names'] = ['s1', 's2', 's3']
+        at.run()
+        assert _marker_value(at, 'assignment:') == (
+            "(['Condition_1'], [['s1', 's2', 's3']])"
+        )
 
-        name_tables = [
-            t.value for t in at.sidebar.dataframe
-            if 'updated name' in t.value.columns
-        ]
-        assert len(name_tables) == 1
-        name_df = name_tables[0]
-        assert list(name_df.columns) == ['old name', 'updated name', 'condition']
-        assert list(name_df['updated name']) == ['s1', 's2', 's3', 's4']
-        assert list(name_df['condition']) == ['A', 'A', 'B', 'B']
-        assert set(name_df['old name']) == {'s1', 's2', 's3', 's4'}
+    def test_editing_a_cell_regroups(self):
+        """Samples need not be contiguous; conditions keep the order they
+        first appear in."""
+        at = AppTest.from_function(
+            assign_conditions_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        _edit_conditions(at, {1: 'WT', 3: 'Control'})
+        assert _marker_value(at, 'assignment:') == (
+            "(['KO', 'WT', 'Control'], [['KO-1'], ['KO-2', 'WT-1'], ['WT-2']])"
+        )
+
+    def test_a_sample_without_a_condition_is_an_error(self):
+        at = AppTest.from_function(
+            assign_conditions_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        _edit_conditions(at, {0: '  '})
+        assert _marker_value(at, 'assignment:') == 'None'
+        assert any("needs a condition" in e.value for e in at.sidebar.error)
+
+    def test_other_samples_start_from_a_fresh_guess(self):
+        """Edits refer to rows of the old table, so a new sample list must
+        not inherit them."""
+        at = AppTest.from_function(
+            assign_conditions_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        _edit_conditions(at, {0: 'Other'})
+        at.session_state['_test_names'] = ['A_1', 'A_2', 'B_1', 'B_2']
+        at.run()
+        assert _marker_value(at, 'assignment:') == (
+            "(['A', 'B'], [['A_1', 'A_2'], ['B_1', 'B_2']])"
+        )
 
 
 def studio_preview_script():
@@ -253,8 +265,9 @@ def test_page_states_how_the_data_is_used():
     ).run()
     notice = [i.value for i in at.info if "How your data is used" in i.value]
     assert len(notice) == 1
-    assert "logged on this server" in notice[0]
+    assert "saved on the LipidCruncher server" in notice[0]
     assert "first 3 rows" in notice[0]
+    assert "does not use this data to train" in notice[0]
 
 
 class TestDataPreviewReflectsReorder:
@@ -382,7 +395,7 @@ def pipeline_import_script():
         "samples:"
         f"{studio_exp.number_of_samples_list if studio_exp else None}"
     )
-    st.text(f"n_samples_1:{st.session_state.get('studio_n_samples_1')}")
+    st.text(f"conditions_table:{st.session_state.get('studio_conditions')}")
 
 
 def _marker(at, prefix):
@@ -426,7 +439,9 @@ class TestQCFilteredPipelineImport:
         # qc_experiment is [2, 1]; the stale pre-QC experiment is [2, 2].
         assert _marker(at, 'samples:') == '[2, 1]'
         # The sidebar prefill must agree with it.
-        assert _marker(at, 'n_samples_1:') == '1'
+        assert _marker(at, 'conditions_table:') == (
+            "{'s1': 'WT', 's2': 'WT', 's3': 'KO'}"
+        )
 
     def test_normalized_import_keeps_the_pre_qc_experiment(self):
         """The QC-updated experiment must not leak into the other sources —
@@ -636,17 +651,13 @@ class TestDataQuestionsMatchesTheExperiment:
         at = AppTest.from_function(
             data_questions_regroup_script, default_timeout=DEFAULT_TIMEOUT,
         ).run()
-        at.sidebar.radio(key='studio_grouping_radio').set_value('No').run()
-        at.sidebar.multiselect(key='studio_select_0').set_value(
-            ['s4', 's5', 's6'],
-        ).run()
-        at.sidebar.multiselect(key='studio_select_1').set_value(
-            ['s1', 's2', 's3'],
-        ).run()
+        # s1..s6 start in one condition; split them into A = s1, s3, s5 and
+        # B = s2, s4, s6, so A's samples are renamed s1..s3.
+        _edit_conditions(at, {0: 'A', 1: 'B', 2: 'A', 3: 'B', 4: 'A', 5: 'B'})
         at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
 
-        # Condition 1 holds the original s4..s6, whatever they are called now.
-        assert _marker_value(at, 'dq_first_condition:') == '[4.0, 5.0, 6.0]'
+        # Condition A holds the original s1, s3, s5, whatever they are called now.
+        assert _marker_value(at, 'dq_first_condition:') == '[1.0, 3.0, 5.0]'
 
     def test_applying_an_experiment_restarts_the_data_questions_chat(self):
         at = AppTest.from_function(
@@ -656,3 +667,307 @@ class TestDataQuestionsMatchesTheExperiment:
 
         # The old conversation referred to the old column names.
         assert _marker_value(at, 'dq_session:') == 'None'
+
+
+def studio_exclusion_script():
+    """The AI Studio sidebar over six named samples (WT_1..3, KO_1..3) whose
+    values identify them, reaching Confirm Inputs with default selections:
+    conditions WT and KO, guessed from the names."""
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('chat_studio_df_original') is None:
+        df = pd.DataFrame({'LipidMolec': ['PC 34:1']})
+        for i, name in enumerate(['WT_1', 'WT_2', 'WT_3', 'KO_1', 'KO_2', 'KO_3']):
+            df[f'intensity[{name}]'] = [float(i + 1)]
+        st.session_state.chat_studio_df = df
+        st.session_state.chat_studio_df_original = df
+        st.session_state.chat_studio_file_id = '_pipeline_import_test'
+
+    from app.ui.ai_studio_page import _display_studio_sidebar
+    _display_studio_sidebar()
+
+    exp = st.session_state.get('chat_studio_experiment')
+    st.text(f"conditions:{exp.conditions_list if exp else None}")
+    st.text(f"counts:{exp.number_of_samples_list if exp else None}")
+    applied = st.session_state.get('chat_studio_df')
+    st.text(
+        "values:"
+        f"{[applied[c].iloc[0] for c in applied.columns if c.startswith('intensity[')]}"
+    )
+    st.text(f"columns:{[c for c in applied.columns if c.startswith('intensity[')]}")
+    st.text(f"bqc:{st.session_state.get('chat_studio_bqc_label')}")
+
+
+def _exclusion_app(excluded):
+    at = AppTest.from_function(
+        studio_exclusion_script, default_timeout=DEFAULT_TIMEOUT,
+    ).run()
+    at.sidebar.multiselect(key='studio_exclude_samples').set_value(excluded).run()
+    return at
+
+
+class TestStudioSampleExclusion:
+    """The AI Studio sidebar can exclude samples, as the main sidebar can."""
+
+    def test_excluded_sample_is_dropped_and_survivors_renumbered(self):
+        at = _exclusion_app(['WT_2'])
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+        assert not at.exception
+        assert _marker_value(at, 'conditions:') == "['WT', 'KO']"
+        assert _marker_value(at, 'counts:') == '[2, 3]'
+        assert _marker_value(at, 'columns:') == str(
+            [f'intensity[s{i}]' for i in range(1, 6)]
+        )
+        # WT_2 (value 2) is gone; WT_3 is the new s2.
+        assert _marker_value(at, 'values:') == '[1.0, 3.0, 4.0, 5.0, 6.0]'
+
+    def test_excluding_a_whole_condition_drops_it(self):
+        at = _exclusion_app(['WT_1', 'WT_2', 'WT_3'])
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+        assert not at.exception
+        assert _marker_value(at, 'conditions:') == "['KO']"
+        assert _marker_value(at, 'values:') == '[4.0, 5.0, 6.0]'
+
+    def test_excluding_the_bqc_condition_clears_bqc(self):
+        at = AppTest.from_function(
+            studio_exclusion_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='studio_bqc_radio').set_value('Yes').run()
+        at.sidebar.radio(key='studio_bqc_label_radio').set_value('KO').run()
+        at.sidebar.multiselect(key='studio_exclude_samples').set_value(
+            ['KO_1', 'KO_2', 'KO_3']
+        ).run()
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+        assert not at.exception
+        assert _marker_value(at, 'conditions:') == "['WT']"
+        assert _marker_value(at, 'bqc:') == 'None'
+        assert any("continuing without BQC" in w.value for w in at.sidebar.warning)
+
+    def test_fewer_than_two_remaining_blocks_confirm(self):
+        at = _exclusion_app(['WT_1', 'WT_2', 'WT_3', 'KO_1', 'KO_2'])
+        assert any("At least two samples" in e.value for e in at.sidebar.error)
+        assert 'studio_confirm_checkbox' not in [c.key for c in at.sidebar.checkbox]
+
+    def test_confirm_summary_matches_the_main_sidebar(self):
+        """The summary used to read "s1-s2-s3 correspond to WT", which hid
+        the dataset's own sample names and the exclusions."""
+        at = _exclusion_app(['WT_2'])
+        text = [m.value for m in at.sidebar.markdown]
+        captions = [c.value for c in at.sidebar.caption]
+        assert "5 samples in 2 conditions" in text
+        assert "**WT** · 2 samples" in text
+        assert "WT\\_1, WT\\_3" in captions
+        assert "Excluded: WT\\_2" in captions
+
+
+def exclusion_lifecycle_script():
+    """Snapshot an exclusion for navigation, then clear it as a new upload
+    or pipeline import does."""
+    import streamlit as st
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.ui.ai_studio_page import _clear_data_sessions
+    StreamlitAdapter.initialize_session_state()
+
+    st.session_state.studio_exclude_samples = ['WT_2']
+    StreamlitAdapter.preserve_ai_studio_widgets()
+    st.text(
+        "preserved:"
+        f"{st.session_state.get('_nav_preserved_studio_exclude_samples')}"
+    )
+    _clear_data_sessions()
+    st.text(f"cleared:{'studio_exclude_samples' not in st.session_state}")
+
+
+def test_exclusion_survives_navigation_and_resets_with_new_data():
+    at = AppTest.from_function(
+        exclusion_lifecycle_script, default_timeout=DEFAULT_TIMEOUT,
+    ).run()
+    assert _marker_value(at, 'preserved:') == "['WT_2']"
+    assert _marker_value(at, 'cleared:') == 'True'
+
+
+def transform_unlock_script():
+    """Full AI Studio page over a long-format file (one row per lipid and
+    sample), with the Transform and Data Questions panels replaced by
+    recorders. The sidebar experiment is never confirmed."""
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    if st.session_state.get('chat_studio_df_original') is None:
+        df = pd.DataFrame({
+            'lipid': ['PC 34:1', 'PC 34:1', 'PE 36:2', 'PE 36:2'],
+            'sample': ['A', 'B', 'A', 'B'],
+            'area': [1.0, 2.0, 3.0, 4.0],
+        })
+        st.session_state.chat_studio_df = df
+        st.session_state.chat_studio_df_original = df
+        st.session_state.chat_studio_file_id = '_pipeline_import_test'
+
+    import app.ui.ai_studio_page as page
+    page.display_transform_chat = lambda df: st.text("transform_chat_shown")
+    page.display_data_questions_chat = lambda df: st.text("dq_chat_shown")
+    page.display_ai_studio_page()
+
+
+def test_transform_opens_before_the_experiment_is_confirmed():
+    """Regression: Transform to Generic was locked behind Confirm Inputs,
+    though it only needs the uploaded file and a long-format file has no
+    sample columns to define until it is transformed."""
+    at = AppTest.from_function(
+        transform_unlock_script, default_timeout=DEFAULT_TIMEOUT,
+    ).run()
+    assert not at.exception
+    shown = [t.value for t in at.text]
+    assert "transform_chat_shown" in shown
+    # Data Questions still needs the experiment.
+    assert "dq_chat_shown" not in shown
+
+
+def sample_families_script():
+    """Render the Sample Columns block over a LipidSearch-like export: two
+    measurement families with a column per sample, plus per-lipid RT."""
+    import streamlit as st
+    import pandas as pd
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    df = pd.DataFrame({
+        'LipidMolec': ['PC 34:1'], 'RT': [5.2],
+        'Area[KO-1]': [1.0], 'Area[KO-2]': [2.0], 'Area[WT-1]': [3.0],
+        'Height[KO-1]': [10.0], 'Height[KO-2]': [20.0], 'Height[WT-1]': [30.0],
+    })
+    from app.ui.ai_studio_page import _display_sample_columns_sidebar
+    st.text(f"result:{_display_sample_columns_sidebar(df)}")
+
+
+class TestSampleColumnFamilies:
+    """With many per-sample measurements (Area[...], Height[...]), the user
+    picks the measurement instead of every column."""
+
+    def test_first_family_is_preselected(self):
+        at = AppTest.from_function(
+            sample_families_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        radio = at.sidebar.radio(key='studio_sample_family')
+        assert radio.options == [
+            'Area[…] (3 columns)', 'Height[…] (3 columns)', 'Pick columns myself',
+        ]
+        assert at.sidebar.multiselect(key='studio_sample_cols_select').value == [
+            'Area[KO-1]', 'Area[KO-2]', 'Area[WT-1]',
+        ]
+
+    def test_choosing_a_family_selects_its_columns(self):
+        at = AppTest.from_function(
+            sample_families_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='studio_sample_family').set_value(
+            'Height[…] (3 columns)'
+        ).run()
+        assert at.sidebar.multiselect(key='studio_sample_cols_select').value == [
+            'Height[KO-1]', 'Height[KO-2]', 'Height[WT-1]',
+        ]
+
+    def test_pick_columns_myself_starts_empty(self):
+        at = AppTest.from_function(
+            sample_families_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        at.sidebar.radio(key='studio_sample_family').set_value(
+            'Pick columns myself'
+        ).run()
+        assert at.sidebar.multiselect(key='studio_sample_cols_select').value == []
+        assert _marker_value(at, 'result:') == 'None'
+
+
+def nonstandard_upload_script():
+    """Full AI Studio page with tests/fixtures/ai_studio_test_dataset.csv
+    uploaded through the Studio's own uploader: a lipid table in no
+    supported format (feature, class, RetentionTime, PrecursorMZ,
+    QualityScore and Notes columns, then 15 samples KO-1 … WT-3), so it can
+    only come in this way. AppTest cannot drive st.file_uploader, so the
+    sidebar's uploader is replaced for the run by one returning the file;
+    reading, format detection and the sidebar flow are the real ones. The
+    Data Questions panel is a recorder."""
+    import io
+    import pathlib
+    import streamlit as st
+    import app
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    StreamlitAdapter.initialize_session_state()
+
+    path = (
+        pathlib.Path(app.__file__).parents[2]
+        / 'tests' / 'fixtures' / 'ai_studio_test_dataset.csv'
+    )
+    data = path.read_bytes()
+    upload = io.BytesIO(data)
+    upload.name, upload.size = path.name, len(data)
+
+    import app.ui.ai_studio_page as page
+
+    def _record(df):
+        exp = st.session_state.chat_studio_experiment
+        st.text(f"dq_conditions:{exp.conditions_list}")
+        st.text(f"dq_counts:{exp.number_of_samples_list}")
+        st.text(f"dq_s4:{df['intensity[s4]'].iloc[0]}")
+
+    page.display_data_questions_chat = _record
+    page.display_transform_chat = lambda df: st.text("transform_chat_shown")
+    st.sidebar.file_uploader = lambda *args, **kwargs: upload
+    try:
+        page.display_ai_studio_page()
+    finally:
+        del st.sidebar.file_uploader
+    st.text(f"format:{st.session_state.get('chat_studio_detected_format')}")
+
+
+class TestNonStandardUpload:
+    """End to end over a file only the AI Studio accepts."""
+
+    def _uploaded(self):
+        at = AppTest.from_function(
+            nonstandard_upload_script, default_timeout=DEFAULT_TIMEOUT,
+        ).run()
+        assert not at.exception
+        return at
+
+    def test_upload_is_accepted_and_transform_opens(self):
+        at = self._uploaded()
+        assert _marker_value(at, 'format:') == 'Unknown'
+        assert not any("dataset detected" in w.value for w in at.sidebar.warning)
+        assert "transform_chat_shown" in [t.value for t in at.text]
+
+    def test_sidebar_guesses_the_samples_and_conditions(self):
+        at = self._uploaded()
+        samples = [
+            f'{cond}-{i}'
+            for cond in ['KO', 'KOWT', 'mut1', 'mut2', 'WT'] for i in (1, 2, 3)
+        ]
+        picker = at.sidebar.multiselect(key='studio_sample_cols_select')
+        # Text and empty columns are not offered; numeric metadata is, but
+        # is not preselected.
+        assert 'feature' not in picker.options
+        assert 'Notes' not in picker.options
+        assert 'RetentionTime' in picker.options
+        assert picker.value == samples
+
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+        assert not at.exception
+        assert _marker_value(at, 'dq_conditions:') == (
+            "['KO', 'KOWT', 'mut1', 'mut2', 'WT']"
+        )
+        assert _marker_value(at, 'dq_counts:') == '[3, 3, 3, 3, 3]'
+
+    def test_regrouped_samples_reach_data_questions(self):
+        """Moving WT-3 into KO makes it KO's fourth sample, the new s4."""
+        at = self._uploaded()
+        _edit_conditions(at, {14: 'KO'})
+        at.sidebar.checkbox(key='studio_confirm_checkbox').set_value(True).run()
+        assert not at.exception
+        assert _marker_value(at, 'dq_counts:') == '[4, 3, 3, 3, 2]'
+        # WT-3's value in the first row of the file.
+        assert _marker_value(at, 'dq_s4:') == '0.409898992'
