@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 import pandas as pd
 
 if TYPE_CHECKING:
-    from app.services.data_standardization import MSDIALFeatures
+    from app.services.standardization.msdial import MSDIALFeatures
 
 
 @dataclass
