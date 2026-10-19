@@ -124,12 +124,9 @@ class SessionState:
                              qc_correlation_plots, qc_pca_plot, qc_samples_removed,
                              _preserved_bqc_filter_choice, _preserved_rt_viewing_mode,
                              _preserved_pca_samples_remove, _preserved_pca_groups_remove
-      analysis.py          → analysis_selection, analysis_bar_chart_fig,
-                             analysis_pie_chart_figs, analysis_saturation_figs,
-                             analysis_chain_length_fig, analysis_fach_fig, analysis_pathway_fig,
-                             analysis_volcano_fig, analysis_volcano_data,
-                             analysis_heatmap_fig, analysis_heatmap_clusters,
-                             analysis_all_plots
+      analysis/            → analysis_selection, analysis_volcano_data,
+                             analysis_pathway_*, analysis_all_plots (figures
+                             for the PDF, written only by _publish)
       isotope_tracing_page.py → iso_measurement_df, iso_molecule_df, iso_element_df,
                              iso_result, iso_result_key
       main_app.py          → page, module
@@ -274,20 +271,11 @@ class SessionState:
 
     # --- Analysis (owner: analysis.py) ---
     analysis_selection: Optional[str] = None
-    analysis_bar_chart_fig: Optional[go.Figure] = None
-    analysis_pie_chart_figs: Dict[str, go.Figure] = field(default_factory=dict)
-    analysis_saturation_figs: Dict[str, go.Figure] = field(default_factory=dict)
-    analysis_chain_length_fig: Optional[go.Figure] = None
-    analysis_fach_fig: Optional[go.Figure] = None
-    analysis_pathway_fig: Optional[go.Figure] = None
     analysis_pathway_added_edges: List[Tuple[str, str]] = field(default_factory=list)
     analysis_pathway_removed_edges: List[Tuple[str, str]] = field(default_factory=list)
     analysis_pathway_custom_nodes: Dict[str, Tuple[float, float]] = field(default_factory=dict)
     analysis_pathway_position_overrides: Dict[str, Tuple[float, float]] = field(default_factory=dict)
-    analysis_volcano_fig: Optional[go.Figure] = None
     analysis_volcano_data: Optional[VolcanoData] = None
-    analysis_heatmap_fig: Optional[go.Figure] = None
-    analysis_heatmap_clusters: Optional[pd.DataFrame] = None
     analysis_all_plots: Dict[str, Union[go.Figure, matplotlib.figure.Figure]] = field(default_factory=dict)
 
     # --- LSI Compliance Report (owner: lsi_report.py) ---
@@ -541,14 +529,14 @@ _STAGES: Tuple[_Stage, ...] = (
     _Stage(
         'analysis',
         fields=frozenset({
-            'analysis_selection', 'analysis_bar_chart_fig',
-            'analysis_pie_chart_figs', 'analysis_saturation_figs',
-            'analysis_chain_length_fig', 'analysis_fach_fig',
-            'analysis_pathway_fig', 'analysis_pathway_added_edges',
+            'analysis_selection', 
+            
+            
+            'analysis_pathway_added_edges',
             'analysis_pathway_removed_edges', 'analysis_pathway_custom_nodes',
-            'analysis_pathway_position_overrides', 'analysis_volcano_fig',
-            'analysis_volcano_data', 'analysis_heatmap_fig',
-            'analysis_heatmap_clusters', 'analysis_all_plots',
+            'analysis_pathway_position_overrides', 
+            'analysis_volcano_data', 
+            'analysis_all_plots',
         }),
         widgets=frozenset({
             'analysis_radio', 'generate_pdf_report', 'download_pdf_report',

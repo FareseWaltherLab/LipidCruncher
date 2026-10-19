@@ -7,7 +7,7 @@ from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.st_helpers import display_export_buttons, section_header
-from app.ui.main_content.analysis._shared import _clear_pdf_plots
+from app.ui.main_content.analysis._shared import _clear_pdf_plots, _publish
 
 
 def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
@@ -40,12 +40,10 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
             df, experiment, all_conditions, selected_classes,
         )
 
-        st.session_state.analysis_pie_chart_figs = {}
         for condition, pie_result in results.items():
             st.markdown(f"###### {condition}")
             st.plotly_chart(pie_result.figure, width='stretch')
-            st.session_state.analysis_pie_chart_figs[condition] = pie_result.figure
-            st.session_state.analysis_all_plots[f'pie_{condition}'] = pie_result.figure
+            _publish(f'pie_{condition}', pie_result.figure)
 
             display_export_buttons(
                 pie_result.figure, pie_result.data_df,

@@ -29,6 +29,71 @@ class ReportMetadata:
     conditions_detail: List[Tuple[str, int, List[str]]] = field(default_factory=list)
 
 
+# ── Analysis pages ──────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class AnalysisPage:
+    """How one kind of analysis figure appears in the report.
+
+    Attributes:
+        key: Its ``analysis_all_plots`` key. A key ending in '_' is a family
+            with one figure per condition or class (``pie_Control``).
+        title: Page caption. For a family, ``{}`` is the condition or class
+            and ``{kind}`` the saturation plot type.
+        cover: Cover-page entry. For a family, ``{}`` is how many conditions
+            or classes it has.
+        orientation: 'landscape' or 'portrait'; None for the heatmap, which
+            has its own page layout.
+        is_matplotlib: The figure is Matplotlib rather than Plotly.
+    """
+    key: str
+    title: str
+    cover: str
+    orientation: Optional[str] = 'landscape'
+    is_matplotlib: bool = False
+
+
+# Every analysis figure the report can hold, in page order. The analysis
+# pages store their figures under these keys.
+ANALYSIS_PAGES: Tuple[AnalysisPage, ...] = (
+    AnalysisPage('bar_chart', "Abundance Bar Chart", "Class Concentration Bar Chart"),
+    AnalysisPage('pie_', "Abundance Pie Chart for {}",
+                 "Class Concentration Pie Charts ({} condition(s))", 'portrait'),
+    AnalysisPage('sat_', "Saturation Plot ({kind}) for {}",
+                 "Saturation Profiles ({} class(es))"),
+    AnalysisPage('chain_length', "Chain Length Distribution", "Chain Length Distribution"),
+    AnalysisPage('fach', "Fatty Acid Composition Heatmap", "Fatty Acid Composition Heatmap"),
+    AnalysisPage('pathway', "Lipid Pathway Visualization", "Lipid Pathway Visualization"),
+    AnalysisPage('volcano', "Volcano Plot", "Volcano Plot Analysis"),
+    AnalysisPage('conc_vs_fc', "Concentration vs. Fold Change",
+                 "Concentration vs. Fold Change"),
+    AnalysisPage('lipid_distribution', "Individual Lipid Concentration Distribution",
+                 "Individual Lipid Concentration Distribution", 'portrait', True),
+    AnalysisPage('heatmap', "Lipidomic Heatmap", "Lipidomic Heatmap", None),
+)
+
+
+def _pages_of(page: AnalysisPage, plots: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """The ``(key, title)`` of each figure of ``page`` in ``plots``, in order.
+
+    Pie charts go by condition name; saturation plots by class, the
+    concentration plot before the percentage plot.
+    """
+    if not page.key.endswith('_'):
+        return [(page.key, page.title)] if page.key in plots else []
+    if page.key == 'sat_':
+        return [
+            (f'sat_{kind}_{cls}', page.title.format(cls, kind=kind.capitalize()))
+            for cls in _get_saturation_classes(plots)
+            for kind in ('concentration', 'percentage')
+            if f'sat_{kind}_{cls}' in plots
+        ]
+    return [
+        (key, page.title.format(key[len(page.key):]))
+        for key in sorted(k for k in plots if k.startswith(page.key))
+    ]
+
+
 # ── Image Conversion ────────────────────────────────────────────────────────
 
 _PLOTLY_EXPORT_LANDSCAPE = dict(format='png', width=1000, height=700, scale=2)
@@ -303,29 +368,13 @@ def _build_analyses_list(plots: Dict[str, Any],
         items.append(f"Pairwise Correlation ({len(corr)} condition(s))")
 
     # Analysis plots
-    if 'bar_chart' in plots:
-        items.append("Class Concentration Bar Chart")
-    pie_count = sum(1 for k in plots if k.startswith('pie_'))
-    if pie_count:
-        items.append(f"Class Concentration Pie Charts ({pie_count} condition(s))")
-    sat_count = len({k.split('_', 2)[2] for k in plots
-                     if k.startswith('sat_')})
-    if sat_count:
-        items.append(f"Saturation Profiles ({sat_count} class(es))")
-    if 'chain_length' in plots:
-        items.append("Chain Length Distribution")
-    if 'fach' in plots:
-        items.append("Fatty Acid Composition Heatmap")
-    if 'pathway' in plots:
-        items.append("Lipid Pathway Visualization")
-    if 'volcano' in plots:
-        items.append("Volcano Plot Analysis")
-    if 'conc_vs_fc' in plots:
-        items.append("Concentration vs. Fold Change")
-    if 'lipid_distribution' in plots:
-        items.append("Individual Lipid Concentration Distribution")
-    if 'heatmap' in plots:
-        items.append("Lipidomic Heatmap")
+    for page in ANALYSIS_PAGES:
+        if page.key == 'sat_':
+            count = len(_get_saturation_classes(plots))
+        else:
+            count = len(_pages_of(page, plots))
+        if count:
+            items.append(page.cover.format(count) if page.key.endswith('_') else page.cover)
 
     return items
 
@@ -342,10 +391,8 @@ def generate_pdf_report(
     Generate a PDF report containing all generated plots.
 
     Args:
-        analysis_plots: Dict from ``analysis_all_plots`` session state.
-            Keys like ``bar_chart``, ``pie_<cond>``, ``sat_concentration_<cls>``,
-            ``sat_percentage_<cls>``, ``fach``, ``pathway``, ``volcano``,
-            ``conc_vs_fc``, ``lipid_distribution`` (matplotlib), ``heatmap``.
+        analysis_plots: Dict from ``analysis_all_plots`` session state,
+            keyed as ``ANALYSIS_PAGES`` lists.
         metadata: Report metadata for the cover page.
         qc_plots: Optional dict of QC plots with keys:
             ``box_plot_fig1``, ``box_plot_fig2``, ``bqc_plot``,
@@ -453,71 +500,14 @@ def _render_qc_plots(pdf: canvas.Canvas, qc_plots: Dict[str, Any]) -> None:
 
 def _render_analysis_plots(pdf: canvas.Canvas,
                            plots: Dict[str, Any]) -> None:
-    """Render all analysis plots in a consistent order."""
-    # Bar chart
-    if 'bar_chart' in plots:
-        _render_plot_page(pdf, plots['bar_chart'],
-                          "Abundance Bar Chart", 'landscape', False)
-
-    # Pie charts (sorted by condition name)
-    pie_keys = sorted(k for k in plots if k.startswith('pie_'))
-    for key in pie_keys:
-        condition = key[4:]  # strip 'pie_'
-        _render_plot_page(pdf, plots[key],
-                          f"Abundance Pie Chart for {condition}",
-                          'portrait', False)
-
-    # Saturation plots (grouped by class)
-    sat_classes = _get_saturation_classes(plots)
-    for cls in sat_classes:
-        conc_key = f'sat_concentration_{cls}'
-        pct_key = f'sat_percentage_{cls}'
-        if conc_key in plots:
-            _render_plot_page(pdf, plots[conc_key],
-                              f"Saturation Plot (Concentration) for {cls}",
-                              'landscape', False)
-        if pct_key in plots:
-            _render_plot_page(pdf, plots[pct_key],
-                              f"Saturation Plot (Percentage) for {cls}",
-                              'landscape', False)
-
-    # Chain length distribution
-    if 'chain_length' in plots:
-        _render_plot_page(pdf, plots['chain_length'],
-                          "Chain Length Distribution", 'landscape', False)
-
-    # FACH
-    if 'fach' in plots:
-        _render_plot_page(pdf, plots['fach'],
-                          "Fatty Acid Composition Heatmap",
-                          'landscape', False)
-
-    # Pathway (Plotly)
-    if 'pathway' in plots:
-        _render_plot_page(pdf, plots['pathway'],
-                          "Lipid Pathway Visualization",
-                          'landscape', False)
-
-    # Volcano
-    if 'volcano' in plots:
-        _render_plot_page(pdf, plots['volcano'],
-                          "Volcano Plot", 'landscape', False)
-
-    # Concentration vs. fold change (rendered under the volcano plot)
-    if 'conc_vs_fc' in plots:
-        _render_plot_page(pdf, plots['conc_vs_fc'],
-                          "Concentration vs. Fold Change", 'landscape', False)
-
-    # Individual lipid distributions (matplotlib)
-    if 'lipid_distribution' in plots:
-        _render_plot_page(pdf, plots['lipid_distribution'],
-                          "Individual Lipid Concentration Distribution",
-                          'portrait', True)
-
-    # Heatmap (special handler)
-    if 'heatmap' in plots:
-        _render_heatmap_page(pdf, plots['heatmap'],
-                             "Lipidomic Heatmap")
+    """Render all analysis plots in ``ANALYSIS_PAGES`` order."""
+    for page in ANALYSIS_PAGES:
+        for key, title in _pages_of(page, plots):
+            if page.orientation is None:
+                _render_heatmap_page(pdf, plots[key], title)
+            else:
+                _render_plot_page(pdf, plots[key], title,
+                                  page.orientation, page.is_matplotlib)
 
 
 def _get_saturation_classes(plots: Dict[str, Any]) -> List[str]:

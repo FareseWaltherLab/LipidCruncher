@@ -12,6 +12,7 @@ from app.ui.main_content.analysis._shared import (
     _display_condition_class_selectors,
     _display_statistical_options,
     _display_detailed_statistics,
+    _publish,
 )
 
 
@@ -55,8 +56,7 @@ def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
         )
 
         st.plotly_chart(result.figure, width='stretch')
-        st.session_state.analysis_bar_chart_fig = result.figure
-        st.session_state.analysis_all_plots['bar_chart'] = result.figure
+        _publish('bar_chart', result.figure)
 
         display_export_buttons(
             result.figure, result.abundance_df,

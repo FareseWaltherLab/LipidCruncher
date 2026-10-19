@@ -67,7 +67,7 @@ def _heatmap_app(mode='original'):
 
 
 def _heatmap_x(at):
-    return list(at.session_state['analysis_heatmap_fig'].data[0].x)
+    return list(at.session_state['analysis_all_plots']['heatmap'].data[0].x)
 
 
 # =============================================================================
@@ -89,7 +89,7 @@ class TestHeatmapSampleAxis:
     def test_standardized_labels_on_the_axis(self):
         at = _heatmap_app(mode='standardized')
         assert _heatmap_x(at) == LABELS
-        assert at.session_state['analysis_heatmap_fig'].layout.xaxis.tickangle == 45
+        assert at.session_state['analysis_all_plots']['heatmap'].layout.xaxis.tickangle == 45
 
     def test_flipping_the_switch_redraws_the_axis(self):
         """The cached heatmap is keyed on the names, so a flip is not served

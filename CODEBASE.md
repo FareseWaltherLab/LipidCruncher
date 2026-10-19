@@ -324,7 +324,7 @@ Box Plots → BQC Assessment → Retention Time → Correlation → PCA
 Bar Charts | Pie Charts | Saturation | Chain Length | FACH | Pathway | Volcano | Heatmap
 ```
 
-Each analysis type is independent and user-selectable. All produce interactive plots with SVG and CSV export, and every analysis shown is included in the PDF report.
+Each analysis type is independent and user-selectable. All produce interactive plots with SVG and CSV export, and every analysis shown is included in the PDF report: each page calls `_clear_pdf_plots` on entry and `_publish(key, figure)` for each figure it draws (`analysis/_shared.py`); `_publish` accepts only keys listed in `ANALYSIS_PAGES` (`report_generator.py`), the table that also orders and captions the report's analysis pages. `tests/ui/test_pdf_keys.py` pins which keys each page leaves after each selection change.
 
 ### AI Studio (separate page)
 
@@ -418,7 +418,7 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | `StatisticalTestingService` | `statistical_testing.py` | Parametric (Welch's t-test, Alexander-Govern ANOVA) and non-parametric (Mann-Whitney, Kruskal-Wallis) tests with two-level correction (between-class and post-hoc). Auto mode selects parametric with log10 transform, FDR for 2+ classes, Tukey for 3+ conditions. Uses dataset-wide zero replacement for consistent detection-floor handling. |
 | `ZeroFilteringService` | `zero_filtering.py` | Removes lipids exceeding configurable zero-value thresholds (default: 75% for non-BQC, 50% for BQC samples). |
 | `StandardsService` | `standards.py` | Standards extraction, validation, and class-to-standard mapping. |
-| `ReportGeneratorService` | `report_generator.py` | Generates PDF reports from collected plots and analysis results. |
+| `ReportGeneratorService` | `report_generator.py` | Generates PDF reports from collected plots and analysis results; `ANALYSIS_PAGES` lists every analysis figure key with its page caption, cover entry and layout. |
 | `LSIReportService` | `lsi_report.py` | Generates Lipidomics Standards Initiative (LSI) compliance checklists with auto-filled fields from the analysis pipeline. Supports PDF and CSV export. |
 
 #### AI Chat Services (`services/ai_chat/`)

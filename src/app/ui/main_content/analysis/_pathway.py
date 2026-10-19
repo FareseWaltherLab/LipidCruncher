@@ -22,7 +22,7 @@ from app.ui.main_content.analysis._pathway_state import (
     get_position_overrides,
 )
 from app.ui.main_content.analysis._pathway_editor import display_pathway_layout_editor
-from app.ui.main_content.analysis._shared import _clear_pdf_plots
+from app.ui.main_content.analysis._shared import _clear_pdf_plots, _publish
 
 
 def _display_pathway_viz(
@@ -131,8 +131,7 @@ def _display_pathway_viz(
             return
 
         st.plotly_chart(figure, width='stretch')
-        st.session_state.analysis_pathway_fig = figure
-        st.session_state.analysis_all_plots['pathway'] = figure
+        _publish('pathway', figure)
 
         col1, col2 = st.columns(2)
         with col1:

@@ -16,7 +16,7 @@ from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
 from app.ui.sample_labels import display_names_for, names_for
-from app.ui.main_content.analysis._shared import _clear_pdf_plots
+from app.ui.main_content.analysis._shared import _clear_pdf_plots, _publish
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -174,8 +174,7 @@ def _display_lipidomic_heatmap(
                 f"{order_text}. The CSV download below contains all "
                 f"{species_total}, in the order they appear in your data."
             )
-        st.session_state.analysis_heatmap_fig = result.figure
-        st.session_state.analysis_all_plots['heatmap'] = result.figure
+        _publish('heatmap', result.figure)
 
         if result.z_scores_df is not None:
             # Clustered rows go out in the figure's order, with their cluster.
@@ -474,7 +473,6 @@ def _display_cluster_composition(
 
     if composition_df is not None:
         st.dataframe(composition_df, width='stretch')
-        st.session_state.analysis_heatmap_clusters = composition_df
 
         csv_download_button(
             composition_df,

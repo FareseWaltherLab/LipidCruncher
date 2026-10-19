@@ -548,6 +548,64 @@ class TestPlotOrdering:
         assert alpha_idx < zeta_idx
 
 
+class TestEveryAnalysisPage:
+    """Pinned: the page each analysis key becomes, in order, and the cover
+    entry it adds."""
+
+    PLOTS = [
+        'heatmap', 'lipid_distribution', 'conc_vs_fc', 'volcano', 'pathway',
+        'fach', 'chain_length', 'sat_percentage_PE', 'sat_concentration_PE',
+        'sat_percentage_PC', 'sat_concentration_PC', 'pie_Treatment',
+        'pie_Control', 'bar_chart',
+    ]
+
+    def _pages(self):
+        from app.services.report_generator import _render_analysis_plots
+        plots = {key: key for key in self.PLOTS}
+        pages = []
+        with patch('app.services.report_generator._render_plot_page') as page, \
+                patch('app.services.report_generator._render_heatmap_page') as heatmap:
+            page.side_effect = lambda pdf, fig, title, orient, mpl: pages.append(
+                (fig, title, orient, mpl))
+            heatmap.side_effect = lambda pdf, fig, title: pages.append(
+                (fig, title, 'heatmap', None))
+            _render_analysis_plots(MagicMock(), plots)
+        return pages
+
+    def test_page_order_titles_and_layout(self):
+        assert self._pages() == [
+            ('bar_chart', 'Abundance Bar Chart', 'landscape', False),
+            ('pie_Control', 'Abundance Pie Chart for Control', 'portrait', False),
+            ('pie_Treatment', 'Abundance Pie Chart for Treatment', 'portrait', False),
+            ('sat_concentration_PC', 'Saturation Plot (Concentration) for PC', 'landscape', False),
+            ('sat_percentage_PC', 'Saturation Plot (Percentage) for PC', 'landscape', False),
+            ('sat_concentration_PE', 'Saturation Plot (Concentration) for PE', 'landscape', False),
+            ('sat_percentage_PE', 'Saturation Plot (Percentage) for PE', 'landscape', False),
+            ('chain_length', 'Chain Length Distribution', 'landscape', False),
+            ('fach', 'Fatty Acid Composition Heatmap', 'landscape', False),
+            ('pathway', 'Lipid Pathway Visualization', 'landscape', False),
+            ('volcano', 'Volcano Plot', 'landscape', False),
+            ('conc_vs_fc', 'Concentration vs. Fold Change', 'landscape', False),
+            ('lipid_distribution', 'Individual Lipid Concentration Distribution', 'portrait', True),
+            ('heatmap', 'Lipidomic Heatmap', 'heatmap', None),
+        ]
+
+    def test_cover_entries(self):
+        plots = {key: key for key in self.PLOTS}
+        assert _build_analyses_list(plots, {}) == [
+            "Class Concentration Bar Chart",
+            "Class Concentration Pie Charts (2 condition(s))",
+            "Saturation Profiles (2 class(es))",
+            "Chain Length Distribution",
+            "Fatty Acid Composition Heatmap",
+            "Lipid Pathway Visualization",
+            "Volcano Plot Analysis",
+            "Concentration vs. Fold Change",
+            "Individual Lipid Concentration Distribution",
+            "Lipidomic Heatmap",
+        ]
+
+
 # ── TestManyConditions ──────────────────────────────────────────────────────
 
 class TestManyConditions:

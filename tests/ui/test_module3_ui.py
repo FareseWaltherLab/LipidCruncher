@@ -145,12 +145,11 @@ class TestBarChartUI:
         at = analysis_generic_app
         at.radio(key='bar_scale_radio').set_value("Linear Scale").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_stores_figure_in_session(self, analysis_generic_app):
         """Bar chart figure is stored in session state."""
         at = analysis_generic_app
-        assert at.session_state['analysis_bar_chart_fig'] is not None
         assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_chart_leaves_pdf_when_no_class_selected(self, analysis_generic_app):
@@ -167,7 +166,7 @@ class TestBarChartUI:
         at = analysis_generic_app
         at.radio(key='bar_stats_mode').set_value("Manual").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_manual_non_parametric(self, analysis_generic_app):
         """Bar chart with Manual non-parametric test renders without error."""
@@ -175,7 +174,7 @@ class TestBarChartUI:
         at.radio(key='bar_stats_mode').set_value("Manual").run()
         at.selectbox(key='bar_test_type').set_value("non_parametric").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_manual_bonferroni_correction(self, analysis_generic_app):
         """Bar chart with Manual bonferroni correction renders without error."""
@@ -183,7 +182,7 @@ class TestBarChartUI:
         at.radio(key='bar_stats_mode').set_value("Manual").run()
         at.selectbox(key='bar_correction').set_value("bonferroni").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_manual_uncorrected(self, analysis_generic_app):
         """Bar chart with Manual uncorrected renders without error."""
@@ -191,7 +190,7 @@ class TestBarChartUI:
         at.radio(key='bar_stats_mode').set_value("Manual").run()
         at.selectbox(key='bar_correction').set_value("uncorrected").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_deselect_all_classes_shows_warning(self, analysis_generic_app):
         """Deselecting all classes shows a warning."""
@@ -230,19 +229,18 @@ class TestPieChartUI:
         assert 'PE' in ms.value
 
     def test_pie_stores_figures_in_session(self, analysis_generic_app):
-        """Pie chart figures are stored in session state per condition."""
+        """Each condition's pie chart reaches the PDF report."""
         at = self._switch_to_pie(analysis_generic_app)
-        figs = at.session_state['analysis_pie_chart_figs']
-        assert 'Control' in figs
-        assert 'Treatment' in figs
+        plots = at.session_state['analysis_all_plots']
+        assert 'pie_Control' in plots
+        assert 'pie_Treatment' in plots
 
     def test_pie_deselect_class_updates_figures(self, analysis_generic_app):
         """Deselecting a class re-renders pie charts with remaining classes."""
         at = self._switch_to_pie(analysis_generic_app)
         at.multiselect(key='pie_classes').set_value(['PC']).run()
         assert not at.exception
-        figs = at.session_state['analysis_pie_chart_figs']
-        assert 'Control' in figs
+        assert 'pie_Control' in at.session_state['analysis_all_plots']
 
     def test_pie_deselect_all_classes_shows_warning(self, analysis_generic_app):
         """Deselecting all classes shows a warning."""
@@ -290,18 +288,18 @@ class TestSaturationUI:
         at = self._switch_to_saturation(analysis_generic_app)
         at.radio(key='sat_plot_type').set_value("Percentage").run()
         assert not at.exception
-        # Percentage plots stored in session
-        figs = at.session_state['analysis_saturation_figs']
-        assert any('percentage' in k for k in figs)
+        # Percentage plots reach the report
+        plots = at.session_state['analysis_all_plots']
+        assert any(k.startswith('sat_percentage_') for k in plots)
 
     def test_saturation_switch_to_both(self, analysis_generic_app):
         """Switching to Both plot type renders concentration and percentage."""
         at = self._switch_to_saturation(analysis_generic_app)
         at.radio(key='sat_plot_type').set_value("Both").run()
         assert not at.exception
-        figs = at.session_state['analysis_saturation_figs']
-        assert any('concentration' in k for k in figs)
-        assert any('percentage' in k for k in figs)
+        plots = at.session_state['analysis_all_plots']
+        assert any(k.startswith('sat_concentration_') for k in plots)
+        assert any(k.startswith('sat_percentage_') for k in plots)
 
     def test_hiding_significance_hides_it_in_the_stored_figure(
         self, analysis_significant_app,
@@ -317,8 +315,8 @@ class TestSaturationUI:
         # a dataset with nothing significant to mark.
         at.checkbox(key='sat_show_significance').set_value(True).run()
         assert not at.exception
-        shown = at.session_state['analysis_saturation_figs']
-        conc_keys = [k for k in shown if k.endswith('_concentration')]
+        shown = at.session_state['analysis_all_plots']
+        conc_keys = [k for k in shown if k.startswith('sat_concentration_')]
         assert conc_keys, "no concentration saturation figure was stored"
         assert any(len(shown[k].layout.annotations) > 0 for k in conc_keys), (
             "fixture produced no significant results, so this test cannot "
@@ -328,14 +326,10 @@ class TestSaturationUI:
         # Unchecking must strip them from the stored copy too.
         at.checkbox(key='sat_show_significance').set_value(False).run()
         assert not at.exception
-        hidden = at.session_state['analysis_saturation_figs']
+        hidden = at.session_state['analysis_all_plots']
         for key in conc_keys:
             assert len(hidden[key].layout.annotations) == 0
             assert len(hidden[key].layout.shapes) == 0
-            report_fig = at.session_state['analysis_all_plots'][
-                f"sat_concentration_{key.rsplit('_', 1)[0]}"
-            ]
-            assert len(report_fig.layout.annotations) == 0
 
     def test_saturation_pdf_follows_plot_type(self, analysis_generic_app):
         """Regression: switching from Both to Concentration left the
@@ -355,8 +349,7 @@ class TestSaturationUI:
         at = self._switch_to_saturation(analysis_generic_app)
         at.radio(key='sat_stats_mode').set_value("Manual").run()
         assert not at.exception
-        figs = at.session_state['analysis_saturation_figs']
-        assert len(figs) > 0
+        assert any(k.startswith('sat_') for k in at.session_state['analysis_all_plots'])
 
     def test_saturation_detailed_fa_no_consolidated_warning(self, analysis_detailed_fa_app):
         """Detailed FA names do not trigger consolidated warning."""
@@ -405,8 +398,7 @@ class TestChainLengthUI:
     def test_chain_length_figure_stored_in_session(self, analysis_generic_app):
         """Chain length figure is stored in session state."""
         at = self._switch_to_chain_length(analysis_generic_app)
-        assert 'analysis_chain_length_fig' in at.session_state
-        assert at.session_state['analysis_chain_length_fig'] is not None
+        assert 'chain_length' in at.session_state['analysis_all_plots']
 
     def test_chain_length_explains_how_bubbles_are_computed(
         self, analysis_generic_app,
@@ -487,7 +479,7 @@ class TestPathwayUI:
     def test_pathway_stores_figure_in_session(self, analysis_generic_app):
         """Pathway visualization figure is stored in session state."""
         at = self._switch_to_pathway(analysis_generic_app)
-        assert at.session_state['analysis_pathway_fig'] is not None
+        assert 'pathway' in at.session_state['analysis_all_plots']
         assert 'pathway' in at.session_state['analysis_all_plots']
 
 
@@ -631,7 +623,7 @@ class TestVolcanoUI:
     def test_volcano_stores_figure_in_session(self, analysis_generic_app):
         """Volcano plot figure is stored in session state."""
         at = self._switch_to_volcano(analysis_generic_app)
-        assert at.session_state['analysis_volcano_fig'] is not None
+        assert 'volcano' in at.session_state['analysis_all_plots']
 
     def test_volcano_hide_nonsig_default_unchecked(self, analysis_generic_app):
         """Hide non-significant checkbox defaults to unchecked."""
@@ -650,21 +642,21 @@ class TestVolcanoUI:
         at = self._switch_to_volcano(analysis_generic_app)
         at.selectbox(key='volcano_stats_mode').set_value("non_parametric").run()
         assert not at.exception
-        assert at.session_state['analysis_volcano_fig'] is not None
+        assert 'volcano' in at.session_state['analysis_all_plots']
 
     def test_volcano_uncorrected(self, analysis_generic_app):
         """Switching volcano to uncorrected renders without error."""
         at = self._switch_to_volcano(analysis_generic_app)
         at.selectbox(key='volcano_correction').set_value("uncorrected").run()
         assert not at.exception
-        assert at.session_state['analysis_volcano_fig'] is not None
+        assert 'volcano' in at.session_state['analysis_all_plots']
 
     def test_volcano_bonferroni(self, analysis_generic_app):
         """Switching volcano to bonferroni correction renders without error."""
         at = self._switch_to_volcano(analysis_generic_app)
         at.selectbox(key='volcano_correction').set_value("bonferroni").run()
         assert not at.exception
-        assert at.session_state['analysis_volcano_fig'] is not None
+        assert 'volcano' in at.session_state['analysis_all_plots']
 
     def test_conc_vs_fc_reaches_the_report(self, analysis_generic_app):
         """The Concentration vs. Fold Change plot is displayed and offered as
@@ -737,13 +729,13 @@ class TestHeatmapUI:
         at = self._switch_to_heatmap(analysis_generic_app)
         at.radio(key='heatmap_type').set_value("Grouped by Class").run()
         assert not at.exception
-        assert at.session_state['analysis_heatmap_fig'] is not None
+        assert 'heatmap' in at.session_state['analysis_all_plots']
 
     def test_heatmap_aggregated_by_class_renders(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
         at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
         assert not at.exception
-        assert at.session_state['analysis_heatmap_fig'] is not None
+        assert 'heatmap' in at.session_state['analysis_all_plots']
 
     @staticmethod
     def _big_analysis_app(n_lipids):
@@ -776,7 +768,7 @@ class TestHeatmapUI:
         assert not at.exception
         pager = at.selectbox(key='heatmap_species_page')
         assert len(pager.options) == 2
-        assert at.session_state['analysis_heatmap_fig'] is not None
+        assert 'heatmap' in at.session_state['analysis_all_plots']
 
     def test_species_pager_switches_pages(self):
         from app.services.plotting.lipidomic_heatmap import GROUPED_PAGE_SIZE
@@ -787,7 +779,7 @@ class TestHeatmapUI:
         at.selectbox(key='heatmap_species_page').set_value(1).run()
 
         assert not at.exception
-        heatmap = at.session_state['analysis_heatmap_fig']
+        heatmap = at.session_state['analysis_all_plots']['heatmap']
         assert len(heatmap.data[0].y) == 40  # the remainder page
 
     def test_smaller_pages_for_full_screen(self):
@@ -804,7 +796,7 @@ class TestHeatmapUI:
 
         assert not at.exception
         assert len(at.selectbox(key='heatmap_species_page').options) == 4
-        heatmap = at.session_state['analysis_heatmap_fig']
+        heatmap = at.session_state['analysis_all_plots']['heatmap']
         assert len(heatmap.data[0].y) == 50
 
     def test_changing_page_size_returns_to_the_first_page(self):
@@ -819,7 +811,7 @@ class TestHeatmapUI:
 
         assert not at.exception
         assert at.selectbox(key='heatmap_species_page').value == 0
-        heatmap = at.session_state['analysis_heatmap_fig']
+        heatmap = at.session_state['analysis_all_plots']['heatmap']
         assert len(heatmap.data[0].y) == 100
 
     def test_no_pager_when_species_fit_on_one_page(self, analysis_generic_app):
@@ -838,7 +830,7 @@ class TestHeatmapUI:
         at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
 
         assert not at.exception
-        assert at.session_state['analysis_heatmap_fig'] is not None
+        assert 'heatmap' in at.session_state['analysis_all_plots']
 
     def test_color_scale_defaults_to_zscore(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
@@ -868,17 +860,17 @@ class TestHeatmapUI:
         at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
 
         assert not at.exception
-        fig = at.session_state['analysis_heatmap_fig']
+        fig = at.session_state['analysis_all_plots']['heatmap']
         assert fig.data[0].colorbar.title.text == 'log2FC'
 
     def test_switching_control_changes_the_reference(self, analysis_generic_app):
         at = self._switch_to_heatmap(analysis_generic_app)
         at.radio(key='heatmap_type').set_value("Aggregated by Class").run()
         at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
-        first = at.session_state['analysis_heatmap_fig'].data[0].z
+        first = at.session_state['analysis_all_plots']['heatmap'].data[0].z
 
         at.selectbox(key='heatmap_control_condition').set_value('Treatment').run()
-        second = at.session_state['analysis_heatmap_fig'].data[0].z
+        second = at.session_state['analysis_all_plots']['heatmap'].data[0].z
 
         assert not at.exception
         assert not np.allclose(np.asarray(first), np.asarray(second))
@@ -892,7 +884,7 @@ class TestHeatmapUI:
             at.radio(key='heatmap_color_scale').set_value("Log2 Fold Change").run()
 
             assert not at.exception, mode
-            fig = at.session_state['analysis_heatmap_fig']
+            fig = at.session_state['analysis_all_plots']['heatmap']
             assert fig.data[0].colorbar.title.text == 'log2FC', mode
 
     def test_clustered_log2fc_notes_what_it_clusters_on(self, analysis_generic_app):
@@ -939,7 +931,7 @@ class TestHeatmapUI:
 
     def test_species_sort_ranks_rows_by_fold_change(self, analysis_generic_app):
         at = self._grouped_log2fc(analysis_generic_app)
-        fig = at.session_state['analysis_heatmap_fig']
+        fig = at.session_state['analysis_all_plots']['heatmap']
         classes = [row[0] for row in fig.data[0].customdata]
         values = np.asarray(fig.data[0].z, dtype=float)
 
@@ -951,12 +943,12 @@ class TestHeatmapUI:
 
     def test_reversing_the_sort_reverses_each_block(self, analysis_generic_app):
         at = self._grouped_log2fc(analysis_generic_app)
-        first = list(at.session_state['analysis_heatmap_fig'].data[0].y)
+        first = list(at.session_state['analysis_all_plots']['heatmap'].data[0].y)
 
         at.selectbox(key='heatmap_species_sort').set_value('asc').run()
 
         assert not at.exception
-        second = list(at.session_state['analysis_heatmap_fig'].data[0].y)
+        second = list(at.session_state['analysis_all_plots']['heatmap'].data[0].y)
         assert second != first
         assert sorted(second) == sorted(first)
 
@@ -1019,7 +1011,7 @@ class TestHeatmapUI:
         assert not at.exception
         warnings = ' '.join(w.value for w in at.warning)
         assert 'needs a control condition' in warnings
-        fig = at.session_state['analysis_heatmap_fig']
+        fig = at.session_state['analysis_all_plots']['heatmap']
         assert fig.data[0].colorbar.title.text == 'Z-score'
 
     def test_fallback_hides_the_control_selector(self, analysis_generic_app):
@@ -1043,7 +1035,7 @@ class TestHeatmapUI:
         ).run()
 
         assert not at.exception
-        fig = at.session_state['analysis_heatmap_fig']
+        fig = at.session_state['analysis_all_plots']['heatmap']
         assert fig.data[0].colorbar.title.text == 'log2FC'
 
     @pytest.mark.parametrize(
@@ -1140,27 +1132,28 @@ class TestHeatmapUI:
         if slider_found:
             # If the slider exists, it might be a stale widget — check that
             # the heatmap figure was still generated
-            assert at.session_state['analysis_heatmap_fig'] is not None
+            assert 'heatmap' in at.session_state['analysis_all_plots']
         else:
             assert True
 
-    def test_heatmap_total_concentration_view(self, analysis_generic_app):
+    def test_heatmap_total_concentration_view(self, analysis_generic_app, captured_downloads):
         """Switching cluster view to Total Concentration renders without error."""
         at = self._switch_to_heatmap(analysis_generic_app)
+        captured_downloads.clear()
         at.radio(key='heatmap_cluster_view').set_value("Total Concentration").run()
         assert not at.exception
-        assert at.session_state['analysis_heatmap_clusters'] is not None
+        assert 'analysis_csv_cluster' in captured_downloads
 
     def test_heatmap_stores_figure_in_session(self, analysis_generic_app):
-        """Heatmap figure is stored in session state."""
+        """The heatmap reaches the PDF report."""
         at = self._switch_to_heatmap(analysis_generic_app)
-        assert at.session_state['analysis_heatmap_fig'] is not None
         assert 'heatmap' in at.session_state['analysis_all_plots']
 
-    def test_heatmap_cluster_composition_stored(self, analysis_generic_app):
-        """Cluster composition DataFrame is stored in session state."""
-        at = self._switch_to_heatmap(analysis_generic_app)
-        assert at.session_state['analysis_heatmap_clusters'] is not None
+    def test_heatmap_cluster_composition_offered(self, analysis_generic_app, captured_downloads):
+        """The cluster composition table is offered as a CSV."""
+        captured_downloads.clear()
+        self._switch_to_heatmap(analysis_generic_app)
+        assert 'analysis_csv_cluster' in captured_downloads
 
 
 # =============================================================================
@@ -1180,8 +1173,6 @@ class TestAnalysisNavigation:
         """Clicking 'Back to Data Processing' clears all analysis session state."""
         at = module3_nav_app
         at.button(key='back_processing_module2').click().run()
-        assert at.session_state['analysis_bar_chart_fig'] is None
-        assert at.session_state['analysis_volcano_fig'] is None
         assert at.session_state['analysis_all_plots'] == {}
 
     def test_back_to_home_resets_page(self, module3_nav_app):
