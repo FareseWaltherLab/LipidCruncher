@@ -1138,6 +1138,49 @@ def qc_and_analysis_script():
     )
 
 
+class FakeUpload:
+    """What st.file_uploader returns for an uploaded file."""
+
+    def __init__(self, name: str, data: bytes):
+        self.name = name
+        self.file_id = f"fake-{name}-{len(data)}"
+        self._data = data
+
+    def getvalue(self) -> bytes:
+        return self._data
+
+
+@pytest.fixture
+def fake_uploads(monkeypatch):
+    """Files to hand to file uploaders, keyed by a fragment of the label.
+
+    AppTest cannot upload files, but it runs the app in this process, so
+    every file_uploader (st. and st.sidebar.) goes through the patched
+    DeltaGenerator method: the widget still renders, and an uploader whose
+    label contains a key of the returned dict gets that FakeUpload.
+    """
+    import streamlit
+    from streamlit.delta_generator import DeltaGenerator
+
+    uploads = {}
+    original = DeltaGenerator.file_uploader
+
+    def _file_uploader(self, label, *args, **kwargs):
+        rendered = original(self, label, *args, **kwargs)
+        for fragment, upload in uploads.items():
+            if fragment in label:
+                return upload
+        return rendered
+
+    monkeypatch.setattr(DeltaGenerator, 'file_uploader', _file_uploader)
+    # st.file_uploader was bound to the main container at import time.
+    monkeypatch.setattr(
+        streamlit, 'file_uploader',
+        lambda *args, **kwargs: _file_uploader(streamlit._main, *args, **kwargs),
+    )
+    return uploads
+
+
 @pytest.fixture
 def captured_downloads(monkeypatch):
     """Record the data behind every st.download_button, keyed by widget key.
