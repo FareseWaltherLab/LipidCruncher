@@ -41,7 +41,6 @@ class TestServicesPublicAPI:
         'NormalizationService',
         'NormalizationResult',
         'StandardsService',
-        'StandardsExtractionResult',
         'StandardsValidationResult',
         'StandardsProcessingResult',
         'QualityCheckService',

@@ -23,7 +23,6 @@ from .zero_filtering import ZeroFilteringService, ZeroFilterConfig, ZeroFilterin
 from .normalization import NormalizationService, NormalizationResult
 from .standards import (
     StandardsService,
-    StandardsExtractionResult,
     StandardsValidationResult,
     StandardsProcessingResult,
 )
@@ -58,7 +57,6 @@ __all__ = [
     'NormalizationService',
     'NormalizationResult',
     'StandardsService',
-    'StandardsExtractionResult',
     'StandardsValidationResult',
     'StandardsProcessingResult',
     'QualityCheckService',
