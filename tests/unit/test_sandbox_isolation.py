@@ -409,6 +409,13 @@ class TestDockerImage:
         assert users, "Dockerfile has no USER line, so the app runs as root"
         assert users[-1] not in ("root", "0")
 
+    def test_r_is_opt_in(self):
+        """R + IsoCorrectoR is built only with --build-arg WITH_R=1."""
+        from pathlib import Path
+
+        dockerfile = Path(__file__).parents[2] / "Dockerfile"
+        assert "ARG WITH_R=0" in dockerfile.read_text().splitlines()
+
 
 class TestAppProcessIsPrivate:
     """S2 option A: the app process holds the API key in its environment,

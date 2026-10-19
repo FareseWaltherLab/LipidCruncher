@@ -6,9 +6,11 @@
 # you build from, not by picking a different file here; separate deployments
 # are separate ECR tags + ECS services pointing at them.
 #
-# The R layer roughly triples the image size and dominates a cold build. It is
-# placed before the application COPY so it stays cached across app changes —
-# only the first build (and R dependency bumps) pays the cost.
+# R + IsoCorrectoR is optional: build with --build-arg WITH_R=1 for the
+# isotope tracing page (e.g. ai-test). Without it (the default) the page says
+# R is unavailable and the rest of the app is unaffected. The R layer roughly
+# triples the image size and dominates a cold build; it is placed before the
+# application COPY so it stays cached across app changes.
 #
 # Reproducibility note: dev was validated on R 4.6 / IsoCorrectoR 1.30.0.
 # Debian's r-base may install a slightly older IsoCorrectoR; outputs reproduce
@@ -17,29 +19,35 @@
 #
 # Build for Fargate (x86_64) explicitly — an arm64 image built on Apple Silicon
 # fails to start with "exec format error":
-#   docker build --platform linux/amd64 -t <ecr>/<repo>:<tag> .
+#   docker build --platform linux/amd64 [--build-arg WITH_R=1] -t <ecr>/<repo>:<tag> .
 
 FROM python:3.11-slim
 WORKDIR /app
+
+ARG WITH_R=0
 
 # System deps:
 #   poppler-utils                      -> pdf2image (PDF report generation)
 #   r-base r-base-dev gfortran ...     -> R + toolchain to compile R packages
 #   lib*-dev                           -> headers some Bioconductor deps need
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        poppler-utils \
-        r-base r-base-dev \
-        gfortran build-essential \
-        libcurl4-openssl-dev libssl-dev libxml2-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+    && if [ "$WITH_R" = "1" ]; then \
+        apt-get install -y --no-install-recommends \
+            r-base r-base-dev \
+            gfortran build-essential \
+            libcurl4-openssl-dev libssl-dev libxml2-dev; \
+    fi \
     && rm -rf /var/lib/apt/lists/*
 
 # R packages: IsoCorrectoR (Bioconductor) + jsonlite (our wrapper reads a JSON
 # config). Verified in the same layer so a broken install fails the build
 # rather than surfacing at runtime as a missing-package error.
-RUN Rscript -e 'install.packages(c("BiocManager", "jsonlite"), repos="https://cloud.r-project.org"); \
-                BiocManager::install("IsoCorrectoR", ask=FALSE, update=FALSE)' \
-    && Rscript -e 'stopifnot(requireNamespace("IsoCorrectoR", quietly=TRUE), requireNamespace("jsonlite", quietly=TRUE)); \
-                   cat("IsoCorrectoR", as.character(packageVersion("IsoCorrectoR")), "OK\n")'
+RUN if [ "$WITH_R" = "1" ]; then \
+        Rscript -e 'install.packages(c("BiocManager", "jsonlite"), repos="https://cloud.r-project.org"); \
+                    BiocManager::install("IsoCorrectoR", ask=FALSE, update=FALSE)' \
+        && Rscript -e 'stopifnot(requireNamespace("IsoCorrectoR", quietly=TRUE), requireNamespace("jsonlite", quietly=TRUE)); \
+                       cat("IsoCorrectoR", as.character(packageVersion("IsoCorrectoR")), "OK\n")'; \
+    fi
 
 # Unprivileged user the app runs as (see USER below).
 RUN useradd --create-home --uid 1000 app
