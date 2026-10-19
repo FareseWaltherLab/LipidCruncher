@@ -286,6 +286,9 @@ class SessionState:
     chat_transform_session: Optional[Any] = None
     chat_viz_session: Optional[Any] = None
     chat_data_questions_session: Optional[Any] = None
+    # About the app rather than the data, so no reset clears it (see
+    # _ROUTING_FIELDS); the AI Studio's Back to Home does.
+    chat_lc_questions_session: Optional[Any] = None
     chat_mode: Optional[str] = None
     chat_transform_result: Optional[pd.DataFrame] = None
     chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
@@ -483,9 +486,28 @@ _STAGES: Tuple[_Stage, ...] = (
             'ai_studio_file_uploader', 'ai_studio_import_pipeline',
             'ai_studio_pipeline_choice', 'studio_sample_family',
             'studio_sample_cols_select', 'studio_conditions_editor',
-            'studio_exclude_samples',
+            'studio_exclude_samples', 'studio_sample_cols_radio',
+            'studio_bqc_radio', 'studio_bqc_label_radio',
+            'studio_confirm_checkbox',
+            'chat_retry_dq', 'chat_retry_viz', 'chat_retry_transform',
         }),
-        plain=frozenset({'studio_conditions'}),
+        # The data the tabs work on and what they derived from it, cleared
+        # with it (AQ13: these used to survive a reset that cleared
+        # chat_studio_df).
+        plain=frozenset({
+            'studio_conditions', 'studio_applied_snapshot',
+            'chat_studio_file_id', 'chat_studio_bqc_label',
+            'chat_questions_result_df', 'chat_transform_diagnostic',
+            'chat_viz_validation', 'chat_turn_ids',
+            'chat_pending_prompt_dq', 'chat_pending_prompt_transform',
+            'chat_pending_prompt_viz', 'chat_pending_prompt_lc',
+            'chat_lc_retry_input',
+            'chat_dq_last_error', 'chat_dq_failed_input',
+            'chat_viz_last_error', 'chat_viz_failed_input',
+            'chat_transform_last_error', 'chat_transform_failed_input',
+        }),
+        # Per-turn feedback widgets (_interaction_log.py).
+        prefixes=('fb_', 'note_', 'send_note_'),
     ),
     _Stage(
         'isotope',
@@ -604,8 +626,9 @@ _NAV_PRESERVE_PREFIX = '_nav_preserved_'
 
 _STAGE_NAMES = tuple(stage.name for stage in _STAGES)
 
-# App-level routing and navigation buttons: never invalidated, only set.
-_ROUTING_FIELDS = frozenset({'page', 'module'})
+# App-level state no reset clears: routing, navigation buttons, and the
+# AI Studio's LipidCruncher Questions chat (about the app, not the data).
+_ROUTING_FIELDS = frozenset({'page', 'module', 'chat_lc_questions_session'})
 _ROUTING_WIDGETS = frozenset({
     'back_home_no_data', 'back_home_module1', 'back_home_module2',
     'back_processing_error', 'back_processing_module2', 'reset_session',

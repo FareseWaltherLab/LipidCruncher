@@ -253,6 +253,38 @@ def _stage_keys(stage):
     return stage.fields | stage.widgets | stage.plain
 
 
+class TestAIStudioKeysFollowTheReset:
+    """Regression (AQ13): the AI Studio kept part of its state in keys no
+    stage owned, so a reset cleared its data (chat_studio_df) but kept the
+    snapshot that marks that data as confirmed, the file id and the
+    per-tab results that described it."""
+
+    DATA_KEYS = (
+        'chat_studio_file_id', 'chat_studio_bqc_label', 'studio_applied_snapshot',
+        'chat_questions_result_df', 'chat_transform_diagnostic',
+        'chat_viz_validation', 'chat_turn_ids', 'chat_pending_prompt_dq',
+        'chat_dq_last_error', 'chat_dq_failed_input', 'fb_turn1',
+    )
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_new_upload_clears_the_ai_studio_data(self, mock_st):
+        mock_st.session_state = MockSessionState(
+            {key: object() for key in self.DATA_KEYS}
+        )
+        StreamlitAdapter.reset_data_state()
+        left = [key for key in self.DATA_KEYS
+                if mock_st.session_state.get(key) is not None]
+        assert left == []
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_the_lipidcruncher_questions_chat_survives(self, mock_st):
+        """It is about the app, not the data."""
+        session = object()
+        mock_st.session_state = MockSessionState({'chat_lc_questions_session': session})
+        StreamlitAdapter.reset_data_state()
+        assert mock_st.session_state['chat_lc_questions_session'] is session
+
+
 class TestStageRegistry:
     """Every session key belongs to one stage, so invalidate_from() clears
     it at the right time. This replaced four hand-kept lists that had
