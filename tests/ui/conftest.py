@@ -1361,7 +1361,6 @@ def module3_nav_app():
     at.session_state['normalized_df'] = df.copy()
     at.session_state['module'] = 'Quality Check & Analysis'
     # Pre-populate analysis state to verify it gets cleared
-    at.session_state['analysis_bar_chart_fig'] = 'fake_bar'
     at.session_state['analysis_volcano_fig'] = 'fake_volcano'
     at.session_state['analysis_all_plots'] = {'bar': 'fake'}
     return at.run()

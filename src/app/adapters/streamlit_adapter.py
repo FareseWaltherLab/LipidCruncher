@@ -82,7 +82,7 @@ class SessionState:
                              qc_correlation_plots, qc_pca_plot, qc_samples_removed,
                              _preserved_bqc_filter_choice, _preserved_rt_viewing_mode,
                              _preserved_pca_samples_remove, _preserved_pca_groups_remove
-      analysis.py          → analysis_selection, analysis_bar_chart_fig,
+      analysis.py          → analysis_selection,
                              analysis_pie_chart_figs, analysis_saturation_figs,
                              analysis_chain_length_fig, analysis_fach_fig, analysis_pathway_fig,
                              analysis_volcano_fig, analysis_volcano_data,
@@ -212,7 +212,6 @@ class SessionState:
 
     # --- Analysis (owner: analysis.py) ---
     analysis_selection: Optional[str] = None
-    analysis_bar_chart_fig: Optional[go.Figure] = None
     analysis_pie_chart_figs: Dict[str, go.Figure] = field(default_factory=dict)
     analysis_saturation_figs: Dict[str, go.Figure] = field(default_factory=dict)
     analysis_chain_length_fig: Optional[go.Figure] = None
@@ -384,7 +383,7 @@ _STAGES: Tuple[_Stage, ...] = (
     _Stage(
         'analysis',
         fields=frozenset({
-            'analysis_selection', 'analysis_bar_chart_fig',
+            'analysis_selection', 
             'analysis_pie_chart_figs', 'analysis_saturation_figs',
             'analysis_chain_length_fig', 'analysis_fach_fig',
             'analysis_pathway_fig', 'analysis_pathway_added_edges',

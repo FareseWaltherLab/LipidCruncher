@@ -117,7 +117,6 @@ class TestSessionStateDefaults:
         """Test that analysis fields storing single values default to None."""
         state = SessionState()
         assert state.analysis_selection is None
-        assert state.analysis_bar_chart_fig is None
         assert state.analysis_fach_fig is None
         assert state.analysis_pathway_fig is None
         assert state.analysis_volcano_fig is None
@@ -207,12 +206,6 @@ class TestSessionStateCreation:
         """Test creating SessionState with analysis selection."""
         state = SessionState(analysis_selection='Abundance Bar Chart')
         assert state.analysis_selection == 'Abundance Bar Chart'
-
-    def test_create_with_analysis_fig(self):
-        """Test creating SessionState with an analysis figure (Any type)."""
-        mock_fig = MagicMock()
-        state = SessionState(analysis_bar_chart_fig=mock_fig)
-        assert state.analysis_bar_chart_fig is mock_fig
 
     def test_create_with_analysis_pie_chart_figs(self):
         """Test creating SessionState with pie chart figs dict."""
@@ -392,7 +385,7 @@ class TestInvalidateFrom:
             'qc_pca_plot': object(),                     # qc
             'pca_samples_remove': ['s1'],                # qc widget
             'qc_rt_svg_individual_PC': b'svg',           # qc prefix
-            'analysis_bar_chart_fig': object(),          # analysis
+            'analysis_volcano_data': object(),           # analysis
             'volcano_label_x_PC': 1.0,                   # analysis prefix
             'page': 'app',                               # routing
         })
@@ -404,7 +397,7 @@ class TestInvalidateFrom:
         assert state['normalized_df'] is not None
         assert state['lsi_manual_fields'] == {'Ion mode': 'neg'}
         assert state['qc_pca_plot'] is None
-        assert state['analysis_bar_chart_fig'] is None
+        assert state['analysis_volcano_data'] is None
         for popped in ('pca_samples_remove', 'qc_rt_svg_individual_PC',
                        'volcano_label_x_PC'):
             assert popped not in state
@@ -802,7 +795,7 @@ class TestSessionStateIntegration:
         StreamlitAdapter.initialize_session_state()
 
         analysis_keys = [
-            'analysis_selection', 'analysis_bar_chart_fig',
+            'analysis_selection',
             'analysis_pie_chart_figs', 'analysis_saturation_figs',
             'analysis_fach_fig', 'analysis_pathway_fig',
             'analysis_volcano_fig', 'analysis_volcano_data',
@@ -820,7 +813,6 @@ class TestSessionStateIntegration:
         StreamlitAdapter.initialize_session_state()
 
         assert mock_st.session_state['analysis_selection'] is None
-        assert mock_st.session_state['analysis_bar_chart_fig'] is None
         assert mock_st.session_state['analysis_fach_fig'] is None
         assert mock_st.session_state['analysis_pathway_fig'] is None
         assert mock_st.session_state['analysis_volcano_fig'] is None
@@ -859,7 +851,6 @@ class TestSessionStateIntegration:
         mock_fig = MagicMock()
         mock_st.session_state = MockSessionState({
             'analysis_selection': 'Bar Chart',
-            'analysis_bar_chart_fig': mock_fig,
             'analysis_pie_chart_figs': {'Ctrl': mock_fig},
             'analysis_saturation_figs': {'PC': mock_fig},
             'analysis_fach_fig': mock_fig,
@@ -874,7 +865,6 @@ class TestSessionStateIntegration:
         StreamlitAdapter.reset_data_state()
 
         assert mock_st.session_state['analysis_selection'] is None
-        assert mock_st.session_state['analysis_bar_chart_fig'] is None
         assert mock_st.session_state['analysis_pie_chart_figs'] == {}
         assert mock_st.session_state['analysis_saturation_figs'] == {}
         assert mock_st.session_state['analysis_fach_fig'] is None
@@ -1016,7 +1006,7 @@ class TestSessionStateFieldCompleteness:
         """Test that all 11 analysis fields exist in SessionState."""
         state = SessionState()
         analysis_fields = [
-            'analysis_selection', 'analysis_bar_chart_fig',
+            'analysis_selection',
             'analysis_pie_chart_figs', 'analysis_saturation_figs',
             'analysis_fach_fig', 'analysis_pathway_fig',
             'analysis_volcano_fig', 'analysis_volcano_data',
@@ -1031,7 +1021,9 @@ class TestSessionStateFieldCompleteness:
         field_names = [f.name for f in fields(SessionState)]
         analysis_fields = [f for f in field_names if f.startswith('analysis_')]
         # 17 - 1 (analysis_pathway_active_classes: nothing read or wrote it)
-        assert len(analysis_fields) == 16
+        # - the write-only per-page figure copies (the report reads
+        #   analysis_all_plots): bar chart
+        assert len(analysis_fields) == 15
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""

@@ -145,12 +145,11 @@ class TestBarChartUI:
         at = analysis_generic_app
         at.radio(key='bar_scale_radio').set_value("Linear Scale").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_stores_figure_in_session(self, analysis_generic_app):
         """Bar chart figure is stored in session state."""
         at = analysis_generic_app
-        assert at.session_state['analysis_bar_chart_fig'] is not None
         assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_chart_leaves_pdf_when_no_class_selected(self, analysis_generic_app):
@@ -167,7 +166,7 @@ class TestBarChartUI:
         at = analysis_generic_app
         at.radio(key='bar_stats_mode').set_value("Manual").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_manual_non_parametric(self, analysis_generic_app):
         """Bar chart with Manual non-parametric test renders without error."""
@@ -175,7 +174,7 @@ class TestBarChartUI:
         at.radio(key='bar_stats_mode').set_value("Manual").run()
         at.selectbox(key='bar_test_type').set_value("non_parametric").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_manual_bonferroni_correction(self, analysis_generic_app):
         """Bar chart with Manual bonferroni correction renders without error."""
@@ -183,7 +182,7 @@ class TestBarChartUI:
         at.radio(key='bar_stats_mode').set_value("Manual").run()
         at.selectbox(key='bar_correction').set_value("bonferroni").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_manual_uncorrected(self, analysis_generic_app):
         """Bar chart with Manual uncorrected renders without error."""
@@ -191,7 +190,7 @@ class TestBarChartUI:
         at.radio(key='bar_stats_mode').set_value("Manual").run()
         at.selectbox(key='bar_correction').set_value("uncorrected").run()
         assert not at.exception
-        assert at.session_state['analysis_bar_chart_fig'] is not None
+        assert 'bar_chart' in at.session_state['analysis_all_plots']
 
     def test_bar_deselect_all_classes_shows_warning(self, analysis_generic_app):
         """Deselecting all classes shows a warning."""
@@ -1180,7 +1179,6 @@ class TestAnalysisNavigation:
         """Clicking 'Back to Data Processing' clears all analysis session state."""
         at = module3_nav_app
         at.button(key='back_processing_module2').click().run()
-        assert at.session_state['analysis_bar_chart_fig'] is None
         assert at.session_state['analysis_volcano_fig'] is None
         assert at.session_state['analysis_all_plots'] == {}
 

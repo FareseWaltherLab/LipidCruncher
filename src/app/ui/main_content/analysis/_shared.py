@@ -12,6 +12,7 @@ import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
+from app.services.report_generator import ANALYSIS_PAGES
 from app.services.statistical_testing import StatisticalTestSummary
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.st_helpers import section_header
@@ -48,6 +49,22 @@ def _skipped_tests_message(params: dict) -> Optional[str]:
         f"{n_skipped} of {total} tests (lipid class × fatty-acid type) "
         "were skipped during testing"
     )
+
+
+def _publish(key: str, figure) -> None:
+    """Put a figure the page draws into the PDF report.
+
+    The one way an analysis figure reaches the report, paired with
+    ``_clear_pdf_plots`` at the top of each page. ``key`` must be one the
+    report has a page for (``ANALYSIS_PAGES``), so a figure cannot be stored
+    where the report never looks.
+    """
+    if not any(
+        key == page.key or (page.key.endswith('_') and key.startswith(page.key))
+        for page in ANALYSIS_PAGES
+    ):
+        raise ValueError(f"The PDF report has no page for {key!r}")
+    st.session_state.analysis_all_plots[key] = figure
 
 
 def _clear_pdf_plots(*keys: str) -> None:
