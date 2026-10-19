@@ -13,6 +13,8 @@ def get_app_knowledge() -> str:
     This is appended to AI system prompts so the assistant understands
     the application context without needing access to the full codebase.
     """
+    # A raw string, so the regex examples below keep their backslashes; a
+    # backslash at the end of a line joins it to the next, as in normal code.
     return r"""\
 ## About LipidCruncher
 
@@ -137,4 +139,4 @@ LPC (lysophosphatidylcholine), LPE (lysophosphatidylethanolamine), CL (cardiolip
 - **Internal standards**: Known-concentration lipids spiked into samples for normalization
 - **Zero filtering**: Removing lipids with excessive missing/zero values across samples
 - **Intensity**: Raw signal/area values from mass spectrometry
-"""
+""".replace("\\\n", "")
