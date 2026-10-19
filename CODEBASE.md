@@ -98,6 +98,7 @@ LipidCruncher/
 │       ├── lipid_nomenclature.py            # LIPID MAPS nomenclature functions
 │       ├── models/                          # Pydantic data models
 │       │   ├── experiment.py                #   ExperimentConfig
+│       │   ├── sample_frame.py              #   SampleFrame
 │       │   ├── normalization.py             #   NormalizationConfig
 │       │   └── statistics.py                #   StatisticalTestConfig
 │       ├── services/                        # Pure business logic
@@ -259,6 +260,7 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 |---|---|---|
 | `ExperimentConfig` | `experiment.py` | Defines experimental setup: number of conditions, condition labels, sample counts. Auto-derives `n_conditions` from `conditions_list` if omitted. Validates condition label uniqueness. Computed properties generate sample labels (s1, s2, ...) and group them by condition. Provides `without_samples()` for creating configs after sample removal. |
 | `NormalizationConfig` | `normalization.py` | Normalization method (`none`, `internal_standard`, `protein`, `both`, `total_intensity`), selected lipid classes, standard-to-class mappings, concentrations. |
+| `SampleFrame` | `sample_frame.py` | A frame whose samples are labelled s1..sN, with its `ExperimentConfig`, display names and each sample's `origin` (its label in the uploaded file). `renumbered(df, experiment, old_to_new)` moves names and origins through a regroup, sidebar exclusion or PCA exclusion; per-sample inputs such as protein amounts are keyed by origin, so renumbering cannot hand them to another sample. |
 | `StatisticalTestConfig` | `statistics.py` | Test type (`parametric`, `non_parametric`, `auto`), multiple-testing correction (`fdr_bh`, `bonferroni`), post-hoc method (`tukey`, `bonferroni`), `auto_transform` flag for log10 transformation. |
 
 ### Services
@@ -421,10 +423,10 @@ All session state is managed through the `SessionState` dataclass in `streamlit_
 **Important state keys and their flow:**
 
 ```
-raw_df → standardized_df → processing_df → cleaned_df → normalized_df → QC output → analysis input
+raw_df → standardized_df → processing_frame.df → cleaned_df → normalized_df → QC output → analysis input
 ```
 
-Each DataFrame flows forward through the pipeline. `processing_df` is `standardized_df` minus any samples excluded in the sidebar. In `_display_module2_and_3` (`main_app.py`) QC runs on `normalized_df` and its output goes straight to the analyses; `qc_continuation_df` is still written but nothing reads it. On entry to Module 2, `_module1_handoff` freezes the setup Module 1 ran with (`qc_input_experiment`, `qc_input_bqc_label`, `qc_input_processing_df`), so a later sidebar exclusion or regroup only shows a warning instead of being paired with the already-normalized data.
+Each DataFrame flows forward through the pipeline. `processing_frame` is a `SampleFrame`: `standardized_df` minus any samples excluded in the sidebar, with the experiment, names and origins of the renumbered survivors. In `_display_module2_and_3` (`main_app.py`) QC runs on `normalized_df` and its output goes straight to the analyses; `qc_continuation_df` is still written but nothing in the app reads it. On entry to Module 2, `_module1_handoff` freezes the setup Module 1 ran with (`qc_input_frame`, `qc_input_bqc_label`), so a later sidebar exclusion or regroup only shows a warning instead of being paired with the already-normalized data. PCA exclusion renumbers `qc_input_frame` into `qc_frame`. `ui/sample_labels.py` reads each label space's names from these frames; `tests/ui/test_sample_identity.py` pins that every per-sample value follows its sample through all three renumberings.
 
 Downstream state is cleared by explicit resets: a new upload or sample-data load calls `reset_for_new_source()` (which runs `reset_data_state()` and clears the cache), a format change calls `reset_format_derived_state()`, the sidebar "Reset session" button calls `reset_to_experiment_setup()`, "Back to Home" calls `reset_data_state()`, and the Next/Back buttons between modules call `go_to_quality_check()` / `back_to_data_processing()`, which clear the `qc` and `analysis` stages. Nothing clears a stage automatically when its inputs change; each trigger above is explicit.
 
