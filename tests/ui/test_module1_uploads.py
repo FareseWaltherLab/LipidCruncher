@@ -111,3 +111,10 @@ class TestExternalStandardsCsv:
         ))
         assert _errors(at)
         assert at.session_state['custom_standards_df'] is None
+
+    def test_empty_file(self, intsta_with_standards_app, fake_uploads):
+        """Regression: pandas' EmptyDataError is a ValueError, and the
+        ValueError handler came first, so this showed 'No columns to parse
+        from file' instead of the message written for it."""
+        at = _standards_csv(intsta_with_standards_app, fake_uploads, _csv(''))
+        assert any('appears to be empty' in e for e in _errors(at))

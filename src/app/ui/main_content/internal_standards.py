@@ -433,10 +433,8 @@ def _process_uploaded_standards(
 
         return result.standards_df
 
-    except ValueError as ve:
-        logger.error("Standards validation error: %s", ve)
-        st.error(str(ve))
-        return _fallback_standards(auto_detected_df)
+    # UnicodeDecodeError, EmptyDataError and ParserError are ValueErrors, so
+    # they are caught first; ValueError itself (a validation message) last.
     except UnicodeDecodeError as e:
         logger.error("Standards file encoding error: %s", e)
         st.error(
@@ -453,6 +451,10 @@ def _process_uploaded_standards(
             "Could not parse the standards file. Please ensure it is a properly formatted CSV with consistent columns. "
             "If the issue persists after refreshing the app, contact abdih@mskcc.org."
         )
+        return _fallback_standards(auto_detected_df)
+    except ValueError as ve:
+        logger.error("Standards validation error: %s", ve)
+        st.error(str(ve))
         return _fallback_standards(auto_detected_df)
 
 
