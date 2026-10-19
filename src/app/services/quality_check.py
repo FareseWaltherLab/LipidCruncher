@@ -2,70 +2,23 @@
 Quality check service for lipidomic data.
 
 Pure business logic - no Streamlit dependencies.
-Handles box plot data preparation, BQC quality assessment, retention time
-availability, pairwise correlation, and PCA analysis.
+Handles the Quality Check decisions that change the data: the BQC CoV
+filter and PCA sample removal, plus retention time availability and which
+conditions can be correlated. The plots themselves come from the plotter
+services under ``services/plotting``.
 """
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA as SklearnPCA
 
-from ..constants import (
-    CORRELATION_THRESHOLD_BIOLOGICAL,
-    CORRELATION_THRESHOLD_TECHNICAL,
-    CORRELATION_VMIN,
-    PCA_N_COMPONENTS,
-)
 from ..models.experiment import ExperimentConfig
-from ..services.validation import (
-    validate_dataframe_not_empty,
-    validate_concentration_columns,
-)
 from .exceptions import ValidationError
 
 
 # ============================================================
 # Result Dataclasses
 # ============================================================
-
-@dataclass
-class BoxPlotResult:
-    """Result of box plot data preparation.
-
-    Attributes:
-        mean_area_df: DataFrame with concentration columns only (one per sample).
-        missing_values_percent: Percentage of zero values per sample
-            (parallel to available_samples).
-        available_samples: Sample labels whose concentration columns exist in df.
-    """
-    mean_area_df: pd.DataFrame
-    missing_values_percent: List[float]
-    available_samples: List[str]
-
-
-@dataclass
-class BQCPrepareResult:
-    """Result of BQC data preparation (before user filtering decision).
-
-    Attributes:
-        prepared_df: DataFrame with 'cov' and 'mean' (log10) columns appended.
-        bqc_sample_index: Index of the BQC condition in conditions_list.
-        bqc_samples: List of BQC sample labels.
-        reliable_data_percent: Percentage of lipids with CoV below threshold.
-        high_cov_lipids: List of LipidMolec names with CoV >= threshold.
-        high_cov_details: DataFrame of high-CoV lipids with columns
-            [LipidMolec, ClassKey, cov, mean].
-    """
-    prepared_df: pd.DataFrame
-    bqc_sample_index: int
-    bqc_samples: List[str]
-    reliable_data_percent: float
-    high_cov_lipids: List[str]
-    high_cov_details: pd.DataFrame
-
 
 @dataclass
 class BQCFilterResult:
@@ -112,43 +65,6 @@ class RetentionTimeDataResult:
 
 
 @dataclass
-class CorrelationResult:
-    """Result of pairwise correlation analysis for a single condition.
-
-    Attributes:
-        condition: The condition label analyzed.
-        correlation_df: Pearson correlation matrix (samples x samples).
-        v_min: Minimum value for heatmap color scale (always 0.5).
-        threshold: Threshold value for the heatmap (0.7 biological, 0.8 technical).
-        sample_type: 'biological replicates' or 'technical replicates'.
-        condition_samples: List of sample labels in this condition.
-    """
-    condition: str
-    correlation_df: pd.DataFrame
-    v_min: float
-    threshold: float
-    sample_type: str
-    condition_samples: List[str]
-
-
-@dataclass
-class PCAResult:
-    """Result of PCA computation.
-
-    Attributes:
-        pc_df: DataFrame with PC1, PC2 columns (one row per sample).
-        pc_labels: Axis labels with variance explained,
-            e.g. ['PC1 (45%)', 'PC2 (30%)'].
-        available_samples: Sample labels included in PCA.
-        conditions: Condition labels per sample (parallel to available_samples).
-    """
-    pc_df: pd.DataFrame
-    pc_labels: List[str]
-    available_samples: List[str]
-    conditions: List[str]
-
-
-@dataclass
 class SampleRemovalResult:
     """Result of removing samples from DataFrame and experiment.
 
@@ -181,175 +97,8 @@ class QualityCheckService:
     """
 
     # ============================================================
-    # Section 1: Box Plot Data
+    # BQC Filter
     # ============================================================
-
-    @staticmethod
-    def prepare_box_plot_data(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-    ) -> BoxPlotResult:
-        """Prepare data for box plots: extract concentration columns and
-        calculate missing values percentages.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration with sample information.
-
-        Returns:
-            BoxPlotResult with mean_area_df and missing_values_percent.
-
-        Raises:
-            ValueError: If DataFrame is empty or has no concentration columns.
-        """
-        QualityCheckService._validate_dataframe(df)
-        available = QualityCheckService._validate_concentration_columns(
-            df, experiment
-        )
-
-        conc_cols = [f'concentration[{s}]' for s in available]
-        mean_area_df = df[conc_cols].copy()
-
-        missing_pct = []
-        n_rows = len(mean_area_df)
-        for col in conc_cols:
-            if n_rows == 0:
-                missing_pct.append(0.0)
-            else:
-                zero_count = (mean_area_df[col] == 0).sum()
-                missing_pct.append(zero_count / n_rows * 100)
-
-        return BoxPlotResult(
-            mean_area_df=mean_area_df,
-            missing_values_percent=missing_pct,
-            available_samples=available,
-        )
-
-    # ============================================================
-    # Section 2: BQC Quality Assessment
-    # ============================================================
-
-    @staticmethod
-    def calculate_coefficient_of_variation(numbers: "np.typing.ArrayLike") -> Optional[float]:
-        """Calculate coefficient of variation (CoV) for an array of numbers.
-
-        Includes zero values. Uses sample standard deviation (ddof=1).
-
-        Args:
-            numbers: Array-like of numerical values.
-
-        Returns:
-            CoV as a percentage, or None if <2 values or mean is zero.
-        """
-        arr = np.array(numbers, dtype=float)
-        if len(arr) < 2:
-            return None
-        mean_val = np.mean(arr)
-        if mean_val == 0:
-            return None
-        return float(np.std(arr, ddof=1) / mean_val * 100)
-
-    @staticmethod
-    def calculate_mean_including_zeros(numbers: "np.typing.ArrayLike") -> Optional[float]:
-        """Calculate mean of numbers, including zeros.
-
-        Args:
-            numbers: Array-like of numerical values.
-
-        Returns:
-            Mean value, or None if fewer than 2 values.
-        """
-        arr = np.array(numbers, dtype=float)
-        if len(arr) < 2:
-            return None
-        return float(np.mean(arr))
-
-    @staticmethod
-    def prepare_bqc_data(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        bqc_label: str,
-        cov_threshold: float = 30.0,
-    ) -> BQCPrepareResult:
-        """Prepare BQC quality assessment data.
-
-        Identifies BQC samples, calculates CoV and mean per lipid,
-        determines reliability percentage.
-        """
-        QualityCheckService._validate_dataframe(df)
-        QualityCheckService._validate_cov_threshold(cov_threshold)
-        bqc_index = QualityCheckService._validate_bqc_label(experiment, bqc_label)
-
-        bqc_samples = experiment.individual_samples_list[bqc_index]
-        auc_columns = [f'concentration[{s}]' for s in bqc_samples]
-
-        missing = [c for c in auc_columns if c not in df.columns]
-        if missing:
-            raise ValidationError(
-                f"BQC concentration columns not found in DataFrame: {missing}"
-            )
-
-        work_df = QualityCheckService._compute_cov_and_mean(df, auc_columns)
-        reliable_pct, high_cov_lipids, high_cov_details = (
-            QualityCheckService._identify_high_cov_lipids(work_df, cov_threshold)
-        )
-
-        return BQCPrepareResult(
-            prepared_df=work_df,
-            bqc_sample_index=bqc_index,
-            bqc_samples=bqc_samples,
-            reliable_data_percent=reliable_pct,
-            high_cov_lipids=high_cov_lipids,
-            high_cov_details=high_cov_details,
-        )
-
-    @staticmethod
-    def _compute_cov_and_mean(df: pd.DataFrame, auc_columns: List[str]) -> pd.DataFrame:
-        """Calculate CoV and log10 mean for BQC samples (vectorized)."""
-        work_df = df.copy()
-        bqc_data = work_df[auc_columns].astype(float)
-
-        n_cols = len(auc_columns)
-        if n_cols < 2:
-            work_df['cov'] = np.nan
-            work_df['mean'] = np.nan
-            return work_df
-
-        row_mean = bqc_data.mean(axis=1)
-        row_std = bqc_data.std(axis=1, ddof=1)
-
-        # CoV = (std / mean) * 100; undefined when mean == 0
-        with np.errstate(divide='ignore', invalid='ignore'):
-            cov = np.where(row_mean != 0, row_std / row_mean * 100, np.nan)
-        work_df['cov'] = cov
-
-        # log10 of mean (only where mean > 0)
-        log_mean = np.where(row_mean > 0, np.log10(row_mean), np.nan)
-        work_df['mean'] = log_mean
-
-        return work_df
-
-    @staticmethod
-    def _identify_high_cov_lipids(
-        work_df: pd.DataFrame, cov_threshold: float
-    ) -> tuple:
-        """Identify lipids above CoV threshold. Returns (reliable_pct, lipid_list, details_df)."""
-        valid_cov = work_df['cov'].dropna()
-        if len(valid_cov) == 0:
-            reliable_pct = 0.0
-        else:
-            reliable_pct = round(
-                (valid_cov < cov_threshold).sum() / len(work_df) * 100, 1
-            )
-
-        high_cov_mask = work_df['cov'].notnull() & (work_df['cov'] >= cov_threshold)
-        high_cov_lipids = work_df.loc[high_cov_mask, 'LipidMolec'].tolist()
-
-        detail_cols = ['LipidMolec', 'ClassKey', 'cov', 'mean']
-        available_detail_cols = [c for c in detail_cols if c in work_df.columns]
-        high_cov_details = work_df.loc[high_cov_mask, available_detail_cols].copy()
-
-        return reliable_pct, high_cov_lipids, high_cov_details
 
     @staticmethod
     def high_cov_lipids(prepared_df: pd.DataFrame, cov_threshold: float) -> List[str]:
@@ -379,7 +128,7 @@ class QualityCheckService:
         Args:
             df: Original DataFrame to filter (the full dataset, not prepared_df).
             high_cov_lipids: List of LipidMolec names with CoV >= threshold
-                (from BQCPrepareResult.high_cov_lipids).
+                (from high_cov_lipids).
             lipids_to_keep: LipidMolec names to keep despite high CoV.
                 If None or empty, all high-CoV lipids are removed.
 
@@ -419,7 +168,7 @@ class QualityCheckService:
         )
 
     # ============================================================
-    # Section 3: Retention Time Data
+    # Retention Time Data
     # ============================================================
 
     @staticmethod
@@ -445,7 +194,7 @@ class QualityCheckService:
         return RetentionTimeDataResult(available=has_rt, lipid_classes=classes)
 
     # ============================================================
-    # Section 4: Pairwise Correlation
+    # Pairwise Correlation
     # ============================================================
 
     @staticmethod
@@ -468,138 +217,9 @@ class QualityCheckService:
             if n > 1
         ]
 
-    @staticmethod
-    def compute_correlation(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-        condition: str,
-        bqc_label: Optional[str] = None,
-    ) -> CorrelationResult:
-        """Compute pairwise Pearson correlation for samples within a condition.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration.
-            condition: Condition label to analyze.
-            bqc_label: If not None, uses 'technical replicates' thresholds;
-                otherwise 'biological replicates'.
-
-        Returns:
-            CorrelationResult with correlation matrix and heatmap parameters.
-
-        Raises:
-            ValueError: If condition not found or has fewer than 2 replicates.
-        """
-        QualityCheckService._validate_dataframe(df)
-        cond_index = QualityCheckService._validate_condition(
-            experiment, condition
-        )
-
-        n_samples = experiment.number_of_samples_list[cond_index]
-        if n_samples < 2:
-            raise ValidationError(
-                f"Condition '{condition}' has only {n_samples} sample(s). "
-                f"Correlation requires at least 2 replicates."
-            )
-
-        sample_type = (
-            'technical replicates' if bqc_label is not None
-            else 'biological replicates'
-        )
-
-        cond_samples = experiment.individual_samples_list[cond_index]
-
-        conc_cols = [f'concentration[{s}]' for s in cond_samples]
-        missing = [c for c in conc_cols if c not in df.columns]
-        if missing:
-            raise ValidationError(
-                f"Missing concentration columns for condition '{condition}': "
-                f"{missing}"
-            )
-
-        mean_area_df = df[conc_cols].copy()
-        mean_area_df.columns = cond_samples
-
-        v_min = CORRELATION_VMIN
-        threshold = (
-            CORRELATION_THRESHOLD_BIOLOGICAL
-            if sample_type == 'biological replicates'
-            else CORRELATION_THRESHOLD_TECHNICAL
-        )
-        correlation_df = mean_area_df.corr()
-
-        return CorrelationResult(
-            condition=condition,
-            correlation_df=correlation_df,
-            v_min=v_min,
-            threshold=threshold,
-            sample_type=sample_type,
-            condition_samples=cond_samples,
-        )
-
     # ============================================================
-    # Section 5: PCA Analysis
+    # PCA Sample Removal
     # ============================================================
-
-    @staticmethod
-    def compute_pca(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-    ) -> PCAResult:
-        """Run PCA with 2 components on concentration data.
-
-        Standardizes data (z-score) then applies PCA. Maps samples to their
-        experimental conditions.
-
-        Args:
-            df: DataFrame with concentration[sample] columns.
-            experiment: Experiment configuration.
-
-        Returns:
-            PCAResult with PC scores, labels, samples, and conditions.
-
-        Raises:
-            ValueError: If fewer than 2 samples have concentration columns.
-        """
-        QualityCheckService._validate_dataframe(df)
-        available = QualityCheckService._validate_concentration_columns(
-            df, experiment
-        )
-
-        if len(available) < 2:
-            raise ValidationError(
-                f"PCA requires at least 2 samples, but only {len(available)} "
-                f"sample(s) have concentration columns."
-            )
-
-        conc_cols = [f'concentration[{s}]' for s in available]
-        data_matrix = df[conc_cols].T  # (samples x lipids)
-
-        scaled_data = StandardScaler().fit_transform(data_matrix)
-        pca = SklearnPCA(n_components=PCA_N_COMPONENTS)
-        principal_components = pca.fit_transform(scaled_data)
-        explained_variance = pca.explained_variance_ratio_
-
-        pc_df = pd.DataFrame(
-            data=principal_components,
-            columns=['PC1', 'PC2'],
-        )
-        pc_labels = [
-            f'PC{i + 1} ({var:.0%})'
-            for i, var in enumerate(explained_variance)
-        ]
-
-        conditions = []
-        for sample in available:
-            idx = experiment.full_samples_list.index(sample)
-            conditions.append(experiment.extensive_conditions_list[idx])
-
-        return PCAResult(
-            pc_df=pc_df,
-            pc_labels=pc_labels,
-            available_samples=available,
-            conditions=conditions,
-        )
 
     @staticmethod
     def remove_samples(
@@ -669,66 +289,3 @@ class QualityCheckService:
         if rename_map:
             updated_df = updated_df.rename(columns=rename_map)
         return updated_df
-
-    # ============================================================
-    # Private Validation Methods
-    # ============================================================
-
-    @staticmethod
-    def _validate_dataframe(df: pd.DataFrame) -> None:
-        """Validate that the DataFrame is not None or empty."""
-        validate_dataframe_not_empty(df)
-
-    @staticmethod
-    def _validate_concentration_columns(
-        df: pd.DataFrame,
-        experiment: ExperimentConfig,
-    ) -> List[str]:
-        """Validate that concentration columns exist and return available samples."""
-        return validate_concentration_columns(df, experiment)
-
-    @staticmethod
-    def _validate_bqc_label(
-        experiment: ExperimentConfig,
-        bqc_label: str,
-    ) -> int:
-        """Validate BQC label exists in conditions_list, return its index.
-
-        Raises:
-            ValueError: If bqc_label not found.
-        """
-        if bqc_label not in experiment.conditions_list:
-            raise ValidationError(
-                f"BQC label '{bqc_label}' not found in conditions: "
-                f"{experiment.conditions_list}"
-            )
-        return experiment.conditions_list.index(bqc_label)
-
-    @staticmethod
-    def _validate_condition(
-        experiment: ExperimentConfig,
-        condition: str,
-    ) -> int:
-        """Validate condition exists in conditions_list, return its index.
-
-        Raises:
-            ValueError: If condition not found.
-        """
-        if condition not in experiment.conditions_list:
-            raise ValidationError(
-                f"Condition '{condition}' not found in conditions: "
-                f"{experiment.conditions_list}"
-            )
-        return experiment.conditions_list.index(condition)
-
-    @staticmethod
-    def _validate_cov_threshold(threshold: float) -> None:
-        """Validate that CoV threshold is positive.
-
-        Raises:
-            ValueError: If threshold is not positive.
-        """
-        if threshold <= 0:
-            raise ValidationError(
-                f"CoV threshold must be positive, got {threshold}."
-            )

@@ -85,10 +85,7 @@ def display_quality_check_module(
     qc_df = _display_bqc_assessment(qc_df, experiment, bqc_label)
 
     # Section 3: Retention Time (read-only)
-    config = QualityCheckConfig(
-        bqc_label=bqc_label,
-        format_type=format_enum,
-    )
+    config = QualityCheckConfig(format_type=format_enum)
     _display_retention_time_plots(qc_df, config)
 
     # Section 4: Correlation (read-only)

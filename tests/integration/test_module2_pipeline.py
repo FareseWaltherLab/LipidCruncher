@@ -270,42 +270,20 @@ def mw_normalized_df():
 
 @pytest.fixture
 def lipidsearch_qc_config():
-    """QC config for LipidSearch format with BQC."""
-    return QualityCheckConfig(
-        bqc_label='BQC',
-        format_type=DataFormat.LIPIDSEARCH,
-        cov_threshold=30.0,
-    )
+    """QC config for LipidSearch format."""
+    return QualityCheckConfig(format_type=DataFormat.LIPIDSEARCH)
 
 
 @pytest.fixture
 def generic_qc_config():
-    """QC config for Generic format with BQC."""
-    return QualityCheckConfig(
-        bqc_label='BQC',
-        format_type=DataFormat.GENERIC,
-        cov_threshold=30.0,
-    )
+    """QC config for Generic format."""
+    return QualityCheckConfig(format_type=DataFormat.GENERIC)
 
 
 @pytest.fixture
 def msdial_qc_config():
-    """QC config for MS-DIAL format (no BQC in test dataset)."""
-    return QualityCheckConfig(
-        bqc_label=None,
-        format_type=DataFormat.MSDIAL,
-        cov_threshold=30.0,
-    )
-
-
-@pytest.fixture
-def no_bqc_config():
-    """QC config with no BQC label."""
-    return QualityCheckConfig(
-        bqc_label=None,
-        format_type=DataFormat.GENERIC,
-        cov_threshold=30.0,
-    )
+    """QC config for MS-DIAL format."""
+    return QualityCheckConfig(format_type=DataFormat.MSDIAL)
 
 
 # =============================================================================

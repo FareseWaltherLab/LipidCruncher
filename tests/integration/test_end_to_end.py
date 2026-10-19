@@ -95,7 +95,7 @@ def run_module2_qc(normalized_df, experiment, bqc_label=None, data_format=DataFo
 
     # Retention time
     QualityCheckWorkflow.check_retention_time_availability(
-        qc_df, QualityCheckConfig(bqc_label=bqc_label, format_type=data_format),
+        qc_df, QualityCheckConfig(format_type=data_format),
     )
 
     # PCA

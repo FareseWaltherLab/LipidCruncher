@@ -301,7 +301,7 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | `DataStandardizationService` | `data_standardization.py` | Converts format-specific column names to standard `intensity[*]` naming. For LipidSearch 5.2 dual-polarity exports, merges each sample's positive/negative files via the alignment map. |
 | `lipidsearch_alignment` | `lipidsearch_alignment.py` | Parses the LipidSearch Alignment Setting file, pairs each biological sample's positive/negative runs by raw-filename base, and merges their per-file `OriginalArea[s{cond}-{file}]` columns into flat `intensity[s1..sN]`. |
 | `NormalizationService` | `normalization.py` | Four methods: internal standard (divide by standard intensity), protein (divide by protein concentration), internal standards + protein (standard then protein), total intensity (divide by per-sample total, scale by median). |
-| `QualityCheckService` | `quality_check.py` | Box plot data prep, BQC CoV calculation and filtering, RT availability check, pairwise Pearson correlation, PCA (via scikit-learn), sample removal. In the app only the BQC filter, RT check, correlation-eligibility check and sample removal are used (via `QualityCheckWorkflow`); the QC plots and their data come from the plotter services (see below). |
+| `QualityCheckService` | `quality_check.py` | The QC decisions that change the data or the choices: the BQC high-CoV rule (`high_cov_lipids`, CoV ≥ threshold) and filter, RT availability check, correlation-eligible conditions, PCA sample removal (with `old_to_new`). The QC plots and their data come from the plotter services (see below). |
 | `StatisticalTestingService` | `statistical_testing.py` | Parametric (Welch's t-test, Alexander-Govern ANOVA) and non-parametric (Mann-Whitney, Kruskal-Wallis) tests with two-level correction (between-class and post-hoc). Auto mode selects parametric with log10 transform, FDR for 2+ classes, Tukey for 3+ conditions. Uses dataset-wide zero replacement for consistent detection-floor handling. |
 | `ZeroFilteringService` | `zero_filtering.py` | Removes lipids exceeding configurable zero-value thresholds (default: 75% for non-BQC, 50% for BQC samples). |
 | `StandardsService` | `standards.py` | Standards extraction, validation, and class-to-standard mapping. |
@@ -339,7 +339,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 |---|---|---|
 | `DataIngestionWorkflow` | `run()` → `IngestionResult` | Format detection (only if no format is given) → cleaning → optional zero filtering → standards validation. Returns cleaned DataFrame + internal standards + messages. The app passes the format and `apply_zero_filter=False` (`data_processing.py`); zero filtering runs in `ui/zero_filtering.py`, called from `main_app.py`, so the workflow's own zero-filter branch is used only by tests. |
 | `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. Also provides `suggest_standard_mappings()`, `validate_standard_mappings()`, `create_normalization_config()` and `preview_normalization()`, currently called only by tests. |
-| `QualityCheckWorkflow` | Individual step methods | Non-sequential: `run_box_plots()`, `run_bqc_assessment()`, `apply_bqc_filter()`, `run_correlation()`, `run_all_correlations()`, `run_pca()`, `remove_samples()`, plus `run_non_interactive()`. Each step can be run independently. The app uses only `validate_inputs()`, `apply_bqc_filter()`, `check_retention_time_availability()`, `get_eligible_correlation_conditions()` and `remove_samples()`; the QC plots are built by the adapter calling `BoxPlotService`, `BQCPlotterService`, `CorrelationPlotterService` and `PCAPlotterService` directly, so the `run_*` methods are currently exercised only by tests. |
+| `QualityCheckWorkflow` | Individual step methods | Non-sequential: `validate_inputs()`, `high_cov_lipids()`, `apply_bqc_filter()`, `check_retention_time_availability()`, `get_eligible_correlation_conditions()`, `remove_samples()`. The QC plots are built by the adapter calling `BoxPlotService`, `BQCPlotterService`, `CorrelationPlotterService` and `PCAPlotterService`; `tests/integration/test_module2_pipeline.py` drives that same path. |
 | `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `run_pathway()`, `run_volcano()`, `run_heatmap()`. |
 
 ### Adapter
@@ -563,12 +563,11 @@ The app runs on port 8501 by default.
 
 ### Adding a New QC Step
 
-1. **Add a method** to `QualityCheckService` in `services/quality_check.py`.
-2. **Add an orchestration method** to `QualityCheckWorkflow` in `workflows/quality_check.py`.
-3. **Add a cached wrapper** in `StreamlitAdapter` if needed.
-4. **Add UI rendering** in `ui/main_content/quality_check.py`.
-5. **Add session state keys** to `SessionState` with the `qc_` prefix.
-6. **Add tests**.
+1. **Add the computation** to a plotter service under `services/plotting/` (a plot) or to `QualityCheckService` (a decision that changes the data), with a `QualityCheckWorkflow` method for the latter.
+2. **Add a cached wrapper** in `StreamlitAdapter` if needed.
+3. **Add UI rendering** in `ui/main_content/quality_check.py`.
+4. **Add session state keys** to `SessionState` with the `qc_` prefix.
+5. **Add tests** on the path the app runs.
 
 ### Key Conventions
 
