@@ -235,6 +235,8 @@ def _render_manual_fields() -> dict:
             if value.strip():
                 manual_fields[item] = value.strip()
                 saved[item] = value.strip()
+            else:
+                saved.pop(item, None)
 
     st.session_state["lsi_manual_fields"] = saved
     return manual_fields

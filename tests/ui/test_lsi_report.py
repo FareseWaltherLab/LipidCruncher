@@ -218,3 +218,13 @@ class TestManualFields:
         at.text_input(key=f'lsi_manual_{ORGANISM}').input('mouse liver').run()
         _back_and_next(at)
         assert _report(captured_downloads)[ORGANISM] == 'mouse liver'
+
+    def test_cleared_field_stays_cleared(self, captured_downloads):
+        """Regression: clearing a field left its old text saved, and it came
+        back (into the field and the report) after Back and Next."""
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.text_input(key=f'lsi_manual_{ORGANISM}').input('mouse liver').run()
+        at.text_input(key=f'lsi_manual_{ORGANISM}').input('').run()
+        _back_and_next(at)
+        assert at.text_input(key=f'lsi_manual_{ORGANISM}').value == ''
+        assert _report(captured_downloads)[ORGANISM] == '[TO BE FILLED BY RESEARCHER]'
