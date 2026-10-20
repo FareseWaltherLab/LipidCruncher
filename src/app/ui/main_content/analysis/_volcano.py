@@ -17,6 +17,7 @@ from app.ui.st_helpers import display_export_buttons, section_header
 from app.ui.main_content.analysis._shared import (
     _clear_pdf_plots,
     _clear_statistics,
+    _display_correction_scope,
     _display_detailed_statistics,
     _publish,
     _publish_statistics,
@@ -258,6 +259,7 @@ def _render_volcano_results(
         f"{'adjusted ' if use_adjusted else ''}p ≤ {p_threshold:g} and fold change "
         f"> {fc_threshold:g}× up or down ({experimental} vs {control})",
     )
+    _display_correction_scope(result.stat_summary, df, selected_classes, 'species')
     _display_detailed_statistics(result.stat_summary, 'volcano')
 
     # Concentration vs Fold Change (stored only if rendered; see _clear_pdf_plots)
