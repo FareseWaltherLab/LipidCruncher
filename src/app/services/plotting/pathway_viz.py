@@ -377,14 +377,12 @@ class PathwayVizPlotterService:
         if experimental not in experiment.conditions_list:
             raise ValueError(f"Experimental condition '{experimental}' not in experiment")
 
-        ctrl_idx = experiment.conditions_list.index(control)
-        exp_idx = experiment.conditions_list.index(experimental)
         ctrl_samples = [
-            s for s in experiment.individual_samples_list[ctrl_idx]
+            s for s in experiment.samples_for(control)
             if f'concentration[{s}]' in df.columns
         ]
         exp_samples = [
-            s for s in experiment.individual_samples_list[exp_idx]
+            s for s in experiment.samples_for(experimental)
             if f'concentration[{s}]' in df.columns
         ]
 

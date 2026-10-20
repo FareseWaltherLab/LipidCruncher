@@ -164,8 +164,7 @@ class FACHPlotterService:
             if condition not in experiment.conditions_list:
                 continue
 
-            cond_idx = experiment.conditions_list.index(condition)
-            samples = experiment.individual_samples_list[cond_idx]
+            samples = experiment.samples_for(condition)
             conc_cols = [
                 f'concentration[{s}]' for s in samples
                 if f'concentration[{s}]' in class_df.columns

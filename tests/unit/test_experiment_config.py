@@ -226,6 +226,25 @@ class TestExperimentConfigComputedFields:
         assert config.full_samples_list[-1] == 's100'
 
 
+class TestExperimentConfigSamplesFor:
+
+    def test_each_condition(self):
+        config = ExperimentConfig(
+            n_conditions=3, conditions_list=['A', 'B', 'C'],
+            number_of_samples_list=[2, 1, 3],
+        )
+        assert config.samples_for('A') == ['s1', 's2']
+        assert config.samples_for('B') == ['s3']
+        assert config.samples_for('C') == ['s4', 's5', 's6']
+
+    def test_unknown_condition(self):
+        config = ExperimentConfig(
+            n_conditions=1, conditions_list=['A'], number_of_samples_list=[2],
+        )
+        with pytest.raises(ValueError, match="'Z' not found"):
+            config.samples_for('Z')
+
+
 class TestExperimentConfigWithoutSamples:
     """Tests for the without_samples method."""
 

@@ -356,13 +356,7 @@ class AnalysisWorkflow:
         Raises:
             ValueError: If condition not found.
         """
-        if condition not in experiment.conditions_list:
-            raise ValueError(
-                f"Condition '{condition}' not found in experiment. "
-                f"Available: {experiment.conditions_list}"
-            )
-        idx = experiment.conditions_list.index(condition)
-        return experiment.individual_samples_list[idx]
+        return experiment.samples_for(condition)
 
     # ------------------------------------------------------------------
     # Bar Chart
@@ -464,8 +458,7 @@ class AnalysisWorkflow:
         for condition in selected_conditions:
             if condition not in experiment.conditions_list:
                 continue
-            idx = experiment.conditions_list.index(condition)
-            samples = experiment.individual_samples_list[idx]
+            samples = experiment.samples_for(condition)
             available_samples = [
                 s for s in samples
                 if f"concentration[{s}]" in pie_data.abundance_df.columns

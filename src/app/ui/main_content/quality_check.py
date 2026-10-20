@@ -606,8 +606,7 @@ def _display_pca_analysis(
         # Expand selected groups to their sample names
         group_samples = []
         for cond in groups_to_remove:
-            idx = experiment.conditions_list.index(cond)
-            group_samples.extend(experiment.individual_samples_list[idx])
+            group_samples.extend(experiment.samples_for(cond))
 
         restored_pca = StreamlitAdapter.restore_widget_value(
             'pca_samples_remove', '_preserved_pca_samples_remove', []

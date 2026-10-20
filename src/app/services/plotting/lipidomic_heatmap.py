@@ -150,8 +150,7 @@ class LipidomicHeatmapPlotterService:
         for condition in selected_conditions:
             if condition not in experiment.conditions_list:
                 continue
-            cond_idx = experiment.conditions_list.index(condition)
-            selected_samples.extend(experiment.individual_samples_list[cond_idx])
+            selected_samples.extend(experiment.samples_for(condition))
 
         if not selected_samples:
             raise ValueError("No valid samples found for selected conditions")
@@ -201,10 +200,7 @@ class LipidomicHeatmapPlotterService:
         for condition in selected_conditions:
             if condition not in experiment.conditions_list:
                 continue
-            cond_idx = experiment.conditions_list.index(condition)
-            labels.extend(
-                [condition] * len(experiment.individual_samples_list[cond_idx])
-            )
+            labels.extend([condition] * len(experiment.samples_for(condition)))
         return labels
 
     @staticmethod
@@ -223,8 +219,7 @@ class LipidomicHeatmapPlotterService:
         """
         if not condition or condition not in experiment.conditions_list:
             return []
-        cond_idx = experiment.conditions_list.index(condition)
-        return list(experiment.individual_samples_list[cond_idx])
+        return list(experiment.samples_for(condition))
 
     @staticmethod
     def count_species(df: pd.DataFrame, selected_classes: List[str]) -> int:

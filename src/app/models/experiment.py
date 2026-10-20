@@ -112,6 +112,19 @@ class ExperimentConfig(BaseModel):
                 for condition, num_samples in zip(self.conditions_list, self.number_of_samples_list)
                 for _ in range(num_samples)]
 
+    def samples_for(self, condition: str) -> List[str]:
+        """The sample labels of one condition, e.g. ['s1', 's2', 's3'].
+
+        Raises:
+            ValueError: ``condition`` is not one of ``conditions_list``.
+        """
+        if condition not in self.conditions_list:
+            raise ValueError(
+                f"Condition '{condition}' not found in experiment. "
+                f"Available: {self.conditions_list}"
+            )
+        return self.individual_samples_list[self.conditions_list.index(condition)]
+
     def without_samples(self, samples_to_remove: List[str]) -> "ExperimentConfig":
         """
         Create a new ExperimentConfig with specified samples removed.

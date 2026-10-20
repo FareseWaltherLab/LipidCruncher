@@ -430,9 +430,7 @@ class VolcanoPlotterService:
             for condition in selected_conditions:
                 if condition not in experiment.conditions_list:
                     continue
-                cond_idx = experiment.conditions_list.index(condition)
-                samples = experiment.individual_samples_list[cond_idx]
-                for sample in samples:
+                for sample in experiment.samples_for(condition):
                     col = f'concentration[{sample}]'
                     if col in df.columns:
                         val = lipid_rows[col].values[0]

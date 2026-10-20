@@ -417,9 +417,7 @@ def _build_distribution_csv(
         for condition in conditions:
             if condition not in experiment.conditions_list:
                 continue
-            idx = experiment.conditions_list.index(condition)
-            samples = experiment.individual_samples_list[idx]
-            for sample in samples:
+            for sample in experiment.samples_for(condition):
                 col = f"concentration[{sample}]"
                 if col in df.columns:
                     val = lipid_row[col].values[0]

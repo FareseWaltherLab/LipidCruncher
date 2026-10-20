@@ -59,8 +59,7 @@ def display_standards_consistency_plots(
     # Get samples for selected conditions
     selected_samples = []
     for cond in selected_conditions:
-        idx = conditions.index(cond)
-        selected_samples.extend(experiment.individual_samples_list[idx])
+        selected_samples.extend(experiment.samples_for(cond))
 
     # Maintain original sample order
     full_samples = experiment.full_samples_list
