@@ -152,6 +152,11 @@ class DataTransformerService:
         is_valid, errors = DataTransformerService.validate_generic_schema(
             sandbox_result.result_df
         )
+        if is_valid:
+            errors = DataTransformerService.check_values_stay_with_their_lipid(
+                sandbox_result.result_df, source_df,
+            )
+            is_valid = not errors
 
         if not is_valid:
             return TransformationResult(
@@ -255,6 +260,96 @@ class DataTransformerService:
             )
 
         return len(errors) == 0, errors
+
+    @staticmethod
+    def check_values_stay_with_their_lipid(
+        result_df: pd.DataFrame, source_df: pd.DataFrame,
+    ) -> List[str]:
+        """Catch values that moved to another lipid during the transform.
+
+        Generated code that filters rows and then builds ``result_df`` by
+        index (``result['name'] = filtered['name'].values`` next to
+        ``result[col] = filtered[col]``) lines the columns up by row label,
+        so lipids get other lipids' values or none. The result looks like a
+        valid Generic table, so the schema check passes it.
+
+        Compares each output row with the uploaded row of the same lipid,
+        over the sample columns kept under their names. A transform may
+        change values (scaling, filling gaps), so only an exact copy of a
+        *different* lipid's row is treated as moved. Lipids or columns that
+        were renamed, and names that are not unique, are not checked.
+
+        Returns:
+            One error message when values moved, otherwise an empty list.
+        """
+        names = result_df.iloc[:, 0].astype(str)
+        name_col = max(
+            (c for c in source_df.columns if source_df[c].dtype == object),
+            key=lambda c: names.isin(source_df[c].astype(str)).sum(),
+            default=None,
+        )
+        columns = [
+            c for c in DataTransformerService._sample_columns(result_df)
+            if c in source_df.columns and c != name_col
+        ]
+        if name_col is None or not columns:
+            return []
+
+        source_names = source_df[name_col].astype(str)
+        unique = set(source_names[~source_names.duplicated(keep=False)])
+        unique &= set(names[~names.duplicated(keep=False)])
+        if not unique:
+            return []
+
+        def _rows(df, name_series):
+            values = df[columns].apply(pd.to_numeric, errors='coerce')
+            values.index = name_series.values
+            return values
+
+        source = _rows(source_df, source_names)
+        output = _rows(result_df, names)
+
+        def _key(row) -> tuple:
+            return tuple('nan' if pd.isna(v) else f'{v:.10g}' for v in row)
+
+        owner = {}
+        for name, row in source.iterrows():
+            if row.notna().sum() >= 2:
+                owner.setdefault(_key(row), set()).add(name)
+
+        moved, lost = [], []
+        for name, row in output.iterrows():
+            if name not in unique:
+                continue
+            own = source.loc[name]
+            if row.isna().all() and own.notna().any():
+                lost.append(name)
+                continue
+            key = _key(row)
+            others = owner.get(key, set()) - {name}
+            if others and key != _key(own):
+                moved.append((name, sorted(others)[0]))
+
+        if not moved:
+            return []
+        example = moved[0]
+        message = (
+            f"Values do not stay with their lipid: {len(moved)} row(s) carry "
+            f"another lipid's values from the uploaded file (e.g. "
+            f"'{example[0]}' has the values of '{example[1]}')"
+        )
+        if lost:
+            message += (
+                f", and {len(lost)} row(s) lost all their values "
+                f"(e.g. '{lost[0]}')"
+            )
+        message += (
+            ". This happens when columns of a filtered DataFrame are combined "
+            "by index with a new one: call .reset_index(drop=True) on the "
+            "filtered DataFrame before building result_df, or use .values "
+            "for every column."
+        )
+        return [message]
 
     @staticmethod
     def _sample_columns(df: pd.DataFrame) -> List:

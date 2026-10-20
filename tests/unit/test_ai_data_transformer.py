@@ -270,3 +270,79 @@ class TestBuildValidationSummary:
         })
         summary = DataTransformerService.build_validation_summary(df)
         assert "may not be lipid names" in summary
+
+
+# The code the AI wrote for "keep species with retention time above 5 and
+# quality score above 70, then transform to generic" (2026-10-20). The names
+# get a fresh 0..n index (.values) while the sample columns keep the filtered
+# frame's index, so pandas lines them up by label: values land on the wrong
+# lipids or vanish.
+_MISALIGNED_FILTER = """
+def transform(df):
+    filtered = df[(df['RetentionTime'] > 5) & (df['QualityScore'] > 70)].copy()
+    sample_cols = ['KO-1', 'KO-2', 'KO-3', 'KOWT-1', 'KOWT-2', 'KOWT-3',
+                   'mut1-1', 'mut1-2', 'mut1-3', 'mut2-1', 'mut2-2', 'mut2-3',
+                   'WT-1', 'WT-2', 'WT-3']
+    result = pd.DataFrame()
+    result['feature'] = filtered['feature'].values
+    for col in sample_cols:
+        result[col] = pd.to_numeric(filtered[col], errors='coerce')
+    return result.reset_index(drop=True)
+
+result_df = transform(df)
+"""
+
+_SAMPLES = ['KO-1', 'KO-2', 'KO-3', 'KOWT-1', 'KOWT-2', 'KOWT-3',
+            'mut1-1', 'mut1-2', 'mut1-3', 'mut2-1', 'mut2-2', 'mut2-3',
+            'WT-1', 'WT-2', 'WT-3']
+
+
+@pytest.fixture
+def studio_df():
+    from pathlib import Path
+    path = Path(__file__).parents[1] / 'fixtures' / 'ai_studio_test_dataset.csv'
+    return pd.read_csv(path)
+
+
+class TestValuesStayWithTheirLipid:
+    """Regression: a transform that filtered rows and then combined columns
+    by index put each lipid's values on another lipid (and blanked others),
+    and passed every schema check."""
+
+    def test_misaligned_filter_is_refused(self, studio_df):
+        result = DataTransformerService.execute_transformation(_MISALIGNED_FILTER, studio_df)
+        assert result.success is False
+        message = " ".join(result.validation_errors)
+        assert "'CE 19:1;0' has the values of 'CE 16:1;0'" in message
+        assert "reset_index(drop=True)" in message
+
+    def test_the_corrected_filter_passes(self, studio_df):
+        code = _MISALIGNED_FILTER.replace(
+            ".copy()", ".copy().reset_index(drop=True)", 1,
+        )
+        result = DataTransformerService.execute_transformation(code, studio_df)
+        assert result.success is True, result.validation_errors
+        kept = studio_df[(studio_df['RetentionTime'] > 5) & (studio_df['QualityScore'] > 70)]
+        assert len(result.result_df) == len(kept)
+
+    @pytest.mark.parametrize('values', [
+        "df[_SAMPLES] / 2",                     # scaled: every value changes
+        "df[_SAMPLES].fillna(0)",               # gaps filled
+    ])
+    def test_changed_values_are_not_mistaken_for_moved_ones(self, studio_df, values):
+        code = (
+            f"_SAMPLES = {_SAMPLES!r}\n"
+            f"result_df = pd.concat([df[['feature']], {values}], axis=1)\n"
+        )
+        result = DataTransformerService.execute_transformation(code, studio_df)
+        assert result.success is True, result.validation_errors
+
+    def test_renamed_lipids_are_not_checked(self, studio_df):
+        code = (
+            f"_SAMPLES = {_SAMPLES!r}\n"
+            "result_df = df[['feature'] + _SAMPLES].copy()\n"
+            "result_df['feature'] = 'X ' + result_df['feature']\n"
+            "result_df = result_df.iloc[::-1]\n"
+        )
+        result = DataTransformerService.execute_transformation(code, studio_df)
+        assert result.success is True, result.validation_errors
