@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.workflows.data_ingestion import DataIngestionWorkflow
 from app.constants import (
     MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL,
     FORMAT_METABOLOMICS_WORKBENCH,
@@ -207,26 +208,16 @@ def display_app_page() -> None:
 # Module 1: Decomposed Steps
 # =============================================================================
 
-def _run_zero_filtering(result) -> None:
-    """Step 4: Apply zero filtering to cleaned data."""
-    pre_filter_df = st.session_state.get('pre_filter_df', result.cleaned_df)
-    if pre_filter_df is not None and not pre_filter_df.empty:
-        filtered_df, removed_species, zero_config = display_zero_filtering_config(
-            pre_filter_df, st.session_state.get('experiment'), st.session_state.get('bqc_label'),
-            data_format=st.session_state.get('format_type')
-        )
-        if filtered_df is not None:
-            st.session_state.cleaned_df = filtered_df
-
-
-def _run_internal_standards(result) -> None:
-    """Step 6: Manage internal standards."""
-    auto_detected_intsta_df = st.session_state.get('intsta_df', result.internal_standards_df)
-    intsta_df = display_manage_internal_standards(
-        cleaned_df=st.session_state.cleaned_df,
-        auto_detected_df=auto_detected_intsta_df
+def _run_zero_filtering(result) -> pd.DataFrame:
+    """Step 4: Apply zero filtering to the cleaned data; return the result."""
+    cleaned_df = result.cleaned_df
+    if cleaned_df is None or cleaned_df.empty:
+        return cleaned_df
+    filtered_df, removed_species, zero_config = display_zero_filtering_config(
+        cleaned_df, st.session_state.get('experiment'), st.session_state.get('bqc_label'),
+        data_format=st.session_state.get('format_type')
     )
-    st.session_state.intsta_df = intsta_df
+    return cleaned_df if filtered_df is None else filtered_df
 
 
 def _display_module1_navigation() -> None:
@@ -267,18 +258,27 @@ def _display_module1(
         return
 
     # Step 4: Zero Filtering Configuration (interactive)
-    _run_zero_filtering(result)
+    filtered_df = _run_zero_filtering(result)
 
-    # Step 5: Final filtered data
-    display_final_filtered_data(st.session_state.cleaned_df)
+    # Step 5: Final filtered data. Shown here, but filled after step 6: the
+    # standards chosen there leave the data, so only then is it final.
+    final_data_slot = st.container()
 
     # Step 6: Manage Internal Standards
-    _run_internal_standards(result)
+    intsta_df = display_manage_internal_standards(
+        cleaned_df=filtered_df,
+        auto_detected_df=result.internal_standards_df,
+    )
+    cleaned_df = DataIngestionWorkflow.analysis_frame(filtered_df, intsta_df)
+    st.session_state.cleaned_df = cleaned_df
+    st.session_state.intsta_df = intsta_df
+    with final_data_slot:
+        display_final_filtered_data(cleaned_df)
 
     # Step 7: Normalization
     display_normalization_ui(
-        cleaned_df=st.session_state.cleaned_df,
-        intsta_df=st.session_state.intsta_df,
+        cleaned_df=cleaned_df,
+        intsta_df=intsta_df,
         experiment=experiment,
         data_format=data_format
     )

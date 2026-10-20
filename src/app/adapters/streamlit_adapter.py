@@ -76,8 +76,7 @@ class SessionState:
                              original_column_order, regroup_origin,
                              _preserved_grouping_radio, _preserved_regroup_selections
       confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
-      data_processing.py   → cleaned_df, intsta_df, ingestion_result,
-                             pre_filter_df, grade_config, last_quality_config,
+      data_processing.py   → ingestion_result, grade_config, last_quality_config,
                              msdial_use_normalized, msdial_data_type_index
       internal_standards.py → original_auto_intsta_df, custom_standards_df,
                               custom_standards_mode, standards_source
@@ -96,7 +95,8 @@ class SessionState:
                              analysis_pathway_*, analysis_all_plots (figures
                              for the PDF, written only by _publish),
                              analysis_statistics (tests run, for the LSI report)
-      main_app.py          → page, module
+      main_app.py          → page, module, cleaned_df and intsta_df (Module 1's
+                             final data and standards, written once per run)
     """
     # --- App-level routing (owner: main_app.py) ---
     page: str = PAGE_LANDING
@@ -159,7 +159,6 @@ class SessionState:
     # --- Data processing (owner: data_processing.py) ---
     cleaned_df: Optional[pd.DataFrame] = None
     intsta_df: Optional[pd.DataFrame] = None
-    pre_filter_df: Optional[pd.DataFrame] = None
     ingestion_result: Optional[IngestionResult] = None
     grade_config: Optional[GradeFilterConfig] = None
     last_quality_config: Optional[QualityFilterConfig] = None
@@ -325,7 +324,7 @@ _STAGES: Tuple[_Stage, ...] = (
     _Stage(
         'processing',
         fields=frozenset({
-            'cleaned_df', 'intsta_df', 'pre_filter_df',
+            'cleaned_df', 'intsta_df',
             'ingestion_result', 'grade_config', 'last_quality_config',
             'original_auto_intsta_df', 'custom_standards_df',
             'custom_standards_mode', 'custom_standards_sample_set',

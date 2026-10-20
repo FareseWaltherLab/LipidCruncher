@@ -177,7 +177,6 @@ Your MS-DIAL export contains both raw and pre-normalized intensity values:
             # Clear cached data to force re-standardization with new selection
             st.session_state.standardized_df = None
             st.session_state.cleaned_df = None
-            st.session_state.pre_filter_df = None
             # Clear column mapping so it gets rebuilt from fresh standardization
             # (otherwise the stale override mapping causes incorrect column lookups)
             st.session_state.column_mapping = None
@@ -405,14 +404,9 @@ def run_ingestion_pipeline(df, experiment, data_format,
         )
 
         st.session_state.ingestion_result = result
-        st.session_state.pre_filter_df = result.cleaned_df
         st.session_state.grade_config = grade_config
         if quality_config is not None:
             st.session_state.last_quality_config = quality_config
-
-        if result.is_valid:
-            st.session_state.cleaned_df = result.cleaned_df
-            st.session_state.intsta_df = result.internal_standards_df
     except (ValueError, KeyError) as e:
         logger.error("Data processing error: %s", e)
         st.error(f"Data processing failed: {e}")
@@ -439,12 +433,9 @@ def run_ingestion_pipeline(df, experiment, data_format,
 def display_final_filtered_data(cleaned_df: pd.DataFrame):
     """Display the final filtered data table with download button.
 
-    Sorts by ClassKey if available and updates session state.
+    ``cleaned_df`` is what normalization receives
+    (``DataIngestionWorkflow.analysis_frame``).
     """
-    if 'ClassKey' in cleaned_df.columns:
-        cleaned_df = cleaned_df.sort_values('ClassKey').reset_index(drop=True)
-        st.session_state.cleaned_df = cleaned_df
-
     st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
     named_dataframe(
         cleaned_df, sample_names=names_for('processing'),

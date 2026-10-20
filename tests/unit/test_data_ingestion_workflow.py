@@ -1358,3 +1358,33 @@ class TestWorkflowIntegrationDataIntegrity:
         intensity_cols = [c for c in result.cleaned_df.columns if 'intensity' in c]
         for col in intensity_cols:
             assert pd.api.types.is_numeric_dtype(result.cleaned_df[col])
+
+
+class TestAnalysisFrame:
+    """R3: what Module 1 normalizes, from the zero-filtered data and the
+    active standards, independent of the UI's call order."""
+
+    @staticmethod
+    def _filtered():
+        return pd.DataFrame({
+            'LipidMolec': ['PE 1', 'PC 1', 'PC IS', 'PE 2'],
+            'ClassKey': ['PE', 'PC', 'PC', 'PE'],
+            'intensity[s1]': [1.0, 2.0, 3.0, 4.0],
+        })
+
+    def test_sorted_by_class_without_the_standards(self):
+        standards = pd.DataFrame({'LipidMolec': ['PC IS'], 'ClassKey': ['PC']})
+        out = DataIngestionWorkflow.analysis_frame(self._filtered(), standards)
+        assert out['LipidMolec'].tolist() == ['PC 1', 'PE 1', 'PE 2']
+
+    @pytest.mark.parametrize('standards', [None, pd.DataFrame()])
+    def test_no_standards_only_sorts(self, standards):
+        out = DataIngestionWorkflow.analysis_frame(self._filtered(), standards)
+        assert out['ClassKey'].tolist() == ['PC', 'PC', 'PE', 'PE']
+        assert len(out) == 4
+
+    def test_standards_not_in_the_data_change_nothing(self):
+        """Auto-detected standards were already taken out by run()."""
+        standards = pd.DataFrame({'LipidMolec': ['SM IS'], 'ClassKey': ['SM']})
+        out = DataIngestionWorkflow.analysis_frame(self._filtered(), standards)
+        assert len(out) == 4

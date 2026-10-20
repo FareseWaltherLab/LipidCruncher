@@ -9,7 +9,8 @@ from pathlib import Path
 from streamlit.testing.v1 import AppTest
 
 from app.constants import (
-    FORMAT_LIPIDSEARCH, FORMAT_MSDIAL, MODULE_DATA_PROCESSING, PAGE_APP,
+    FORMAT_LIPIDSEARCH, FORMAT_MSDIAL, MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS,
+    PAGE_APP,
 )
 
 DEFAULT_TIMEOUT = 90
@@ -93,12 +94,14 @@ class TestStandardMappingSurvivesNextAndBack:
         acca.set_value(other).run()
         assert not at.exception, at.exception
 
-        [b for b in at.button if b.label.startswith('Next')][0].click().run()
-        assert not at.exception, at.exception
-        # Clicking Back trips an AppTest artifact (the element tree keeps
-        # Module 2's widgets after st.rerun()); Back only clears the qc stage.
-        at.session_state['module'] = MODULE_DATA_PROCESSING
-        at.run()
+        # Leave and re-enter Module 1 by setting the module: after Next /
+        # Back's st.rerun() AppTest's element tree keeps the previous page's
+        # widgets, whose dropped keys the next run cannot read. Both only
+        # clear the qc stage.
+        for module in (MODULE_QC_ANALYSIS, MODULE_DATA_PROCESSING):
+            at.session_state['module'] = module
+            at.run()
+            assert not at.exception, at.exception
 
         assert at.radio(key='norm_method_selection').value == 'Internal Standards'
         assert at.selectbox(key='standard_selection_AcCa').value == other

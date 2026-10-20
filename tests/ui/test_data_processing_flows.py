@@ -12,7 +12,8 @@ from pathlib import Path
 from streamlit.testing.v1 import AppTest
 
 from app.constants import (
-    FORMAT_LIPIDSEARCH, FORMAT_MSDIAL, MODULE_DATA_PROCESSING, PAGE_APP,
+    FORMAT_LIPIDSEARCH, FORMAT_MSDIAL, MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS,
+    PAGE_APP,
 )
 from app.services.data_standardization import MSDIALFeatures
 from tests.ui.conftest import DEFAULT_TIMEOUT as WIDGET_TIMEOUT
@@ -35,14 +36,14 @@ def _module1(data_format):
 
 
 def _next_and_back(at):
-    [b for b in at.button if b.label.startswith('Next')][0].click().run()
-    assert not at.exception, at.exception
-    # Clicking Back trips an AppTest artifact (the element tree keeps
-    # Module 2's widgets after st.rerun()); Back only clears the qc stage,
-    # which Next has just cleared.
-    at.session_state['module'] = MODULE_DATA_PROCESSING
-    at.run()
-    assert not at.exception, at.exception
+    """Leave Module 1 for Quality Check and come back. Set the module rather
+    than click Next / Back: after their st.rerun() AppTest's element tree
+    keeps the previous page's widgets, whose dropped keys the next run cannot
+    read. Both only clear the qc stage, empty here."""
+    for module in (MODULE_QC_ANALYSIS, MODULE_DATA_PROCESSING):
+        at.session_state['module'] = module
+        at.run()
+        assert not at.exception, at.exception
 
 
 def _rows(at, lipid_class):
@@ -116,11 +117,11 @@ class TestMsdialQualityLevels:
 
     def test_custom_score_overrides_preset(self):
         at = _module1(FORMAT_MSDIAL)
-        rows_at_60 = len(at.session_state['pre_filter_df'])
+        rows_at_60 = len(at.session_state['ingestion_result'].cleaned_df)
         at.checkbox(key='msdial_show_custom_threshold').check().run()
         at.slider(key='msdial_custom_score').set_value(90).run()
         assert _quality_config(at) == (90, False)
-        assert len(at.session_state['pre_filter_df']) < rows_at_60
+        assert len(at.session_state['ingestion_result'].cleaned_df) < rows_at_60
         assert any('Score ≥ 90' in m.value for m in at.markdown)
 
 
