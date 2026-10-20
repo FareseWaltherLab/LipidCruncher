@@ -28,9 +28,9 @@ same sample, so the **Alignment Setting file is required** and is requested at
 upload.
 
 It is used to pair each sample's positive and negative runs; the paired columns
-are then summed into a single `intensity[s1..sN]` per sample. Because any given
-lipid is detected in only one polarity, that sum is equivalent to taking
-whichever polarity saw it. Samples are renumbered flat in alignment order, and
+are then summed into a single `intensity[s1..sN]` per sample. Each row of the
+export is one identification (one ion, in one polarity), so the sum just fills
+that row from the run it was measured in. Samples are renumbered flat in alignment order, and
 the conditions and sample counts read from the alignment pre-populate the
 experiment setup in the sidebar, with each sample named after its raw file
 (e.g. `ID_01.raw` -> `ID_01`).
@@ -48,6 +48,23 @@ experiment setup in the sidebar, with each sample named after its raw file
 | 5. Best Peak Selection | One entry per lipid: best grade first, then highest TotalSmpIDRate(%) |
 | 6. Column Projection | Keep LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey and the intensity columns; drop extended-export extras (`OrgMeanArea[*]`, `MeanHeight[*]`, `MeanConc[*]`, `LipidMolecGroup`, …) |
 | 7. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+
+#### Lipids identified in both positive and negative mode
+
+A lipid can be identified in both polarities (e.g. PC as `[M+H]+` and as
+`[M+HCOO]-`), giving two rows with the same name. Step 5 keeps **one** of them,
+the better grade and then the higher TotalSmpIDRate(%), for every sample. The
+two rows' values are **never added**: positive- and negative-mode signals for
+the same lipid differ by an order of magnitude or more, so a sum would mean
+nothing.
+
+What this means for your results: comparing a lipid **across conditions** is
+unaffected, since every sample uses the same row. But within one class, some
+species may be quantified from positive mode and others from negative mode, so
+species-to-species comparisons inside that class (composition, proportions,
+saturation profiles) mix two signal scales. After cleaning, the app says how
+many lipids were seen in both modes and which classes ended up with species
+from both.
 
 ---
 

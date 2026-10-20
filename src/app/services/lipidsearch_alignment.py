@@ -11,7 +11,8 @@ Three acquisition layouts occur in practice, and one run can mix them:
 
 1. **Separate positive/negative files** — one biological sample acquired twice,
    the polarity marked in the filename (``..._01n.raw`` / ``..._01p.raw``).
-   Each lipid is detected in only one polarity, so the pair must be merged.
+   Each row (one identification) is measured in only one of them, so the pair
+   must be merged; a lipid identified in both keeps two rows.
 2. **Polarity switching** — pos and neg are embedded in a *single* acquisition,
    so the sample has one per-file token and needs no merging. This is the
    common case for the study samples of a run.
@@ -229,8 +230,10 @@ def merge_dual_polarity(
 
     For each biological sample, the per-file ``{area_prefix}[dataid]`` columns
     are summed (missing values treated as zero, but a row stays NaN when every
-    file of that sample is missing the lipid). Because a lipid is detected in
-    only one polarity, this sum equals coalescing the pair. Samples are
+    file of that sample is missing the lipid). Each row is one identification,
+    measured in one polarity, so this sum equals coalescing the pair. A lipid
+    identified in both polarities stays two rows; the LipidSearch cleaner
+    keeps one. Samples are
     renumbered flat ``intensity[s1..sN]`` in ``alignment.samples`` order
     (condition-contiguous, see ``parse_alignment_file``).
 

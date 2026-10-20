@@ -9,6 +9,7 @@ from app.services.data_cleaning import (
     CleaningResult,
     BaseDataCleaner,
     LipidSearchCleaner,
+    POLARITY_NOTE_PREFIX,
     MSDIALCleaner,
     GenericCleaner,
     ConfigurationError,
@@ -680,6 +681,61 @@ class TestCleanerContract:
     def test_registry_holds_cleaner_classes(self):
         from app.services.data_cleaning import _CLEANER_REGISTRY
         assert all(issubclass(c, BaseDataCleaner) for c in _CLEANER_REGISTRY.values())
+
+
+class TestLipidSearchPolarityNote:
+    """M10: lipids identified in both ionisation modes keep one row; the
+    cleaner says so, and which classes mix the two modes."""
+
+    @staticmethod
+    def _df(lipidsearch_df, ions, extra=None):
+        df = lipidsearch_df.assign(MainIon=ions)
+        if extra is not None:
+            df = pd.concat([df, pd.DataFrame([extra])], ignore_index=True)
+        return df
+
+    def _note(self, df, experiment):
+        _, messages = LipidSearchCleaner.clean(df, experiment)
+        notes = [m for m in messages if m.startswith(POLARITY_NOTE_PREFIX)]
+        assert len(notes) <= 1
+        return notes[0] if notes else None
+
+    def test_lipid_in_both_modes(self, lipidsearch_df, simple_experiment_2x2):
+        pc_negative = {
+            **lipidsearch_df.iloc[0].to_dict(), 'MainIon': 'M+HCOO',
+            'TotalGrade': 'B', 'intensity[s1]': 50.0,
+        }
+        df = self._df(lipidsearch_df, ['M+H', 'M+H', 'M+NH4'], pc_negative)
+        cleaned, _ = LipidSearchCleaner.clean(df, simple_experiment_2x2)
+        # Selection unchanged: the better-graded positive row, not a sum.
+        pc = cleaned[cleaned['ClassKey'] == 'PC']
+        assert pc['intensity[s1]'].tolist() == [1000.0]
+        note = self._note(df, simple_experiment_2x2)
+        assert '1 lipid(s) were identified in both positive and negative mode' in note
+        assert 'never added' in note
+        assert 'Classes whose species' not in note
+
+    def test_class_with_species_from_both_modes(self, lipidsearch_df, simple_experiment_2x2):
+        pc_other = {
+            **lipidsearch_df.iloc[0].to_dict(), 'LipidMolec': 'PC(18:0_18:1)',
+            'FAKey': '18:0_18:1', 'MainIon': 'M+HCOO',
+        }
+        df = self._df(lipidsearch_df, ['M+H', 'M-H', 'M+NH4'], pc_other)
+        note = self._note(df, simple_experiment_2x2)
+        assert 'identified in both' not in note
+        assert 'PC (1 positive, 1 negative)' in note
+        assert 'PE (' not in note and 'TG (' not in note
+
+    def test_one_mode_only(self, lipidsearch_df, simple_experiment_2x2):
+        df = self._df(lipidsearch_df, ['M+H', 'M+H', 'M+NH4'])
+        assert self._note(df, simple_experiment_2x2) is None
+
+    def test_no_ion_column(self, lipidsearch_df, simple_experiment_2x2):
+        assert self._note(lipidsearch_df, simple_experiment_2x2) is None
+
+    def test_unknown_ions_are_left_out(self, lipidsearch_df, simple_experiment_2x2):
+        df = self._df(lipidsearch_df, ['M+H', 'M+X', 'M+NH4'])
+        assert self._note(df, simple_experiment_2x2) is None
 
 
 class TestLipidSearchCleanerBasic:

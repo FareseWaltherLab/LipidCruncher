@@ -12,10 +12,20 @@ from ...constants import (
     LYSO_CLASSES,
     LIPIDSEARCH_DEFAULT_GRADES, LIPIDSEARCH_RELAXED_GRADES,
     LIPIDSEARCH_RELAXED_GRADE_CLASSES,
+    LIPIDSEARCH_NEGATIVE_IONS, LIPIDSEARCH_POSITIVE_IONS,
 )
 from .base import BaseDataCleaner
 from .configs import GradeFilterConfig
 from .exceptions import EmptyDataError, ConfigurationError
+
+# Starts the cleaning message that explains dual-polarity lipids, which the
+# app shows on the page (the other cleaning messages are not).
+POLARITY_NOTE_PREFIX = "Polarity:"
+
+_ION_POLARITY: Dict[str, str] = {
+    **{ion: '+' for ion in LIPIDSEARCH_POSITIVE_IONS},
+    **{ion: '-' for ion in LIPIDSEARCH_NEGATIVE_IONS},
+}
 
 
 class LipidSearchCleaner(BaseDataCleaner):
@@ -83,12 +93,19 @@ class LipidSearchCleaner(BaseDataCleaner):
         df = LipidSearchCleaner._standardize_lipid_names(df)
 
         # Step 5: Select best AUC for each lipid
+        candidates = df[LipidSearchCleaner._build_eligibility_mask(df, grade_dict)]
         df, msg = LipidSearchCleaner._step_select_best_auc(df, experiment, grade_dict)
         if msg:
             messages.append(msg)
 
         # Step 6: Remove all-zero rows
         df, msg = LipidSearchCleaner._step_remove_zero_rows(df)
+        if msg:
+            messages.append(msg)
+
+        # Say which lipids were seen in both ionisation modes, and which
+        # classes ended up quantified from both (selection is unchanged).
+        msg = LipidSearchCleaner._polarity_note(candidates, df)
         if msg:
             messages.append(msg)
 
@@ -102,6 +119,55 @@ class LipidSearchCleaner(BaseDataCleaner):
 
         messages.append(LipidSearchCleaner._make_summary_message(initial_count, len(df)))
         return df, messages
+
+    # ==================== Polarity ====================
+
+    @staticmethod
+    def _polarity_note(candidates: pd.DataFrame, kept: pd.DataFrame) -> Optional[str]:
+        """Explain the rows of lipids identified in both ionisation modes.
+
+        ``candidates`` are the grade-eligible rows before one row per lipid
+        was kept; ``kept`` the rows kept. None when the export has no MainIon
+        column or nothing was measured in both modes.
+        """
+        if 'MainIon' not in candidates.columns or 'MainIon' not in kept.columns:
+            return None
+
+        def polarity(frame):
+            ions = frame['MainIon'].astype(str).str.strip()
+            return frame.assign(_polarity=ions.map(_ION_POLARITY)).dropna(
+                subset=['_polarity']
+            )
+
+        modes = polarity(candidates).groupby('LipidMolec')['_polarity'].nunique()
+        n_both = int((modes > 1).sum())
+        per_class = polarity(kept).groupby(['ClassKey', '_polarity']).size().unstack(
+            fill_value=0,
+        )
+        mixed = [
+            f"{cls} ({row.get('+', 0)} positive, {row.get('-', 0)} negative)"
+            for cls, row in per_class.iterrows()
+            if row.get('+', 0) and row.get('-', 0)
+        ]
+        if not n_both and not mixed:
+            return None
+
+        note = POLARITY_NOTE_PREFIX
+        if n_both:
+            note += (
+                f" {n_both} lipid(s) were identified in both positive and "
+                "negative mode. Each is quantified from its better-graded "
+                "identification; the two modes' values are never added, as "
+                "their signal scales differ."
+            )
+        if mixed:
+            note += (
+                " Classes whose species come from both modes: "
+                + ", ".join(mixed)
+                + ". Compare these species across conditions rather than with "
+                "each other (composition within a class mixes the two scales)."
+            )
+        return note
 
     # ==================== Cleaning Steps ====================
 

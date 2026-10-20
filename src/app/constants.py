@@ -158,6 +158,15 @@ LIPIDSEARCH_DEFAULT_GRADES: Tuple[str, ...] = ('A', 'B')
 LIPIDSEARCH_RELAXED_GRADE_CLASSES: Tuple[str, ...] = ('LPC', 'SM')
 LIPIDSEARCH_RELAXED_GRADES: Tuple[str, ...] = ('A', 'B', 'C')
 
+# Ionisation mode of LipidSearch's MainIon adducts (the export gives no charge
+# sign). Ions in neither list are left out of the polarity note.
+LIPIDSEARCH_POSITIVE_IONS: Tuple[str, ...] = (
+    'M+H', 'M+2H', 'M+NH4', 'M+Na', 'M+K', 'M+Li', 'M+H-H2O',
+)
+LIPIDSEARCH_NEGATIVE_IONS: Tuple[str, ...] = (
+    'M-H', 'M-2H', 'M-CH3', 'M+HCOO', 'M+CH3COO', 'M+Cl',
+)
+
 
 # =============================================================================
 # MS-DIAL Quality Filtering

@@ -29,7 +29,9 @@ from app.constants import (
     MSDIAL_QUALITY_PRESETS,
     MSDIAL_DEFAULT_QUALITY_LEVEL,
 )
-from app.services.data_cleaning import GradeFilterConfig, QualityFilterConfig
+from app.services.data_cleaning import (
+    POLARITY_NOTE_PREFIX, GradeFilterConfig, QualityFilterConfig,
+)
 from app.ui.content import get_processing_docs, ZERO_FILTERING_DOCS
 from app.ui.sample_labels import names_for
 
@@ -420,6 +422,12 @@ def run_ingestion_pipeline(df, experiment, data_format,
 
     for warning in result.validation_warnings:
         st.warning(warning)
+
+    # Lipids measured in both ionisation modes (LipidSearch): say which row
+    # was used and what that means for comparisons.
+    for msg in result.cleaning_messages:
+        if msg.startswith(POLARITY_NOTE_PREFIX):
+            st.info(msg)
 
     # MS-DIAL: rerun if quality config changed so expander shows updated results
     if data_format == FORMAT_MSDIAL and quality_config is not None:
