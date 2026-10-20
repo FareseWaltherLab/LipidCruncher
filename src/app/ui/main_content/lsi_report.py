@@ -10,6 +10,12 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+from app.constants import (
+    FORMAT_LIPIDSEARCH,
+    LIPIDSEARCH_DEFAULT_GRADES,
+    LIPIDSEARCH_RELAXED_GRADE_CLASSES,
+    LIPIDSEARCH_RELAXED_GRADES,
+)
 from app.models.experiment import ExperimentConfig
 from app.models.normalization import NormalizationConfig
 from app.models.statistics import StatisticalTestConfig
@@ -113,7 +119,7 @@ def _collect_auto_fields(
     intsta_df = st.session_state.get("intsta_df")
 
     # Cleaning parameters
-    cleaning_params = _build_cleaning_params()
+    cleaning_params = _build_cleaning_params(format_type)
 
     # QC summary
     qc_summary = _build_qc_summary()
@@ -131,13 +137,23 @@ def _collect_auto_fields(
     )
 
 
-def _build_cleaning_params() -> dict:
+def _build_cleaning_params(format_type: str) -> dict:
     """Extract data cleaning parameters from session state."""
     params: dict = {}
 
-    grade_config = st.session_state.get("grade_config")
-    if grade_config is not None:
-        params["Grade filter (LipidSearch)"] = str(grade_config)
+    if format_type == FORMAT_LIPIDSEARCH:
+        grade_config = st.session_state.get("grade_config")
+        if grade_config is None:
+            params["Grade filter (LipidSearch)"] = (
+                f"Default: {', '.join(LIPIDSEARCH_DEFAULT_GRADES)} for all classes; "
+                f"{', '.join(LIPIDSEARCH_RELAXED_GRADES)} for "
+                f"{', '.join(LIPIDSEARCH_RELAXED_GRADE_CLASSES)}"
+            )
+        else:
+            params["Grade filter (LipidSearch)"] = "; ".join(
+                f"{cls}: {', '.join(grades)}"
+                for cls, grades in grade_config.grade_config.items()
+            )
 
     quality_config = st.session_state.get("last_quality_config")
     if quality_config is not None:

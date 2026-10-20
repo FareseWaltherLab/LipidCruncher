@@ -407,6 +407,7 @@ def run_ingestion_pipeline(df, experiment, data_format,
 
         st.session_state.ingestion_result = result
         st.session_state.pre_filter_df = result.cleaned_df
+        st.session_state.grade_config = grade_config
         if quality_config is not None:
             st.session_state.last_quality_config = quality_config
 

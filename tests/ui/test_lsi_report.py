@@ -18,8 +18,8 @@ DEFAULT_TIMEOUT = 90
 MAIN_APP = str(Path(__file__).parents[2] / 'src' / 'main_app.py')
 
 
-def _run_to_analysis(method, data_format=None, drop_classes=()):
-    """Sample data → confirm → normalization ``method`` → Next."""
+def _run_to_analysis(method, data_format=None, drop_classes=(), setup=None):
+    """Sample data → confirm → ``setup(at)`` → normalization ``method`` → Next."""
     at = AppTest.from_file(MAIN_APP, default_timeout=DEFAULT_TIMEOUT)
     at.session_state['page'] = PAGE_APP
     at.run()
@@ -27,6 +27,9 @@ def _run_to_analysis(method, data_format=None, drop_classes=()):
         at.sidebar.selectbox[0].set_value(data_format).run()
     at.sidebar.button(key='load_sample').click().run()
     at.sidebar.checkbox(key='confirm_checkbox').check().run()
+    if setup is not None:
+        setup(at)
+        assert not at.exception, at.exception
     if drop_classes:
         classes = at.multiselect(key='temp_selected_classes')
         classes.set_value([c for c in classes.options if c not in drop_classes]).run()
@@ -68,3 +71,35 @@ class TestNormalizationReported:
         assert report['Standard-to-class mappings'] == '; '.join(
             f'{cls} → {std}' for cls, std in sorted(mapping.items())
         )
+
+
+GRADE_ITEM = 'Cleaning: Grade filter (LipidSearch)'
+
+
+class TestGradeFilterReported:
+    """Regression: the grade filter LipidSearch data went through never
+    reached the report, which read a grade_config session key nothing
+    wrote."""
+
+    def test_default_grades(self, captured_downloads):
+        _run_to_analysis('None (pre-normalized data)', FORMAT_LIPIDSEARCH)
+        assert _report(captured_downloads)[GRADE_ITEM] == (
+            'Default: A, B for all classes; A, B, C for LPC, SM'
+        )
+
+    def test_allow_c_for_all_classes(self, captured_downloads):
+        def allow_c(at):
+            at.radio(key='grade_filter_mode_radio').set_value(
+                'Allow C for all classes'
+            ).run()
+
+        at = _run_to_analysis(
+            'None (pre-normalized data)', FORMAT_LIPIDSEARCH, setup=allow_c,
+        )
+        entries = _report(captured_downloads)[GRADE_ITEM].split('; ')
+        classes = sorted(at.session_state['standardized_df']['ClassKey'].unique())
+        assert entries == [f'{cls}: A, B, C' for cls in classes]
+
+    def test_not_reported_for_other_formats(self, captured_downloads):
+        _run_to_analysis('None (pre-normalized data)')
+        assert GRADE_ITEM not in _report(captured_downloads)
