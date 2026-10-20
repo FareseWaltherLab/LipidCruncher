@@ -138,16 +138,16 @@ class SaturationPlotterService:
             if class_df.empty:
                 continue
 
-            # Pre-compute FA ratios for all species in this class
-            ratios = class_df['LipidMolec'].apply(
-                SaturationPlotterService.calculate_fa_ratios
+            # (species x 3) SFA/MUFA/PUFA ratio of each species' chains
+            ratios = np.array(
+                class_df['LipidMolec'].apply(
+                    SaturationPlotterService.calculate_fa_ratios
+                ).tolist(),
+                dtype=float,
             )
-            sfa_ratios = ratios.apply(lambda r: r[0]).values
-            mufa_ratios = ratios.apply(lambda r: r[1]).values
-            pufa_ratios = ratios.apply(lambda r: r[2]).values
 
             class_fa_data: Dict[str, Dict[str, np.ndarray]] = {
-                'SFA': {}, 'MUFA': {}, 'PUFA': {}
+                fa: {} for fa in FA_TYPES
             }
             rows: List[Dict] = []
 
@@ -164,41 +164,22 @@ class SaturationPlotterService:
                 if not sample_cols:
                     continue
 
-                sfa_values = []
-                mufa_values = []
-                pufa_values = []
-
-                for col in sample_cols:
-                    concentrations = class_df[col].values.astype(float)
-                    sfa_values.append(np.nansum(concentrations * sfa_ratios))
-                    mufa_values.append(np.nansum(concentrations * mufa_ratios))
-                    pufa_values.append(np.nansum(concentrations * pufa_ratios))
-
-                sfa_arr = np.array(sfa_values)
-                mufa_arr = np.array(mufa_values)
-                pufa_arr = np.array(pufa_values)
-
-                class_fa_data['SFA'][condition] = sfa_arr
-                class_fa_data['MUFA'][condition] = mufa_arr
-                class_fa_data['PUFA'][condition] = pufa_arr
+                # (samples x 3): each sample's concentration-weighted sums
+                concentrations = class_df[sample_cols].to_numpy(dtype=float)
+                values = np.nansum(
+                    concentrations[:, :, None] * ratios[:, None, :], axis=0,
+                )
+                for k, fa in enumerate(FA_TYPES):
+                    class_fa_data[fa][condition] = values[:, k]
 
                 # Check if we have meaningful data (at least one FA type > 0)
-                has_data = (
-                    np.nanmean(sfa_arr) > 0 or
-                    np.nanmean(mufa_arr) > 0 or
-                    np.nanmean(pufa_arr) > 0
-                )
-
-                if has_data and len(sample_cols) > 1:
-                    n_samples = len(sample_cols)
+                means = np.nanmean(values, axis=0)
+                if (means > 0).any() and len(sample_cols) > 1:
                     rows.append({
-                        'Condition': f"{condition} (n={n_samples})",
-                        'SFA_AUC': np.nanmean(sfa_arr),
-                        'MUFA_AUC': np.nanmean(mufa_arr),
-                        'PUFA_AUC': np.nanmean(pufa_arr),
-                        'SFA_std': np.nanstd(sfa_arr, ddof=1),
-                        'MUFA_std': np.nanstd(mufa_arr, ddof=1),
-                        'PUFA_std': np.nanstd(pufa_arr, ddof=1),
+                        'Condition': f"{condition} (n={len(sample_cols)})",
+                        **{f'{fa}_AUC': means[k] for k, fa in enumerate(FA_TYPES)},
+                        **{f'{fa}_std': np.nanstd(values[:, k], ddof=1)
+                           for k, fa in enumerate(FA_TYPES)},
                     })
 
             if rows:
