@@ -155,6 +155,14 @@ def _display_manual_experiment(sample_cols: list) -> tuple:
         st.sidebar.error("All condition labels must be non-empty.")
         return None, None, None
 
+    duplicates = sorted({cond for cond in conditions_list if conditions_list.count(cond) > 1})
+    if duplicates:
+        st.sidebar.error(
+            f"Condition labels must be unique: {', '.join(duplicates)} "
+            "is used more than once."
+        )
+        return None, None, None
+
     total_assigned = sum(number_of_samples_list)
     if total_assigned != len(sample_cols):
         st.sidebar.warning(

@@ -12,6 +12,7 @@ import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
+from app.services.lsi_report import AnalysisStatistics
 from app.services.report_generator import ANALYSIS_PAGES
 from app.services.statistical_testing import StatisticalTestSummary
 from app.workflows.analysis import AnalysisWorkflow
@@ -65,6 +66,61 @@ def _publish(key: str, figure) -> None:
     ):
         raise ValueError(f"The PDF report has no page for {key!r}")
     st.session_state.analysis_all_plots[key] = figure
+
+
+def _clear_statistics(analysis: str) -> None:
+    """Drop an analysis's tests from the LSI report before it re-renders
+    (the ``_clear_pdf_plots`` of ``_publish_statistics``)."""
+    st.session_state.analysis_statistics.pop(analysis, None)
+
+
+def _publish_statistics(
+    analysis: str,
+    summary: Optional[StatisticalTestSummary],
+    significance: Optional[str] = None,
+) -> None:
+    """Put the tests an analysis ran into the LSI report.
+
+    ``significance`` defaults to the test run's alpha, on adjusted p-values
+    when a correction was applied. None ``summary`` (no tests run) records
+    nothing.
+    """
+    if summary is None:
+        return
+    if significance is None:
+        corrected = summary.test_info.get('correction', 'uncorrected') != 'uncorrected'
+        alpha = summary.parameters.get('alpha', 0.05)
+        significance = f"{'adjusted ' if corrected else ''}p ≤ {alpha:g}"
+    st.session_state.analysis_statistics[analysis] = AnalysisStatistics(
+        summary=summary, significance=significance,
+    )
+
+
+def _display_correction_scope(
+    summary: Optional[StatisticalTestSummary],
+    df: pd.DataFrame,
+    selected_classes: List[str],
+    unit: str,
+) -> None:
+    """Warn that a correction counted only the selected classes' tests.
+
+    The multiple-testing family is what was tested, so leaving classes out
+    makes the correction less strict and adjusted p-values move with the
+    class selection.
+    """
+    if summary is None:
+        return
+    if summary.test_info.get('correction', 'uncorrected') == 'uncorrected':
+        return
+    n_available = len(AnalysisWorkflow.get_available_classes(df))
+    if len(selected_classes) >= n_available:
+        return
+    st.warning(
+        f"The multiple-testing correction covers only the {len(summary.results)} "
+        f"{unit} tested here, from the {len(selected_classes)} of {n_available} "
+        "lipid classes selected. Selecting other classes changes the correction, "
+        "so adjusted p-values and significance can change with the class selection."
+    )
 
 
 def _clear_pdf_plots(*keys: str) -> None:
@@ -163,6 +219,7 @@ def _display_condition_class_selectors(
     experiment: ExperimentConfig,
     df: pd.DataFrame,
     key_prefix: str,
+    conditions: Optional[List[str]] = None,
 ) -> Tuple[List[str], List[str]]:
     """Display condition and class multiselect widgets.
 
@@ -170,13 +227,18 @@ def _display_condition_class_selectors(
         experiment: Experiment configuration.
         df: DataFrame with ClassKey column.
         key_prefix: Prefix for widget keys.
+        conditions: Conditions to offer. Defaults to those with two or more
+            samples, which statistical tests need.
 
     Returns:
         Tuple of (selected_conditions, selected_classes).
     """
     section_header("🎯 Data Selection")
 
-    valid_conditions = AnalysisWorkflow.get_eligible_conditions(experiment)
+    valid_conditions = (
+        AnalysisWorkflow.get_eligible_conditions(experiment)
+        if conditions is None else conditions
+    )
     all_classes = AnalysisWorkflow.get_available_classes(df)
 
     col1, col2 = st.columns(2)

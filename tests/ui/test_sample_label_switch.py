@@ -184,7 +184,7 @@ class TestExcludeSamplesPicker:
 def _lsi_summary_script():
     import streamlit as st
     from app.ui.main_content.lsi_report import _build_qc_summary
-    st.text(_build_qc_summary()["Outlier samples removed (PCA)"])
+    st.text(_build_qc_summary(None)["Outlier samples removed (PCA)"])
 
 
 class TestLsiOutlierSummary:

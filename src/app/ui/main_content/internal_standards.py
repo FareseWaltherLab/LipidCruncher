@@ -13,6 +13,7 @@ from typing import Dict, Optional
 import streamlit as st
 import pandas as pd
 
+from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_COMPLETE_HELP
@@ -62,11 +63,11 @@ def _remove_dataset_standards_from_main(
     cleaned_df: pd.DataFrame,
     standards_df: pd.DataFrame,
 ) -> list:
-    """Drop dataset-sourced standards from the main dataset.
+    """The dataset lipids chosen as standards, which leave the main data.
 
-    A lipid used as an internal standard should not also be analysed as a
-    regular species, so it is removed from ``cleaned_df``. Safe to re-run:
-    ``cleaned_df`` is rebuilt from the zero-filtering step on every rerun.
+    A lipid used as an internal standard is not also analysed as a regular
+    species; ``DataIngestionWorkflow.analysis_frame`` removes it. This only
+    names them, for the message.
 
     Returns the list of removed lipid names.
     """
@@ -75,11 +76,9 @@ def _remove_dataset_standards_from_main(
     if cleaned_df is None or cleaned_df.empty:
         return []
 
-    filtered_df, removed = StandardsService.remove_standards_from_dataset(
+    _, removed = StandardsService.remove_standards_from_dataset(
         cleaned_df, standards_df
     )
-    if removed:
-        st.session_state.cleaned_df = filtered_df
     return removed
 
 
@@ -389,10 +388,8 @@ def _process_uploaded_standards(
     try:
         uploaded_df = pd.read_csv(uploaded_file)
 
-        result = StandardsService.process_standards_file(
-            uploaded_df=uploaded_df,
-            cleaned_df=cleaned_df,
-            standards_in_dataset=use_extract_mode
+        result = StreamlitAdapter.run_process_standards_file(
+            uploaded_df, cleaned_df, use_extract_mode,
         )
 
         if result.standards_df is None or result.standards_df.empty:
@@ -407,11 +404,10 @@ def _process_uploaded_standards(
 
         # For external standards, remove them from main dataset if present
         if not use_extract_mode:
-            filtered_df, removed_lipids = StandardsService.remove_standards_from_dataset(
+            _, removed_lipids = StandardsService.remove_standards_from_dataset(
                 cleaned_df, result.standards_df
             )
             if removed_lipids:
-                st.session_state.cleaned_df = filtered_df
                 preview = removed_lipids[:5]
                 more = f"... and {len(removed_lipids) - 5} more" if len(removed_lipids) > 5 else ""
                 st.warning(

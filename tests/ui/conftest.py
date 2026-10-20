@@ -642,6 +642,9 @@ def internal_standards_script():
         st.session_state.experiment = st.session_state['_test_experiment']
 
     result = display_manage_internal_standards(cleaned_df, auto_detected_df)
+    # As main_app does: the chosen standards leave the main data.
+    from app.workflows.data_ingestion import DataIngestionWorkflow
+    st.session_state.cleaned_df = DataIngestionWorkflow.analysis_frame(cleaned_df, result)
     if result is not None and not result.empty:
         st.text(f"standards_count:{len(result)}")
     else:

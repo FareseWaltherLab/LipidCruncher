@@ -576,6 +576,7 @@ class StatisticalTestingService:
         control_samples: List[str],
         experimental_samples: List[str],
         config: StatisticalTestConfig,
+        dataset_df: Optional[pd.DataFrame] = None,
     ) -> StatisticalTestSummary:
         """Run per-lipid statistical tests (used by volcano plot).
 
@@ -587,6 +588,10 @@ class StatisticalTestingService:
             control_samples: Sample names for control condition.
             experimental_samples: Sample names for experimental condition.
             config: Statistical test configuration.
+            dataset_df: The whole dataset, when ``df`` is a subset (e.g.
+                selected classes): the zero-replacement value comes from it,
+                so a lipid's result does not depend on which other lipids
+                are tested. Defaults to ``df``.
 
         Returns:
             StatisticalTestSummary with per-lipid results including
@@ -599,7 +604,9 @@ class StatisticalTestingService:
 
         # Compute one dataset-wide small value for all tests
         global_small = (
-            StatisticalTestingService._compute_dataset_small_value(df)
+            StatisticalTestingService._compute_dataset_small_value(
+                df if dataset_df is None else dataset_df
+            )
             if config.auto_transform else None
         )
 

@@ -186,40 +186,40 @@ class TestGenerateCovPlotData:
 # =============================================================================
 
 class TestGenerateAndDisplayCovPlot:
-    def test_returns_tuple_of_four(self, bqc_df, simple_experiment):
+    def test_returns_tuple_of_three(self, bqc_df, simple_experiment):
         result = BQCPlotterService.generate_and_display_cov_plot(
             bqc_df, simple_experiment, 1, cov_threshold=30
         )
-        assert len(result) == 4
+        assert len(result) == 3
 
     def test_returns_figure(self, bqc_df, simple_experiment):
-        fig, _, _, _ = BQCPlotterService.generate_and_display_cov_plot(
+        fig, _, _ = BQCPlotterService.generate_and_display_cov_plot(
             bqc_df, simple_experiment, 1
         )
         assert isinstance(fig, go.Figure)
 
     def test_returns_prepared_df(self, bqc_df, simple_experiment):
-        _, prepared_df, _, _ = BQCPlotterService.generate_and_display_cov_plot(
+        _, prepared_df, _ = BQCPlotterService.generate_and_display_cov_plot(
             bqc_df, simple_experiment, 1
         )
         assert isinstance(prepared_df, pd.DataFrame)
         assert 'cov' in prepared_df.columns
 
     def test_returns_reliable_percentage(self, bqc_df, simple_experiment):
-        _, _, pct, _ = BQCPlotterService.generate_and_display_cov_plot(
+        _, _, pct = BQCPlotterService.generate_and_display_cov_plot(
             bqc_df, simple_experiment, 1, cov_threshold=200
         )
         assert isinstance(pct, float)
         assert 0 <= pct <= 100
 
     def test_high_threshold_all_reliable(self, bqc_df, simple_experiment):
-        _, _, pct, _ = BQCPlotterService.generate_and_display_cov_plot(
+        _, _, pct = BQCPlotterService.generate_and_display_cov_plot(
             bqc_df, simple_experiment, 1, cov_threshold=9999
         )
         assert pct == 100.0
 
     def test_low_threshold_low_reliability(self, bqc_df, simple_experiment):
-        _, _, pct, _ = BQCPlotterService.generate_and_display_cov_plot(
+        _, _, pct = BQCPlotterService.generate_and_display_cov_plot(
             bqc_df, simple_experiment, 1, cov_threshold=0.001
         )
         assert pct < 50

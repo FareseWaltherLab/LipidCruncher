@@ -146,6 +146,29 @@ class DataIngestionWorkflow:
 
         return result
 
+    @staticmethod
+    def analysis_frame(
+        filtered_df: pd.DataFrame,
+        standards_df: Optional[pd.DataFrame],
+    ) -> pd.DataFrame:
+        """The data Module 1 normalizes and shows as its final filtered data.
+
+        The zero-filtered species sorted by class, minus every lipid used as
+        an internal standard: a standard is not also analysed as a species,
+        whichever way it was chosen (auto-detected standards were already
+        taken out by ``run``; ones picked from the dataset or uploaded are
+        removed here).
+
+        Args:
+            filtered_df: Cleaned, zero-filtered data.
+            standards_df: The active internal standards, or None.
+        """
+        if 'ClassKey' in filtered_df.columns:
+            filtered_df = filtered_df.sort_values('ClassKey').reset_index(drop=True)
+        analysis_df, _ = StandardsService.remove_standards_from_dataset(
+            filtered_df, standards_df,
+        )
+        return analysis_df
 
     @staticmethod
     def validate_for_format(

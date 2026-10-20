@@ -194,7 +194,7 @@ Protein-based normalization: Users must independently determine protein concentr
 
 - Manual entry: Users enter the protein concentration for each sample individually through the interface
 
-- File upload: Users upload a CSV file containing a single column named "Concentration" with protein values for each sample in order
+- File upload: Users upload a CSV file with a column named "Concentration" holding one protein value per sample. An optional "Sample" column (each sample's label or name) assigns rows to samples; without it, rows are taken in sample order
 
 The lipid concentration is calculated by dividing the lipid intensity by the protein concentration.
 

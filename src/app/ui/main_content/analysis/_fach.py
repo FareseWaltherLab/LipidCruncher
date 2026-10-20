@@ -28,11 +28,8 @@ def _display_fach_heatmaps(
         _check_fa_compatibility(df)
 
         all_classes = AnalysisWorkflow.get_available_classes(df)
-        valid_conditions = AnalysisWorkflow.get_eligible_conditions(experiment)
-
-        if not valid_conditions:
-            st.warning("No conditions with multiple samples available.")
-            return
+        # Means only: a single-sample condition is fine.
+        valid_conditions = AnalysisWorkflow.get_all_conditions(experiment)
 
         section_header("🎯 Data Selection")
 

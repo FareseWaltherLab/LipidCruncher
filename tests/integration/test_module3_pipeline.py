@@ -19,6 +19,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 # Module 1 workflows (used to produce normalized DataFrames)
+from app.services.plotting.lipidomic_heatmap import LipidomicHeatmapPlotterService
 from app.workflows.data_ingestion import (
     DataIngestionWorkflow,
     IngestionConfig,
@@ -1406,7 +1407,7 @@ class TestHeatmapEndToEnd:
         assert isinstance(result.figure, go.Figure)
         assert isinstance(result.z_scores_df, pd.DataFrame)
         assert not result.z_scores_df.empty
-        assert result.cluster_composition is None  # regular mode
+        assert result.clustering is None  # regular mode
 
     def test_lipidsearch_clustered_heatmap(
         self, lipidsearch_normalized_df, lipidsearch_experiment,
@@ -1423,8 +1424,10 @@ class TestHeatmapEndToEnd:
 
         assert isinstance(result, HeatmapResult)
         assert isinstance(result.figure, go.Figure)
-        assert isinstance(result.cluster_composition, pd.DataFrame)
-        assert not result.cluster_composition.empty
+        composition = LipidomicHeatmapPlotterService.get_cluster_composition(
+            result.z_scores_df, 3, clustering=result.clustering,
+        )
+        assert not composition.empty
 
     def test_heatmap_z_scores_normalized(
         self, lipidsearch_normalized_df, lipidsearch_experiment,
@@ -1463,7 +1466,10 @@ class TestHeatmapEndToEnd:
         )
 
         # Cluster composition should have n_clusters rows
-        assert len(result.cluster_composition) == n_clusters
+        composition = LipidomicHeatmapPlotterService.get_cluster_composition(
+            result.z_scores_df, n_clusters, clustering=result.clustering,
+        )
+        assert len(composition) == n_clusters
 
     def test_heatmap_subset_conditions(
         self, lipidsearch_normalized_df, lipidsearch_experiment,
@@ -2049,7 +2055,7 @@ class TestLSIReportEndToEnd:
             format_type="LipidSearch",
             experiment=lipidsearch_experiment,
             normalization_config=NormalizationConfig(method='none'),
-            stat_config=None,
+            statistics=None,
             cleaned_df=lipidsearch_normalized_df,
             intsta_df=None,
             bqc_label="BQC",
@@ -2074,13 +2080,22 @@ class TestLSIReportEndToEnd:
         self, generic_normalized_df, generic_experiment,
     ):
         """Auto-fields from real Generic data are complete."""
-        from app.services.lsi_report import LSIReportService
+        from app.services.lsi_report import AnalysisStatistics, LSIReportService
+        from app.services.statistical_testing import StatisticalTestingService
 
+        classes = sorted(generic_normalized_df['ClassKey'].unique())
+        summary = StatisticalTestingService.run_class_level_tests(
+            generic_normalized_df, generic_experiment,
+            generic_experiment.conditions_list, classes,
+            StatisticalTestConfig.create_auto(),
+        )
         fields = LSIReportService.collect_auto_fields(
             format_type="Generic Format",
             experiment=generic_experiment,
             normalization_config=None,
-            stat_config=StatisticalTestConfig.create_auto(),
+            statistics={"Abundance bar chart": AnalysisStatistics(
+                summary=summary, significance="adjusted p ≤ 0.05",
+            )},
             cleaned_df=generic_normalized_df,
             intsta_df=None,
             bqc_label=None,
@@ -2090,7 +2105,8 @@ class TestLSIReportEndToEnd:
 
         assert fields["Number of conditions"] == 3
         assert fields["BQC samples"] == "Not used"
-        assert fields["Statistical test mode"] == "Auto"
+        assert fields["Statistics (Abundance bar chart): number of tests"] == len(classes)
+        assert fields["Statistics (Abundance bar chart): tests"]
         assert fields["Number of lipid species (after filtering)"] > 0
 
     def test_collect_auto_fields_msdial(
@@ -2103,7 +2119,7 @@ class TestLSIReportEndToEnd:
             format_type="MS-DIAL",
             experiment=msdial_experiment,
             normalization_config=None,
-            stat_config=None,
+            statistics=None,
             cleaned_df=msdial_normalized_df,
             intsta_df=None,
             bqc_label=None,
@@ -2125,7 +2141,7 @@ class TestLSIReportEndToEnd:
             format_type="LipidSearch",
             experiment=lipidsearch_experiment,
             normalization_config=NormalizationConfig(method='none'),
-            stat_config=StatisticalTestConfig.create_manual(),
+            statistics=None,
             cleaned_df=lipidsearch_normalized_df,
             intsta_df=None,
             bqc_label="BQC",
@@ -2151,7 +2167,7 @@ class TestLSIReportEndToEnd:
             format_type="Generic Format",
             experiment=generic_experiment,
             normalization_config=None,
-            stat_config=None,
+            statistics=None,
             cleaned_df=generic_normalized_df,
             intsta_df=None,
             bqc_label=None,
@@ -2176,7 +2192,7 @@ class TestLSIReportEndToEnd:
             format_type="MS-DIAL",
             experiment=msdial_experiment,
             normalization_config=None,
-            stat_config=None,
+            statistics=None,
             cleaned_df=msdial_normalized_df,
             intsta_df=None,
             bqc_label=None,

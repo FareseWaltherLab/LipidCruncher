@@ -4,8 +4,8 @@ Internal standards consistency plots UI component.
 import pandas as pd
 import streamlit as st
 
+from ..adapters.streamlit_adapter import StreamlitAdapter
 from ..models.experiment import ExperimentConfig
-from ..services.plotting.standards_plotter import StandardsPlotterService
 from .sample_labels import display_names_for
 from .st_helpers import keep_intsta_expander_open
 
@@ -59,8 +59,7 @@ def display_standards_consistency_plots(
     # Get samples for selected conditions
     selected_samples = []
     for cond in selected_conditions:
-        idx = conditions.index(cond)
-        selected_samples.extend(experiment.individual_samples_list[idx])
+        selected_samples.extend(experiment.samples_for(cond))
 
     # Maintain original sample order
     full_samples = experiment.full_samples_list
@@ -79,7 +78,7 @@ def display_standards_consistency_plots(
     sample_conditions = [cond_by_sample[s] for s in selected_samples_ordered]
 
     # Generate and display plots
-    plots = StandardsPlotterService.create_consistency_plots(
+    plots = StreamlitAdapter.run_standards_plots(
         intsta_df,
         selected_samples_ordered,
         sample_conditions=sample_conditions,

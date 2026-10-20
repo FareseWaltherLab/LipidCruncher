@@ -15,6 +15,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.constants import CONDITION_COLORS
+from app.services.plotting._shared import BASE_LAYOUT
 
 
 def _get_sample_colors(
@@ -214,7 +215,7 @@ class BoxPlotService:
             ),
             height=total_height + 80,
             width=900,
-            plot_bgcolor='white',
+            **BASE_LAYOUT,
         )
 
         fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
@@ -317,6 +318,6 @@ class BoxPlotService:
                 xanchor='center', x=0.5,
             ),
             height=700 + label_room, width=900,
-            plot_bgcolor='white',
+            **BASE_LAYOUT,
         )
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')

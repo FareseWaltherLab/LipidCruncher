@@ -12,6 +12,7 @@ Pure logic — no Streamlit dependencies. All methods are static.
 """
 import io
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -22,7 +23,7 @@ from reportlab.pdfgen import canvas
 
 from app.models.experiment import ExperimentConfig
 from app.models.normalization import NormalizationConfig
-from app.models.statistics import StatisticalTestConfig
+from app.services.statistical_testing import StatisticalTestSummary
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,32 @@ _NORM_METHOD_DISPLAY = {
     'both': 'Internal Standard + Protein Normalization',
     'total_intensity': 'Total Intensity Normalization',
 }
+
+# Display names for the corrections a statistical test run resolved to
+_CORRECTION_DISPLAY = {
+    'uncorrected': 'None',
+    'fdr_bh': 'Benjamini-Hochberg FDR',
+    'bonferroni': 'Bonferroni',
+}
+_POSTHOC_DISPLAY = {
+    'tukey': "Tukey's HSD",
+    'bonferroni': 'Pairwise tests, Bonferroni-corrected',
+    'uncorrected': 'Pairwise tests, uncorrected',
+}
+
+
+@dataclass(frozen=True)
+class AnalysisStatistics:
+    """The statistical tests one analysis ran, as the LSI report shows them.
+
+    Attributes:
+        summary: The test run's results and resolved settings.
+        significance: The criterion a result was called significant by,
+            e.g. "p ≤ 0.05".
+    """
+    summary: StatisticalTestSummary
+    significance: str
+
 
 # LSI checklist categories and their manual (blank) fields
 _MANUAL_FIELDS: List[Dict[str, str]] = [
@@ -83,7 +110,7 @@ class LSIReportService:
         format_type: str,
         experiment: ExperimentConfig,
         normalization_config: Optional[NormalizationConfig],
-        stat_config: Optional[StatisticalTestConfig],
+        statistics: Optional[Dict[str, AnalysisStatistics]],
         cleaned_df: pd.DataFrame,
         intsta_df: Optional[pd.DataFrame],
         bqc_label: Optional[str],
@@ -96,7 +123,7 @@ class LSIReportService:
             format_type: Data format string (e.g., "LipidSearch").
             experiment: Experiment configuration.
             normalization_config: Normalization settings, or None.
-            stat_config: Statistical test config, or None.
+            statistics: Analysis name -> the tests it ran, or None.
             cleaned_df: The cleaned/normalized DataFrame.
             intsta_df: Internal standards DataFrame, or None.
             bqc_label: BQC condition label, or None.
@@ -185,22 +212,8 @@ class LSIReportService:
                 fields[f"QC: {key}"] = str(value)
 
         # ── Statistical Testing ──
-        if stat_config is not None:
-            if stat_config.is_auto_mode():
-                fields["Statistical test mode"] = "Auto"
-            else:
-                test_type = (
-                    "Parametric" if stat_config.is_parametric()
-                    else "Non-parametric"
-                )
-                fields["Statistical test type"] = test_type
-            fields["Multiple testing correction"] = (
-                stat_config.get_correction_display_name()
-            )
-            fields["Post-hoc method"] = (
-                stat_config.get_posthoc_display_name()
-            )
-            fields["Significance threshold (alpha)"] = stat_config.alpha
+        for analysis, stats in (statistics or {}).items():
+            fields.update(_statistics_fields(analysis, stats))
 
         return fields
 
@@ -325,6 +338,31 @@ class LSIReportService:
         pdf.save()
         pdf_buffer.seek(0)
         return pdf_buffer.read()
+
+
+def _statistics_fields(analysis: str, stats: AnalysisStatistics) -> Dict[str, Any]:
+    """Report fields for the tests one analysis ran."""
+    summary = stats.summary
+    info = summary.test_info
+    prefix = f"Statistics ({analysis})"
+    fields: Dict[str, Any] = {
+        f"{prefix}: tests": ", ".join(
+            sorted({r.test_name for r in summary.results.values()})
+        ) or "None run",
+        f"{prefix}: number of tests": len(summary.results),
+        f"{prefix}: multiple testing correction": _CORRECTION_DISPLAY.get(
+            info.get('correction'), info.get('correction')
+        ),
+    }
+    if summary.posthoc_results:
+        fields[f"{prefix}: post-hoc"] = _POSTHOC_DISPLAY.get(
+            info.get('posthoc'), info.get('posthoc')
+        )
+    fields[f"{prefix}: data transformation"] = (
+        "log10" if info.get('transform') == 'log10' else "None"
+    )
+    fields[f"{prefix}: significance"] = stats.significance
+    return fields
 
 
 # ── PDF Rendering Helpers ──────────────────────────────────────────────────

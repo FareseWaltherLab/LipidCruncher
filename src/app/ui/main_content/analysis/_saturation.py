@@ -9,15 +9,18 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.services.plotting.saturation_plot import SaturationPlotterService, Y_PADDING_FACTOR
+from app.services.plotting.saturation_plot import Y_PADDING_FACTOR
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
     _clear_pdf_plots,
+    _clear_statistics,
     _display_condition_class_selectors,
+    _display_correction_scope,
     _display_statistical_options,
     _display_detailed_statistics,
     _publish,
+    _publish_statistics,
 )
 from app.ui.main_content.analysis._utils import (
     _check_fa_compatibility,
@@ -30,6 +33,7 @@ def _display_saturation_plots(
 ) -> None:
     """Display SFA/MUFA/PUFA saturation analysis."""
     _clear_pdf_plots('sat_')
+    _clear_statistics('Saturation profile')
     with st.expander("Class Level Breakdown - Saturation Plots", expanded=False):
         st.markdown(
             "Analyze the distribution of saturated (SFA), monounsaturated (MUFA), "
@@ -132,29 +136,16 @@ def _render_saturation_results(
 
             display_export_buttons(
                 display_fig,
-                _build_saturation_csv(df, experiment, selected_conditions, lipid_class),
+                result.plot_data.get(lipid_class, pd.DataFrame()),
                 f"saturation_{ptype}_{lipid_class}.svg",
                 f"saturation_{ptype}_{lipid_class}.csv",
                 f"analysis_svg_sat_{ptype}_{lipid_class}",
                 f"analysis_csv_sat_{ptype}_{lipid_class}",
             )
 
+    _publish_statistics('Saturation profile', stat_summary)
+    _display_correction_scope(stat_summary, df, selected_classes, 'tests')
     _display_detailed_statistics(stat_summary, 'sat')
-
-
-def _build_saturation_csv(
-    df: pd.DataFrame,
-    experiment: ExperimentConfig,
-    selected_conditions: List[str],
-    lipid_class: str,
-) -> pd.DataFrame:
-    """Build a CSV-friendly DataFrame for saturation data."""
-    sat_data = SaturationPlotterService.calculate_sfa_mufa_pufa(
-        df, experiment, selected_conditions, [lipid_class],
-    )
-    if lipid_class in sat_data.plot_data:
-        return sat_data.plot_data[lipid_class]
-    return pd.DataFrame()
 
 
 def _reset_y_range(fig: go.Figure) -> None:

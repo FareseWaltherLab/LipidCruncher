@@ -20,6 +20,7 @@ from plotly.subplots import make_subplots
 from app.constants import parse_lipid_name
 from app.lipid_nomenclature import parse_chain_carbon_db
 from app.models.experiment import ExperimentConfig
+from app.services.plotting._shared import BASE_LAYOUT
 
 
 # ── Constants ──────────────────────────────────────────────────────────
@@ -164,8 +165,7 @@ class FACHPlotterService:
             if condition not in experiment.conditions_list:
                 continue
 
-            cond_idx = experiment.conditions_list.index(condition)
-            samples = experiment.individual_samples_list[cond_idx]
+            samples = experiment.samples_for(condition)
             conc_cols = [
                 f'concentration[{s}]' for s in samples
                 if f'concentration[{s}]' in class_df.columns
@@ -259,8 +259,7 @@ class FACHPlotterService:
                 zmin=0,
                 zmax=vmax,
                 colorbar=dict(
-                    title='Proportion (%)',
-                    titlefont=dict(color='black', size=15),
+                    title=dict(text='Proportion (%)', font=dict(color='black', size=15)),
                     tickfont=dict(color='black', size=13),
                 ),
                 hovertemplate=(
@@ -284,8 +283,7 @@ class FACHPlotterService:
                 tickvals=db_values,
                 ticktext=db_values,
                 tickangle=0,
-                title_text='Double Bonds',
-                titlefont=dict(color='black', size=15),
+                title=dict(text='Double Bonds', font=dict(color='black', size=15)),
                 tickfont=dict(color='black', size=13),
                 range=[-0.5, max_db + 1.5],
                 row=1,
@@ -298,8 +296,9 @@ class FACHPlotterService:
                 range=[min_carbon - 0.5, max_carbon + 2.5],
             )
             if col_idx == 1:
-                y_kwargs['title_text'] = 'Carbon Chain Length'
-                y_kwargs['titlefont'] = dict(color='black', size=15)
+                y_kwargs['title'] = dict(
+                    text='Carbon Chain Length', font=dict(color='black', size=15),
+                )
             fig.update_yaxes(row=1, col=col_idx, **y_kwargs)
 
             col_idx += 1
@@ -310,12 +309,10 @@ class FACHPlotterService:
                 annotation.font = dict(color='black', size=15)
 
         fig.update_layout(
-            title='Fatty Acid Composition Heatmaps',
-            titlefont=dict(color='black'),
+            title=dict(text='Fatty Acid Composition Heatmaps', font=dict(color='black')),
             height=HEATMAP_HEIGHT,
             width=HEATMAP_WIDTH_PER_CONDITION * n_conditions,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
         )
 
         return fig

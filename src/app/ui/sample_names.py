@@ -85,22 +85,30 @@ def names_from_editor(edited: pd.DataFrame) -> Dict[str, str]:
     }
 
 
-def sample_display_map(names: Optional[Dict[str, str]]) -> Dict[str, str]:
+def sample_display_map(
+    names: Optional[Dict[str, str]],
+    origin: Optional[Dict[str, str]] = None,
+) -> Dict[str, str]:
     """Map each named label to the text shown for it on screen and in exports.
 
     The same text a CSV header uses, so a plot, a table and a download never
-    disagree; unnamed labels are absent (show the label itself).
+    disagree; unnamed labels are absent (show the label itself). ``origin``
+    (label -> upload label) picks the label a shared name is shown with.
     """
-    return _csv_display_names(names or {})
+    return _csv_display_names(names or {}, origin)
 
 
-def _csv_display_names(names: Dict[str, str]) -> Dict[str, str]:
+def _csv_display_names(
+    names: Dict[str, str],
+    origin: Optional[Dict[str, str]] = None,
+) -> Dict[str, str]:
     """Map each named label to the text written for it in a CSV.
 
     Blank names and names equal to their own label are dropped (the label is
     kept). A name shared by several samples, or equal to another sample's
-    label, gets its label appended (``"QC (s5)"``) so no two samples can end
-    up with the same header.
+    label, gets a label appended (``"QC (s5)"``) so no two samples can end
+    up with the same header: the sample's upload label from ``origin``,
+    which no regroup or exclusion changes, else its own.
     """
     cleaned = {}
     for label, name in names.items():
@@ -111,7 +119,7 @@ def _csv_display_names(names: Dict[str, str]) -> Dict[str, str]:
     return {
         label: (
             text if counts[text] == 1 and not _BARE_LABEL_RE.match(text)
-            else f"{text} ({label})"
+            else f"{text} ({(origin or {}).get(label, label)})"
         )
         for label, text in cleaned.items()
     }

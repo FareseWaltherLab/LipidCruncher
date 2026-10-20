@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from app.services.plotting._shared import MARKER_LINE
+from app.services.plotting._shared import BASE_LAYOUT, MARKER_LINE
 
 
 MARKER_SIZE = 6
@@ -106,7 +106,7 @@ class BQCPlotterService:
         experiment,
         bqc_sample_index: int,
         cov_threshold: float = 30,
-    ) -> Tuple[go.Figure, pd.DataFrame, float, pd.DataFrame]:
+    ) -> Tuple[go.Figure, pd.DataFrame, float]:
         """Full pipeline: prepare data and create CoV scatter plot.
 
         Args:
@@ -116,7 +116,7 @@ class BQCPlotterService:
             cov_threshold: CoV threshold for coloring (default 30%).
 
         Returns:
-            Tuple of (figure, prepared_df, reliable_data_percent, empty_df).
+            Tuple of (figure, prepared_df, reliable_data_percent).
         """
         prepared_df = BQCPlotterService.generate_cov_plot_data(
             dataframe, experiment.individual_samples_list, bqc_sample_index
@@ -133,10 +133,7 @@ class BQCPlotterService:
         reliable_count = len(prepared_df[prepared_df['cov'] < cov_threshold])
         reliable_pct = round(reliable_count / len(prepared_df) * 100, 1)
 
-        # Empty filtered_lipids (unused, kept for interface consistency)
-        filtered_lipids = pd.DataFrame()
-
-        return fig, prepared_df, reliable_pct, filtered_lipids
+        return fig, prepared_df, reliable_pct
 
     @staticmethod
     def create_cov_scatter_plot_with_threshold(
@@ -227,7 +224,7 @@ class BQCPlotterService:
             yaxis_title='CoV(%)',
             xaxis=axis_style,
             yaxis=axis_style,
-            plot_bgcolor='white', paper_bgcolor='white',
+            **BASE_LAYOUT,
             showlegend=False,
             margin=dict(t=50, r=50, b=50, l=50),
             font=dict(color='black'),

@@ -21,6 +21,7 @@ import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
 from app.constants import HYDROXYL_PATTERN, parse_lipid_name
+from app.services.plotting._shared import BASE_LAYOUT
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -377,14 +378,12 @@ class PathwayVizPlotterService:
         if experimental not in experiment.conditions_list:
             raise ValueError(f"Experimental condition '{experimental}' not in experiment")
 
-        ctrl_idx = experiment.conditions_list.index(control)
-        exp_idx = experiment.conditions_list.index(experimental)
         ctrl_samples = [
-            s for s in experiment.individual_samples_list[ctrl_idx]
+            s for s in experiment.samples_for(control)
             if f'concentration[{s}]' in df.columns
         ]
         exp_samples = [
-            s for s in experiment.individual_samples_list[exp_idx]
+            s for s in experiment.samples_for(experimental)
             if f'concentration[{s}]' in df.columns
         ]
 
@@ -772,8 +771,7 @@ def _apply_pathway_layout(
             gridcolor='#cccccc' if show_grid else None,
             gridwidth=0.5 if show_grid else None,
         ),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
+        **BASE_LAYOUT,
         width=PATHWAY_FIG_WIDTH,
         height=PATHWAY_FIG_HEIGHT,
         margin=dict(l=10, r=10, t=60, b=10),

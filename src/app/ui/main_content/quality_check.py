@@ -23,7 +23,6 @@ from app.models.sample_frame import SampleFrame
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
-from app.ui.sample_names import sample_display_map
 from app.ui.sample_labels import display_names_for, labeler, names_for, qc_input_names
 from app.ui.st_helpers import (
     display_export_buttons,
@@ -244,7 +243,7 @@ def _render_bqc_scatter(
     results_header()
 
     bqc_sample_index = experiment.conditions_list.index(bqc_label)
-    scatter_plot, prepared_df, reliable_data_percent, _ = (
+    scatter_plot, prepared_df, reliable_data_percent = (
         StreamlitAdapter.run_bqc_scatter(
             df, experiment, bqc_sample_index, cov_threshold,
         )
@@ -372,6 +371,8 @@ def _render_bqc_filtering(
 
 def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) -> None:
     """Display retention time plots (LipidSearch/MS-DIAL only)."""
+    # The report gets only a plot drawn in this run (none after an early return).
+    st.session_state.qc_retention_time_plot = None
     rt_result = QualityCheckWorkflow.check_retention_time_availability(df, config)
     if not rt_result.available:
         return
@@ -571,6 +572,8 @@ def _display_pca_analysis(
 
     Returns (updated_df, updated_experiment).
     """
+    # The report gets only a plot drawn in this run (none after an early return).
+    st.session_state.qc_pca_plot = None
     with st.expander("Principal Component Analysis (PCA)"):
         st.markdown(
             "Visualize sample clustering based on lipid profiles. "
@@ -607,8 +610,7 @@ def _display_pca_analysis(
         # Expand selected groups to their sample names
         group_samples = []
         for cond in groups_to_remove:
-            idx = experiment.conditions_list.index(cond)
-            group_samples.extend(experiment.individual_samples_list[idx])
+            group_samples.extend(experiment.samples_for(cond))
 
         restored_pca = StreamlitAdapter.restore_widget_value(
             'pca_samples_remove', '_preserved_pca_samples_remove', []
@@ -646,12 +648,7 @@ def _display_pca_analysis(
             removal_result = QualityCheckWorkflow.remove_samples(
                 df, experiment, combined_removal
             )
-            # A shared name keeps the label it had before the exclusion
-            # ("QC (s5)"), so its text does not change with the renumbering.
-            before = _qc_input_frame(df, experiment)
-            st.session_state.qc_frame = before.model_copy(
-                update={'names': sample_display_map(before.names)}
-            ).renumbered(
+            st.session_state.qc_frame = _qc_input_frame(df, experiment).renumbered(
                 removal_result.updated_df,
                 removal_result.updated_experiment,
                 removal_result.old_to_new,

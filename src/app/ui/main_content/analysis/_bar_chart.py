@@ -9,16 +9,20 @@ from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
     _clear_pdf_plots,
+    _clear_statistics,
     _display_condition_class_selectors,
+    _display_correction_scope,
     _display_statistical_options,
     _display_detailed_statistics,
     _publish,
+    _publish_statistics,
 )
 
 
 def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
     """Display abundance bar chart analysis."""
     _clear_pdf_plots('bar_chart')
+    _clear_statistics('Abundance bar chart')
     with st.expander("Class Concentration Bar Chart", expanded=False):
         st.markdown(
             "Visualize the total abundance of each lipid class across conditions."
@@ -65,4 +69,6 @@ def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
             "analysis_svg_bar", "analysis_csv_bar",
         )
 
+        _publish_statistics('Abundance bar chart', result.stat_summary)
+        _display_correction_scope(result.stat_summary, df, selected_classes, 'classes')
         _display_detailed_statistics(result.stat_summary, 'bar')

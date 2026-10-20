@@ -51,12 +51,10 @@ def _display_pathway_viz(
 
         _check_fa_compatibility(df)
 
-        valid_conditions = AnalysisWorkflow.get_eligible_conditions(experiment)
+        # Means only: a single-sample condition is fine.
+        valid_conditions = AnalysisWorkflow.get_all_conditions(experiment)
         if len(valid_conditions) < 2:
-            st.warning(
-                "Pathway visualization requires at least 2 conditions "
-                "with multiple samples."
-            )
+            st.warning("Pathway visualization requires at least 2 conditions.")
             return
 
         st.markdown("---")

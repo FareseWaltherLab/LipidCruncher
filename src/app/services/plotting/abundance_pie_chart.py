@@ -14,7 +14,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
-from app.services.plotting._shared import CLASS_COLORS
+from app.services.plotting._shared import BASE_LAYOUT, CLASS_COLORS
 
 CHART_WIDTH = 450
 CHART_HEIGHT = 300
@@ -153,7 +153,7 @@ class PieChartPlotterService:
             margin=dict(l=10, r=100, t=40, b=10),
             width=CHART_WIDTH,
             height=CHART_HEIGHT,
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
         )
 
         # Build summary DataFrame for export

@@ -4,9 +4,13 @@ Unit tests for LSIReportService.
 import pytest
 import pandas as pd
 
-from app.services.lsi_report import LSIReportService, _PLACEHOLDER, _MANUAL_FIELDS
+from app.services.lsi_report import (
+    AnalysisStatistics, LSIReportService, _PLACEHOLDER, _MANUAL_FIELDS,
+)
 from app.models.normalization import NormalizationConfig
-from app.models.statistics import StatisticalTestConfig
+from app.services.statistical_testing import (
+    PostHocResult, StatisticalTestResult, StatisticalTestSummary,
+)
 
 from tests.conftest import make_experiment, make_dataframe
 
@@ -47,22 +51,39 @@ def norm_config():
     )
 
 
-@pytest.fixture
-def stat_config():
-    return StatisticalTestConfig.create_manual(
-        test_type="parametric",
-        correction_method="fdr_bh",
-        posthoc_correction="tukey",
+def _summary(test_names, correction="fdr_bh", posthoc=None, transform="log10"):
+    results = {
+        f"G{i}": StatisticalTestResult(test_name=name, statistic=1.0, p_value=0.01)
+        for i, name in enumerate(test_names)
+    }
+    info = {"test_type": "parametric", "correction": correction, "transform": transform}
+    posthoc_results = {}
+    if posthoc is not None:
+        info["posthoc"] = posthoc
+        posthoc_results = {"G0": [PostHocResult(
+            group1="A", group2="B", p_value=0.01, test_name="Tukey's HSD",
+        )]}
+    return StatisticalTestSummary(
+        results=results, posthoc_results=posthoc_results,
+        test_info=info, parameters={"alpha": 0.05},
     )
 
 
 @pytest.fixture
-def auto_fields(experiment, norm_config, stat_config, cleaned_df, intsta_df):
+def statistics():
+    return {"Abundance bar chart": AnalysisStatistics(
+        summary=_summary(["Welch's t-test", "Welch's t-test"]),
+        significance="adjusted p ≤ 0.05",
+    )}
+
+
+@pytest.fixture
+def auto_fields(experiment, norm_config, statistics, cleaned_df, intsta_df):
     return LSIReportService.collect_auto_fields(
         format_type="LipidSearch",
         experiment=experiment,
         normalization_config=norm_config,
-        stat_config=stat_config,
+        statistics=statistics,
         cleaned_df=cleaned_df,
         intsta_df=intsta_df,
         bqc_label=None,
@@ -89,8 +110,10 @@ class TestCollectAutoFields:
         assert auto_fields["Number of internal standards"] == 2
         assert auto_fields["Number of lipid species (after filtering)"] == 10
         assert auto_fields["Number of lipid classes"] == 3
-        assert "Parametric" in auto_fields["Statistical test type"]
-        assert "FDR" in auto_fields["Multiple testing correction"]
+        assert auto_fields["Statistics (Abundance bar chart): tests"] == "Welch's t-test"
+        assert auto_fields[
+            "Statistics (Abundance bar chart): multiple testing correction"
+        ] == "Benjamini-Hochberg FDR"
 
     def test_minimal_fields(self, experiment, cleaned_df):
         """Only required fields (no BQC, no stats, no normalization)."""
@@ -98,7 +121,7 @@ class TestCollectAutoFields:
             format_type="Generic Format",
             experiment=experiment,
             normalization_config=None,
-            stat_config=None,
+            statistics=None,
             cleaned_df=cleaned_df,
             intsta_df=None,
             bqc_label=None,
@@ -108,7 +131,7 @@ class TestCollectAutoFields:
         assert fields["Software"] == "LipidCruncher"
         assert fields["Normalization method"] == "Not configured"
         assert fields["Internal standards detected"] == "None detected"
-        assert "Statistical test type" not in fields
+        assert not [k for k in fields if k.startswith("Statistics")]
 
     def test_bqc_label_present(self, experiment, cleaned_df):
         """BQC label is included when provided."""
@@ -116,7 +139,7 @@ class TestCollectAutoFields:
             format_type="MS-DIAL",
             experiment=experiment,
             normalization_config=None,
-            stat_config=None,
+            statistics=None,
             cleaned_df=cleaned_df,
             intsta_df=None,
             bqc_label="BQC",
@@ -125,21 +148,49 @@ class TestCollectAutoFields:
         )
         assert "BQC" in fields["BQC samples"]
 
-    def test_auto_mode_stats(self, experiment, cleaned_df):
-        """Auto-mode statistical config is represented correctly."""
-        stat = StatisticalTestConfig.create_auto()
+    def test_statistics_per_analysis(self, experiment, cleaned_df):
+        """Each analysis's tests are listed under its own name."""
         fields = LSIReportService.collect_auto_fields(
             format_type="Generic Format",
             experiment=experiment,
             normalization_config=None,
-            stat_config=stat,
+            statistics={
+                "Saturation profile": AnalysisStatistics(
+                    summary=_summary(
+                        ["Welch's ANOVA", "Kruskal-Wallis", "Welch's ANOVA"],
+                        posthoc="tukey",
+                    ),
+                    significance="adjusted p ≤ 0.05",
+                ),
+                "Volcano plot": AnalysisStatistics(
+                    summary=_summary(
+                        ["Welch's t-test"], correction="uncorrected", transform="none",
+                    ),
+                    significance="p ≤ 0.01 and fold change > 2× up or down (B vs A)",
+                ),
+            },
             cleaned_df=cleaned_df,
             intsta_df=None,
             bqc_label=None,
             cleaning_params={},
             qc_summary={},
         )
-        assert fields["Statistical test mode"] == "Auto"
+        stats = {k: v for k, v in fields.items() if k.startswith("Statistics")}
+        assert stats == {
+            "Statistics (Saturation profile): tests": "Kruskal-Wallis, Welch's ANOVA",
+            "Statistics (Saturation profile): number of tests": 3,
+            "Statistics (Saturation profile): multiple testing correction":
+                "Benjamini-Hochberg FDR",
+            "Statistics (Saturation profile): post-hoc": "Tukey's HSD",
+            "Statistics (Saturation profile): data transformation": "log10",
+            "Statistics (Saturation profile): significance": "adjusted p ≤ 0.05",
+            "Statistics (Volcano plot): tests": "Welch's t-test",
+            "Statistics (Volcano plot): number of tests": 1,
+            "Statistics (Volcano plot): multiple testing correction": "None",
+            "Statistics (Volcano plot): data transformation": "None",
+            "Statistics (Volcano plot): significance":
+                "p ≤ 0.01 and fold change > 2× up or down (B vs A)",
+        }
 
 
 # ── generate_checklist_csv ────────────────────────────────────────────────

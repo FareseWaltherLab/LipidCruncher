@@ -15,7 +15,11 @@ import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-from app.services.plotting._shared import generate_class_color_mapping
+from app.services.plotting._shared import (
+    BASE_LAYOUT,
+    frame_axes,
+    generate_class_color_mapping,
+)
 
 
 class PCAPlotterService:
@@ -135,12 +139,11 @@ def _create_scatter_plot(
         yaxis_title=dict(text=pc_names[1], font=dict(size=18, color='black')),
         xaxis=dict(tickfont=dict(size=14, color='black')),
         yaxis=dict(tickfont=dict(size=14, color='black')),
-        plot_bgcolor='white', paper_bgcolor='white',
+        **BASE_LAYOUT,
         legend=dict(font=dict(size=12, color='black')),
         margin=dict(t=50, r=50, b=50, l=50),
     )
-    fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-    fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+    frame_axes(fig)
 
     return fig
 

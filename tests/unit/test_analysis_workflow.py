@@ -226,7 +226,7 @@ class TestResultDataclasses:
         result = HeatmapResult()
         assert result.figure is None
         assert result.z_scores_df is None
-        assert result.cluster_composition is None
+        assert result.clustering is None
 
 
 # =============================================================================
@@ -984,6 +984,29 @@ class TestComputePathwayDataSaturationSource:
 class TestRunVolcano:
     """Tests for AnalysisWorkflow.run_volcano."""
 
+    def test_zero_floor_is_the_datasets_not_the_selected_classes(
+        self, exp_2x3, manual_stat_config,
+    ):
+        """Regression (M1): zeros were replaced with a tenth of the smallest
+        value among the *selected* classes, so a lipid's p-value changed when
+        an unrelated class was toggled. Like the class-level tests and S1,
+        the floor now comes from the whole dataset."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1', 'PC 36:2', 'SM 34:1'],
+            'ClassKey': ['PC', 'PC', 'SM'],
+            # PC 34:1 has a zero; SM holds the dataset's smallest value.
+            **{f'concentration[s{i}]': [v, 1000.0 + i, 0.5 + i]
+               for i, v in enumerate([0.0, 900.0, 950.0, 400.0, 420.0, 380.0], 1)},
+        })
+
+        def p_value(classes):
+            result = AnalysisWorkflow.run_volcano(
+                df, exp_2x3, 'Control', 'Treatment', classes, manual_stat_config,
+            )
+            return result.stat_summary.results['PC 34:1'].p_value
+
+        assert p_value(['PC']) == pytest.approx(p_value(['PC', 'SM']))
+
     def test_basic(self, multi_species_df, exp_2x3, manual_stat_config):
         result = AnalysisWorkflow.run_volcano(
             multi_species_df, exp_2x3,
@@ -1143,7 +1166,7 @@ class TestRunHeatmap:
         assert isinstance(result, HeatmapResult)
         assert isinstance(result.figure, go.Figure)
         assert isinstance(result.z_scores_df, pd.DataFrame)
-        assert result.cluster_composition is None
+        assert result.clustering is None
 
     def test_clustered_heatmap(self, multi_species_df, exp_2x3):
         result = AnalysisWorkflow.run_heatmap(
@@ -1155,8 +1178,33 @@ class TestRunHeatmap:
         )
         assert isinstance(result, HeatmapResult)
         assert isinstance(result.figure, go.Figure)
-        assert result.cluster_composition is not None
-        assert isinstance(result.cluster_composition, pd.DataFrame)
+        assert result.clustering is not None
+
+    def test_clusters_once(self, multi_species_df, exp_2x3, monkeypatch):
+        """R7: the figure, the CSV order and the composition share one
+        clustering (Ward ran three times here, and once more per rerun in
+        the composition section)."""
+        from app.services.plotting.lipidomic_heatmap import (
+            LipidomicHeatmapPlotterService as H,
+        )
+        calls = []
+        original = H.perform_clustering
+        monkeypatch.setattr(H, 'perform_clustering', staticmethod(
+            lambda *a, **k: calls.append(1) or original(*a, **k)
+        ))
+        result = AnalysisWorkflow.run_heatmap(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC', 'PE'],
+            heatmap_type='clustered',
+            n_clusters=2,
+        )
+        assert len(calls) == 1
+        composition = H.get_cluster_composition(
+            result.z_scores_df, 2, clustering=result.clustering,
+        )
+        assert len(calls) == 1
+        assert composition.equals(H.get_cluster_composition(result.z_scores_df, 2))
 
     def test_clustered_csv_frame_in_figure_order(self, multi_species_df, exp_2x3):
         """The clustered CSV frame lists species top-to-bottom as the figure
@@ -1195,7 +1243,7 @@ class TestRunHeatmap:
         )
         assert isinstance(result, HeatmapResult)
         assert isinstance(result.figure, go.Figure)
-        assert result.cluster_composition is None
+        assert result.clustering is None
 
     def test_class_grouped_groups_rows_by_class(self, multi_species_df, exp_2x3):
         result = AnalysisWorkflow.run_heatmap(
@@ -1592,7 +1640,7 @@ class TestRunHeatmap:
         )
         assert isinstance(result, HeatmapResult)
         assert isinstance(result.figure, go.Figure)
-        assert result.cluster_composition is None
+        assert result.clustering is None
 
     def test_class_aggregated_has_one_row_per_class(self, multi_species_df, exp_2x3):
         result = AnalysisWorkflow.run_heatmap(
@@ -1653,7 +1701,7 @@ class TestRunHeatmap:
             heatmap_type='clustered',
             n_clusters=3,
         )
-        assert result.cluster_composition is not None
+        assert result.clustering is not None
 
 
 class TestRunHeatmapEdgeCases:

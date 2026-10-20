@@ -13,7 +13,8 @@ from app.constants import (
     ZERO_FILTER_BQC_DEFAULT,
 )
 from ..models.experiment import ExperimentConfig
-from ..services.zero_filtering import ZeroFilteringService, ZeroFilterConfig
+from ..adapters.streamlit_adapter import StreamlitAdapter
+from ..services.zero_filtering import ZeroFilterConfig
 from ..ui.download_utils import csv_download_button
 
 logger = logging.getLogger(__name__)
@@ -114,11 +115,8 @@ def display_zero_filtering_config(
         )
 
         try:
-            filter_result = ZeroFilteringService.filter_zeros(
-                df=cleaned_df,
-                experiment=experiment,
-                config=zero_config,
-                bqc_label=bqc_label
+            filter_result = StreamlitAdapter.run_zero_filter(
+                cleaned_df, experiment, zero_config, bqc_label,
             )
 
             removed_count = len(filter_result.removed_species)

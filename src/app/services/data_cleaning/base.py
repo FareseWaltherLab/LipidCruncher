@@ -5,6 +5,7 @@ Pure logic - no Streamlit dependencies.
 from abc import ABC, abstractmethod
 
 import pandas as pd
+from pydantic import BaseModel
 from typing import Dict, List, Optional, Tuple
 
 from app.constants import (
@@ -31,14 +32,16 @@ class BaseDataCleaner(ABC):
     def clean(
         df: pd.DataFrame,
         experiment: "ExperimentConfig",
-        **kwargs,
+        config: Optional[BaseModel] = None,
     ) -> Tuple[pd.DataFrame, List[str]]:
         """Clean format-specific data.
 
         Args:
             df: Input DataFrame (already column-standardized).
             experiment: Experiment configuration with sample information.
-            **kwargs: Format-specific options (e.g. grade_config, quality_config).
+            config: The format's filter configuration (GradeFilterConfig for
+                LipidSearch, QualityFilterConfig for MS-DIAL), or None for
+                its defaults. Formats without one ignore it.
 
         Returns:
             Tuple of (cleaned_df, messages_list).

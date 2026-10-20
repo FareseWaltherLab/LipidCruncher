@@ -14,7 +14,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from app.services.plotting._shared import generate_condition_color_mapping
+from app.services.plotting._shared import BASE_LAYOUT, generate_condition_color_mapping
 
 
 # Color palette for multiple standards in the same class
@@ -187,6 +187,7 @@ def _build_single_standard_plot(
         legend_title=legend_title,
         font=_FONT_STYLE,
         title_font=_FONT_STYLE,
+        **BASE_LAYOUT,
     )
     return fig
 
@@ -257,6 +258,7 @@ def _build_multi_standard_plot(
         legend_title='Internal Standard' if sample_conditions is None else 'Condition',
         font=_FONT_STYLE,
         title_font=_FONT_STYLE,
+        **BASE_LAYOUT,
     )
     # X-axis title only on the bottom subplot
     fig.update_xaxes(title_text='Samples', row=n_standards, col=1)

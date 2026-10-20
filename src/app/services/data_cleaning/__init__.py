@@ -3,7 +3,7 @@ Data cleaning service package.
 Provides format-specific cleaners for lipidomic data.
 """
 import pandas as pd
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Type
 
 from ...models.experiment import ExperimentConfig
 from ..format_detection import DataFormat
@@ -11,26 +11,20 @@ from ..format_detection import DataFormat
 from .configs import GradeFilterConfig, QualityFilterConfig, CleaningResult
 from .exceptions import DataCleaningError, ConfigurationError, EmptyDataError
 from .base import BaseDataCleaner
-from .lipidsearch import LipidSearchCleaner
+from .lipidsearch import LipidSearchCleaner, POLARITY_NOTE_PREFIX
 from .msdial import MSDIALCleaner
 from .generic import GenericCleaner
 
 
 # Registry mapping DataFormat to its cleaner class; dispatch calls
-# cleaner_cls.clean(df, experiment, ...). A new format also needs its
+# cleaner_cls.clean(df, experiment, config). A new format also needs its
 # DataFormat value and an entry in constants.FORMAT_OPTIONS.
-_CLEANER_REGISTRY: Dict[DataFormat, type] = {
+_CLEANER_REGISTRY: Dict[DataFormat, Type[BaseDataCleaner]] = {
     DataFormat.LIPIDSEARCH: LipidSearchCleaner,
     DataFormat.MSDIAL: MSDIALCleaner,
     DataFormat.GENERIC: GenericCleaner,
     DataFormat.METABOLOMICS_WORKBENCH: GenericCleaner,
     DataFormat.UNKNOWN: GenericCleaner,
-}
-
-# Maps DataFormat to the keyword argument name for its format-specific config.
-_FORMAT_CONFIG_KEY: Dict[DataFormat, str] = {
-    DataFormat.LIPIDSEARCH: 'grade_config',
-    DataFormat.MSDIAL: 'quality_config',
 }
 
 
@@ -75,17 +69,12 @@ class DataCleaningService:
         # Look up cleaner from registry
         cleaner_cls = _CLEANER_REGISTRY.get(data_format, GenericCleaner)
 
-        # Build format-specific kwargs
-        config_map = {
-            'grade_config': grade_config,
-            'quality_config': quality_config,
-        }
-        config_key = _FORMAT_CONFIG_KEY.get(data_format)
-        kwargs = {}
-        if config_key and config_map[config_key] is not None:
-            kwargs[config_key] = config_map[config_key]
-
-        cleaned_df, messages = cleaner_cls.clean(df, experiment, **kwargs)
+        # Each format's own config; the other is meaningless to its cleaner.
+        config = {
+            LipidSearchCleaner: grade_config,
+            MSDIALCleaner: quality_config,
+        }.get(cleaner_cls)
+        cleaned_df, messages = cleaner_cls.clean(df, experiment, config)
 
         # Extract internal standards
         cleaned_df, internal_standards_df = BaseDataCleaner.extract_internal_standards(
@@ -110,6 +99,7 @@ __all__ = [
     'EmptyDataError',
     'BaseDataCleaner',
     'LipidSearchCleaner',
+    'POLARITY_NOTE_PREFIX',
     'MSDIALCleaner',
     'GenericCleaner',
 ]

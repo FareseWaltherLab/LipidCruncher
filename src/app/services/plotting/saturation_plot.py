@@ -18,7 +18,12 @@ import plotly.graph_objects as go
 
 from app.constants import HYDROXYL_PATTERN, SINGLE_CHAIN_CLASSES, parse_lipid_name
 from app.models.experiment import ExperimentConfig
-from app.services.plotting._shared import get_effective_p_value, p_value_to_marker
+from app.services.plotting._shared import (
+    BASE_LAYOUT,
+    frame_axes,
+    get_effective_p_value,
+    p_value_to_marker,
+)
 from app.services.statistical_testing import StatisticalTestSummary
 
 
@@ -133,16 +138,16 @@ class SaturationPlotterService:
             if class_df.empty:
                 continue
 
-            # Pre-compute FA ratios for all species in this class
-            ratios = class_df['LipidMolec'].apply(
-                SaturationPlotterService.calculate_fa_ratios
+            # (species x 3) SFA/MUFA/PUFA ratio of each species' chains
+            ratios = np.array(
+                class_df['LipidMolec'].apply(
+                    SaturationPlotterService.calculate_fa_ratios
+                ).tolist(),
+                dtype=float,
             )
-            sfa_ratios = ratios.apply(lambda r: r[0]).values
-            mufa_ratios = ratios.apply(lambda r: r[1]).values
-            pufa_ratios = ratios.apply(lambda r: r[2]).values
 
             class_fa_data: Dict[str, Dict[str, np.ndarray]] = {
-                'SFA': {}, 'MUFA': {}, 'PUFA': {}
+                fa: {} for fa in FA_TYPES
             }
             rows: List[Dict] = []
 
@@ -150,8 +155,7 @@ class SaturationPlotterService:
                 if condition not in experiment.conditions_list:
                     continue
 
-                cond_idx = experiment.conditions_list.index(condition)
-                samples = experiment.individual_samples_list[cond_idx]
+                samples = experiment.samples_for(condition)
                 sample_cols = [
                     f"concentration[{s}]" for s in samples
                     if f"concentration[{s}]" in class_df.columns
@@ -160,41 +164,22 @@ class SaturationPlotterService:
                 if not sample_cols:
                     continue
 
-                sfa_values = []
-                mufa_values = []
-                pufa_values = []
-
-                for col in sample_cols:
-                    concentrations = class_df[col].values.astype(float)
-                    sfa_values.append(np.nansum(concentrations * sfa_ratios))
-                    mufa_values.append(np.nansum(concentrations * mufa_ratios))
-                    pufa_values.append(np.nansum(concentrations * pufa_ratios))
-
-                sfa_arr = np.array(sfa_values)
-                mufa_arr = np.array(mufa_values)
-                pufa_arr = np.array(pufa_values)
-
-                class_fa_data['SFA'][condition] = sfa_arr
-                class_fa_data['MUFA'][condition] = mufa_arr
-                class_fa_data['PUFA'][condition] = pufa_arr
+                # (samples x 3): each sample's concentration-weighted sums
+                concentrations = class_df[sample_cols].to_numpy(dtype=float)
+                values = np.nansum(
+                    concentrations[:, :, None] * ratios[:, None, :], axis=0,
+                )
+                for k, fa in enumerate(FA_TYPES):
+                    class_fa_data[fa][condition] = values[:, k]
 
                 # Check if we have meaningful data (at least one FA type > 0)
-                has_data = (
-                    np.nanmean(sfa_arr) > 0 or
-                    np.nanmean(mufa_arr) > 0 or
-                    np.nanmean(pufa_arr) > 0
-                )
-
-                if has_data and len(sample_cols) > 1:
-                    n_samples = len(sample_cols)
+                means = np.nanmean(values, axis=0)
+                if (means > 0).any() and len(sample_cols) > 1:
                     rows.append({
-                        'Condition': f"{condition} (n={n_samples})",
-                        'SFA_AUC': np.nanmean(sfa_arr),
-                        'MUFA_AUC': np.nanmean(mufa_arr),
-                        'PUFA_AUC': np.nanmean(pufa_arr),
-                        'SFA_std': np.nanstd(sfa_arr, ddof=1),
-                        'MUFA_std': np.nanstd(mufa_arr, ddof=1),
-                        'PUFA_std': np.nanstd(pufa_arr, ddof=1),
+                        'Condition': f"{condition} (n={len(sample_cols)})",
+                        **{f'{fa}_AUC': means[k] for k, fa in enumerate(FA_TYPES)},
+                        **{f'{fa}_std': np.nanstd(values[:, k], ddof=1)
+                           for k, fa in enumerate(FA_TYPES)},
                     })
 
             if rows:
@@ -327,8 +312,7 @@ class SaturationPlotterService:
                 tickfont=dict(size=14, color='black'),
                 range=[0, y_max * Y_PADDING_FACTOR],
             ),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
             legend=dict(font=dict(size=12, color='black')),
             barmode='group',
             bargap=0.15,
@@ -338,8 +322,7 @@ class SaturationPlotterService:
             margin=dict(t=50, r=150, b=50, l=50),
         )
 
-        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        frame_axes(fig)
 
         if show_significance and stat_results is not None:
             _add_significance_annotations(fig, plot_df, stat_results, lipid_class)
@@ -391,8 +374,7 @@ class SaturationPlotterService:
             yaxis_title=dict(text="Percentage", font=dict(size=18, color='black')),
             xaxis=dict(tickfont=dict(size=14, color='black')),
             yaxis=dict(tickfont=dict(size=14, color='black'), range=[0, 100]),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
             legend=dict(font=dict(size=12, color='black')),
             barmode='stack',
             height=CHART_HEIGHT,
@@ -400,8 +382,7 @@ class SaturationPlotterService:
             margin=dict(t=50, r=50, b=50, l=50),
         )
 
-        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        frame_axes(fig)
 
         return fig
 

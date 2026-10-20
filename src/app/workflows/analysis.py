@@ -50,6 +50,7 @@ from ..services.plotting.volcano_plot import (
 )
 from ..services.plotting.lipidomic_heatmap import (
     GROUPED_PAGE_SIZE,
+    ClusteringResult,
     LipidomicHeatmapPlotterService,
 )
 
@@ -101,12 +102,15 @@ class SaturationResult:
 
     Attributes:
         plots: Dict mapping class name to its Plotly figure.
+        plot_data: Dict mapping class name to its plotted values (Condition,
+            *_AUC and *_std columns), for the CSV download.
         stat_summary: Statistical test results (if tests were run).
         consolidated_lipids: Dict mapping class → list of consolidated lipid names.
         success: Whether the analysis completed successfully.
         validation_errors: List of error messages if analysis failed.
     """
     plots: Dict[str, go.Figure] = dataclass_field(default_factory=dict)
+    plot_data: Dict[str, pd.DataFrame] = dataclass_field(default_factory=dict)
     stat_summary: Optional[StatisticalTestSummary] = None
     consolidated_lipids: Dict[str, List[str]] = dataclass_field(
         default_factory=dict
@@ -198,7 +202,8 @@ class HeatmapResult:
     Attributes:
         figure: Plotly heatmap figure.
         z_scores_df: Row-wise Z-score DataFrame.
-        cluster_composition: Cluster composition DataFrame (clustered mode only).
+        clustering: The one clustering the figure, clustered_df and the
+            cluster composition share (clustered mode only).
         clustered_df: z_scores_df in the figure's top-to-bottom order with a
             leading Cluster column, for the CSV download (clustered mode only).
         success: Whether the analysis completed successfully.
@@ -206,7 +211,7 @@ class HeatmapResult:
     """
     figure: Optional[go.Figure] = None
     z_scores_df: Optional[pd.DataFrame] = None
-    cluster_composition: Optional[pd.DataFrame] = None
+    clustering: Optional[ClusteringResult] = None
     clustered_df: Optional[pd.DataFrame] = None
     success: bool = True
     validation_errors: List[str] = dataclass_field(default_factory=list)
@@ -354,13 +359,7 @@ class AnalysisWorkflow:
         Raises:
             ValueError: If condition not found.
         """
-        if condition not in experiment.conditions_list:
-            raise ValueError(
-                f"Condition '{condition}' not found in experiment. "
-                f"Available: {experiment.conditions_list}"
-            )
-        idx = experiment.conditions_list.index(condition)
-        return experiment.individual_samples_list[idx]
+        return experiment.samples_for(condition)
 
     # ------------------------------------------------------------------
     # Bar Chart
@@ -462,8 +461,7 @@ class AnalysisWorkflow:
         for condition in selected_conditions:
             if condition not in experiment.conditions_list:
                 continue
-            idx = experiment.conditions_list.index(condition)
-            samples = experiment.individual_samples_list[idx]
+            samples = experiment.samples_for(condition)
             available_samples = [
                 s for s in samples
                 if f"concentration[{s}]" in pie_data.abundance_df.columns
@@ -550,6 +548,7 @@ class AnalysisWorkflow:
             plots[lipid_class] = fig
 
         return SaturationResult(
+            plot_data=sat_data.plot_data,
             plots=plots,
             stat_summary=stat_summary,
             consolidated_lipids=consolidated,
@@ -785,6 +784,7 @@ class AnalysisWorkflow:
         # Run per-lipid statistical tests
         stat_summary = StatisticalTestingService.run_species_level_tests(
             filtered_df, control_samples, exp_samples, stat_config,
+            dataset_df=df,
         )
 
         # Build volcano data
@@ -974,16 +974,16 @@ class AnalysisWorkflow:
                 filtered_df,
             )
 
-        cluster_composition = None
+        clustering = None
         if heatmap_type == 'clustered':
+            clustering = LipidomicHeatmapPlotterService.perform_clustering(
+                z_scores_df, n_clusters,
+            )
             figure = LipidomicHeatmapPlotterService.generate_clustered_heatmap(
                 z_scores_df, shown_samples, n_clusters,
                 sample_conditions=sample_conditions,
                 value_label=value_label,
-            )
-            cluster_composition = LipidomicHeatmapPlotterService.get_cluster_composition(
-                z_scores_df, n_clusters, mode='species_count',
-                filtered_df=filtered_df,
+                clustering=clustering,
             )
         elif heatmap_type == 'class_grouped':
             # Under log2fc, rank the species inside each class block by their
@@ -1022,13 +1022,15 @@ class AnalysisWorkflow:
 
         # The clustered CSV lists species as the figure draws them.
         clustered_df = (
-            LipidomicHeatmapPlotterService.order_by_clusters(z_scores_df, n_clusters)
+            LipidomicHeatmapPlotterService.order_by_clusters(
+                z_scores_df, n_clusters, clustering=clustering,
+            )
             if heatmap_type == 'clustered' else None
         )
 
         return HeatmapResult(
             figure=figure,
             z_scores_df=z_scores_df,
-            cluster_composition=cluster_composition,
+            clustering=clustering,
             clustered_df=clustered_df,
         )

@@ -6,6 +6,8 @@ This module contains all Streamlit-specific code that wraps the pure business lo
 """
 from __future__ import annotations
 
+import dataclasses
+import hashlib
 import uuid
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -27,12 +29,19 @@ from ..models.sample_frame import SampleFrame
 from ..models.statistics import StatisticalTestConfig
 from ..models.isotope_tracing import IsotopeCorrectionConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
+from ..services.lsi_report import AnalysisStatistics
 from ..services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from ..services.plotting.box_plot import BoxPlotService
 from ..services.plotting.bqc_plotter import BQCPlotterService
 from ..services.plotting.correlation import CorrelationPlotterService
 from ..services.plotting.pca import PCAPlotterService
 from ..services.plotting.retention_time import RetentionTimePlotterService
+from ..services.plotting.standards_plotter import StandardsPlotterService
+from ..services.plotting.volcano_plot import VolcanoPlotterService
+from ..services.standards import StandardsProcessingResult, StandardsService
+from ..services.zero_filtering import (
+    ZeroFilterConfig, ZeroFilteringResult, ZeroFilteringService,
+)
 from ..services.validation import get_matching_concentration_columns
 from ..workflows.analysis import (
     GROUPED_PAGE_SIZE,
@@ -105,17 +114,17 @@ class SessionState:
       experiment_config.py → workbench_conditions, workbench_samples
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
                              processing_frame, _preserved_excluded_samples,
-                             original_column_order, regroup_origin
+                             original_column_order, regroup_origin,
+                             _preserved_grouping_radio, _preserved_regroup_selections
       confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
-      data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
-                             pre_filter_df, grade_config, last_quality_config,
+      data_processing.py   → ingestion_result, grade_config, last_quality_config,
                              msdial_use_normalized, msdial_data_type_index
       internal_standards.py → original_auto_intsta_df, custom_standards_df,
                               custom_standards_mode, standards_source
       standards_plots.py   → standards_consistency_figs
       zero_filtering.py    → _zero_filter_format, _preserved_zero_filter_*
-      normalization.py     → normalized_df, normalization_method,
-                             selected_classes, norm_method_selection,
+      normalization.py     → normalized_df, selected_classes,
+                             norm_method_selection,
                              _preserved_norm_method_selection, normalization_result,
                              class_standard_map, standard_concentrations, protein_df,
                              protein_input_method, protein_input_method_prev
@@ -126,10 +135,12 @@ class SessionState:
                              _preserved_pca_samples_remove, _preserved_pca_groups_remove
       analysis/            → analysis_selection, analysis_volcano_data,
                              analysis_pathway_*, analysis_all_plots (figures
-                             for the PDF, written only by _publish)
+                             for the PDF, written only by _publish),
+                             analysis_statistics (tests run, for the LSI report)
       isotope_tracing_page.py → iso_measurement_df, iso_molecule_df, iso_element_df,
                              iso_result, iso_result_key
-      main_app.py          → page, module
+      main_app.py          → page, module, cleaned_df and intsta_df (Module 1's
+                             final data and standards, written once per run)
     """
     # --- App-level routing (owner: main_app.py) ---
     page: str = PAGE_LANDING
@@ -189,6 +200,11 @@ class SessionState:
     _preserved_excluded_regroup_origin: Optional[Dict[str, str]] = None
     # Sidebar label -> upload label (None when not regrouped).
     regroup_origin: Optional[Dict[str, str]] = None
+    # The regroup answers (radio, picks per condition), kept for runs that
+    # stop before the grouping step (an invalid experiment setup) and so drop
+    # their widget keys.
+    _preserved_grouping_radio: Optional[str] = None
+    _preserved_regroup_selections: Dict[str, List[str]] = field(default_factory=dict)
     # BQC answers, kept for runs where the BQC widgets are not drawn (e.g. a
     # manual regroup is mid-edit) and Streamlit drops their keys.
     _preserved_sidebar_bqc_radio: Optional[str] = None
@@ -200,8 +216,6 @@ class SessionState:
     # --- Data processing (owner: data_processing.py) ---
     cleaned_df: Optional[pd.DataFrame] = None
     intsta_df: Optional[pd.DataFrame] = None
-    continuation_df: Optional[pd.DataFrame] = None
-    pre_filter_df: Optional[pd.DataFrame] = None
     ingestion_result: Optional[IngestionResult] = None
     grade_config: Optional[GradeFilterConfig] = None
     last_quality_config: Optional[QualityFilterConfig] = None
@@ -229,7 +243,6 @@ class SessionState:
 
     # --- Normalization (owner: normalization.py) ---
     normalized_df: Optional[pd.DataFrame] = None
-    normalization_method: str = 'None'
     selected_classes: List[str] = field(default_factory=list)
     norm_method_selection: Optional[str] = None
     _preserved_norm_method_selection: Optional[str] = None
@@ -277,10 +290,14 @@ class SessionState:
     analysis_pathway_position_overrides: Dict[str, Tuple[float, float]] = field(default_factory=dict)
     analysis_volcano_data: Optional[VolcanoData] = None
     analysis_all_plots: Dict[str, Union[go.Figure, matplotlib.figure.Figure]] = field(default_factory=dict)
+    # The tests each analysis ran, for the LSI report (same lifetime as the
+    # figures above: cleared when the page re-renders, set when it tests).
+    analysis_statistics: Dict[str, AnalysisStatistics] = field(default_factory=dict)
 
     # --- LSI Compliance Report (owner: lsi_report.py) ---
     lsi_manual_fields: Dict[str, str] = field(default_factory=dict)
     lsi_pdf_bytes: Optional[bytes] = None
+    lsi_pdf_source: Optional[str] = None  # the CSV the PDF was made from
 
     # --- AI Chat (owner: ai_chat/chat_panel.py) ---
     chat_transform_session: Optional[Any] = None
@@ -351,12 +368,17 @@ class _Stage:
       popped. A SessionState field that happens to share the prefix
       (``protein_df``, ``lsi_manual_fields``) is reset like any field, not
       popped, so code later in the same run can still read it.
+
+    ``derived`` names the ``fields`` computed from the stage's input rather
+    than chosen by the user. ``StreamlitAdapter.track_inputs`` resets them
+    (and every later stage's) when that input changes, keeping the settings.
     """
     name: str
     fields: frozenset = frozenset()
     widgets: frozenset = frozenset()
     plain: frozenset = frozenset()
     prefixes: Tuple[str, ...] = ()
+    derived: frozenset = frozenset()
 
 
 _STAGES: Tuple[_Stage, ...] = (
@@ -392,6 +414,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'original_column_order', 'sample_names', 'processing_frame',
             '_preserved_excluded_samples',
             '_preserved_excluded_regroup_origin', 'regroup_origin',
+            '_preserved_grouping_radio', '_preserved_regroup_selections',
             '_preserved_sidebar_bqc_radio',
             '_preserved_sidebar_bqc_label_radio',
             # What the grouping widgets showed last run (Confirm invalidation)
@@ -420,14 +443,14 @@ _STAGES: Tuple[_Stage, ...] = (
     _Stage(
         'processing',
         fields=frozenset({
-            'cleaned_df', 'intsta_df', 'continuation_df', 'pre_filter_df',
+            'cleaned_df', 'intsta_df',
             'ingestion_result', 'grade_config', 'last_quality_config',
             'original_auto_intsta_df', 'custom_standards_df',
             'custom_standards_mode', 'custom_standards_sample_set',
             'standards_source', 'standards_consistency_figs',
             '_zero_filter_format', '_preserved_zero_filter_detection_threshold',
             '_preserved_non_bqc_zero_threshold', '_preserved_bqc_zero_threshold',
-            'normalized_df', 'normalization_method', 'selected_classes',
+            'normalized_df', 'selected_classes',
             '_preserved_norm_method_selection', 'normalization_result',
             'class_standard_map', 'standard_concentrations', 'protein_df',
             'protein_input_method_prev',
@@ -460,7 +483,8 @@ _STAGES: Tuple[_Stage, ...] = (
     # cleared with the experiment they describe.
     _Stage(
         'report',
-        fields=frozenset({'lsi_manual_fields', 'lsi_pdf_bytes'}),
+        fields=frozenset({'lsi_manual_fields', 'lsi_pdf_bytes',
+                           'lsi_pdf_source'}),
         widgets=frozenset({'lsi_download_csv', 'lsi_generate_pdf',
                            'lsi_download_pdf'}),
         prefixes=('lsi_manual_',),
@@ -558,7 +582,12 @@ _STAGES: Tuple[_Stage, ...] = (
             'analysis_pathway_removed_edges', 'analysis_pathway_custom_nodes',
             'analysis_pathway_position_overrides', 
             'analysis_volcano_data', 
-            'analysis_all_plots',
+            'analysis_all_plots', 'analysis_statistics',
+        }),
+        # Every page's results, kept for the reports while another page is
+        # shown; computed from Quality Check's output.
+        derived=frozenset({
+            'analysis_all_plots', 'analysis_statistics', 'analysis_volcano_data',
         }),
         widgets=frozenset({
             'analysis_radio', 'generate_pdf_report', 'download_pdf_report',
@@ -625,6 +654,24 @@ _AI_STUDIO_NAV_WIDGET_PREFIXES = ()
 _NAV_PRESERVE_PREFIX = '_nav_preserved_'
 
 _STAGE_NAMES = tuple(stage.name for stage in _STAGES)
+
+
+def _inputs_key(stage: str) -> str:
+    """Session key holding the fingerprint of ``stage``'s last inputs."""
+    return f'_inputs_{stage}'
+
+
+def _fingerprint(values: Tuple[Any, ...]) -> str:
+    """A digest that changes when any of ``values`` does (frames by content)."""
+    digest = hashlib.sha256()
+    for value in values:
+        if isinstance(value, pd.DataFrame):
+            digest.update(repr(list(value.columns)).encode())
+            digest.update(pd.util.hash_pandas_object(value, index=True).values.tobytes())
+        else:
+            digest.update(repr(value).encode())
+        digest.update(b'\0')
+    return digest.hexdigest()
 
 # App-level state no reset clears: routing, navigation buttons, and the
 # AI Studio's LipidCruncher Questions chat (about the app, not the data).
@@ -723,7 +770,7 @@ class StreamlitAdapter:
         # key instantiated as a widget during the current run, but allows
         # deletion.
         for s in stages:
-            for key in s.widgets | s.plain:
+            for key in s.widgets | s.plain | {_inputs_key(s.name)}:
                 st.session_state.pop(key, None)
         defaults = SessionState()
         for s in stages:
@@ -736,6 +783,33 @@ class StreamlitAdapter:
                         if isinstance(k, str) and k.startswith(prefixes)
                         and k not in field_names]:
                 st.session_state.pop(key, None)
+
+    @staticmethod
+    def track_inputs(stage: str, *inputs: Any) -> bool:
+        """Drop what was computed from ``stage``'s previous inputs.
+
+        Call where the stage reads its inputs, before it computes anything.
+        When ``inputs`` differ from the last run's, the ``derived`` fields of
+        ``stage`` and of every later stage go back to their defaults; the
+        user's settings (other fields, widgets) are kept.
+
+        Args:
+            stage: A ``_STAGES`` name.
+            *inputs: Everything the stage's results are computed from.
+
+        Returns:
+            True when results were dropped.
+        """
+        fingerprint = _fingerprint(inputs)
+        previous = st.session_state.get(_inputs_key(stage))
+        st.session_state[_inputs_key(stage)] = fingerprint
+        if previous is None or previous == fingerprint:
+            return False
+        defaults = SessionState()
+        for s in _STAGES[_STAGE_NAMES.index(stage):]:
+            for name in s.derived:
+                st.session_state[name] = getattr(defaults, name)
+        return True
 
     @staticmethod
     def reset_data_state() -> None:
@@ -1031,6 +1105,49 @@ class StreamlitAdapter:
             intsta_df=intsta_df
         )
 
+    @staticmethod
+    @st.cache_data(
+        show_spinner=False,
+        hash_funcs={ExperimentConfig: hash, ZeroFilterConfig: dataclasses.astuple},
+    )
+    def run_zero_filter(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        config: ZeroFilterConfig,
+        bqc_label: Optional[str] = None,
+    ) -> ZeroFilteringResult:
+        """Cached zero filtering."""
+        return ZeroFilteringService.filter_zeros(
+            df=df, experiment=experiment, config=config, bqc_label=bqc_label,
+        )
+
+    @staticmethod
+    @st.cache_data(show_spinner=False)
+    def run_process_standards_file(
+        uploaded_df: pd.DataFrame,
+        cleaned_df: pd.DataFrame,
+        standards_in_dataset: bool,
+    ) -> StandardsProcessingResult:
+        """Cached processing of an uploaded internal-standards table."""
+        return StandardsService.process_standards_file(
+            uploaded_df=uploaded_df, cleaned_df=cleaned_df,
+            standards_in_dataset=standards_in_dataset,
+        )
+
+    @staticmethod
+    @st.cache_data(show_spinner=False)
+    def run_standards_plots(
+        intsta_df: pd.DataFrame,
+        samples: List[str],
+        sample_conditions: Optional[List[str]] = None,
+        display_names: Optional[Dict[str, str]] = None,
+    ) -> List[go.Figure]:
+        """Cached internal-standards consistency plots."""
+        return StandardsPlotterService.create_consistency_plots(
+            intsta_df, samples,
+            sample_conditions=sample_conditions, display_names=display_names,
+        )
+
     # ==================== Cached Isotope Tracing Wrapper ====================
 
     @staticmethod
@@ -1135,11 +1252,11 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         bqc_sample_index: int,
         cov_threshold: int,
-    ) -> Tuple[go.Figure, pd.DataFrame, float, pd.DataFrame]:
+    ) -> Tuple[go.Figure, pd.DataFrame, float]:
         """Cached BQC scatter plot computation.
 
         Returns:
-            Tuple of (scatter_plot, prepared_df, reliable_data_percent, high_cov_info)
+            Tuple of (scatter_plot, prepared_df, reliable_data_percent)
         """
         return BQCPlotterService.generate_and_display_cov_plot(
             df, experiment, bqc_sample_index, cov_threshold=cov_threshold,
@@ -1378,6 +1495,22 @@ class StreamlitAdapter:
             hide_non_sig=hide_non_sig, top_n_labels=top_n_labels,
             custom_label_positions=custom_label_positions,
             additional_labels=list(additional_labels) if additional_labels else None,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating distribution plot...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_distribution_plot(
+        df: pd.DataFrame,
+        selected_lipids: List[str],
+        selected_conditions: List[str],
+        experiment: ExperimentConfig,
+    ) -> matplotlib.figure.Figure:
+        """Cached per-lipid concentration distribution plot (volcano page)."""
+        return VolcanoPlotterService.create_distribution_plot(
+            df, selected_lipids, selected_conditions, experiment,
         )
 
     @staticmethod
