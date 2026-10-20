@@ -5,6 +5,7 @@ import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.workflows.analysis import AnalysisWorkflow
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
@@ -51,6 +52,8 @@ def _display_chain_length_plots(
 
         selected_conditions, selected_classes = _display_condition_class_selectors(
             experiment, df, 'clen',
+            # Means only: a single-sample condition is fine.
+            conditions=AnalysisWorkflow.get_all_conditions(experiment),
         )
 
         if not selected_conditions:

@@ -219,6 +219,7 @@ def _display_condition_class_selectors(
     experiment: ExperimentConfig,
     df: pd.DataFrame,
     key_prefix: str,
+    conditions: Optional[List[str]] = None,
 ) -> Tuple[List[str], List[str]]:
     """Display condition and class multiselect widgets.
 
@@ -226,13 +227,18 @@ def _display_condition_class_selectors(
         experiment: Experiment configuration.
         df: DataFrame with ClassKey column.
         key_prefix: Prefix for widget keys.
+        conditions: Conditions to offer. Defaults to those with two or more
+            samples, which statistical tests need.
 
     Returns:
         Tuple of (selected_conditions, selected_classes).
     """
     section_header("🎯 Data Selection")
 
-    valid_conditions = AnalysisWorkflow.get_eligible_conditions(experiment)
+    valid_conditions = (
+        AnalysisWorkflow.get_eligible_conditions(experiment)
+        if conditions is None else conditions
+    )
     all_classes = AnalysisWorkflow.get_available_classes(df)
 
     col1, col2 = st.columns(2)
