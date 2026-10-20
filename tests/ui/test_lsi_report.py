@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 from streamlit.testing.v1 import AppTest
 
-from app.constants import FORMAT_LIPIDSEARCH, PAGE_APP
+from app.constants import FORMAT_LIPIDSEARCH, MODULE_DATA_PROCESSING, PAGE_APP
 
 DEFAULT_TIMEOUT = 90
 MAIN_APP = str(Path(__file__).parents[2] / 'src' / 'main_app.py')
@@ -153,3 +153,68 @@ class TestLipidCoverageReported:
         assert _report(captured_downloads)[
             'Number of lipid species (after filtering)'
         ] == str(len(analyzed))
+
+
+ORGANISM = 'Organism / tissue type'
+
+
+def _back(at):
+    """Return to Module 1. Clicking Back trips an AppTest artifact (after
+    its st.rerun() the element tree still holds Module 2's widgets, whose
+    popped keys the next run cannot read); Back only clears the qc stage,
+    which the following Next clears again."""
+    at.session_state['module'] = MODULE_DATA_PROCESSING
+    at.run()
+    assert not at.exception, at.exception
+
+
+def _next(at):
+    [b for b in at.button if b.label.startswith('Next')][0].click().run()
+    assert not at.exception, at.exception
+
+
+def _back_and_next(at):
+    _back(at)
+    _next(at)
+
+
+def _renders_pdf_download(at, captured):
+    captured.clear()
+    at.run()
+    return 'lsi_download_pdf' in captured
+
+
+class TestPdfFollowsTheReport:
+    """Regression: a generated PDF stayed downloadable after the report
+    changed, so the PDF could disagree with the settings and the CSV."""
+
+    def _generate(self, captured):
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.button(key='lsi_generate_pdf').click().run()
+        assert not at.exception, at.exception
+        assert captured['lsi_download_pdf'].startswith(b'%PDF')
+        return at
+
+    def test_unchanged_report_keeps_pdf(self, captured_downloads):
+        at = self._generate(captured_downloads)
+        assert _renders_pdf_download(at, captured_downloads)
+
+    def test_manual_field_edit_drops_pdf(self, captured_downloads):
+        at = self._generate(captured_downloads)
+        at.text_input(key=f'lsi_manual_{ORGANISM}').input('mouse liver').run()
+        assert not _renders_pdf_download(at, captured_downloads)
+
+    def test_normalization_change_drops_pdf(self, captured_downloads):
+        at = self._generate(captured_downloads)
+        _back(at)
+        at.radio(key='norm_method_selection').set_value('Total Intensity').run()
+        _next(at)
+        assert not _renders_pdf_download(at, captured_downloads)
+
+
+class TestManualFields:
+    def test_kept_across_back_and_next(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.text_input(key=f'lsi_manual_{ORGANISM}').input('mouse liver').run()
+        _back_and_next(at)
+        assert _report(captured_downloads)[ORGANISM] == 'mouse liver'

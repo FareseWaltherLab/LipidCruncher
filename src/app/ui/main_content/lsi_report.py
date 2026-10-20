@@ -64,6 +64,9 @@ def display_lsi_report_section(
         # ── Download buttons ──
         st.markdown("#### Download Report")
         col1, col2 = st.columns(2)
+        csv_str = LSIReportService.generate_checklist_csv(
+            auto_fields, manual_fields
+        )
 
         with col1:
             if st.button("Generate PDF Report", key="lsi_generate_pdf"):
@@ -72,8 +75,13 @@ def display_lsi_report_section(
                         auto_fields, manual_fields
                     )
                     st.session_state["lsi_pdf_bytes"] = pdf_bytes
+                    st.session_state["lsi_pdf_source"] = csv_str
                 except Exception as e:
                     st.error(f"Failed to generate PDF: {e}")
+
+            # A PDF generated before a field or setting changed is out of date.
+            if st.session_state.get("lsi_pdf_source") != csv_str:
+                st.session_state["lsi_pdf_bytes"] = None
 
             if st.session_state.get("lsi_pdf_bytes"):
                 st.download_button(
@@ -85,9 +93,6 @@ def display_lsi_report_section(
                 )
 
         with col2:
-            csv_str = LSIReportService.generate_checklist_csv(
-                auto_fields, manual_fields
-            )
             st.download_button(
                 label="Download LSI Report (CSV)",
                 data=csv_str.encode("utf-8"),

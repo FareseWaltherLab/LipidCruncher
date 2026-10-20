@@ -218,6 +218,7 @@ class SessionState:
     # --- LSI Compliance Report (owner: lsi_report.py) ---
     lsi_manual_fields: Dict[str, str] = field(default_factory=dict)
     lsi_pdf_bytes: Optional[bytes] = None
+    lsi_pdf_source: Optional[str] = None  # the CSV the PDF was made from
 
 
 @dataclass(frozen=True)
@@ -340,7 +341,8 @@ _STAGES: Tuple[_Stage, ...] = (
     # cleared with the experiment they describe.
     _Stage(
         'report',
-        fields=frozenset({'lsi_manual_fields', 'lsi_pdf_bytes'}),
+        fields=frozenset({'lsi_manual_fields', 'lsi_pdf_bytes',
+                           'lsi_pdf_source'}),
         widgets=frozenset({'lsi_download_csv', 'lsi_generate_pdf',
                            'lsi_download_pdf'}),
         prefixes=('lsi_manual_',),
