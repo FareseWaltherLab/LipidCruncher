@@ -67,6 +67,19 @@ class TestProteinCsv:
         at = _protein_csv(norm_no_standards_app, fake_uploads, _csv(''))
         assert any('appears to be empty' in e for e in _errors(at))
 
+    def test_not_utf8(self, norm_no_standards_app, fake_uploads):
+        upload = FakeUpload('upload.csv', 'Concentration\n'.encode('utf-16'))
+        at = _protein_csv(norm_no_standards_app, fake_uploads, upload)
+        assert any('save it as a UTF-8 encoded CSV' in e for e in _errors(at))
+        assert at.session_state['normalized_df'] is None
+
+    def test_malformed_rows(self, norm_no_standards_app, fake_uploads):
+        at = _protein_csv(norm_no_standards_app, fake_uploads, _csv(
+            'Concentration\n1\n2,3,4\n'
+        ))
+        assert any('Could not parse the protein concentration CSV' in e for e in _errors(at))
+        assert at.session_state['normalized_df'] is None
+
 
 def _standards_csv(at, fake_uploads, upload):
     fake_uploads['Upload standards CSV'] = upload
