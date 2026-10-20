@@ -569,6 +569,8 @@ def _display_pca_analysis(
 
     Returns (updated_df, updated_experiment).
     """
+    # The report gets only a plot drawn in this run (none after an early return).
+    st.session_state.qc_pca_plot = None
     with st.expander("Principal Component Analysis (PCA)"):
         st.markdown(
             "Visualize sample clustering based on lipid profiles. "

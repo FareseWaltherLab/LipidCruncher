@@ -303,6 +303,15 @@ class TestPCA:
         error_values = [e.value for e in at.error]
         assert any("At least two samples" in v for v in error_values)
 
+    def test_pca_min_2_error_drops_report_figure(self, qc_small_app):
+        """Regression: the error stopped the section before plotting, but
+        the PCA plot of the previous selection stayed for the PDF report."""
+        at = qc_small_app
+        assert at.session_state['qc_pca_plot'] is not None
+        at.multiselect(key='pca_samples_remove').set_value(['s1', 's2', 's3']).run()
+        assert not at.exception
+        assert at.session_state['qc_pca_plot'] is None
+
 
 class TestQcInputNames:
 
