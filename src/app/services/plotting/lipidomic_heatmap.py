@@ -331,6 +331,7 @@ class LipidomicHeatmapPlotterService:
     def order_by_clusters(
         z_scores_df: pd.DataFrame,
         n_clusters: int,
+        clustering: Optional[ClusteringResult] = None,
     ) -> pd.DataFrame:
         """Reorder rows into the clustered heatmap's top-to-bottom order.
 
@@ -341,6 +342,8 @@ class LipidomicHeatmapPlotterService:
             z_scores_df: Per-species value DataFrame indexed by
                 (LipidMolec, ClassKey).
             n_clusters: Number of clusters.
+            clustering: ``perform_clustering(z_scores_df, n_clusters)``, when
+                already computed.
 
         Returns:
             The rows in dendrogram order, with a leading 'Cluster' column
@@ -349,9 +352,10 @@ class LipidomicHeatmapPlotterService:
         Raises:
             ValueError: If inputs are invalid.
         """
-        clustering = LipidomicHeatmapPlotterService.perform_clustering(
-            z_scores_df, n_clusters,
-        )
+        if clustering is None:
+            clustering = LipidomicHeatmapPlotterService.perform_clustering(
+                z_scores_df, n_clusters,
+            )
         order = clustering.dendrogram_order
         ordered_df = z_scores_df.iloc[order].copy()
         ordered_df.insert(0, 'Cluster', clustering.cluster_labels[order])
@@ -539,6 +543,7 @@ class LipidomicHeatmapPlotterService:
         n_clusters: int,
         sample_conditions: Optional[List[str]] = None,
         value_label: str = 'Z-score',
+        clustering: Optional[ClusteringResult] = None,
     ) -> go.Figure:
         """Create a heatmap reordered by hierarchical clustering with cluster boundaries.
 
@@ -552,6 +557,8 @@ class LipidomicHeatmapPlotterService:
                 with selected_samples. When given, a colour-coded condition strip
                 is drawn above the columns.
             value_label: Name of the plotted quantity, used for the colour bar.
+            clustering: ``perform_clustering(z_scores_df, n_clusters)``, when
+                already computed.
 
         Returns:
             Plotly Figure with clustered heatmap and dashed cluster boundary lines.
@@ -562,9 +569,10 @@ class LipidomicHeatmapPlotterService:
         if z_scores_df is None or z_scores_df.empty:
             raise ValueError("Z-scores DataFrame is empty")
 
-        clustering = LipidomicHeatmapPlotterService.perform_clustering(
-            z_scores_df, n_clusters,
-        )
+        if clustering is None:
+            clustering = LipidomicHeatmapPlotterService.perform_clustering(
+                z_scores_df, n_clusters,
+            )
 
         clustered_df = z_scores_df.iloc[clustering.dendrogram_order].copy()
         clustered_df['Cluster'] = clustering.cluster_labels[clustering.dendrogram_order]
@@ -812,6 +820,7 @@ class LipidomicHeatmapPlotterService:
         n_clusters: int,
         mode: str = 'species_count',
         filtered_df: Optional[pd.DataFrame] = None,
+        clustering: Optional[ClusteringResult] = None,
     ) -> pd.DataFrame:
         """Get lipid class composition per cluster.
 
@@ -822,6 +831,8 @@ class LipidomicHeatmapPlotterService:
                 'concentration' for concentration-based percentage.
             filtered_df: Original filtered DataFrame with concentration values.
                 Required when mode='concentration'.
+            clustering: ``perform_clustering(z_scores_df, n_clusters)``, when
+                already computed.
 
         Returns:
             DataFrame with clusters as rows and lipid classes as columns,
@@ -841,9 +852,10 @@ class LipidomicHeatmapPlotterService:
                 "filtered_df is required when mode='concentration'"
             )
 
-        clustering = LipidomicHeatmapPlotterService.perform_clustering(
-            z_scores_df, n_clusters,
-        )
+        if clustering is None:
+            clustering = LipidomicHeatmapPlotterService.perform_clustering(
+                z_scores_df, n_clusters,
+            )
 
         if mode == 'species_count':
             return _compute_species_percentages(z_scores_df, clustering.cluster_labels)

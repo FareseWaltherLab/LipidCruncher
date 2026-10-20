@@ -19,6 +19,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 # Module 1 workflows (used to produce normalized DataFrames)
+from app.services.plotting.lipidomic_heatmap import LipidomicHeatmapPlotterService
 from app.workflows.data_ingestion import (
     DataIngestionWorkflow,
     IngestionConfig,
@@ -1406,7 +1407,7 @@ class TestHeatmapEndToEnd:
         assert isinstance(result.figure, go.Figure)
         assert isinstance(result.z_scores_df, pd.DataFrame)
         assert not result.z_scores_df.empty
-        assert result.cluster_composition is None  # regular mode
+        assert result.clustering is None  # regular mode
 
     def test_lipidsearch_clustered_heatmap(
         self, lipidsearch_normalized_df, lipidsearch_experiment,
@@ -1423,8 +1424,10 @@ class TestHeatmapEndToEnd:
 
         assert isinstance(result, HeatmapResult)
         assert isinstance(result.figure, go.Figure)
-        assert isinstance(result.cluster_composition, pd.DataFrame)
-        assert not result.cluster_composition.empty
+        composition = LipidomicHeatmapPlotterService.get_cluster_composition(
+            result.z_scores_df, 3, clustering=result.clustering,
+        )
+        assert not composition.empty
 
     def test_heatmap_z_scores_normalized(
         self, lipidsearch_normalized_df, lipidsearch_experiment,
@@ -1463,7 +1466,10 @@ class TestHeatmapEndToEnd:
         )
 
         # Cluster composition should have n_clusters rows
-        assert len(result.cluster_composition) == n_clusters
+        composition = LipidomicHeatmapPlotterService.get_cluster_composition(
+            result.z_scores_df, n_clusters, clustering=result.clustering,
+        )
+        assert len(composition) == n_clusters
 
     def test_heatmap_subset_conditions(
         self, lipidsearch_normalized_df, lipidsearch_experiment,

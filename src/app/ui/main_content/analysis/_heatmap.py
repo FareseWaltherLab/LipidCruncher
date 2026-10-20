@@ -468,7 +468,7 @@ def _display_cluster_composition(
 
     composition_df = LipidomicHeatmapPlotterService.get_cluster_composition(
         result.z_scores_df, n_clusters, mode=mode,
-        filtered_df=filtered_df,
+        filtered_df=filtered_df, clustering=result.clustering,
     )
 
     if composition_df is not None:
