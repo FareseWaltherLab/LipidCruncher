@@ -18,7 +18,10 @@ to test different data scenarios without importing main_app.py.
 10. Edge cases — single condition volcano warning, three-condition analysis
 """
 
+import io
+
 import numpy as np
+import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -412,6 +415,43 @@ class TestChainLengthUI:
         assert 'How each bubble is computed' in markdowns
         assert 'summed across every chain' in code
         assert 'area' in captions and 'radius' in captions
+
+    @pytest.mark.parametrize('selector, message', [
+        ('clen_conditions', 'Please select at least one condition.'),
+        ('clen_classes', 'Please select at least one lipid class.'),
+    ])
+    def test_empty_selection_warns_and_drops_report_figure(
+        self, analysis_generic_app, selector, message,
+    ):
+        at = self._switch_to_chain_length(analysis_generic_app)
+        assert 'chain_length' in at.session_state['analysis_all_plots']
+        at.multiselect(key=selector).set_value([]).run()
+        assert not at.exception
+        assert message in [w.value for w in at.warning]
+        assert 'chain_length' not in at.session_state['analysis_all_plots']
+
+    def test_names_without_chains(self):
+        from app.models.experiment import ExperimentConfig
+        at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
+        df = make_analysis_dataframe(n_lipids=4, n_samples=4)
+        df['LipidMolec'] = ['PC', 'PC-like', 'PE', 'PE-like']
+        at.session_state['_test_df'] = df
+        at.session_state['_test_experiment'] = ExperimentConfig(
+            n_conditions=2, conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[2, 2],
+        )
+        at.run()
+        at = self._switch_to_chain_length(at)
+        assert not at.exception
+        assert any('No chain length data' in i.value for i in at.info)
+        assert 'chain_length' not in at.session_state['analysis_all_plots']
+
+    def test_csv_rows_carry_their_condition(self, analysis_generic_app, captured_downloads):
+        at = self._switch_to_chain_length(analysis_generic_app)
+        at.multiselect(key='clen_conditions').set_value(['Treatment']).run()
+        assert not at.exception
+        out = pd.read_csv(io.BytesIO(captured_downloads['analysis_csv_chain_length']))
+        assert set(out['Condition']) == {'Treatment'}
 
 
 # =============================================================================
