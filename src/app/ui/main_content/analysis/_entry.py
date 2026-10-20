@@ -17,10 +17,11 @@ from typing import Any, Dict, Optional
 import pandas as pd
 import streamlit as st
 
+from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.models.experiment import ExperimentConfig
 from app.services.report_generator import generate_pdf_report, build_metadata_from_experiment
 from app.ui.main_content.lsi_report import display_lsi_report_section
-from app.ui.sample_labels import display_names_for
+from app.ui.sample_labels import display_names_for, names_for
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.content import STATISTICAL_TESTING_DOCS, SATURATION_PROFILE_DOCS
 
@@ -89,6 +90,10 @@ def display_analysis_module(
         for err in errors:
             st.error(err)
         return
+
+    # Pages not shown keep their figures for the reports; drop them all when
+    # what they were drawn from (data, setup, shown sample names) changed.
+    StreamlitAdapter.track_inputs('analysis', df, experiment, bqc_label, names_for('qc'))
 
     with st.expander("📊 About Statistical Testing"):
         st.markdown(STATISTICAL_TESTING_DOCS)

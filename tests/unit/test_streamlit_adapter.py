@@ -8,6 +8,7 @@ Note: Methods with @st.cache_data decorators and session state access
 require mocking or integration tests with Streamlit.
 """
 import pandas as pd
+import pytest
 from unittest.mock import MagicMock, patch
 from dataclasses import asdict, fields
 
@@ -288,6 +289,10 @@ class TestStageRegistry:
         widget_fields = {k for s in _STAGES for k in s.widgets} & field_names
         assert widget_fields == {'norm_method_selection', 'protein_input_method'}
 
+    def test_derived_keys_are_stage_fields(self):
+        for stage in _STAGES:
+            assert stage.derived <= stage.fields, stage.derived - stage.fields
+
     def test_prefixes_end_with_underscore(self):
         for stage in _STAGES:
             for prefix in stage.prefixes:
@@ -316,6 +321,51 @@ class TestStageRegistry:
                     if key not in registered and not key.startswith(prefixes):
                         unregistered.append(f"{path.name}:{key}")
         assert unregistered == []
+
+
+class TestTrackInputs:
+    """track_inputs(stage, ...) drops results computed from other inputs."""
+
+    @staticmethod
+    def _state(**extra):
+        return MockSessionState({
+            'analysis_all_plots': {'bar_chart': object()},
+            'analysis_volcano_data': object(),
+            'bar_conditions': ['WT'],   # a setting: kept
+            **extra,
+        })
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_same_inputs_keep_results(self, mock_st):
+        mock_st.session_state = self._state()
+        df = pd.DataFrame({'a': [1.0, 2.0]})
+        assert StreamlitAdapter.track_inputs('analysis', df, 'x') is False
+        assert StreamlitAdapter.track_inputs('analysis', df.copy(), 'x') is False
+        assert 'bar_chart' in mock_st.session_state['analysis_all_plots']
+
+    @pytest.mark.parametrize('changed', [
+        (pd.DataFrame({'a': [1.0, 3.0]}), 'x'),   # a value
+        (pd.DataFrame({'b': [1.0, 2.0]}), 'x'),   # a column name
+        (pd.DataFrame({'a': [1.0, 2.0]}), 'y'),   # another input
+    ])
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_changed_inputs_drop_results_only(self, mock_st, changed):
+        mock_st.session_state = self._state()
+        StreamlitAdapter.track_inputs('analysis', pd.DataFrame({'a': [1.0, 2.0]}), 'x')
+        assert StreamlitAdapter.track_inputs('analysis', *changed) is True
+        state = mock_st.session_state
+        assert state['analysis_all_plots'] == {}
+        assert state['analysis_volcano_data'] is None
+        assert state['bar_conditions'] == ['WT']
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_first_inputs_after_invalidation_drop_nothing(self, mock_st):
+        mock_st.session_state = self._state()
+        StreamlitAdapter.track_inputs('analysis', 'x')
+        StreamlitAdapter.invalidate_from('analysis')
+        mock_st.session_state['analysis_all_plots'] = {'pie_charts': object()}
+        assert StreamlitAdapter.track_inputs('analysis', 'y') is False
+        assert 'pie_charts' in mock_st.session_state['analysis_all_plots']
 
 
 class TestInvalidateFrom:

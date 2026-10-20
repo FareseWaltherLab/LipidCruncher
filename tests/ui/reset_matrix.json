@@ -135,6 +135,7 @@
  },
  "module1/next": {
   "added": [
+   "_inputs_analysis",
    "analysis_all_plots",
    "analysis_csv_bar",
    "analysis_radio",
@@ -593,6 +594,7 @@
   "changed": [],
   "cleared": [
    "_dataset_source_id",
+   "_inputs_analysis",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_grouping_radio",
@@ -716,6 +718,7 @@
   ],
   "changed": [],
   "cleared": [
+   "_inputs_analysis",
    "analysis_all_plots",
    "analysis_csv_bar",
    "analysis_radio",
@@ -840,6 +843,7 @@
   ],
   "kept": [
    "_dataset_source_id",
+   "_inputs_analysis",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_grouping_radio",
@@ -951,6 +955,7 @@
   ],
   "kept": [
    "_dataset_source_id",
+   "_inputs_analysis",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_grouping_radio",
@@ -1065,6 +1070,7 @@
   ],
   "kept": [
    "_dataset_source_id",
+   "_inputs_analysis",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_grouping_radio",
@@ -1181,6 +1187,7 @@
    "n_samples_1"
   ],
   "cleared": [
+   "_inputs_analysis",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_grouping_radio",
@@ -1294,6 +1301,7 @@
    "standardized_df"
   ],
   "cleared": [
+   "_inputs_analysis",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_grouping_radio",
@@ -1458,6 +1466,7 @@
   ],
   "kept": [
    "_dataset_source_id",
+   "_inputs_analysis",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
    "_preserved_grouping_radio",

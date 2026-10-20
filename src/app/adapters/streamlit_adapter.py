@@ -6,6 +6,7 @@ This module contains all Streamlit-specific code that wraps the pure business lo
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -249,12 +250,17 @@ class _Stage:
       popped. A SessionState field that happens to share the prefix
       (``protein_df``, ``lsi_manual_fields``) is reset like any field, not
       popped, so code later in the same run can still read it.
+
+    ``derived`` names the ``fields`` computed from the stage's input rather
+    than chosen by the user. ``StreamlitAdapter.track_inputs`` resets them
+    (and every later stage's) when that input changes, keeping the settings.
     """
     name: str
     fields: frozenset = frozenset()
     widgets: frozenset = frozenset()
     plain: frozenset = frozenset()
     prefixes: Tuple[str, ...] = ()
+    derived: frozenset = frozenset()
 
 
 _STAGES: Tuple[_Stage, ...] = (
@@ -394,6 +400,11 @@ _STAGES: Tuple[_Stage, ...] = (
             'analysis_volcano_data', 
             'analysis_all_plots', 'analysis_statistics',
         }),
+        # Every page's results, kept for the reports while another page is
+        # shown; computed from Quality Check's output.
+        derived=frozenset({
+            'analysis_all_plots', 'analysis_statistics', 'analysis_volcano_data',
+        }),
         widgets=frozenset({
             'analysis_radio', 'generate_pdf_report', 'download_pdf_report',
             # bar chart / saturation (keys built from a 'bar' / 'sat' prefix)
@@ -434,6 +445,24 @@ _STAGES: Tuple[_Stage, ...] = (
 )
 
 _STAGE_NAMES = tuple(stage.name for stage in _STAGES)
+
+
+def _inputs_key(stage: str) -> str:
+    """Session key holding the fingerprint of ``stage``'s last inputs."""
+    return f'_inputs_{stage}'
+
+
+def _fingerprint(values: Tuple[Any, ...]) -> str:
+    """A digest that changes when any of ``values`` does (frames by content)."""
+    digest = hashlib.sha256()
+    for value in values:
+        if isinstance(value, pd.DataFrame):
+            digest.update(repr(list(value.columns)).encode())
+            digest.update(pd.util.hash_pandas_object(value, index=True).values.tobytes())
+        else:
+            digest.update(repr(value).encode())
+        digest.update(b'\0')
+    return digest.hexdigest()
 
 # App-level routing and navigation buttons: never invalidated, only set.
 _ROUTING_FIELDS = frozenset({'page', 'module'})
@@ -516,7 +545,7 @@ class StreamlitAdapter:
         # key instantiated as a widget during the current run, but allows
         # deletion.
         for s in stages:
-            for key in s.widgets | s.plain:
+            for key in s.widgets | s.plain | {_inputs_key(s.name)}:
                 st.session_state.pop(key, None)
         defaults = SessionState()
         for s in stages:
@@ -529,6 +558,33 @@ class StreamlitAdapter:
                         if isinstance(k, str) and k.startswith(prefixes)
                         and k not in field_names]:
                 st.session_state.pop(key, None)
+
+    @staticmethod
+    def track_inputs(stage: str, *inputs: Any) -> bool:
+        """Drop what was computed from ``stage``'s previous inputs.
+
+        Call where the stage reads its inputs, before it computes anything.
+        When ``inputs`` differ from the last run's, the ``derived`` fields of
+        ``stage`` and of every later stage go back to their defaults; the
+        user's settings (other fields, widgets) are kept.
+
+        Args:
+            stage: A ``_STAGES`` name.
+            *inputs: Everything the stage's results are computed from.
+
+        Returns:
+            True when results were dropped.
+        """
+        fingerprint = _fingerprint(inputs)
+        previous = st.session_state.get(_inputs_key(stage))
+        st.session_state[_inputs_key(stage)] = fingerprint
+        if previous is None or previous == fingerprint:
+            return False
+        defaults = SessionState()
+        for s in _STAGES[_STAGE_NAMES.index(stage):]:
+            for name in s.derived:
+                st.session_state[name] = getattr(defaults, name)
+        return True
 
     @staticmethod
     def reset_data_state() -> None:
