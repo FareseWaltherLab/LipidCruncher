@@ -39,6 +39,60 @@ class NormalizationService:
     """
 
     @staticmethod
+    def protein_row_samples(
+        row_ids: List[object],
+        samples: List[str],
+        names: Optional[Dict[str, str]] = None,
+    ) -> Optional[List[str]]:
+        """The sample each row of a protein-amount table belongs to.
+
+        A row's Sample value names a sample by its label (``s1``) or its
+        name. When every value names one, rows go to those samples; when none
+        does, the column is not about these samples and None says to take the
+        rows in sample order.
+
+        Args:
+            row_ids: The table's Sample column, one value per row.
+            samples: The experiment's sample labels.
+            names: Sample label -> name.
+
+        Raises:
+            ValueError: Some values name no sample, a value names two
+                samples, or a sample is named more than once.
+        """
+        lookup: Dict[str, str] = {s: s for s in samples}
+        ambiguous = set()
+        for sample, name in (names or {}).items():
+            name = str(name).strip()
+            if sample not in lookup or not name:
+                continue
+            if lookup.setdefault(name, sample) != sample:
+                ambiguous.add(name)
+
+        ids = [str(v).strip() for v in row_ids]
+        if not any(i in lookup for i in ids):
+            return None
+        unknown = [i for i in ids if i not in lookup]
+        if unknown:
+            raise ValueError(
+                "The Sample column lists a name that is not a sample of this "
+                f"experiment: {', '.join(unknown)}"
+            )
+        both = sorted({i for i in ids if i in ambiguous})
+        if both:
+            raise ValueError(
+                f"The Sample column value {', '.join(both)} is both one "
+                "sample's label and another's name"
+            )
+        matched = [lookup[i] for i in ids]
+        repeated = sorted({s for s in matched if matched.count(s) > 1})
+        if repeated:
+            raise ValueError(
+                f"The Sample column lists a sample more than once: {', '.join(repeated)}"
+            )
+        return matched
+
+    @staticmethod
     def normalize(
         df: pd.DataFrame,
         config: NormalizationConfig,

@@ -23,4 +23,4 @@ PE 15:0_18:1+D7:(s),800,850,820,810
 ```
 """
 
-PROTEIN_CSV_HELP = """**CSV format:** Single column named `Concentration` with one value per sample (in order)."""
+PROTEIN_CSV_HELP = """**CSV format:** a column named `Concentration` with one value per sample. Add a `Sample` column (each sample's label, e.g. s1, or its name) to match rows to samples; without one, rows are taken in sample order (s1, s2, ...)."""

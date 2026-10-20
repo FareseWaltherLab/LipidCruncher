@@ -40,6 +40,62 @@ class TestProteinCsv:
                 cleaned.loc[normalized.index, f'intensity[s{i}]'] / amount,
             )
 
+    def _assert_divided_by(self, at, amount_of):
+        cleaned = at.session_state['_test_cleaned_df'].set_index('LipidMolec')
+        normalized = at.session_state['normalized_df'].set_index('LipidMolec')
+        for sample, amount in amount_of.items():
+            np.testing.assert_allclose(
+                normalized[f'concentration[{sample}]'],
+                cleaned.loc[normalized.index, f'intensity[{sample}]'] / amount,
+            )
+
+    def test_rows_follow_their_sample_column(self, norm_no_standards_app, fake_uploads):
+        """Regression: rows were taken in order and the Sample column was
+        ignored, so a file listing the samples in another order gave each
+        sample another sample's amount."""
+        amount_of = {f's{i}': a for i, a in enumerate(AMOUNTS, 1)}
+        at = _protein_csv(norm_no_standards_app, fake_uploads, _csv(
+            'Sample,Concentration\n'
+            + ''.join(f'{s},{a}\n' for s, a in reversed(amount_of.items()))
+        ))
+        assert any('matched by the Sample column' in s.value for s in at.success)
+        self._assert_divided_by(at, amount_of)
+
+    def test_rows_matched_by_sample_name(self, norm_no_standards_app, fake_uploads):
+        at = norm_no_standards_app
+        at.session_state['sample_names'] = {f's{i}': f'mouse {i}' for i in range(1, 7)}
+        amount_of = {f's{i}': a for i, a in enumerate(AMOUNTS, 1)}
+        at = _protein_csv(at, fake_uploads, _csv(
+            'Sample,Concentration\n'
+            + ''.join(f'mouse {s[1:]},{a}\n' for s, a in reversed(amount_of.items()))
+        ))
+        self._assert_divided_by(at, amount_of)
+
+    def test_sample_column_naming_no_sample_keeps_row_order(
+        self, norm_no_standards_app, fake_uploads,
+    ):
+        at = _protein_csv(norm_no_standards_app, fake_uploads, _csv(
+            'Sample,Concentration\n' + ''.join(f'tube {i},{a}\n' for i, a in enumerate(AMOUNTS, 1))
+        ))
+        assert any('matched by row order' in s.value for s in at.success)
+        self._assert_divided_by(at, {f's{i}': a for i, a in enumerate(AMOUNTS, 1)})
+
+    def test_sample_column_partly_matching_is_refused(
+        self, norm_no_standards_app, fake_uploads,
+    ):
+        at = _protein_csv(norm_no_standards_app, fake_uploads, _csv(
+            'Sample,Concentration\ns1,1\ns2,1\ns3,1\ns4,1\ns5,1\nsx,1\n'
+        ))
+        assert any("not a sample of this experiment: sx" in e for e in _errors(at))
+        assert at.session_state['normalized_df'] is None
+
+    def test_sample_named_twice_is_refused(self, norm_no_standards_app, fake_uploads):
+        at = _protein_csv(norm_no_standards_app, fake_uploads, _csv(
+            'Sample,Concentration\ns1,1\ns1,1\ns3,1\ns4,1\ns5,1\ns6,1\n'
+        ))
+        assert any("more than once: s1" in e for e in _errors(at))
+        assert at.session_state['normalized_df'] is None
+
     def test_amounts_are_kept_when_the_upload_is_gone(self, norm_no_standards_app, fake_uploads):
         at = _protein_csv(norm_no_standards_app, fake_uploads, _csv(
             'Concentration\n' + ''.join(f'{a}\n' for a in AMOUNTS)

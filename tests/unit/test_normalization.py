@@ -1963,3 +1963,51 @@ class TestIntegrationPreserveStructure:
         original_lipids = basic_lipid_df['LipidMolec'].tolist()
         result_lipids = result.normalized_df['LipidMolec'].tolist()
         assert original_lipids == result_lipids
+
+
+class TestProteinRowSamples:
+    """Which sample each row of a protein-amount table belongs to."""
+
+    SAMPLES = ['s1', 's2', 's3']
+
+    def test_by_label_in_any_order(self):
+        assert NormalizationService.protein_row_samples(
+            ['s3', ' s1', 's2'], self.SAMPLES,
+        ) == ['s3', 's1', 's2']
+
+    def test_by_name(self):
+        names = {'s1': 'A', 's2': 'B', 's3': 'C'}
+        assert NormalizationService.protein_row_samples(
+            ['C', 'A', 'B'], self.SAMPLES, names,
+        ) == ['s3', 's1', 's2']
+
+    def test_labels_and_names_mixed(self):
+        assert NormalizationService.protein_row_samples(
+            ['s2', 'C', 's1'], self.SAMPLES, {'s3': 'C'},
+        ) == ['s2', 's3', 's1']
+
+    def test_no_value_names_a_sample(self):
+        assert NormalizationService.protein_row_samples(
+            ['tube 1', 'tube 2', 'tube 3'], self.SAMPLES, {'s1': 'A'},
+        ) is None
+
+    def test_some_values_name_no_sample(self):
+        with pytest.raises(ValueError, match='not a sample of this experiment: x'):
+            NormalizationService.protein_row_samples(['s1', 's2', 'x'], self.SAMPLES)
+
+    def test_sample_named_twice(self):
+        with pytest.raises(ValueError, match='more than once: s1'):
+            NormalizationService.protein_row_samples(
+                ['s1', 'A', 's3'], self.SAMPLES, {'s1': 'A'},
+            )
+
+    def test_name_that_is_another_samples_label(self):
+        with pytest.raises(ValueError, match='s2 is both'):
+            NormalizationService.protein_row_samples(
+                ['s2', 's1', 's3'], self.SAMPLES, {'s1': 's2'},
+            )
+
+    def test_a_samples_own_label_as_its_name(self):
+        assert NormalizationService.protein_row_samples(
+            ['s2', 's1', 's3'], self.SAMPLES, {'s1': 's1'},
+        ) == ['s2', 's1', 's3']

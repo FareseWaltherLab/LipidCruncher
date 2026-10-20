@@ -19,9 +19,10 @@ from app.models.experiment import ExperimentConfig
 from app.workflows.normalization import NormalizationWorkflow, NormalizationWorkflowResult
 from app.constants import FORMAT_MSDIAL, resolve_format_enum
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.services.normalization import NormalizationService
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
-from app.ui.sample_labels import labeler, names_for
+from app.ui.sample_labels import labeler, names_for, processing_names
 from app.ui.st_helpers import dataset_widget_key
 
 logger = logging.getLogger(__name__)
@@ -278,11 +279,27 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
                 st.error("Some concentration values couldn't be converted to numbers.")
                 return None
 
-            protein_concentrations = dict(zip(sample_names, csv_df['Concentration'].tolist()))
+            rows = None
+            if 'Sample' in csv_df.columns:
+                try:
+                    rows = NormalizationService.protein_row_samples(
+                        csv_df['Sample'].tolist(), sample_names, processing_names(),
+                    )
+                except ValueError as e:
+                    st.error(str(e))
+                    return None
+            protein_concentrations = dict(zip(
+                rows or sample_names, csv_df['Concentration'].tolist(),
+            ))
+            protein_concentrations = {s: protein_concentrations[s] for s in sample_names}
             st.session_state.protein_df = {
                 _protein_key(s): c for s, c in protein_concentrations.items()
             }
-            st.success(f"✓ Loaded {len(protein_concentrations)} concentration values")
+            matched_by = "the Sample column" if rows else "row order"
+            st.success(
+                f"✓ Loaded {len(protein_concentrations)} concentration values "
+                f"(matched by {matched_by})"
+            )
             return protein_concentrations
 
         except UnicodeDecodeError as e:
