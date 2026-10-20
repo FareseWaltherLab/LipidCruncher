@@ -47,17 +47,32 @@ def names_for(space: str) -> Optional[Dict[str, str]]:
     """The ``{s-label -> name}`` map to display in a label space, or None.
 
     None when standardized labels are chosen or no names exist, so callers
-    show the s-labels.
+    show the s-labels. A shared name comes with the sample's upload label
+    (``QC (s9)``), the same in every space.
     """
     if not showing_original_names():
         return None
-    names = {
-        'upload': lambda: st.session_state.get('sample_names'),
-        'processing': processing_names,
-        'qc_input': qc_input_names,
-        'qc': _qc_names,
-    }[space]()
-    return names or None
+    frame = None
+    # Each space falls back to the one before it (a page rendered without
+    # the steps that build its frame).
+    for key in _FRAME_KEYS[space]:
+        frame = st.session_state.get(key)
+        if frame is not None:
+            break
+    if frame is not None:
+        names, origin = frame.names, frame.origin
+    else:
+        names = st.session_state.get('sample_names')
+        origin = st.session_state.get('regroup_origin') if space == 'upload' else None
+    return sample_display_map(names, origin) or None
+
+
+_FRAME_KEYS = {
+    'upload': (),
+    'processing': ('processing_frame',),
+    'qc_input': ('qc_input_frame', 'processing_frame'),
+    'qc': ('qc_frame', 'qc_input_frame', 'processing_frame'),
+}
 
 
 def processing_names() -> Optional[Dict[str, str]]:
@@ -78,11 +93,6 @@ def qc_input_names() -> Optional[Dict[str, str]]:
     """
     frame = st.session_state.get('qc_input_frame')
     return frame.names if frame is not None else processing_names()
-
-
-def _qc_names() -> Optional[Dict[str, str]]:
-    frame = st.session_state.get('qc_frame')
-    return frame.names if frame is not None else qc_input_names()
 
 
 def display_names_for(space: str) -> Dict[str, str]:

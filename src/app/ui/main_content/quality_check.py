@@ -23,7 +23,6 @@ from app.models.sample_frame import SampleFrame
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.download_utils import csv_download_button, named_dataframe
-from app.ui.sample_names import sample_display_map
 from app.ui.sample_labels import display_names_for, labeler, names_for, qc_input_names
 from app.ui.st_helpers import (
     display_export_buttons,
@@ -646,12 +645,7 @@ def _display_pca_analysis(
             removal_result = QualityCheckWorkflow.remove_samples(
                 df, experiment, combined_removal
             )
-            # A shared name keeps the label it had before the exclusion
-            # ("QC (s5)"), so its text does not change with the renumbering.
-            before = _qc_input_frame(df, experiment)
-            st.session_state.qc_frame = before.model_copy(
-                update={'names': sample_display_map(before.names)}
-            ).renumbered(
+            st.session_state.qc_frame = _qc_input_frame(df, experiment).renumbered(
                 removal_result.updated_df,
                 removal_result.updated_experiment,
                 removal_result.old_to_new,
