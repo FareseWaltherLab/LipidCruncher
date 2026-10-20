@@ -13,6 +13,7 @@ from typing import Dict, Optional
 import streamlit as st
 import pandas as pd
 
+from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.standards import StandardsService
 from app.ui.standards_plots import display_standards_consistency_plots
 from app.ui.content import STANDARDS_COMPLETE_HELP
@@ -389,10 +390,8 @@ def _process_uploaded_standards(
     try:
         uploaded_df = pd.read_csv(uploaded_file)
 
-        result = StandardsService.process_standards_file(
-            uploaded_df=uploaded_df,
-            cleaned_df=cleaned_df,
-            standards_in_dataset=use_extract_mode
+        result = StreamlitAdapter.run_process_standards_file(
+            uploaded_df, cleaned_df, use_extract_mode,
         )
 
         if result.standards_df is None or result.standards_df.empty:

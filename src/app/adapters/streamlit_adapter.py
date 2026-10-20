@@ -7,6 +7,7 @@ This module contains all Streamlit-specific code that wraps the pure business lo
 from __future__ import annotations
 
 import hashlib
+import dataclasses
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -33,6 +34,12 @@ from ..services.plotting.bqc_plotter import BQCPlotterService
 from ..services.plotting.correlation import CorrelationPlotterService
 from ..services.plotting.pca import PCAPlotterService
 from ..services.plotting.retention_time import RetentionTimePlotterService
+from ..services.plotting.standards_plotter import StandardsPlotterService
+from ..services.plotting.volcano_plot import VolcanoPlotterService
+from ..services.standards import StandardsProcessingResult, StandardsService
+from ..services.zero_filtering import (
+    ZeroFilterConfig, ZeroFilteringResult, ZeroFilteringService,
+)
 from ..services.validation import get_matching_concentration_columns
 from ..workflows.analysis import (
     GROUPED_PAGE_SIZE,
@@ -820,6 +827,49 @@ class StreamlitAdapter:
             intsta_df=intsta_df
         )
 
+    @staticmethod
+    @st.cache_data(
+        show_spinner=False,
+        hash_funcs={ExperimentConfig: hash, ZeroFilterConfig: dataclasses.astuple},
+    )
+    def run_zero_filter(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        config: ZeroFilterConfig,
+        bqc_label: Optional[str] = None,
+    ) -> ZeroFilteringResult:
+        """Cached zero filtering."""
+        return ZeroFilteringService.filter_zeros(
+            df=df, experiment=experiment, config=config, bqc_label=bqc_label,
+        )
+
+    @staticmethod
+    @st.cache_data(show_spinner=False)
+    def run_process_standards_file(
+        uploaded_df: pd.DataFrame,
+        cleaned_df: pd.DataFrame,
+        standards_in_dataset: bool,
+    ) -> StandardsProcessingResult:
+        """Cached processing of an uploaded internal-standards table."""
+        return StandardsService.process_standards_file(
+            uploaded_df=uploaded_df, cleaned_df=cleaned_df,
+            standards_in_dataset=standards_in_dataset,
+        )
+
+    @staticmethod
+    @st.cache_data(show_spinner=False)
+    def run_standards_plots(
+        intsta_df: pd.DataFrame,
+        samples: List[str],
+        sample_conditions: Optional[List[str]] = None,
+        display_names: Optional[Dict[str, str]] = None,
+    ) -> List[go.Figure]:
+        """Cached internal-standards consistency plots."""
+        return StandardsPlotterService.create_consistency_plots(
+            intsta_df, samples,
+            sample_conditions=sample_conditions, display_names=display_names,
+        )
+
     # ==================== Cached QC Wrappers ====================
 
     @staticmethod
@@ -1111,6 +1161,22 @@ class StreamlitAdapter:
             hide_non_sig=hide_non_sig, top_n_labels=top_n_labels,
             custom_label_positions=custom_label_positions,
             additional_labels=list(additional_labels) if additional_labels else None,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating distribution plot...",
+        hash_funcs={ExperimentConfig: hash},
+    )
+    def run_distribution_plot(
+        df: pd.DataFrame,
+        selected_lipids: List[str],
+        selected_conditions: List[str],
+        experiment: ExperimentConfig,
+    ) -> matplotlib.figure.Figure:
+        """Cached per-lipid concentration distribution plot (volcano page)."""
+        return VolcanoPlotterService.create_distribution_plot(
+            df, selected_lipids, selected_conditions, experiment,
         )
 
     @staticmethod

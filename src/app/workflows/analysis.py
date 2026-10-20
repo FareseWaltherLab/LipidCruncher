@@ -102,12 +102,15 @@ class SaturationResult:
 
     Attributes:
         plots: Dict mapping class name to its Plotly figure.
+        plot_data: Dict mapping class name to its plotted values (Condition,
+            *_AUC and *_std columns), for the CSV download.
         stat_summary: Statistical test results (if tests were run).
         consolidated_lipids: Dict mapping class → list of consolidated lipid names.
         success: Whether the analysis completed successfully.
         validation_errors: List of error messages if analysis failed.
     """
     plots: Dict[str, go.Figure] = dataclass_field(default_factory=dict)
+    plot_data: Dict[str, pd.DataFrame] = dataclass_field(default_factory=dict)
     stat_summary: Optional[StatisticalTestSummary] = None
     consolidated_lipids: Dict[str, List[str]] = dataclass_field(
         default_factory=dict
@@ -545,6 +548,7 @@ class AnalysisWorkflow:
             plots[lipid_class] = fig
 
         return SaturationResult(
+            plot_data=sat_data.plot_data,
             plots=plots,
             stat_summary=stat_summary,
             consolidated_lipids=consolidated,

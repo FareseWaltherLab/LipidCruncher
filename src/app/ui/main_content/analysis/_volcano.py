@@ -9,7 +9,6 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.services.plotting.volcano_plot import VolcanoPlotterService
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
@@ -381,10 +380,9 @@ def _display_individual_lipid_analysis(
         return
 
     selected_conditions = [control, experimental]
-    with st.spinner("Generating distribution plot..."):
-        dist_fig = VolcanoPlotterService.create_distribution_plot(
-            df, detail_lipids, selected_conditions, experiment,
-        )
+    dist_fig = StreamlitAdapter.run_distribution_plot(
+        df, detail_lipids, selected_conditions, experiment,
+    )
 
     st.pyplot(dist_fig)
     _publish('lipid_distribution', dist_fig)
