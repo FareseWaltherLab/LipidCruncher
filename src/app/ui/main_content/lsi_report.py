@@ -119,10 +119,10 @@ def _collect_auto_fields(
     intsta_df = st.session_state.get("intsta_df")
 
     # Cleaning parameters
-    cleaning_params = _build_cleaning_params(format_type)
+    cleaning_params = _build_cleaning_params(format_type, bqc_label)
 
     # QC summary
-    qc_summary = _build_qc_summary()
+    qc_summary = _build_qc_summary(bqc_label)
 
     return LSIReportService.collect_auto_fields(
         format_type=format_type,
@@ -137,7 +137,7 @@ def _collect_auto_fields(
     )
 
 
-def _build_cleaning_params(format_type: str) -> dict:
+def _build_cleaning_params(format_type: str, bqc_label: Optional[str]) -> dict:
     """Extract data cleaning parameters from session state."""
     params: dict = {}
 
@@ -164,18 +164,18 @@ def _build_cleaning_params(format_type: str) -> dict:
     bqc = st.session_state.get("_preserved_bqc_zero_threshold")
     if non_bqc is not None:
         params["Zero filter threshold (non-BQC)"] = f"{non_bqc}%"
-    if bqc is not None:
+    if bqc_label and bqc is not None:
         params["Zero filter threshold (BQC)"] = f"{bqc}%"
 
     return params
 
 
-def _build_qc_summary() -> dict:
+def _build_qc_summary(bqc_label: Optional[str]) -> dict:
     """Extract QC metrics from session state."""
     summary: dict = {}
 
     cov_threshold = st.session_state.get("qc_cov_threshold")
-    if cov_threshold is not None:
+    if bqc_label and cov_threshold is not None:
         summary["BQC CoV threshold"] = f"{cov_threshold}%"
 
     samples_removed = st.session_state.get("qc_samples_removed", [])

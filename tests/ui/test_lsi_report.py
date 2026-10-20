@@ -103,3 +103,27 @@ class TestGradeFilterReported:
     def test_not_reported_for_other_formats(self, captured_downloads):
         _run_to_analysis('None (pre-normalized data)')
         assert GRADE_ITEM not in _report(captured_downloads)
+
+
+BQC_ITEMS = ('Cleaning: Zero filter threshold (BQC)', 'QC: BQC CoV threshold')
+
+
+class TestBqcSettingsReported:
+    """Regression: the BQC zero-filter and CoV thresholds were reported (at
+    their defaults) for experiments without a BQC condition, next to
+    "BQC samples: Not used"."""
+
+    def test_with_bqc(self, captured_downloads):
+        _run_to_analysis('None (pre-normalized data)')
+        report = _report(captured_downloads)
+        assert report['BQC samples'] == 'Label: BQC'
+        assert [report[item] for item in BQC_ITEMS] == ['50%', '30%']
+
+    def test_without_bqc(self, captured_downloads):
+        def no_bqc(at):
+            at.sidebar.radio(key='bqc_radio').set_value('No').run()
+
+        _run_to_analysis('None (pre-normalized data)', setup=no_bqc)
+        report = _report(captured_downloads)
+        assert report['BQC samples'] == 'Not used'
+        assert [item for item in BQC_ITEMS if item in report] == []
