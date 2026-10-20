@@ -5,6 +5,7 @@ gets from ``lc.compare_species`` must equal what the eval's independent
 reference implementation computes. That is what makes "defer to the
 pipeline" mean the same numbers the main app reports.
 """
+import pandas as pd
 import pytest
 
 from app.models.experiment import ExperimentConfig
@@ -575,3 +576,23 @@ class TestArgumentsAreHonoured:
         data = lc.volcano("WT", "KO", classes=["PC"]).data.volcano_df
         assert len(data) > 0
         assert set(data["ClassKey"]) == {"PC"}
+
+    def test_volcano_p_value_does_not_depend_on_the_classes(self):
+        """M1 / AQ5: the zero floor is the whole dataset's, as on the main
+        Volcano page, so narrowing the classes leaves a lipid's p-value as is."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1', 'PC 36:2', 'SM 34:1'],
+            'ClassKey': ['PC', 'PC', 'SM'],
+            # PC 34:1 has a zero; SM holds the dataset's smallest value.
+            **{f'concentration[s{i}]': [v, 1000.0 + i, 0.5 + i]
+               for i, v in enumerate([0.0, 900.0, 950.0, 400.0, 420.0, 380.0], 1)},
+        })
+        lc = PipelineAPI(df, ExperimentConfig(
+            conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
+        ))
+
+        def p_value(classes):
+            res = lc.volcano("WT", "KO", classes=classes).raw
+            return res.stat_summary.results['PC 34:1'].p_value
+
+        assert p_value(['PC']) == pytest.approx(p_value(['PC', 'SM']))
