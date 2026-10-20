@@ -64,7 +64,8 @@ class SessionState:
       experiment_config.py → workbench_conditions, workbench_samples
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
                              processing_frame, _preserved_excluded_samples,
-                             original_column_order, regroup_origin
+                             original_column_order, regroup_origin,
+                             _preserved_grouping_radio, _preserved_regroup_selections
       confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
       data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
                              pre_filter_df, grade_config, last_quality_config,
@@ -132,6 +133,11 @@ class SessionState:
     _preserved_excluded_regroup_origin: Optional[Dict[str, str]] = None
     # Sidebar label -> upload label (None when not regrouped).
     regroup_origin: Optional[Dict[str, str]] = None
+    # The regroup answers (radio, picks per condition), kept for runs that
+    # stop before the grouping step (an invalid experiment setup) and so drop
+    # their widget keys.
+    _preserved_grouping_radio: Optional[str] = None
+    _preserved_regroup_selections: Dict[str, List[str]] = field(default_factory=dict)
     # BQC answers, kept for runs where the BQC widgets are not drawn (e.g. a
     # manual regroup is mid-edit) and Streamlit drops their keys.
     _preserved_sidebar_bqc_radio: Optional[str] = None
@@ -278,6 +284,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'original_column_order', 'sample_names', 'processing_frame',
             '_preserved_excluded_samples',
             '_preserved_excluded_regroup_origin', 'regroup_origin',
+            '_preserved_grouping_radio', '_preserved_regroup_selections',
             '_preserved_sidebar_bqc_radio',
             '_preserved_sidebar_bqc_label_radio',
         }),

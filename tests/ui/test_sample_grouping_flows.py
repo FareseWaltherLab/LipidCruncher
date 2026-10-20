@@ -8,6 +8,8 @@ sidebar says why and Module 1 stops until it is fixed.
 
 from pathlib import Path
 
+import pytest
+
 from streamlit.testing.v1 import AppTest
 
 from app.constants import PAGE_APP
@@ -108,3 +110,49 @@ class TestSampleExclusion:
         assert _sidebar_errors(at) == []
         assert at.session_state['experiment'].number_of_samples_list == [3, 4, 4]
         assert not _module1_stopped(at)
+
+
+# Swap s1 and s5 between WT and ADGAT-DKO.
+SWAP = {
+    'WT': ['s5', 's2', 's3', 's4'],
+    'ADGAT-DKO': ['s1', 's6', 's7', 's8'],
+    'BQC': ['s9', 's10', 's11', 's12'],
+}
+
+
+def _break_and_fix_name(at):
+    at.sidebar.text_input(key='cond_name_1').input('WT').run()
+    at.sidebar.text_input(key='cond_name_1').input('ADGAT-DKO').run()
+
+
+def _break_and_fix_count(at):
+    at.sidebar.number_input(key='n_samples_0').set_value(3).run()
+    at.sidebar.number_input(key='n_samples_0').set_value(4).run()
+
+
+class TestRegroupSurvivesInvalidSetup:
+    """Regression: a run that stopped at an invalid experiment setup (a
+    repeated label, a count briefly off while editing) dropped the regroup
+    widgets, so fixing the setup silently restored the uploaded grouping
+    and the analysis ran with s1 and s5 back in their old conditions."""
+
+    @pytest.mark.parametrize('break_and_fix', [_break_and_fix_name, _break_and_fix_count])
+    def test_swap_kept(self, break_and_fix):
+        at = _confirmed()
+        upload = at.session_state['standardized_df'].copy()
+        at.sidebar.radio(key='grouping_radio').set_value('No').run()
+        for condition, samples in SWAP.items():
+            at.sidebar.multiselect(key=f'select_{condition}').set_value(samples).run()
+        _reconfirm(at)
+        swapped = at.session_state['regroup_origin']
+        assert swapped['s1'] == 's5'
+
+        break_and_fix(at)
+        _reconfirm(at)
+
+        assert _sidebar_errors(at) == []
+        assert at.sidebar.radio(key='grouping_radio').value == 'No'
+        assert at.session_state['regroup_origin'] == swapped
+        # Module 1's WT s1 holds the uploaded s5's intensities.
+        frame = at.session_state['processing_frame']
+        assert frame.df['intensity[s1]'].tolist() == upload['intensity[s5]'].tolist()

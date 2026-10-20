@@ -136,16 +136,25 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
 
     # Manual regrouping option
     st.sidebar.write('Are your samples properly grouped together?')
+    # A run that stopped before this step (an invalid experiment setup)
+    # dropped the widget keys; restore the answer so that fixing the setup
+    # does not undo a manual regroup.
+    if 'grouping_radio' not in st.session_state:
+        preserved = st.session_state.get('_preserved_grouping_radio')
+        if preserved is not None:
+            st.session_state.grouping_radio = preserved
     grouping_correct = st.sidebar.radio(
         'Samples properly grouped?', ['Yes', 'No'], key='grouping_radio',
         label_visibility='collapsed',
     )
+    st.session_state._preserved_grouping_radio = grouping_correct
 
     if grouping_correct == 'No':
         return _handle_manual_regrouping(df, group_df, experiment)
     else:
         st.session_state.grouping_complete = True
         st.session_state.regroup_origin = None
+        st.session_state._preserved_regroup_selections = {}
         # Restore the original pre-regrouping DataFrame if user previously
         # reshuffled samples.  A simple reindex is insufficient because
         # regrouping renames columns (e.g. intensity[s4] → intensity[s1]),
@@ -211,7 +220,11 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         # Streamlit treat this as a new widget; seed it with the selection it
         # had so the flip does not blank the picker.
         key = f'select_{condition}'
-        previous = [s for s in st.session_state.get(key) or [] if s in remaining_samples]
+        if key in st.session_state:
+            picked = st.session_state[key] or []
+        else:
+            picked = st.session_state._preserved_regroup_selections.get(condition, [])
+        previous = [s for s in picked if s in remaining_samples]
         selected_samples = st.sidebar.multiselect(
             f'Pick the samples that belong to condition {condition}',
             remaining_samples,
@@ -224,6 +237,7 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
 
         if len(selected_samples) == expected_samples[condition]:
             remaining_samples = [s for s in remaining_samples if s not in selected_samples]
+    st.session_state._preserved_regroup_selections = selections
 
     # Verify all conditions have correct number of samples
     all_correct = all(
