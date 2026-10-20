@@ -80,7 +80,6 @@ class TestSessionStateDefaults:
     def test_default_normalization_settings(self):
         """Test default normalization settings."""
         state = SessionState()
-        assert state.normalization_method == 'None'
         assert state.selected_classes == []
 
     def test_default_grade_config(self):
@@ -185,7 +184,6 @@ class TestSessionStateCreation:
             page='results',
             module='Analysis',
             confirmed=True,
-            normalization_method='Log2'
         )
 
         assert state.raw_df is not None

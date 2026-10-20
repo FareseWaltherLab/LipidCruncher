@@ -73,8 +73,8 @@ class SessionState:
                               custom_standards_mode, standards_source
       standards_plots.py   → standards_consistency_figs
       zero_filtering.py    → _zero_filter_format, _preserved_zero_filter_*
-      normalization.py     → normalized_df, normalization_method,
-                             selected_classes, norm_method_selection,
+      normalization.py     → normalized_df, selected_classes,
+                             norm_method_selection,
                              _preserved_norm_method_selection, normalization_result,
                              class_standard_map, standard_concentrations, protein_df,
                              protein_input_method, protein_input_method_prev
@@ -172,7 +172,6 @@ class SessionState:
 
     # --- Normalization (owner: normalization.py) ---
     normalized_df: Optional[pd.DataFrame] = None
-    normalization_method: str = 'None'
     selected_classes: List[str] = field(default_factory=list)
     norm_method_selection: Optional[str] = None
     _preserved_norm_method_selection: Optional[str] = None
@@ -308,7 +307,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'standards_source', 'standards_consistency_figs',
             '_zero_filter_format', '_preserved_zero_filter_detection_threshold',
             '_preserved_non_bqc_zero_threshold', '_preserved_bqc_zero_threshold',
-            'normalized_df', 'normalization_method', 'selected_classes',
+            'normalized_df', 'selected_classes',
             '_preserved_norm_method_selection', 'normalization_result',
             'class_standard_map', 'standard_concentrations', 'protein_df',
             'protein_input_method_prev',

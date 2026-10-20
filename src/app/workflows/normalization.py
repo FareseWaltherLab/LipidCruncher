@@ -49,6 +49,7 @@ class NormalizationWorkflowResult:
     success: bool = True
 
     # Method information
+    config: Optional[NormalizationConfig] = None
     method_applied: str = "None"
     removed_standards: List[str] = field(default_factory=list)
 
@@ -94,7 +95,7 @@ class NormalizationWorkflow:
         Raises:
             ValueError: If input data is invalid
         """
-        result = NormalizationWorkflowResult()
+        result = NormalizationWorkflowResult(config=config.normalization)
 
         # Step 1: Validate inputs
         validation_errors = NormalizationWorkflow.validate_config(

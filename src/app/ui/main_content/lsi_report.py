@@ -95,26 +95,11 @@ def _collect_auto_fields(
     bqc_label: Optional[str],
 ) -> dict:
     """Gather auto-filled fields from session state and configs."""
-    # Normalization config
+    # Normalization config: the one the last successful run used
     norm_result = st.session_state.get("normalization_result")
-    norm_config: Optional[NormalizationConfig] = None
-    if norm_result is not None and hasattr(norm_result, "config"):
-        norm_config = norm_result.config
-
-    # If no config from result, try to build from session state
-    if norm_config is None:
-        norm_method = st.session_state.get("normalization_method", "None")
-        if norm_method and norm_method != "None":
-            try:
-                norm_config = NormalizationConfig(
-                    method=norm_method.lower().replace(" ", "_"),
-                    selected_classes=st.session_state.get("selected_classes", []),
-                    internal_standards=st.session_state.get("class_standard_map"),
-                    intsta_concentrations=st.session_state.get("standard_concentrations"),
-                    protein_concentrations=None,
-                )
-            except Exception:
-                norm_config = None
+    norm_config: Optional[NormalizationConfig] = (
+        norm_result.config if norm_result is not None else None
+    )
 
     # Statistical test config — check if any analysis stored one
     stat_config: Optional[StatisticalTestConfig] = st.session_state.get(
