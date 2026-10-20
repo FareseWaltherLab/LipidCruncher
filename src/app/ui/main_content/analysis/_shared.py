@@ -12,6 +12,7 @@ import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
+from app.services.lsi_report import AnalysisStatistics
 from app.services.report_generator import ANALYSIS_PAGES
 from app.services.statistical_testing import StatisticalTestSummary
 from app.workflows.analysis import AnalysisWorkflow
@@ -65,6 +66,34 @@ def _publish(key: str, figure) -> None:
     ):
         raise ValueError(f"The PDF report has no page for {key!r}")
     st.session_state.analysis_all_plots[key] = figure
+
+
+def _clear_statistics(analysis: str) -> None:
+    """Drop an analysis's tests from the LSI report before it re-renders
+    (the ``_clear_pdf_plots`` of ``_publish_statistics``)."""
+    st.session_state.analysis_statistics.pop(analysis, None)
+
+
+def _publish_statistics(
+    analysis: str,
+    summary: Optional[StatisticalTestSummary],
+    significance: Optional[str] = None,
+) -> None:
+    """Put the tests an analysis ran into the LSI report.
+
+    ``significance`` defaults to the test run's alpha, on adjusted p-values
+    when a correction was applied. None ``summary`` (no tests run) records
+    nothing.
+    """
+    if summary is None:
+        return
+    if significance is None:
+        corrected = summary.test_info.get('correction', 'uncorrected') != 'uncorrected'
+        alpha = summary.parameters.get('alpha', 0.05)
+        significance = f"{'adjusted ' if corrected else ''}p ≤ {alpha:g}"
+    st.session_state.analysis_statistics[analysis] = AnalysisStatistics(
+        summary=summary, significance=significance,
+    )
 
 
 def _clear_pdf_plots(*keys: str) -> None:

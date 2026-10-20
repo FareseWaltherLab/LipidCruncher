@@ -14,10 +14,12 @@ from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
     _clear_pdf_plots,
+    _clear_statistics,
     _display_condition_class_selectors,
     _display_statistical_options,
     _display_detailed_statistics,
     _publish,
+    _publish_statistics,
 )
 from app.ui.main_content.analysis._utils import (
     _check_fa_compatibility,
@@ -30,6 +32,7 @@ def _display_saturation_plots(
 ) -> None:
     """Display SFA/MUFA/PUFA saturation analysis."""
     _clear_pdf_plots('sat_')
+    _clear_statistics('Saturation profile')
     with st.expander("Class Level Breakdown - Saturation Plots", expanded=False):
         st.markdown(
             "Analyze the distribution of saturated (SFA), monounsaturated (MUFA), "
@@ -139,6 +142,7 @@ def _render_saturation_results(
                 f"analysis_csv_sat_{ptype}_{lipid_class}",
             )
 
+    _publish_statistics('Saturation profile', stat_summary)
     _display_detailed_statistics(stat_summary, 'sat')
 
 

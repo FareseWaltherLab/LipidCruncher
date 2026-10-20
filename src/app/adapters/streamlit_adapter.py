@@ -25,6 +25,7 @@ from ..models.normalization import NormalizationConfig
 from ..models.sample_frame import SampleFrame
 from ..models.statistics import StatisticalTestConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
+from ..services.lsi_report import AnalysisStatistics
 from ..services.data_cleaning import GradeFilterConfig, QualityFilterConfig
 from ..services.plotting.box_plot import BoxPlotService
 from ..services.plotting.bqc_plotter import BQCPlotterService
@@ -85,7 +86,8 @@ class SessionState:
                              _preserved_pca_samples_remove, _preserved_pca_groups_remove
       analysis/            → analysis_selection, analysis_volcano_data,
                              analysis_pathway_*, analysis_all_plots (figures
-                             for the PDF, written only by _publish)
+                             for the PDF, written only by _publish),
+                             analysis_statistics (tests run, for the LSI report)
       main_app.py          → page, module
     """
     # --- App-level routing (owner: main_app.py) ---
@@ -220,6 +222,9 @@ class SessionState:
     analysis_pathway_position_overrides: Dict[str, Tuple[float, float]] = field(default_factory=dict)
     analysis_volcano_data: Optional[VolcanoData] = None
     analysis_all_plots: Dict[str, Union[go.Figure, matplotlib.figure.Figure]] = field(default_factory=dict)
+    # The tests each analysis ran, for the LSI report (same lifetime as the
+    # figures above: cleared when the page re-renders, set when it tests).
+    analysis_statistics: Dict[str, AnalysisStatistics] = field(default_factory=dict)
 
     # --- LSI Compliance Report (owner: lsi_report.py) ---
     lsi_manual_fields: Dict[str, str] = field(default_factory=dict)
@@ -387,7 +392,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'analysis_pathway_removed_edges', 'analysis_pathway_custom_nodes',
             'analysis_pathway_position_overrides', 
             'analysis_volcano_data', 
-            'analysis_all_plots',
+            'analysis_all_plots', 'analysis_statistics',
         }),
         widgets=frozenset({
             'analysis_radio', 'generate_pdf_report', 'download_pdf_report',

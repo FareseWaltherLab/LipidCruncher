@@ -2049,7 +2049,7 @@ class TestLSIReportEndToEnd:
             format_type="LipidSearch",
             experiment=lipidsearch_experiment,
             normalization_config=NormalizationConfig(method='none'),
-            stat_config=None,
+            statistics=None,
             cleaned_df=lipidsearch_normalized_df,
             intsta_df=None,
             bqc_label="BQC",
@@ -2074,13 +2074,22 @@ class TestLSIReportEndToEnd:
         self, generic_normalized_df, generic_experiment,
     ):
         """Auto-fields from real Generic data are complete."""
-        from app.services.lsi_report import LSIReportService
+        from app.services.lsi_report import AnalysisStatistics, LSIReportService
+        from app.services.statistical_testing import StatisticalTestingService
 
+        classes = sorted(generic_normalized_df['ClassKey'].unique())
+        summary = StatisticalTestingService.run_class_level_tests(
+            generic_normalized_df, generic_experiment,
+            generic_experiment.conditions_list, classes,
+            StatisticalTestConfig.create_auto(),
+        )
         fields = LSIReportService.collect_auto_fields(
             format_type="Generic Format",
             experiment=generic_experiment,
             normalization_config=None,
-            stat_config=StatisticalTestConfig.create_auto(),
+            statistics={"Abundance bar chart": AnalysisStatistics(
+                summary=summary, significance="adjusted p ≤ 0.05",
+            )},
             cleaned_df=generic_normalized_df,
             intsta_df=None,
             bqc_label=None,
@@ -2090,7 +2099,8 @@ class TestLSIReportEndToEnd:
 
         assert fields["Number of conditions"] == 3
         assert fields["BQC samples"] == "Not used"
-        assert fields["Statistical test mode"] == "Auto"
+        assert fields["Statistics (Abundance bar chart): number of tests"] == len(classes)
+        assert fields["Statistics (Abundance bar chart): tests"]
         assert fields["Number of lipid species (after filtering)"] > 0
 
     def test_collect_auto_fields_msdial(
@@ -2103,7 +2113,7 @@ class TestLSIReportEndToEnd:
             format_type="MS-DIAL",
             experiment=msdial_experiment,
             normalization_config=None,
-            stat_config=None,
+            statistics=None,
             cleaned_df=msdial_normalized_df,
             intsta_df=None,
             bqc_label=None,
@@ -2125,7 +2135,7 @@ class TestLSIReportEndToEnd:
             format_type="LipidSearch",
             experiment=lipidsearch_experiment,
             normalization_config=NormalizationConfig(method='none'),
-            stat_config=StatisticalTestConfig.create_manual(),
+            statistics=None,
             cleaned_df=lipidsearch_normalized_df,
             intsta_df=None,
             bqc_label="BQC",
@@ -2151,7 +2161,7 @@ class TestLSIReportEndToEnd:
             format_type="Generic Format",
             experiment=generic_experiment,
             normalization_config=None,
-            stat_config=None,
+            statistics=None,
             cleaned_df=generic_normalized_df,
             intsta_df=None,
             bqc_label=None,
@@ -2176,7 +2186,7 @@ class TestLSIReportEndToEnd:
             format_type="MS-DIAL",
             experiment=msdial_experiment,
             normalization_config=None,
-            stat_config=None,
+            statistics=None,
             cleaned_df=msdial_normalized_df,
             intsta_df=None,
             bqc_label=None,

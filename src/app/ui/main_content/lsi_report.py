@@ -18,7 +18,6 @@ from app.constants import (
 )
 from app.models.experiment import ExperimentConfig
 from app.models.normalization import NormalizationConfig
-from app.models.statistics import StatisticalTestConfig
 from app.services.lsi_report import LSIReportService
 from app.ui.sample_labels import labeler
 
@@ -115,10 +114,8 @@ def _collect_auto_fields(
         norm_result.config if norm_result is not None else None
     )
 
-    # Statistical test config — check if any analysis stored one
-    stat_config: Optional[StatisticalTestConfig] = st.session_state.get(
-        "analysis_stat_config"
-    )
+    # The tests each analysis page ran
+    statistics = st.session_state.get("analysis_statistics")
 
     # Internal standards
     intsta_df = st.session_state.get("intsta_df")
@@ -133,7 +130,7 @@ def _collect_auto_fields(
         format_type=format_type,
         experiment=experiment,
         normalization_config=norm_config,
-        stat_config=stat_config,
+        statistics=statistics,
         cleaned_df=df,
         intsta_df=intsta_df,
         bqc_label=bqc_label,

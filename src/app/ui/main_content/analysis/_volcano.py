@@ -16,8 +16,10 @@ from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
     _clear_pdf_plots,
+    _clear_statistics,
     _display_detailed_statistics,
     _publish,
+    _publish_statistics,
 )
 from app.ui.sample_labels import names_for
 from typing import TYPE_CHECKING
@@ -31,6 +33,7 @@ def _display_volcano_plot(
 ) -> None:
     """Display volcano plot analysis."""
     _clear_pdf_plots('volcano', 'conc_vs_fc', 'lipid_distribution')
+    _clear_statistics('Volcano plot')
     with st.expander("Species Level Breakdown - Volcano Plot", expanded=False):
         st.markdown(
             "Identify differentially abundant lipid species between two conditions."
@@ -250,6 +253,11 @@ def _render_volcano_results(
         )
 
     # Show detailed results
+    _publish_statistics(
+        'Volcano plot', result.stat_summary,
+        f"{'adjusted ' if use_adjusted else ''}p ≤ {p_threshold:g} and fold change "
+        f"> {fc_threshold:g}× up or down ({experimental} vs {control})",
+    )
     _display_detailed_statistics(result.stat_summary, 'volcano')
 
     # Concentration vs Fold Change (stored only if rendered; see _clear_pdf_plots)

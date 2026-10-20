@@ -228,3 +228,52 @@ class TestManualFields:
         _back_and_next(at)
         assert at.text_input(key=f'lsi_manual_{ORGANISM}').value == ''
         assert _report(captured_downloads)[ORGANISM] == '[TO BE FILLED BY RESEARCHER]'
+
+
+def _show_analysis(at, word):
+    radio = at.radio(key='analysis_radio')
+    radio.set_value([o for o in radio.options if word in o][0]).run()
+    assert not at.exception, at.exception
+
+
+def _statistics(report, analysis):
+    prefix = f'Statistics ({analysis}): '
+    return {k[len(prefix):]: v for k, v in report.items() if k.startswith(prefix)}
+
+
+class TestStatisticsReported:
+    """Regression: the report never listed statistical settings (it read an
+    analysis_stat_config key nothing wrote). Each analysis page that tests
+    now reports the tests it ran."""
+
+    def test_bar_chart_defaults(self, captured_downloads):
+        _run_to_analysis('None (pre-normalized data)')
+        stats = _statistics(_report(captured_downloads), 'Abundance bar chart')
+        # Generic sample: 3 conditions, Auto mode, 15 classes.
+        assert stats == {
+            'tests': 'Alexander-Govern',
+            'number of tests': '15',
+            'multiple testing correction': 'Benjamini-Hochberg FDR',
+            'post-hoc': "Tukey's HSD",
+            'data transformation': 'log10',
+            'significance': 'adjusted p ≤ 0.05',
+        }
+
+    def test_volcano_thresholds(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)')
+        _show_analysis(at, 'Volcano')
+        at.number_input(key='volcano_p_threshold').set_value(0.01).run()
+        stats = _statistics(_report(captured_downloads), 'Volcano plot')
+        assert stats['tests'] == "Welch's t-test"
+        assert stats['multiple testing correction'] == 'None'
+        assert stats['significance'] == (
+            'p ≤ 0.01 and fold change > 1.5× up or down (ADGAT-DKO vs WT)'
+        )
+        # Pages keep each other's entries, like their PDF figures.
+        assert _statistics(_report(captured_downloads), 'Abundance bar chart')
+
+    def test_dropped_when_no_longer_tested(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.multiselect(key='bar_conditions').set_value(['WT']).run()
+        assert not at.exception, at.exception
+        assert _statistics(_report(captured_downloads), 'Abundance bar chart') == {}

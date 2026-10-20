@@ -942,7 +942,8 @@ class TestSessionStateFieldCompleteness:
         # - the write-only per-page figure copies (the report reads
         #   analysis_all_plots): bar chart, pie charts, saturation, chain length,
         #   FACH, pathway, volcano, heatmap (figure and cluster table)
-        assert len(analysis_fields) == 7
+        # + analysis_statistics (the tests each page ran, for the LSI report)
+        assert len(analysis_fields) == 8
 
     def test_qc_field_count_unchanged(self):
         """Test that QC fields count hasn't changed (no regression)."""
