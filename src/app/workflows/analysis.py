@@ -785,6 +785,7 @@ class AnalysisWorkflow:
         # Run per-lipid statistical tests
         stat_summary = StatisticalTestingService.run_species_level_tests(
             filtered_df, control_samples, exp_samples, stat_config,
+            dataset_df=df,
         )
 
         # Build volcano data

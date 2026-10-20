@@ -984,6 +984,29 @@ class TestComputePathwayDataSaturationSource:
 class TestRunVolcano:
     """Tests for AnalysisWorkflow.run_volcano."""
 
+    def test_zero_floor_is_the_datasets_not_the_selected_classes(
+        self, exp_2x3, manual_stat_config,
+    ):
+        """Regression (M1): zeros were replaced with a tenth of the smallest
+        value among the *selected* classes, so a lipid's p-value changed when
+        an unrelated class was toggled. Like the class-level tests and S1,
+        the floor now comes from the whole dataset."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1', 'PC 36:2', 'SM 34:1'],
+            'ClassKey': ['PC', 'PC', 'SM'],
+            # PC 34:1 has a zero; SM holds the dataset's smallest value.
+            **{f'concentration[s{i}]': [v, 1000.0 + i, 0.5 + i]
+               for i, v in enumerate([0.0, 900.0, 950.0, 400.0, 420.0, 380.0], 1)},
+        })
+
+        def p_value(classes):
+            result = AnalysisWorkflow.run_volcano(
+                df, exp_2x3, 'Control', 'Treatment', classes, manual_stat_config,
+            )
+            return result.stat_summary.results['PC 34:1'].p_value
+
+        assert p_value(['PC']) == pytest.approx(p_value(['PC', 'SM']))
+
     def test_basic(self, multi_species_df, exp_2x3, manual_stat_config):
         result = AnalysisWorkflow.run_volcano(
             multi_species_df, exp_2x3,
