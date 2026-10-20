@@ -69,7 +69,7 @@ class SessionState:
                              original_column_order, regroup_origin,
                              _preserved_grouping_radio, _preserved_regroup_selections
       confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
-      data_processing.py   → cleaned_df, intsta_df, continuation_df, ingestion_result,
+      data_processing.py   → cleaned_df, intsta_df, ingestion_result,
                              pre_filter_df, grade_config, last_quality_config,
                              msdial_use_normalized, msdial_data_type_index
       internal_standards.py → original_auto_intsta_df, custom_standards_df,
@@ -152,7 +152,6 @@ class SessionState:
     # --- Data processing (owner: data_processing.py) ---
     cleaned_df: Optional[pd.DataFrame] = None
     intsta_df: Optional[pd.DataFrame] = None
-    continuation_df: Optional[pd.DataFrame] = None
     pre_filter_df: Optional[pd.DataFrame] = None
     ingestion_result: Optional[IngestionResult] = None
     grade_config: Optional[GradeFilterConfig] = None
@@ -319,7 +318,7 @@ _STAGES: Tuple[_Stage, ...] = (
     _Stage(
         'processing',
         fields=frozenset({
-            'cleaned_df', 'intsta_df', 'continuation_df', 'pre_filter_df',
+            'cleaned_df', 'intsta_df', 'pre_filter_df',
             'ingestion_result', 'grade_config', 'last_quality_config',
             'original_auto_intsta_df', 'custom_standards_df',
             'custom_standards_mode', 'custom_standards_sample_set',
@@ -869,11 +868,11 @@ class StreamlitAdapter:
         experiment: ExperimentConfig,
         bqc_sample_index: int,
         cov_threshold: int,
-    ) -> Tuple[go.Figure, pd.DataFrame, float, pd.DataFrame]:
+    ) -> Tuple[go.Figure, pd.DataFrame, float]:
         """Cached BQC scatter plot computation.
 
         Returns:
-            Tuple of (scatter_plot, prepared_df, reliable_data_percent, high_cov_info)
+            Tuple of (scatter_plot, prepared_df, reliable_data_percent)
         """
         return BQCPlotterService.generate_and_display_cov_plot(
             df, experiment, bqc_sample_index, cov_threshold=cov_threshold,

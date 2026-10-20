@@ -427,7 +427,6 @@ def _run_normalization(
         if result.success:
             st.session_state.normalization_result = result
             st.session_state.normalized_df = result.normalized_df
-            st.session_state.continuation_df = result.normalized_df
         else:
             _clear_normalization_output()
 

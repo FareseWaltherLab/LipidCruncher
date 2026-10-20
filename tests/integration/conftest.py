@@ -89,7 +89,7 @@ def qc_bqc_assessment(df: pd.DataFrame, experiment, bqc_label: str, cov_threshol
     from app.services.plotting.bqc_plotter import BQCPlotterService
     from app.workflows.quality_check import QualityCheckWorkflow
 
-    _, prepared_df, reliable_pct, _ = BQCPlotterService.generate_and_display_cov_plot(
+    _, prepared_df, reliable_pct = BQCPlotterService.generate_and_display_cov_plot(
         df, experiment, experiment.conditions_list.index(bqc_label),
         cov_threshold=cov_threshold,
     )

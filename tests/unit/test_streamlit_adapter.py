@@ -60,7 +60,6 @@ class TestSessionStateDefaults:
         assert state.cleaned_df is None
         assert state.intsta_df is None
         assert state.normalized_df is None
-        assert state.continuation_df is None
         assert state.original_column_order is None
 
     def test_default_experiment_config_none(self):

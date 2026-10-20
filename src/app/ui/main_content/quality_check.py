@@ -240,7 +240,7 @@ def _render_bqc_scatter(
     results_header()
 
     bqc_sample_index = experiment.conditions_list.index(bqc_label)
-    scatter_plot, prepared_df, reliable_data_percent, _ = (
+    scatter_plot, prepared_df, reliable_data_percent = (
         StreamlitAdapter.run_bqc_scatter(
             df, experiment, bqc_sample_index, cov_threshold,
         )

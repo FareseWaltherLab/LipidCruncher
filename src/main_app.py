@@ -217,7 +217,6 @@ def _run_zero_filtering(result) -> None:
         )
         if filtered_df is not None:
             st.session_state.cleaned_df = filtered_df
-            st.session_state.continuation_df = filtered_df
 
 
 def _run_internal_standards(result) -> None:

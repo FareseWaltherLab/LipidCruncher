@@ -178,7 +178,6 @@ Your MS-DIAL export contains both raw and pre-normalized intensity values:
             st.session_state.standardized_df = None
             st.session_state.cleaned_df = None
             st.session_state.pre_filter_df = None
-            st.session_state.continuation_df = None
             # Clear column mapping so it gets rebuilt from fresh standardization
             # (otherwise the stale override mapping causes incorrect column lookups)
             st.session_state.column_mapping = None
@@ -414,7 +413,6 @@ def run_ingestion_pipeline(df, experiment, data_format,
         if result.is_valid:
             st.session_state.cleaned_df = result.cleaned_df
             st.session_state.intsta_df = result.internal_standards_df
-            st.session_state.continuation_df = result.cleaned_df
     except (ValueError, KeyError) as e:
         logger.error("Data processing error: %s", e)
         st.error(f"Data processing failed: {e}")
@@ -446,7 +444,6 @@ def display_final_filtered_data(cleaned_df: pd.DataFrame):
     if 'ClassKey' in cleaned_df.columns:
         cleaned_df = cleaned_df.sort_values('ClassKey').reset_index(drop=True)
         st.session_state.cleaned_df = cleaned_df
-        st.session_state.continuation_df = cleaned_df
 
     st.markdown("##### 📋 Final Filtered Data (Pre-Normalization)")
     named_dataframe(
