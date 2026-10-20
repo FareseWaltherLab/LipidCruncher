@@ -46,6 +46,16 @@ CLASS_COLORS = (
 # plots so every scatter in the app reads as one family.
 MARKER_LINE = dict(width=1, color='black')
 
+# White plot area and paper for every figure: the figures hard-code black
+# text, so a paper left to the theme turns it unreadable in dark mode.
+BASE_LAYOUT = dict(plot_bgcolor='white', paper_bgcolor='white')
+
+
+def frame_axes(fig) -> None:
+    """Draw the black frame around a figure's plot area."""
+    fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+    fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+
 
 # ── Significance markers ──────────────────────────────────────────────
 

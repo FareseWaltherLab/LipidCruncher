@@ -20,6 +20,7 @@ from plotly.subplots import make_subplots
 from app.constants import parse_lipid_name
 from app.lipid_nomenclature import parse_chain_carbon_db
 from app.models.experiment import ExperimentConfig
+from app.services.plotting._shared import BASE_LAYOUT
 
 
 # ── Constants ──────────────────────────────────────────────────────────
@@ -311,8 +312,7 @@ class FACHPlotterService:
             title=dict(text='Fatty Acid Composition Heatmaps', font=dict(color='black')),
             height=HEATMAP_HEIGHT,
             width=HEATMAP_WIDTH_PER_CONDITION * n_conditions,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
         )
 
         return fig

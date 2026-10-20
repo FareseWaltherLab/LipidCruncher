@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
 from app.services.plotting._shared import (
+    BASE_LAYOUT,
     generate_condition_color_mapping,
     get_effective_p_value,
     p_value_to_marker,
@@ -253,8 +254,7 @@ class BarChartPlotterService:
             margin=dict(r=250),
             height=max(MIN_CHART_HEIGHT, len(abundance_df) * HEIGHT_PER_CLASS),
             width=CHART_WIDTH,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
         )
 
         return fig

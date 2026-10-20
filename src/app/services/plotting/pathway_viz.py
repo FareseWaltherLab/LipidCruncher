@@ -21,6 +21,7 @@ import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
 from app.constants import HYDROXYL_PATTERN, parse_lipid_name
+from app.services.plotting._shared import BASE_LAYOUT
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -770,8 +771,7 @@ def _apply_pathway_layout(
             gridcolor='#cccccc' if show_grid else None,
             gridwidth=0.5 if show_grid else None,
         ),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
+        **BASE_LAYOUT,
         width=PATHWAY_FIG_WIDTH,
         height=PATHWAY_FIG_HEIGHT,
         margin=dict(l=10, r=10, t=60, b=10),

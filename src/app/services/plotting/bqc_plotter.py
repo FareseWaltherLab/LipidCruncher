@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from app.services.plotting._shared import MARKER_LINE
+from app.services.plotting._shared import BASE_LAYOUT, MARKER_LINE
 
 
 MARKER_SIZE = 6
@@ -224,7 +224,7 @@ class BQCPlotterService:
             yaxis_title='CoV(%)',
             xaxis=axis_style,
             yaxis=axis_style,
-            plot_bgcolor='white', paper_bgcolor='white',
+            **BASE_LAYOUT,
             showlegend=False,
             margin=dict(t=50, r=50, b=50, l=50),
             font=dict(color='black'),

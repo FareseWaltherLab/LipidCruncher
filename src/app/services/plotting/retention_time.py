@@ -13,7 +13,12 @@ from typing import List, Tuple
 import pandas as pd
 import plotly.graph_objects as go
 
-from app.services.plotting._shared import CLASS_COLORS, MARKER_LINE
+from app.services.plotting._shared import (
+    BASE_LAYOUT,
+    CLASS_COLORS,
+    MARKER_LINE,
+    frame_axes,
+)
 
 
 MARKER_SIZE = 7
@@ -128,12 +133,11 @@ def _render_single_plot(retention_df: pd.DataFrame, lipid_class: str) -> go.Figu
         yaxis_title=dict(text='Retention Time (mins)', font=dict(size=18, color='black')),
         xaxis=dict(tickfont=dict(size=14, color='black')),
         yaxis=dict(tickfont=dict(size=14, color='black')),
-        plot_bgcolor='white', paper_bgcolor='white',
+        **BASE_LAYOUT,
         margin=dict(t=50, r=50, b=50, l=50),
     )
 
-    fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-    fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+    frame_axes(fig)
 
     return fig
 
@@ -170,13 +174,12 @@ def _render_multi_plot(retention_df: pd.DataFrame) -> go.Figure:
         yaxis_title=dict(text='Retention Time (mins)', font=dict(size=18, color='black')),
         xaxis=dict(tickfont=dict(size=14, color='black')),
         yaxis=dict(tickfont=dict(size=14, color='black')),
-        plot_bgcolor='white', paper_bgcolor='white',
+        **BASE_LAYOUT,
         legend=dict(font=dict(size=12, color='black')),
         margin=dict(t=50, r=50, b=50, l=50),
     )
 
-    fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-    fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+    frame_axes(fig)
 
     return fig
 

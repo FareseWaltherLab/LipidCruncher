@@ -18,7 +18,12 @@ import plotly.graph_objects as go
 
 from app.constants import HYDROXYL_PATTERN, SINGLE_CHAIN_CLASSES, parse_lipid_name
 from app.models.experiment import ExperimentConfig
-from app.services.plotting._shared import get_effective_p_value, p_value_to_marker
+from app.services.plotting._shared import (
+    BASE_LAYOUT,
+    frame_axes,
+    get_effective_p_value,
+    p_value_to_marker,
+)
 from app.services.statistical_testing import StatisticalTestSummary
 
 
@@ -326,8 +331,7 @@ class SaturationPlotterService:
                 tickfont=dict(size=14, color='black'),
                 range=[0, y_max * Y_PADDING_FACTOR],
             ),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
             legend=dict(font=dict(size=12, color='black')),
             barmode='group',
             bargap=0.15,
@@ -337,8 +341,7 @@ class SaturationPlotterService:
             margin=dict(t=50, r=150, b=50, l=50),
         )
 
-        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        frame_axes(fig)
 
         if show_significance and stat_results is not None:
             _add_significance_annotations(fig, plot_df, stat_results, lipid_class)
@@ -390,8 +393,7 @@ class SaturationPlotterService:
             yaxis_title=dict(text="Percentage", font=dict(size=18, color='black')),
             xaxis=dict(tickfont=dict(size=14, color='black')),
             yaxis=dict(tickfont=dict(size=14, color='black'), range=[0, 100]),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
             legend=dict(font=dict(size=12, color='black')),
             barmode='stack',
             height=CHART_HEIGHT,
@@ -399,8 +401,7 @@ class SaturationPlotterService:
             margin=dict(t=50, r=50, b=50, l=50),
         )
 
-        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        frame_axes(fig)
 
         return fig
 

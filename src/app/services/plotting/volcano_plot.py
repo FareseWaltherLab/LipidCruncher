@@ -19,7 +19,9 @@ import seaborn as sns
 
 from app.models.experiment import ExperimentConfig
 from app.services.plotting._shared import (
+    BASE_LAYOUT,
     MARKER_LINE,
+    frame_axes,
     generate_class_color_mapping,
 )
 from app.services.statistical_testing import (
@@ -294,14 +296,12 @@ class VolcanoPlotterService:
                 tickfont=dict(size=12, color='black'),
                 showgrid=True, gridcolor='lightgray',
             ),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
             legend=dict(font=dict(size=LEGEND_FONT_SIZE, color='black')),
             height=CHART_HEIGHT,
             margin=dict(t=80, r=50, b=50, l=50),
         )
-        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        frame_axes(fig)
 
         return fig
 
@@ -380,14 +380,12 @@ class VolcanoPlotterService:
                 tickfont=dict(size=12, color='black'),
                 showgrid=True, gridcolor='lightgray',
             ),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
             legend=dict(font=dict(size=LEGEND_FONT_SIZE, color='black')),
             height=CHART_HEIGHT,
             margin=dict(t=50, r=50, b=50, l=50),
         )
-        fig.update_xaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
-        fig.update_yaxes(showline=True, linewidth=2, linecolor='black', mirror=True)
+        frame_axes(fig)
 
         summary_cols = ['LipidMolec', 'Log10MeanControl', 'FoldChange', 'ClassKey']
         summary_df = display_df[

@@ -20,6 +20,7 @@ from plotly.subplots import make_subplots
 from app.lipid_nomenclature import parse_chain_carbon_db, parse_lipid_name
 from app.models.experiment import ExperimentConfig
 from app.services.plotting._shared import (
+    BASE_LAYOUT,
     generate_class_color_mapping,
     validate_dataframe,
 )
@@ -319,8 +320,10 @@ class ChainLengthPlotterService:
         fig.update_layout(
             height=total_height,
             width=CHART_WIDTH,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            **BASE_LAYOUT,
+            # Black, as on the other white-paper plots (a theme colour would
+            # be white on white under a dark theme).
+            font=dict(color='black'),
             legend=dict(
                 title='Lipid Class',
                 orientation='h',

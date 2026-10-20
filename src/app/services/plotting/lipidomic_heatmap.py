@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.models.experiment import ExperimentConfig
-from app.services.plotting._shared import generate_condition_color_mapping
+from app.services.plotting._shared import BASE_LAYOUT, generate_condition_color_mapping
 from app.services.statistical_testing import (
     MIN_POSITIVE_FALLBACK,
     ZERO_REPLACEMENT_DIVISOR,
@@ -1170,8 +1170,7 @@ def _apply_square_layout(
         margin=dict(l=left, r=MARGIN_RIGHT, t=top, b=bottom),
         width=left + MARGIN_RIGHT + n_cols * cell,
         height=top + bottom + n_rows * cell,
-        plot_bgcolor='white',
-        paper_bgcolor='white',
+        **BASE_LAYOUT,
         showlegend=False,
     )
     sample_axis, _ = _sample_axis_layout(x_labels, bottom=bottom)
