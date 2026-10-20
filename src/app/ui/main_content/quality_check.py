@@ -368,6 +368,8 @@ def _render_bqc_filtering(
 
 def _display_retention_time_plots(df: pd.DataFrame, config: QualityCheckConfig) -> None:
     """Display retention time plots (LipidSearch/MS-DIAL only)."""
+    # The report gets only a plot drawn in this run (none after an early return).
+    st.session_state.qc_retention_time_plot = None
     rt_result = QualityCheckWorkflow.check_retention_time_availability(df, config)
     if not rt_result.available:
         return

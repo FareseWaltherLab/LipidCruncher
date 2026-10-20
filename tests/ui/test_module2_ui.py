@@ -184,6 +184,24 @@ class TestRetentionTime:
         # Should have PC and PE as options (from our test data)
         assert len(class_select.value) > 0
 
+    def test_no_classes_drops_report_figure(self, qc_lipidsearch_app):
+        """Regression: with every class deselected the section stopped but
+        kept its last plot, which the PDF report then included."""
+        at = qc_lipidsearch_app
+        assert at.session_state['qc_retention_time_plot'] is not None
+        at.multiselect(key='rt_class_selection').set_value([]).run()
+        assert not at.exception
+        assert 'Please select at least one lipid class.' in [w.value for w in at.warning]
+        assert at.session_state['qc_retention_time_plot'] is None
+
+    def test_individual_mode_stores_its_first_plot(self, qc_lipidsearch_app):
+        at = qc_lipidsearch_app
+        comparison = at.session_state['qc_retention_time_plot']
+        at.radio(key='rt_viewing_mode').set_value('Individual Mode').run()
+        assert not at.exception
+        individual = at.session_state['qc_retention_time_plot']
+        assert individual is not None and individual is not comparison
+
 
 # =============================================================================
 # Group 5: Correlation (3 tests)
