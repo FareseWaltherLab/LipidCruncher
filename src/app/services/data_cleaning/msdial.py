@@ -25,7 +25,7 @@ class MSDIALCleaner(BaseDataCleaner):
     def clean(
         df: pd.DataFrame,
         experiment: ExperimentConfig,
-        quality_config: Optional[QualityFilterConfig] = None
+        config: Optional[QualityFilterConfig] = None
     ) -> Tuple[pd.DataFrame, List[str]]:
         """
         Clean MS-DIAL format data.
@@ -33,7 +33,7 @@ class MSDIALCleaner(BaseDataCleaner):
         Args:
             df: MS-DIAL DataFrame (already column-standardized).
             experiment: Experiment configuration.
-            quality_config: Optional quality filtering configuration.
+            config: Optional quality filtering configuration.
 
         Returns:
             Tuple of (cleaned_df, messages_list).
@@ -52,7 +52,7 @@ class MSDIALCleaner(BaseDataCleaner):
         initial_count = len(df)
 
         # Step 1: Apply quality filtering
-        df, filter_msgs = MSDIALCleaner._step_apply_quality_filter(df, quality_config)
+        df, filter_msgs = MSDIALCleaner._step_apply_quality_filter(df, config)
         messages.extend(filter_msgs)
 
         # Step 2: Extract relevant columns

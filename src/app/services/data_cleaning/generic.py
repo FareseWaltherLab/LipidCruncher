@@ -28,7 +28,8 @@ class GenericCleaner(BaseDataCleaner):
     @staticmethod
     def clean(
         df: pd.DataFrame,
-        experiment: ExperimentConfig
+        experiment: ExperimentConfig,
+        config: None = None,
     ) -> Tuple[pd.DataFrame, List[str]]:
         """
         Clean Generic format data.
@@ -36,6 +37,7 @@ class GenericCleaner(BaseDataCleaner):
         Args:
             df: Generic DataFrame (already column-standardized).
             experiment: Experiment configuration.
+            config: Unused; Generic data has no filter configuration.
 
         Returns:
             Tuple of (cleaned_df, messages_list).

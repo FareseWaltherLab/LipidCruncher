@@ -40,7 +40,7 @@ class LipidSearchCleaner(BaseDataCleaner):
     def clean(
         df: pd.DataFrame,
         experiment: ExperimentConfig,
-        grade_config: Optional[GradeFilterConfig] = None
+        config: Optional[GradeFilterConfig] = None
     ) -> Tuple[pd.DataFrame, List[str]]:
         """
         Clean LipidSearch format data.
@@ -48,7 +48,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         Args:
             df: Raw LipidSearch DataFrame.
             experiment: Experiment configuration.
-            grade_config: Optional grade filtering configuration.
+            config: Optional grade filtering configuration.
 
         Returns:
             Tuple of (cleaned_df, messages_list).
@@ -74,7 +74,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         df = LipidSearchCleaner.convert_columns_to_numeric(df, experiment.full_samples_list)
 
         # Step 3: Apply grade filtering
-        grade_dict = grade_config.grade_config if grade_config else None
+        grade_dict = config.grade_config if config else None
         df, msg = LipidSearchCleaner._step_apply_grade_filter(df, grade_dict)
         if msg:
             messages.append(msg)

@@ -663,6 +663,25 @@ class TestBaseDataCleanerInternalStandards:
 # LipidSearchCleaner Tests
 # =============================================================================
 
+class TestCleanerContract:
+    """R5: every cleaner takes clean(df, experiment, config=None), so the
+    dispatch passes one optional config instead of per-format keywords."""
+
+    @pytest.mark.parametrize('cleaner, df_fixture', [
+        (LipidSearchCleaner, 'lipidsearch_df'),
+        (MSDIALCleaner, 'msdial_df'),
+        (GenericCleaner, 'generic_df'),
+    ])
+    def test_config_none_is_accepted(self, cleaner, df_fixture, request, simple_experiment_2x2):
+        df = request.getfixturevalue(df_fixture)
+        cleaned, _ = cleaner.clean(df, simple_experiment_2x2, config=None)
+        assert not cleaned.empty
+
+    def test_registry_holds_cleaner_classes(self):
+        from app.services.data_cleaning import _CLEANER_REGISTRY
+        assert all(issubclass(c, BaseDataCleaner) for c in _CLEANER_REGISTRY.values())
+
+
 class TestLipidSearchCleanerBasic:
     """Basic tests for LipidSearchCleaner."""
 
