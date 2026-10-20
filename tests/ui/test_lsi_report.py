@@ -127,3 +127,29 @@ class TestBqcSettingsReported:
         report = _report(captured_downloads)
         assert report['BQC samples'] == 'Not used'
         assert [item for item in BQC_ITEMS if item in report] == []
+
+
+class TestLipidCoverageReported:
+    """Regression: the species and class counts came from Module 1's
+    cleaned data, so lipids the analysis never saw (classes deselected for
+    normalization, lipids the BQC CoV filter removed) were still counted."""
+
+    def test_deselected_class_not_counted(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)', drop_classes={'PG'})
+        report = _report(captured_downloads)
+        analyzed = at.session_state['qc_continuation_df']
+        assert 'PG' not in report['Lipid classes detected'].split(', ')
+        assert report['Number of lipid classes'] == str(analyzed['ClassKey'].nunique())
+        assert report['Number of lipid species (after filtering)'] == str(len(analyzed))
+
+    def test_cov_filter_counted(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)')
+        # Every sample lipid is under the default 30%.
+        at.number_input(key='bqc_cov_threshold').set_value(10).run()
+        at.radio(key='bqc_filter_choice').set_value('Yes').run()
+        assert not at.exception, at.exception
+        analyzed = at.session_state['qc_continuation_df']
+        assert len(analyzed) < len(at.session_state['normalized_df'])
+        assert _report(captured_downloads)[
+            'Number of lipid species (after filtering)'
+        ] == str(len(analyzed))

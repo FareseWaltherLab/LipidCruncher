@@ -24,6 +24,7 @@ from app.ui.sample_labels import labeler
 
 
 def display_lsi_report_section(
+    df: pd.DataFrame,
     experiment: ExperimentConfig,
     format_type: str,
     bqc_label: Optional[str],
@@ -34,6 +35,7 @@ def display_lsi_report_section(
     from session state and lets the user optionally fill in manual fields.
 
     Args:
+        df: The data the analysis module ran on.
         experiment: Experiment configuration.
         format_type: Data format string.
         bqc_label: BQC condition label, or None.
@@ -49,7 +51,7 @@ def display_lsi_report_section(
         )
 
         # ── Collect auto-filled fields ──
-        auto_fields = _collect_auto_fields(experiment, format_type, bqc_label)
+        auto_fields = _collect_auto_fields(df, experiment, format_type, bqc_label)
 
         # ── Preview auto-filled fields ──
         with st.expander("Preview auto-filled fields", expanded=False):
@@ -96,6 +98,7 @@ def display_lsi_report_section(
 
 
 def _collect_auto_fields(
+    df: pd.DataFrame,
     experiment: ExperimentConfig,
     format_type: str,
     bqc_label: Optional[str],
@@ -112,9 +115,6 @@ def _collect_auto_fields(
         "analysis_stat_config"
     )
 
-    # Cleaned DataFrame
-    cleaned_df = st.session_state.get("cleaned_df", pd.DataFrame())
-
     # Internal standards
     intsta_df = st.session_state.get("intsta_df")
 
@@ -129,7 +129,7 @@ def _collect_auto_fields(
         experiment=experiment,
         normalization_config=norm_config,
         stat_config=stat_config,
-        cleaned_df=cleaned_df,
+        cleaned_df=df,
         intsta_df=intsta_df,
         bqc_label=bqc_label,
         cleaning_params=cleaning_params,

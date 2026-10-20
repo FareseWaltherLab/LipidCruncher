@@ -110,7 +110,7 @@ def display_analysis_module(
     _display_pdf_report_section(experiment, format_type)
 
     # LSI Compliance Report
-    display_lsi_report_section(experiment, format_type, bqc_label)
+    display_lsi_report_section(df, experiment, format_type, bqc_label)
 
 
 # ═══════════════════════════════════════════════════════════════════════
