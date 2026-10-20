@@ -320,6 +320,7 @@ class ChainLengthPlotterService:
             height=total_height,
             width=CHART_WIDTH,
             plot_bgcolor='white',
+            paper_bgcolor='white',
             legend=dict(
                 title='Lipid Class',
                 orientation='h',

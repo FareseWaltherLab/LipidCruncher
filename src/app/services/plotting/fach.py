@@ -258,8 +258,7 @@ class FACHPlotterService:
                 zmin=0,
                 zmax=vmax,
                 colorbar=dict(
-                    title='Proportion (%)',
-                    titlefont=dict(color='black', size=15),
+                    title=dict(text='Proportion (%)', font=dict(color='black', size=15)),
                     tickfont=dict(color='black', size=13),
                 ),
                 hovertemplate=(
@@ -283,8 +282,7 @@ class FACHPlotterService:
                 tickvals=db_values,
                 ticktext=db_values,
                 tickangle=0,
-                title_text='Double Bonds',
-                titlefont=dict(color='black', size=15),
+                title=dict(text='Double Bonds', font=dict(color='black', size=15)),
                 tickfont=dict(color='black', size=13),
                 range=[-0.5, max_db + 1.5],
                 row=1,
@@ -297,8 +295,9 @@ class FACHPlotterService:
                 range=[min_carbon - 0.5, max_carbon + 2.5],
             )
             if col_idx == 1:
-                y_kwargs['title_text'] = 'Carbon Chain Length'
-                y_kwargs['titlefont'] = dict(color='black', size=15)
+                y_kwargs['title'] = dict(
+                    text='Carbon Chain Length', font=dict(color='black', size=15),
+                )
             fig.update_yaxes(row=1, col=col_idx, **y_kwargs)
 
             col_idx += 1
@@ -309,8 +308,7 @@ class FACHPlotterService:
                 annotation.font = dict(color='black', size=15)
 
         fig.update_layout(
-            title='Fatty Acid Composition Heatmaps',
-            titlefont=dict(color='black'),
+            title=dict(text='Fatty Acid Composition Heatmaps', font=dict(color='black')),
             height=HEATMAP_HEIGHT,
             width=HEATMAP_WIDTH_PER_CONDITION * n_conditions,
             plot_bgcolor='white',

@@ -215,6 +215,7 @@ class BoxPlotService:
             height=total_height + 80,
             width=900,
             plot_bgcolor='white',
+            paper_bgcolor='white',
         )
 
         fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
@@ -318,5 +319,6 @@ class BoxPlotService:
             ),
             height=700 + label_room, width=900,
             plot_bgcolor='white',
+            paper_bgcolor='white',
         )
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
