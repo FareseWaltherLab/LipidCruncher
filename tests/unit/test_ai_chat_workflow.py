@@ -107,6 +107,27 @@ class TestTransformTurn:
         assert len(result.session.messages) == 2  # user + assistant
 
     @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_success_message_reports_the_change_against_the_upload(
+        self, mock_send, source_df, transform_session,
+    ):
+        mock_send.side_effect = canned_stream(
+            "Keeping lipids above 150 in s1.\n\n"
+            "```python\n"
+            "kept = df[df['area_s1'] > 150].reset_index(drop=True)\n"
+            "result_df = kept[['lipid_name', 'area_s1', 'area_s2']]\n"
+            "```"
+        )
+        result = finish(AIChatWorkflow.stream_transform_message(
+            "Keep lipids above 150", transform_session, source_df,
+        ))
+        assert result.transformation.report.lipids_removed == ("PC(34:1)",)
+        assert (
+            "**Compared with your upload:** 2 of 3 lipids kept, 1 removed; "
+            "2 sample columns; 1 columns dropped (`lipid_class`); "
+            "0 values changed."
+        ) in result.assistant_message
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
     def test_ai_asks_question(self, mock_send, source_df, transform_session):
         mock_send.side_effect = canned_stream(MOCK_QUESTION_RESPONSE)
 

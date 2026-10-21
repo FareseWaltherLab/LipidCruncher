@@ -94,6 +94,18 @@ def render_transform_chat(source_df) -> None:
                 f"{len(transform_result_df)} rows, "
                 f"{len(transform_result_df.columns)} columns"
             )
+            report = st.session_state.get('chat_transform_report')
+            if report is not None:
+                st.markdown(f"**Compared with your upload:** {report.summary()}.")
+                if report.lipids_removed:
+                    st.download_button(
+                        label=f"Download the {len(report.lipids_removed):,} "
+                              f"removed lipid names",
+                        data="\n".join(report.lipids_removed).encode("utf-8"),
+                        file_name="removed_lipids.txt",
+                        mime="text/plain",
+                        key="chat_download_removed_lipids",
+                    )
 
             csv_data = transform_result_df.to_csv(index=False).encode("utf-8")
             st.download_button(
@@ -141,8 +153,10 @@ def render_transform_chat(source_df) -> None:
             # clears it.
             if t and t.success and not t.is_info_only:
                 st.session_state.chat_transform_result = t.result_df
+                st.session_state.chat_transform_report = t.report
             elif t and not t.success:
                 st.session_state.chat_transform_result = None
+                st.session_state.chat_transform_report = None
             return {"code": (t.code if t else None) or None,
                     "produced_table": bool(
                         t and t.success and not t.is_info_only)}

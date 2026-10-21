@@ -347,6 +347,7 @@ class AIChatWorkflow:
                 code=code,
                 sandbox_result=transformation.sandbox_result,
                 validation_errors=transformation.validation_errors,
+                report=transformation.report,
             )
 
             # Build assistant response text
@@ -368,6 +369,8 @@ class AIChatWorkflow:
                     f"{explanation}\n\n"
                     f"The transformation was successful! "
                     f"**Result:** {summary}. "
+                    f"**Compared with your upload:** "
+                    f"{transformation.report.summary()}. "
                     f"You can download the transformed file below."
                 )
             else:

@@ -8,6 +8,7 @@ All methods are stateless static methods — no Streamlit imports.
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 from ...models.chat import AIConfig, SandboxConfig
@@ -18,6 +19,71 @@ from .codebase_tools import TOOL_DEFINITIONS, execute_tool
 from .prompt_templates import build_transform_context, data_transform_system_prompt
 from .sandbox import SandboxResult, SandboxService
 from .schema_extractor import SchemaExtractorService
+
+
+@dataclass(frozen=True)
+class TransformReport:
+    """What an accepted transform did to the upload, computed by the app.
+
+    Lipids are matched by name and columns by name, as in
+    ``check_values_stay_with_their_lipid``; a renamed lipid counts as
+    removed and as not in the upload. Value counts cover lipid x column
+    cells present on both sides (``cells_compared``).
+    """
+    rows_uploaded: int
+    rows_result: int
+    lipids_removed: Tuple[str, ...]
+    lipids_not_in_upload: Tuple[str, ...]
+    sample_columns: Tuple[str, ...]
+    columns_dropped: Tuple[str, ...]
+    cells_compared: int
+    values_changed: int
+    values_appeared: int
+    values_missing: int
+    duplicate_names: Tuple[str, ...]
+
+    def summary(self) -> str:
+        """One line for the assistant message."""
+        kept = self.rows_uploaded - len(self.lipids_removed)
+        if kept:
+            parts = [
+                f"{kept:,} of {self.rows_uploaded:,} lipids kept, "
+                f"{len(self.lipids_removed):,} removed",
+            ]
+            if self.lipids_not_in_upload:
+                parts.append(
+                    f"{len(self.lipids_not_in_upload):,} lipid names not in "
+                    f"the upload"
+                )
+        else:
+            parts = [
+                f"{self.rows_result:,} lipids, none named as in the upload, "
+                f"so they could not be compared with it"
+            ]
+        parts.append(f"{len(self.sample_columns)} sample columns")
+        if self.columns_dropped:
+            parts.append(
+                f"{len(self.columns_dropped)} columns dropped ("
+                + ", ".join(f"`{c}`" for c in self.columns_dropped[:5])
+                + (", ..." if len(self.columns_dropped) > 5 else "")
+                + ")"
+            )
+        if self.cells_compared:
+            parts.append(f"{self.values_changed:,} values changed")
+            if self.values_appeared:
+                parts.append(f"{self.values_appeared:,} values filled in")
+            if self.values_missing:
+                parts.append(f"{self.values_missing:,} values now missing")
+        elif kept:
+            parts.append(
+                "values not compared (no sample column kept under its "
+                "uploaded name)"
+            )
+        if self.duplicate_names:
+            parts.append(
+                f"{len(self.duplicate_names):,} lipid names appear more than once"
+            )
+        return "; ".join(parts)
 
 
 @dataclass(frozen=True)
@@ -40,6 +106,8 @@ class TransformationResult:
         code: The generated Python code.
         sandbox_result: Raw sandbox execution result.
         validation_errors: Schema validation errors (if any).
+        report: What an accepted transform changed relative to the
+            upload. None unless the transform was accepted.
     """
     success: bool
     result_df: Optional[pd.DataFrame] = None
@@ -48,6 +116,7 @@ class TransformationResult:
     code: str = ""
     sandbox_result: Optional[SandboxResult] = None
     validation_errors: Tuple[str, ...] = ()
+    report: Optional[TransformReport] = None
 
 
 class DataTransformerService:
@@ -184,6 +253,9 @@ class DataTransformerService:
             result_df=sandbox_result.result_df,
             code=code,
             sandbox_result=sandbox_result,
+            report=DataTransformerService.compare_to_upload(
+                sandbox_result.result_df, source_df,
+            ),
         )
 
     @staticmethod
@@ -295,11 +367,7 @@ class DataTransformerService:
             One error message when values moved, otherwise an empty list.
         """
         names = result_df.iloc[:, 0].astype(str)
-        name_col = max(
-            (c for c in source_df.columns if source_df[c].dtype == object),
-            key=lambda c: names.isin(source_df[c].astype(str)).sum(),
-            default=None,
-        )
+        name_col = DataTransformerService._name_column(names, source_df)
         columns = [
             c for c in DataTransformerService._sample_columns(result_df)
             if c in source_df.columns and c != name_col
@@ -362,6 +430,74 @@ class DataTransformerService:
             "for every column."
         )
         return [message]
+
+    @staticmethod
+    def compare_to_upload(
+        result_df: pd.DataFrame, source_df: pd.DataFrame,
+    ) -> TransformReport:
+        """Report what a transform changed, so the user can check it
+        without reading the code (a filter that used ``>`` instead of
+        ``>=`` passes every check, but shows here as lipids removed)."""
+        names = result_df.iloc[:, 0].astype(str)
+        name_col = DataTransformerService._name_column(names, source_df)
+        source_names = (
+            source_df[name_col].astype(str) if name_col is not None
+            else pd.Series([], dtype=str)
+        )
+        samples = DataTransformerService._sample_columns(result_df)
+        columns = [c for c in samples if c in source_df.columns and c != name_col]
+
+        source_set, result_set = set(source_names), set(names)
+        compared = changed = appeared = missing = 0
+        both = sorted(
+            set(source_names[~source_names.duplicated(keep=False)])
+            & set(names[~names.duplicated(keep=False)])
+        )
+        if columns and both:
+            def _cells(df, name_series):
+                values = df[columns].apply(pd.to_numeric, errors='coerce')
+                values.index = name_series.values
+                return values.loc[both]
+
+            before = _cells(source_df, source_names)
+            after = _cells(result_df, names)
+            compared = before.size
+            was, now = before.notna(), after.notna()
+            differs = ~np.isclose(before, after, rtol=1e-9, atol=0)
+            changed = int((was & now & differs).sum().sum())
+            appeared = int((~was & now).sum().sum())
+            missing = int((was & ~now).sum().sum())
+
+        return TransformReport(
+            rows_uploaded=len(source_df),
+            rows_result=len(result_df),
+            lipids_removed=tuple(
+                n for n in dict.fromkeys(source_names) if n not in result_set
+            ),
+            lipids_not_in_upload=tuple(
+                n for n in dict.fromkeys(names) if n not in source_set
+            ),
+            sample_columns=tuple(str(c) for c in samples),
+            columns_dropped=tuple(
+                str(c) for c in source_df.columns
+                if c not in result_df.columns and c != name_col
+            ),
+            cells_compared=compared,
+            values_changed=changed,
+            values_appeared=appeared,
+            values_missing=missing,
+            duplicate_names=tuple(dict.fromkeys(names[names.duplicated()])),
+        )
+
+    @staticmethod
+    def _name_column(names: pd.Series, source_df: pd.DataFrame):
+        """The upload's text column that shares the most names with
+        ``names`` (the result's lipid names); None if it has none."""
+        return max(
+            (c for c in source_df.columns if source_df[c].dtype == object),
+            key=lambda c: names.isin(source_df[c].astype(str)).sum(),
+            default=None,
+        )
 
     @staticmethod
     def _sample_columns(df: pd.DataFrame) -> List:

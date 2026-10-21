@@ -13,7 +13,10 @@ from streamlit.testing.v1 import AppTest
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.models.chat import ChatMessage
 from app.services.ai_chat import usage_limits
-from app.services.ai_chat.data_transformer import TransformationResult
+from app.services.ai_chat.data_transformer import (
+    DataTransformerService,
+    TransformationResult,
+)
 from app.services.ai_chat.sandbox import SandboxResult
 from app.workflows.ai_chat import (
     DataQuestionsStepResult,
@@ -154,6 +157,32 @@ def test_successful_code_turn(tab, logged, monkeypatch):
     assert (log["figure"] is not None) is (tab == "viz")
     assert (log["experiment"] is not None) is (tab == "viz")
     assert log["code"] == CODE
+
+
+def test_transform_preview_shows_the_report(logged, monkeypatch):
+    """A2: the app's comparison with the upload sits with the preview, and
+    the removed lipids can be downloaded."""
+    upload = pd.DataFrame({"LipidMolec": ["PC 34:1", "PE 36:2"],
+                           "intensity[s1]": [1.0, 2.0]})
+    kept = upload.head(1)
+    report = DataTransformerService.compare_to_upload(kept, upload)
+
+    def _stream(*args, **kwargs):
+        result = TransformStepResult(
+            session=_answer(kwargs["session"], code=CODE),
+            assistant_message="answer",
+            transformation=TransformationResult(
+                success=True, result_df=kept, code=CODE, report=report))
+        return iter(["answer"]), lambda: result
+
+    monkeypatch.setattr(StreamlitAdapter, STREAM["transform"],
+                        staticmethod(_stream))
+    at = _turn("transform")
+    assert not at.exception
+    assert any("**Compared with your upload:** 1 of 2 lipids kept, 1 removed"
+               in m.value for m in at.markdown)
+    labels = [b.proto.label for b in at.get("download_button")]
+    assert "Download the 1 removed lipid names" in labels
 
 
 @pytest.mark.parametrize("tab", ["dq", "transform", "viz"])

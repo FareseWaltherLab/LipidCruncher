@@ -370,3 +370,79 @@ class TestMetadataKeptAsSamples:
         )
         result = DataTransformerService.execute_transformation(code, studio_df)
         assert result.success is True, result.validation_errors
+
+
+_RT_QUALITY_FILTER = (
+    f"_SAMPLES = {_SAMPLES!r}\n"
+    "kept = df[(df['RetentionTime'] > 5) & (df['QualityScore'] > 70)]\n"
+    "result_df = kept[['feature'] + _SAMPLES].reset_index(drop=True)\n"
+)
+
+
+class TestCompareToUpload:
+    """Every accepted transform carries an app-computed report, so the user
+    can see what it did (a filter that used '>' where they meant '>=' passes
+    every check, but shows up here as lipids removed)."""
+
+    def test_the_2026_10_20_filter_is_reported_exactly(self, studio_df):
+        result = DataTransformerService.execute_transformation(
+            _RT_QUALITY_FILTER, studio_df,
+        )
+        assert result.success is True, result.validation_errors
+        report = result.report
+        assert report.rows_uploaded == 1394
+        assert report.rows_result == 757
+        assert len(report.lipids_removed) == 637
+        assert report.lipids_not_in_upload == ()
+        assert report.sample_columns == tuple(_SAMPLES)
+        assert report.columns_dropped == (
+            'LipidClass', 'RetentionTime', 'PrecursorMZ', 'QualityScore', 'Notes',
+        )
+        assert (report.values_changed, report.values_appeared,
+                report.values_missing) == (0, 0, 0)
+        assert report.duplicate_names == ()
+        assert report.summary().startswith(
+            "757 of 1,394 lipids kept, 637 removed; 15 sample columns; "
+            "5 columns dropped"
+        )
+        assert "0 values changed" in report.summary()
+
+    def test_changed_filled_and_missing_values_are_counted(self):
+        source = pd.DataFrame({
+            "name": ["PC 34:1", "PE 36:2", "SM 42:1"],
+            "s1": [1.0, None, 3.0],
+            "s2": [4.0, 5.0, 6.0],
+        })
+        result = pd.DataFrame({
+            "name": ["PC 34:1", "PE 36:2", "TG 52:2", "TG 52:2"],
+            "s1": [2.0, 0.0, 1.0, 1.0],     # PC changed, PE filled in
+            "s2": [4.0, None, 1.0, 1.0],    # PE now missing
+        })
+        report = DataTransformerService.compare_to_upload(result, source)
+        assert report.lipids_removed == ("SM 42:1",)
+        assert report.lipids_not_in_upload == ("TG 52:2",)
+        assert report.duplicate_names == ("TG 52:2",)
+        assert (report.values_changed, report.values_appeared,
+                report.values_missing) == (1, 1, 1)
+
+    def test_failed_transform_has_no_report(self, studio_df):
+        result = DataTransformerService.execute_transformation(
+            _MISALIGNED_FILTER, studio_df,
+        )
+        assert result.success is False
+        assert result.report is None
+
+    def test_renamed_lipids_and_columns_are_not_reported_as_unchanged(self):
+        source = pd.DataFrame({
+            "name": ["PC(34:1)", "PE(36:2)"],
+            "area_1": [1.0, 2.0],
+        })
+        renamed = pd.DataFrame({"name": ["PC 34:1", "PE 36:2"], "S1": [9.0, 9.0]})
+        summary = DataTransformerService.compare_to_upload(renamed, source).summary()
+        assert summary.startswith("2 lipids, none named as in the upload")
+        assert "values changed" not in summary
+
+        new_columns = pd.DataFrame({"name": ["PC(34:1)"], "S1": [9.0]})
+        report = DataTransformerService.compare_to_upload(new_columns, source)
+        assert report.cells_compared == 0
+        assert "values not compared" in report.summary()

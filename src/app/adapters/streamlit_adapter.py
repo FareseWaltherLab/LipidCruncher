@@ -308,6 +308,7 @@ class SessionState:
     chat_lc_questions_session: Optional[Any] = None
     chat_mode: Optional[str] = None
     chat_transform_result: Optional[pd.DataFrame] = None
+    chat_transform_report: Optional[Any] = None
     chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
 
     # --- AI Studio (owner: ai_studio_page.py) ---
@@ -497,6 +498,7 @@ _STAGES: Tuple[_Stage, ...] = (
         fields=frozenset({
             'chat_transform_session', 'chat_viz_session',
             'chat_data_questions_session', 'chat_mode', 'chat_transform_result',
+            'chat_transform_report',
             'chat_viz_figures',
             'chat_studio_df', 'chat_studio_df_original', 'chat_studio_experiment',
             'chat_studio_pipeline_source', 'chat_studio_detected_format',
@@ -505,6 +507,7 @@ _STAGES: Tuple[_Stage, ...] = (
         }),
         widgets=frozenset({
             'chat_input', 'chat_apply_transform', 'chat_download_transform',
+            'chat_download_removed_lipids',
             'chat_input_questions', 'chat_input_transform',
             'chat_input_lc_questions', 'chat_retry_lc', 'chat_input_viz',
             'ai_studio_file_uploader', 'ai_studio_import_pipeline',
