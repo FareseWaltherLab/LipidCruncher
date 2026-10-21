@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from app.services.ai_chat.output_checks import (
+    check_direction_colors,
     check_lipid_table,
     computed_values,
     numbers_not_computed,
@@ -80,3 +81,68 @@ class TestNumbersNotComputed:
         assert numbers_not_computed(
             "PC totals 6,350 and PE 4,379.", computed_values(figure=fig),
         ) == ()
+
+
+# The model's code from 2026-10-21 for "bar chart of the 10 most significant
+# lipids ... colored by direction": colors listed, then the bars re-sorted.
+MISCOLORED_BARS = """
+top10 = lc.compare_species('WT', 'KO').head(10).copy()
+top10['Direction'] = top10['log2FC'].apply(lambda x: 'Up in KO' if x > 0 else 'Down in KO')
+color_map = {'Up in KO': '#d62728', 'Down in KO': '#1f77b4'}
+bar_colors = [color_map[d] for d in top10['Direction']]
+top10 = top10.sort_values('log2FC')
+fig = go.Figure([go.Bar(x=top10['log2FC'], y=top10['LipidMolec'], orientation='h',
+                        marker_color=bar_colors, showlegend=False)])
+for label, color in color_map.items():
+    fig.add_trace(go.Bar(x=[None], y=[None], orientation='h', marker_color=color,
+                         name=label))
+"""
+
+
+class TestDirectionColors:
+    """B3: values right, colors wrong. A chart colored by direction must
+    have each color on one side of zero."""
+
+    @pytest.fixture(scope='class')
+    def lc(self):
+        from app.models.experiment import ExperimentConfig
+        from app.workflows.pipeline_api import PipelineAPI
+        from tests.evals import reference_analysis as ref
+        return PipelineAPI(ref.load_canonical(), ExperimentConfig(
+            conditions_list=["WT", "KO"], number_of_samples_list=[3, 3]))
+
+    def _figure(self, code, lc):
+        import plotly.graph_objects as go
+        scope = {"lc": lc, "go": go}
+        exec(code, scope)
+        return scope["fig"]
+
+    def test_colors_listed_before_a_resort_are_caught(self, lc):
+        (warning,) = check_direction_colors(self._figure(MISCOLORED_BARS, lc))
+        assert "2 of 10 points" in warning
+        assert "'SM d18:1_16:0' is colored 'Up in KO'" in warning
+
+    def test_colors_listed_after_the_sort_pass(self, lc):
+        code = MISCOLORED_BARS.replace(
+            "top10 = top10.sort_values('log2FC')\n", "",
+        ).replace(
+            "top10['Direction'] = ",
+            "top10 = top10.sort_values('log2FC')\ntop10['Direction'] = ",
+        )
+        assert check_direction_colors(self._figure(code, lc)) == []
+
+    def test_one_trace_per_direction(self):
+        import plotly.graph_objects as go
+        good = go.Figure([go.Bar(name="Higher in WT", x=["a", "b"], y=[-1.0, -2.0]),
+                          go.Bar(name="Higher in KO", x=["c"], y=[1.5])])
+        assert check_direction_colors(good) == []   # which side is "up" is not assumed
+        bad = go.Figure([go.Bar(name="Increased", x=["a", "b"], y=[1.0, -2.0]),
+                         go.Bar(name="Decreased", x=["c"], y=[-1.5])])
+        (warning,) = check_direction_colors(bad)
+        assert "'b' is colored 'Increased'" in warning
+
+    def test_colors_that_are_not_directions_are_not_checked(self):
+        import plotly.graph_objects as go
+        by_class = go.Figure([go.Bar(name="PC", x=["a", "b"], y=[1.0, -2.0]),
+                              go.Bar(name="PE", x=["c"], y=[-1.5])])
+        assert check_direction_colors(by_class) == []

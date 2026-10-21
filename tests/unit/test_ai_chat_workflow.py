@@ -430,3 +430,24 @@ def test_numbers_the_code_never_produced_are_recorded(mock_loop, source_df):
     ))
     # 3 is below 10; 300 is in the table (area_s1); 30 is nowhere.
     assert result.unverified_numbers == ("30",)
+
+
+@patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+def test_miscolored_direction_chart_is_flagged_in_the_answer(mock_loop):
+    """B3: the chart is shown, with a warning the model sees next turn."""
+    from app.models.experiment import ExperimentConfig
+    from tests.evals import reference_analysis as ref
+    from tests.unit.test_ai_output_checks import MISCOLORED_BARS
+    df = ref.load_canonical()
+    experiment = ExperimentConfig(conditions_list=["WT", "KO"],
+                                  number_of_samples_list=[3, 3])
+    mock_loop.side_effect = canned_stream(
+        f"Top 10 by significance.\n\n```python\n{MISCOLORED_BARS}```"
+    )
+    session = AIChatWorkflow.start_viz_session(df, experiment)
+    result = finish(AIChatWorkflow.stream_viz_message(
+        user_message="top 10 colored by direction", session=session,
+        analysis_df=df, experiment=experiment,
+    ))
+    assert result.sandbox_result.figure is not None
+    assert "colors do not follow the direction" in result.assistant_message

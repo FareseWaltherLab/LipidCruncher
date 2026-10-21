@@ -22,6 +22,7 @@ from ..services.ai_chat.ai_client import AIClientService
 from ..services.ai_chat.codebase_tools import TOOL_DEFINITIONS, execute_tool
 from ..services.ai_chat.data_transformer import DataTransformerService, TransformationResult
 from ..services.ai_chat.output_checks import (
+    check_direction_colors,
     check_lipid_table,
     computed_values,
     numbers_not_computed,
@@ -632,6 +633,9 @@ class AIChatWorkflow:
                         f"{explanation}\n\n"
                         f"Here's the visualization you requested."
                     )
+                    # Shown to the user, and seen by the model next turn.
+                    for warning in check_direction_colors(sandbox_result.figure):
+                        assistant_text += f"\n\n{warning}"
             elif sandbox_result.success and sandbox_result.figure is None:
                 assistant_text = (
                     f"{explanation}\n\n"

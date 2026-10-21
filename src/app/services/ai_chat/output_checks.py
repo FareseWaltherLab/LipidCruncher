@@ -207,3 +207,88 @@ def numbers_not_computed(
         if not any(np.any(np.abs(computed - t) <= tol) for t, tol in targets):
             unverified.append(text)
     return tuple(dict.fromkeys(unverified))
+
+
+_UP_WORDS = ("up", "increase", "increased", "higher", "enriched", "elevated")
+_DOWN_WORDS = ("down", "decrease", "decreased", "lower", "depleted", "reduced")
+
+
+def _direction(name) -> str:
+    """'up' / 'down' if a legend name states a direction, else ''."""
+    words = set(re.findall(r"[a-z]+", str(name or "").lower()))
+    up, down = bool(words & set(_UP_WORDS)), bool(words & set(_DOWN_WORDS))
+    return "up" if up and not down else "down" if down and not up else ""
+
+
+def check_direction_colors(figure) -> List[str]:
+    """Catch a chart whose up/down coloring does not follow its values.
+
+    Generated code that builds a per-bar color list and then re-sorts the
+    data colors bars by another lipid's direction (seen 2026-10-21: a
+    "colored by direction" top-10 bar chart with a falling lipid in the
+    "Up in KO" color). When the legend names two directions, the points of
+    each must all lie on one side of zero, on opposite sides; which side is
+    "up" is not assumed. Covers one trace per direction and one trace with
+    per-point colors plus legend-only traces naming the colors.
+
+    Returns:
+        One warning when the coloring contradicts the values, else [].
+    """
+    groups = {"up": [], "down": []}   # (label, value, legend name)
+    legend = {}                       # color -> (direction, legend name)
+    colored = []                      # traces with per-point colors
+    for trace in figure.data:
+        direction = _direction(getattr(trace, "name", None))
+        color = getattr(getattr(trace, "marker", None), "color", None)
+        labels, values = _labels_and_values(trace)
+        if direction and isinstance(color, str):
+            legend[color] = (direction, trace.name)
+        if direction and values:
+            groups[direction].extend(
+                (label, v, trace.name) for label, v in zip(labels, values)
+            )
+        elif values and color is not None and not isinstance(color, str):
+            colored.append((labels, values, list(color)))
+    for labels, values, colors in colored:
+        for label, value, color in zip(labels, values, colors):
+            if color in legend:
+                direction, name = legend[color]
+                groups[direction].append((label, value, name))
+
+    signs = {d: {np.sign(v) for _, v, _ in points if v} for d, points in groups.items()}
+    if not signs["up"] or not signs["down"]:
+        return []
+    if len(signs["up"]) == 1 and len(signs["down"]) == 1 and signs["up"] != signs["down"]:
+        return []
+    # The side most "up" points are on; points of either direction on the
+    # wrong side are miscolored.
+    up_side = np.sign(sum(np.sign(v) for _, v, _ in groups["up"]) or 1)
+    wrong = [(label, v, name) for d, points in groups.items()
+             for label, v, name in points
+             if v and np.sign(v) != (up_side if d == "up" else -up_side)]
+    label, value, name = wrong[0]
+    return [
+        f"⚠️ The colors do not follow the direction of the values: "
+        f"{len(wrong)} of {sum(len(p) for p in groups.values())} points are "
+        f"colored as going the other way (e.g. '{label}' is colored "
+        f"'{name}' with value {value:.3g}). Per-point colors were "
+        f"probably computed before the data was re-sorted."
+    ]
+
+
+def _labels_and_values(trace):
+    """A bar/scatter trace's category labels and numeric values."""
+    x = list(trace.x) if getattr(trace, "x", None) is not None else []
+    y = list(trace.y) if getattr(trace, "y", None) is not None else []
+    numeric = pd.to_numeric(pd.Series(x, dtype=object), errors="coerce")
+    if getattr(trace, "orientation", None) == "h" or (x and numeric.notna().all()):
+        values, labels = x, y
+    else:
+        values, labels = y, x
+    text = getattr(trace, "text", None)
+    if not labels and text is not None and not isinstance(text, str):
+        labels = list(text)
+    values = pd.to_numeric(pd.Series(values, dtype=object), errors="coerce")
+    keep = values.notna().to_numpy()
+    labels = [str(lbl) for lbl, k in zip(labels or [""] * len(values), keep) if k]
+    return labels, [float(v) for v in values[keep]]
