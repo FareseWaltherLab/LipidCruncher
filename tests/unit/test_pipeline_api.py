@@ -260,6 +260,20 @@ class TestPromptsAdvertisePipelineFirst:
             assert "Pipeline first" in prompt
             assert "lc.compare_species" in prompt
 
+    def test_lc_settles_chain_length_before_any_question_is_listed(self):
+        """First eval run (2026-10-21): asked to compare the chain length
+        distribution, the model asked presence-vs-chain-split. The rule not
+        to ask came after the list of questions to ask; lc.chain_length
+        counts no individual chains at all, which the prompt did not say."""
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        from app.services.ai_chat.viz_generator import _viz_system_prompt
+        for prompt in (data_questions_system_prompt(), _viz_system_prompt()):
+            exception = prompt.index("no methodology question when `lc`")
+            assert exception < prompt.index("Common ambiguities to watch for")
+            assert "**total** carbons and double bonds" in prompt
+
 
 class TestExperimentContextReachesTheModel:
     """The model must be told the condition names, not have to ask.
