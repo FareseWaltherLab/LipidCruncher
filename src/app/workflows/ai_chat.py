@@ -21,6 +21,7 @@ from ..models.experiment import ExperimentConfig
 from ..services.ai_chat.ai_client import AIClientService
 from ..services.ai_chat.codebase_tools import TOOL_DEFINITIONS, execute_tool
 from ..services.ai_chat.data_transformer import DataTransformerService, TransformationResult
+from ..services.ai_chat.output_checks import check_lipid_table
 from ..services.ai_chat.prompt_templates import (
     build_experiment_context,
     data_questions_system_prompt,
@@ -719,7 +720,21 @@ class AIChatWorkflow:
                 numeric_columns=numeric_columns,
                 lc=PipelineAPI(source_df, experiment),
             )
-            if sandbox_result.success:
+            table_errors = (
+                check_lipid_table(sandbox_result.result_df, source_df)
+                if sandbox_result.success
+                and sandbox_result.result_df is not None
+                else []
+            )
+            if table_errors:
+                # Not an answer: the message goes back to the model on the
+                # next turn, as a failed transform's does.
+                assistant_text = (
+                    f"{explanation}\n\n"
+                    f"I computed a table, but it failed a check, so it is not "
+                    f"shown: {' '.join(table_errors)}"
+                )
+            elif sandbox_result.success:
                 result_df = sandbox_result.result_df
                 parts = []
                 if explanation.strip():

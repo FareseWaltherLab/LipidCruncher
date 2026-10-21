@@ -3,6 +3,7 @@ Unit tests for the AI chat workflow.
 
 Tests workflow orchestration with a mocked AI client to avoid real API calls.
 """
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
@@ -348,3 +349,39 @@ class TestRegressions:
         ))
         assert result.result_df is not None and len(result.result_df) == 2
         assert result.assistant_message == "Here's the result:"
+
+
+@patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+def test_data_questions_table_with_moved_values_is_not_an_answer(mock_loop):
+    """B1: the 2026-10-20 misalignment, written as Data Questions code. The
+    table is withheld and the reason goes back to the model."""
+    path = Path(__file__).parents[1] / "fixtures" / "ai_studio_test_dataset.csv"
+    df = pd.read_csv(path)
+    code = (
+        "kept = df[df['QualityScore'] > 70]\n"
+        "result_df = pd.DataFrame({'feature': kept['feature'].values})\n"
+        "for col in ['KO-1', 'KO-2', 'KO-3']:\n"
+        "    result_df[col] = kept[col]\n"
+    )
+    mock_loop.side_effect = canned_stream(
+        f"Here are the KO values.\n\n```python\n{code}```"
+    )
+    session = AIChatWorkflow.start_data_questions_session(df)
+    result = finish(AIChatWorkflow.stream_data_questions_message(
+        "KO values of lipids with quality above 70", session, df,
+    ))
+    assert result.result_df is None
+    assert "failed a check" in result.assistant_message
+    assert "reset_index(drop=True)" in result.session.messages[-1].content
+
+    mock_loop.side_effect = canned_stream(
+        "Here are the KO values.\n\n```python\n"
+        + code.replace("df['QualityScore'] > 70]",
+                       "df['QualityScore'] > 70].reset_index(drop=True)")
+        + "```"
+    )
+    result = finish(AIChatWorkflow.stream_data_questions_message(
+        "KO values of lipids with quality above 70", session, df,
+    ))
+    assert result.result_df is not None
+    assert "failed a check" not in result.assistant_message
