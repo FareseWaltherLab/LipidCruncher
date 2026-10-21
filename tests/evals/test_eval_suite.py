@@ -13,6 +13,7 @@ Scoring lives in ``scorers.py`` and is unit-tested separately, so a failure
 here means the *AI's answer* regressed, not the grader.
 """
 import os
+import warnings
 
 import pandas as pd
 import pytest
@@ -60,7 +61,8 @@ def run_case(case: C.EvalCase) -> dict:
     """Execute one case against the real AI and normalise what came back."""
     df, experiment = load_dataset(case.dataset)
     outcome = {"code": "", "answer": "", "result_df": None,
-               "figure": None, "error": None, "transformation": None, "df": df}
+               "figure": None, "error": None, "transformation": None, "df": df,
+               "unverified_numbers": ()}
 
     try:
         if case.tab == "transform":
@@ -87,6 +89,7 @@ def run_case(case: C.EvalCase) -> dict:
                 experiment=experiment,
             ))
             outcome["answer"] = result.assistant_message
+            outcome["unverified_numbers"] = result.unverified_numbers
             last = result.session.messages[-1]
             outcome["code"] = last.code or ""
             if result.sandbox_result is not None:
@@ -104,6 +107,7 @@ def run_case(case: C.EvalCase) -> dict:
             outcome["answer"] = result.assistant_message
             outcome["code"] = result.code or ""
             outcome["result_df"] = result.result_df
+            outcome["unverified_numbers"] = result.unverified_numbers
     except Exception as e:  # a crash is a graded failure, not a test error
         outcome["error"] = f"{type(e).__name__}: {e}"
 
@@ -113,6 +117,12 @@ def run_case(case: C.EvalCase) -> dict:
 @pytest.mark.parametrize("case", C.CASES, ids=lambda c: c.id)
 def test_eval_case(case):
     outcome = run_case(case)
+    if outcome["unverified_numbers"]:
+        # Measured, not graded (plan B2): shows in the warnings summary.
+        warnings.warn(
+            f"{case.id}: numbers the answer states that the code never "
+            f"produced: {', '.join(outcome['unverified_numbers'])}"
+        )
     failures = score_case(
         case,
         code=outcome["code"],
