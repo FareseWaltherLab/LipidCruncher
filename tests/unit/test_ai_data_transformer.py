@@ -346,3 +346,27 @@ class TestValuesStayWithTheirLipid:
         )
         result = DataTransformerService.execute_transformation(code, studio_df)
         assert result.success is True, result.validation_errors
+
+
+class TestMetadataKeptAsSamples:
+    """A numeric metadata column left in result_df passed the schema check
+    and was then analysed as a sample; only the summary text hinted at it."""
+
+    def test_retention_time_kept_as_a_sample_is_refused(self, studio_df):
+        code = (
+            f"_SAMPLES = {_SAMPLES!r}\n"
+            "result_df = df[['feature', 'RetentionTime'] + _SAMPLES]\n"
+        )
+        result = DataTransformerService.execute_transformation(code, studio_df)
+        assert result.success is False
+        message = " ".join(result.validation_errors)
+        assert "'RetentionTime'" in message
+        assert "drop these" in message
+
+    def test_the_same_transform_without_it_passes(self, studio_df):
+        code = (
+            f"_SAMPLES = {_SAMPLES!r}\n"
+            "result_df = df[['feature'] + _SAMPLES]\n"
+        )
+        result = DataTransformerService.execute_transformation(code, studio_df)
+        assert result.success is True, result.validation_errors

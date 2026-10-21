@@ -153,7 +153,19 @@ class DataTransformerService:
             sandbox_result.result_df
         )
         if is_valid:
-            errors = DataTransformerService.check_values_stay_with_their_lipid(
+            # A numeric metadata column passes the schema check, and the
+            # Generic reader would then analyse it as a sample.
+            metadata = DataTransformerService.detect_metadata_columns(
+                sandbox_result.result_df
+            )
+            if metadata:
+                errors = [
+                    "Metadata columns kept as samples: "
+                    + ", ".join(f"'{c}'" for c in metadata)
+                    + ". Every column after the lipid names (and ClassKey) "
+                    "is analysed as a sample, so drop these from result_df."
+                ]
+            errors += DataTransformerService.check_values_stay_with_their_lipid(
                 sandbox_result.result_df, source_df,
             )
             is_valid = not errors
