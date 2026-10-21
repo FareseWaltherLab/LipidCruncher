@@ -3,7 +3,7 @@
 Pure functions over what a turn produced — no API calls, no Streamlit — so
 they are unit-testable on their own and cheap to run.
 
-Two scorers, in the order that matters:
+Scorers, in the order that matters:
 
 * **routing** — did the question go to LipidCruncher's own method? If it
   did, the numbers are right by construction, which is why this is the
@@ -11,10 +11,20 @@ Two scorers, in the order that matters:
 * **usability** — did the turn actually produce a complete, readable,
   self-explanatory answer? Every failure observed in live testing was of
   this kind, and none would have been caught by checking numbers.
+* **pipeline parity** — for a question the main pipeline answers, is the
+  answer the pipeline's? Routing makes that likely, but a non-default
+  argument or a later filter changes the numbers that reach the user.
+* **transform** — did a Transform to Generic request give exactly the
+  rows it asked for, with every value still on its own lipid?
 
 Each returns a list of human-readable failure strings; empty means pass.
 """
+import math
+import re
 from typing import Any, List, Optional
+
+import numpy as np
+import pandas as pd
 
 # Phrases that indicate the answer explains how it was computed. Any one
 # is enough — we are checking that a method was stated, not policing wording.
@@ -159,6 +169,106 @@ def _is_refusal(answer: str) -> bool:
     return declines and blames_data
 
 
+_NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+
+def score_pipeline_parity(
+    case, df: pd.DataFrame, answer: str, *, result_df: Any = None,
+) -> List[str]:
+    """Check the turn gave the main pipeline's answer, not a different one."""
+    failures = []
+
+    if case.pipeline_number is not None:
+        expected = float(case.pipeline_number(df))
+        stated = [float(n.replace(",", "")) for n in _NUMBER.findall(answer or "")]
+        if result_df is not None:
+            stated += [
+                float(v) for v in np.ravel(result_df.select_dtypes("number"))
+                if pd.notna(v)
+            ]
+        if not any(math.isclose(n, expected, rel_tol=0.01) for n in stated):
+            failures.append(
+                f"the pipeline's answer is {expected:g}; the turn never states it"
+            )
+
+    if case.pipeline_answer is None:
+        return failures
+    expected = case.pipeline_answer(df)
+    want = set(map(str, expected.index))
+    if result_df is None:
+        return failures + ["no table to compare with the pipeline's answer"]
+
+    table = (
+        result_df if isinstance(result_df.index, pd.RangeIndex)
+        else result_df.reset_index()
+    )
+    key = max(
+        (c for c in table.columns if table[c].dtype == object),
+        key=lambda c: table[c].astype(str).isin(want).sum(),
+        default=None,
+    )
+    if key is None or not table[key].astype(str).isin(want).any():
+        example = next(iter(want))
+        return failures + [f"no column lists the pipeline's keys (e.g. {example!r})"]
+
+    got = set(table[key].astype(str))
+    if got != want:
+        missing, extra = sorted(want - got), sorted(got - want)
+        return failures + [
+            f"listed different rows from the pipeline: missing {missing[:5]}, "
+            f"extra {extra[:5]}"
+        ]
+
+    rows = table.assign(_key=table[key].astype(str)).drop_duplicates("_key")
+    rows = rows.set_index("_key").loc[[str(k) for k in expected.index]]
+    target = expected.to_numpy(dtype=float)
+    for col in rows.select_dtypes("number").columns:
+        if np.allclose(rows[col].to_numpy(dtype=float), target, rtol=0.01):
+            return failures
+    first = expected.index[0]
+    return failures + [
+        f"no column matches the pipeline's values (e.g. {first!r}: "
+        f"pipeline {expected.iloc[0]:.3g})"
+    ]
+
+
+def score_transform(case, df: pd.DataFrame, transformation: Any) -> List[str]:
+    """Check a transform kept exactly the expected lipids, with values
+    unchanged and each on its own lipid (compared by position, so renamed
+    sample columns are fine)."""
+    if case.expect_table is None:
+        return []
+    if transformation is None or not transformation.success:
+        return ["the transform did not produce an accepted table"]
+    expected = case.expect_table(df)
+    result = transformation.result_df
+    names = result.iloc[:, 0].astype(str)
+    want = expected.iloc[:, 0].astype(str)
+
+    if names.duplicated().any():
+        return [f"{names.duplicated().sum()} lipid names appear more than once"]
+    if set(names) != set(want):
+        missing, extra = sorted(set(want) - set(names)), sorted(set(names) - set(want))
+        return [
+            f"kept {len(names)} lipids, expected {len(want)}: "
+            f"missing {missing[:5]}, extra {extra[:5]}"
+        ]
+    samples = list(transformation.report.sample_columns)
+    if len(samples) != expected.shape[1] - 1:
+        return [
+            f"{len(samples)} sample columns, expected {expected.shape[1] - 1} "
+            f"({samples[:5]})"
+        ]
+    got = result[samples].set_index(names.values).loc[want.values]
+    differ = ~np.isclose(
+        got.to_numpy(dtype=float), expected.iloc[:, 1:].to_numpy(dtype=float),
+        rtol=1e-9, equal_nan=True,
+    )
+    if differ.any():
+        return [f"{int(differ.sum())} values differ from the upload"]
+    return []
+
+
 def score_case(
     case,
     code: str,
@@ -167,12 +277,18 @@ def score_case(
     result_df: Any = None,
     figure: Any = None,
     error: Optional[str] = None,
+    df: Optional[pd.DataFrame] = None,
+    transformation: Any = None,
 ) -> List[str]:
     """Run every scorer for one case. Empty list means the case passed."""
-    return (
+    failures = (
         score_routing(code, case)
         + score_usability(
             code, answer, case,
             result_df=result_df, figure=figure, error=error,
         )
     )
+    if df is not None:
+        failures += score_pipeline_parity(case, df, answer, result_df=result_df)
+        failures += score_transform(case, df, transformation)
+    return failures

@@ -50,6 +50,9 @@ def load_dataset(name: str):
         return df, ExperimentConfig(
             conditions_list=["All"], number_of_samples_list=[4],
         )
+    if name == C.STUDIO:
+        # Raw, pre-Generic data: the Transform tab needs no experiment.
+        return pd.read_csv(os.path.join(FIXTURES, "ai_studio_test_dataset.csv")), None
     raise KeyError(f"Unknown dataset {name!r}")
 
 
@@ -57,10 +60,25 @@ def run_case(case: C.EvalCase) -> dict:
     """Execute one case against the real AI and normalise what came back."""
     df, experiment = load_dataset(case.dataset)
     outcome = {"code": "", "answer": "", "result_df": None,
-               "figure": None, "error": None}
+               "figure": None, "error": None, "transformation": None, "df": df}
 
     try:
-        if case.tab == "visualization":
+        if case.tab == "transform":
+            _, session = AIChatWorkflow.start_transform_chat(df)
+            result = finish(AIChatWorkflow.stream_transform_message(
+                user_message=case.question,
+                session=session,
+                source_df=df,
+            ))
+            outcome["answer"] = result.assistant_message
+            t = result.transformation
+            outcome["transformation"] = t
+            if t is not None:
+                outcome["code"] = t.code
+                outcome["result_df"] = t.result_df
+                if not t.success:
+                    outcome["error"] = "; ".join(t.validation_errors)
+        elif case.tab == "visualization":
             session = AIChatWorkflow.start_viz_session(df, experiment)
             result = finish(AIChatWorkflow.stream_viz_message(
                 user_message=case.question,
@@ -102,6 +120,8 @@ def test_eval_case(case):
         result_df=outcome["result_df"],
         figure=outcome["figure"],
         error=outcome["error"],
+        df=outcome["df"],
+        transformation=outcome["transformation"],
     )
     if failures:
         pytest.fail(

@@ -5,11 +5,23 @@ silently passes everything is worse than no eval at all, so each one is
 checked against both a good turn and the specific bad turn it exists to
 catch — using the real failures observed in preview testing.
 """
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
+from app.models.experiment import ExperimentConfig
+from app.services.ai_chat.data_transformer import DataTransformerService
+from app.workflows.pipeline_api import PipelineAPI
 from tests.evals import cases as C
-from tests.evals.scorers import score_routing, score_usability, score_case
+from tests.evals import reference_analysis as ref
+from tests.evals.scorers import (
+    score_case,
+    score_pipeline_parity,
+    score_routing,
+    score_transform,
+    score_usability,
+)
 
 
 TOP10 = C.by_id("top10_significant")
@@ -17,6 +29,12 @@ SATURATION = C.by_id("saturation_tg")
 CHAIN = C.by_id("chain_length_distribution")
 REFUSAL = C.by_id("chain_pools_consolidated")
 DESCRIBE = C.by_id("describe_dataset")
+SIGNIFICANT = C.by_id("significant_changes")
+TOP5 = C.by_id("top5_abundant")
+COUNT = C.by_id("species_count")
+FILTER = C.by_id("transform_filter_rt_quality")
+AT_LEAST = C.by_id("transform_filter_at_least")
+PLAIN = C.by_id("transform_plain")
 
 
 class TestRouting:
@@ -208,3 +226,136 @@ class TestRefusalIsNotJustAnyDecline:
             "molecular species identifications."
         )
         assert score_usability("", answer, REFUSAL) == []
+
+
+class TestPipelineParity:
+    """A question the main pipeline answers has one right answer. Each bad
+    turn below routes to lc, so the routing scorer passes it."""
+
+    @pytest.fixture(scope="class")
+    def canonical(self):
+        return ref.load_canonical()
+
+    @pytest.fixture(scope="class")
+    def lc(self, canonical):
+        return PipelineAPI(canonical, ExperimentConfig(
+            conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
+        ))
+
+    def test_the_pipelines_own_table_passes(self, canonical, lc):
+        table = lc.compare_species("WT", "KO").head(10)
+        assert score_pipeline_parity(TOP10, canonical, "", result_df=table) == []
+        significant = lc.compare_species("WT", "KO").query("significant")
+        assert score_pipeline_parity(
+            SIGNIFICANT, canonical, "", result_df=significant,
+        ) == []
+
+    def test_lipid_names_as_the_index_pass(self, canonical, lc):
+        table = lc.compare_species("WT", "KO").head(10).set_index("LipidMolec")
+        assert score_pipeline_parity(TOP10, canonical, "", result_df=table) == []
+
+    def test_a_non_default_correction_is_caught(self, canonical, lc):
+        """BH-adjusted p-values are not what the app reports by default;
+        the same six lipids are significant, so only the values differ."""
+        table = lc.compare_species("WT", "KO", correction="fdr_bh")
+        table = table.query("significant")[["LipidMolec", "adj_p_value"]]
+        failures = score_pipeline_parity(SIGNIFICANT, canonical, "", result_df=table)
+        assert any("no column matches the pipeline's values" in f for f in failures)
+
+    def test_a_different_set_of_lipids_is_caught(self, canonical, lc):
+        table = lc.compare_species("WT", "KO").head(5)
+        failures = score_pipeline_parity(SIGNIFICANT, canonical, "", result_df=table)
+        assert any("listed different rows" in f for f in failures)
+
+    def test_ties_must_both_be_listed(self, canonical):
+        top = ref.total_per_lipid(canonical).sort_values(ascending=False)
+        good = top.head(5).rename("total").reset_index()
+        assert score_pipeline_parity(TOP5, canonical, "", result_df=good) == []
+        one_of_the_tie = top.iloc[1:6].rename("total").reset_index()
+        assert score_pipeline_parity(TOP5, canonical, "", result_df=one_of_the_tie)
+
+    def test_a_number_must_be_stated(self, canonical):
+        assert score_pipeline_parity(
+            COUNT, canonical, "Your dataset has 24 lipid species.",
+        ) == []
+        failures = score_pipeline_parity(
+            COUNT, canonical, "Your dataset has 23 lipid species.",
+        )
+        assert failures == ["the pipeline's answer is 24; the turn never states it"]
+
+    def test_no_table_is_a_failure(self, canonical):
+        assert score_pipeline_parity(TOP10, canonical, "PE 18:0_20:4 ...") == [
+            "no table to compare with the pipeline's answer"
+        ]
+
+
+_SAMPLES = ['KO-1', 'KO-2', 'KO-3', 'KOWT-1', 'KOWT-2', 'KOWT-3',
+            'mut1-1', 'mut1-2', 'mut1-3', 'mut2-1', 'mut2-2', 'mut2-3',
+            'WT-1', 'WT-2', 'WT-3']
+
+
+class TestTransform:
+    """Graded by running real transform code on the 2026-10-20 fixture."""
+
+    @pytest.fixture(scope="class")
+    def studio(self):
+        path = Path(__file__).parents[1] / "fixtures" / "ai_studio_test_dataset.csv"
+        return pd.read_csv(path)
+
+    def _run(self, code, studio):
+        return DataTransformerService.execute_transformation(
+            f"_SAMPLES = {_SAMPLES!r}\n{code}", studio,
+        )
+
+    def test_the_right_filter_passes(self, studio):
+        t = self._run(
+            "kept = df[(df['RetentionTime'] > 5) & (df['QualityScore'] > 70)]\n"
+            "result_df = kept[['feature'] + _SAMPLES].reset_index(drop=True)\n",
+            studio,
+        )
+        assert score_transform(FILTER, studio, t) == []
+
+    def test_renamed_columns_and_a_classkey_column_pass(self, studio):
+        t = self._run(
+            "result_df = df[['feature', 'LipidClass'] + _SAMPLES].rename("
+            "columns={'LipidClass': 'ClassKey', 'KO-1': 'S1'})\n",
+            studio,
+        )
+        assert score_transform(PLAIN, studio, t) == []
+
+    def test_greater_than_for_at_least_is_caught(self, studio):
+        t = self._run(
+            "kept = df[(df['RetentionTime'] > 5) & (df['QualityScore'] > 70)]\n"
+            "result_df = kept[['feature'] + _SAMPLES].reset_index(drop=True)\n",
+            studio,
+        )
+        (failure,) = score_transform(AT_LEAST, studio, t)
+        assert failure.startswith("kept 757 lipids, expected 761")
+
+    def test_values_moved_and_changed_are_caught(self, studio):
+        """Passes every refusal in the app (A3 only warns)."""
+        t = self._run(
+            "kept = df[(df['RetentionTime'] > 5) & (df['QualityScore'] > 70)]\n"
+            "result_df = pd.DataFrame({'feature': kept['feature'].values})\n"
+            "for c in _SAMPLES:\n"
+            "    result_df[c] = kept[c] / 2\n",
+            studio,
+        )
+        assert t.success
+        (failure,) = score_transform(FILTER, studio, t)
+        assert failure.endswith("values differ from the upload")
+
+    def test_a_refused_transform_fails(self, studio):
+        t = self._run("result_df = df[['feature', 'RetentionTime'] + _SAMPLES]\n", studio)
+        assert score_transform(PLAIN, studio, t) == [
+            "the transform did not produce an accepted table"
+        ]
+
+
+def test_every_case_is_scored_against_the_pipeline_where_it_can_be():
+    """Cases with a pipeline answer must run on a dataset that has one."""
+    for case in C.CASES:
+        if case.pipeline_answer or case.pipeline_number:
+            assert case.dataset == C.CANONICAL, case.id
+        if case.expect_table:
+            assert case.tab == "transform" and case.dataset == C.STUDIO, case.id
