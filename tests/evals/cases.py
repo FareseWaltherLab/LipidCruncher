@@ -103,6 +103,24 @@ CASES = (
         ),
     ),
 
+    EvalCase(
+        id="direction_colored_bars",
+        question=(
+            "Bar chart of the 10 most significant lipids between WT and KO, "
+            "showing log2 fold change, colored by direction."
+        ),
+        dataset=CANONICAL,
+        tab="visualization",
+        expect_lc=("lc.compare_species", "lc.volcano"),
+        forbid=HAND_ROLLED_STATS,
+        expect=("figure",),
+        note=(
+            "2026-10-21: values right, colors wrong. The code listed a color "
+            "per bar, then re-sorted the bars, so a falling lipid was drawn "
+            "in the 'Up in KO' color."
+        ),
+    ),
+
     # ---- Routing: the pipeline owns these analyses ---------------------
     EvalCase(
         id="volcano_plot",

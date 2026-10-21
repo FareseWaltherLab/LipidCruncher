@@ -13,6 +13,7 @@ Scoring lives in ``scorers.py`` and is unit-tested separately, so a failure
 here means the *AI's answer* regressed, not the grader.
 """
 import os
+import re
 import warnings
 
 import pandas as pd
@@ -118,10 +119,16 @@ def run_case(case: C.EvalCase) -> dict:
 def test_eval_case(case):
     outcome = run_case(case)
     if outcome["unverified_numbers"]:
-        # Measured, not graded (plan B2): shows in the warnings summary.
+        # Measured, not graded (plan B2): shows in the warnings summary,
+        # with each number's sentence so it can be judged.
+        sentences = [
+            s.strip() for s in re.split(r"(?<=[.!?])\s|\n", outcome["answer"])
+            if any(n in s for n in outcome["unverified_numbers"])
+        ]
         warnings.warn(
             f"{case.id}: numbers the answer states that the code never "
-            f"produced: {', '.join(outcome['unverified_numbers'])}"
+            f"produced: {', '.join(outcome['unverified_numbers'])} — "
+            + " | ".join(sentences)[:600]
         )
     failures = score_case(
         case,

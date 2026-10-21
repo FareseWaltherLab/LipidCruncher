@@ -383,3 +383,16 @@ def test_every_case_is_scored_against_the_pipeline_where_it_can_be():
             assert case.dataset == C.CANONICAL, case.id
         if case.expect_table:
             assert case.tab == "transform" and case.dataset == C.STUDIO, case.id
+
+
+def test_a_miscolored_direction_chart_fails_usability():
+    from app.workflows.pipeline_api import PipelineAPI
+    from tests.unit.test_ai_output_checks import MISCOLORED_BARS
+    import plotly.graph_objects as go
+    lc = PipelineAPI(ref.load_canonical(), ExperimentConfig(
+        conditions_list=["WT", "KO"], number_of_samples_list=[3, 3]))
+    scope = {"lc": lc, "go": go}
+    exec(MISCOLORED_BARS, scope)
+    case = C.by_id("direction_colored_bars")
+    failures = score_usability(MISCOLORED_BARS, "", case, figure=scope["fig"])
+    assert any("colors do not follow the direction" in f for f in failures)

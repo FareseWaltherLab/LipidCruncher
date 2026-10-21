@@ -26,6 +26,8 @@ from typing import Any, List, Optional
 import numpy as np
 import pandas as pd
 
+from app.services.ai_chat.output_checks import check_direction_colors
+
 # Phrases that indicate the answer explains how it was computed. Any one
 # is enough — we are checking that a method was stated, not policing wording.
 _METHOD_MARKERS = (
@@ -110,6 +112,9 @@ def score_usability(
 
     if "figure" in case.expect and figure is None:
         failures.append("expected a figure, none was produced")
+
+    if figure is not None:
+        failures += check_direction_colors(figure)
 
     if "method_stated" in case.expect and not _states_method(answer):
         failures.append(
