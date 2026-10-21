@@ -6,7 +6,7 @@ and validates that the output conforms to the Generic format schema.
 All methods are stateless static methods — no Streamlit imports.
 """
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -120,6 +120,8 @@ class TransformationResult:
         validation_errors: Schema validation errors (if any).
         report: What an accepted transform changed relative to the
             upload. None unless the transform was accepted.
+        metadata_columns: Sample columns refused only because their names
+            look like metadata. The user can keep them (``keep_columns``).
     """
     success: bool
     result_df: Optional[pd.DataFrame] = None
@@ -129,6 +131,7 @@ class TransformationResult:
     sandbox_result: Optional[SandboxResult] = None
     validation_errors: Tuple[str, ...] = ()
     report: Optional[TransformReport] = None
+    metadata_columns: Tuple[str, ...] = ()
 
 
 class DataTransformerService:
@@ -178,6 +181,7 @@ class DataTransformerService:
         source_df: pd.DataFrame,
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
+        keep_columns: Sequence[str] = (),
     ) -> TransformationResult:
         """Execute transformation code and validate the output.
 
@@ -187,6 +191,8 @@ class DataTransformerService:
             sandbox_config: Sandbox configuration. Uses defaults if None.
             numeric_columns: Optional list of columns to pre-coerce to
                 numeric before exposing the DataFrame to user code.
+            keep_columns: Columns the user confirmed are samples, though
+                their names look like metadata.
 
         Returns:
             TransformationResult with the outcome.
@@ -233,12 +239,16 @@ class DataTransformerService:
         is_valid, errors = DataTransformerService.validate_generic_schema(
             sandbox_result.result_df
         )
+        metadata = []
         if is_valid:
             # A numeric metadata column passes the schema check, and the
             # Generic reader would then analyse it as a sample.
-            metadata = DataTransformerService.detect_metadata_columns(
-                sandbox_result.result_df
-            )
+            metadata = [
+                c for c in DataTransformerService.detect_metadata_columns(
+                    sandbox_result.result_df
+                )
+                if c not in keep_columns
+            ]
             if metadata:
                 errors = [
                     "Metadata columns kept as samples: "
@@ -260,6 +270,10 @@ class DataTransformerService:
                 code=code,
                 sandbox_result=sandbox_result,
                 validation_errors=tuple(errors),
+                metadata_columns=(
+                    tuple(str(c) for c in metadata) if len(errors) == 1
+                    and metadata else ()
+                ),
             )
 
         return TransformationResult(

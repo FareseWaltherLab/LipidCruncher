@@ -480,3 +480,36 @@ class TestReorderedValuesWarning:
         assert result.success is True, result.validation_errors
         assert result.report.reordered_columns == ()
         assert "no longer rank" not in result.report.summary()
+
+
+class TestKeepColumnsTheUserConfirmed:
+    """A sample can be named like metadata ('Reference_1'); the user, not
+    the name rule, has the last word."""
+
+    def _code(self, extra):
+        return f"_SAMPLES = {_SAMPLES!r}\nresult_df = df[['feature', {extra!r}] + _SAMPLES]\n"
+
+    def test_refused_names_are_offered_for_keeping(self, studio_df):
+        result = DataTransformerService.execute_transformation(
+            self._code('RetentionTime'), studio_df,
+        )
+        assert result.success is False
+        assert result.metadata_columns == ('RetentionTime',)
+
+    def test_a_kept_column_passes(self, studio_df):
+        result = DataTransformerService.execute_transformation(
+            self._code('RetentionTime'), studio_df, keep_columns=('RetentionTime',),
+        )
+        assert result.success is True, result.validation_errors
+        assert 'RetentionTime' in result.report.sample_columns
+
+    def test_not_offered_when_keeping_would_not_help(self, studio_df):
+        """Moved values are refused too; keeping the column fixes nothing."""
+        code = _MISALIGNED_FILTER.replace(
+            "result['feature'] = filtered['feature'].values",
+            "result['feature'] = filtered['feature'].values\n"
+            "    result['RetentionTime'] = filtered['RetentionTime']",
+        )
+        result = DataTransformerService.execute_transformation(code, studio_df)
+        assert result.success is False
+        assert result.metadata_columns == ()

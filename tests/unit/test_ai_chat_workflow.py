@@ -385,3 +385,32 @@ def test_data_questions_table_with_moved_values_is_not_an_answer(mock_loop):
     ))
     assert result.result_df is not None
     assert "failed a check" not in result.assistant_message
+
+
+@patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+def test_keeping_refused_columns_reruns_the_last_code(mock_loop):
+    """The user confirms 'Reference_1' is a sample: the same code runs
+    again without an AI call, and the choice is in the conversation."""
+    df = pd.DataFrame({
+        "name": ["PC 34:1", "PE 36:2"],
+        "Reference_1": [1.0, 2.0],
+        "Sample_2": [3.0, 4.0],
+    })
+    mock_loop.side_effect = canned_stream(
+        "Converting.\n\n```python\nresult_df = df.copy()\n```"
+    )
+    _, session = AIChatWorkflow.start_transform_chat(df)
+    refused = finish(AIChatWorkflow.stream_transform_message(
+        "convert", session, df,
+    ))
+    assert refused.transformation.metadata_columns == ("Reference_1",)
+
+    kept = AIChatWorkflow.keep_transform_columns(
+        refused.session, df, ("Reference_1",),
+    )
+    assert mock_loop.call_count == 1
+    assert kept.transformation.success is True
+    assert list(kept.transformation.result_df.columns) == list(df.columns)
+    assert kept.session.messages[-1].content.startswith(
+        "You confirmed these are samples: `Reference_1`."
+    )

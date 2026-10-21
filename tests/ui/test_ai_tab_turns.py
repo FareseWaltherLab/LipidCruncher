@@ -19,6 +19,7 @@ from app.services.ai_chat.data_transformer import (
 )
 from app.services.ai_chat.sandbox import SandboxResult
 from app.workflows.ai_chat import (
+    AIChatWorkflow,
     DataQuestionsStepResult,
     TransformStepResult,
     VizStepResult,
@@ -183,6 +184,59 @@ def test_transform_preview_shows_the_report(logged, monkeypatch):
                in m.value for m in at.markdown)
     labels = [b.proto.label for b in at.get("download_button")]
     assert "Download the 1 removed lipid names" in labels
+
+
+def test_columns_refused_for_their_names_can_be_kept(logged, monkeypatch):
+    """A sample named like metadata ('Reference_1') is refused; the user can
+    keep it, and later turns keep it too."""
+    seen = []
+
+    def _stream(*args, **kwargs):
+        result = TransformStepResult(
+            session=_answer(kwargs["session"], code=CODE),
+            assistant_message="refused",
+            transformation=TransformationResult(
+                success=False, code=CODE, validation_errors=("metadata",),
+                metadata_columns=("Reference_1",)))
+        return iter(["refused"]), lambda: result
+
+    def _workflow_stream(**kwargs):
+        seen.append(kwargs["keep_columns"])
+        return _stream(**kwargs)
+
+    kept_with = []
+
+    def _keep(session, source_df, keep_columns, numeric_columns=None):
+        kept_with.append(keep_columns)
+        return TransformStepResult(
+            session=session, assistant_message="kept",
+            transformation=TransformationResult(
+                success=True, code=CODE,
+                result_df=pd.DataFrame({"LipidMolec": ["x"], "Reference_1": [1.0]})))
+
+    monkeypatch.setattr(AIChatWorkflow, "stream_transform_message",
+                        staticmethod(_workflow_stream))
+    monkeypatch.setattr(AIChatWorkflow, "keep_transform_columns",
+                        staticmethod(_keep))
+    seen.clear()
+    at = _turn("transform")
+    assert not at.exception
+    assert seen == [()]
+    assert at.session_state.chat_transform_refused_metadata == ("Reference_1",)
+    button = at.button(key="chat_keep_metadata_columns")
+    assert button.label == "Keep 'Reference_1' as samples"
+
+    button.click().run()
+    at.run()  # after the click's st.rerun()
+    assert not at.exception
+    assert kept_with == [("Reference_1",)]
+    assert at.session_state.chat_transform_result is not None
+    assert at.session_state.chat_transform_refused_metadata == ()
+    assert not [b for b in at.button if b.key == "chat_keep_metadata_columns"]
+
+    seen.clear()
+    at.chat_input(key=INPUT_KEY["transform"]).set_value("again").run()
+    assert seen == [("Reference_1",)]
 
 
 @pytest.mark.parametrize("tab", ["dq", "transform", "viz"])

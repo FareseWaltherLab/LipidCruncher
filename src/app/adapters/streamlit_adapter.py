@@ -309,6 +309,10 @@ class SessionState:
     chat_mode: Optional[str] = None
     chat_transform_result: Optional[pd.DataFrame] = None
     chat_transform_report: Optional[Any] = None
+    # Sample columns with metadata-like names: refused by the last transform
+    # turn / confirmed by the user as samples for this conversation.
+    chat_transform_refused_metadata: Tuple[str, ...] = ()
+    chat_transform_kept_columns: Tuple[str, ...] = ()
     chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
 
     # --- AI Studio (owner: ai_studio_page.py) ---
@@ -498,7 +502,8 @@ _STAGES: Tuple[_Stage, ...] = (
         fields=frozenset({
             'chat_transform_session', 'chat_viz_session',
             'chat_data_questions_session', 'chat_mode', 'chat_transform_result',
-            'chat_transform_report',
+            'chat_transform_report', 'chat_transform_refused_metadata',
+            'chat_transform_kept_columns',
             'chat_viz_figures',
             'chat_studio_df', 'chat_studio_df_original', 'chat_studio_experiment',
             'chat_studio_pipeline_source', 'chat_studio_detected_format',
@@ -507,7 +512,7 @@ _STAGES: Tuple[_Stage, ...] = (
         }),
         widgets=frozenset({
             'chat_input', 'chat_apply_transform', 'chat_download_transform',
-            'chat_download_removed_lipids',
+            'chat_download_removed_lipids', 'chat_keep_metadata_columns',
             'chat_input_questions', 'chat_input_transform',
             'chat_input_lc_questions', 'chat_retry_lc', 'chat_input_viz',
             'ai_studio_file_uploader', 'ai_studio_import_pipeline',
@@ -1569,6 +1574,25 @@ class StreamlitAdapter:
             user_message=user_message,
             session=session,
             source_df=source_df,
+            numeric_columns=st.session_state.get(
+                'chat_studio_sample_columns_original'
+            ),
+            keep_columns=st.session_state.get('chat_transform_kept_columns') or (),
+        )
+
+    @staticmethod
+    def keep_ai_transform_columns(session, source_df: pd.DataFrame):
+        """Re-run the last transform keeping the columns it refused only
+        for their metadata-like names, and remember them for later turns."""
+        from ..workflows.ai_chat import AIChatWorkflow
+        kept = tuple(st.session_state.get('chat_transform_kept_columns') or ()) + tuple(
+            st.session_state.get('chat_transform_refused_metadata') or ()
+        )
+        st.session_state.chat_transform_kept_columns = kept
+        return AIChatWorkflow.keep_transform_columns(
+            session=session,
+            source_df=source_df,
+            keep_columns=kept,
             numeric_columns=st.session_state.get(
                 'chat_studio_sample_columns_original'
             ),

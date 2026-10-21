@@ -6,7 +6,7 @@ generation, and data questions. Pure logic — no Streamlit dependencies.
 """
 import logging
 from dataclasses import dataclass, replace
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -324,6 +324,7 @@ class AIChatWorkflow:
         source_df: pd.DataFrame,
         sandbox_config: SandboxConfig,
         numeric_columns: Optional[List[str]],
+        keep_columns: Sequence[str] = (),
     ) -> TransformStepResult:
         """Execute generated transform code (if any), build the assistant
         message, append it to the session, and return the step result.
@@ -338,6 +339,7 @@ class AIChatWorkflow:
                 source_df=source_df,
                 sandbox_config=sandbox_config,
                 numeric_columns=numeric_columns,
+                keep_columns=keep_columns,
             )
             # Include explanation in the transformation result
             transformation = TransformationResult(
@@ -349,6 +351,7 @@ class AIChatWorkflow:
                 sandbox_result=transformation.sandbox_result,
                 validation_errors=transformation.validation_errors,
                 report=transformation.report,
+                metadata_columns=transformation.metadata_columns,
             )
 
             # Build assistant response text
@@ -406,6 +409,7 @@ class AIChatWorkflow:
         ai_config: Optional[AIConfig] = None,
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
+        keep_columns: Sequence[str] = (),
     ):
         """Handle one user message in a data transformation chat.
 
@@ -436,10 +440,37 @@ class AIChatWorkflow:
             explanation, code = AIClientService.extract_code_block(holder["full"])
             return AIChatWorkflow._finalize_transform(
                 session, explanation, code, source_df,
-                sandbox_config, numeric_columns,
+                sandbox_config, numeric_columns, keep_columns,
             )
 
         return generator, finalize
+
+    @staticmethod
+    def keep_transform_columns(
+        session: ChatSession,
+        source_df: pd.DataFrame,
+        keep_columns: Sequence[str],
+        numeric_columns: Optional[List[str]] = None,
+    ) -> TransformStepResult:
+        """Re-run the last transform, keeping columns the user confirmed
+        are samples although their names look like metadata.
+
+        No AI call: the last assistant message's code runs again with
+        ``keep_columns`` allowed, and the outcome is appended as a new
+        assistant message, so the model sees the choice on the next turn.
+        """
+        code = next(
+            (m.code for m in reversed(session.messages)
+             if m.role == "assistant" and m.code),
+            "",
+        )
+        names = ", ".join(f"`{c}`" for c in keep_columns)
+        return AIChatWorkflow._finalize_transform(
+            session,
+            f"You confirmed these are samples: {names}. They stay in the "
+            f"result.",
+            code, source_df, SandboxConfig(), numeric_columns, keep_columns,
+        )
 
     # ------------------------------------------------------------------
     # Visualization mode

@@ -57,6 +57,23 @@ columns are which and ask it to redo the transform.
 """
 
 
+def _store_result(result) -> None:
+    """Keep a turn's session and, for a successful transform, its table
+    for download. Info-gathering turns (no result_df) keep the previous
+    preview; a failed transform clears it."""
+    t = result.transformation
+    st.session_state.chat_transform_session = result.session
+    st.session_state.chat_transform_refused_metadata = (
+        t.metadata_columns if t else ()
+    )
+    if t and t.success and not t.is_info_only:
+        st.session_state.chat_transform_result = t.result_df
+        st.session_state.chat_transform_report = t.report
+    elif t and not t.success:
+        st.session_state.chat_transform_result = None
+        st.session_state.chat_transform_report = None
+
+
 def render_transform_chat(source_df) -> None:
     """Render the data transformation chat interface.
 
@@ -129,6 +146,24 @@ def render_transform_chat(source_df) -> None:
     if usage_refused():
         return
 
+    # A transform refused only because sample names look like metadata
+    # (e.g. 'Reference_1'): the user, not the AI, may say they are samples.
+    refused = st.session_state.get('chat_transform_refused_metadata') or ()
+    if refused:
+        names = ", ".join(f"'{c}'" for c in refused)
+        st.info(
+            f"{names} {'was' if len(refused) == 1 else 'were'} refused because "
+            f"the name looks like metadata (retention time, score, m/z, ...). "
+            f"If {'it is a sample' if len(refused) == 1 else 'they are samples'}, "
+            f"you can keep {'it' if len(refused) == 1 else 'them'}."
+        )
+        if st.button(f"Keep {names} as samples", key="chat_keep_metadata_columns"):
+            StreamlitAdapter.record_ai_execution()
+            _store_result(StreamlitAdapter.keep_ai_transform_columns(
+                session, source_df,
+            ))
+            st.rerun()
+
     user_input = next_user_input(
         "chat_pending_prompt_transform",
         "Ask about your data or request a transformation...",
@@ -145,18 +180,9 @@ def render_transform_chat(source_df) -> None:
                     "I couldn't produce a result for that. "
                     "Please try rephrasing your request."
                 )
-            st.session_state.chat_transform_session = result.session
             if t and t.code:
                 StreamlitAdapter.record_ai_execution()
-            # Keep a successful transform for download. Info-gathering turns
-            # (no result_df) keep the previous preview; a failed transform
-            # clears it.
-            if t and t.success and not t.is_info_only:
-                st.session_state.chat_transform_result = t.result_df
-                st.session_state.chat_transform_report = t.report
-            elif t and not t.success:
-                st.session_state.chat_transform_result = None
-                st.session_state.chat_transform_report = None
+            _store_result(result)
             return {"code": (t.code if t else None) or None,
                     "produced_table": bool(
                         t and t.success and not t.is_info_only)}

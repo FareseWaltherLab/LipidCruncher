@@ -907,6 +907,8 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_questions_result_df = None
     st.session_state.chat_transform_result = None
     st.session_state.chat_transform_report = None
+    st.session_state.chat_transform_refused_metadata = ()
+    st.session_state.chat_transform_kept_columns = ()
     st.session_state.chat_viz_figures = {}
 
 
