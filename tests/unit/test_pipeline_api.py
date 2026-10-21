@@ -260,6 +260,15 @@ class TestPromptsAdvertisePipelineFirst:
             assert "Pipeline first" in prompt
             assert "lc.compare_species" in prompt
 
+    def test_viz_prompt_says_to_build_per_bar_colors_after_sorting(self):
+        """2026-10-21: 3 of 6 "colored by direction" charts listed the
+        colors, then re-sorted the bars, so lipids got another lipid's
+        direction color. The prompt taught the color list, not its order."""
+        from app.services.ai_chat.viz_generator import _viz_system_prompt
+        prompt = _viz_system_prompt()
+        rule = prompt.index("**Build the color list last**")
+        assert rule > prompt.index("bar_colors = [class_color_map[c]")
+
     def test_lc_settles_chain_length_before_any_question_is_listed(self):
         """First eval run (2026-10-21): asked to compare the chain length
         distribution, the model asked presence-vs-chain-split. The rule not

@@ -113,6 +113,12 @@ cures.
   This guarantees evenly-spaced bars regardless of how many categories \
 or how they're distributed.
 
+  **Build the color list last**, from the DataFrame in its final order: \
+do every sort and filter first, then compute `bar_colors` (and any \
+per-bar text) from that same DataFrame. A list built before a re-sort \
+colors each bar by another row's category — e.g. a falling lipid drawn \
+in the "up" color.
+
   When multiple bars genuinely share an x position (e.g., grouped/ \
 stacked bars per condition), `px.bar(..., color=...)` is fine — use \
 `barmode='stack'` or `'group'` as appropriate.
