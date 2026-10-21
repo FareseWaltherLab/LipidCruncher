@@ -283,6 +283,30 @@ class TestPipelineParity:
         )
         assert failures == ["the pipeline's answer is 24; the turn never states it"]
 
+    def test_p_values_formatted_as_text_pass(self, canonical, lc):
+        """First real run (2026-10-21): the model's own code, which was
+        right, failed because its p-values were strings."""
+        top10 = lc.compare_species('WT', 'KO').head(10)[
+            ['LipidMolec', 'ClassKey', 'log2FC', 'p_value', 'significant']].copy()
+        top10['log2FC'] = top10['log2FC'].round(3)
+        top10['p_value'] = top10['p_value'].apply(lambda x: f"{x:.3e}")
+        top10 = top10.reset_index(drop=True)
+        top10.index += 1
+        assert score_pipeline_parity(TOP10, canonical, "", result_df=top10) == []
+
+    def test_every_lipid_with_a_significant_flag_passes(self, canonical, lc):
+        """Same run: all 24 lipids, the six marked significant."""
+        result = lc.compare_species('WT', 'KO', alpha=0.05)
+        table = result[['LipidMolec', 'ClassKey', 'log2FC', 'p_value',
+                        'adj_p_value', 'significant']].copy()
+        table['p_value'] = table['p_value'].apply(lambda x: f"{x:.3e}")
+        assert score_pipeline_parity(SIGNIFICANT, canonical, "", result_df=table) == []
+
+    def test_a_flag_marking_other_lipids_is_still_caught(self, canonical, lc):
+        table = lc.compare_species('WT', 'KO', alpha=0.6)
+        failures = score_pipeline_parity(SIGNIFICANT, canonical, "", result_df=table)
+        assert any("listed different rows" in f for f in failures)
+
     def test_no_table_is_a_failure(self, canonical):
         assert score_pipeline_parity(TOP10, canonical, "PE 18:0_20:4 ...") == [
             "no table to compare with the pipeline's answer"

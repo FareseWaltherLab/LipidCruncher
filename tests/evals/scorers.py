@@ -212,6 +212,14 @@ def score_pipeline_parity(
         return failures + [f"no column lists the pipeline's keys (e.g. {example!r})"]
 
     got = set(table[key].astype(str))
+    # A table of every lipid with a yes/no column marking exactly the
+    # pipeline's answer gives that answer too.
+    for flag in table.select_dtypes(bool).columns:
+        marked = set(table.loc[table[flag], key].astype(str))
+        if got > want and marked == want:
+            table = table[table[flag]]
+            got = marked
+            break
     if got != want:
         missing, extra = sorted(want - got), sorted(got - want)
         return failures + [
@@ -222,8 +230,10 @@ def score_pipeline_parity(
     rows = table.assign(_key=table[key].astype(str)).drop_duplicates("_key")
     rows = rows.set_index("_key").loc[[str(k) for k in expected.index]]
     target = expected.to_numpy(dtype=float)
-    for col in rows.select_dtypes("number").columns:
-        if np.allclose(rows[col].to_numpy(dtype=float), target, rtol=0.01):
+    for col in rows.columns:
+        # Numbers formatted as text ("1.069e-06") count as numbers.
+        values = pd.to_numeric(rows[col], errors="coerce")
+        if values.notna().all() and np.allclose(values, target, rtol=0.01):
             return failures
     first = expected.index[0]
     return failures + [
