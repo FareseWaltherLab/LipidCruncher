@@ -146,7 +146,8 @@ def render_viz_chat(analysis_df, experiment) -> None:
                 )
             return {"code": result.session.messages[-1].code,
                     "produced_figure": bool(sr and sr.figure is not None),
-                    "figure": sr.figure if sr else None}
+                    "figure": sr.figure if sr else None,
+                    "unverified_numbers": result.unverified_numbers}
 
         run_code_turn(
             "viz", "visualization", user_input, session.messages,

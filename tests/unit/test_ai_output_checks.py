@@ -5,7 +5,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from app.services.ai_chat.output_checks import check_lipid_table
+from app.services.ai_chat.output_checks import (
+    check_lipid_table,
+    computed_values,
+    numbers_not_computed,
+)
 
 _KO = ['KO-1', 'KO-2', 'KO-3']
 
@@ -44,3 +48,35 @@ def test_summary_tables_are_not_checked(studio_df):
     assert check_lipid_table(means, studio_df) == []
     counts = pd.DataFrame({'n': [len(studio_df)]})
     assert check_lipid_table(counts, studio_df) == []
+
+
+class TestNumbersNotComputed:
+    """B2: the explanation streams before the code runs, so a number in it
+    is a claim. Only numbers no computed value rounds to are reported."""
+
+    computed = computed_values(
+        "Kept 757 of 1394 lipids\n",
+        pd.DataFrame({"LipidMolec": ["PE 18:0_20:4"], "p_value": [1.069e-06],
+                      "log2FC": [1.987], "share": [0.5430]}),
+    )
+
+    def test_rounded_computed_numbers_pass(self):
+        prose = ("We kept 757 of 1,394 lipids (54.3%); PE 18:0_20:4 has "
+                 "p = 1.07e-06 and log2FC 1.99.")
+        assert numbers_not_computed(prose, self.computed) == ()
+
+    def test_numbers_the_code_never_produced_are_reported(self):
+        prose = "There are 24 species, with a mean of 412.7, and 61.2% are PCs."
+        assert numbers_not_computed(prose, self.computed) == ("24", "412.7", "61.2%")
+
+    def test_names_small_numbers_and_the_question_are_not_claims(self):
+        prose = ("1. In WT-1, s3 and C18 chains of PC 16:0_18:1, across 2 "
+                 "conditions, the top 10 are shown.")
+        assert numbers_not_computed(prose, self.computed, context="top 10") == ()
+
+    def test_plotted_values_count_as_computed(self):
+        import plotly.graph_objects as go
+        fig = go.Figure(go.Bar(x=["PC", "PE"], y=[6350.0, 4379.0]))
+        assert numbers_not_computed(
+            "PC totals 6,350 and PE 4,379.", computed_values(figure=fig),
+        ) == ()

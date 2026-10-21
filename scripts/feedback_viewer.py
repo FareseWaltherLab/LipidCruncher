@@ -189,6 +189,11 @@ def _detail(turn, all_turns):
         if r.get("produced_figure"):
             flags.append("figure")
         st.caption("Produced: " + (", ".join(flags) or "text only"))
+        if r.get("unverified_numbers"):
+            st.warning(
+                "Numbers in the answer the code never produced: "
+                + ", ".join(r["unverified_numbers"])
+            )
 
 
 def main():

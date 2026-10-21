@@ -24,7 +24,9 @@ from typing import Optional
 #   2 — adds model, dataset descriptor, prior conversation, figure JSON
 #   3 — `figure` (trace types, names, point counts, titles) replaces
 #       `figure_json`: the plotted values are the user's data
-SCHEMA_VERSION = 3
+#   4 — adds `unverified_numbers`: numbers the answer states that the
+#       turn's code never produced (Data Questions, Visualization)
+SCHEMA_VERSION = 4
 
 # Size guards. The awslogs driver splits a stdout line above 256 KB into
 # several CloudWatch events, which would break the JSON (and the pull script
@@ -201,6 +203,7 @@ class InteractionLoggingService:
         dataset: Optional[dict] = None,
         history=None,
         figure: Optional[dict] = None,
+        unverified_numbers=(),
     ) -> dict:
         """Build the turn record dict (pure — no I/O). Broken out so it can
         be unit-tested without capturing stdout.
@@ -225,6 +228,7 @@ class InteractionLoggingService:
             "dataset": dataset,
             "history": InteractionLoggingService._compact_history(history),
             "figure": figure,
+            "unverified_numbers": list(unverified_numbers)[:50],
         }, ("question", "answer", "code", "error"))
 
     @staticmethod
@@ -262,6 +266,7 @@ class InteractionLoggingService:
         dataset: Optional[dict] = None,
         history=None,
         figure: Optional[dict] = None,
+        unverified_numbers=(),
     ) -> None:
         """Emit one turn record (question, answer, tab, code, outcome, plus
         the model, dataset descriptor, prior conversation and a summary of
@@ -280,6 +285,7 @@ class InteractionLoggingService:
             dataset=dataset,
             history=history,
             figure=figure,
+            unverified_numbers=unverified_numbers,
         ))
 
     @staticmethod

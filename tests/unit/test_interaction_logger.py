@@ -109,8 +109,22 @@ class TestSchema2Context:
     and the figure, so a record can be reviewed on its own (schema 3: a
     summary of the figure)."""
 
-    def test_schema_version_is_3(self):
-        assert SCHEMA_VERSION == 3
+    def test_schema_version_is_4(self):
+        assert SCHEMA_VERSION == 4
+
+    def test_turn_record_carries_unverified_numbers(self):
+        """Schema 4: numbers the answer states that its code never
+        produced, logged to measure how often that happens (plan B2)."""
+        rec = InteractionLoggingService.build_turn_record(
+            turn_id="t", session_id="s", tab="data_questions",
+            question="q", answer="There are 30 species.",
+            unverified_numbers=("30",),
+        )
+        assert rec["unverified_numbers"] == ["30"]
+        assert InteractionLoggingService.build_turn_record(
+            turn_id="t", session_id="s", tab="data_questions",
+            question="q", answer="a",
+        )["unverified_numbers"] == []
 
     def test_turn_record_carries_model_dataset_history_figure(self):
         rec = InteractionLoggingService.build_turn_record(
@@ -245,7 +259,7 @@ class TestSchema2Context:
         finally:
             logging.getLogger(_LOGGER_NAME).removeHandler(handler)
         payload = json.loads(handler.records[0])
-        assert payload["schema"] == 3
+        assert payload["schema"] == 4
         assert payload["model"] == "claude-x"
         assert payload["dataset"] == {"rows": 1}
         assert payload["history"] == [{"role": "user", "content": "hi"}]

@@ -1750,6 +1750,7 @@ class StreamlitAdapter:
         df: Optional[pd.DataFrame] = None,
         experiment: Optional[ExperimentConfig] = None,
         figure=None,
+        unverified_numbers=(),
     ) -> str:
         """Log one completed AI Studio turn. Returns the turn_id so the UI
         can attach a later 👍/👎 feedback record to it.
@@ -1784,6 +1785,7 @@ class StreamlitAdapter:
             ),
             history=history,
             figure=InteractionLoggingService.summarize_figure(figure),
+            unverified_numbers=unverified_numbers,
         )
         return turn_id
 

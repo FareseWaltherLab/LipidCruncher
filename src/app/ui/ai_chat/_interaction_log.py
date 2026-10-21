@@ -30,6 +30,7 @@ def record_turn(
     df=None,
     experiment=None,
     figure=None,
+    unverified_numbers=(),
 ) -> None:
     """Log one turn. If ``assistant_msg`` is given, map its timestamp to the
     turn_id so the feedback widget can attach to it. ``history`` is the
@@ -49,6 +50,7 @@ def record_turn(
             df=df,
             experiment=experiment,
             figure=figure,
+            unverified_numbers=unverified_numbers,
         )
         if assistant_msg is not None:
             store = st.session_state.setdefault(_TURN_IDS, {})

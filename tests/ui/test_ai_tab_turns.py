@@ -92,7 +92,8 @@ def _result(tab, session, empty=False):
     if tab == "dq":
         return DataQuestionsStepResult(
             session=new, assistant_message="answer",
-            result_df=pd.DataFrame({"n": [1]}), code=CODE)
+            result_df=pd.DataFrame({"n": [1]}), code=CODE,
+            unverified_numbers=("30",))
     if tab == "transform":
         return TransformStepResult(
             session=new, assistant_message="answer",
@@ -102,7 +103,8 @@ def _result(tab, session, empty=False):
     return VizStepResult(
         session=new, assistant_message="answer",
         sandbox_result=SandboxResult(success=True, figure=go.Figure(
-            go.Bar(x=["a"], y=[1]))))
+            go.Bar(x=["a"], y=[1]))),
+        unverified_numbers=("30",))
 
 
 def _stub(monkeypatch, tab, empty=False, fail=False):
@@ -158,6 +160,9 @@ def test_successful_code_turn(tab, logged, monkeypatch):
     assert (log["figure"] is not None) is (tab == "viz")
     assert (log["experiment"] is not None) is (tab == "viz")
     assert log["code"] == CODE
+    # B2: numbers the answer states that the code never produced
+    assert tuple(log.get("unverified_numbers", ())) == (
+        ("30",) if tab in ("dq", "viz") else ())
 
 
 def test_transform_preview_shows_the_report(logged, monkeypatch):

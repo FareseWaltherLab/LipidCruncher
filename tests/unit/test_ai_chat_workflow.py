@@ -414,3 +414,19 @@ def test_keeping_refused_columns_reruns_the_last_code(mock_loop):
     assert kept.session.messages[-1].content.startswith(
         "You confirmed these are samples: `Reference_1`."
     )
+
+
+@patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+def test_numbers_the_code_never_produced_are_recorded(mock_loop, source_df):
+    """B2: the explanation is written before the code runs, so its numbers
+    are claims. Recorded on the step result for the turn log."""
+    mock_loop.side_effect = canned_stream(
+        "There are 30 lipids, 3 of them in the table, with total 300.\n\n"
+        "```python\nprint(len(df))\nresult_df = df.head(3)\n```"
+    )
+    session = AIChatWorkflow.start_data_questions_session(source_df)
+    result = finish(AIChatWorkflow.stream_data_questions_message(
+        "how many lipids?", session, source_df,
+    ))
+    # 3 is below 10; 300 is in the table (area_s1); 30 is nowhere.
+    assert result.unverified_numbers == ("30",)

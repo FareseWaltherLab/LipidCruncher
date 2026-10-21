@@ -1,11 +1,13 @@
 """
-Checks that an AI-produced table still matches the data it came from.
+Checks that an AI-produced answer still matches the data it came from.
 
-Shared by the Transform to Generic and Data Questions tabs. Pure
-functions over DataFrames — no Streamlit imports.
+Shared by the Transform to Generic, Data Questions and Custom
+Visualization tabs. Pure functions over DataFrames — no Streamlit imports.
 """
-from typing import List
+import re
+from typing import List, Tuple
 
+import numpy as np
 import pandas as pd
 
 
@@ -144,3 +146,64 @@ def _table_name_column(table: pd.DataFrame, source_df: pd.DataFrame):
         if count > best_count:
             best, best_count = col, count
     return best
+
+
+# A number standing on its own in prose: not part of a lipid name
+# ('PC 16:0_18:1'), a sample name ('WT-1', 's3') or a word ('C18').
+_PROSE_NUMBER = re.compile(
+    r"(?<![\w.:/_\-])(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?([eE][-+]?\d+)?(%?)(?![\w:/_])"
+)
+_ANY_NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+
+def computed_values(stdout: str = "", result_df=None, figure=None) -> np.ndarray:
+    """Every number a turn's code produced: printed, in its table, or
+    plotted."""
+    values = [float(v) for v in _ANY_NUMBER.findall(stdout or "")]
+    if result_df is not None:
+        table = result_df.reset_index()
+        for col in table.columns:
+            numbers = pd.to_numeric(table[col], errors="coerce")
+            values.extend(numbers.dropna().astype(float))
+    if figure is not None:
+        for trace in figure.data:
+            for axis in ("x", "y", "z", "values"):
+                data = getattr(trace, axis, None)
+                if data is not None:
+                    numbers = pd.to_numeric(pd.Series(np.ravel(data)), errors="coerce")
+                    values.extend(numbers.dropna().astype(float))
+    return np.abs(np.asarray(values, dtype=float))
+
+
+def numbers_not_computed(
+    prose: str, computed: np.ndarray, context: str = "",
+) -> Tuple[str, ...]:
+    """Numbers the model stated that its code never produced.
+
+    The explanation streams before the code runs, so a number in it is the
+    model's claim, not a result. A stated number counts as computed when a
+    computed value rounds to it (to the decimals it was written with; a
+    percentage may also be a fraction). Numbers below 10 (list markers,
+    "2 conditions") and numbers that appear in ``context`` (the question,
+    the code) are not checked. For logging and measurement, not refusal.
+    """
+    context_numbers = {m.group(0) for m in _ANY_NUMBER.finditer(context or "")}
+    unverified = []
+    for match in _PROSE_NUMBER.finditer(prose or ""):
+        whole, fraction, exponent, percent = match.groups()
+        text = match.group(0)
+        number = float(whole.replace(",", "") + (fraction or "") + (exponent or ""))
+        if number < 10 and not fraction and not exponent:
+            continue
+        if text.rstrip("%") in context_numbers or whole.replace(",", "") in context_numbers:
+            continue
+        if exponent:
+            tolerance = abs(number) * 5e-3
+        else:
+            tolerance = 0.5 * 10 ** -len((fraction or ".")[1:]) + 1e-12
+        targets = [(number, tolerance)]
+        if percent:
+            targets.append((number / 100, tolerance / 100))
+        if not any(np.any(np.abs(computed - t) <= tol) for t, tol in targets):
+            unverified.append(text)
+    return tuple(dict.fromkeys(unverified))

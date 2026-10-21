@@ -21,7 +21,11 @@ from ..models.experiment import ExperimentConfig
 from ..services.ai_chat.ai_client import AIClientService
 from ..services.ai_chat.codebase_tools import TOOL_DEFINITIONS, execute_tool
 from ..services.ai_chat.data_transformer import DataTransformerService, TransformationResult
-from ..services.ai_chat.output_checks import check_lipid_table
+from ..services.ai_chat.output_checks import (
+    check_lipid_table,
+    computed_values,
+    numbers_not_computed,
+)
 from ..services.ai_chat.prompt_templates import (
     build_experiment_context,
     data_questions_system_prompt,
@@ -109,10 +113,13 @@ class VizStepResult:
         session: Updated chat session with new messages appended.
         sandbox_result: Sandbox execution result (None if AI only asked a question).
         assistant_message: The full assistant response text for display.
+        unverified_numbers: Numbers the explanation states that the code
+            never produced (logged, not shown; see ``_unverified_numbers``).
     """
     session: ChatSession
     sandbox_result: Optional[SandboxResult] = None
     assistant_message: str = ""
+    unverified_numbers: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -124,11 +131,36 @@ class DataQuestionsStepResult:
         assistant_message: The full assistant response text for display.
         result_df: Optional DataFrame if the AI computed a summary table.
         code: Optional code that was executed to compute the answer.
+        unverified_numbers: Numbers the explanation states that the code
+            never produced (logged, not shown; see ``_unverified_numbers``).
     """
     session: ChatSession
     assistant_message: str = ""
     result_df: Optional[pd.DataFrame] = None
     code: str = ""
+    unverified_numbers: Tuple[str, ...] = ()
+
+
+def _unverified_numbers(
+    session: ChatSession,
+    explanation: str,
+    code: str,
+    stdout: str = "",
+    result_df: Optional[pd.DataFrame] = None,
+    figure=None,
+) -> Tuple[str, ...]:
+    """Numbers in the model's explanation that its code never produced.
+
+    ``session`` ends with this turn's user and assistant messages; the
+    question, the code and the data's schema are the numbers' legitimate
+    sources besides the computed output. Logged so the rate can be
+    measured before anything is shown to users (plan B2)."""
+    question = session.messages[-2].content if len(session.messages) >= 2 else ""
+    return numbers_not_computed(
+        explanation,
+        computed_values(stdout, result_df, figure),
+        context="\n".join([question, code or "", session.schema_context or ""]),
+    )
 
 
 class AIChatWorkflow:
@@ -634,10 +666,16 @@ class AIChatWorkflow:
         )
         session = session.add_message(assistant_msg)
 
+        ran = sandbox_result is not None and sandbox_result.success
         return VizStepResult(
             session=session,
             sandbox_result=sandbox_result,
             assistant_message=assistant_text,
+            unverified_numbers=_unverified_numbers(
+                session, explanation, code,
+                stdout=sandbox_result.stdout if ran else "",
+                figure=sandbox_result.figure if ran else None,
+            ),
         )
 
     @staticmethod
@@ -744,6 +782,7 @@ class AIChatWorkflow:
         """
         explanation, code = AIClientService.extract_code_block(response_text)
         result_df = None
+        stdout = ""
 
         if code:
             sandbox_result = SandboxService.execute(
@@ -751,6 +790,8 @@ class AIChatWorkflow:
                 numeric_columns=numeric_columns,
                 lc=PipelineAPI(source_df, experiment),
             )
+            if sandbox_result.success:
+                stdout = sandbox_result.stdout
             table_errors = (
                 check_lipid_table(sandbox_result.result_df, source_df)
                 if sandbox_result.success
@@ -817,6 +858,10 @@ class AIChatWorkflow:
             assistant_message=assistant_text,
             result_df=result_df,
             code=code,
+            unverified_numbers=_unverified_numbers(
+                session, explanation, code,
+                stdout=stdout, result_df=result_df,
+            ),
         )
 
     @staticmethod
