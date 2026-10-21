@@ -29,6 +29,10 @@ class TransformReport:
     ``check_values_stay_with_their_lipid``; a renamed lipid counts as
     removed and as not in the upload. Value counts cover lipid x column
     cells present on both sides (``cells_compared``).
+
+    ``reordered_columns`` are sample columns whose lipids no longer rank
+    as in the upload (see ``compare_to_upload``): a warning that values
+    may have moved to other lipids and were also changed.
     """
     rows_uploaded: int
     rows_result: int
@@ -41,6 +45,7 @@ class TransformReport:
     values_appeared: int
     values_missing: int
     duplicate_names: Tuple[str, ...]
+    reordered_columns: Tuple[str, ...] = ()
 
     def summary(self) -> str:
         """One line for the assistant message."""
@@ -82,6 +87,12 @@ class TransformReport:
         if self.duplicate_names:
             parts.append(
                 f"{len(self.duplicate_names):,} lipid names appear more than once"
+            )
+        if self.reordered_columns:
+            parts.append(
+                f"⚠️ in {len(self.reordered_columns)} sample columns (e.g. "
+                f"`{self.reordered_columns[0]}`) the lipids no longer rank as "
+                f"in the upload, so values may have moved to other lipids"
             )
         return "; ".join(parts)
 
@@ -449,6 +460,7 @@ class DataTransformerService:
 
         source_set, result_set = set(source_names), set(names)
         compared = changed = appeared = missing = 0
+        reordered = []
         both = sorted(
             set(source_names[~source_names.duplicated(keep=False)])
             & set(names[~names.duplicated(keep=False)])
@@ -467,6 +479,26 @@ class DataTransformerService:
             changed = int((was & now & differs).sum().sum())
             appeared = int((~was & now).sum().sum())
             missing = int((was & ~now).sum().sum())
+
+            # Rescaling, logs and per-sample normalization keep each
+            # column's ranking of lipids; values moved to other lipids
+            # destroy it (Spearman ~0 vs ~1). Ranking within each class
+            # (the name's leading letters) keeps per-class normalization
+            # at ~1 too.
+            classes = pd.Series(both, index=both).str.extract(
+                r'^([A-Za-z]+)', expand=False,
+            )
+            for col in columns:
+                pair = pd.concat(
+                    [before[col], after[col]], axis=1, keys=['was', 'now'],
+                ).dropna()
+                if len(pair) < 10:
+                    continue
+                ranks = pair.groupby(
+                    classes[pair.index], dropna=False,
+                ).rank(pct=True)
+                if ranks['was'].corr(ranks['now'], method='spearman') < 0.5:
+                    reordered.append(str(col))
 
         return TransformReport(
             rows_uploaded=len(source_df),
@@ -487,6 +519,7 @@ class DataTransformerService:
             values_appeared=appeared,
             values_missing=missing,
             duplicate_names=tuple(dict.fromkeys(names[names.duplicated()])),
+            reordered_columns=tuple(reordered),
         )
 
     @staticmethod

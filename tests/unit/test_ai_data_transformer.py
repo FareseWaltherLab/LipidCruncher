@@ -446,3 +446,37 @@ class TestCompareToUpload:
         report = DataTransformerService.compare_to_upload(new_columns, source)
         assert report.cells_compared == 0
         assert "values not compared" in report.summary()
+
+
+class TestReorderedValuesWarning:
+    """A3: values moved to another lipid *and* changed (here halved) slip
+    past the identity check, which only knows exact copies. The report
+    warns when a column no longer ranks its lipids as the upload did."""
+
+    def test_misaligned_filter_then_halved_is_warned_about(self, studio_df):
+        code = _MISALIGNED_FILTER.replace(
+            "pd.to_numeric(filtered[col], errors='coerce')",
+            "pd.to_numeric(filtered[col], errors='coerce') / 2",
+        )
+        result = DataTransformerService.execute_transformation(code, studio_df)
+        assert result.success is True, result.validation_errors
+        assert result.report.reordered_columns == tuple(_SAMPLES)
+        assert "no longer rank as in the upload" in result.report.summary()
+
+    @pytest.mark.parametrize('values', [
+        "df[_SAMPLES] * 1000",
+        "np.log10(df[_SAMPLES])",
+        "df[_SAMPLES] / df[_SAMPLES].sum()",
+        # a different factor per class: global ranking changes, within-class
+        # ranking does not
+        "df[_SAMPLES].div(df.groupby('LipidClass')[_SAMPLES].transform('sum'))",
+    ])
+    def test_value_preserving_transforms_are_not(self, studio_df, values):
+        code = (
+            f"_SAMPLES = {_SAMPLES!r}\n"
+            f"result_df = pd.concat([df[['feature']], {values}], axis=1)\n"
+        )
+        result = DataTransformerService.execute_transformation(code, studio_df)
+        assert result.success is True, result.validation_errors
+        assert result.report.reordered_columns == ()
+        assert "no longer rank" not in result.report.summary()
