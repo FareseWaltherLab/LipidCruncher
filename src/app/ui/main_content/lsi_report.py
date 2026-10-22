@@ -178,7 +178,14 @@ def _build_qc_summary(bqc_label: Optional[str]) -> dict:
 
     cov_threshold = st.session_state.get("qc_cov_threshold")
     if bqc_label and cov_threshold is not None:
-        summary["BQC CoV threshold"] = f"{cov_threshold}%"
+        if st.session_state.get("_preserved_bqc_filter_choice") == "Yes":
+            cov_filter = f"Applied: lipids with CoV ≥ {cov_threshold}% removed"
+            kept = st.session_state.get("bqc_lipids_to_keep") or []
+            if kept:
+                cov_filter += f", except {len(kept)} kept by choice"
+        else:
+            cov_filter = "Not applied"
+        summary["BQC CoV filter"] = cov_filter
 
     samples_removed = st.session_state.get("qc_samples_removed", [])
     if samples_removed:
