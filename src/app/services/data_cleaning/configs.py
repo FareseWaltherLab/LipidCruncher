@@ -9,15 +9,19 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class GradeFilterConfig(BaseModel):
-    """Configuration for LipidSearch grade filtering.
+    """Configuration for LipidSearch grade filtering and adducts.
 
     Args:
         grade_config: Optional dict mapping ClassKey to list of acceptable grades.
                      If None, uses default filtering (A/B/C for all classes).
+        keep_other_adducts: Keep species of a class with its own internal
+            standard that were seen only in other adducts than the
+            standard's (removed by default).
     """
     model_config = {"frozen": True}
 
     grade_config: Optional[Dict[str, List[str]]] = None
+    keep_other_adducts: bool = False
 
     @field_validator('grade_config')
     @classmethod

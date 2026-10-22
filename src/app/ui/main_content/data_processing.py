@@ -30,7 +30,7 @@ from app.constants import (
     MSDIAL_DEFAULT_QUALITY_LEVEL,
 )
 from app.services.data_cleaning import (
-    POLARITY_NOTE_PREFIX, GradeFilterConfig, QualityFilterConfig,
+    ADDUCT_NOTE_PREFIX, GradeFilterConfig, QualityFilterConfig,
 )
 from app.ui.content import get_processing_docs, ZERO_FILTERING_DOCS
 from app.ui.sample_labels import names_for
@@ -141,6 +141,43 @@ def display_grade_filtering_config(df: pd.DataFrame) -> dict:
                 grade_config[lipid_class] = selected_grades
 
         return grade_config
+
+
+def display_adduct_config(df: pd.DataFrame) -> bool:
+    """LipidSearch adduct option, when the export names each row's adduct.
+
+    Returns:
+        Whether to keep species seen only in other adducts than their
+        class's internal standard.
+    """
+    if 'MainIon' not in df.columns:
+        return False
+
+    if 'keep_other_adducts' not in st.session_state:
+        st.session_state.keep_other_adducts = False
+    widget_key = "keep_other_adducts_checkbox"
+    st.session_state[widget_key] = st.session_state.keep_other_adducts
+
+    def on_change():
+        st.session_state.keep_other_adducts = st.session_state[widget_key]
+
+    with st.expander("⚙️ Configure Adducts", expanded=False):
+        st.info(
+            "ℹ️ A class with its own internal standard is quantified in the "
+            "standard's adduct (e.g. PC as [M+H]+ when the PC standard is "
+            "[M+H]+), so species and standard respond alike. Species of that "
+            "class seen only in other adducts are **removed** by default: "
+            "their signal is on a different scale from the standard's."
+        )
+        st.checkbox(
+            "Keep species measured in other adducts",
+            key=widget_key,
+            on_change=on_change,
+            help="Keeps more species, but their concentrations from the "
+                 "standard are less accurate. The note after processing "
+                 "lists them per class.",
+        )
+    return st.session_state.keep_other_adducts
 
 
 def display_msdial_data_type_selection():
@@ -357,8 +394,12 @@ def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):
 
     if data_format == FORMAT_LIPIDSEARCH:
         grade_config_dict = display_grade_filtering_config(raw_df)
-        if grade_config_dict is not None:
-            grade_config = GradeFilterConfig(grade_config=grade_config_dict)
+        keep_other_adducts = display_adduct_config(raw_df)
+        if grade_config_dict is not None or keep_other_adducts:
+            grade_config = GradeFilterConfig(
+                grade_config=grade_config_dict,
+                keep_other_adducts=keep_other_adducts,
+            )
 
     elif data_format == FORMAT_MSDIAL:
         display_msdial_data_type_selection()
@@ -423,10 +464,10 @@ def run_ingestion_pipeline(df, experiment, data_format,
     for warning in result.validation_warnings:
         st.warning(warning)
 
-    # Lipids measured in both ionisation modes (LipidSearch): say which row
-    # was used and what that means for comparisons.
+    # LipidSearch: which adduct each class was quantified from, what was
+    # removed for not matching its standard, and which classes mix adducts.
     for msg in result.cleaning_messages:
-        if msg.startswith(POLARITY_NOTE_PREFIX):
+        if msg.startswith(ADDUCT_NOTE_PREFIX):
             st.info(msg)
 
     # MS-DIAL: rerun if quality config changed so expander shows updated results

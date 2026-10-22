@@ -11,7 +11,7 @@ from ..format_detection import DataFormat
 from .configs import GradeFilterConfig, QualityFilterConfig, CleaningResult
 from .exceptions import DataCleaningError, ConfigurationError, EmptyDataError
 from .base import BaseDataCleaner
-from .lipidsearch import LipidSearchCleaner, POLARITY_NOTE_PREFIX
+from .lipidsearch import LipidSearchCleaner, ADDUCT_NOTE_PREFIX
 from .msdial import MSDIALCleaner
 from .generic import GenericCleaner
 
@@ -99,7 +99,7 @@ __all__ = [
     'EmptyDataError',
     'BaseDataCleaner',
     'LipidSearchCleaner',
-    'POLARITY_NOTE_PREFIX',
+    'ADDUCT_NOTE_PREFIX',
     'MSDIALCleaner',
     'GenericCleaner',
 ]

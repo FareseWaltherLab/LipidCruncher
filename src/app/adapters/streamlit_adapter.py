@@ -339,6 +339,7 @@ _STAGES: Tuple[_Stage, ...] = (
         widgets=frozenset({
             # data_processing.py
             'grade_filter_mode', 'grade_selections', 'grade_filter_mode_radio',
+            'keep_other_adducts', 'keep_other_adducts_checkbox',
             'msdial_quality_level', 'msdial_data_type_radio',
             'msdial_quality_level_radio', 'msdial_custom_msms',
             'msdial_show_custom_threshold', 'msdial_custom_score',

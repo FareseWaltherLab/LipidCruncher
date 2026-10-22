@@ -9,7 +9,7 @@ from app.services.data_cleaning import (
     CleaningResult,
     BaseDataCleaner,
     LipidSearchCleaner,
-    POLARITY_NOTE_PREFIX,
+    ADDUCT_NOTE_PREFIX,
     MSDIALCleaner,
     GenericCleaner,
     ConfigurationError,
@@ -683,59 +683,79 @@ class TestCleanerContract:
         assert all(issubclass(c, BaseDataCleaner) for c in _CLEANER_REGISTRY.values())
 
 
-class TestLipidSearchPolarityNote:
-    """M10: lipids identified in both ionisation modes keep one row; the
-    cleaner says so, and which classes mix the two modes."""
+class TestLipidSearchAdducts:
+    """M10 (power user, 2026-10-22): a class with its own internal standard
+    is quantified in the standard's adduct; its species seen only in other
+    adducts are removed unless the user keeps them; the cleaner says which
+    adduct each class used and which classes still mix adducts."""
 
     @staticmethod
-    def _df(lipidsearch_df, ions, extra=None):
-        df = lipidsearch_df.assign(MainIon=ions)
-        if extra is not None:
-            df = pd.concat([df, pd.DataFrame([extra])], ignore_index=True)
-        return df
+    def _row(base, **changes):
+        return {**base, 'TotalSmpIDRate(%)': 90.0, **changes}
 
-    def _note(self, df, experiment):
-        _, messages = LipidSearchCleaner.clean(df, experiment)
-        notes = [m for m in messages if m.startswith(POLARITY_NOTE_PREFIX)]
+    @pytest.fixture
+    def export(self, lipidsearch_df):
+        """PC has an [M+H]+ standard. PC(16:0_18:1) is also seen, better
+        graded, as [M+HCOO]-; PC(18:0_18:1) only as [M+HCOO]-. PE and TG
+        have no standard; PE also has an [M-H]- species."""
+        pc, pe = lipidsearch_df.iloc[0].to_dict(), lipidsearch_df.iloc[1].to_dict()
+        df = lipidsearch_df.assign(MainIon=['M+H', 'M+H', 'M+NH4'], TotalGrade='B')
+        rows = [
+            self._row(pc, LipidMolec='PC(15:0_18:1)+D7:(s)', FAKey='(15:0_18:1)+D7:(s)',
+                      TotalGrade='A', MainIon='M+H', **{'intensity[s1]': 500.0}),
+            self._row(pc, TotalGrade='A', MainIon='M+HCOO', **{'intensity[s1]': 50.0}),
+            self._row(pc, LipidMolec='PC(18:0_18:1)', FAKey='18:0_18:1',
+                      MainIon='M+HCOO', **{'intensity[s1]': 70.0}),
+            self._row(pe, LipidMolec='PE(16:0_18:1)', FAKey='16:0_18:1',
+                      MainIon='M-H', **{'intensity[s1]': 80.0}),
+        ]
+        return pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
+
+    @staticmethod
+    def _clean(df, experiment, keep_other=False):
+        cleaned, messages = LipidSearchCleaner.clean(
+            df, experiment, GradeFilterConfig(keep_other_adducts=keep_other),
+        )
+        notes = [m for m in messages if m.startswith(ADDUCT_NOTE_PREFIX)]
         assert len(notes) <= 1
-        return notes[0] if notes else None
+        return cleaned.set_index('LipidMolec'), (notes[0] if notes else None)
 
-    def test_lipid_in_both_modes(self, lipidsearch_df, simple_experiment_2x2):
-        pc_negative = {
-            **lipidsearch_df.iloc[0].to_dict(), 'MainIon': 'M+HCOO',
-            'TotalGrade': 'B', 'intensity[s1]': 50.0,
-        }
-        df = self._df(lipidsearch_df, ['M+H', 'M+H', 'M+NH4'], pc_negative)
-        cleaned, _ = LipidSearchCleaner.clean(df, simple_experiment_2x2)
-        # Selection unchanged: the better-graded positive row, not a sum.
-        pc = cleaned[cleaned['ClassKey'] == 'PC']
-        assert pc['intensity[s1]'].tolist() == [1000.0]
-        note = self._note(df, simple_experiment_2x2)
-        assert '1 lipid(s) were identified in both positive and negative mode' in note
-        assert 'never added' in note
-        assert 'Classes whose species' not in note
+    def test_species_use_the_standards_adduct(self, export, simple_experiment_2x2):
+        cleaned, _ = self._clean(export, simple_experiment_2x2)
+        # The [M+H]+ row, though the [M+HCOO]- row graded better.
+        assert cleaned.loc['PC 16:0_18:1', 'MainIon'] == 'M+H'
+        assert cleaned.loc['PC 16:0_18:1', 'intensity[s1]'] == 1000.0
 
-    def test_class_with_species_from_both_modes(self, lipidsearch_df, simple_experiment_2x2):
-        pc_other = {
-            **lipidsearch_df.iloc[0].to_dict(), 'LipidMolec': 'PC(18:0_18:1)',
-            'FAKey': '18:0_18:1', 'MainIon': 'M+HCOO',
-        }
-        df = self._df(lipidsearch_df, ['M+H', 'M-H', 'M+NH4'], pc_other)
-        note = self._note(df, simple_experiment_2x2)
-        assert 'identified in both' not in note
-        assert 'PC (1 positive, 1 negative)' in note
-        assert 'PE (' not in note and 'TG (' not in note
+    def test_species_only_in_other_adducts_are_removed(self, export, simple_experiment_2x2):
+        cleaned, note = self._clean(export, simple_experiment_2x2)
+        assert 'PC 18:0_18:1' not in cleaned.index
+        assert "PC (M+H): 1 species; 1 seen only as other adducts removed (M+HCOO 1)" in note
+        assert 'Keep species measured in other adducts' in note
 
-    def test_one_mode_only(self, lipidsearch_df, simple_experiment_2x2):
-        df = self._df(lipidsearch_df, ['M+H', 'M+H', 'M+NH4'])
-        assert self._note(df, simple_experiment_2x2) is None
+    def test_the_user_can_keep_them(self, export, simple_experiment_2x2):
+        cleaned, note = self._clean(export, simple_experiment_2x2, keep_other=True)
+        assert cleaned.loc['PC 18:0_18:1', 'MainIon'] == 'M+HCOO'
+        assert cleaned.loc['PC 16:0_18:1', 'MainIon'] == 'M+H'  # matched rows still win
+        assert "1 seen only as other adducts kept (M+HCOO 1)" in note
+        assert "PC (M+H 1, M+HCOO 1)" in note  # now a mixed class
+
+    def test_classes_without_a_standard_are_unchanged_but_listed(
+        self, export, simple_experiment_2x2,
+    ):
+        cleaned, note = self._clean(export, simple_experiment_2x2)
+        assert cleaned.loc['PE 16:0_18:1', 'MainIon'] == 'M-H'
+        assert "Classes whose species come from different adducts: PE (M+H 1, M-H 1)" in note
+        assert 'never a sum' in note
+
+    def test_no_standard_and_one_adduct_per_class(self, lipidsearch_df, simple_experiment_2x2):
+        df = lipidsearch_df.assign(MainIon=['M+H', 'M+H', 'M+NH4'])
+        _, note = self._clean(df, simple_experiment_2x2)
+        assert note is None
 
     def test_no_ion_column(self, lipidsearch_df, simple_experiment_2x2):
-        assert self._note(lipidsearch_df, simple_experiment_2x2) is None
-
-    def test_unknown_ions_are_left_out(self, lipidsearch_df, simple_experiment_2x2):
-        df = self._df(lipidsearch_df, ['M+H', 'M+X', 'M+NH4'])
-        assert self._note(df, simple_experiment_2x2) is None
+        cleaned, note = self._clean(lipidsearch_df, simple_experiment_2x2)
+        assert note is None
+        assert 'MainIon' not in cleaned.columns
 
 
 class TestLipidSearchCleanerBasic:
@@ -820,8 +840,10 @@ class TestLipidSearchCleanerBasic:
         # LipidMolec is the leftmost column
         assert cleaned.columns[0] == 'LipidMolec'
 
-        # Only canonical metadata + intensity[*] survive
-        expected_metadata = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'FAKey', 'TotalGrade']
+        # Only canonical metadata + intensity[*] survive (MainIon: each
+        # species' adduct, which the adduct note refers to)
+        expected_metadata = ['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'FAKey', 'TotalGrade',
+                             'MainIon']
         expected_intensity = [f'intensity[{s}]' for s in samples]
         assert list(cleaned.columns) == expected_metadata + expected_intensity
 
@@ -830,7 +852,7 @@ class TestLipidSearchCleanerBasic:
             for s in samples:
                 assert f'{prefix}[{s}]' not in cleaned.columns
         for col in ['Rej', 'ID', 'LipidMolecGroup', 'SubClassKey', 'FAGroupKey',
-                    'MolFormula', 'MainIon', 'TotalSmpIDRate(%)']:
+                    'MolFormula', 'TotalSmpIDRate(%)']:
             assert col not in cleaned.columns
 
 
