@@ -25,10 +25,11 @@ from ..workflows.analysis import VolcanoData
 from ..workflows.data_ingestion import IngestionResult
 from ..workflows.isotope_tracing import IsotopeTracingResult
 from ..workflows.normalization import NormalizationWorkflowResult
+from .ai_studio import AI_STUDIO_KEYS, AIStudioState
 
 
 @dataclass
-class SessionState:
+class SessionState(AIStudioState):
     """
     Type-safe container for all session state variables.
 
@@ -229,54 +230,6 @@ class SessionState:
     lsi_pdf_bytes: Optional[bytes] = None
     lsi_pdf_source: Optional[str] = None  # the CSV the PDF was made from
 
-    # --- AI Chat (owner: ai_chat/chat_panel.py) ---
-    chat_transform_session: Optional[Any] = None
-    chat_viz_session: Optional[Any] = None
-    chat_data_questions_session: Optional[Any] = None
-    # About the app rather than the data, so no reset clears it (see
-    # _ROUTING_FIELDS); the AI Studio's Back to Home does.
-    chat_lc_questions_session: Optional[Any] = None
-    chat_mode: Optional[str] = None
-    chat_transform_result: Optional[pd.DataFrame] = None
-    chat_transform_report: Optional[Any] = None
-    # Sample columns with metadata-like names: refused by the last transform
-    # turn / confirmed by the user as samples for this conversation.
-    chat_transform_refused_metadata: Tuple[str, ...] = ()
-    chat_transform_kept_columns: Tuple[str, ...] = ()
-    chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
-
-    # --- AI Studio (owner: ai_studio_page.py) ---
-    # `chat_studio_df_original` holds the dataframe with the user's
-    # original sample column names (what they uploaded / imported). It is
-    # what the data preview, Data Questions, and Transform tabs read.
-    # `chat_studio_df` holds a reordered/renamed copy with sample columns
-    # normalized to `intensity[s1..sN]` per condition — required by the
-    # Custom Visualization tab's plotters because ExperimentConfig
-    # generates its sample labels as s1..sN.
-    chat_studio_df: Optional[pd.DataFrame] = None
-    chat_studio_df_original: Optional[pd.DataFrame] = None
-    chat_studio_experiment: Optional[Any] = None
-    # Tracks where the AI Studio data came from. None for direct upload,
-    # 'normalized' or 'raw' for the two pipeline-import options. Used to
-    # hard-lock Custom Visualization when the source is 'raw' regardless
-    # of whether the columns happen to satisfy the validation check.
-    chat_studio_pipeline_source: Optional[str] = None
-    # Detected format string (DataFormat.value) for the uploaded file.
-    # Used to block the AI Studio flow when a known standard format
-    # (LipidSearch, MS-DIAL) is uploaded directly — those should be
-    # processed through the main pipeline first.
-    chat_studio_detected_format: Optional[str] = None
-    # Names of the columns in `chat_studio_df_original` that the user
-    # (or pipeline import) marked as sample-intensity columns. Used by
-    # the sandbox to pre-coerce these to numeric before exposing the
-    # DataFrame to AI-generated code, preventing TypeError on
-    # arithmetic when the raw CSV inferred string dtypes.
-    chat_studio_sample_columns_original: Optional[List[str]] = None
-    # Names of the same columns AFTER the apply-step rename to
-    # `{intensity|concentration}[s1..sN]`. Used when the Custom Viz
-    # tab pre-coerces `chat_studio_df` (the renamed copy).
-    chat_studio_sample_columns_renamed: Optional[List[str]] = None
-
     # --- Isotope tracing (owner: isotope_tracing_page.py) ---
     iso_measurement_df: Optional[pd.DataFrame] = None
     iso_molecule_df: Optional[pd.DataFrame] = None
@@ -429,51 +382,7 @@ _STAGES: Tuple[_Stage, ...] = (
     # The AI Studio and the isotope tracing page. Every main-app reset
     # clears them (they sit before 'qc', so Next / Back do not); their own
     # pages clear just their stage with clear_stage().
-    _Stage(
-        'ai_studio',
-        fields=frozenset({
-            'chat_transform_session', 'chat_viz_session',
-            'chat_data_questions_session', 'chat_mode', 'chat_transform_result',
-            'chat_transform_report', 'chat_transform_refused_metadata',
-            'chat_transform_kept_columns',
-            'chat_viz_figures',
-            'chat_studio_df', 'chat_studio_df_original', 'chat_studio_experiment',
-            'chat_studio_pipeline_source', 'chat_studio_detected_format',
-            'chat_studio_sample_columns_original',
-            'chat_studio_sample_columns_renamed',
-        }),
-        widgets=frozenset({
-            'chat_input', 'chat_apply_transform', 'chat_download_transform',
-            'chat_download_removed_lipids', 'chat_keep_metadata_columns',
-            'chat_input_questions', 'chat_input_transform',
-            'chat_input_lc_questions', 'chat_retry_lc', 'chat_input_viz',
-            'ai_studio_file_uploader', 'ai_studio_import_pipeline',
-            'ai_studio_pipeline_choice', 'studio_sample_family',
-            'studio_sample_cols_select', 'studio_conditions_editor',
-            'studio_exclude_samples', 'studio_sample_cols_radio',
-            'studio_bqc_radio', 'studio_bqc_label_radio',
-            'studio_confirm_checkbox',
-            'chat_retry_dq', 'chat_retry_viz', 'chat_retry_transform',
-        }),
-        # The data the tabs work on and what they derived from it, cleared
-        # with it (AQ13: these used to survive a reset that cleared
-        # chat_studio_df).
-        plain=frozenset({
-            'studio_conditions', 'studio_applied_snapshot',
-            'chat_studio_file_id', 'chat_studio_upload_kept',
-            'chat_studio_bqc_label',
-            'chat_questions_result_df', 'chat_transform_diagnostic',
-            'chat_viz_validation', 'chat_turn_ids',
-            'chat_pending_prompt_dq', 'chat_pending_prompt_transform',
-            'chat_pending_prompt_viz', 'chat_pending_prompt_lc',
-            'chat_lc_retry_input',
-            'chat_dq_last_error', 'chat_dq_failed_input',
-            'chat_viz_last_error', 'chat_viz_failed_input',
-            'chat_transform_last_error', 'chat_transform_failed_input',
-        }),
-        # Per-turn feedback widgets (_interaction_log.py).
-        prefixes=('fb_', 'note_', 'send_note_'),
-    ),
+    _Stage('ai_studio', **AI_STUDIO_KEYS),
     _Stage(
         'isotope',
         fields=frozenset({
@@ -569,30 +478,6 @@ _STAGES: Tuple[_Stage, ...] = (
     ),
 )
 
-
-# Sidebar widget keys that need a snapshot when the user navigates to a
-# different page (main app ↔ AI Studio). Without this, Streamlit garbage-
-# collects keys whose widgets did not render in the current run, and the
-# user loses their experiment configuration on every round-trip.
-_MAIN_APP_NAV_WIDGET_KEYS = (
-    'data_format_select', 'n_conditions',
-    'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
-    'grouping_radio', 'manual_sample_override',
-)
-_MAIN_APP_NAV_WIDGET_PREFIXES = (
-    'cond_name_', 'n_samples_', 'select_',
-)
-# The Assign Conditions table is not listed: Streamlit refuses to restore a
-# data_editor through session state, so its values are kept in the plain
-# 'studio_conditions' key instead, which navigation does not drop.
-_AI_STUDIO_NAV_WIDGET_KEYS = (
-    'studio_sample_cols_radio', 'studio_sample_family',
-    'studio_sample_cols_select',
-    'studio_bqc_radio', 'studio_bqc_label_radio',
-    'studio_exclude_samples', 'studio_confirm_checkbox',
-)
-_AI_STUDIO_NAV_WIDGET_PREFIXES = ()
-_NAV_PRESERVE_PREFIX = '_nav_preserved_'
 
 _STAGE_NAMES = tuple(stage.name for stage in _STAGES)
 

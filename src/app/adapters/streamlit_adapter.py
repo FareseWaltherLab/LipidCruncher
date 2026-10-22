@@ -8,9 +8,8 @@ module1_cache.py, qc_cache.py and analysis_cache.py, which it inherits.
 """
 from __future__ import annotations
 
-import uuid
 from dataclasses import fields
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import pandas as pd
 import streamlit as st
@@ -20,18 +19,16 @@ from app.constants import (
     resolve_format_enum,
 )
 
-from ..models.experiment import ExperimentConfig
 from ..models.isotope_tracing import IsotopeCorrectionConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
 from ..workflows.isotope_tracing import IsotopeTracingWorkflow, IsotopeTracingResult
+from .ai_studio import AIStudioAdapter
 from .analysis_cache import AnalysisCache
 from .module1_cache import Module1Cache
 from .qc_cache import QualityCheckCache
 from .session_state import (  # noqa: F401 (re-exported)
     SessionState, _ROUTING_FIELDS, _ROUTING_WIDGETS, _STAGE_NAMES, _STAGES,
     _fingerprint, _inputs_key,
-    _MAIN_APP_NAV_WIDGET_KEYS, _MAIN_APP_NAV_WIDGET_PREFIXES,
-    _AI_STUDIO_NAV_WIDGET_KEYS, _AI_STUDIO_NAV_WIDGET_PREFIXES, _NAV_PRESERVE_PREFIX,
 )
 
 
@@ -41,23 +38,6 @@ class _UncachedResult(Exception):
     def __init__(self, result):
         super().__init__()
         self.result = result
-
-
-def _normalize_lc_question(question: str) -> str:
-    """Canonical cache key for a LipidCruncher-questions prompt."""
-    return " ".join(question.split()).lower()
-
-
-@st.cache_resource
-def _lc_answer_cache() -> Dict[str, str]:
-    """Process-wide cache of canonical answers to LipidCruncher app questions.
-
-    Keyed by normalized question text. Shared across sessions because these
-    answers describe the application itself and do not depend on user data,
-    so reuse is both correct and desirable. Doubles as a fallback when the
-    AI service is unavailable.
-    """
-    return {}
 
 
 @st.cache_resource(show_spinner=False)
@@ -72,7 +52,9 @@ def _isocorrector_available() -> bool:
     return check_isocorrector_available()
 
 
-class StreamlitAdapter(Module1Cache, QualityCheckCache, AnalysisCache):
+class StreamlitAdapter(
+    Module1Cache, QualityCheckCache, AnalysisCache, AIStudioAdapter,
+):
     """
     Adapter for managing Streamlit session state and caching.
 
@@ -343,65 +325,6 @@ class StreamlitAdapter(Module1Cache, QualityCheckCache, AnalysisCache):
         if value is not None:
             st.session_state[preserved_key] = value
 
-    @staticmethod
-    def _snapshot_widgets(static_keys, prefixes) -> None:
-        """Copy each named/prefixed widget key into a parallel
-        ``_nav_preserved_*`` key. Shared by the per-page preserve helpers
-        below. Streamlit garbage-collects widget keys whose widgets don't
-        render in the current run, so without this snapshot the user
-        would lose their sidebar configuration on every cross-page hop.
-        """
-        keys = list(static_keys)
-        keys += [
-            k for k in list(st.session_state.keys())
-            if isinstance(k, str) and k.startswith(prefixes)
-        ]
-        for key in keys:
-            if key in st.session_state:
-                st.session_state[f'{_NAV_PRESERVE_PREFIX}{key}'] = (
-                    st.session_state[key]
-                )
-
-    @staticmethod
-    def preserve_main_app_widgets() -> None:
-        """Snapshot main-app sidebar widget keys before the user navigates
-        to a different page. Restored on re-entry by
-        ``restore_navigation_widgets()``."""
-        StreamlitAdapter._snapshot_widgets(
-            _MAIN_APP_NAV_WIDGET_KEYS, _MAIN_APP_NAV_WIDGET_PREFIXES,
-        )
-        # The file uploader cannot be snapshotted; it comes back empty.
-        if st.session_state.get('raw_df') is not None:
-            st.session_state['upload_kept_across_pages'] = True
-
-    @staticmethod
-    def preserve_ai_studio_widgets() -> None:
-        """Snapshot AI Studio sidebar widget keys before the user
-        navigates to a different page. Restored on re-entry by
-        ``restore_navigation_widgets()``."""
-        StreamlitAdapter._snapshot_widgets(
-            _AI_STUDIO_NAV_WIDGET_KEYS, _AI_STUDIO_NAV_WIDGET_PREFIXES,
-        )
-
-    @staticmethod
-    def restore_navigation_widgets() -> None:
-        """Restore any widget key that was preserved by either
-        ``preserve_main_app_widgets()`` or ``preserve_ai_studio_widgets()``
-        and is currently absent from session_state. Generic over both
-        pages because each page's widget keys have unique prefixes — keys
-        not matching any rendered widget on the current page are simply
-        unused. If Streamlit kept the widget alive, the live value wins.
-        """
-        prefix_len = len(_NAV_PRESERVE_PREFIX)
-        for key in list(st.session_state.keys()):
-            if not isinstance(key, str):
-                continue
-            if not key.startswith(_NAV_PRESERVE_PREFIX):
-                continue
-            target = key[prefix_len:]
-            if target not in st.session_state:
-                st.session_state[target] = st.session_state[key]
-
     # ==================== Service Wrappers ====================
 
 
@@ -472,254 +395,3 @@ class StreamlitAdapter(Module1Cache, QualityCheckCache, AnalysisCache):
         if result.error_message:
             raise _UncachedResult(result)  # Streamlit does not cache exceptions
         return result
-
-    # ==================== AI Chat Wrappers (NOT cached — stateful) ====================
-
-    @staticmethod
-    def stream_ai_transform(
-        user_message: str,
-        session,
-        source_df: pd.DataFrame,
-    ):
-        """Stream one turn of the AI data transformation chat.
-
-        Returns (explanation_generator, finalize). The UI streams the
-        explanation (st.write_stream), then calls finalize() to execute the
-        code and obtain a TransformStepResult.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.stream_transform_message(
-            user_message=user_message,
-            session=session,
-            source_df=source_df,
-            numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_original'
-            ),
-            keep_columns=st.session_state.get('chat_transform_kept_columns') or (),
-            sample_columns=st.session_state.get(
-                'chat_studio_sample_columns_original'
-            ),
-        )
-
-    @staticmethod
-    def keep_ai_transform_columns(session, source_df: pd.DataFrame):
-        """Re-run the last transform keeping the columns it refused only
-        for their metadata-like names, and remember them for later turns."""
-        from ..workflows.ai_chat import AIChatWorkflow
-        kept = tuple(st.session_state.get('chat_transform_kept_columns') or ()) + tuple(
-            st.session_state.get('chat_transform_refused_metadata') or ()
-        )
-        st.session_state.chat_transform_kept_columns = kept
-        return AIChatWorkflow.keep_transform_columns(
-            session=session,
-            source_df=source_df,
-            keep_columns=kept,
-            numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_original'
-            ),
-            sample_columns=st.session_state.get(
-                'chat_studio_sample_columns_original'
-            ),
-        )
-
-    @staticmethod
-    def stream_ai_viz(
-        user_message: str,
-        session,
-        analysis_df: pd.DataFrame,
-        experiment: ExperimentConfig,
-    ):
-        """Stream one turn of the AI visualization chat.
-
-        Returns (explanation_generator, finalize). The UI streams the
-        explanation, then calls finalize() for a VizStepResult.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.stream_viz_message(
-            user_message=user_message,
-            session=session,
-            analysis_df=analysis_df,
-            experiment=experiment,
-            numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_renamed'
-            ),
-        )
-
-    @staticmethod
-    def stream_ai_data_questions(
-        user_message: str,
-        session,
-        source_df: pd.DataFrame,
-    ):
-        """Stream one turn of the AI data questions chat.
-
-        Returns (explanation_generator, finalize). The UI streams the
-        explanation, then calls finalize() for a DataQuestionsStepResult.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.stream_data_questions_message(
-            user_message=user_message,
-            session=session,
-            source_df=source_df,
-            numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_renamed'
-            ),
-            experiment=st.session_state.get('chat_studio_experiment'),
-        )
-
-    @staticmethod
-    def stream_ai_lc_questions(
-        user_message: str,
-        session,
-    ):
-        """Stream one turn of the LipidCruncher questions chat.
-
-        Returns (session_with_user_message, text_chunk_generator). The UI
-        consumes the generator (e.g. via st.write_stream) and appends the
-        assistant message from the accumulated text.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.stream_lc_questions_message(
-            user_message=user_message,
-            session=session,
-        )
-
-    @staticmethod
-    def get_cached_lc_answer(question: str) -> Optional[str]:
-        """Return a cached answer for a LipidCruncher-questions prompt, if any."""
-        return _lc_answer_cache().get(_normalize_lc_question(question))
-
-    @staticmethod
-    def set_cached_lc_answer(question: str, answer: str) -> None:
-        """Store a canonical answer for a LipidCruncher-questions prompt."""
-        _lc_answer_cache()[_normalize_lc_question(question)] = answer
-
-    # ------------------------------------------------------------------
-    # AI Studio interaction logging (super-user preview)
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _ai_log_session_id() -> str:
-        """Return an anonymous per-Streamlit-session id, creating it once.
-
-        Groups all turns from one browser session together in the logs
-        without identifying the user.
-        """
-        sid = st.session_state.get("ai_log_session_id")
-        if sid is None:
-            sid = uuid.uuid4().hex
-            st.session_state["ai_log_session_id"] = sid
-        return sid
-
-    # ------------------------------------------------------------------
-    # AI Studio usage limits
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _ai_client_id() -> Optional[str]:
-        """The visitor's address, for the per-client AI Studio limit.
-
-        Behind the AWS load balancer every connection comes from the
-        balancer, so ``st.context.ip_address`` is the same for everyone.
-        The balancer appends the address it saw to ``X-Forwarded-For``, so
-        the last entry is the one a visitor cannot forge (anything before
-        it is whatever the visitor sent). That holds for exactly one proxy
-        in front of the app; reached directly, the header is the visitor's
-        to set, and only the session and global limits really hold.
-        Locally there is neither, and the per-client limit is skipped.
-        """
-        forwarded = st.context.headers.get("X-Forwarded-For") or ""
-        last = forwarded.rsplit(",", 1)[-1].strip()
-        return last or st.context.ip_address
-
-    @staticmethod
-    def ai_usage_refusal(runs_code: bool = True) -> Optional[str]:
-        """Why this visitor may not start an AI turn now, or None."""
-        from ..services.ai_chat.usage_limits import UsageLimitService
-        return UsageLimitService.refusal(
-            StreamlitAdapter._ai_log_session_id(),
-            StreamlitAdapter._ai_client_id(),
-            runs_code=runs_code,
-        )
-
-    @staticmethod
-    def start_ai_turn(runs_code: bool = True) -> Optional[str]:
-        """Count one AI turn against every limit; the refusal, or None."""
-        from ..services.ai_chat.usage_limits import UsageLimitService
-        return UsageLimitService.start_turn(
-            StreamlitAdapter._ai_log_session_id(),
-            StreamlitAdapter._ai_client_id(),
-            runs_code=runs_code,
-        )
-
-    @staticmethod
-    def record_ai_execution() -> None:
-        """Count one execution of AI-generated code for this session."""
-        from ..services.ai_chat.usage_limits import UsageLimitService
-        UsageLimitService.record_execution(
-            StreamlitAdapter._ai_log_session_id(),
-        )
-
-    @staticmethod
-    def log_ai_turn(
-        *,
-        tab: str,
-        question: str,
-        answer: str,
-        code: Optional[str] = None,
-        produced_table: bool = False,
-        produced_figure: bool = False,
-        error: Optional[str] = None,
-        history=None,
-        df: Optional[pd.DataFrame] = None,
-        experiment: Optional[ExperimentConfig] = None,
-        figure=None,
-        unverified_numbers=(),
-    ) -> str:
-        """Log one completed AI Studio turn. Returns the turn_id so the UI
-        can attach a later 👍/👎 feedback record to it.
-
-        ``history`` is the chat's messages *before* this turn; ``df`` /
-        ``experiment`` describe the data the tab ran against (the upload's
-        name and detected format come from session state); ``figure`` is
-        the Plotly figure the turn produced, if any.
-        """
-        from ..models.chat import AIConfig
-        from ..services.ai_chat.interaction_logger import InteractionLoggingService
-        turn_id = InteractionLoggingService.new_turn_id()
-        InteractionLoggingService.log_turn(
-            turn_id=turn_id,
-            session_id=StreamlitAdapter._ai_log_session_id(),
-            tab=tab,
-            question=question,
-            answer=answer,
-            code=code,
-            produced_table=produced_table,
-            produced_figure=produced_figure,
-            error=error,
-            model=AIConfig().model,
-            dataset=InteractionLoggingService.describe_dataset(
-                df,
-                source=(
-                    st.session_state.get("chat_studio_pipeline_source")
-                    or st.session_state.get("chat_studio_file_id")
-                ),
-                data_format=st.session_state.get("chat_studio_detected_format"),
-                experiment=experiment,
-            ),
-            history=history,
-            figure=InteractionLoggingService.summarize_figure(figure),
-            unverified_numbers=unverified_numbers,
-        )
-        return turn_id
-
-    @staticmethod
-    def log_ai_feedback(*, turn_id: str, verdict: str, note: str = "") -> None:
-        """Log a 👍/👎 signal for a previously-logged turn."""
-        from ..services.ai_chat.interaction_logger import InteractionLoggingService
-        InteractionLoggingService.log_feedback(
-            turn_id=turn_id,
-            session_id=StreamlitAdapter._ai_log_session_id(),
-            verdict=verdict,
-            note=note,
-        )
