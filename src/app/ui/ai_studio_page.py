@@ -362,11 +362,18 @@ def _offer_pipeline_import_sidebar() -> None:
         # removal drops sample columns and renumbers the survivors, so the
         # pre-QC experiment would claim samples the data no longer has.
         pipeline_experiment = st.session_state.get('experiment')
+        pipeline_bqc_label = st.session_state.get('bqc_label')
+        # Module 1's output belongs to the setup frozen when Quality Check
+        # opened; the sidebar may have changed since (Quality Check only
+        # warns), and the raw frame follows the sidebar.
+        handoff = st.session_state.get('qc_input_frame')
+        if source_key != 'raw' and handoff is not None:
+            pipeline_experiment = handoff.experiment
+            pipeline_bqc_label = st.session_state.get('qc_input_bqc_label')
         if source_key == 'qc_filtered':
             qc_experiment = st.session_state.get('qc_experiment')
             if qc_experiment is not None:
                 pipeline_experiment = qc_experiment
-        pipeline_bqc_label = st.session_state.get('bqc_label')
         # PCA removal can drop the whole BQC condition. Left in place, the
         # Studio's BQC radio would fall back to its first option and treat
         # an ordinary condition as BQC.
