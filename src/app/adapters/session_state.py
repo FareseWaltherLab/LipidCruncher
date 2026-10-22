@@ -23,13 +23,13 @@ from ..services.format_detection import DataFormat
 from ..services.lsi_report import AnalysisStatistics
 from ..workflows.analysis import VolcanoData
 from ..workflows.data_ingestion import IngestionResult
-from ..workflows.isotope_tracing import IsotopeTracingResult
 from ..workflows.normalization import NormalizationWorkflowResult
 from .ai_studio import AI_STUDIO_KEYS, AIStudioState
+from .isotope import ISOTOPE_KEYS, IsotopeState
 
 
 @dataclass
-class SessionState(AIStudioState):
+class SessionState(AIStudioState, IsotopeState):
     """
     Type-safe container for all session state variables.
 
@@ -230,14 +230,6 @@ class SessionState(AIStudioState):
     lsi_pdf_bytes: Optional[bytes] = None
     lsi_pdf_source: Optional[str] = None  # the CSV the PDF was made from
 
-    # --- Isotope tracing (owner: isotope_tracing_page.py) ---
-    iso_measurement_df: Optional[pd.DataFrame] = None
-    iso_molecule_df: Optional[pd.DataFrame] = None
-    iso_element_df: Optional[pd.DataFrame] = None
-    iso_result: Optional[IsotopeTracingResult] = None
-    # Fingerprint of the inputs + settings iso_result was computed from.
-    iso_result_key: Optional[str] = None
-
 
 @dataclass(frozen=True)
 class _Stage:
@@ -383,21 +375,7 @@ _STAGES: Tuple[_Stage, ...] = (
     # clears them (they sit before 'qc', so Next / Back do not); their own
     # pages clear just their stage with clear_stage().
     _Stage('ai_studio', **AI_STUDIO_KEYS),
-    _Stage(
-        'isotope',
-        fields=frozenset({
-            'iso_measurement_df', 'iso_molecule_df', 'iso_element_df',
-            'iso_result', 'iso_result_key',
-        }),
-        widgets=frozenset({
-            'iso_measurement_uploader', 'iso_molecule_uploader',
-            'iso_element_uploader', 'iso_load_sample', 'iso_run',
-            'iso_correct_tracer_impurity', 'iso_correct_tracer_element_core',
-            'iso_calculate_mean_enrichment', 'iso_ultra_high_res',
-            'iso_correct_also_monoisotopic', 'iso_calculation_threshold_uhr',
-        }),
-        prefixes=('iso_dl_',),
-    ),
+    _Stage('isotope', **ISOTOPE_KEYS),
     # Module 2. Next and Back to Data Processing clear from here.
     _Stage(
         'qc',

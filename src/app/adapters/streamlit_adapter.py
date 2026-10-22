@@ -19,10 +19,9 @@ from app.constants import (
     resolve_format_enum,
 )
 
-from ..models.isotope_tracing import IsotopeCorrectionConfig
 from ..services.format_detection import FormatDetectionService, DataFormat
-from ..workflows.isotope_tracing import IsotopeTracingWorkflow, IsotopeTracingResult
 from .ai_studio import AIStudioAdapter
+from .isotope import IsotopeAdapter, _isocorrector_available  # noqa: F401 (re-exported)
 from .analysis_cache import AnalysisCache
 from .module1_cache import Module1Cache
 from .qc_cache import QualityCheckCache
@@ -32,28 +31,9 @@ from .session_state import (  # noqa: F401 (re-exported)
 )
 
 
-class _UncachedResult(Exception):
-    """Carries a result out of a cached function without it being cached."""
-
-    def __init__(self, result):
-        super().__init__()
-        self.result = result
-
-
-@st.cache_resource(show_spinner=False)
-def _isocorrector_available() -> bool:
-    """Whether R + IsoCorrectoR can run here, probed once per process.
-
-    The probe starts Rscript (~0.7 s), which every rerun of the isotope
-    tracing page used to pay. R comes with the image, so the answer cannot
-    change under a running process.
-    """
-    from ..services.isotope_correction import check_isocorrector_available
-    return check_isocorrector_available()
-
-
 class StreamlitAdapter(
     Module1Cache, QualityCheckCache, AnalysisCache, AIStudioAdapter,
+    IsotopeAdapter,
 ):
     """
     Adapter for managing Streamlit session state and caching.
@@ -339,59 +319,3 @@ class StreamlitAdapter(
         if detected in (DataFormat.UNKNOWN, resolve_format_enum(data_format)):
             return None
         return detected
-
-    # ==================== Cached Isotope Tracing Wrapper ====================
-
-    @staticmethod
-    def isocorrector_available() -> bool:
-        """Whether the isotope tracing page can run (R + IsoCorrectoR)."""
-        return _isocorrector_available()
-
-    @staticmethod
-    def run_isotope_correction(
-        measurement_df: pd.DataFrame,
-        molecule_df: pd.DataFrame,
-        element_df: pd.DataFrame,
-        config: IsotopeCorrectionConfig,
-    ) -> IsotopeTracingResult:
-        """Isotope tracing workflow, cached on success.
-
-        Keyed on the three input DataFrames and the config, so re-running with
-        unchanged inputs skips the (slow) R subprocess. A run that failed in R
-        (a timeout, a crash, inputs IsoCorrectoR rejected) is not cached, so
-        retrying really re-runs it.
-
-        Args:
-            measurement_df: Measurement file.
-            molecule_df: Molecule file.
-            element_df: Element file.
-            config: IsoCorrectoR settings.
-
-        Returns:
-            IsotopeTracingResult — success with the correction, or failure with
-            validation_errors / error_message.
-        """
-        try:
-            return StreamlitAdapter._run_isotope_correction_cached(
-                measurement_df, molecule_df, element_df, config
-            )
-        except _UncachedResult as uncached:
-            return uncached.result
-
-    @staticmethod
-    @st.cache_data(
-        show_spinner="Running IsoCorrectoR...",
-        hash_funcs={IsotopeCorrectionConfig: hash},
-    )
-    def _run_isotope_correction_cached(
-        measurement_df: pd.DataFrame,
-        molecule_df: pd.DataFrame,
-        element_df: pd.DataFrame,
-        config: IsotopeCorrectionConfig,
-    ) -> IsotopeTracingResult:
-        result = IsotopeTracingWorkflow.run(
-            measurement_df, molecule_df, element_df, config
-        )
-        if result.error_message:
-            raise _UncachedResult(result)  # Streamlit does not cache exceptions
-        return result
