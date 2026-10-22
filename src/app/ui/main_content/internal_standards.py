@@ -532,6 +532,17 @@ Auto-detection identifies deuterated standards (`(d5)`, `(d7)`, `(d9)`),
         )
         st.session_state.standards_source = standards_source
 
+        # LipidSearch: the adducts were matched to the export's own standards
+        # during data processing; another source does not move them.
+        if standards_source != "Automatic Detection" and 'MainIon' in cleaned_df.columns:
+            st.caption(
+                "Each class's adduct was matched to the standards found in your "
+                "file during data processing (see **Configure Adducts**); "
+                "standards chosen here do not change it. Normalization warns "
+                "when a class's species and its standard were measured in "
+                "different adducts."
+            )
+
         if standards_source == "Automatic Detection":
             active_standards_df = _display_auto_detected_standards(
                 auto_detected_df, cleaned_df
