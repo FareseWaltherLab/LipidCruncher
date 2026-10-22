@@ -66,6 +66,13 @@ class TestNumbersNotComputed:
                  "p = 1.07e-06 and log2FC 1.99.")
         assert numbers_not_computed(prose, self.computed) == ()
 
+    def test_times_ten_notation_is_read_as_one_number(self):
+        """First eval run with written answers (2026-10-22): "p = 9.27×10⁻⁶"
+        was read as 9.27 and flagged."""
+        computed = computed_values("", pd.DataFrame({"p": [9.269e-06, 1.065e-06]}))
+        prose = "p = 9.27×10⁻⁶ and p = 1.07 x 10^-6; not 3.5×10⁻⁶."
+        assert numbers_not_computed(prose, computed) == ("3.5×10⁻⁶",)
+
     def test_numbers_the_code_never_produced_are_reported(self):
         prose = "There are 24 species, with a mean of 412.7, and 61.2% are PCs."
         assert numbers_not_computed(prose, self.computed) == ("24", "412.7", "61.2%")

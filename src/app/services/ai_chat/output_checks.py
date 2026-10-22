@@ -151,8 +151,11 @@ def _table_name_column(table: pd.DataFrame, source_df: pd.DataFrame):
 # A number standing on its own in prose: not part of a lipid name
 # ('PC 16:0_18:1'), a sample name ('WT-1', 's3') or a word ('C18').
 _PROSE_NUMBER = re.compile(
-    r"(?<![\w.:/_\-])(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?([eE][-+]?\d+)?(%?)(?![\w:/_])"
+    r"(?<![\w.:/_\-])(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?([eE][-+]?\d+"
+    r"|\s*[×x]\s*10\^?[⁻\-−]?[⁰¹²³⁴⁵⁶⁷⁸⁹\d]+)?(%?)(?![\w:/_])"
 )
+# "9.27×10⁻⁶" / "9.27 x 10^-6" → e-6
+_TIMES_TEN = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻−", "0123456789--")
 _ANY_NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
 
 
@@ -192,6 +195,9 @@ def numbers_not_computed(
     for match in _PROSE_NUMBER.finditer(prose or ""):
         whole, fraction, exponent, percent = match.groups()
         text = match.group(0)
+        if exponent and "10" in exponent and exponent[0] not in "eE":
+            power = re.split(r"10\^?", exponent.translate(_TIMES_TEN), maxsplit=1)[1]
+            exponent = f"e{power}"
         number = float(whole.replace(",", "") + (fraction or "") + (exponent or ""))
         if number < 10 and not fraction and not exponent:
             continue
