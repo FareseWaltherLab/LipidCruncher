@@ -344,7 +344,7 @@ class AIChatWorkflow:
 
         return ChatSession(
             mode=ChatMode.DATA_TRANSFORM,
-            schema_context=schema,
+            schema_context=schema + _repeated_lipids_note(source_df),
         )
 
     @staticmethod
@@ -820,6 +820,7 @@ class AIChatWorkflow:
         schema = SchemaExtractorService.extract_schema(df)
         schema_context = (
             f"Auto-detected format: {format_label}\n\n{schema}"
+            + _repeated_lipids_note(df)
         )
         return ChatSession(
             mode=ChatMode.DATA_QUESTIONS,
@@ -1053,6 +1054,39 @@ _RAW_IMPORT_MESSAGE = (
     "want a custom filter/normalization, ask me here and "
     "I'll generate the code."
 )
+
+def _repeated_lipids_note(df: pd.DataFrame) -> str:
+    """Context for data with one row per identification, not per lipid.
+
+    A raw LipidSearch export (uploaded here, or imported as "Raw uploaded
+    data") lists a lipid once per adduct / polarity it was seen in.
+    Counting or summing those rows disagrees with the pipeline, which
+    keeps one row per lipid. Empty when every lipid name is unique.
+    """
+    if 'LipidMolec' not in df.columns:
+        return ""
+    names = df['LipidMolec'].astype(str)
+    repeated = names[names.duplicated(keep=False)]
+    if repeated.empty:
+        return ""
+    why = (
+        "the same lipid identified as different adducts (see MainIon) or in "
+        "both polarities" if 'MainIon' in df.columns
+        else "the same lipid identified more than once"
+    )
+    return (
+        "\n\n## Rows are identifications, not lipids\n"
+        f"{repeated.nunique()} lipid names appear on more than one row "
+        f"({len(repeated)} rows; e.g. `{repeated.iloc[0]}`): {why}. Counting "
+        f"rows counts such a lipid more than once ({names.nunique()} distinct "
+        f"names in {len(names)} rows), and its rows are on different signal "
+        "scales, so never add them. LipidCruncher's pipeline keeps one row per "
+        "lipid (in its class's internal-standard adduct, otherwise the best "
+        "grade). For counts, totals or comparisons, say this, count distinct "
+        "lipids, and suggest processing the file in the main app (Module 1) "
+        "and importing the QC-filtered data, which has one row per lipid."
+    )
+
 
 _RAW_IMPORT_NOTE = (
     "\n\n## Important context for this dataset\n"

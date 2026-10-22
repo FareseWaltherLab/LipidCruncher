@@ -538,3 +538,32 @@ class TestAnswerWrittenFromResults:
             answer_from_results_system_prompt,
         )
         assert "panel below your answer" in answer_from_results_system_prompt()
+
+
+class TestRepeatedLipidNames:
+    """M10: a raw LipidSearch export has one row per identification, so
+    counting rows disagrees with the pipeline's one row per lipid. The AI
+    is told when lipid names repeat."""
+
+    raw = pd.DataFrame({
+        "LipidMolec": ["PC 34:1", "PC 34:1", "PE 36:2", "TG 52:2", "TG 52:2"],
+        "ClassKey": ["PC", "PC", "PE", "TG", "TG"],
+        "MainIon": ["M+H", "M+HCOO", "M-H", "M+NH4", "M+Na"],
+        "intensity[s1]": [10.0, 1.0, 5.0, 7.0, 2.0],
+    })
+
+    def test_data_questions_are_told(self):
+        context = AIChatWorkflow.start_data_questions_session(self.raw).schema_context
+        assert "## Rows are identifications, not lipids" in context
+        assert "2 lipid names appear on more than one row (4 rows; e.g. `PC 34:1`)" in context
+        assert "different adducts (see MainIon)" in context
+        assert "(3 distinct names in 5 rows)" in context
+
+    def test_transforms_are_told(self):
+        context = AIChatWorkflow.start_transform_session(self.raw).schema_context
+        assert "## Rows are identifications, not lipids" in context
+
+    def test_one_row_per_lipid_says_nothing(self):
+        unique = self.raw.drop_duplicates("LipidMolec")
+        assert "identifications" not in (
+            AIChatWorkflow.start_data_questions_session(unique).schema_context)
