@@ -286,6 +286,17 @@ class TestPromptsAdvertisePipelineFirst:
         assert "bar_colors = [" not in prompt
         assert "build it last, from the DataFrame in its final order" in prompt
 
+    def test_prompts_describe_the_lipidsearch_adduct_rule(self):
+        """M10: the transform tab mirrored the old LipidSearch selection
+        (best grade only) when asked to deduplicate a raw export."""
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt, data_transform_system_prompt,
+        )
+        transform = data_transform_system_prompt()
+        assert "`_match_standard_adducts`, then `_select_best_auc`" in transform
+        assert "never summed" in transform
+        assert "adduct matching" in data_questions_system_prompt()
+
     def test_lc_settles_chain_length_before_any_question_is_listed(self):
         """First eval run (2026-10-21): asked to compare the chain length
         distribution, the model asked presence-vs-chain-split. The rule not

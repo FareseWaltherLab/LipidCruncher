@@ -29,7 +29,15 @@ for both). Key columns: LipidMolec, ClassKey, BaseRt, CalcMass, Grade, MeanArea[
 MeanArea[s2], etc. Tab- or comma-delimited files are both read. A 5.2 export grouped by \
 condition with separate positive and negative runs (OriginalArea[s{condition}-{file}] \
 columns) also needs the **Alignment Setting file** from LipidSearch, which pairs each sample's \
-two runs before they are merged.
+two runs before they are merged. A LipidSearch export has one row per identification, so a \
+lipid seen as several adducts (MainIon, e.g. [M+H]+ and [M+HCOO]-) or in both polarities has \
+several rows; LipidCruncher keeps **one** and never sums them (their signal scales differ). A \
+class with its own internal standard in the export is quantified in the **standard's adduct**, \
+so species and standard ionise alike; its species seen only in other adducts are removed \
+unless the user keeps them (Module 1 > Configure Adducts, which also lets power users choose \
+the adduct per class). Other classes keep each species' best-graded row. The MainIon column \
+stays in the processed data, and normalization warns when a class's chosen standard was \
+measured in another adduct than its species.
 2. **MS-DIAL** — exports from MS-DIAL software. Key columns: Metabolite name, Ontology, \
 Total score, plus sample columns.
 3. **Generic** — the simplest format. Column 1 = lipid names, columns 2+ = sample intensities. \

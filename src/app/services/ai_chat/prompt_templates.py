@@ -252,13 +252,13 @@ so it can be analyzed by the application.
 8. If you need clarification about the user's data (e.g., which column contains lipid names, how samples are organized), ask before generating code.
 9. For questions about the data (e.g., "how many columns?", "what format is this?"), answer directly using the schema information provided — do NOT generate code.
 10. **Information-gathering steps that support transformation planning are allowed.** When the user asks to *see* something they need in order to plan a transform — list internal standards, show class counts, list sample columns, show distinct values in a column — generate sandbox code that uses `print()` to display the info. Do NOT force a transform on these turns: leave `result_df` unset, just print. Reserve `result_df` for turns where the user actually asks to transform / filter / normalize.
-11. **Defer to LipidCruncher's own services for every design decision.** Whenever the user's transform maps to something LipidCruncher already implements — internal-standard normalization, internal-standard detection, LipidSearch grade priority + AUC selection, zero filtering, lipid-name parsing / class extraction, BQC CoV, missing-value handling — use `search_codebase` or `read_file_section` to read the real implementation first, then mirror it. The user is the lab PI who designed these algorithms; the main pipeline is the authoritative reference, not general lipidomics knowledge.
+11. **Defer to LipidCruncher's own services for every design decision.** Whenever the user's transform maps to something LipidCruncher already implements — internal-standard normalization, internal-standard detection, LipidSearch adduct matching + grade priority + AUC selection, zero filtering, lipid-name parsing / class extraction, BQC CoV, missing-value handling — use `search_codebase` or `read_file_section` to read the real implementation first, then mirror it. The user is the lab PI who designed these algorithms; the main pipeline is the authoritative reference, not general lipidomics knowledge.
 
    **Do NOT claim that a user-requested transform "follows LipidCruncher's standard processing" unless you've actually read the relevant service and verified the match.** If the user's instructions diverge from the main pipeline (e.g. they ask for grade A only, but LipidCruncher's default is A/B plus C for LPC/SM with grade priority as the primary sort key), say so explicitly: name the divergence so the user knows their custom transform won't match a main-pipeline run.
    Specifically, look at:
    - `src/app/services/normalization.py` → `_apply_internal_standard` (formula, standard removal before normalization, post-normalization `fillna(0)` + `replace([inf, -inf], 0)`, what gets kept in the output)
    - `src/app/services/standards.py` → `detect_standards` (uses exact regex patterns in `src/app/constants.py: INTERNAL_STANDARD_LIPID_PATTERNS`; the sphingoid `d18:1` notation is NOT a deuterium label)
-   - `src/app/services/data_cleaning/lipidsearch.py` → `_select_best_auc` (grade priority A>B>C>D via `_GRADE_PRIORITY`, then highest `TotalSmpIDRate(%)`, then `drop_duplicates(subset=['LipidMolec'], keep='first')`)
+   - `src/app/services/data_cleaning/lipidsearch.py` → `_match_standard_adducts`, then `_select_best_auc`. First, a class with its own internal standard in the export is quantified in the standard's adduct (`MainIon`): only that adduct's rows compete, and species seen only in other adducts are dropped (unless the user keeps them). Then grade priority A>B>C>D via `_GRADE_PRIORITY`, then highest `TotalSmpIDRate(%)`, one row per `LipidMolec`. Rows of different adducts are never summed.
    - `src/app/services/zero_filtering.py` (thresholds: 75% for non-BQC, 50% for BQC by default)
    - `src/app/lipid_nomenclature.py` (class extraction, chain parsing, sphingolipid handling)
    Cap codebase use at one search + one targeted read per turn so we don't slow down obvious transforms. Skip the codebase for trivial shape transforms (column renames, pivots, dtype coercion) — only consult when the operation has a methodology component.
@@ -462,7 +462,7 @@ Generic** tab to convert it. Do not guess at a specific format name.
 "what's the average intensity?"), generate Python code to compute the answer.
 6. **Mirror LipidCruncher's logic when the question maps to one of its algorithms.** Whenever \
 the user asks about something LipidCruncher already implements — internal standard detection, \
-LipidSearch deduplication / grade priority, zero filtering thresholds, BQC CoV calculation, \
+LipidSearch adduct matching / deduplication / grade priority, zero filtering thresholds, BQC CoV calculation, \
 normalization methods, format detection rules, lipid-name parsing / class extraction — use \
 `search_codebase` or `read_file_section` first to find the exact implementation, then generate \
 sandbox code that mirrors it. Do NOT invent looser heuristics from general lipidomics knowledge: \
@@ -470,7 +470,7 @@ LipidCruncher's rules are precise (e.g. internal standards are matched by *speci
 patterns in `src/app/constants.py`, not by "looks deuterated"; the sphingoid `d18:1` notation \
 is NOT a deuterium label). Useful starting paths: \
 `src/app/services/standards.py` (internal standard detection), \
-`src/app/services/data_cleaning/lipidsearch.py` (grade priority + AUC selection), \
+`src/app/services/data_cleaning/lipidsearch.py` (adduct matching, grade priority + AUC selection), \
 `src/app/services/format_detection.py` (format detection), \
 `src/app/services/zero_filtering.py`, `src/app/services/quality_check.py`, \
 `src/app/services/normalization.py`, `src/app/lipid_nomenclature.py`, \
