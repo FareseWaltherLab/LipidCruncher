@@ -126,3 +126,11 @@ def test_help_explains_the_rule():
     assert "quantified in the\nstandard's adduct" in docs
     assert 'never added' in docs
     assert 'detected in only one polarity' not in docs
+
+
+def test_supplementary_methods_describe_the_rule():
+    """The methods document (which the AI Studio also reads) described only
+    the best-grade rule; an AI answer quoted it as current."""
+    methods = (Path(__file__).parents[2] / 'docs' / 'supplementary_methods.md').read_text()
+    assert "only rows in the standard's adduct are considered" in methods
+    assert 'never summed' in methods
