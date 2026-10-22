@@ -54,7 +54,8 @@ class EvalCase:
         expect_table: For transforms, the Generic table the request
             should give (names, then samples) — computed from the upload.
         expect_mentions: Words the answer must contain (case-insensitive),
-            for questions about how LipidCruncher works.
+            for questions about how LipidCruncher works; "a|b" accepts
+            either.
     """
     id: str
     question: str
@@ -236,7 +237,13 @@ CASES = (
         ),
         dataset=APP,
         tab="lc_questions",
-        expect_mentions=("adduct", "internal standard", "one"),
+        expect_mentions=(
+            "internal standard",
+            # the rule itself, not just the words: an answer quoting the
+            # old best-grade rule mentioned "adduct" and "internal standard"
+            "standard's adduct|standard’s adduct|same adduct"
+            "|adduct of its internal standard|adduct as its internal standard",
+        ),
         note=(
             "The rule changed (M10): one row per lipid, in its class's "
             "internal-standard adduct, never a sum. The old answer was "

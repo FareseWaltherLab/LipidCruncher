@@ -414,6 +414,8 @@ def test_app_questions_must_mention_the_rule():
     good = ("LipidCruncher keeps one identification per lipid: for a class with "
             "its own internal standard, the row in the standard's adduct.")
     assert score_usability("", good, case) == []
-    old = "It keeps the identification with the better grade."
+    old = ("It keeps the identification with the best grade; the MainIon "
+           "column records the adduct, and the internal standard is detected "
+           "automatically.")
     failures = score_usability("", old, case)
-    assert "the answer does not mention 'adduct'" in failures
+    assert len(failures) == 1 and "standard's adduct" in failures[0]
