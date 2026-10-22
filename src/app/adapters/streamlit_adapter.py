@@ -1578,6 +1578,9 @@ class StreamlitAdapter:
                 'chat_studio_sample_columns_original'
             ),
             keep_columns=st.session_state.get('chat_transform_kept_columns') or (),
+            sample_columns=st.session_state.get(
+                'chat_studio_sample_columns_original'
+            ),
         )
 
     @staticmethod
@@ -1594,6 +1597,9 @@ class StreamlitAdapter:
             source_df=source_df,
             keep_columns=kept,
             numeric_columns=st.session_state.get(
+                'chat_studio_sample_columns_original'
+            ),
+            sample_columns=st.session_state.get(
                 'chat_studio_sample_columns_original'
             ),
         )

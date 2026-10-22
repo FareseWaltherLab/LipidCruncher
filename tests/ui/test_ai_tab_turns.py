@@ -207,11 +207,13 @@ def test_columns_refused_for_their_names_can_be_kept(logged, monkeypatch):
 
     def _workflow_stream(**kwargs):
         seen.append(kwargs["keep_columns"])
+        # The confirmed samples (none in this script) reach the check.
+        assert "sample_columns" in kwargs
         return _stream(**kwargs)
 
     kept_with = []
 
-    def _keep(session, source_df, keep_columns, numeric_columns=None):
+    def _keep(session, source_df, keep_columns, **kwargs):
         kept_with.append(keep_columns)
         return TransformStepResult(
             session=session, assistant_message="kept",

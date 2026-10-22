@@ -513,3 +513,47 @@ class TestKeepColumnsTheUserConfirmed:
         result = DataTransformerService.execute_transformation(code, studio_df)
         assert result.success is False
         assert result.metadata_columns == ()
+
+
+class TestOnlyConfirmedSamples:
+    """The user confirms the sample columns in the sidebar; a result may
+    keep only those as samples, whatever the other columns are called."""
+
+    def _run(self, studio_df, extra):
+        code = f"_SAMPLES = {_SAMPLES!r}\nresult_df = df[['feature'] + _SAMPLES].copy()\n{extra}"
+        return DataTransformerService.execute_transformation(
+            code, studio_df, sample_columns=_SAMPLES,
+        )
+
+    def test_an_upload_column_that_is_not_a_sample_is_refused(self, studio_df):
+        result = self._run(studio_df, "result_df['RetentionTime'] = df['RetentionTime']\n")
+        assert result.success is False
+        assert result.metadata_columns == ('RetentionTime',)
+        assert "Not among the user's confirmed sample columns: 'RetentionTime'" in (
+            result.validation_errors[0])
+
+    def test_metadata_under_an_innocent_name_is_refused(self, studio_df):
+        """The name rule cannot see this; the values give it away."""
+        result = self._run(studio_df, "result_df['S16'] = df['PrecursorMZ']\n")
+        assert result.success is False
+        assert result.metadata_columns == ('S16',)
+
+    @pytest.mark.parametrize('extra', [
+        "result_df = result_df.rename(columns={'KO-1': 'Sample A'})\n",
+        "result_df['Sample A'] = np.log10(result_df.pop('KO-1'))\n",
+    ])
+    def test_renamed_samples_pass(self, studio_df, extra):
+        result = self._run(studio_df, extra)
+        assert result.success is True, result.validation_errors
+
+    def test_a_confirmed_sample_named_like_metadata_passes(self):
+        names = [f"PC {30 + i}:1" for i in range(12)]
+        df = pd.DataFrame({
+            "name": names,
+            "Reference_1": [float(i + 1) for i in range(12)],
+            "S2": [float(i + 2) for i in range(12)],
+        })
+        result = DataTransformerService.execute_transformation(
+            "result_df = df.copy()", df, sample_columns=["Reference_1", "S2"],
+        )
+        assert result.success is True, result.validation_errors

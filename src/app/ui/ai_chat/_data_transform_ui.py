@@ -146,16 +146,19 @@ def render_transform_chat(source_df) -> None:
     if usage_refused():
         return
 
-    # A transform refused only because sample names look like metadata
-    # (e.g. 'Reference_1'): the user, not the AI, may say they are samples.
+    # A transform refused only for keeping columns that are not the
+    # confirmed samples: the user, not the AI, may say they are samples.
     refused = st.session_state.get('chat_transform_refused_metadata') or ()
     if refused:
         names = ", ".join(f"'{c}'" for c in refused)
+        one = len(refused) == 1
         st.info(
-            f"{names} {'was' if len(refused) == 1 else 'were'} refused because "
-            f"the name looks like metadata (retention time, score, m/z, ...). "
-            f"If {'it is a sample' if len(refused) == 1 else 'they are samples'}, "
-            f"you can keep {'it' if len(refused) == 1 else 'them'}."
+            f"{names} {'was' if one else 'were'} refused: "
+            f"{'it is' if one else 'they are'} not among the sample columns "
+            f"you confirmed in the sidebar (or the name looks like metadata). "
+            f"If {'it is a sample' if one else 'they are samples'}, you can "
+            f"keep {'it' if one else 'them'}, or add "
+            f"{'it' if one else 'them'} to your samples in the sidebar."
         )
         if st.button(f"Keep {names} as samples", key="chat_keep_metadata_columns"):
             StreamlitAdapter.record_ai_execution()

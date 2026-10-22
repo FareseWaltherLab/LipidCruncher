@@ -358,6 +358,7 @@ class AIChatWorkflow:
         sandbox_config: SandboxConfig,
         numeric_columns: Optional[List[str]],
         keep_columns: Sequence[str] = (),
+        sample_columns: Optional[Sequence[str]] = None,
     ) -> TransformStepResult:
         """Execute generated transform code (if any), build the assistant
         message, append it to the session, and return the step result.
@@ -373,6 +374,7 @@ class AIChatWorkflow:
                 sandbox_config=sandbox_config,
                 numeric_columns=numeric_columns,
                 keep_columns=keep_columns,
+                sample_columns=sample_columns,
             )
             # Include explanation in the transformation result
             transformation = TransformationResult(
@@ -443,6 +445,7 @@ class AIChatWorkflow:
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
         keep_columns: Sequence[str] = (),
+        sample_columns: Optional[Sequence[str]] = None,
     ):
         """Handle one user message in a data transformation chat.
 
@@ -461,9 +464,19 @@ class AIChatWorkflow:
         history = session.to_api_messages()[:-1]
 
         holder = {"full": ""}
+        # The model sees which columns the user confirmed as samples; the
+        # session keeps the user's own words.
+        model_message = user_message
+        if sample_columns:
+            model_message = (
+                "Sample columns the user confirmed (result_df's sample "
+                "columns must come from these): "
+                + ", ".join(f"`{c}`" for c in sample_columns)
+                + f"\n\n{user_message}"
+            )
         generator = DataTransformerService.stream_transformation_code(
             source_schema=session.schema_context,
-            user_message=user_message,
+            user_message=model_message,
             history=history,
             config=ai_config,
             holder=holder,
@@ -473,7 +486,7 @@ class AIChatWorkflow:
             explanation, code = AIClientService.extract_code_block(holder["full"])
             return AIChatWorkflow._finalize_transform(
                 session, explanation, code, source_df,
-                sandbox_config, numeric_columns, keep_columns,
+                sandbox_config, numeric_columns, keep_columns, sample_columns,
             )
 
         return generator, finalize
@@ -484,6 +497,7 @@ class AIChatWorkflow:
         source_df: pd.DataFrame,
         keep_columns: Sequence[str],
         numeric_columns: Optional[List[str]] = None,
+        sample_columns: Optional[Sequence[str]] = None,
     ) -> TransformStepResult:
         """Re-run the last transform, keeping columns the user confirmed
         are samples although their names look like metadata.
@@ -503,6 +517,7 @@ class AIChatWorkflow:
             f"You confirmed these are samples: {names}. They stay in the "
             f"result.",
             code, source_df, SandboxConfig(), numeric_columns, keep_columns,
+            sample_columns,
         )
 
     # ------------------------------------------------------------------

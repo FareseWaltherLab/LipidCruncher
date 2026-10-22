@@ -120,8 +120,10 @@ class TransformationResult:
         validation_errors: Schema validation errors (if any).
         report: What an accepted transform changed relative to the
             upload. None unless the transform was accepted.
-        metadata_columns: Sample columns refused only because their names
-            look like metadata. The user can keep them (``keep_columns``).
+        metadata_columns: Sample columns refused only because they are not
+            the user's confirmed samples (or, without a confirmed list,
+            have metadata-like names). The user can keep them
+            (``keep_columns``).
     """
     success: bool
     result_df: Optional[pd.DataFrame] = None
@@ -182,6 +184,7 @@ class DataTransformerService:
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
         keep_columns: Sequence[str] = (),
+        sample_columns: Optional[Sequence[str]] = None,
     ) -> TransformationResult:
         """Execute transformation code and validate the output.
 
@@ -191,8 +194,12 @@ class DataTransformerService:
             sandbox_config: Sandbox configuration. Uses defaults if None.
             numeric_columns: Optional list of columns to pre-coerce to
                 numeric before exposing the DataFrame to user code.
-            keep_columns: Columns the user confirmed are samples, though
-                their names look like metadata.
+            keep_columns: Columns the user chose to keep as samples,
+                although the check below refused them.
+            sample_columns: The sample columns the user confirmed. The
+                result may keep only these (or columns whose values match
+                one) as samples. Without them, columns with metadata-like
+                names are refused instead.
 
         Returns:
             TransformationResult with the outcome.
@@ -243,20 +250,32 @@ class DataTransformerService:
         if is_valid:
             # A numeric metadata column passes the schema check, and the
             # Generic reader would then analyse it as a sample.
-            metadata = [
-                c for c in DataTransformerService.detect_metadata_columns(
-                    sandbox_result.result_df
+            result_df = sandbox_result.result_df
+            if sample_columns is not None:
+                metadata = DataTransformerService._unconfirmed_sample_columns(
+                    result_df, source_df, sample_columns,
                 )
-                if c not in keep_columns
-            ]
-            if metadata:
+            else:
+                metadata = DataTransformerService.detect_metadata_columns(result_df)
+            metadata = [c for c in metadata if c not in keep_columns]
+            if metadata and sample_columns is not None:
+                shown = ", ".join(f"'{c}'" for c in list(sample_columns)[:5])
+                more = len(sample_columns) - 5
+                errors = [
+                    "Not among the user's confirmed sample columns: "
+                    + ", ".join(f"'{c}'" for c in metadata)
+                    + ". Every column after the lipid names (and ClassKey) "
+                    "is analysed as a sample, so keep only the confirmed "
+                    f"samples ({shown}{f', and {more} more' if more > 0 else ''}) "
+                    "and drop these from result_df."
+                ]
+            elif metadata:
                 errors = [
                     "Metadata columns kept as samples: "
                     + ", ".join(f"'{c}'" for c in metadata)
                     + ". Every column after the lipid names (and ClassKey) "
                     "is analysed as a sample, so drop these from result_df."
                 ]
-            result_df = sandbox_result.result_df
             errors += check_values_stay_with_their_lipid(
                 result_df.iloc[:, 0], result_df, source_df,
                 DataTransformerService._sample_columns(result_df),
@@ -411,24 +430,11 @@ class DataTransformerService:
             appeared = int((~was & now).sum().sum())
             missing = int((was & ~now).sum().sum())
 
-            # Rescaling, logs and per-sample normalization keep each
-            # column's ranking of lipids; values moved to other lipids
-            # destroy it (Spearman ~0 vs ~1). Ranking within each class
-            # (the name's leading letters) keeps per-class normalization
-            # at ~1 too.
-            classes = pd.Series(both, index=both).str.extract(
-                r'^([A-Za-z]+)', expand=False,
-            )
             for col in columns:
-                pair = pd.concat(
-                    [before[col], after[col]], axis=1, keys=['was', 'now'],
-                ).dropna()
-                if len(pair) < 10:
-                    continue
-                ranks = pair.groupby(
-                    classes[pair.index], dropna=False,
-                ).rank(pct=True)
-                if ranks['was'].corr(ranks['now'], method='spearman') < 0.5:
+                agreement = DataTransformerService._rank_agreement(
+                    before[col], after[col],
+                )
+                if agreement is not None and agreement < 0.5:
                     reordered.append(str(col))
 
         return TransformReport(
@@ -452,6 +458,78 @@ class DataTransformerService:
             duplicate_names=tuple(dict.fromkeys(names[names.duplicated()])),
             reordered_columns=tuple(reordered),
         )
+
+    @staticmethod
+    def _rank_agreement(was: pd.Series, now: pd.Series) -> Optional[float]:
+        """How well two columns, indexed by lipid name, rank the lipids
+        alike (Spearman of within-class ranks); None below 10 shared values.
+
+        Rescaling, logs and per-sample normalization keep a column's
+        ranking of lipids; values moved to other lipids destroy it
+        (Spearman ~0 vs ~1). Ranking within each class (the name's leading
+        letters) keeps per-class normalization at ~1 too.
+        """
+        pair = pd.concat([was, now], axis=1, keys=['was', 'now']).dropna()
+        if len(pair) < 10:
+            return None
+        classes = pd.Series(pair.index, index=pair.index).astype(str).str.extract(
+            r'^([A-Za-z]+)', expand=False,
+        )
+        ranks = pair.groupby(classes, dropna=False).rank(pct=True)
+        return ranks['was'].corr(ranks['now'], method='spearman')
+
+    @staticmethod
+    def _unconfirmed_sample_columns(
+        result_df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        sample_columns: Sequence[str],
+    ) -> List:
+        """Sample columns of the result that are not the user's samples.
+
+        A column kept under an upload name must be a confirmed sample. A
+        renamed one counts as a sample if its values rank the lipids like a
+        confirmed sample's (it may be rescaled or normalized). When it
+        cannot be compared (lipids renamed, too few shared), only a
+        metadata-like name gives it away.
+        """
+        confirmed = [c for c in sample_columns if c in source_df.columns]
+        names = result_df.iloc[:, 0].astype(str)
+        name_col = source_name_column(names, source_df)
+        source_names = (
+            source_df[name_col].astype(str) if name_col is not None
+            else pd.Series([], dtype=str)
+        )
+        both = sorted(
+            set(source_names[~source_names.duplicated(keep=False)])
+            & set(names[~names.duplicated(keep=False)])
+        )
+
+        def _column(df, name_series, col):
+            values = pd.to_numeric(df[col], errors='coerce')
+            values.index = name_series.values
+            return values.loc[both]
+
+        refused = []
+        for col in DataTransformerService._sample_columns(result_df):
+            if col in confirmed:
+                continue
+            if col in source_df.columns:
+                refused.append(col)
+                continue
+            agreements = [
+                DataTransformerService._rank_agreement(
+                    _column(source_df, source_names, sample),
+                    _column(result_df, names, col),
+                )
+                for sample in confirmed
+            ] if both else []
+            known = [a for a in agreements if a is not None]
+            if known:
+                if max(known) < 0.9:
+                    refused.append(col)
+            elif looks_like_metadata_name(col):
+                refused.append(col)
+        return refused
 
     @staticmethod
     def _sample_columns(df: pd.DataFrame) -> List:

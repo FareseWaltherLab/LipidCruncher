@@ -451,3 +451,18 @@ def test_miscolored_direction_chart_is_flagged_in_the_answer(mock_loop):
     ))
     assert result.sandbox_result.figure is not None
     assert "colors do not follow the direction" in result.assistant_message
+
+
+@patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+def test_the_model_is_told_the_confirmed_samples(mock_loop, source_df, transform_session):
+    """It writes the transform knowing which columns are samples; the
+    conversation keeps the user's own words."""
+    mock_loop.side_effect = canned_stream("Which columns?")
+    result = finish(AIChatWorkflow.stream_transform_message(
+        "convert", transform_session, source_df,
+        sample_columns=["area_s1", "area_s2"],
+    ))
+    sent = mock_loop.call_args.kwargs["messages"][-1]["content"]
+    assert "Sample columns the user confirmed" in sent
+    assert "`area_s1`, `area_s2`" in sent
+    assert result.session.messages[-2].content == "convert"

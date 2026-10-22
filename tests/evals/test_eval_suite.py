@@ -72,6 +72,8 @@ def run_case(case: C.EvalCase) -> dict:
                 user_message=case.question,
                 session=session,
                 source_df=df,
+                # As confirmed in the sidebar: the 15 intensity columns.
+                sample_columns=list(df.columns[6:]),
             ))
             outcome["answer"] = result.assistant_message
             t = result.transformation
