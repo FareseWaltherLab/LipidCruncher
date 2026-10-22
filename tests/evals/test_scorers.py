@@ -380,7 +380,7 @@ def test_every_case_is_scored_against_the_pipeline_where_it_can_be():
     """Cases with a pipeline answer must run on a dataset that has one."""
     for case in C.CASES:
         if case.pipeline_answer or case.pipeline_number:
-            assert case.dataset == C.CANONICAL, case.id
+            assert case.dataset in (C.CANONICAL, C.RAW_REPEATS), case.id
         if case.expect_table:
             assert case.tab == "transform" and case.dataset == C.STUDIO, case.id
 
@@ -407,3 +407,13 @@ def test_direction_chart_must_use_colored_bars():
     assert score_routing(good, case) == []
     by_hand = "t = lc.compare_species('WT', 'KO').head(10)\nbar_colors = [...]"
     assert score_routing(by_hand, case) == ["did not call lc.colored_bars"]
+
+
+def test_app_questions_must_mention_the_rule():
+    case = C.by_id("lipidsearch_both_modes")
+    good = ("LipidCruncher keeps one identification per lipid: for a class with "
+            "its own internal standard, the row in the standard's adduct.")
+    assert score_usability("", good, case) == []
+    old = "It keeps the identification with the better grade."
+    failures = score_usability("", old, case)
+    assert "the answer does not mention 'adduct'" in failures

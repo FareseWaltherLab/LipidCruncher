@@ -24,6 +24,8 @@ CANONICAL = "canonical"          # 24 species, WT vs KO, 6 planted effects
 CHAIN_MOLECULAR = "chain_molecular"        # answerable chain question
 CHAIN_CONSOLIDATED = "chain_consolidated"  # must refuse: sum composition
 STUDIO = "studio"                # ai_studio_test_dataset.csv: raw, with metadata
+RAW_REPEATS = "raw_repeats"      # canonical + 4 lipids seen again as another adduct
+APP = "app"                      # no data: questions about LipidCruncher itself
 
 
 @dataclass(frozen=True)
@@ -34,7 +36,8 @@ class EvalCase:
         id: Stable identifier, used in test output.
         question: Verbatim user prompt.
         dataset: Fixture to load.
-        tab: 'data_questions', 'visualization' or 'transform'.
+        tab: 'data_questions', 'visualization', 'transform' or
+            'lc_questions'.
         expect_lc: Substrings that must appear in the generated code —
             the pipeline calls this question should route to (any one).
         expect_lc_all: Calls that must all appear as well.
@@ -50,6 +53,8 @@ class EvalCase:
             turn must state it.
         expect_table: For transforms, the Generic table the request
             should give (names, then samples) — computed from the upload.
+        expect_mentions: Words the answer must contain (case-insensitive),
+            for questions about how LipidCruncher works.
     """
     id: str
     question: str
@@ -63,6 +68,7 @@ class EvalCase:
     pipeline_answer: Optional[Callable[[pd.DataFrame], pd.Series]] = None
     pipeline_number: Optional[Callable[[pd.DataFrame], float]] = None
     expect_table: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None
+    expect_mentions: Tuple[str, ...] = ()
 
 
 # Analysis the pipeline already implements; writing it by hand means the
@@ -208,6 +214,34 @@ CASES = (
         dataset=CANONICAL,
         pipeline_number=ref.n_species,
         note="The simplest parity check: 24.",
+    ),
+
+    # ---- LipidSearch adducts (M10, 2026-10-22) -------------------------
+    EvalCase(
+        id="species_count_repeated_rows",
+        question="How many lipid species are in my dataset?",
+        dataset=RAW_REPEATS,
+        pipeline_number=lambda df: df["LipidMolec"].nunique(),
+        note=(
+            "A raw LipidSearch export lists a lipid once per adduct; the "
+            "pipeline keeps one row per lipid, so the answer is 24, not the "
+            "28 rows."
+        ),
+    ),
+    EvalCase(
+        id="lipidsearch_both_modes",
+        question=(
+            "How does LipidCruncher handle a LipidSearch lipid that was "
+            "identified in both positive and negative mode?"
+        ),
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("adduct", "internal standard", "one"),
+        note=(
+            "The rule changed (M10): one row per lipid, in its class's "
+            "internal-standard adduct, never a sum. The old answer was "
+            "'the better grade'."
+        ),
     ),
 
     # ---- Transform to Generic: mined from real failures (2026-10-20) ---

@@ -52,6 +52,18 @@ def load_dataset(name: str):
         return df, ExperimentConfig(
             conditions_list=["All"], number_of_samples_list=[4],
         )
+    if name == C.RAW_REPEATS:
+        # Four lipids seen again as [M+HCOO]-, at a tenth of the signal:
+        # 28 rows, 24 lipids.
+        df = ref.load_canonical().assign(MainIon="M+H")
+        again = df.head(4).assign(MainIon="M+HCOO")
+        conc = [c for c in df.columns if c.startswith("concentration[")]
+        again[conc] = again[conc] * 0.1
+        return pd.concat([df, again], ignore_index=True), ExperimentConfig(
+            conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
+        )
+    if name == C.APP:
+        return None, None
     if name == C.STUDIO:
         # Raw, pre-Generic data: the Transform tab needs no experiment.
         return pd.read_csv(os.path.join(FIXTURES, "ai_studio_test_dataset.csv")), None
@@ -66,7 +78,12 @@ def run_case(case: C.EvalCase) -> dict:
                "unverified_numbers": ()}
 
     try:
-        if case.tab == "transform":
+        if case.tab == "lc_questions":
+            _, stream = AIChatWorkflow.stream_lc_questions_message(
+                case.question, AIChatWorkflow.start_lc_questions_session(),
+            )
+            outcome["answer"] = "".join(stream)
+        elif case.tab == "transform":
             _, session = AIChatWorkflow.start_transform_chat(df)
             result = finish(AIChatWorkflow.stream_transform_message(
                 user_message=case.question,

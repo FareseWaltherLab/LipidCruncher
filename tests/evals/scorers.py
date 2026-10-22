@@ -125,6 +125,11 @@ def score_usability(
             "reported statistics without saying how they were computed"
         )
 
+    lowered = answer.lower()
+    for word in case.expect_mentions:
+        if word.lower() not in lowered:
+            failures.append(f"the answer does not mention {word!r}")
+
     if "refusal" in case.expect and not _is_refusal(answer):
         failures.append(
             "should have explained that the data cannot answer this, "
