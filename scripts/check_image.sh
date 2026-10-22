@@ -39,7 +39,8 @@ echo "== Image user: $user"
 echo "== Sandbox isolation tests inside the image"
 # pytest is a dev tool, so it goes into this throwaway container only.
 log=$(mktemp)
-if ! docker run --rm --platform "$platform" -e PYTHONPATH=src "$image" sh -c '
+if ! docker run --rm --platform "$platform" -e PYTHONPATH=src \
+        --entrypoint sh "$image" -c '
         pip install --quiet --user --no-warn-script-location pytest==9.0.3 &&
         python -m pytest tests/unit/test_sandbox_isolation.py -q -rs -p no:cacheprovider
     ' 2>&1 | tee "$log"; then
