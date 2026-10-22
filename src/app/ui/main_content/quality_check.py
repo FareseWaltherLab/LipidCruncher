@@ -66,6 +66,7 @@ def display_quality_check_module(
     # The samples after PCA exclusion, set by the PCA section if it excludes
     # any (exclusion renumbers the survivors); None means none excluded.
     st.session_state.qc_frame = None
+    st.session_state.qc_samples_removed = []
 
     # Validate inputs
     errors = QualityCheckWorkflow.validate_inputs(continuation_df, experiment)

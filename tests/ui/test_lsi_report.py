@@ -155,6 +155,25 @@ class TestLipidCoverageReported:
         ] == str(len(analyzed))
 
 
+PCA_ITEM = 'QC: Outlier samples removed (PCA)'
+
+
+class TestPcaExclusionReported:
+    """Regression: samples excluded in PCA and then put back stayed listed
+    as removed, next to sample counts that included them again."""
+
+    def test_cleared_exclusion_not_reported(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.multiselect(key='pca_samples_remove').set_value(['s2']).run()
+        assert _report(captured_downloads)[PCA_ITEM] == 's2'
+
+        at.multiselect(key='pca_samples_remove').set_value([]).run()
+        assert not at.exception, at.exception
+        report = _report(captured_downloads)
+        assert report['Total samples'] == '12'
+        assert report[PCA_ITEM] == 'None'
+
+
 ORGANISM = 'Organism / tissue type'
 
 
