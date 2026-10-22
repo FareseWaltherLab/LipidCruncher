@@ -1464,3 +1464,47 @@ class TestWorkflowWithVariousExperiments:
 
         assert result.success is True
         assert sum(c.startswith('concentration[') for c in result.normalized_df.columns) == n_samples
+
+
+class TestAdductMismatches:
+    """A standard converts a species' signal to a concentration only if
+    both were measured in the same adduct (LipidSearch MainIon)."""
+
+    species = pd.DataFrame({
+        'LipidMolec': ['PC 16:0_18:1', 'PC 18:0_18:1', 'PC 18:1_18:1', 'PE 18:0_20:4'],
+        'ClassKey': ['PC', 'PC', 'PC', 'PE'],
+        'MainIon': ['M+H', 'M+HCOO', 'M+H', 'M-H'],
+    })
+    standards = pd.DataFrame({
+        'LipidMolec': ['PC 15:0_18:1+D7:(s)', 'PE 15:0_18:1+D7:(s)'],
+        'ClassKey': ['PC', 'PE'],
+        'MainIon': ['M+H', 'M-H'],
+    })
+
+    def test_a_class_with_species_in_another_adduct(self):
+        (warning,) = NormalizationWorkflow.adduct_mismatches(
+            self.species, self.standards,
+            {'PC': 'PC 15:0_18:1+D7:(s)', 'PE': 'PE 15:0_18:1+D7:(s)'},
+        )
+        assert warning.startswith(
+            "**PC** is normalized with PC 15:0_18:1+D7:(s), measured as M+H, "
+            "but 1 of 3 PC species were measured as other adducts (M+HCOO 1)")
+
+    def test_a_standard_from_another_class_and_adduct(self):
+        warnings = NormalizationWorkflow.adduct_mismatches(
+            self.species, self.standards, {'PE': 'PC 15:0_18:1+D7:(s)'},
+        )
+        assert "1 of 1 PE species were measured as other adducts (M-H 1)" in warnings[0]
+
+    def test_an_uploaded_standard_has_no_adduct(self):
+        uploaded = self.standards.drop(columns=['MainIon'])
+        (warning,) = NormalizationWorkflow.adduct_mismatches(
+            self.species, uploaded, {'PC': 'PC 15:0_18:1+D7:(s)'},
+        )
+        assert warning.startswith("No adduct is recorded for PC 15:0_18:1+D7:(s)")
+
+    def test_other_formats_are_not_checked(self):
+        assert NormalizationWorkflow.adduct_mismatches(
+            self.species.drop(columns=['MainIon']), self.standards,
+            {'PC': 'PC 15:0_18:1+D7:(s)'},
+        ) == []

@@ -245,6 +245,63 @@ class NormalizationWorkflow:
         """
         return NormalizationService.get_standards_by_class(intsta_df)
 
+    @staticmethod
+    def adduct_mismatches(
+        species_df: pd.DataFrame,
+        intsta_df: Optional[pd.DataFrame],
+        class_standard_map: Dict[str, str],
+    ) -> List[str]:
+        """Warn where a class is normalized with a standard measured in
+        another adduct than its species.
+
+        A standard converts a species' signal to a concentration only if
+        both ionise alike; a [M+HCOO]- species against a [M+H]+ standard
+        compares different scales. Uses LipidSearch's ``MainIon`` column;
+        without it (other formats) nothing is checked. Standards with no
+        recorded adduct (an uploaded table) are named once, unchecked.
+        """
+        if 'MainIon' not in species_df.columns:
+            return []
+        standard_ions = {}
+        if intsta_df is not None and 'MainIon' in intsta_df.columns:
+            standard_ions = dict(zip(
+                intsta_df['LipidMolec'],
+                intsta_df['MainIon'].astype(str).str.strip(),
+            ))
+
+        warnings, unknown = [], []
+        for lipid_class, standard in class_standard_map.items():
+            ions = species_df.loc[
+                species_df['ClassKey'] == lipid_class, 'MainIon'
+            ].astype(str).str.strip()
+            if ions.empty:
+                continue
+            standard_ion = standard_ions.get(standard)
+            if standard_ion in (None, '', 'nan'):
+                unknown.append(standard)
+                continue
+            other = ions[ions != standard_ion]
+            if len(other):
+                tally = other.value_counts().sort_index().sort_values(
+                    ascending=False, kind="stable",
+                )
+                warnings.append(
+                    f"**{lipid_class}** is normalized with {standard}, measured as "
+                    f"{standard_ion}, but {len(other)} of {len(ions)} {lipid_class} "
+                    f"species were measured as other adducts ("
+                    + ", ".join(f"{ion} {n}" for ion, n in tally.items())
+                    + "): their concentrations are on a different scale from "
+                    "the standard's."
+                )
+        if unknown:
+            warnings.append(
+                "No adduct is recorded for "
+                + ", ".join(dict.fromkeys(unknown))
+                + " (e.g. an uploaded standards table), so LipidCruncher cannot "
+                "check that it was measured in the same adduct as its species."
+            )
+        return warnings
+
 
     @staticmethod
     def _store_essential_columns(

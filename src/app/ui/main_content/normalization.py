@@ -65,7 +65,9 @@ def _display_class_selection(cleaned_df: pd.DataFrame) -> list:
 # Helper Functions - Internal Standards Configuration
 # =============================================================================
 
-def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes: list) -> tuple:
+def _display_internal_standards_config(
+    intsta_df: pd.DataFrame, selected_classes: list, species_df: pd.DataFrame,
+) -> tuple:
     """Display internal standards configuration UI. Returns (internal_standards, intsta_concentrations) or (None, None)."""
     if intsta_df is None or intsta_df.empty:
         st.error("No internal standards detected. Please upload standards or use a different method.")
@@ -124,6 +126,20 @@ def _display_internal_standards_config(intsta_df: pd.DataFrame, selected_classes
 
         # Save mapping to session state for persistence
         st.session_state.class_standard_map = internal_standards
+
+        # LipidSearch: a standard measured in another adduct than its
+        # class's species puts their concentrations on another scale.
+        mismatches = NormalizationWorkflow.adduct_mismatches(
+            species_df, intsta_df, internal_standards,
+        )
+        for warning in mismatches:
+            st.warning(warning)
+        if mismatches:
+            st.caption(
+                "Pick a standard measured in the same adduct as the class's "
+                "species, or set the class's adduct under **Configure Adducts** "
+                "in data processing."
+            )
 
         # Standard concentrations (always visible, not optional)
         if st.session_state.get('standard_concentrations') is None:
@@ -484,7 +500,7 @@ def display_normalization_ui(cleaned_df: pd.DataFrame, intsta_df: pd.DataFrame, 
 
     # Collect configuration based on method
     internal_standards, intsta_concentrations, protein_concentrations = (
-        _collect_method_config(method, intsta_df, selected_classes, experiment)
+        _collect_method_config(method, intsta_df, selected_classes, experiment, cleaned_df)
     )
     if internal_standards is None or protein_concentrations is None:
         _clear_normalization_output()
@@ -542,7 +558,9 @@ def _display_method_selection(normalization_options: list) -> str:
     return method
 
 
-def _collect_method_config(method: str, intsta_df, selected_classes: list, experiment) -> tuple:
+def _collect_method_config(
+    method: str, intsta_df, selected_classes: list, experiment, species_df,
+) -> tuple:
     """Collect IS and protein config based on selected method.
 
     Returns (internal_standards, intsta_concentrations, protein_concentrations).
@@ -553,7 +571,9 @@ def _collect_method_config(method: str, intsta_df, selected_classes: list, exper
     protein_concentrations = {}
 
     if method in ['Internal Standards', 'Internal Standards + Protein']:
-        internal_standards, intsta_concentrations = _display_internal_standards_config(intsta_df, selected_classes)
+        internal_standards, intsta_concentrations = _display_internal_standards_config(
+            intsta_df, selected_classes, species_df,
+        )
         if internal_standards is None:
             return None, None, None
 

@@ -94,6 +94,28 @@ def test_power_users_choose_the_adduct_per_class(two_mode_sample):
     assert set(final.loc[final['ClassKey'] == 'PC', 'MainIon']) == {'M+HCOO'}
 
 
+def test_normalization_warns_when_a_standard_is_another_adduct(two_mode_sample):
+    """The power user's "apples to oranges": kept [M+HCOO]- PC species
+    normalized with the [M+H]+ PC standard are warned about at the
+    mapping."""
+    at = _module1()
+    at.checkbox(key='keep_other_adducts_checkbox').check().run()
+    at.radio(key='norm_method_selection').set_value('Internal Standards').run()
+    assert not at.exception, at.exception
+    warnings = [w.value for w in at.warning if 'is normalized with' in w.value]
+    assert len(warnings) == 1
+    assert warnings[0].startswith('**PC** is normalized with')
+    # The kept [M+HCOO]- species that survive the zero filter
+    assert 'measured as M+H' in warnings[0] and 'other adducts (M+HCOO' in warnings[0]
+
+
+def test_no_normalization_warning_when_adducts_match(two_mode_sample):
+    at = _module1()
+    at.radio(key='norm_method_selection').set_value('Internal Standards').run()
+    assert not at.exception, at.exception
+    assert not [w for w in at.warning if 'is normalized with' in w.value]
+
+
 def test_no_note_without_ions():
     assert _notes(_module1()) == []
 
