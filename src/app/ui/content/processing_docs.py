@@ -45,26 +45,40 @@ experiment setup in the sidebar, with each sample named after its raw file
 | 2. Data Type Conversion | Convert intensity columns to numeric (non-numeric → 0) |
 | 3. Grade Filtering | Filter by quality grade (**configurable below**) |
 | 4. Lipid Name Standardization | Standardize to LIPID MAPS shorthand (`Class chains`) |
-| 5. Best Peak Selection | One entry per lipid: best grade first, then highest TotalSmpIDRate(%) |
-| 6. Column Projection | Keep LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, TotalSmpIDRate(%), FAKey and the intensity columns; drop extended-export extras (`OrgMeanArea[*]`, `MeanHeight[*]`, `MeanConc[*]`, `LipidMolecGroup`, …) |
-| 7. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
+| 5. Adduct Matching | A class with its own internal standard is quantified in the standard's adduct (`MainIon`); its species seen only in other adducts are removed (**configurable below**) |
+| 6. Best Peak Selection | One entry per lipid: best grade first, then highest TotalSmpIDRate(%) |
+| 7. Column Projection | Keep LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, MainIon, FAKey and the intensity columns; drop extended-export extras (`OrgMeanArea[*]`, `MeanHeight[*]`, `MeanConc[*]`, `LipidMolecGroup`, …) |
+| 8. Zero Filtering | Remove species failing zero threshold (**configurable below**) |
 
-#### Lipids identified in both positive and negative mode
+#### Lipids identified in more than one adduct or mode
 
-A lipid can be identified in both polarities (e.g. PC as `[M+H]+` and as
-`[M+HCOO]-`), giving two rows with the same name. Step 5 keeps **one** of them,
-the better grade and then the higher TotalSmpIDRate(%), for every sample. The
-two rows' values are **never added**: positive- and negative-mode signals for
-the same lipid differ by an order of magnitude or more, so a sum would mean
-nothing.
+A lipid can be identified as several adducts, in one or both polarities (e.g.
+PC as `[M+H]+` and as `[M+HCOO]-`), giving rows with the same name. One row is
+kept for every sample; the rows' values are **never added**, since the same
+lipid's signal differs by an order of magnitude or more between adducts, so a
+sum would mean nothing.
+
+**Which row.** Converting a species' signal to a concentration with an internal
+standard assumes the two ionise alike, so a class with its own standard in the
+export (detected automatically, e.g. `PC 15:0_18:1+D7`) is quantified in the
+standard's adduct: for PC with an `[M+H]+` standard, a species' `[M+H]+` row is
+used even when another adduct graded better. A species of that class seen
+**only** in other adducts is removed by default; **Configure Adducts** can keep
+it, on a scale that differs from the standard's. Classes without a standard of
+their own keep each species' best row (best grade, then TotalSmpIDRate(%)). The
+standard's adduct is taken from the standards in the export; standards uploaded
+as a separate table carry no adduct, so they cannot set one. **Choose the adduct
+per class** (under Configure Adducts) overrides this for any class measured in
+more than one adduct: a specific adduct, or *Any adduct* for each species' best
+row.
 
 What this means for your results: comparing a lipid **across conditions** is
-unaffected, since every sample uses the same row. But within one class, some
-species may be quantified from positive mode and others from negative mode, so
-species-to-species comparisons inside that class (composition, proportions,
-saturation profiles) mix two signal scales. After cleaning, the app says how
-many lipids were seen in both modes and which classes ended up with species
-from both.
+unaffected, since every sample uses the same row. But where a class's species
+come from different adducts, species-to-species comparisons inside that class
+(composition, proportions, saturation profiles) mix signal scales. After
+cleaning, the app lists each class's adduct, the species removed for not
+matching their standard, and the classes that still mix adducts; the
+`MainIon` column of the final data shows each species' adduct.
 
 ---
 

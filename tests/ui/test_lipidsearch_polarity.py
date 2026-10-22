@@ -1,9 +1,11 @@
 """
-LipidSearch lipids identified in both ionisation modes (M10).
+LipidSearch lipids identified as several adducts or in both modes (M10).
 
-The app keeps one row per lipid (better grade, then identification rate)
-and never adds the two modes. It now says so on the page, with this file's
-counts, and the processing help explains what it means for comparisons.
+The app keeps one row per lipid and never adds them. A class with its own
+internal standard is quantified in the standard's adduct, and its species
+seen only in other adducts are removed unless the user keeps them (power
+user, 2026-10-22). The page says what happened, with this file's counts,
+and the processing help explains the rule.
 """
 
 from pathlib import Path
@@ -31,14 +33,14 @@ def _module1():
 
 
 def _notes(at):
-    return [i.value for i in at.main.info if i.value.startswith('Polarity:')]
+    return [i.value for i in at.main.info if i.value.startswith('Adducts:')]
 
 
 @pytest.fixture
 def two_mode_sample(tmp_path, monkeypatch):
-    """The LipidSearch sample with ions: every row positive, three A-grade
-    PC species also seen (B grade) in negative mode, two PC species only in
-    negative mode."""
+    """The LipidSearch sample with ions: every row [M+H]+ (so is the PC
+    standard), three A-grade PC species also seen (B grade) as [M+HCOO]-,
+    two PC species only as [M+HCOO]-."""
     df = pd.read_csv(SAMPLE)
     df['MainIon'] = 'M+H'
     pc = df.index[(df['ClassKey'] == 'PC') & (df['TotalGrade'] == 'A')]
@@ -56,12 +58,40 @@ def two_mode_sample(tmp_path, monkeypatch):
     monkeypatch.setattr(file_upload, 'SAMPLE_DATA_DIR', tmp_path)
 
 
-def test_note_names_the_counts(two_mode_sample):
+def test_species_not_in_the_standards_adduct_are_removed(two_mode_sample):
     at = _module1()
     [note] = _notes(at)
-    assert '3 lipid(s) were identified in both positive and negative mode' in note
-    assert 'never added' in note
-    assert ', 2 negative)' in note and 'PC (' in note
+    assert '2 seen only as other adducts removed (M+HCOO 2)' in note
+    assert 'PC (M+H):' in note
+    assert 'Keep species measured in other adducts' in note
+    final = at.session_state.ingestion_result.cleaned_df
+    assert not final['LipidMolec'].str.startswith('PC 91:0').any()
+    assert set(final.loc[final['ClassKey'] == 'PC', 'MainIon']) == {'M+H'}
+
+
+def test_the_user_can_keep_them(two_mode_sample):
+    at = _module1()
+    at.checkbox(key='keep_other_adducts_checkbox').check().run()
+    assert not at.exception, at.exception
+    [note] = _notes(at)
+    assert '2 seen only as other adducts kept (M+HCOO 2)' in note
+    final = at.session_state.ingestion_result.cleaned_df
+    assert final['LipidMolec'].str.startswith('PC 91:0').any()
+
+
+def test_power_users_choose_the_adduct_per_class(two_mode_sample):
+    """Step 4: an adduct per class, for classes measured in more than one."""
+    at = _module1()
+    assert not [s for s in at.selectbox if s.key == 'adduct_select_PC']
+    at.checkbox(key='customize_adducts_checkbox').check().run()
+    select = at.selectbox(key='adduct_select_PC')
+    assert select.options == ['Default', 'M+H', 'M+HCOO', 'Any adduct']
+    select.set_value('M+HCOO').run()
+    assert not at.exception, at.exception
+    [note] = _notes(at)
+    assert 'PC (M+HCOO, your choice):' in note
+    final = at.session_state.ingestion_result.cleaned_df
+    assert set(final.loc[final['ClassKey'] == 'PC', 'MainIon']) == {'M+HCOO'}
 
 
 def test_no_note_without_ions():
@@ -71,6 +101,6 @@ def test_no_note_without_ions():
 def test_help_explains_the_rule():
     from app.ui.content import get_processing_docs
     docs = get_processing_docs(FORMAT_LIPIDSEARCH)
-    assert 'Lipids identified in both positive and negative mode' in docs
+    assert "quantified in the\nstandard's adduct" in docs
     assert 'never added' in docs
     assert 'detected in only one polarity' not in docs

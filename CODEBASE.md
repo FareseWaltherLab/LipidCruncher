@@ -406,7 +406,7 @@ Domain-specific subclasses exist in `data_cleaning/exceptions.py` (`DataCleaning
 | Class | Purpose |
 |---|---|
 | `BaseDataCleaner` | Common utilities: lipid column detection, numeric conversion, internal standard extraction (regex-based), lipid name validation. |
-| `LipidSearchCleaner` | Grade-based filtering (A/B/C/D per class), best-peak deduplication (best grade, then highest TotalSmpIDRate(%)), column standardization (`MeanArea[*]` → `intensity[*]`). |
+| `LipidSearchCleaner` | Grade-based filtering (A/B/C/D per class), adduct matching (a class with its own internal standard in the export is quantified in the standard's `MainIon` adduct; its species seen only in other adducts are removed unless `GradeFilterConfig.keep_other_adducts`; `class_adducts` lets the user set a class's adduct, or `ANY_ADDUCT`), best-peak deduplication (best grade, then highest TotalSmpIDRate(%)), column standardization (`MeanArea[*]` → `intensity[*]`). The `Adducts:` cleaning message (`ADDUCT_NOTE_PREFIX`) is shown in Module 1; `MainIon` stays in the cleaned data. |
 | `MSDIALCleaner` | Score threshold filtering, optional MS/MS requirement, deduplication by highest score, sample column auto-detection. |
 | `GenericCleaner` | Basic cleanup: invalid lipid removal, zero column check, standard extraction. Used for Generic and Metabolomics Workbench formats. |
 

@@ -9,15 +9,23 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class GradeFilterConfig(BaseModel):
-    """Configuration for LipidSearch grade filtering.
+    """Configuration for LipidSearch grade filtering and adducts.
 
     Args:
         grade_config: Optional dict mapping ClassKey to list of acceptable grades.
                      If None, uses default filtering (A/B/C for all classes).
+        keep_other_adducts: Keep species of a class with its own internal
+            standard that were seen only in other adducts than the
+            standard's (removed by default).
+        class_adducts: The user's adduct per class, overriding the
+            standard's (or giving one to a class without a standard);
+            ``ANY_ADDUCT`` keeps each species' best-graded row instead.
     """
     model_config = {"frozen": True}
 
     grade_config: Optional[Dict[str, List[str]]] = None
+    keep_other_adducts: bool = False
+    class_adducts: Optional[Dict[str, str]] = None
 
     @field_validator('grade_config')
     @classmethod
@@ -35,9 +43,12 @@ class GradeFilterConfig(BaseModel):
         return v
 
     def __hash__(self) -> int:
-        if self.grade_config is None:
-            return hash(None)
-        return hash(tuple(sorted((k, tuple(v)) for k, v in self.grade_config.items())))
+        # Every field: the app caches cleaning results by this hash.
+        grades = None if self.grade_config is None else tuple(
+            sorted((k, tuple(v)) for k, v in self.grade_config.items())
+        )
+        adducts = tuple(sorted((self.class_adducts or {}).items()))
+        return hash((grades, self.keep_other_adducts, adducts))
 
 
 class QualityFilterConfig(BaseModel):

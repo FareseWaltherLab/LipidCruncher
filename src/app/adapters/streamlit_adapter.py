@@ -463,6 +463,8 @@ _STAGES: Tuple[_Stage, ...] = (
         widgets=frozenset({
             # data_processing.py
             'grade_filter_mode', 'grade_selections', 'grade_filter_mode_radio',
+            'keep_other_adducts', 'keep_other_adducts_checkbox',
+            'customize_adducts', 'customize_adducts_checkbox', 'adduct_choices',
             'msdial_quality_level', 'msdial_data_type_radio',
             'msdial_quality_level_radio', 'msdial_custom_msms',
             'msdial_show_custom_threshold', 'msdial_custom_score',
@@ -482,7 +484,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'download_normalized_data',
         }),
         prefixes=('protein_', 'conc_', 'standard_selection_', 'grade_select_',
-                  'standards_file_uploader_'),
+                  'adduct_select_', 'standards_file_uploader_'),
     ),
     # The LSI compliance report's typed-in fields: kept across Next / Back,
     # cleared with the experiment they describe.

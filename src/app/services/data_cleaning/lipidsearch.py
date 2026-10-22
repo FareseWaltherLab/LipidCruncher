@@ -12,20 +12,20 @@ from ...constants import (
     LYSO_CLASSES,
     LIPIDSEARCH_DEFAULT_GRADES, LIPIDSEARCH_RELAXED_GRADES,
     LIPIDSEARCH_RELAXED_GRADE_CLASSES,
-    LIPIDSEARCH_NEGATIVE_IONS, LIPIDSEARCH_POSITIVE_IONS,
 )
+from ..standards import StandardsService
 from .base import BaseDataCleaner
 from .configs import GradeFilterConfig
 from .exceptions import EmptyDataError, ConfigurationError
 
-# Starts the cleaning message that explains dual-polarity lipids, which the
-# app shows on the page (the other cleaning messages are not).
-POLARITY_NOTE_PREFIX = "Polarity:"
+# Starts the cleaning message that explains which adduct each class was
+# quantified from, which the app shows on the page (the other cleaning
+# messages are not).
+ADDUCT_NOTE_PREFIX = "Adducts:"
 
-_ION_POLARITY: Dict[str, str] = {
-    **{ion: '+' for ion in LIPIDSEARCH_POSITIVE_IONS},
-    **{ion: '-' for ion in LIPIDSEARCH_NEGATIVE_IONS},
-}
+# A class's adduct choice meaning: no single adduct, keep each species' best
+# row whatever its adduct (as for a class without an internal standard).
+ANY_ADDUCT = "Any adduct"
 
 
 class LipidSearchCleaner(BaseDataCleaner):
@@ -44,6 +44,7 @@ class LipidSearchCleaner(BaseDataCleaner):
     # columns are appended after these by _final_cleanup.
     OUTPUT_COLUMNS: Tuple[str, ...] = (
         'LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'FAKey', 'TotalGrade',
+        'MainIon',
     )
 
     @staticmethod
@@ -92,20 +93,29 @@ class LipidSearchCleaner(BaseDataCleaner):
         # Step 4: Standardize lipid names
         df = LipidSearchCleaner._standardize_lipid_names(df)
 
-        # Step 5: Select best AUC for each lipid
+        # Step 5: Quantify classes with an internal standard in its adduct
         candidates = df[LipidSearchCleaner._build_eligibility_mask(df, grade_dict)]
+        keep_other = config.keep_other_adducts if config else False
+        df, anchors, removed = LipidSearchCleaner._match_standard_adducts(
+            candidates, keep_other, config.class_adducts if config else None,
+        )
+
+        # Step 6: Select best AUC for each lipid
         df, msg = LipidSearchCleaner._step_select_best_auc(df, experiment, grade_dict)
         if msg:
             messages.append(msg)
 
-        # Step 6: Remove all-zero rows
+        # Step 7: Remove all-zero rows
         df, msg = LipidSearchCleaner._step_remove_zero_rows(df)
         if msg:
             messages.append(msg)
 
-        # Say which lipids were seen in both ionisation modes, and which
-        # classes ended up quantified from both (selection is unchanged).
-        msg = LipidSearchCleaner._polarity_note(candidates, df)
+        # Say which adduct each class was quantified from, what was removed
+        # for not matching its standard, and which classes still mix adducts.
+        msg = LipidSearchCleaner._adduct_note(
+            candidates, df, anchors, removed, keep_other,
+            config.class_adducts if config else None,
+        )
         if msg:
             messages.append(msg)
 
@@ -114,60 +124,153 @@ class LipidSearchCleaner(BaseDataCleaner):
                 "No lipid species with non-zero intensity values found."
             )
 
-        # Step 7: Final cleanup
+        # Step 8: Final cleanup
         df = LipidSearchCleaner._final_cleanup(df)
 
         messages.append(LipidSearchCleaner._make_summary_message(initial_count, len(df)))
         return df, messages
 
-    # ==================== Polarity ====================
+    # ==================== Adducts ====================
 
     @staticmethod
-    def _polarity_note(candidates: pd.DataFrame, kept: pd.DataFrame) -> Optional[str]:
-        """Explain the rows of lipids identified in both ionisation modes.
+    def _best_first(df: pd.DataFrame) -> pd.DataFrame:
+        """Rows ordered best grade first, then highest identification rate."""
+        priority = df['TotalGrade'].map(LipidSearchCleaner._GRADE_PRIORITY).fillna(99)
+        return df.assign(_priority=priority).sort_values(
+            ['_priority', 'TotalSmpIDRate(%)'], ascending=[True, False],
+        ).drop(columns=['_priority'])
+
+    @staticmethod
+    def _match_standard_adducts(
+        df: pd.DataFrame,
+        keep_other: bool,
+        class_adducts: Optional[Dict[str, str]] = None,
+    ) -> Tuple[pd.DataFrame, Dict[str, List[str]], pd.DataFrame]:
+        """Quantify each class that has its own internal standard in the
+        standard's adduct (``MainIon``), or in the adduct the user chose.
+
+        Species and standard must ionise alike for the standard to convert
+        a species' signal to a concentration; a [M+HCOO]- species against a
+        [M+H]+ standard compares different scales. For a species with a row
+        in the standard's adduct, only those rows stay (the best of them is
+        selected later). A species seen only in other adducts is removed,
+        unless ``keep_other``. Classes without a standard of their own are
+        unchanged. The standard's adduct is that of its best row.
+        ``class_adducts`` overrides it per class, gives a class without a
+        standard an adduct, or (``ANY_ADDUCT``) leaves a class unmatched.
+
+        Returns:
+            The rows to select from; each anchored class's adducts; and the
+            best row of each species removed (or kept) for not matching.
+        """
+        if 'MainIon' not in df.columns or df.empty:
+            return df, {}, df.iloc[0:0]
+        df = df.assign(MainIon=df['MainIon'].astype(str).str.strip())
+        is_standard = StandardsService.detect_standards(df)
+        standards = LipidSearchCleaner._best_first(df[is_standard]).drop_duplicates(
+            'LipidMolec',
+        )
+        anchors = {
+            cls: sorted(set(group['MainIon']))
+            for cls, group in standards.groupby('ClassKey')
+        }
+        for cls, adduct in (class_adducts or {}).items():
+            if adduct == ANY_ADDUCT:
+                anchors.pop(cls, None)
+            else:
+                anchors[cls] = [adduct]
+        if not anchors:
+            return df, {}, df.iloc[0:0]
+
+        species = df[~is_standard]
+        anchored = species['ClassKey'].isin(list(anchors))
+        matches = pd.Series(
+            [ion in anchors.get(cls, ()) for cls, ion in
+             zip(species['ClassKey'], species['MainIon'])],
+            index=species.index, dtype=bool,
+        )
+        has_match = matches.groupby(species['LipidMolec']).transform('any')
+        other_only = anchored & ~has_match
+        unmatched = LipidSearchCleaner._best_first(species[other_only]).drop_duplicates(
+            'LipidMolec',
+        )
+        keep = ~anchored | matches | (other_only & keep_other)
+        return pd.concat([df[is_standard], species[keep]]), anchors, unmatched
+
+    @staticmethod
+    def _adduct_note(
+        candidates: pd.DataFrame,
+        kept: pd.DataFrame,
+        anchors: Dict[str, List[str]],
+        unmatched: pd.DataFrame,
+        keep_other: bool,
+        class_adducts: Optional[Dict[str, str]] = None,
+    ) -> Optional[str]:
+        """Explain which adduct each class was quantified from.
 
         ``candidates`` are the grade-eligible rows before one row per lipid
-        was kept; ``kept`` the rows kept. None when the export has no MainIon
-        column or nothing was measured in both modes.
+        was kept; ``kept`` the rows kept; ``anchors`` and ``unmatched`` come
+        from ``_match_standard_adducts``. None when the export has no MainIon
+        column or every class is measured in one adduct.
         """
         if 'MainIon' not in candidates.columns or 'MainIon' not in kept.columns:
             return None
+        ions = kept.assign(MainIon=kept['MainIon'].astype(str).str.strip())
+        species = ions[~StandardsService.detect_standards(ions)]
 
-        def polarity(frame):
-            ions = frame['MainIon'].astype(str).str.strip()
-            return frame.assign(_polarity=ions.map(_ION_POLARITY)).dropna(
-                subset=['_polarity']
+        def counts(frame) -> str:
+            tally = frame['MainIon'].value_counts().sort_index().sort_values(
+                ascending=False, kind='stable',
             )
+            return ", ".join(f"{ion} {n}" for ion, n in tally.items())
 
-        modes = polarity(candidates).groupby('LipidMolec')['_polarity'].nunique()
-        n_both = int((modes > 1).sum())
-        per_class = polarity(kept).groupby(['ClassKey', '_polarity']).size().unstack(
-            fill_value=0,
-        )
+        parts = []
+        anchored = []
+        for cls, adducts in sorted(anchors.items()):
+            matched = species[(species['ClassKey'] == cls)
+                              & species['MainIon'].isin(adducts)]
+            other = unmatched[unmatched['ClassKey'] == cls]
+            chosen = ", your choice" if cls in (class_adducts or {}) else ""
+            text = f"{cls} ({' / '.join(adducts)}{chosen}): {len(matched)} species"
+            if len(other):
+                text += (
+                    f"; {len(other)} seen only as other adducts "
+                    f"{'kept' if keep_other else 'removed'} ({counts(other)})"
+                )
+            anchored.append(text)
+        if anchored:
+            parts.append(
+                "Classes quantified in one adduct (their internal standard's, "
+                "so species and standard respond alike, or the one you chose): "
+                + "; ".join(anchored) + "."
+            )
+            if len(unmatched) and not keep_other:
+                parts.append(
+                    "To keep the removed species, turn on **Keep species "
+                    "measured in other adducts** under Configure Adducts."
+                )
+            elif len(unmatched):
+                parts.append(
+                    "The species kept in other adducts are on a different scale "
+                    "from their class's standard."
+                )
+
         mixed = [
-            f"{cls} ({row.get('+', 0)} positive, {row.get('-', 0)} negative)"
-            for cls, row in per_class.iterrows()
-            if row.get('+', 0) and row.get('-', 0)
+            f"{cls} ({counts(group)})"
+            for cls, group in species.groupby('ClassKey')
+            if group['MainIon'].nunique() > 1
         ]
-        if not n_both and not mixed:
-            return None
-
-        note = POLARITY_NOTE_PREFIX
-        if n_both:
-            note += (
-                f" {n_both} lipid(s) were identified in both positive and "
-                "negative mode. Each is quantified from its better-graded "
-                "identification; the two modes' values are never added, as "
-                "their signal scales differ."
-            )
         if mixed:
-            note += (
-                " Classes whose species come from both modes: "
-                + ", ".join(mixed)
-                + ". Compare these species across conditions rather than with "
-                "each other (composition within a class mixes the two scales)."
+            parts.append(
+                "Classes whose species come from different adducts: "
+                + "; ".join(mixed)
+                + ". Each species is quantified from one identification (its "
+                "best grade), never a sum of adducts; compare these species "
+                "across conditions rather than with each other."
             )
-        return note
+        if not parts:
+            return None
+        return f"{ADDUCT_NOTE_PREFIX} " + " ".join(parts)
 
     # ==================== Cleaning Steps ====================
 
