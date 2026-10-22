@@ -101,3 +101,67 @@ class TestImportAfterSidebarChange:
         _import(at, 'QC-filtered data (from pipeline)')
         assert _studio_groups(at) == UPLOADED
         assert at.session_state['chat_studio_bqc_label'] == 'BQC'
+
+
+OWN_CSV = (
+    "Lipid,WT_1,WT_2,KO_1,KO_2\n"
+    "PC 34:1,1.0,1.1,5.0,5.5\n"
+    "PE 36:2,2.0,2.1,6.0,6.5\n"
+    "TG 52:2,3.0,3.1,7.0,7.5\n"
+).encode()
+
+
+def _studio_with_own_upload(fake_uploads, monkeypatch):
+    """Main pipeline holding the sample data; the Studio holding the user's
+    own CSV with its experiment confirmed. st.rerun() ends the run instead
+    (tests call at.run() for the rerun), so a page switch leaves no widgets
+    of the old page in AppTest's tree."""
+    import streamlit
+
+    from tests.ui.conftest import FakeUpload
+
+    monkeypatch.setattr(streamlit, 'rerun', streamlit.stop)
+    at = AppTest.from_file(MAIN_APP, default_timeout=DEFAULT_TIMEOUT)
+    at.session_state['page'] = PAGE_APP
+    at.run()
+    at.sidebar.button(key='load_sample').click().run()
+    fake_uploads['Upload your dataset'] = FakeUpload('own.csv', OWN_CSV)
+    at.session_state['page'] = PAGE_AI_STUDIO
+    at.run()
+    at.sidebar.checkbox(key='studio_confirm_checkbox').check().run()
+    at.run()
+    _ok(at)
+    assert at.session_state['studio_applied_snapshot'] is not None
+    return at
+
+
+class TestOwnUploadAcrossPages:
+    """Regression: the Studio's uploader comes back empty after a visit to
+    the main pipeline (the page is unmounted), and an empty uploader
+    cleared the Studio, so "Back to Main Pipeline" and back lost the
+    user's file, experiment and chats."""
+
+    def test_upload_survives_a_visit_to_the_main_pipeline(self, fake_uploads, monkeypatch):
+        at = _studio_with_own_upload(fake_uploads, monkeypatch)
+        experiment = at.session_state['chat_studio_experiment']
+        at.button(key='ai_studio_back_main').click().run()
+        at.run()
+        _ok(at)
+        assert at.session_state['page'] == PAGE_APP
+
+        fake_uploads.clear()  # unmounted: the uploader comes back empty
+        at.session_state['page'] = PAGE_AI_STUDIO
+        at.run()
+        _ok(at)
+        assert at.session_state['chat_studio_file_id'] == f'own.csv_{len(OWN_CSV)}'
+        assert at.session_state['chat_studio_experiment'] == experiment
+        assert at.session_state['studio_applied_snapshot'] is not None
+        assert any('uploaded before' in i.value for i in at.sidebar.info)
+
+    def test_removing_the_file_on_the_studio_page_clears_it(self, fake_uploads, monkeypatch):
+        at = _studio_with_own_upload(fake_uploads, monkeypatch)
+        fake_uploads.clear()  # the user clicks the uploader's ×
+        at.run()
+        _ok(at)
+        assert at.session_state['chat_studio_df'] is None
+        assert at.session_state['studio_applied_snapshot'] is None

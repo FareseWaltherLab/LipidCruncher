@@ -530,7 +530,8 @@ _STAGES: Tuple[_Stage, ...] = (
         # chat_studio_df).
         plain=frozenset({
             'studio_conditions', 'studio_applied_snapshot',
-            'chat_studio_file_id', 'chat_studio_bqc_label',
+            'chat_studio_file_id', 'chat_studio_upload_kept',
+            'chat_studio_bqc_label',
             'chat_questions_result_df', 'chat_transform_diagnostic',
             'chat_viz_validation', 'chat_turn_ids',
             'chat_pending_prompt_dq', 'chat_pending_prompt_transform',

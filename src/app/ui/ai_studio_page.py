@@ -224,9 +224,18 @@ def _handle_file_upload_sidebar() -> None:
         # this exclusion every rerun would wipe the imported data.
         file_id = st.session_state.get("chat_studio_file_id")
         if file_id is not None and not file_id.startswith("_pipeline_import"):
+            # The uploader loses its file while the page is unmounted, so
+            # after a visit to the main pipeline the stored upload stands in.
+            if st.session_state.get("chat_studio_upload_kept"):
+                st.sidebar.info(
+                    "📁 Using the file you uploaded before going to the main "
+                    "pipeline. Upload a file to replace it."
+                )
+                return
             _clear_data_sessions()
         return
 
+    st.session_state.chat_studio_upload_kept = False
     file_id = f"{uploaded.name}_{uploaded.size}"
     if st.session_state.get("chat_studio_file_id") == file_id:
         return
@@ -876,6 +885,7 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_studio_df = None
     st.session_state.chat_studio_df_original = None
     st.session_state.chat_studio_file_id = None
+    st.session_state.chat_studio_upload_kept = False
     st.session_state.chat_studio_experiment = None
     st.session_state.chat_studio_pipeline_source = None
     st.session_state.chat_studio_bqc_label = None
@@ -1211,13 +1221,15 @@ def _display_navigation() -> None:
                 # trip via the widget snapshot — Streamlit GCs studio_*
                 # keys while the AI Studio page isn't rendering, and
                 # restore_navigation_widgets() re-hydrates them on the
-                # way back.
+                # way back. The uploader itself comes back empty.
                 if st.session_state.get(
                     'chat_studio_pipeline_source'
                 ) is not None:
                     _clear_data_sessions()
                 else:
                     StreamlitAdapter.preserve_ai_studio_widgets()
+                    if st.session_state.get('chat_studio_df_original') is not None:
+                        st.session_state.chat_studio_upload_kept = True
                 st.session_state.page = PAGE_APP
                 st.rerun()
         with col2:

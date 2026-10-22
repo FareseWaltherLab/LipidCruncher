@@ -1144,11 +1144,12 @@ def qc_and_analysis_script():
 
 class FakeUpload(io.BytesIO):
     """What st.file_uploader returns for an uploaded file: readable like a
-    file, with getvalue(), a name and a file_id."""
+    file, with getvalue(), a name, a size and a file_id."""
 
     def __init__(self, name: str, data: bytes):
         super().__init__(data)
         self.name = name
+        self.size = len(data)
         self.file_id = f"fake-{name}-{len(data)}"
 
 
