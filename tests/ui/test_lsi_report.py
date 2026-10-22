@@ -105,7 +105,8 @@ class TestGradeFilterReported:
         assert GRADE_ITEM not in _report(captured_downloads)
 
 
-BQC_ITEMS = ('Cleaning: Zero filter threshold (BQC)', 'QC: BQC CoV threshold')
+COV_ITEM = 'QC: BQC CoV filter'
+BQC_ITEMS = ('Cleaning: Zero filter threshold (BQC)', COV_ITEM)
 
 
 class TestBqcSettingsReported:
@@ -117,7 +118,7 @@ class TestBqcSettingsReported:
         _run_to_analysis('None (pre-normalized data)')
         report = _report(captured_downloads)
         assert report['BQC samples'] == 'Label: BQC'
-        assert [report[item] for item in BQC_ITEMS] == ['50%', '30%']
+        assert [report[item] for item in BQC_ITEMS] == ['50%', 'Not applied']
 
     def test_without_bqc(self, captured_downloads):
         def no_bqc(at):
@@ -153,6 +154,51 @@ class TestLipidCoverageReported:
         assert _report(captured_downloads)[
             'Number of lipid species (after filtering)'
         ] == str(len(analyzed))
+
+
+class TestCovFilterReported:
+    """Regression: the report gave the CoV threshold whether or not the
+    filter ran, so data nothing was removed from read as CoV-filtered."""
+
+    def test_applied(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.number_input(key='bqc_cov_threshold').set_value(10).run()
+        at.radio(key='bqc_filter_choice').set_value('Yes').run()
+        assert not at.exception, at.exception
+        assert _report(captured_downloads)[COV_ITEM] == (
+            'Applied: lipids with CoV ≥ 10% removed'
+        )
+
+    def test_applied_with_lipids_kept(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.number_input(key='bqc_cov_threshold').set_value(10).run()
+        at.radio(key='bqc_filter_choice').set_value('Yes').run()
+        keep = at.multiselect(key='bqc_lipids_to_keep')
+        # Options are shown as "name (CoV: x%)"; values are the names.
+        keep.set_value([o.rsplit(' (CoV:', 1)[0] for o in keep.options[:2]]).run()
+        assert not at.exception, at.exception
+        assert _report(captured_downloads)[COV_ITEM] == (
+            'Applied: lipids with CoV ≥ 10% removed, except 2 kept by choice'
+        )
+
+
+PCA_ITEM = 'QC: Outlier samples removed (PCA)'
+
+
+class TestPcaExclusionReported:
+    """Regression: samples excluded in PCA and then put back stayed listed
+    as removed, next to sample counts that included them again."""
+
+    def test_cleared_exclusion_not_reported(self, captured_downloads):
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.multiselect(key='pca_samples_remove').set_value(['s2']).run()
+        assert _report(captured_downloads)[PCA_ITEM] == 's2'
+
+        at.multiselect(key='pca_samples_remove').set_value([]).run()
+        assert not at.exception, at.exception
+        report = _report(captured_downloads)
+        assert report['Total samples'] == '12'
+        assert report[PCA_ITEM] == 'None'
 
 
 ORGANISM = 'Organism / tissue type'
