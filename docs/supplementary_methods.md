@@ -96,7 +96,7 @@ LipidCruncher performs a filtering step to ensure the dataset is prepared for an
 
 Deduplication is handled differently depending on the data format:
 
-- LipidSearch: When multiple entries exist for the same lipid, the entry with the best quality grade (A > B > C) is retained; among entries with the same grade, the one with the highest TotalSmpIDRate(%) is selected
+- LipidSearch: A LipidSearch export has one row per identification, so a lipid identified as several adducts (MainIon, e.g. [M+H]+ and [M+HCOO]-) or in both polarities has several rows. One is retained and the rows are never summed, since their signal scales differ. For a lipid class with its own internal standard in the export, only rows in the standard's adduct are considered, so that species and standard ionise alike (the internal-standard normalization assumes they do); species of that class identified only in other adducts are removed by default, and users can keep them or choose the adduct per class. Among the remaining rows (and for classes without their own internal standard), the entry with the best quality grade (A > B > C) is retained; among entries with the same grade, the one with the highest TotalSmpIDRate(%) is selected
 
 - MS-DIAL: When duplicates exist, the entry with the highest Total Score is retained; if no score is available, the first occurrence is kept
 
@@ -108,7 +108,7 @@ Applies to: LipidSearch and MS-DIAL formats only
 
 For generic and Metabolomics Workbench formats, quality-based filtering is not performed as these formats do not include quality metrics.
 
-LipidSearch: LipidSearch assigns quality grades to each lipid identification: A (highest confidence), B, C, and D (lowest confidence). By default, LipidCruncher accepts grades A and B for most lipid classes. For SM (sphingomyelin) and LPC (lysophosphatidylcholine) classes, grade C is also accepted by default due to the typically lower identification confidence for these classes. Users can customize grade acceptance for each lipid class through the interface. For each unique lipid with multiple entries, the entry with the best grade is selected, as the grade reflects identification confidence; among entries with the same grade, the one with the highest TotalSmpIDRate(%) is selected, as this indicates the most consistent detection across samples.
+LipidSearch: LipidSearch assigns quality grades to each lipid identification: A (highest confidence), B, C, and D (lowest confidence). By default, LipidCruncher accepts grades A and B for most lipid classes. For SM (sphingomyelin) and LPC (lysophosphatidylcholine) classes, grade C is also accepted by default due to the typically lower identification confidence for these classes. Users can customize grade acceptance for each lipid class through the interface. For each unique lipid with multiple entries, the entry with the best grade is selected, as the grade reflects identification confidence; among entries with the same grade, the one with the highest TotalSmpIDRate(%) is selected, as this indicates the most consistent detection across samples. For a class with its own internal standard, this choice is made among the entries in the standard's adduct (see S2.2).
 
 MS-DIAL: MS-DIAL provides a Total Score (0-100) reflecting identification confidence. LipidCruncher offers three predefined filtering levels, and users can adjust the threshold as needed:
 
