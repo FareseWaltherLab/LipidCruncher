@@ -36,7 +36,8 @@ class EvalCase:
         dataset: Fixture to load.
         tab: 'data_questions', 'visualization' or 'transform'.
         expect_lc: Substrings that must appear in the generated code —
-            the pipeline calls this question should route to.
+            the pipeline calls this question should route to (any one).
+        expect_lc_all: Calls that must all appear as well.
         forbid: Substrings that must NOT appear — hand-rolled analysis the
             pipeline already implements.
         expect: Usability requirements: 'table', 'figure', 'method_stated',
@@ -55,6 +56,7 @@ class EvalCase:
     dataset: str
     tab: str = "data_questions"
     expect_lc: Tuple[str, ...] = ()
+    expect_lc_all: Tuple[str, ...] = ()
     forbid: Tuple[str, ...] = ()
     expect: Tuple[str, ...] = ()
     note: str = ""
@@ -112,6 +114,7 @@ CASES = (
         dataset=CANONICAL,
         tab="visualization",
         expect_lc=("lc.compare_species", "lc.volcano"),
+        expect_lc_all=("lc.colored_bars",),
         forbid=HAND_ROLLED_STATS,
         expect=("figure",),
         note=(

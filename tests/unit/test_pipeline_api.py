@@ -5,6 +5,7 @@ gets from ``lc.compare_species`` must equal what the eval's independent
 reference implementation computes. That is what makes "defer to the
 pipeline" mean the same numbers the main app reports.
 """
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -175,6 +176,18 @@ class TestSandboxIntegration:
         assert set(res.result_df.loc[res.result_df["significant"],
                                      "LipidMolec"]) == PLANTED
 
+    def test_colored_bars_from_generated_code(self, df, experiment):
+        res = self._run(
+            "top = lc.compare_species('WT', 'KO').head(10)\n"
+            "top['Direction'] = np.where(top['log2FC'] > 0, 'Up', 'Down')\n"
+            "top = top.sort_values('log2FC')\n"
+            "fig = lc.colored_bars(top, x='log2FC', y='LipidMolec', "
+            "color_by='Direction', orientation='h').figure",
+            df, experiment,
+        )
+        assert res.success, res.error_message
+        assert res.figure is not None
+
     def test_lc_without_experiment_reports_clearly(self, df):
         res = self._run("result_df = lc.compare_species('WT', 'KO')", df)
         assert not res.success
@@ -260,14 +273,18 @@ class TestPromptsAdvertisePipelineFirst:
             assert "Pipeline first" in prompt
             assert "lc.compare_species" in prompt
 
-    def test_viz_prompt_says_to_build_per_bar_colors_after_sorting(self):
+    def test_viz_prompt_colors_bars_with_lc_colored_bars(self):
         """2026-10-21: 3 of 6 "colored by direction" charts listed the
         colors, then re-sorted the bars, so lipids got another lipid's
-        direction color. The prompt taught the color list, not its order."""
+        direction color. The prompt and its worked example taught that
+        list; they now use lc.colored_bars, which reads each bar's color
+        from its own row, and say to build any other list last."""
         from app.services.ai_chat.viz_generator import _viz_system_prompt
         prompt = _viz_system_prompt()
-        rule = prompt.index("**Build the color list last**")
-        assert rule > prompt.index("bar_colors = [class_color_map[c]")
+        assert "use `lc.colored_bars`" in prompt
+        assert "lc.colored_bars(top15, x='LipidMolec'" in prompt  # the example
+        assert "bar_colors = [" not in prompt
+        assert "build it last, from the DataFrame in its final order" in prompt
 
     def test_lc_settles_chain_length_before_any_question_is_listed(self):
         """First eval run (2026-10-21): asked to compare the chain length
@@ -619,3 +636,31 @@ class TestArgumentsAreHonoured:
             return res.stat_summary.results['PC 34:1'].p_value
 
         assert p_value(['PC']) == pytest.approx(p_value(['PC', 'SM']))
+
+
+class TestColoredBars:
+    """lc.colored_bars: each bar's color comes from its own row."""
+
+    def test_colors_follow_each_row_after_a_sort(self, lc):
+        from app.services.ai_chat.output_checks import check_direction_colors
+        top = lc.compare_species("WT", "KO").head(10)
+        top["Direction"] = np.where(top["log2FC"] > 0, "Up in KO", "Down in KO")
+        top = top.sort_values("log2FC")
+        colors = {"Up in KO": "#d62728", "Down in KO": "#1f77b4"}
+        fig = lc.colored_bars(top, x="log2FC", y="LipidMolec",
+                              color_by="Direction", colors=colors,
+                              orientation="h").figure
+        bars = fig.data[0]
+        assert list(bars.marker.color) == [colors[d] for d in top["Direction"]]
+        assert list(fig.layout.yaxis.categoryarray) == list(top["LipidMolec"])
+        assert [t.name for t in fig.data[1:]] == list(dict.fromkeys(top["Direction"]))
+        assert check_direction_colors(fig) == []
+
+    def test_default_colors_and_vertical_bars(self, lc):
+        table = pd.DataFrame({"lipid": ["a", "b", "c"], "v": [3.0, 2.0, 1.0],
+                              "cls": ["PC", "PE", "PC"]})
+        result = lc.colored_bars(table, x="lipid", y="v", color_by="cls")
+        colors = list(result.figure.data[0].marker.color)
+        assert colors[0] == colors[2] != colors[1]
+        assert list(result.figure.layout.xaxis.categoryarray) == ["a", "b", "c"]
+        assert result.data.equals(table)

@@ -83,41 +83,28 @@ ascending, sorted by category, etc.), pin the axis order explicitly:
 categorical axes alphabetically or by first-appearance. Apply the same \
 to `update_yaxes` for horizontal bar charts.
 
-- **Coloring bars by category — use a SINGLE trace with marker_color, \
-not `color='...'`**: when each x position has exactly ONE bar that \
-needs to be colored by some category (e.g., top-N lipids colored by \
-ClassKey, ratio per class colored by sign), do NOT use \
-`px.bar(..., color='ClassKey')`. That call splits the data into one \
-plotly trace per category, and Plotly's per-trace offsetgroup layout \
-produces uneven bar spacing that no `barmode`/`bargap` setting fully \
-cures.
-
-  Instead, build an explicit per-bar color list and use a single \
-`go.Bar` trace:
+- **Coloring bars by category — use `lc.colored_bars`**: when each x \
+position has exactly ONE bar colored by some category (top-N lipids by \
+ClassKey, fold changes by direction), put the category in a column of the \
+table, sort and filter the table as you need, then:
   ```
-  unique_classes = list(df_plot['ClassKey'].drop_duplicates())
-  palette = px.colors.qualitative.Set1
-  class_color_map = dict(zip(unique_classes, palette[:len(unique_classes)]))
-  bar_colors = [class_color_map[c] for c in df_plot['ClassKey']]
-
-  fig = go.Figure([go.Bar(
-      x=df_plot['x_col'], y=df_plot['y_col'],
-      marker_color=bar_colors, showlegend=False,
-  )])
-  # Optional: invisible legend stubs so the legend still shows classes.
-  for cls, color in class_color_map.items():
-      fig.add_trace(go.Bar(
-          x=[None], y=[None], marker_color=color, name=cls, showlegend=True,
-      ))
+  top10['Direction'] = np.where(top10['log2FC'] > 0, 'Up in KO', 'Down in KO')
+  top10 = top10.sort_values('log2FC')
+  fig = lc.colored_bars(top10, x='log2FC', y='LipidMolec', color_by='Direction',
+                        colors={{'Up in KO': '#d62728', 'Down in KO': '#1f77b4'}},
+                        orientation='h').figure
   ```
-  This guarantees evenly-spaced bars regardless of how many categories \
-or how they're distributed.
+  It draws one evenly spaced bar per row in the table's order, reads each \
+bar's color from its own row (so sorting first is safe), adds a legend of \
+the categories and pins the category axis order. Do NOT use \
+`px.bar(..., color='ClassKey')` for this: it splits the data into one \
+trace per category, and Plotly's per-trace offsetgroup layout produces \
+uneven bar spacing.
 
-  **Build the color list last**, from the DataFrame in its final order: \
-do every sort and filter first, then compute `bar_colors` (and any \
-per-bar text) from that same DataFrame. A list built before a re-sort \
-colors each bar by another row's category — e.g. a falling lipid drawn \
-in the "up" color.
+  **Any other per-point list you build yourself** (colors, text, hover \
+labels): build it last, from the DataFrame in its final order — do every \
+sort and filter first. A list built before a re-sort labels each point \
+with another row's value — e.g. a falling lipid drawn in the "up" color.
 
   When multiple bars genuinely share an x position (e.g., grouped/ \
 stacked bars per condition), `px.bar(..., color=...)` is fine — use \

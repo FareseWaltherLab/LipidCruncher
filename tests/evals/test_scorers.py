@@ -396,3 +396,14 @@ def test_a_miscolored_direction_chart_fails_usability():
     case = C.by_id("direction_colored_bars")
     failures = score_usability(MISCOLORED_BARS, "", case, figure=scope["fig"])
     assert any("colors do not follow the direction" in f for f in failures)
+
+
+def test_direction_chart_must_use_colored_bars():
+    """The helper makes the miscoloring impossible; a hand-built color list
+    is graded down even when its colors happen to be right."""
+    case = C.by_id("direction_colored_bars")
+    good = ("t = lc.compare_species('WT', 'KO').head(10)\n"
+            "fig = lc.colored_bars(t, x='log2FC', y='LipidMolec', color_by='d').figure")
+    assert score_routing(good, case) == []
+    by_hand = "t = lc.compare_species('WT', 'KO').head(10)\nbar_colors = [...]"
+    assert score_routing(by_hand, case) == ["did not call lc.colored_bars"]

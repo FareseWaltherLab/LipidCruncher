@@ -66,6 +66,10 @@ def score_routing(code: str, case) -> List[str]:
                 f"did not call {expected} (code was {len(code)} chars)"
             )
 
+    for call in case.expect_lc_all:
+        if call not in code:
+            failures.append(f"did not call {call}")
+
     for pattern in case.forbid:
         if pattern in code:
             failures.append(

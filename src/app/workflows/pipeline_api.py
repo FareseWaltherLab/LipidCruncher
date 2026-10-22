@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 
 from ..models.experiment import ExperimentConfig
 from ..models.statistics import StatisticalTestConfig
@@ -603,6 +605,50 @@ class PipelineAPI:
         )
         self._check(res, "Heatmap")
         return LCResult(res.figure, res.z_scores_df, res)
+
+    def colored_bars(
+        self,
+        table: pd.DataFrame,
+        x: str,
+        y: str,
+        color_by: str,
+        colors: Optional[Dict[Any, str]] = None,
+        orientation: str = 'v',
+    ) -> LCResult:
+        """One bar per row of ``table``, in its row order, colored by the
+        row's ``color_by`` value.
+
+        Each bar's color is read from its own row as the figure is drawn,
+        so sorting or filtering ``table`` first cannot give a bar another
+        row's color (a per-bar color list built before a re-sort does).
+        One trace keeps the bars evenly spaced; legend entries name the
+        categories; the category axis keeps the table's order. For
+        horizontal bars pass ``orientation='h'`` with the numbers in ``x``.
+        ``colors`` maps categories to colors (default: Plotly's palette).
+        """
+        rows = table.reset_index(drop=True)
+        categories = list(dict.fromkeys(rows[color_by]))
+        palette = px.colors.qualitative.Plotly
+        colors = {
+            **{c: palette[i % len(palette)] for i, c in enumerate(categories)},
+            **(colors or {}),
+        }
+        fig = go.Figure(go.Bar(
+            x=rows[x], y=rows[y], orientation=orientation,
+            marker_color=[colors[c] for c in rows[color_by]],
+            showlegend=False,
+        ))
+        for category in categories:
+            fig.add_trace(go.Bar(
+                x=[None], y=[None], orientation=orientation,
+                marker_color=colors[category], name=str(category),
+            ))
+        labels = list(rows[y] if orientation == 'h' else rows[x])
+        if orientation == 'h':
+            fig.update_yaxes(categoryorder='array', categoryarray=labels)
+        else:
+            fig.update_xaxes(categoryorder='array', categoryarray=labels)
+        return LCResult(fig, rows, None)
 
     def available_classes(self) -> List[str]:
         """Lipid classes present in the data."""

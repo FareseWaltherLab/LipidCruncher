@@ -284,38 +284,19 @@ fig = px.violin(df_plot, x='ClassKey', y='_mean', box=True, points='outliers',
 fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Mean Intensity')
 ```
 
-### Example 5: Bars colored by class — single-trace pattern
+### Example 5: Bars colored by class — lc.colored_bars
 User: "Top 15 most abundant lipids, colored by their lipid class"
 ```python
 # Compute mean intensity and pick top 15
 conc_cols = [c for c in df.columns if c.startswith('concentration[') or c.startswith('intensity[')]
 df_plot = df.copy()
 df_plot['_mean'] = df_plot[conc_cols].mean(axis=1)
-top15 = df_plot.nlargest(15, '_mean').reset_index(drop=True)
+top15 = df_plot.nlargest(15, '_mean')
 
-# Build a {class: color} map and an explicit per-bar color list.
-unique_classes = list(top15['ClassKey'].drop_duplicates())
-palette = px.colors.qualitative.Set1
-class_color_map = dict(zip(unique_classes, palette[:len(unique_classes)]))
-bar_colors = [class_color_map[c] for c in top15['ClassKey']]
-
-# IMPORTANT: use a SINGLE go.Bar trace with marker_color, NOT
-# px.bar(..., color='ClassKey'). px.bar splits each color into its own
-# trace, and Plotly's per-trace offsetgroup layout produces uneven bar
-# spacing. One trace = one row of evenly-spaced bars, full stop.
-fig = go.Figure([go.Bar(
-    x=top15['LipidMolec'], y=top15['_mean'],
-    marker_color=bar_colors, showlegend=False,
-)])
-
-# Add invisible legend stubs (one per class) so the legend still works.
-for cls, color in class_color_map.items():
-    fig.add_trace(go.Bar(
-        x=[None], y=[None], marker_color=color, name=cls, showlegend=True,
-    ))
-
-fig.update_xaxes(categoryorder='array',
-                 categoryarray=top15['LipidMolec'].tolist())
+# One evenly spaced bar per row, colored from the row's own ClassKey, in
+# the table's order (NOT px.bar(..., color='ClassKey'), whose one trace
+# per class spaces the bars unevenly).
+fig = lc.colored_bars(top15, x='LipidMolec', y='_mean', color_by='ClassKey').figure
 fig.update_layout(title='Top 15 Most Abundant Lipids',
                   xaxis_title='Lipid', yaxis_title='Mean Intensity',
                   xaxis_tickangle=-45, bargap=0.15)
