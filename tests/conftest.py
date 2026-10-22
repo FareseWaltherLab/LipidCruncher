@@ -10,6 +10,23 @@ import pandas as pd
 import pytest
 
 from app.models.experiment import ExperimentConfig
+from app.services.ai_chat.ai_client import AIClientService
+from app.services.ai_chat.exceptions import AIClientError
+
+
+@pytest.fixture(autouse=True)
+def _no_real_answer_call(request, monkeypatch):
+    """Outside the eval suite, the Data Questions answer call fails as with
+    no API key, whether or not one is set: tests stay offline and take the
+    fallback (the plan as the answer). A test that wants an answer patches
+    ``AIClientService.complete`` itself."""
+    if request.node.get_closest_marker("eval"):
+        return
+
+    def _offline(*args, **kwargs):
+        raise AIClientError("no API calls in tests")
+
+    monkeypatch.setattr(AIClientService, "complete", staticmethod(_offline))
 
 
 # =============================================================================

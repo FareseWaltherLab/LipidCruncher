@@ -86,3 +86,38 @@ def test_installed_sdk_accepts_our_call_kwargs():
             f"{method.__qualname__} no longer accepts {sorted(missing)}; "
             "update ai_client.py before bumping the anthropic pin"
         )
+
+
+def test_complete_returns_the_reply_text_and_maps_errors(monkeypatch):
+    """The plain call behind the Data Questions answer (tests/conftest.py
+    stubs it everywhere else, so it is restored here)."""
+    from types import SimpleNamespace
+
+    import pytest
+
+    from app.models.chat import AIConfig
+    from app.services.ai_chat.ai_client import AIClientService
+
+    monkeypatch.undo()
+    sent = {}
+
+    def _create(**kwargs):
+        sent.update(kwargs)
+        return SimpleNamespace(content=[
+            SimpleNamespace(type="text", text="24 species"),
+            SimpleNamespace(type="text", text=" in 6 classes."),
+        ])
+
+    client = SimpleNamespace(messages=SimpleNamespace(create=_create))
+    monkeypatch.setattr(AIClientService, "create_client", staticmethod(lambda: client))
+    config = AIConfig(max_tokens=1024)
+    assert AIClientService.complete([{"role": "user", "content": "q"}], "sys", config) \
+        == "24 species in 6 classes."
+    assert sent["max_tokens"] == 1024 and sent["system"] == "sys"
+
+    def _fail(**kwargs):
+        raise ValueError("boom")
+
+    client.messages.create = _fail
+    with pytest.raises(AIClientError, match="boom"):
+        AIClientService.complete([], "sys", config)

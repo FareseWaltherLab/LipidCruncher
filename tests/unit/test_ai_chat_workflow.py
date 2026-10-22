@@ -466,3 +466,75 @@ def test_the_model_is_told_the_confirmed_samples(mock_loop, source_df, transform
     assert "Sample columns the user confirmed" in sent
     assert "`area_s1`, `area_s2`" in sent
     assert result.session.messages[-2].content == "convert"
+
+
+class TestAnswerWrittenFromResults:
+    """Fix 2: the explanation streams before the code runs, so its numbers
+    were guesses. A second call now writes the answer from the output."""
+
+    CODE = "print(len(df))\nresult_df = df.head(2)"
+
+    def _turn(self, mock_loop, source_df, monkeypatch, complete):
+        from app.services.ai_chat.ai_client import AIClientService
+        monkeypatch.setattr(AIClientService, "complete", staticmethod(complete))
+        mock_loop.side_effect = canned_stream(
+            f"Counting the rows.\n\n```python\n{self.CODE}\n```"
+        )
+        session = AIChatWorkflow.start_data_questions_session(source_df)
+        return finish(AIChatWorkflow.stream_data_questions_message(
+            "how many lipids?", session, source_df,
+        ))
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_the_answer_comes_from_the_output(self, mock_loop, source_df, monkeypatch):
+        sent = {}
+
+        def _complete(messages, system_prompt, config):
+            sent["request"] = messages[0]["content"]
+            sent["max_tokens"] = config.max_tokens
+            return "There are 3 lipids; the table shows the first two."
+
+        result = self._turn(mock_loop, source_df, monkeypatch, _complete)
+        request = sent["request"]
+        assert "<question>\nhow many lipids?" in request
+        assert "Counting the rows." in request and self.CODE in request
+        assert "<printed_output>\n3\n</printed_output>" in request
+        assert "2 rows x 4 columns" in request and "PC(34:1)" in request
+        assert sent["max_tokens"] == 1024
+        assert result.assistant_message.startswith(
+            "There are 3 lipids; the table shows the first two.")
+        assert "```\n3\n```" in result.assistant_message  # output kept
+        assert "Counting the rows." not in result.assistant_message
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_a_number_the_answer_makes_up_is_still_flagged(
+        self, mock_loop, source_df, monkeypatch,
+    ):
+        result = self._turn(mock_loop, source_df, monkeypatch,
+                            lambda **kw: "There are 3 lipids, 57 in total.")
+        assert result.unverified_numbers == ("57",)
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_a_failed_answer_call_keeps_the_plan_and_output(self, mock_loop, source_df):
+        """tests/conftest.py makes the call fail, as with no API key."""
+        mock_loop.side_effect = canned_stream(
+            f"Counting the rows.\n\n```python\n{self.CODE}\n```"
+        )
+        session = AIChatWorkflow.start_data_questions_session(source_df)
+        result = finish(AIChatWorkflow.stream_data_questions_message(
+            "how many lipids?", session, source_df,
+        ))
+        assert result.assistant_message.startswith("Counting the rows.")
+        assert result.result_df is not None
+
+    def test_the_first_call_is_told_not_to_state_results(self):
+        from app.services.ai_chat.prompt_templates import data_questions_system_prompt
+        prompt = data_questions_system_prompt()
+        assert "say what you will compute, not what it will find" in prompt
+
+    def test_the_answer_call_knows_the_table_is_below(self):
+        """First real answers said "the table above"; it renders below."""
+        from app.services.ai_chat.prompt_templates import (
+            answer_from_results_system_prompt,
+        )
+        assert "panel below your answer" in answer_from_results_system_prompt()

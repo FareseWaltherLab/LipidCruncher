@@ -280,6 +280,25 @@ class AIClientService:
         yield from _stream_turn()
 
     @staticmethod
+    def complete(messages: list, system_prompt: str, config: AIConfig) -> str:
+        """One plain call (no tools, no streaming); returns the reply text."""
+        client = AIClientService.create_client()
+        try:
+            reply = client.messages.create(
+                model=config.model,
+                max_tokens=config.max_tokens,
+                temperature=config.temperature,
+                system=system_prompt,
+                messages=messages,
+            )
+        except Exception as e:
+            raise _friendly_error(e, context="answer") from e
+        return "".join(
+            block.text for block in reply.content
+            if getattr(block, "type", "") == "text"
+        )
+
+    @staticmethod
     def _filter_to_explanation(chunks, holder: dict):
         """Yield only the prose before the first ``` code fence.
 

@@ -93,7 +93,10 @@ def run_code_turn(
             with st.spinner(spinner):
                 generator, finalize = stream()
                 streamed = st.write_stream(safe_stream(generator))
-            result = finalize()
+            # Runs the code (and, in Data Questions, writes the answer
+            # from its output): seconds with nothing else on screen.
+            with st.spinner("Running the code..."):
+                result = finalize()
             clear_failure(tab)
             fields = on_result(result, streamed or "")
             record_turn(

@@ -27,7 +27,10 @@ from ..services.ai_chat.output_checks import (
     computed_values,
     numbers_not_computed,
 )
+from ..services.ai_chat.exceptions import AIClientError
 from ..services.ai_chat.prompt_templates import (
+    answer_from_results_system_prompt,
+    build_answer_request,
     build_experiment_context,
     data_questions_system_prompt,
     lipidcruncher_questions_system_prompt,
@@ -162,6 +165,44 @@ def _unverified_numbers(
         computed_values(stdout, result_df, figure),
         context="\n".join([question, code or "", session.schema_context or ""]),
     )
+
+
+def _answer_from_results(
+    question: str,
+    plan: str,
+    code: str,
+    stdout: str,
+    result_df: Optional[pd.DataFrame],
+    ai_config: AIConfig,
+) -> Optional[str]:
+    """A second, small call that writes the Data Questions answer from the
+    code's actual output, so its numbers are results, not guesses.
+
+    None if the call fails: the turn then keeps the plan and the printed
+    output, as before, rather than losing a computed result.
+    """
+    table = None
+    if result_df is not None:
+        shown = result_df.head(50)
+        table = (
+            f"{len(result_df)} rows x {result_df.shape[1]} columns"
+            + (", first 50 shown" if len(result_df) > 50 else "") + "\n"
+            + shown.to_csv(
+                index=not isinstance(result_df.index, pd.RangeIndex),
+            )[:8000]
+        )
+    try:
+        answer = AIClientService.complete(
+            messages=[{"role": "user", "content": build_answer_request(
+                question, plan, code, stdout, table,
+            )}],
+            system_prompt=answer_from_results_system_prompt(),
+            config=ai_config.model_copy(update={"max_tokens": 1024}),
+        )
+    except AIClientError as e:
+        logger.warning("Writing the answer from results failed: %s", e)
+        return None
+    return answer.strip() or None
 
 
 class AIChatWorkflow:
@@ -793,15 +834,16 @@ class AIChatWorkflow:
         sandbox_config: SandboxConfig,
         numeric_columns: Optional[List[str]],
         experiment: Optional[ExperimentConfig] = None,
+        ai_config: Optional[AIConfig] = None,
     ) -> DataQuestionsStepResult:
-        """Extract/execute any code in the AI response, build the assistant
-        message, append it to the session, and return the step result.
-
-        Shared by the blocking and streaming data-questions paths.
+        """Extract/execute any code in the AI response, have the answer
+        written from the code's output, append it to the session, and
+        return the step result.
         """
         explanation, code = AIClientService.extract_code_block(response_text)
         result_df = None
         stdout = ""
+        answer = None
 
         if code:
             sandbox_result = SandboxService.execute(
@@ -827,8 +869,17 @@ class AIChatWorkflow:
                 )
             elif sandbox_result.success:
                 result_df = sandbox_result.result_df
+                # The explanation was written before the code ran; the
+                # answer is written from what the code actually produced.
+                question = session.messages[-1].content if session.messages else ""
+                answer = _answer_from_results(
+                    question, explanation, code,
+                    stdout, result_df, ai_config or AIConfig(),
+                )
                 parts = []
-                if explanation.strip():
+                if answer:
+                    parts.append(answer)
+                elif explanation.strip():
                     parts.append(explanation.strip())
                 if sandbox_result.stdout.strip():
                     # Fence it: printed output is rendered as markdown, which
@@ -878,7 +929,7 @@ class AIChatWorkflow:
             result_df=result_df,
             code=code,
             unverified_numbers=_unverified_numbers(
-                session, explanation, code,
+                session, f"{explanation}\n\n{answer or ''}", code,
                 stdout=stdout, result_df=result_df,
             ),
         )
@@ -930,7 +981,7 @@ class AIChatWorkflow:
         def finalize() -> DataQuestionsStepResult:
             return AIChatWorkflow._finalize_data_questions(
                 session, holder["full"], source_df,
-                sandbox_config, numeric_columns, experiment,
+                sandbox_config, numeric_columns, experiment, ai_config,
             )
 
         return generator, finalize

@@ -497,6 +497,13 @@ Pandas, numpy and plotly may be imported, and so may {analysis_modules_text()} i
 - `result_df` — a pandas DataFrame (for tables, summaries). The UI will show a download button.
 - Use `print()` for text-based answers that don't need a table.
 
+### Before the code: say what you will compute, not what it will find
+Write one or two sentences on what the code computes and how (method, test, correction). \
+Do **not** state results or numbers from the data: you have not seen them, and anything you \
+guess may be wrong. After the code runs, the answer is written from its actual output — so \
+print or return everything the answer needs (counts, totals, percentages), rather than \
+leaving any number to be worked out in the prose.
+
 {PIPELINE_FIRST_RULES}
 
 {METHODOLOGY_CLARIFICATION_RULES}
@@ -524,3 +531,41 @@ Never generate code that transforms the data into a new format or produces visua
 your output should ONLY be summaries, counts, statistics, or descriptions of the data.
 """
 
+
+
+def answer_from_results_system_prompt() -> str:
+    """System prompt for the second Data Questions call, which writes the
+    answer after the code has run, from its actual output."""
+    return """\
+You write the final answer to a user's question about their lipidomics dataset in \
+LipidCruncher. The analysis has already run: you are given the question, the plan that \
+was shown to the user, the code, and the code's exact output.
+
+Rules:
+- Answer the question directly, in a few sentences or a short list.
+- Use only numbers that appear in the output. Round them as the output does, or to three \
+significant figures. Do not compute new numbers (sums, differences, ratios, percentages) \
+that are not in the output.
+- If the output has a table, the user sees it in the "Result Table" panel below your \
+answer: point to it ("in the table below") instead of repeating every row.
+- Say in one sentence how the result was computed (method, test, correction) when the plan, \
+the code or the output shows it.
+- If the output does not answer the question (an error, an empty table, the wrong thing \
+computed), say so plainly instead of answering.
+- No code, no headings, no preamble."""
+
+
+def build_answer_request(
+    question: str, plan: str, code: str, stdout: str, table: Optional[str],
+) -> str:
+    """The second call's message: everything the answer may draw on."""
+    parts = [
+        f"<question>\n{question}\n</question>",
+        f"<plan>\n{plan.strip() or '(none)'}\n</plan>",
+        f"<code>\n{code}\n</code>",
+        f"<printed_output>\n{stdout.strip()[:6000] or '(nothing printed)'}\n</printed_output>",
+    ]
+    if table is not None:
+        parts.append(f"<result_table>\n{table}\n</result_table>")
+    parts.append("Write the answer.")
+    return "\n\n".join(parts)
