@@ -41,3 +41,31 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v
+
+  image:
+    # The deployed image: builds as production does, then the app must answer
+    # the load balancer's health check while running as a non-root user.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t lipidcruncher-ci .
+
+      - name: The image runs as a non-root user
+        run: |
+          user=$(docker image inspect -f '{{.Config.User}}' lipidcruncher-ci)
+          echo "image user: ${user:-root}"
+          case "$user" in ''|root|0|0:*) exit 1 ;; esac
+
+      - name: The app answers /healthz as that user
+        run: |
+          docker run -d --name app -p 8501:8501 lipidcruncher-ci
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8501/healthz && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8501/healthz || { docker logs app; exit 1; }
+          uid=$(docker exec app stat -c %u /proc/1)
+          echo "app uid: $uid"
+          test "$uid" != 0
