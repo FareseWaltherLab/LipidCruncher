@@ -10,6 +10,7 @@ from app.services.data_cleaning import (
     BaseDataCleaner,
     LipidSearchCleaner,
     ADDUCT_NOTE_PREFIX,
+    ANY_ADDUCT,
     MSDIALCleaner,
     GenericCleaner,
     ConfigurationError,
@@ -105,6 +106,8 @@ class TestGradeFilterConfig:
             GradeFilterConfig(grade_config=grades, keep_other_adducts=True))
         assert hash(GradeFilterConfig(grade_config=grades)) == hash(
             GradeFilterConfig(grade_config={'PC': ['A', 'B']}))
+        assert hash(GradeFilterConfig(class_adducts={'PC': 'M+H'})) != hash(
+            GradeFilterConfig(class_adducts={'PC': 'M+HCOO'}))
     """Tests for GradeFilterConfig."""
 
     def test_default_config(self):
@@ -755,6 +758,37 @@ class TestLipidSearchAdducts:
         assert cleaned.loc['PE 16:0_18:1', 'MainIon'] == 'M-H'
         assert "Classes whose species come from different adducts: PE (M+H 1, M-H 1)" in note
         assert 'never a sum' in note
+
+    @staticmethod
+    def _choose(df, experiment, class_adducts):
+        cleaned, messages = LipidSearchCleaner.clean(
+            df, experiment, GradeFilterConfig(class_adducts=class_adducts),
+        )
+        [note] = [m for m in messages if m.startswith(ADDUCT_NOTE_PREFIX)]
+        return cleaned.set_index('LipidMolec'), note
+
+    def test_user_gives_a_class_without_a_standard_an_adduct(
+        self, export, simple_experiment_2x2,
+    ):
+        """Step 4, the power-user tool: an adduct per class."""
+        cleaned, note = self._choose(export, simple_experiment_2x2, {'PE': 'M-H'})
+        assert 'PE 18:0_20:4' not in cleaned.index  # seen only as [M+H]+
+        assert cleaned.loc['PE 16:0_18:1', 'MainIon'] == 'M-H'
+        assert "PE (M-H, your choice): 1 species; 1 seen only as other adducts removed" in note
+
+    def test_user_overrides_the_standards_adduct(self, export, simple_experiment_2x2):
+        cleaned, note = self._choose(export, simple_experiment_2x2, {'PC': 'M+HCOO'})
+        assert cleaned.loc['PC 16:0_18:1', 'intensity[s1]'] == 50.0
+        assert cleaned.loc['PC 18:0_18:1', 'MainIon'] == 'M+HCOO'
+        assert "PC (M+HCOO, your choice): 2 species" in note
+
+    def test_any_adduct_keeps_each_species_best_row(self, export, simple_experiment_2x2):
+        cleaned, note = self._choose(export, simple_experiment_2x2, {'PC': ANY_ADDUCT})
+        assert cleaned.loc['PC 16:0_18:1', 'MainIon'] == 'M+HCOO'  # graded A
+        assert 'PC 18:0_18:1' in cleaned.index
+        # Not matched to an adduct, and both species now [M+HCOO]-: PC is
+        # neither listed with an adduct nor as mixing adducts.
+        assert "PC (" not in note
 
     def test_no_standard_and_one_adduct_per_class(self, lipidsearch_df, simple_experiment_2x2):
         df = lipidsearch_df.assign(MainIon=['M+H', 'M+H', 'M+NH4'])

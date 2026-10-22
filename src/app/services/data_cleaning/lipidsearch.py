@@ -23,6 +23,10 @@ from .exceptions import EmptyDataError, ConfigurationError
 # messages are not).
 ADDUCT_NOTE_PREFIX = "Adducts:"
 
+# A class's adduct choice meaning: no single adduct, keep each species' best
+# row whatever its adduct (as for a class without an internal standard).
+ANY_ADDUCT = "Any adduct"
+
 
 class LipidSearchCleaner(BaseDataCleaner):
     """
@@ -93,7 +97,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         candidates = df[LipidSearchCleaner._build_eligibility_mask(df, grade_dict)]
         keep_other = config.keep_other_adducts if config else False
         df, anchors, removed = LipidSearchCleaner._match_standard_adducts(
-            candidates, keep_other,
+            candidates, keep_other, config.class_adducts if config else None,
         )
 
         # Step 6: Select best AUC for each lipid
@@ -108,7 +112,10 @@ class LipidSearchCleaner(BaseDataCleaner):
 
         # Say which adduct each class was quantified from, what was removed
         # for not matching its standard, and which classes still mix adducts.
-        msg = LipidSearchCleaner._adduct_note(candidates, df, anchors, removed, keep_other)
+        msg = LipidSearchCleaner._adduct_note(
+            candidates, df, anchors, removed, keep_other,
+            config.class_adducts if config else None,
+        )
         if msg:
             messages.append(msg)
 
@@ -135,10 +142,12 @@ class LipidSearchCleaner(BaseDataCleaner):
 
     @staticmethod
     def _match_standard_adducts(
-        df: pd.DataFrame, keep_other: bool,
+        df: pd.DataFrame,
+        keep_other: bool,
+        class_adducts: Optional[Dict[str, str]] = None,
     ) -> Tuple[pd.DataFrame, Dict[str, List[str]], pd.DataFrame]:
         """Quantify each class that has its own internal standard in the
-        standard's adduct (``MainIon``).
+        standard's adduct (``MainIon``), or in the adduct the user chose.
 
         Species and standard must ionise alike for the standard to convert
         a species' signal to a concentration; a [M+HCOO]- species against a
@@ -147,6 +156,8 @@ class LipidSearchCleaner(BaseDataCleaner):
         selected later). A species seen only in other adducts is removed,
         unless ``keep_other``. Classes without a standard of their own are
         unchanged. The standard's adduct is that of its best row.
+        ``class_adducts`` overrides it per class, gives a class without a
+        standard an adduct, or (``ANY_ADDUCT``) leaves a class unmatched.
 
         Returns:
             The rows to select from; each anchored class's adducts; and the
@@ -163,6 +174,11 @@ class LipidSearchCleaner(BaseDataCleaner):
             cls: sorted(set(group['MainIon']))
             for cls, group in standards.groupby('ClassKey')
         }
+        for cls, adduct in (class_adducts or {}).items():
+            if adduct == ANY_ADDUCT:
+                anchors.pop(cls, None)
+            else:
+                anchors[cls] = [adduct]
         if not anchors:
             return df, {}, df.iloc[0:0]
 
@@ -188,6 +204,7 @@ class LipidSearchCleaner(BaseDataCleaner):
         anchors: Dict[str, List[str]],
         unmatched: pd.DataFrame,
         keep_other: bool,
+        class_adducts: Optional[Dict[str, str]] = None,
     ) -> Optional[str]:
         """Explain which adduct each class was quantified from.
 
@@ -213,7 +230,8 @@ class LipidSearchCleaner(BaseDataCleaner):
             matched = species[(species['ClassKey'] == cls)
                               & species['MainIon'].isin(adducts)]
             other = unmatched[unmatched['ClassKey'] == cls]
-            text = f"{cls} ({' / '.join(adducts)}): {len(matched)} species"
+            chosen = ", your choice" if cls in (class_adducts or {}) else ""
+            text = f"{cls} ({' / '.join(adducts)}{chosen}): {len(matched)} species"
             if len(other):
                 text += (
                     f"; {len(other)} seen only as other adducts "
@@ -222,8 +240,8 @@ class LipidSearchCleaner(BaseDataCleaner):
             anchored.append(text)
         if anchored:
             parts.append(
-                "Classes with their own internal standard are quantified in the "
-                "standard's adduct, so species and standard respond alike: "
+                "Classes quantified in one adduct (their internal standard's, "
+                "so species and standard respond alike, or the one you chose): "
                 + "; ".join(anchored) + "."
             )
             if len(unmatched) and not keep_other:

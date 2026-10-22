@@ -79,6 +79,21 @@ def test_the_user_can_keep_them(two_mode_sample):
     assert final['LipidMolec'].str.startswith('PC 91:0').any()
 
 
+def test_power_users_choose_the_adduct_per_class(two_mode_sample):
+    """Step 4: an adduct per class, for classes measured in more than one."""
+    at = _module1()
+    assert not [s for s in at.selectbox if s.key == 'adduct_select_PC']
+    at.checkbox(key='customize_adducts_checkbox').check().run()
+    select = at.selectbox(key='adduct_select_PC')
+    assert select.options == ['Default', 'M+H', 'M+HCOO', 'Any adduct']
+    select.set_value('M+HCOO').run()
+    assert not at.exception, at.exception
+    [note] = _notes(at)
+    assert 'PC (M+HCOO, your choice):' in note
+    final = at.session_state.ingestion_result.cleaned_df
+    assert set(final.loc[final['ClassKey'] == 'PC', 'MainIon']) == {'M+HCOO'}
+
+
 def test_no_note_without_ions():
     assert _notes(_module1()) == []
 

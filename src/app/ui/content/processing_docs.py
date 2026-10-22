@@ -67,7 +67,10 @@ used even when another adduct graded better. A species of that class seen
 it, on a scale that differs from the standard's. Classes without a standard of
 their own keep each species' best row (best grade, then TotalSmpIDRate(%)). The
 standard's adduct is taken from the standards in the export; standards uploaded
-as a separate table carry no adduct, so they cannot set one.
+as a separate table carry no adduct, so they cannot set one. **Choose the adduct
+per class** (under Configure Adducts) overrides this for any class measured in
+more than one adduct: a specific adduct, or *Any adduct* for each species' best
+row.
 
 What this means for your results: comparing a lipid **across conditions** is
 unaffected, since every sample uses the same row. But where a class's species
