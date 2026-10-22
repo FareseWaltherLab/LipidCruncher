@@ -219,7 +219,7 @@ def _load_sample_data() -> None:
 
 
 def _resolve_input(uploaded, session_key: str) -> Optional[pd.DataFrame]:
-    """An uploaded file takes precedence; otherwise use what's in session."""
+    """An uploaded file takes precedence; otherwise the sample data, if loaded."""
     if uploaded is not None:
         return pd.read_csv(uploaded)
     return st.session_state.get(session_key)
@@ -388,9 +388,6 @@ def display_isotope_tracing_page() -> None:
         config = _config_from_widgets()
         current_key = _inputs_key(measurement_df, molecule_df, element_df, config)
         if run_clicked:
-            st.session_state.iso_measurement_df = measurement_df
-            st.session_state.iso_molecule_df = molecule_df
-            st.session_state.iso_element_df = element_df
             st.session_state.iso_result = StreamlitAdapter.run_isotope_correction(
                 measurement_df, molecule_df, element_df, config
             )

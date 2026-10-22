@@ -86,6 +86,29 @@ class TestResultsMatchTheInputs:
         assert _shows_results(at) and not _stale(at)
 
 
+class TestRemovedUploadLeavesTheInputs:
+    """Regression: Run kept a copy of the uploaded files, so after removing
+    one from its uploader (its ×) the old result stayed on screen under
+    "Correction complete", and Run stayed enabled on the removed file."""
+
+    def test_removed_file_is_not_used(self, runs, fake_uploads):
+        from tests.ui.conftest import FakeUpload
+        from app.ui.isotope_tracing_page import _SAMPLE_DIR
+
+        for name in ("Measurement", "Molecule", "Element"):
+            fake_uploads[f"{name} file"] = FakeUpload(
+                f"{name}.csv", (_SAMPLE_DIR / f"{name}File.csv").read_bytes(),
+            )
+        at = AppTest.from_function(page_script, default_timeout=30).run()
+        at.button(key="iso_run").click().run()
+        assert len(runs) == 1 and _shows_results(at)
+
+        del fake_uploads["Measurement file"]
+        at.run()
+        assert not _shows_results(at)
+        assert at.sidebar.button(key="iso_run").disabled
+
+
 class TestSampleDataResetsTheSettings:
     """Regression (IQ8): Load sample data set only UHR mode, so a setting
     changed earlier (e.g. tracer impurity off) carried over and the sample

@@ -1172,6 +1172,8 @@ def fake_uploads(monkeypatch):
         rendered = original(self, label, *args, **kwargs)
         for fragment, upload in uploads.items():
             if fragment in label:
+                # Each run gets the file unread, as from a real uploader.
+                upload.seek(0)
                 return upload
         return rendered
 
