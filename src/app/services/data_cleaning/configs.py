@@ -39,9 +39,11 @@ class GradeFilterConfig(BaseModel):
         return v
 
     def __hash__(self) -> int:
-        if self.grade_config is None:
-            return hash(None)
-        return hash(tuple(sorted((k, tuple(v)) for k, v in self.grade_config.items())))
+        # Every field: the app caches cleaning results by this hash.
+        grades = None if self.grade_config is None else tuple(
+            sorted((k, tuple(v)) for k, v in self.grade_config.items())
+        )
+        return hash((grades, self.keep_other_adducts))
 
 
 class QualityFilterConfig(BaseModel):

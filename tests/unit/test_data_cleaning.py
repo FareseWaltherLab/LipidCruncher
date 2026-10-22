@@ -96,6 +96,15 @@ def generic_df():
 # =============================================================================
 
 class TestGradeFilterConfig:
+
+    def test_hash_covers_every_option(self):
+        """The ingestion cache keys on this hash: with custom grades, turning
+        "keep other adducts" on reused the result cleaned without it."""
+        grades = {'PC': ['A', 'B']}
+        assert hash(GradeFilterConfig(grade_config=grades)) != hash(
+            GradeFilterConfig(grade_config=grades, keep_other_adducts=True))
+        assert hash(GradeFilterConfig(grade_config=grades)) == hash(
+            GradeFilterConfig(grade_config={'PC': ['A', 'B']}))
     """Tests for GradeFilterConfig."""
 
     def test_default_config(self):
