@@ -216,7 +216,11 @@ LipidCruncher/
 │       │   ├── pipeline_api.py              #   PipelineAPI — the `lc` object AI-generated code calls into
 │       │   └── isotope_tracing.py           #   IsotopeTracingWorkflow
 │       ├── adapters/
-│       │   └── streamlit_adapter.py         #   StreamlitAdapter
+│       │   ├── streamlit_adapter.py         #   StreamlitAdapter (facade: setup, resets, navigation)
+│       │   ├── session_state.py             #   SessionState, stage registry (_STAGES)
+│       │   ├── module1_cache.py             #   cached Module 1 wrappers
+│       │   ├── qc_cache.py                  #   cached Quality Check wrappers
+│       │   └── analysis_cache.py            #   cached analysis wrappers
 │       └── ui/                              # Streamlit UI components
 │           ├── landing_page.py
 │           ├── isotope_tracing_page.py      #   Stable isotope tracing page
@@ -507,7 +511,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 ### Adapter
 
-`src/app/adapters/streamlit_adapter.py` — the `StreamlitAdapter` class provides:
+`src/app/adapters/streamlit_adapter.py` — the `StreamlitAdapter` class is the one facade the UI calls. `SessionState` and `_STAGES` live in `session_state.py`; the cached wrappers live in `module1_cache.py`, `qc_cache.py` and `analysis_cache.py`, whose classes `StreamlitAdapter` inherits (`tests/unit/test_adapter_facade.py` checks every `StreamlitAdapter.<name>` in use resolves). It provides:
 
 - **`SessionState` dataclass** — defines all session state keys with defaults and documents ownership (which UI file manages which keys).
 - **`initialize_session_state()`** — populates `st.session_state` from `SessionState` defaults on first run.
@@ -592,7 +596,7 @@ Nomenclature functions live in `lipid_nomenclature.py`: `parse_lipid_name()`, `n
 
 ## Session State Management
 
-All session state is managed through the `SessionState` dataclass in `streamlit_adapter.py`. Key principles:
+All session state is managed through the `SessionState` dataclass in `adapters/session_state.py`. Key principles:
 
 1. **Single ownership** — each key is owned by exactly one UI file (documented in `SessionState` docstring) and belongs to exactly one stage in `_STAGES`. A new widget key must be added to its stage; `tests/unit/test_streamlit_adapter.py::TestStageRegistry` fails on a literal `key='...'` that is not registered.
 2. **Stage invalidation** — `invalidate_from(stage)` clears a stage and everything after it; `clear_stage(stage)` clears one (the AI Studio and isotope pages use it for their own state). `tests/ui/test_reset_matrix.py` pins what each trigger clears (regenerate `reset_matrix.json` with `UPDATE_RESET_MATRIX=1` after an intended change).
@@ -724,7 +728,7 @@ The app runs on port 8501 by default. Server settings live in `.streamlit/config
 
 - **Check session state**: In a Streamlit callback or after an error, inspect `st.session_state` to see what data is available at each stage.
 - **Test services in isolation**: Since all services are pure static methods, you can test any business logic in a Python REPL without running Streamlit.
-- **Check the adapter**: If a cached result seems wrong, the issue is usually in the hash function or the cache key. Look at the `@st.cache_data` wrappers in `streamlit_adapter.py`.
+- **Check the adapter**: If a cached result seems wrong, the issue is usually in the hash function or the cache key. Look at the `@st.cache_data` wrappers in `adapters/*_cache.py`.
 
 ---
 
@@ -773,7 +777,7 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 ### Adding a New QC Step
 
 1. **Add the computation** to a plotter service under `services/plotting/` (a plot) or to `QualityCheckService` (a decision that changes the data), with a `QualityCheckWorkflow` method for the latter.
-2. **Add a cached wrapper** in `StreamlitAdapter` if needed.
+2. **Add a cached wrapper** in `adapters/qc_cache.py` if needed.
 3. **Add UI rendering** in `ui/main_content/quality_check.py`.
 4. **Add session state keys** to `SessionState` with the `qc_` prefix.
 5. **Add tests** on the path the app runs.
