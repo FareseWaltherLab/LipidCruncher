@@ -7,12 +7,21 @@ AI Studio and imports from the pipeline, then checks which uploaded samples
 each Studio condition holds.
 """
 
+import io
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import pytest
 from streamlit.testing.v1 import AppTest
 
+from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import PAGE_AI_STUDIO, PAGE_APP
+from app.services.ai_chat import usage_limits
+from app.services.ai_chat.ai_client import AIClientService
+from app.ui.main_content.analysis._entry import ANALYSIS_OPTIONS
+from tests.ai_turns import canned_stream
 
 DEFAULT_TIMEOUT = 90
 MAIN_APP = str(Path(__file__).parents[2] / 'src' / 'main_app.py')
@@ -165,3 +174,74 @@ class TestOwnUploadAcrossPages:
         _ok(at)
         assert at.session_state['chat_studio_df'] is None
         assert at.session_state['studio_applied_snapshot'] is None
+
+
+@pytest.fixture
+def ai_replies(monkeypatch):
+    """Data Questions turns run for real (workflow, sandbox, checks) on the
+    model reply the test sets: ``ai_replies(text)``."""
+    monkeypatch.setattr(usage_limits, "_counts", Counter())
+    monkeypatch.setattr(StreamlitAdapter, "_ai_client_id", staticmethod(lambda: None))
+    # No turn id: no st.feedback, which AppTest cannot rerun.
+    monkeypatch.setattr(StreamlitAdapter, "log_ai_turn", staticmethod(lambda **kwargs: None))
+
+    def reply(text):
+        monkeypatch.setattr(
+            AIClientService, "stream_tool_loop", staticmethod(canned_stream(text)),
+        )
+    return reply
+
+
+def _ask(at, question):
+    at.chat_input(key='chat_input_questions').set_value(question).run()
+    at.run()  # the turn's st.rerun()
+    _ok(at)
+    return at.session_state['chat_questions_result_df']
+
+
+class TestDataQuestionsOnPipelineData:
+    """A Data Questions turn on imported QC data works on the samples Quality
+    Check kept, and the AI's lc gives the main app's volcano numbers."""
+
+    def test_condition_means_after_a_pca_exclusion(self, ai_replies):
+        ai_replies(
+            "Means per condition.\n\n```python\n"
+            "result_df = pd.DataFrame({c: df[[f'concentration[{s}]' "
+            "for s in lc.samples_for(c)]].mean(axis=1) for c in lc.conditions()})\n"
+            "result_df.insert(0, 'LipidMolec', df['LipidMolec'])\n```"
+        )
+        at = _to_quality_check()
+        at.multiselect(key='pca_samples_remove').set_value(['s2']).run()
+        _open_studio(at)
+        _import(at, 'QC-filtered data (from pipeline)')
+        means = _ask(at, 'mean per condition').set_index('LipidMolec')
+
+        upload = at.session_state['standardized_df'].set_index('LipidMolec')
+        for condition, samples in {**UPLOADED, 'WT': ['s1', 's3', 's4']}.items():
+            expected = upload.loc[means.index, [f'intensity[{s}]' for s in samples]].mean(axis=1)
+            np.testing.assert_allclose(means[condition], expected)
+
+        at.run()
+        assert len(at.session_state['chat_data_questions_session'].messages) == 2
+        assert at.session_state['chat_questions_result_df'] is not None
+
+    def test_compare_species_matches_the_volcano(self, ai_replies, captured_downloads):
+        ai_replies("Comparing.\n\n```python\nresult_df = lc.compare_species('WT', 'ADGAT-DKO')\n```")
+        at = _to_quality_check()
+        at.multiselect(key='pca_samples_remove').set_value(['s2']).run()
+        at.radio(key='analysis_radio').set_value(ANALYSIS_OPTIONS[6]).run()
+        _ok(at)
+        volcano = pd.read_csv(
+            io.BytesIO(captured_downloads['analysis_csv_volcano'])
+        ).set_index('LipidMolec')
+        _open_studio(at)
+        _import(at, 'QC-filtered data (from pipeline)')
+        compared = _ask(at, 'compare WT and ADGAT-DKO').set_index('LipidMolec')
+
+        assert sorted(compared.index) == sorted(volcano.index)
+        np.testing.assert_allclose(
+            compared['p_value'], volcano.loc[compared.index, 'pValue'],
+        )
+        np.testing.assert_allclose(
+            compared['log2FC'], volcano.loc[compared.index, 'FoldChange'],
+        )
