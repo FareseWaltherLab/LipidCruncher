@@ -53,14 +53,14 @@ ANALYSIS_OPTIONS = [
 # Dispatch table: analysis option → rendering function.
 # Avoids fragile index-based routing (ANALYSIS_OPTIONS[0], [1], ...).
 _ANALYSIS_DISPATCH = {
-    ANALYSIS_OPTIONS[0]: lambda df, exp: _display_bar_chart(df, exp),
-    ANALYSIS_OPTIONS[1]: lambda df, exp: _display_pie_charts(df, exp),
-    ANALYSIS_OPTIONS[2]: lambda df, exp: _display_saturation_plots(df, exp),
-    ANALYSIS_OPTIONS[3]: lambda df, exp: _display_chain_length_plots(df, exp),
-    ANALYSIS_OPTIONS[4]: lambda df, exp: _display_fach_heatmaps(df, exp),
-    ANALYSIS_OPTIONS[5]: lambda df, exp: _display_pathway_viz(df, exp),
-    ANALYSIS_OPTIONS[6]: lambda df, exp: _display_volcano_plot(df, exp),
-    ANALYSIS_OPTIONS[7]: lambda df, exp: _display_lipidomic_heatmap(df, exp),
+    ANALYSIS_OPTIONS[0]: lambda df, exp, bqc: _display_bar_chart(df, exp, bqc),
+    ANALYSIS_OPTIONS[1]: lambda df, exp, bqc: _display_pie_charts(df, exp),
+    ANALYSIS_OPTIONS[2]: lambda df, exp, bqc: _display_saturation_plots(df, exp),
+    ANALYSIS_OPTIONS[3]: lambda df, exp, bqc: _display_chain_length_plots(df, exp),
+    ANALYSIS_OPTIONS[4]: lambda df, exp, bqc: _display_fach_heatmaps(df, exp),
+    ANALYSIS_OPTIONS[5]: lambda df, exp, bqc: _display_pathway_viz(df, exp),
+    ANALYSIS_OPTIONS[6]: lambda df, exp, bqc: _display_volcano_plot(df, exp),
+    ANALYSIS_OPTIONS[7]: lambda df, exp, bqc: _display_lipidomic_heatmap(df, exp),
 }
 
 
@@ -109,7 +109,7 @@ def display_analysis_module(
 
     handler = _ANALYSIS_DISPATCH.get(analysis_type)
     if handler is not None:
-        handler(df, experiment)
+        handler(df, experiment, bqc_label)
 
     # PDF Report Download
     _display_pdf_report_section(experiment, format_type)

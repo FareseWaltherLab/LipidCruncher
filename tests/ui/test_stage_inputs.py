@@ -52,7 +52,7 @@ class TestAnalysisOutputsFollowQcOutput:
         assert _bar_results(at) == (True, True)
         assert at.session_state['analysis_statistics'][
             'Abundance bar chart'
-        ].summary.parameters['n_conditions'] == 3
+        ].summary.parameters['n_conditions'] == 2  # BQC is not selected by default
 
     def test_dropped_when_sample_labels_switch(self):
         """The figures show sample names or labels; switching what is shown
