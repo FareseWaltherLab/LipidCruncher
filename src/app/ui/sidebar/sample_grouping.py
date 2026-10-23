@@ -140,15 +140,15 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
     # A run that stopped before this step (an invalid experiment setup)
     # dropped the widget keys; restore the answer so that fixing the setup
     # does not undo a manual regroup.
-    if 'grouping_radio' not in st.session_state:
-        preserved = st.session_state.get('_preserved_grouping_radio')
-        if preserved is not None:
-            st.session_state.grouping_radio = preserved
-    grouping_correct = st.sidebar.radio(
-        'Samples properly grouped?', ['Yes', 'No'], key='grouping_radio',
-        label_visibility='collapsed',
+    options = ['Yes', 'No']
+    answer = StreamlitAdapter.restore_widget_value(
+        'grouping_radio', '_preserved_grouping_radio', 'Yes',
     )
-    st.session_state._preserved_grouping_radio = grouping_correct
+    grouping_correct = st.sidebar.radio(
+        'Samples properly grouped?', options, index=options.index(answer),
+        key='grouping_radio', label_visibility='collapsed',
+    )
+    StreamlitAdapter.save_widget_value('grouping_radio', '_preserved_grouping_radio')
 
     if grouping_correct == 'No':
         return _handle_manual_regrouping(df, group_df, experiment)
