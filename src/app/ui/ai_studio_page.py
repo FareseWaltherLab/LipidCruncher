@@ -33,6 +33,7 @@ from app.ui.ai_chat import (
     display_transform_chat,
     display_viz_chat,
 )
+from app.ui.ai_chat._turn_errors import clear_failure
 
 logger = logging.getLogger(__name__)
 
@@ -933,6 +934,9 @@ def _clear_data_sessions() -> None:
     st.session_state.chat_transform_refused_metadata = ()
     st.session_state.chat_transform_kept_columns = ()
     st.session_state.chat_viz_figures = {}
+    # Each data tab's last failed turn, shown with a Retry, was on the old data.
+    for tab in ('dq', 'transform', 'viz'):
+        clear_failure(tab)
 
 
 # =============================================================================

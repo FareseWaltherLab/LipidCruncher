@@ -335,3 +335,55 @@ class TestSubsetOfDetectedColumns:
         assert list(at.session_state['chat_studio_df_original'].columns) == [
             'LipidMolec', 'intensity[s1]', 'intensity[s2]', 'intensity[s3]', 'intensity[s4]',
         ]
+
+
+@pytest.fixture
+def failing_ai(monkeypatch):
+    """Every AI turn fails as if the API were down."""
+    from collections import Counter
+
+    from app.adapters.streamlit_adapter import StreamlitAdapter
+    from app.services.ai_chat import usage_limits
+    from app.services.ai_chat.ai_client import AIClientService
+
+    def down(*args, **kwargs):
+        raise RuntimeError("API down")
+
+    monkeypatch.setattr(usage_limits, "_counts", Counter())
+    monkeypatch.setattr(StreamlitAdapter, "_ai_client_id", staticmethod(lambda: None))
+    monkeypatch.setattr(StreamlitAdapter, "log_ai_turn", staticmethod(lambda **kwargs: None))
+    monkeypatch.setattr(AIClientService, "stream_tool_loop", staticmethod(down))
+
+
+class TestNewDataDropsOldErrors:
+    """Regression: a failed turn's error and Retry stayed on the Data
+    Questions and Transform tabs after new data was loaded, under the new,
+    empty chat; Retry sent the old question to the new data."""
+
+    def _fail_both_tabs(self, studio):
+        at = _confirm(studio.upload('own.csv', OWN_CSV))
+        for key in ('chat_input_questions', 'chat_input_transform'):
+            at.chat_input(key=key).set_value('old question').run()
+            at.run()  # the turn's rerun
+            _ok(at)
+        for label in ("Data Questions", "Transform to Generic"):
+            tab = next(t for t in at.tabs if t.label == label)
+            assert any("API down" in e.value for e in tab.error), label
+        return at
+
+    def test_a_new_upload_drops_them(self, studio, failing_ai):
+        at = self._fail_both_tabs(studio)
+        at = _confirm(studio.upload('other.csv', OWN_CSV.replace(b'KO', b'HET')))
+        for label in ("Data Questions", "Transform to Generic"):
+            tab = next(t for t in at.tabs if t.label == label)
+            assert not any("API down" in e.value for e in tab.error), label
+            assert not [b for b in tab.button if b.label == "Retry"], label
+
+    def test_removing_the_file_drops_them(self, studio, failing_ai):
+        at = self._fail_both_tabs(studio)
+        studio.fake_uploads.clear()
+        at.run()
+        _ok(at)
+        for key in ('chat_dq_last_error', 'chat_transform_last_error',
+                    'chat_dq_failed_input', 'chat_transform_failed_input'):
+            assert key not in at.session_state, key
