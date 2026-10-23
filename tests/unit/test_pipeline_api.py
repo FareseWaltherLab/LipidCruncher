@@ -5,6 +5,8 @@ gets from ``lc.compare_species`` must equal what the eval's independent
 reference implementation computes. That is what makes "defer to the
 pipeline" mean the same numbers the main app reports.
 """
+import inspect
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -675,3 +677,57 @@ class TestColoredBars:
         assert colors[0] == colors[2] != colors[1]
         assert list(result.figure.layout.xaxis.categoryarray) == ["a", "b", "c"]
         assert result.data.equals(table)
+
+
+class TestBarChartLeavesBQCOut:
+    """User decision (2026-10-23): the app's Bar Chart page leaves BQC out
+    of its default conditions, so lc.bar_chart and lc.compare_classes (its
+    statistics) default to the same, and say so."""
+
+    @pytest.fixture
+    def with_bqc(self, df):
+        experiment = ExperimentConfig(
+            conditions_list=["WT", "KO", "QC"], number_of_samples_list=[2, 2, 2],
+        )
+        return PipelineAPI(df, experiment, bqc_label="QC")
+
+    @staticmethod
+    def _conditions_tested(lc, call, monkeypatch):
+        from app.services.statistical_testing import StatisticalTestingService
+        seen = []
+        real = StatisticalTestingService.run_class_level_tests
+
+        def spy(*args, **kwargs):
+            seen.append(inspect.signature(real).bind(*args, **kwargs).arguments[
+                "selected_conditions"
+            ])
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(StatisticalTestingService, "run_class_level_tests", spy)
+        call(lc)
+        return seen[0]
+
+    @pytest.mark.parametrize("call", [
+        lambda lc: lc.bar_chart(), lambda lc: lc.compare_classes(),
+    ])
+    def test_bqc_is_left_out_by_default_and_noted(self, with_bqc, call, monkeypatch):
+        assert self._conditions_tested(with_bqc, call, monkeypatch) == ["WT", "KO"]
+        assert any("BQC samples (QC) are left out" in m for m in with_bqc.methods_used)
+
+    def test_naming_it_includes_it(self, with_bqc, monkeypatch):
+        tested = self._conditions_tested(
+            with_bqc, lambda lc: lc.bar_chart(conditions=["WT", "KO", "QC"]), monkeypatch,
+        )
+        assert tested == ["WT", "KO", "QC"]
+        assert not any("BQC" in m for m in with_bqc.methods_used)
+
+    def test_the_label_survives_rebinding(self, with_bqc, df):
+        assert with_bqc.with_dataframe(df)._bqc_label == "QC"
+
+    def test_single_sample_conditions_are_left_out_like_the_page(self, df):
+        experiment = ExperimentConfig(
+            conditions_list=["WT", "KO", "One"], number_of_samples_list=[3, 2, 1],
+        )
+        data = PipelineAPI(df, experiment).bar_chart(with_stats=False).data
+        assert not [c for c in data.columns if c.endswith("_One")]
+        assert [c for c in data.columns if c.endswith("_KO")]

@@ -548,6 +548,7 @@ class AIStudioAdapter:
             numeric_columns=st.session_state.get(
                 'chat_studio_sample_columns_renamed'
             ),
+            bqc_label=st.session_state.get('chat_studio_bqc_label'),
         )
 
     @staticmethod
@@ -570,6 +571,7 @@ class AIStudioAdapter:
                 'chat_studio_sample_columns_renamed'
             ),
             experiment=st.session_state.get('chat_studio_experiment'),
+            bqc_label=st.session_state.get('chat_studio_bqc_label'),
         )
 
     @staticmethod

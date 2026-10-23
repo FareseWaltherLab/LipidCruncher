@@ -77,7 +77,8 @@ with `ClassKey`, `p_value`, `adj_p_value`, `significant`.
 **Standard plots — these return LipidCruncher's *own* figures**, identical to the app's
 analysis pages, so prefer them over drawing your own. Each returns an object with `.figure`
 (assign it to `fig`) and `.data` (the frame behind it); `conditions=` and `classes=` default to
-all:
+all (`bar_chart` and `compare_classes`: like the Bar Chart page, conditions with 2+ samples,
+BQC samples left out):
 
 - `lc.volcano(control, experimental, classes=None, p_threshold=0.05, fc_threshold=1.0,
 test_type='parametric', correction='uncorrected')` — same statistics and defaults as

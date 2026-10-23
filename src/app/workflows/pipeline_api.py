@@ -119,9 +119,11 @@ class PipelineAPI:
         self,
         df: pd.DataFrame,
         experiment: Optional[ExperimentConfig] = None,
+        bqc_label: Optional[str] = None,
     ):
         self._df = df
         self._experiment = experiment
+        self._bqc_label = bqc_label
         self.methods_used: List[str] = []
 
     def with_dataframe(self, df: pd.DataFrame) -> "PipelineAPI":
@@ -131,7 +133,7 @@ class PipelineAPI:
         frame; this rebinds ``lc`` to that same prepared copy so both see
         identical data.
         """
-        return PipelineAPI(df, self._experiment)
+        return PipelineAPI(df, self._experiment, self._bqc_label)
 
     # -- introspection ------------------------------------------------
 
@@ -238,7 +240,8 @@ class PipelineAPI:
         the number of conditions and classes.
 
         Args:
-            conditions: Condition names to compare. Defaults to all.
+            conditions: Condition names to compare. Defaults to the Bar
+                Chart page's: conditions with 2+ samples, BQC left out.
             classes: Lipid classes to test. Defaults to all in the data.
             alpha: Significance threshold.
 
@@ -249,8 +252,7 @@ class PipelineAPI:
         self._require_experiment()
         frame = self._frame()
 
-        if conditions is None:
-            conditions = list(self._experiment.conditions_list)
+        conditions = self._bar_chart_conditions(conditions)
         if classes is None:
             classes = sorted(frame['ClassKey'].dropna().unique().tolist())
 
@@ -393,6 +395,22 @@ class PipelineAPI:
             return list(conditions)
         return self._analysis().get_all_conditions(self._experiment)
 
+    def _bar_chart_conditions(self, conditions: Optional[List[str]]) -> List[str]:
+        """``conditions``, or the Bar Chart page's default: conditions with
+        2+ samples, BQC left out (a pooled technical control, not a group
+        to compare), which is noted for the user."""
+        self._require_experiment()
+        if conditions:
+            return list(conditions)
+        eligible = self._analysis().get_eligible_conditions(self._experiment)
+        if self._bqc_label in eligible:
+            self._note(
+                f"The BQC samples ({self._bqc_label}) are left out, as on the "
+                "main app's Bar Chart page; name them in conditions= to "
+                "include them."
+            )
+        return [c for c in eligible if c != self._bqc_label]
+
     def _classes_or_all(self, classes: Optional[List[str]]) -> List[str]:
         if classes:
             return list(classes)
@@ -419,7 +437,8 @@ class PipelineAPI:
         """Class-level abundance bar chart (the app's Abundance Bar Chart).
 
         Args:
-            conditions: Conditions to include. Defaults to all.
+            conditions: Conditions to include. Defaults to the Bar Chart
+                page's: conditions with 2+ samples, BQC left out.
             classes: Lipid classes to include. Defaults to all.
             scale: 'linear' or 'log10'.
             with_stats: Run the class-level tests and annotate significance.
@@ -430,7 +449,7 @@ class PipelineAPI:
         res = self._analysis().run_bar_chart(
             df=self._frame(),
             experiment=self._experiment,
-            selected_conditions=self._conditions_or_all(conditions),
+            selected_conditions=self._bar_chart_conditions(conditions),
             selected_classes=self._classes_or_all(classes),
             stat_config=CLASS_STATS if with_stats else None,
             scale=scale,

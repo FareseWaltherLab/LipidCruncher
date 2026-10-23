@@ -657,6 +657,7 @@ class AIChatWorkflow:
         sandbox_config: SandboxConfig,
         numeric_columns: Optional[List[str]],
         experiment: Optional[ExperimentConfig] = None,
+        bqc_label: Optional[str] = None,
     ) -> VizStepResult:
         """Execute generated viz code (if any), build the assistant message,
         append it to the session, and return the step result.
@@ -670,7 +671,7 @@ class AIChatWorkflow:
                 df=analysis_df,
                 sandbox_config=sandbox_config,
                 numeric_columns=numeric_columns,
-                lc=PipelineAPI(analysis_df, experiment),
+                lc=PipelineAPI(analysis_df, experiment, bqc_label),
             )
 
             if sandbox_result.success and sandbox_result.figure is not None:
@@ -747,6 +748,7 @@ class AIChatWorkflow:
         ai_config: Optional[AIConfig] = None,
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
+        bqc_label: Optional[str] = None,
     ):
         """Handle one user message in the visualization chat.
 
@@ -778,6 +780,7 @@ class AIChatWorkflow:
             return AIChatWorkflow._finalize_viz(
                 session, explanation, code, analysis_df,
                 sandbox_config, numeric_columns, experiment,
+                bqc_label=bqc_label,
             )
 
         return generator, finalize
@@ -836,6 +839,7 @@ class AIChatWorkflow:
         numeric_columns: Optional[List[str]],
         experiment: Optional[ExperimentConfig] = None,
         ai_config: Optional[AIConfig] = None,
+        bqc_label: Optional[str] = None,
     ) -> DataQuestionsStepResult:
         """Extract/execute any code in the AI response, have the answer
         written from the code's output, append it to the session, and
@@ -850,7 +854,7 @@ class AIChatWorkflow:
             sandbox_result = SandboxService.execute(
                 code, source_df, sandbox_config,
                 numeric_columns=numeric_columns,
-                lc=PipelineAPI(source_df, experiment),
+                lc=PipelineAPI(source_df, experiment, bqc_label),
             )
             if sandbox_result.success:
                 stdout = sandbox_result.stdout
@@ -944,6 +948,7 @@ class AIChatWorkflow:
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
         experiment: Optional[ExperimentConfig] = None,
+        bqc_label: Optional[str] = None,
     ):
         """Handle one user message in the data questions chat.
 
@@ -983,6 +988,7 @@ class AIChatWorkflow:
             return AIChatWorkflow._finalize_data_questions(
                 session, holder["full"], source_df,
                 sandbox_config, numeric_columns, experiment, ai_config,
+                bqc_label=bqc_label,
             )
 
         return generator, finalize

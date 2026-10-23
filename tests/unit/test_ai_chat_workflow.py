@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from app.models.chat import ChatMode
+from app.models.experiment import ExperimentConfig
 from app.workflows.ai_chat import AIChatWorkflow, TransformStepResult
 from tests.ai_turns import canned_stream, finish
 
@@ -567,3 +568,22 @@ class TestRepeatedLipidNames:
         unique = self.raw.drop_duplicates("LipidMolec")
         assert "identifications" not in (
             AIChatWorkflow.start_data_questions_session(unique).schema_context)
+
+
+@patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+def test_data_questions_lc_knows_the_bqc_condition(mock_loop):
+    """lc in the sandbox gets the Studio's BQC label, so lc.compare_classes
+    leaves BQC out like the app's Bar Chart page and the answer says so."""
+    from tests.evals import reference_analysis as ref
+    df = ref.load_canonical()
+    experiment = ExperimentConfig(
+        conditions_list=["WT", "KO", "QC"], number_of_samples_list=[2, 2, 2],
+    )
+    mock_loop.side_effect = canned_stream(
+        "Comparing classes.\n\n```python\nresult_df = lc.compare_classes()\n```"
+    )
+    session = AIChatWorkflow.start_data_questions_session(df)
+    result = finish(AIChatWorkflow.stream_data_questions_message(
+        "compare classes", session, df, experiment=experiment, bqc_label="QC",
+    ))
+    assert "BQC samples (QC) are left out" in result.assistant_message
