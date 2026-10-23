@@ -7,9 +7,12 @@ import json
 
 import plotly.graph_objects as go
 import pytest
+from pathlib import Path
+
 from streamlit.testing.v1 import AppTest
 
-VIEWER = "scripts/feedback_viewer.py"
+# Absolute: AppTest resolves a relative path against this file, not the cwd.
+VIEWER = str(Path(__file__).parents[2] / 'scripts' / 'feedback_viewer.py')
 
 
 @pytest.fixture

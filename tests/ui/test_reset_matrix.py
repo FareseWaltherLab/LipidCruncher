@@ -89,7 +89,7 @@ def _snapshot(at) -> dict:
     """Every session key that holds a non-default value -> fingerprint."""
     state = at.session_state
     out = {}
-    for key in state.filtered_state:
+    for key in state:
         if key.startswith("$$") or key.startswith("FormSubmitter"):
             continue
         value = state[key]

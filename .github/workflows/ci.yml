@@ -42,6 +42,24 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v
 
+  audit:
+    # Known vulnerabilities in the pinned dependencies (PyPI advisory
+    # database). Fails on any finding.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install the pinned dependencies
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install pip-audit==2.10.1
+      - name: Audit them
+        run: pip-audit --progress-spinner off
+
   image:
     # The deployed image: builds as production does, then the app must answer
     # the load balancer's health check while running as a non-root user.

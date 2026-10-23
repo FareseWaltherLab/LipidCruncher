@@ -220,6 +220,7 @@ LipidCruncher/
 │       ├── adapters/
 │       │   ├── streamlit_adapter.py         #   StreamlitAdapter (facade: setup, resets, navigation)
 │       │   ├── session_state.py             #   SessionState, stage registry (_STAGES)
+│       │   ├── sidebar_state.py             #   regroup snapshot + exclusion memory
 │       │   ├── module1_cache.py             #   cached Module 1 wrappers
 │       │   ├── qc_cache.py                  #   cached Quality Check wrappers
 │       │   ├── analysis_cache.py            #   cached analysis wrappers
@@ -521,7 +522,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 ### Adapter
 
-`src/app/adapters/streamlit_adapter.py` — the `StreamlitAdapter` class is the one facade the UI calls. `SessionState` and `_STAGES` live in `session_state.py`; the cached wrappers live in `module1_cache.py`, `qc_cache.py` and `analysis_cache.py`, and the AI Studio's and isotope page's state, stage keys and calls in `ai_studio.py` and `isotope.py`; `StreamlitAdapter` inherits their classes (and `SessionState` the two pages' state classes) (`tests/unit/test_adapter_facade.py` checks every `StreamlitAdapter.<name>` in use resolves). It provides:
+`src/app/adapters/streamlit_adapter.py` — the `StreamlitAdapter` class is the one facade the UI calls. `SessionState` and `_STAGES` live in `session_state.py`; the sidebar's manual-regroup snapshot and sample-exclusion memory (`begin_regroup` / `apply_regroup` / `undo_regroup`, `restore_excluded_samples` / `save_excluded_samples`) in `sidebar_state.py`; the cached wrappers in `module1_cache.py`, `qc_cache.py` and `analysis_cache.py`; and the AI Studio's and isotope page's state, stage keys and calls in `ai_studio.py` and `isotope.py`. `StreamlitAdapter` inherits all of their classes (and `SessionState` the two pages' state classes) (`tests/unit/test_adapter_facade.py` checks every `StreamlitAdapter.<name>` in use resolves). It provides:
 
 - **`SessionState` dataclass** — defines all session state keys with defaults and documents ownership (which UI file manages which keys).
 - **`initialize_session_state()`** — populates `st.session_state` from `SessionState` defaults on first run.
@@ -812,9 +813,9 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 
 | Package | Version | Purpose |
 |---|---|---|
-| streamlit | 1.54.0 | UI framework |
+| streamlit | 1.66.1 | UI framework |
 | pandas | 1.5.3 | Data manipulation |
-| numpy | 1.24.3 | Numerical computing |
+| numpy | 1.26.4 | Numerical computing |
 | scipy | 1.13.1 | Statistical tests (Welch's t-test, Alexander-Govern, Mann-Whitney, Kruskal-Wallis); hierarchical clustering for the heatmap |
 | scikit-learn | 1.5.2 | PCA, StandardScaler |
 | statsmodels | 0.14.0 | Multiple testing correction (FDR, Bonferroni), Tukey HSD |
@@ -824,7 +825,7 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 | kaleido | 0.2.1 | Plotly static image export |
 | reportlab | 3.6.13 | PDF generation |
 | pdf2image | 1.17.0 | PDF to image conversion (landing-page module images; needs Poppler) |
-| pillow | 12.3.0 | Image processing |
+| pillow | 13.0.0 | Image processing |
 | anthropic | 0.96.0 | Claude API SDK for the AI Studio (chat completion + tool use). Reads `ANTHROPIC_API_KEY` from environment or `st.secrets`. |
 | pydantic | 2.11.3 | Frozen data models and configs |
 | pyarrow | 23.0.1 | Streamlit dependency, pinned to stay on numpy 1.x |
