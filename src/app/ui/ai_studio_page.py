@@ -171,8 +171,10 @@ def _apply_user_experiment(
     so condition A's samples become s1..sX and condition B's become
     s(X+1)..s(X+Y). The output uses {output_prefix}[sN] regardless of how the
     original columns were named, so override-picked raw columns are
-    normalized to the same shape as auto-detected ones. Non-sample columns
-    are left untouched.
+    normalized to the same shape as auto-detected ones. Other
+    {output_prefix}[...] columns, which the user did not pick as samples,
+    are dropped: their names could repeat the new ones. Other non-sample
+    columns are left untouched.
 
     Args:
         df: DataFrame containing the sample columns.
@@ -198,7 +200,11 @@ def _apply_user_experiment(
             new_idx += 1
 
     sample_col_set = set(sample_cols_in_order)
-    non_sample = [c for c in df.columns if c not in sample_col_set]
+    non_sample = [
+        c for c in df.columns
+        if c not in sample_col_set
+        and not (c.startswith(f'{output_prefix}[') and c.endswith(']'))
+    ]
     reordered = df[non_sample + sample_cols_in_order].rename(columns=rename_map)
 
     experiment = ExperimentConfig(

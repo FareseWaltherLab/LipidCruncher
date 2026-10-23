@@ -308,3 +308,30 @@ class TestBackToHome:
             'chat_lc_questions_session',
         ):
             assert at.session_state[key] is None, key
+
+
+class TestSubsetOfDetectedColumns:
+    """Regression: answering "No" to the detected intensity[...] columns
+    and picking some of them left the others in the data under their old
+    names, which the picked columns' new names s1..sN could repeat; the
+    page then failed with "Duplicate column names found"."""
+
+    def test_rejecting_the_detected_columns_lets_the_user_pick(self, studio):
+        csv = (
+            "LipidMolec,intensity[s1],intensity[s2],intensity[s3],intensity[s4]\n"
+            "PC 34:1,1,2,3,4\n"
+        ).encode()
+        at = studio.upload('gen.csv', csv)
+        at.sidebar.radio(key='studio_sample_cols_radio').set_value('No').run()
+        picker = at.sidebar.multiselect(key='studio_sample_cols_select')
+        assert picker.value == [f'intensity[s{i}]' for i in range(1, 5)]
+        picker.set_value(['intensity[s2]', 'intensity[s4]']).run()
+        at = _confirm(at)
+        # Columns the user said are not samples do not keep sample names.
+        assert list(at.session_state['chat_studio_df'].columns) == [
+            'LipidMolec', 'intensity[s1]', 'intensity[s2]',
+        ]
+        assert _groups(at) == {'Condition_1': [2, 4]}
+        assert list(at.session_state['chat_studio_df_original'].columns) == [
+            'LipidMolec', 'intensity[s1]', 'intensity[s2]', 'intensity[s3]', 'intensity[s4]',
+        ]
