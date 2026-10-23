@@ -4,9 +4,23 @@ UI tests for the AI Studio sidebar.
 Uses Streamlit's AppTest to drive the Confirm Inputs flow and assert that
 the data-dependent tabs lock/unlock in lockstep with the checkbox.
 """
+import pytest
 from streamlit.testing.v1 import AppTest
 
 DEFAULT_TIMEOUT = 15
+
+
+@pytest.fixture(autouse=True)
+def _real_chat_panels():
+    """Some scripts below replace the page's chat panels with recorders.
+    AppTest runs them in this process, so put the real ones back for the
+    tests that run after (a full-app Data Questions test got a recorder)."""
+    import app.ui.ai_studio_page as page
+    names = ('display_data_questions_chat', 'display_transform_chat')
+    saved = {name: getattr(page, name) for name in names}
+    yield
+    for name, panel in saved.items():
+        setattr(page, name, panel)
 
 
 def studio_confirm_flow_script():
