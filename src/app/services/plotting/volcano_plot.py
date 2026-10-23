@@ -221,35 +221,9 @@ class VolcanoPlotterService:
         )
 
         fig = go.Figure()
-
-        # One trace per class
-        for class_name, color in color_mapping.items():
-            class_df = display_df[display_df['ClassKey'] == class_name]
-            if class_df.empty:
-                continue
-            fig.add_trace(go.Scatter(
-                x=class_df['FoldChange'],
-                y=class_df[p_col],
-                mode='markers',
-                name=class_name,
-                marker=dict(color=color, size=MARKER_SIZE, line=MARKER_LINE),
-                text=class_df['LipidMolec'],
-                customdata=np.column_stack((
-                    class_df[p_raw_col],
-                    class_df['test_method'],
-                    class_df['transformation'],
-                    class_df['correction_method'],
-                )) if not class_df.empty else None,
-                hovertemplate=(
-                    '<b>Lipid:</b> %{text}<br>'
-                    '<b>Log2 Fold Change:</b> %{x:.3f}<br>'
-                    f'<b>{"-log10(adj. p-value)" if use_adjusted_p else "-log10(p-value)"}:</b> %{{y:.3f}}<br>'
-                    f'<b>{"Adj. p-value" if use_adjusted_p else "p-value"}:</b> %{{customdata[0]:.2e}}<br>'
-                    '<b>Test:</b> %{customdata[1]}<br>'
-                    '<b>Transform:</b> %{customdata[2]}<br>'
-                    '<b>Correction:</b> %{customdata[3]}<extra></extra>'
-                ),
-            ))
+        _add_class_traces(
+            fig, display_df, color_mapping, p_col, p_raw_col, use_adjusted_p,
+        )
 
         # Threshold lines
         if not display_df.empty:
@@ -257,51 +231,16 @@ class VolcanoPlotterService:
                 fig, display_df, p_col, q_threshold, fc_threshold
             )
 
-        # Combine top N + additional labels for rendering
-        lipids_to_label: List[str] = []
-        if top_n_labels > 0:
-            top_df = vdf.sort_values(p_col, ascending=False).head(top_n_labels)
-            lipids_to_label = top_df['LipidMolec'].tolist()
-        if additional_labels:
-            for lip in additional_labels:
-                if lip not in lipids_to_label:
-                    lipids_to_label.append(lip)
-
+        lipids_to_label = _lipids_to_label(
+            vdf, p_col, top_n_labels, additional_labels,
+        )
         if lipids_to_label and not vdf.empty:
             _add_labels(
                 fig, vdf, p_col, color_mapping,
                 lipids_to_label, custom_label_positions,
             )
 
-        # Layout
-        p_label = "Adjusted p-value" if use_adjusted_p else "p-value"
-        fig.update_layout(
-            title=dict(
-                text="Volcano Plot",
-                font=dict(size=20, color='black'),
-            ),
-            xaxis_title=dict(
-                text="Log2(Fold Change)",
-                font=dict(size=16, color='black'),
-            ),
-            yaxis_title=dict(
-                text=f"-log10({p_label})",
-                font=dict(size=16, color='black'),
-            ),
-            xaxis=dict(
-                tickfont=dict(size=12, color='black'),
-                showgrid=True, gridcolor='lightgray',
-            ),
-            yaxis=dict(
-                tickfont=dict(size=12, color='black'),
-                showgrid=True, gridcolor='lightgray',
-            ),
-            **BASE_LAYOUT,
-            legend=dict(font=dict(size=LEGEND_FONT_SIZE, color='black')),
-            height=CHART_HEIGHT,
-            margin=dict(t=80, r=50, b=50, l=50),
-        )
-        frame_axes(fig)
+        _apply_volcano_layout(fig, use_adjusted_p)
 
         return fig
 
@@ -538,6 +477,94 @@ def _determine_exclusion_reason(
     if np.all(exp_clean == 0):
         return "All experimental values are zero"
     return "Statistical test failed"
+
+
+def _add_class_traces(
+    fig: go.Figure,
+    display_df: pd.DataFrame,
+    color_mapping: Dict[str, str],
+    p_col: str,
+    p_raw_col: str,
+    use_adjusted_p: bool,
+) -> None:
+    """One scatter trace per lipid class, with the test details on hover."""
+    for class_name, color in color_mapping.items():
+        class_df = display_df[display_df['ClassKey'] == class_name]
+        if class_df.empty:
+            continue
+        fig.add_trace(go.Scatter(
+            x=class_df['FoldChange'],
+            y=class_df[p_col],
+            mode='markers',
+            name=class_name,
+            marker=dict(color=color, size=MARKER_SIZE, line=MARKER_LINE),
+            text=class_df['LipidMolec'],
+            customdata=np.column_stack((
+                class_df[p_raw_col],
+                class_df['test_method'],
+                class_df['transformation'],
+                class_df['correction_method'],
+            )) if not class_df.empty else None,
+            hovertemplate=(
+                '<b>Lipid:</b> %{text}<br>'
+                '<b>Log2 Fold Change:</b> %{x:.3f}<br>'
+                f'<b>{"-log10(adj. p-value)" if use_adjusted_p else "-log10(p-value)"}:</b> %{{y:.3f}}<br>'
+                f'<b>{"Adj. p-value" if use_adjusted_p else "p-value"}:</b> %{{customdata[0]:.2e}}<br>'
+                '<b>Test:</b> %{customdata[1]}<br>'
+                '<b>Transform:</b> %{customdata[2]}<br>'
+                '<b>Correction:</b> %{customdata[3]}<extra></extra>'
+            ),
+        ))
+
+
+def _lipids_to_label(
+    vdf: pd.DataFrame,
+    p_col: str,
+    top_n_labels: int,
+    additional_labels: Optional[List[str]],
+) -> List[str]:
+    """The top N lipids by significance, then any extra ones, no repeats."""
+    lipids_to_label: List[str] = []
+    if top_n_labels > 0:
+        top_df = vdf.sort_values(p_col, ascending=False).head(top_n_labels)
+        lipids_to_label = top_df['LipidMolec'].tolist()
+    if additional_labels:
+        for lip in additional_labels:
+            if lip not in lipids_to_label:
+                lipids_to_label.append(lip)
+    return lipids_to_label
+
+
+def _apply_volcano_layout(fig: go.Figure, use_adjusted_p: bool) -> None:
+    """Titles, axes, legend and size of the volcano plot."""
+    p_label = "Adjusted p-value" if use_adjusted_p else "p-value"
+    fig.update_layout(
+        title=dict(
+            text="Volcano Plot",
+            font=dict(size=20, color='black'),
+        ),
+        xaxis_title=dict(
+            text="Log2(Fold Change)",
+            font=dict(size=16, color='black'),
+        ),
+        yaxis_title=dict(
+            text=f"-log10({p_label})",
+            font=dict(size=16, color='black'),
+        ),
+        xaxis=dict(
+            tickfont=dict(size=12, color='black'),
+            showgrid=True, gridcolor='lightgray',
+        ),
+        yaxis=dict(
+            tickfont=dict(size=12, color='black'),
+            showgrid=True, gridcolor='lightgray',
+        ),
+        **BASE_LAYOUT,
+        legend=dict(font=dict(size=LEGEND_FONT_SIZE, color='black')),
+        height=CHART_HEIGHT,
+        margin=dict(t=80, r=50, b=50, l=50),
+    )
+    frame_axes(fig)
 
 
 def _filter_significant(
