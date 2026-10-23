@@ -315,7 +315,7 @@ class TestMetabolomicsWorkbenchBlocked:
         from app.services.format_detection import (
             DataFormat, FormatDetectionService,
         )
-        from app.ui.ai_studio_page import _AI_STUDIO_BLOCKED_FORMATS
+        from app.workflows.ai_studio import AIStudioWorkflow
 
         mw_path = os.path.join(
             os.path.dirname(__file__), '..', '..',
@@ -336,7 +336,7 @@ class TestMetabolomicsWorkbenchBlocked:
         )
         # MW now belongs to the blocked set, so the advisory fires.
         assert (
-            DataFormat.METABOLOMICS_WORKBENCH.value in _AI_STUDIO_BLOCKED_FORMATS
+            DataFormat.METABOLOMICS_WORKBENCH.value in AIStudioWorkflow.BLOCKED_FORMATS
         )
 
     def test_mw_format_triggers_block(self):

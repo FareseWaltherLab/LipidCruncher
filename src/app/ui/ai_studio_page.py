@@ -19,11 +19,6 @@ import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import PAGE_APP, PAGE_LANDING
-from app.models.experiment import ExperimentConfig
-from app.services.format_detection import (
-    DataFormat,
-    FormatDetectionService,
-)
 from app.services.sample_inference import SampleInferenceService
 from app.ui.landing_page import display_logo
 from app.ui.sidebar.confirm_inputs import render_confirm_summary
@@ -34,19 +29,9 @@ from app.ui.ai_chat import (
     display_viz_chat,
 )
 from app.ui.ai_chat._turn_errors import clear_failure
+from app.workflows.ai_studio import AIStudioWorkflow
 
 logger = logging.getLogger(__name__)
-
-
-# Standard formats that the main pipeline already handles end-to-end
-# (cleaning, zero filtering, normalization). When users upload these
-# directly to AI Studio, we redirect them rather than letting them try
-# to pick sample columns from raw, unfiltered data.
-_AI_STUDIO_BLOCKED_FORMATS: frozenset = frozenset({
-    DataFormat.LIPIDSEARCH.value,
-    DataFormat.MSDIAL.value,
-    DataFormat.METABOLOMICS_WORKBENCH.value,
-})
 
 
 # Shown above the tabs, not in an expander: what leaves the browser session
@@ -115,105 +100,15 @@ def _is_blocked_standard_format() -> bool:
     """True when the uploaded file is a known standard format that should
     go through the main pipeline first. Pipeline imports are exempt: the
     user has already explicitly chosen to bring that data over."""
-    if st.session_state.get('chat_studio_pipeline_source') is not None:
-        return False
-    detected = st.session_state.get('chat_studio_detected_format')
-    return detected in _AI_STUDIO_BLOCKED_FORMATS
+    return AIStudioWorkflow.is_blocked_standard_format(
+        st.session_state.get('chat_studio_detected_format'),
+        st.session_state.get('chat_studio_pipeline_source'),
+    )
 
 
 # =============================================================================
 # Helpers
 # =============================================================================
-
-def _derive_experiment(df: pd.DataFrame) -> ExperimentConfig:
-    """Create a minimal single-condition ExperimentConfig from numeric columns.
-
-    This allows the visualization chat to work without the user manually
-    defining experimental conditions.
-    """
-    intensity_cols = [c for c in df.columns if c.startswith("intensity[")]
-    if not intensity_cols:
-        intensity_cols = df.select_dtypes(include="number").columns.tolist()
-
-    n_samples = max(len(intensity_cols), 1)
-    return ExperimentConfig(
-        conditions_list=["All Samples"],
-        number_of_samples_list=[n_samples],
-    )
-
-
-def _detect_sample_prefix(df: pd.DataFrame) -> Optional[str]:
-    """Return 'intensity' or 'concentration' depending on which sample-column
-    prefix the DataFrame uses. Module 1 emits one or the other depending on
-    the normalization method (raw / total intensity → intensity[*]; internal
-    standard, protein, or both → concentration[*]).
-
-    Returns None if neither prefix is present.
-    """
-    if any(c.startswith('intensity[') and c.endswith(']') for c in df.columns):
-        return 'intensity'
-    if any(c.startswith('concentration[') and c.endswith(']') for c in df.columns):
-        return 'concentration'
-    return None
-
-
-def _apply_user_experiment(
-    df: pd.DataFrame,
-    conditions_list: list,
-    samples_per_condition: list,
-    sample_to_col: dict,
-    output_prefix: str,
-) -> tuple:
-    """Build an ExperimentConfig and a reordered DataFrame.
-
-    The user picks samples per condition in arbitrary order (e.g. condition A
-    gets s1+s3, condition B gets s2+s4). ExperimentConfig assumes conditions
-    occupy contiguous sample blocks (s1..sN), so we rename the sample columns
-    so condition A's samples become s1..sX and condition B's become
-    s(X+1)..s(X+Y). The output uses {output_prefix}[sN] regardless of how the
-    original columns were named, so override-picked raw columns are
-    normalized to the same shape as auto-detected ones. Other
-    {output_prefix}[...] columns, which the user did not pick as samples,
-    are dropped: their names could repeat the new ones. Other non-sample
-    columns are left untouched.
-
-    Args:
-        df: DataFrame containing the sample columns.
-        conditions_list: condition names, in declared order.
-        samples_per_condition: list of lists; samples_per_condition[i] is the
-            list of sample names assigned to conditions_list[i].
-        sample_to_col: maps each sample name to its original column in df.
-        output_prefix: 'intensity' or 'concentration' — the prefix used for
-            renamed sample columns.
-
-    Returns:
-        (reordered_df, experiment).
-    """
-    rename_map = {}
-    sample_cols_in_order = []
-    new_idx = 1
-    for samples in samples_per_condition:
-        for old_sample in samples:
-            old_col = sample_to_col[old_sample]
-            new_col = f'{output_prefix}[s{new_idx}]'
-            rename_map[old_col] = new_col
-            sample_cols_in_order.append(old_col)
-            new_idx += 1
-
-    sample_col_set = set(sample_cols_in_order)
-    non_sample = [
-        c for c in df.columns
-        if c not in sample_col_set
-        and not (c.startswith(f'{output_prefix}[') and c.endswith(']'))
-    ]
-    reordered = df[non_sample + sample_cols_in_order].rename(columns=rename_map)
-
-    experiment = ExperimentConfig(
-        conditions_list=conditions_list,
-        number_of_samples_list=[len(s) for s in samples_per_condition],
-    )
-    return reordered, experiment
-
 
 def _handle_file_upload_sidebar() -> None:
     """Render the file uploader in the sidebar. Only processes the file on
@@ -248,20 +143,7 @@ def _handle_file_upload_sidebar() -> None:
         return
 
     try:
-        # Metabolomics Workbench files are multi-section text documents whose
-        # real table only the main pipeline's MW parser can recover.
-        # detect_format() recognizes them by scanning the raw text for the
-        # MS_METABOLITE_DATA markers — it cannot see them from a DataFrame
-        # (a plain read_csv yields a garbage "Unnamed" frame). Detect from the
-        # text first so an MW upload is flagged as MW (and thus blocked) rather
-        # than mis-read as a table the user is asked to hand-pick columns from.
-        text = uploaded.getvalue().decode("utf-8", errors="replace")
-        text_format = FormatDetectionService.detect_format(text)
-        # LipidSearch 5.2 exports are tab-delimited with a .csv extension; sniff
-        # the delimiter so they don't collapse into a single column.
-        delimiter = FormatDetectionService.sniff_delimiter(text)
-        uploaded.seek(0)
-        df = pd.read_csv(uploaded, sep=delimiter)
+        df, detected = AIStudioWorkflow.read_upload(uploaded.getvalue())
         if df.empty:
             st.sidebar.error("The uploaded file is empty.")
             return
@@ -269,12 +151,7 @@ def _handle_file_upload_sidebar() -> None:
         st.session_state.chat_studio_df = df
         st.session_state.chat_studio_df_original = df
         st.session_state.chat_studio_file_id = file_id
-        detected = (
-            text_format
-            if text_format == DataFormat.METABOLOMICS_WORKBENCH
-            else FormatDetectionService.detect_format(df)
-        )
-        st.session_state.chat_studio_detected_format = detected.value
+        st.session_state.chat_studio_detected_format = detected
     except Exception as e:
         st.sidebar.error(f"Could not read CSV: {e}")
 
@@ -301,22 +178,11 @@ def _offer_pipeline_import_sidebar() -> None:
     # has visited Module 2. It carries its own experiment because sample
     # removal renumbers the survivors (see SessionState.qc_experiment).
     qc_df = st.session_state.get("qc_continuation_df")
-    # For the "Raw" option we prefer `standardized_df` over `raw_df`:
-    # both contain the same unfiltered, un-normalized values, but the
-    # standardized version has the column rename applied (e.g. LipidSearch
-    # `MeanArea[s1]` → `intensity[s1]`), which lets AI Studio's auto-
-    # detection + experiment pre-populate run end-to-end. Fall back to
-    # `raw_df` only if standardization hasn't happened yet. Once inputs are
-    # confirmed, `processing_frame` comes first: `experiment` describes it,
-    # not `standardized_df`, when samples were excluded in the sidebar.
     processing = st.session_state.get("processing_frame")
-    raw_for_studio = next(
-        (df for df in (
-            processing.df if processing is not None else None,
-            st.session_state.get("standardized_df"),
-            st.session_state.get("raw_df"),
-        ) if df is not None),
-        None,
+    raw_for_studio = AIStudioWorkflow.raw_import_frame(
+        processing.df if processing is not None else None,
+        st.session_state.get("standardized_df"),
+        st.session_state.get("raw_df"),
     )
     if normalized_df is None and raw_for_studio is None and qc_df is None:
         return
@@ -374,30 +240,15 @@ def _offer_pipeline_import_sidebar() -> None:
             source_key, imported = 'raw', raw_for_studio
         # Read pipeline state BEFORE clearing — _clear_data_sessions() only
         # touches AI Studio state, but reading first keeps the intent clear.
-        # QC output must pair with the QC-updated experiment: PCA sample
-        # removal drops sample columns and renumbers the survivors, so the
-        # pre-QC experiment would claim samples the data no longer has.
-        pipeline_experiment = st.session_state.get('experiment')
-        pipeline_bqc_label = st.session_state.get('bqc_label')
-        # Module 1's output belongs to the setup frozen when Quality Check
-        # opened; the sidebar may have changed since (Quality Check only
-        # warns), and the raw frame follows the sidebar.
         handoff = st.session_state.get('qc_input_frame')
-        if source_key != 'raw' and handoff is not None:
-            pipeline_experiment = handoff.experiment
-            pipeline_bqc_label = st.session_state.get('qc_input_bqc_label')
-        if source_key == 'qc_filtered':
-            qc_experiment = st.session_state.get('qc_experiment')
-            if qc_experiment is not None:
-                pipeline_experiment = qc_experiment
-        # PCA removal can drop the whole BQC condition. Left in place, the
-        # Studio's BQC radio would fall back to its first option and treat
-        # an ordinary condition as BQC.
-        if (
-            pipeline_experiment is not None
-            and pipeline_bqc_label not in pipeline_experiment.conditions_list
-        ):
-            pipeline_bqc_label = None
+        pipeline_experiment, pipeline_bqc_label = AIStudioWorkflow.import_setup(
+            source_key,
+            st.session_state.get('experiment'),
+            st.session_state.get('bqc_label'),
+            handoff.experiment if handoff is not None else None,
+            st.session_state.get('qc_input_bqc_label'),
+            st.session_state.get('qc_experiment'),
+        )
 
         # Reset all studio state + sidebar widgets so the import starts
         # clean (no stale conditions, sample counts, or BQC selections
@@ -579,15 +430,7 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
     """
     st.sidebar.subheader("Sample Columns")
 
-    detected_prefix = _detect_sample_prefix(df)
-    if detected_prefix is not None:
-        head = f'{detected_prefix}['
-        auto_cols = [
-            c for c in df.columns
-            if c.startswith(head) and c.endswith(']')
-        ]
-    else:
-        auto_cols = []
+    detected_prefix, auto_cols = AIStudioWorkflow.detected_sample_columns(df)
 
     output_prefix = detected_prefix or 'intensity'
     numeric = SampleInferenceService.numeric_columns(df)
@@ -833,25 +676,17 @@ def _display_studio_sidebar() -> None:
         st.session_state.studio_applied_snapshot = None
         return
 
-    # Streamlit reruns the script on every interaction. The checkbox stays
-    # True across reruns, so we'd otherwise rebuild the experiment and wipe
-    # per-tab chat sessions on every rerun. Only re-apply when the inputs
-    # actually change by comparing a snapshot.
     kept_conditions = [c for c, samples in zip(condition_names, kept) if samples]
     kept_samples = [samples for samples in kept if samples]
-    snapshot = (
+    snapshot = AIStudioWorkflow.apply_snapshot(
         st.session_state.get('chat_studio_file_id'),
-        output_prefix,
-        tuple(sample_columns),
-        tuple(kept_conditions),
-        tuple(tuple(s) for s in kept_samples),
-        bqc_label,
+        output_prefix, sample_columns, kept_conditions, kept_samples, bqc_label,
     )
     if st.session_state.get('studio_applied_snapshot') == snapshot:
         return
 
     try:
-        reordered_df, experiment = _apply_user_experiment(
+        reordered_df, experiment = AIStudioWorkflow.apply_user_experiment(
             studio_df.drop(columns=[sample_to_col[s] for s in excluded]),
             kept_conditions, kept_samples, sample_to_col, output_prefix,
         )
@@ -1201,7 +1036,9 @@ def display_ai_studio_page() -> None:
                         "chat_studio_experiment"
                     )
                     if experiment is None:
-                        experiment = _derive_experiment(studio_df_processed)
+                        experiment = AIStudioWorkflow.derive_experiment(
+                            studio_df_processed
+                        )
                         st.session_state.chat_studio_experiment = experiment
                     display_viz_chat(studio_df_processed, experiment)
 
