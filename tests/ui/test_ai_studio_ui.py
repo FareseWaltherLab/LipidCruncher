@@ -786,7 +786,6 @@ def exclusion_lifecycle_script():
     or pipeline import does."""
     import streamlit as st
     from app.adapters.streamlit_adapter import StreamlitAdapter
-    from app.ui.ai_studio_page import _clear_data_sessions
     StreamlitAdapter.initialize_session_state()
 
     st.session_state.studio_exclude_samples = ['WT_2']
@@ -795,7 +794,7 @@ def exclusion_lifecycle_script():
         "preserved:"
         f"{st.session_state.get('_nav_preserved_studio_exclude_samples')}"
     )
-    _clear_data_sessions()
+    StreamlitAdapter.clear_studio_data()
     st.text(f"cleared:{'studio_exclude_samples' not in st.session_state}")
 
 

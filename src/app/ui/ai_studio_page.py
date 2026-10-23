@@ -18,7 +18,6 @@ import pandas as pd
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from app.constants import PAGE_APP, PAGE_LANDING
 from app.services.sample_inference import SampleInferenceService
 from app.ui.landing_page import display_logo
 from app.ui.sidebar.confirm_inputs import render_confirm_summary
@@ -28,7 +27,6 @@ from app.ui.ai_chat import (
     display_transform_chat,
     display_viz_chat,
 )
-from app.ui.ai_chat._turn_errors import clear_failure
 from app.workflows.ai_studio import AIStudioWorkflow
 
 logger = logging.getLogger(__name__)
@@ -134,10 +132,10 @@ def _handle_file_upload_sidebar() -> None:
                     "pipeline. Upload a file to replace it."
                 )
                 return
-            _clear_data_sessions()
+            StreamlitAdapter.clear_studio_data()
         return
 
-    st.session_state.chat_studio_upload_kept = False
+    StreamlitAdapter.set_studio_upload_kept(False)
     file_id = f"{uploaded.name}_{uploaded.size}"
     if st.session_state.get("chat_studio_file_id") == file_id:
         return
@@ -147,11 +145,7 @@ def _handle_file_upload_sidebar() -> None:
         if df.empty:
             st.sidebar.error("The uploaded file is empty.")
             return
-        _clear_data_sessions()
-        st.session_state.chat_studio_df = df
-        st.session_state.chat_studio_df_original = df
-        st.session_state.chat_studio_file_id = file_id
-        st.session_state.chat_studio_detected_format = detected
+        StreamlitAdapter.store_studio_upload(df, file_id, detected)
     except Exception as e:
         st.sidebar.error(f"Could not read CSV: {e}")
 
@@ -172,18 +166,10 @@ def _offer_pipeline_import_sidebar() -> None:
     Carries over the pipeline's experiment definition as well, so the
     Studio doesn't fall back to a single dummy condition.
     """
-    normalized_df = st.session_state.get("normalized_df")
-    # The Quality Check module's output: normalized data with high-CoV lipids
-    # dropped and any PCA-flagged samples removed. Only present once the user
-    # has visited Module 2. It carries its own experiment because sample
-    # removal renumbers the survivors (see SessionState.qc_experiment).
-    qc_df = st.session_state.get("qc_continuation_df")
-    processing = st.session_state.get("processing_frame")
-    raw_for_studio = AIStudioWorkflow.raw_import_frame(
-        processing.df if processing is not None else None,
-        st.session_state.get("standardized_df"),
-        st.session_state.get("raw_df"),
-    )
+    frames = StreamlitAdapter.studio_pipeline_frames()
+    qc_df = frames['qc_filtered']
+    normalized_df = frames['normalized']
+    raw_for_studio = frames['raw']
     if normalized_df is None and raw_for_studio is None and qc_df is None:
         return
 
@@ -233,67 +219,12 @@ def _offer_pipeline_import_sidebar() -> None:
     )
     if st.sidebar.button(button_label, key="ai_studio_import_pipeline"):
         if choice.startswith("QC-filtered"):
-            source_key, imported = 'qc_filtered', qc_df
+            source_key = 'qc_filtered'
         elif choice.startswith("Normalized"):
-            source_key, imported = 'normalized', normalized_df
+            source_key = 'normalized'
         else:
-            source_key, imported = 'raw', raw_for_studio
-        # Read pipeline state BEFORE clearing — _clear_data_sessions() only
-        # touches AI Studio state, but reading first keeps the intent clear.
-        handoff = st.session_state.get('qc_input_frame')
-        pipeline_experiment, pipeline_bqc_label = AIStudioWorkflow.import_setup(
-            source_key,
-            st.session_state.get('experiment'),
-            st.session_state.get('bqc_label'),
-            handoff.experiment if handoff is not None else None,
-            st.session_state.get('qc_input_bqc_label'),
-            st.session_state.get('qc_experiment'),
-        )
-
-        # Reset all studio state + sidebar widgets so the import starts
-        # clean (no stale conditions, sample counts, or BQC selections
-        # leaking from a previous import or upload).
-        _clear_data_sessions()
-
-        # Set the new data + provenance.
-        st.session_state.chat_studio_df = imported
-        st.session_state.chat_studio_df_original = imported
-        st.session_state.chat_studio_file_id = "_pipeline_import"
-        st.session_state.chat_studio_pipeline_source = source_key
-        if pipeline_experiment is not None:
-            st.session_state.chat_studio_experiment = pipeline_experiment
-        if pipeline_bqc_label is not None:
-            st.session_state.chat_studio_bqc_label = pipeline_bqc_label
-
-        # Pre-populate every studio_* sidebar widget so the user doesn't
-        # have to re-walk the flow — the next rerun renders the sidebar
-        # with these values, the apply step runs, studio_applied_snapshot
-        # is set, and the data tabs unlock immediately. Works for every
-        # branch because:
-        #   • Normalized imports already have intensity[*]/concentration[*]
-        #     columns matching the experiment.
-        #   • QC-filtered imports are the normalized frame minus high-CoV
-        #     lipids and PCA-removed samples, and pipeline_experiment is the
-        #     QC-updated config, so the columns still match.
-        #   • Raw imports use `standardized_df`, which has the same column
-        #     rename applied, so auto-detection finds intensity[*] too.
-        # Custom Viz is still hard-locked for raw via pipeline_source ==
-        # 'raw' (the data hasn't been cleaned/zero-filtered/normalized).
-        if pipeline_experiment is not None:
-            st.session_state.studio_sample_cols_radio = "Yes"
-            # The pipeline's columns are {prefix}[s1..sN], so the Assign
-            # Conditions table's samples are the experiment's s-labels.
-            st.session_state.studio_conditions = dict(zip(
-                pipeline_experiment.full_samples_list,
-                pipeline_experiment.extensive_conditions_list,
-            ))
-            st.session_state.studio_bqc_radio = (
-                "Yes" if pipeline_bqc_label else "No"
-            )
-            if pipeline_bqc_label:
-                st.session_state.studio_bqc_label_radio = pipeline_bqc_label
-            st.session_state.studio_confirm_checkbox = True
-
+            source_key = 'raw'
+        StreamlitAdapter.import_studio_pipeline_data(source_key)
         st.rerun()
 
 
@@ -573,11 +504,7 @@ def _render_standard_format_advisory_sidebar() -> None:
     if st.sidebar.button(
         "Go to Main Pipeline", key="ai_studio_goto_main_from_advisory"
     ):
-        # Clear AI Studio state — the user has chosen to take the data
-        # through the main pipeline instead. They'll re-import via the
-        # 'Import from main pipeline' control after Module 1 finishes.
-        _clear_data_sessions()
-        st.session_state.page = PAGE_APP
+        StreamlitAdapter.send_studio_upload_to_main_pipeline()
         st.rerun()
 
 
@@ -670,10 +597,7 @@ def _display_studio_sidebar() -> None:
         condition_names, kept, [s for s in sample_names if s in excluded],
     )
     if not confirmed:
-        # Unchecking the box must re-lock the data-dependent tabs, which gate
-        # on `studio_applied_snapshot`. Clear it so the tabs turn inactive;
-        # re-checking re-applies because the stored snapshot is now None.
-        st.session_state.studio_applied_snapshot = None
+        StreamlitAdapter.unconfirm_studio_experiment()
         return
 
     kept_conditions = [c for c, samples in zip(condition_names, kept) if samples]
@@ -694,84 +618,11 @@ def _display_studio_sidebar() -> None:
         st.sidebar.error(str(e))
         return
 
-    st.session_state.chat_studio_df = reordered_df
-    st.session_state.chat_studio_experiment = experiment
-    st.session_state.chat_studio_bqc_label = bqc_label
-    # Persist the sample-column names so the sandbox can pre-coerce
-    # them to numeric before exposing `df` to AI code. Two lists — one
-    # for the original df (used by Transform) and one for the renamed df
-    # (used by Data Questions and Custom Viz). The renamed names are
-    # always `{output_prefix}[s1..sN]` derived from the experiment.
-    st.session_state.chat_studio_sample_columns_original = list(sample_columns)
-    st.session_state.chat_studio_sample_columns_renamed = [
-        f'{output_prefix}[{s}]' for s in experiment.full_samples_list
-    ]
-    # Data Questions and Custom Viz read the renamed df, whose columns
-    # change on apply, so their sessions start over. Transform reads the
-    # original (which doesn't change on apply); it is still cleared on a
-    # fresh upload via _clear_data_sessions().
-    st.session_state.chat_viz_session = None
-    st.session_state.chat_viz_figures = {}
-    st.session_state.chat_data_questions_session = None
-    st.session_state.chat_questions_result_df = None
-    st.session_state.studio_applied_snapshot = snapshot
-    st.rerun()
-
-
-def _clear_data_sessions() -> None:
-    """Reset all data-dependent chat sessions and sidebar widget keys when
-    the underlying data changes (new upload, pipeline import, navigation).
-    Widget keys must be popped (not assigned None) — Streamlit refuses
-    direct assignment to a widget's key after the widget has rendered.
-    """
-    st.session_state.chat_studio_df = None
-    st.session_state.chat_studio_df_original = None
-    st.session_state.chat_studio_file_id = None
-    st.session_state.chat_studio_upload_kept = False
-    st.session_state.chat_studio_experiment = None
-    st.session_state.chat_studio_pipeline_source = None
-    st.session_state.chat_studio_bqc_label = None
-    st.session_state.chat_studio_detected_format = None
-    st.session_state.chat_studio_sample_columns_original = None
-    st.session_state.chat_studio_sample_columns_renamed = None
-    st.session_state.studio_applied_snapshot = None
-    # Sidebar widget keys, and the Assign Conditions table's values.
-    # Pre-populated values from a pipeline import would otherwise leak into
-    # a subsequent fresh upload or different import.
-    static_widget_keys = (
-        'studio_sample_cols_radio', 'studio_sample_family',
-        'studio_sample_cols_select', 'studio_conditions',
-        'studio_conditions_editor',
-        'studio_bqc_radio', 'studio_bqc_label_radio',
-        'studio_exclude_samples', 'studio_confirm_checkbox',
+    StreamlitAdapter.store_studio_experiment(
+        reordered_df, experiment, bqc_label, output_prefix, sample_columns,
+        snapshot,
     )
-    for key in static_widget_keys:
-        st.session_state.pop(key, None)
-    # Cross-page snapshots written by preserve_ai_studio_widgets() would
-    # otherwise re-populate the sidebar on the next rerun via
-    # restore_navigation_widgets(), defeating the clear.
-    nav_snapshot_keys = [
-        key for key in list(st.session_state.keys())
-        if isinstance(key, str)
-        and key.startswith('_nav_preserved_studio_')
-    ]
-    for key in nav_snapshot_keys:
-        st.session_state.pop(key, None)
-    # Per-tab sessions
-    st.session_state.chat_data_questions_session = None
-    st.session_state.chat_transform_session = None
-    st.session_state.chat_transform_diagnostic = None
-    st.session_state.chat_viz_session = None
-    st.session_state.chat_viz_validation = None
-    st.session_state.chat_questions_result_df = None
-    st.session_state.chat_transform_result = None
-    st.session_state.chat_transform_report = None
-    st.session_state.chat_transform_refused_metadata = ()
-    st.session_state.chat_transform_kept_columns = ()
-    st.session_state.chat_viz_figures = {}
-    # Each data tab's last failed turn, shown with a Retry, was on the old data.
-    for tab in ('dq', 'transform', 'viz'):
-        clear_failure(tab)
+    st.rerun()
 
 
 # =============================================================================
@@ -998,13 +849,9 @@ def display_ai_studio_page() -> None:
                 st.info(not_confirmed_msg)
             else:
                 # Validate Module 1 output before showing viz chat
-                from app.workflows.ai_chat import AIChatWorkflow
-                validation = st.session_state.get('chat_viz_validation')
-                if validation is None:
-                    validation = AIChatWorkflow.validate_module1_output(
-                        studio_df_processed
-                    )
-                    st.session_state.chat_viz_validation = validation
+                validation = StreamlitAdapter.studio_viz_validation(
+                    studio_df_processed
+                )
 
                 if not validation.is_valid:
                     missing = []
@@ -1032,14 +879,9 @@ def display_ai_studio_page() -> None:
                         "to build custom visualizations."
                     )
                 else:
-                    experiment = st.session_state.get(
-                        "chat_studio_experiment"
+                    experiment = StreamlitAdapter.studio_viz_experiment(
+                        studio_df_processed
                     )
-                    if experiment is None:
-                        experiment = AIStudioWorkflow.derive_experiment(
-                            studio_df_processed
-                        )
-                        st.session_state.chat_studio_experiment = experiment
                     display_viz_chat(studio_df_processed, experiment)
 
         # Navigation
@@ -1060,24 +902,7 @@ def _display_navigation() -> None:
             if st.button(
                 "← Back to Main Pipeline", key="ai_studio_back_main"
             ):
-                # When the current Studio data came from a pipeline
-                # import, clear it on exit so the next re-entry shows a
-                # fresh import-choice sidebar (the user can pull raw or
-                # normalized data again). Direct uploads have no
-                # pipeline source and are preserved across the round-
-                # trip via the widget snapshot — Streamlit GCs studio_*
-                # keys while the AI Studio page isn't rendering, and
-                # restore_navigation_widgets() re-hydrates them on the
-                # way back. The uploader itself comes back empty.
-                if st.session_state.get(
-                    'chat_studio_pipeline_source'
-                ) is not None:
-                    _clear_data_sessions()
-                else:
-                    StreamlitAdapter.preserve_ai_studio_widgets()
-                    if st.session_state.get('chat_studio_df_original') is not None:
-                        st.session_state.chat_studio_upload_kept = True
-                st.session_state.page = PAGE_APP
+                StreamlitAdapter.leave_studio_for_main_pipeline()
                 st.rerun()
         with col2:
             _render_back_to_home_button()
@@ -1090,8 +915,5 @@ def _render_back_to_home_button() -> None:
     button can appear in either a 1-col or 2-col layout depending on
     whether 'Back to Main Pipeline' is also shown."""
     if st.button("Back to Home", key="ai_studio_back_home"):
-        # Clear all studio-specific state
-        _clear_data_sessions()
-        st.session_state.chat_lc_questions_session = None
-        st.session_state.page = PAGE_LANDING
+        StreamlitAdapter.leave_studio_for_home()
         st.rerun()
