@@ -207,7 +207,8 @@ LipidCruncher/
 │       │       ├── fach.py
 │       │       ├── pathway_viz.py
 │       │       ├── volcano_plot.py
-│       │       └── lipidomic_heatmap.py
+│       │       ├── lipidomic_heatmap.py
+│       │       └── heatmap_layout.py        #   condition strip, class column, square cells
 │       ├── workflows/                       # Orchestration layer
 │       │   ├── data_ingestion.py            #   DataIngestionWorkflow
 │       │   ├── normalization.py             #   NormalizationWorkflow

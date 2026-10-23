@@ -211,24 +211,14 @@ class ChainLengthPlotterService:
         n_conditions = len(conditions)
 
         if n_conditions == 0:
-            fig = go.Figure()
-            fig.update_layout(
-                title="No chain length data available",
-                height=CHART_HEIGHT_PER_CONDITION,
-            )
-            return fig
+            return _empty_chain_length_figure()
 
         # Check if any condition has data
         has_any_data = any(
             d.records for d in per_condition_data.values()
         )
         if not has_any_data:
-            fig = go.Figure()
-            fig.update_layout(
-                title="No chain length data available",
-                height=CHART_HEIGHT_PER_CONDITION,
-            )
-            return fig
+            return _empty_chain_length_figure()
 
         # Build subplot titles: two per condition row
         subplot_titles = []
@@ -265,56 +255,10 @@ class ChainLengthPlotterService:
             data = per_condition_data[cond]
             if not data.records:
                 continue
-
-            rec_df = pd.DataFrame(data.records)
-            # Scale markers using global concentration range
-            size_arr = _scale_marker_sizes(
-                rec_df['MeanConcentration'].values, global_conc,
+            _add_condition_row(
+                fig, row_idx, cond, data, global_conc, color_mapping,
+                legend_added,
             )
-
-            for i, rec_row in rec_df.iterrows():
-                cls = rec_row['ClassKey']
-                color = color_mapping.get(cls, '#333333')
-                show_legend = cls not in legend_added
-                if show_legend:
-                    legend_added.add(cls)
-
-                shared = dict(
-                    mode='markers',
-                    name=cls,
-                    legendgroup=cls,
-                    showlegend=show_legend,
-                    marker=dict(
-                        color=color,
-                        size=size_arr[i],
-                        opacity=MARKER_OPACITY,
-                        line=dict(width=0.5, color='white'),
-                    ),
-                    hovertemplate=(
-                        f"<b>{cls}</b> ({cond})<br>"
-                        f"Carbons: {int(rec_row['TotalCarbons'])}<br>"
-                        f"Double bonds: {int(rec_row['TotalDoubleBonds'])}<br>"
-                        f"Mean concentration: {rec_row['MeanConcentration']:.2f}"
-                        "<extra></extra>"
-                    ),
-                )
-
-                # Left panel: chain length
-                fig.add_trace(
-                    go.Scatter(
-                        x=[cls], y=[rec_row['TotalCarbons']], **shared,
-                    ),
-                    row=row_idx, col=1,
-                )
-
-                # Right panel: double bonds
-                fig.add_trace(
-                    go.Scatter(
-                        x=[cls], y=[rec_row['TotalDoubleBonds']],
-                        **{**shared, 'showlegend': False},
-                    ),
-                    row=row_idx, col=2,
-                )
 
         total_height = CHART_HEIGHT_PER_CONDITION * n_conditions
         fig.update_layout(
@@ -335,23 +279,7 @@ class ChainLengthPlotterService:
             margin=dict(b=max(120, 50 * len(legend_added) // 6)),
         )
 
-        for row_idx in range(1, n_conditions + 1):
-            fig.update_xaxes(
-                title_text='Lipid Class', showgrid=False,
-                row=row_idx, col=1,
-            )
-            fig.update_xaxes(
-                title_text='Lipid Class', showgrid=False,
-                row=row_idx, col=2,
-            )
-            fig.update_yaxes(
-                title_text='Total Carbon Chain Length',
-                gridcolor='lightgray', row=row_idx, col=1,
-            )
-            fig.update_yaxes(
-                title_text='Total Double Bonds',
-                gridcolor='lightgray', row=row_idx, col=2,
-            )
+        _style_condition_axes(fig, n_conditions)
 
         return fig
 
@@ -366,6 +294,101 @@ class ChainLengthPlotterService:
             Dict mapping class name to hex color string.
         """
         return generate_class_color_mapping(classes)
+
+
+def _empty_chain_length_figure() -> go.Figure:
+    """The placeholder drawn when there is nothing to plot."""
+    fig = go.Figure()
+    fig.update_layout(
+        title="No chain length data available",
+        height=CHART_HEIGHT_PER_CONDITION,
+    )
+    return fig
+
+
+def _add_condition_row(
+    fig: go.Figure,
+    row_idx: int,
+    cond: str,
+    data: ChainLengthData,
+    global_conc: np.ndarray,
+    color_mapping: Dict[str, str],
+    legend_added: set,
+) -> None:
+    """Draw one condition's two panels: chain length (left), double bonds
+    (right). Markers are scaled on the global concentration range so bubble
+    sizes compare across rows; a class enters the legend the first time it is
+    drawn (``legend_added`` is updated in place)."""
+    rec_df = pd.DataFrame(data.records)
+    # Scale markers using global concentration range
+    size_arr = _scale_marker_sizes(
+        rec_df['MeanConcentration'].values, global_conc,
+    )
+
+    for i, rec_row in rec_df.iterrows():
+        cls = rec_row['ClassKey']
+        color = color_mapping.get(cls, '#333333')
+        show_legend = cls not in legend_added
+        if show_legend:
+            legend_added.add(cls)
+
+        shared = dict(
+            mode='markers',
+            name=cls,
+            legendgroup=cls,
+            showlegend=show_legend,
+            marker=dict(
+                color=color,
+                size=size_arr[i],
+                opacity=MARKER_OPACITY,
+                line=dict(width=0.5, color='white'),
+            ),
+            hovertemplate=(
+                f"<b>{cls}</b> ({cond})<br>"
+                f"Carbons: {int(rec_row['TotalCarbons'])}<br>"
+                f"Double bonds: {int(rec_row['TotalDoubleBonds'])}<br>"
+                f"Mean concentration: {rec_row['MeanConcentration']:.2f}"
+                "<extra></extra>"
+            ),
+        )
+
+        # Left panel: chain length
+        fig.add_trace(
+            go.Scatter(
+                x=[cls], y=[rec_row['TotalCarbons']], **shared,
+            ),
+            row=row_idx, col=1,
+        )
+
+        # Right panel: double bonds
+        fig.add_trace(
+            go.Scatter(
+                x=[cls], y=[rec_row['TotalDoubleBonds']],
+                **{**shared, 'showlegend': False},
+            ),
+            row=row_idx, col=2,
+        )
+
+
+def _style_condition_axes(fig: go.Figure, n_conditions: int) -> None:
+    """Axis titles and grid for every condition row's two panels."""
+    for row_idx in range(1, n_conditions + 1):
+        fig.update_xaxes(
+            title_text='Lipid Class', showgrid=False,
+            row=row_idx, col=1,
+        )
+        fig.update_xaxes(
+            title_text='Lipid Class', showgrid=False,
+            row=row_idx, col=2,
+        )
+        fig.update_yaxes(
+            title_text='Total Carbon Chain Length',
+            gridcolor='lightgray', row=row_idx, col=1,
+        )
+        fig.update_yaxes(
+            title_text='Total Double Bonds',
+            gridcolor='lightgray', row=row_idx, col=2,
+        )
 
 
 def _scale_marker_sizes(
