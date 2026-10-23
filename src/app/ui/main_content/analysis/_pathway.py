@@ -60,22 +60,7 @@ def _display_pathway_viz(
         st.markdown("---")
         st.markdown("#### Data Selection")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            control = st.selectbox(
-                "Control Condition",
-                valid_conditions,
-                index=0,
-                key='pathway_control',
-            )
-        with col2:
-            exp_options = [c for c in valid_conditions if c != control]
-            experimental = st.selectbox(
-                "Experimental Condition",
-                exp_options,
-                index=0,
-                key='pathway_experimental',
-            )
+        control, experimental = _select_conditions(valid_conditions)
 
         if control == experimental:
             st.warning("Control and experimental conditions must be different.")
@@ -131,29 +116,60 @@ def _display_pathway_viz(
         st.plotly_chart(figure, width='stretch')
         _publish('pathway', figure)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            plotly_svg_download_button(
-                figure,
-                f"pathway_visualization_{control}_vs_{experimental}.svg",
-                key="analysis_svg_pathway",
-            )
-        with col2:
-            summary_rows = []
-            if pathway_dict and 'class' in pathway_dict:
-                for i, cls in enumerate(pathway_dict['class']):
-                    summary_rows.append({
-                        'Lipid Class': cls,
-                        'Fold Change': pathway_dict['abundance ratio'][i],
-                        'Saturation Ratio': pathway_dict['saturated fatty acids ratio'][i],
-                    })
-            summary_df = pd.DataFrame(summary_rows)
-            csv_download_button(
-                summary_df,
-                "pathway_visualization_data.csv",
-                key="analysis_csv_pathway",
-            )
+        summary_rows = _pathway_downloads(
+            figure, pathway_dict, control, experimental,
+        )
 
         st.markdown(f"**Data Summary:** Comparing {experimental} to {control}")
         if summary_rows:
             st.dataframe(pd.DataFrame(summary_rows), width='stretch')
+
+
+def _select_conditions(valid_conditions: list) -> tuple:
+    """Control and experimental condition pickers; returns ``(control, experimental)``."""
+    col1, col2 = st.columns(2)
+    with col1:
+        control = st.selectbox(
+            "Control Condition",
+            valid_conditions,
+            index=0,
+            key='pathway_control',
+        )
+    with col2:
+        exp_options = [c for c in valid_conditions if c != control]
+        experimental = st.selectbox(
+            "Experimental Condition",
+            exp_options,
+            index=0,
+            key='pathway_experimental',
+        )
+    return control, experimental
+
+
+def _pathway_downloads(
+    figure, pathway_dict: dict, control: str, experimental: str,
+) -> list:
+    """SVG and CSV downloads side by side; returns the CSV's rows."""
+    col1, col2 = st.columns(2)
+    with col1:
+        plotly_svg_download_button(
+            figure,
+            f"pathway_visualization_{control}_vs_{experimental}.svg",
+            key="analysis_svg_pathway",
+        )
+    with col2:
+        summary_rows = []
+        if pathway_dict and 'class' in pathway_dict:
+            for i, cls in enumerate(pathway_dict['class']):
+                summary_rows.append({
+                    'Lipid Class': cls,
+                    'Fold Change': pathway_dict['abundance ratio'][i],
+                    'Saturation Ratio': pathway_dict['saturated fatty acids ratio'][i],
+                })
+        summary_df = pd.DataFrame(summary_rows)
+        csv_download_button(
+            summary_df,
+            "pathway_visualization_data.csv",
+            key="analysis_csv_pathway",
+        )
+    return summary_rows
