@@ -2,8 +2,7 @@
 
 Example-question answers are cached process-wide and served to every user.
 Regression: an answer generated after earlier turns was cached too, so one
-user could steer it with those turns and have it served to everyone else
-(and used as the fallback when the API is down)."""
+user could steer it with those turns and have it served to everyone else."""
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -67,3 +66,26 @@ def test_example_after_earlier_turns_is_not_cached(cache_writes):
     at = _run(with_history=True)
     assert not at.exception
     assert cache_writes == []
+
+
+def test_a_failed_call_shows_the_error_and_a_retry(monkeypatch):
+    """A cached example answer is served before the AI is called, so after
+    a failed call there is none to fall back on: the error and Retry show."""
+    lookups = []
+
+    def _lookup(question):
+        lookups.append(question)
+        return None
+
+    def _down(user_message, session):
+        raise RuntimeError("API down")
+
+    monkeypatch.setattr(StreamlitAdapter, "get_cached_lc_answer", staticmethod(_lookup))
+    monkeypatch.setattr(StreamlitAdapter, "stream_ai_lc_questions", staticmethod(_down))
+    at = _run(with_history=False)
+    assert not at.exception
+    assert lookups == [EXAMPLE]
+    messages = at.session_state['chat_lc_questions_session'].messages
+    assert messages[-1].content == "Sorry, I encountered an error: API down"
+    assert at.session_state['chat_lc_retry_input'] == EXAMPLE
+    assert [b for b in at.button if b.label == "Retry last question"]

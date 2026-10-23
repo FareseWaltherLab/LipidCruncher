@@ -97,8 +97,8 @@ def render_lc_questions_chat() -> None:
 
         # The example questions describe the app (not the user's data), so
         # their answers are cached and reused across sessions — instant on
-        # repeat, and a fallback if the API is unavailable. Free-typed
-        # questions always go live (they may depend on conversation context).
+        # repeat. Free-typed questions always go live (they may depend on
+        # conversation context).
         # An answer is only cached when the example opened the conversation:
         # earlier turns can steer it, and the cache is served to every user.
         is_example = user_input in _EXAMPLE_PROMPTS
@@ -148,7 +148,7 @@ def render_lc_questions_chat() -> None:
                     )
                     st.markdown(safe_markdown(full_text))
                 elif is_example and not session.messages:
-                    # Cache the canonical answer for instant reuse / fallback.
+                    # Cache the canonical answer for instant reuse.
                     StreamlitAdapter.set_cached_lc_answer(user_input, full_text)
 
                 # Persist the accumulated answer to the session.
@@ -169,50 +169,20 @@ def render_lc_questions_chat() -> None:
                 error_text = str(e)
 
         if error_text:
-            # If the API failed but we have a cached answer for this example
-            # question, serve it instead of an error.
-            fallback = (
-                StreamlitAdapter.get_cached_lc_answer(user_input)
-                if is_example else None
+            user_msg = ChatMessage(role="user", content=user_input)
+            error_msg = ChatMessage(
+                role="assistant",
+                content=f"Sorry, I encountered an error: {error_text}",
             )
-            if fallback is not None:
-                fallback_text = (
-                    fallback
-                    + "\n\n_(The AI service is unavailable right now — "
-                    "showing a previously cached answer.)_"
-                )
-                with st.chat_message("assistant"):
-                    st.markdown(safe_markdown(fallback_text))
-                st.session_state.chat_lc_questions_session = (
-                    session
-                    .add_message(ChatMessage(role="user", content=user_input))
-                    .add_message(
-                        ChatMessage(role="assistant", content=fallback_text)
-                    )
-                )
-                st.session_state.pop('chat_lc_retry_input', None)
-                record_turn(
-                    "lc_questions", user_input, fallback_text,
-                    assistant_msg=(
-                        st.session_state.chat_lc_questions_session.messages[-1]
-                    ),
-                    history=session.messages,
-                )
-            else:
-                user_msg = ChatMessage(role="user", content=user_input)
-                error_msg = ChatMessage(
-                    role="assistant",
-                    content=f"Sorry, I encountered an error: {error_text}",
-                )
-                current = st.session_state.chat_lc_questions_session
-                st.session_state.chat_lc_questions_session = (
-                    current.add_message(user_msg).add_message(error_msg)
-                )
-                # Remember the failed input so the Retry button can re-fire it.
-                st.session_state.chat_lc_retry_input = user_input
-                record_turn(
-                    "lc_questions", user_input, "", error=error_text,
-                    history=session.messages,
-                )
+            current = st.session_state.chat_lc_questions_session
+            st.session_state.chat_lc_questions_session = (
+                current.add_message(user_msg).add_message(error_msg)
+            )
+            # Remember the failed input so the Retry button can re-fire it.
+            st.session_state.chat_lc_retry_input = user_input
+            record_turn(
+                "lc_questions", user_input, "", error=error_text,
+                history=session.messages,
+            )
 
         st.rerun()

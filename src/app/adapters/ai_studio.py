@@ -155,8 +155,7 @@ def _lc_answer_cache() -> Dict[str, str]:
 
     Keyed by normalized question text. Shared across sessions because these
     answers describe the application itself and do not depend on user data,
-    so reuse is both correct and desirable. Doubles as a fallback when the
-    AI service is unavailable.
+    so reuse is both correct and desirable.
     """
     return {}
 
