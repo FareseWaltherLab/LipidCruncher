@@ -61,45 +61,7 @@ def _display_lipidomic_heatmap(
             return
 
         section_header("⚙️ Heatmap Settings")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            heatmap_type = st.radio(
-                "Heatmap Type",
-                ["Clustered", "Regular", "Grouped by Class", "Aggregated by Class"],
-                index=0,
-                key='heatmap_type',
-                help=(
-                    "Clustered: one row per species, ordered by hierarchical "
-                    "clustering. "
-                    "Regular: one row per species, in input order. "
-                    "Grouped by Class: one row per species, grouped into lipid "
-                    "class blocks and ranked by fold change inside each block "
-                    "when the Log2 Fold Change colour scale is on, "
-                    f"up to {GROUPED_PAGE_SIZE} species per page. "
-                    "Aggregated by Class: one row per lipid class, summing the "
-                    "concentrations of its species."
-                ),
-            )
-        with col2:
-            if heatmap_type == "Clustered":
-                n_clusters = st.slider(
-                    "Number of Clusters",
-                    min_value=2,
-                    max_value=10,
-                    value=5,
-                    key='heatmap_n_clusters',
-                )
-            else:
-                n_clusters = 3
-                st.markdown("")  # Alignment placeholder
-
-        heatmap_type_value = {
-            "Clustered": 'clustered',
-            "Regular": 'regular',
-            "Grouped by Class": 'class_grouped',
-            "Aggregated by Class": 'class_aggregated',
-        }[heatmap_type]
+        heatmap_type_value, n_clusters = _select_heatmap_type()
 
         color_scale, control_condition = _select_color_scale(
             selected_conditions, heatmap_type_value,
@@ -154,48 +116,112 @@ def _display_lipidomic_heatmap(
         )
 
         if heatmap_type_value == 'class_grouped' and species_total > page_size:
-            start, end = LipidomicHeatmapPlotterService.page_bounds(
+            _page_caption(
                 species_total, species_page, page_size,
-            )
-            if color_scale == 'log2fc':
-                ranked = (
-                    'largest increases' if sort_direction == 'desc'
-                    else 'largest decreases'
-                )
-                order_text = (
-                    "ordered by lipid class and then by fold change within "
-                    f"each class, so a class's {ranked} sit at the top of "
-                    "its block"
-                )
-            else:
-                order_text = "ordered by lipid class"
-            st.caption(
-                f"Showing species {start + 1}–{end} of {species_total}, "
-                f"{order_text}. The CSV download below contains all "
-                f"{species_total}, in the order they appear in your data."
+                sorted_by_fc=(color_scale == 'log2fc'),
+                sort_direction=sort_direction,
             )
         _publish('heatmap', result.figure)
 
         if result.z_scores_df is not None:
-            # Clustered rows go out in the figure's order, with their cluster.
-            csv_df = (
-                result.clustered_df if result.clustered_df is not None
-                else result.z_scores_df
-            )
-            display_export_buttons(
-                result.figure, csv_df,
-                f"lipidomic_{heatmap_type_value}_heatmap.svg",
-                f"{heatmap_type_value}_heatmap_data.csv",
-                "analysis_svg_heatmap", "analysis_csv_heatmap",
-                sample_names=names_for('qc'),
-            )
+            _export_heatmap(result, heatmap_type_value)
 
         # Cluster composition (clustered mode only)
-        if heatmap_type == "Clustered":
+        if heatmap_type_value == 'clustered':
             _display_cluster_composition(
                 result, df, experiment, selected_conditions, selected_classes,
                 n_clusters,
             )
+
+
+def _select_heatmap_type() -> tuple:
+    """The heatmap-type radio and, for Clustered, the cluster-count slider.
+
+    Returns ``(heatmap_type, n_clusters)`` with the type as the workflow's
+    value ('clustered', 'regular', 'class_grouped', 'class_aggregated').
+    """
+    col1, col2 = st.columns(2)
+    with col1:
+        heatmap_type = st.radio(
+            "Heatmap Type",
+            ["Clustered", "Regular", "Grouped by Class", "Aggregated by Class"],
+            index=0,
+            key='heatmap_type',
+            help=(
+                "Clustered: one row per species, ordered by hierarchical "
+                "clustering. "
+                "Regular: one row per species, in input order. "
+                "Grouped by Class: one row per species, grouped into lipid "
+                "class blocks and ranked by fold change inside each block "
+                "when the Log2 Fold Change colour scale is on, "
+                f"up to {GROUPED_PAGE_SIZE} species per page. "
+                "Aggregated by Class: one row per lipid class, summing the "
+                "concentrations of its species."
+            ),
+        )
+    with col2:
+        if heatmap_type == "Clustered":
+            n_clusters = st.slider(
+                "Number of Clusters",
+                min_value=2,
+                max_value=10,
+                value=5,
+                key='heatmap_n_clusters',
+            )
+        else:
+            n_clusters = 3
+            st.markdown("")  # Alignment placeholder
+
+    heatmap_type_value = {
+        "Clustered": 'clustered',
+        "Regular": 'regular',
+        "Grouped by Class": 'class_grouped',
+        "Aggregated by Class": 'class_aggregated',
+    }[heatmap_type]
+    return heatmap_type_value, n_clusters
+
+
+def _page_caption(
+    species_total: int, species_page: int, page_size: int,
+    sorted_by_fc: bool, sort_direction: str,
+) -> None:
+    """Say which species the class-grouped page shows, and in what order."""
+    start, end = LipidomicHeatmapPlotterService.page_bounds(
+        species_total, species_page, page_size,
+    )
+    if sorted_by_fc:
+        ranked = (
+            'largest increases' if sort_direction == 'desc'
+            else 'largest decreases'
+        )
+        order_text = (
+            "ordered by lipid class and then by fold change within "
+            f"each class, so a class's {ranked} sit at the top of "
+            "its block"
+        )
+    else:
+        order_text = "ordered by lipid class"
+    st.caption(
+        f"Showing species {start + 1}–{end} of {species_total}, "
+        f"{order_text}. The CSV download below contains all "
+        f"{species_total}, in the order they appear in your data."
+    )
+
+
+def _export_heatmap(result: 'HeatmapResult', heatmap_type_value: str) -> None:
+    """SVG and CSV downloads; clustered rows go out in the figure's order,
+    with their cluster."""
+    csv_df = (
+        result.clustered_df if result.clustered_df is not None
+        else result.z_scores_df
+    )
+    display_export_buttons(
+        result.figure, csv_df,
+        f"lipidomic_{heatmap_type_value}_heatmap.svg",
+        f"{heatmap_type_value}_heatmap_data.csv",
+        "analysis_svg_heatmap", "analysis_csv_heatmap",
+        sample_names=names_for('qc'),
+    )
 
 
 def _select_color_scale(
