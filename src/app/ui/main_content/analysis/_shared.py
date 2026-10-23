@@ -220,6 +220,7 @@ def _display_condition_class_selectors(
     df: pd.DataFrame,
     key_prefix: str,
     conditions: Optional[List[str]] = None,
+    bqc_label: Optional[str] = None,
 ) -> Tuple[List[str], List[str]]:
     """Display condition and class multiselect widgets.
 
@@ -229,6 +230,8 @@ def _display_condition_class_selectors(
         key_prefix: Prefix for widget keys.
         conditions: Conditions to offer. Defaults to those with two or more
             samples, which statistical tests need.
+        bqc_label: Offered but not selected by default: BQC samples are a
+            pooled technical control, not a group to compare.
 
     Returns:
         Tuple of (selected_conditions, selected_classes).
@@ -246,7 +249,7 @@ def _display_condition_class_selectors(
         selected_conditions = st.multiselect(
             "Conditions",
             valid_conditions,
-            default=valid_conditions,
+            default=[c for c in valid_conditions if c != bqc_label],
             key=f'{key_prefix}_conditions',
         )
     with col2:

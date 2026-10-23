@@ -1,5 +1,7 @@
 """Feature 1: Abundance Bar Chart analysis."""
 
+from typing import Optional
+
 import pandas as pd
 import streamlit as st
 
@@ -19,8 +21,12 @@ from app.ui.main_content.analysis._shared import (
 )
 
 
-def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
-    """Display abundance bar chart analysis."""
+def _display_bar_chart(
+    df: pd.DataFrame, experiment: ExperimentConfig, bqc_label: Optional[str] = None,
+) -> None:
+    """Display abundance bar chart analysis. The BQC condition is left out
+    of the default selection, so out of the statistics unless the user adds
+    it."""
     _clear_pdf_plots('bar_chart')
     _clear_statistics('Abundance bar chart')
     with st.expander("Class Concentration Bar Chart", expanded=False):
@@ -29,7 +35,7 @@ def _display_bar_chart(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
         )
 
         selected_conditions, selected_classes = _display_condition_class_selectors(
-            experiment, df, 'bar',
+            experiment, df, 'bar', bqc_label=bqc_label,
         )
 
         if not selected_conditions:

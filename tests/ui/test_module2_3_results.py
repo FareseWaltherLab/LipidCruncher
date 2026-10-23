@@ -233,8 +233,8 @@ class TestClassLevel:
         at = _to_analysis()
         totals = _class_totals(at)
         bar = _csv(captured_downloads, 'analysis_csv_bar').set_index('ClassKey')
-        for condition, samples in SAMPLES.items():
-            t = totals[_columns(samples)].loc[bar.index]
+        for condition in ('WT', 'ADGAT-DKO'):  # BQC is not selected by default
+            t = totals[_columns(SAMPLES[condition])].loc[bar.index]
             np.testing.assert_allclose(bar[f'mean_AUC_{condition}'], t.mean(axis=1))
             np.testing.assert_allclose(bar[f'std_AUC_{condition}'], t.std(axis=1, ddof=1))
             np.testing.assert_allclose(
@@ -243,6 +243,21 @@ class TestClassLevel:
             np.testing.assert_allclose(
                 bar[f'log10_std_AUC_{condition}'], np.log10(t).std(axis=1, ddof=1),
             )
+
+    def test_bar_chart_leaves_bqc_out_by_default(self, captured_downloads):
+        """User decision (2026-10-23): BQC samples are a pooled technical
+        control, so the bar chart's default conditions, and so its
+        statistics, leave them out. They can be added back."""
+        at = _to_analysis()
+        conditions = at.multiselect(key='bar_conditions')
+        assert conditions.options == ['WT', 'ADGAT-DKO', 'BQC']
+        assert conditions.value == ['WT', 'ADGAT-DKO']
+        bar = _csv(captured_downloads, 'analysis_csv_bar')
+        assert not [c for c in bar.columns if 'BQC' in c]
+
+        conditions.set_value(['WT', 'ADGAT-DKO', 'BQC']).run()
+        _ok(at)
+        assert 'mean_AUC_BQC' in _csv(captured_downloads, 'analysis_csv_bar').columns
 
     def test_pie_charts_share_of_class_totals(self, captured_downloads):
         at = _to_analysis()

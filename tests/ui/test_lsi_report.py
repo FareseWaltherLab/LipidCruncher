@@ -295,12 +295,12 @@ class TestStatisticsReported:
     def test_bar_chart_defaults(self, captured_downloads):
         _run_to_analysis('None (pre-normalized data)')
         stats = _statistics(_report(captured_downloads), 'Abundance bar chart')
-        # Generic sample: 3 conditions, Auto mode, 15 classes.
+        # Generic sample: WT and ADGAT-DKO (BQC is not selected by
+        # default), Auto mode, 15 classes.
         assert stats == {
-            'tests': 'Alexander-Govern',
+            'tests': "Welch's t-test",
             'number of tests': '15',
             'multiple testing correction': 'Benjamini-Hochberg FDR',
-            'post-hoc': "Tukey's HSD",
             'data transformation': 'log10',
             'significance': 'adjusted p ≤ 0.05',
         }

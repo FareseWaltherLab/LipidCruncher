@@ -286,6 +286,8 @@ Level 2 (pairwise comparisons):
 
 For the abundance bar chart analysis, statistics are calculated directly on the appropriate scale: linear scale uses mean and standard deviation of untransformed values, while log10 scale uses statistics computed from log10-transformed values. This ensures mathematically accurate error bar representation on each scale.
 
+The bar chart's conditions start as every condition with two or more samples except BQC: BQC samples are pooled technical replicates, not a group to compare, so by default they are neither plotted nor included in the statistical tests. The user can add them.
+
 ## S5.4 Fold Change Calculation
 
 For volcano plots, fold change is calculated using the original (non-transformed) concentration values by dividing the mean of the experimental group by the mean of the control group. The log2 of this ratio is then computed for visualization. Statistical tests are performed on log10-transformed values to improve normality, while fold change is calculated from original values for biological interpretability.
