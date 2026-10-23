@@ -4,7 +4,7 @@ export, with a sample row and a factors row above the data.
 """
 
 import csv
-from typing import Union
+from typing import List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -31,63 +31,26 @@ def process(
         return StandardizationResult(False, "Invalid data section markers")
 
     try:
-        data_section = text_data[start_idx:end_idx].strip().split('\n')
-        data_section = [line.strip() for line in data_section if line.strip()]
-        data_section = [
-            line for line in data_section if 'MS_METABOLITE_DATA_START' not in line
-        ]
-
-        if len(data_section) < 3:
+        parsed = _parse_data_section(text_data[start_idx:end_idx])
+        if len(parsed) < 3:
             return StandardizationResult(False, "Insufficient data rows")
-
-        # csv.reader keeps a quoted name such as "1,2-DAG 34:1" as one
-        # field; a plain split on ',' silently dropped those rows.
-        parsed = list(csv.reader(data_section))
         samples_line = parsed[0]
         factors_line = parsed[1]
 
         sample_names = samples_line[1:]
-        conditions = factors_line[1:]
+        cleaned_conditions = [_condition_name(cond) for cond in factors_line[1:]]
 
-        cleaned_conditions = []
-        for cond in conditions:
-            cond = cond.strip()
-            if cond.startswith('Condition:'):
-                cond = cond.replace('Condition:', '').strip()
-            cleaned_conditions.append(cond)
-
-        # A row with another field count cannot be lined up with the
-        # samples; dropping it silently lost that lipid from the analysis.
-        n_fields = len(sample_names) + 1
-        misaligned = [values for values in parsed[2:] if len(values) != n_fields]
+        misaligned = _misaligned_rows_message(parsed[2:], len(sample_names) + 1)
         if misaligned:
-            listed = '; '.join(
-                f"'{values[0]}' ({len(values)} fields)" for values in misaligned[:5]
-            )
-            more = f" and {len(misaligned) - 5} more" if len(misaligned) > 5 else ""
-            return StandardizationResult(
-                False,
-                f"{len(misaligned)} data row(s) do not have {n_fields} fields "
-                f"(the lipid name plus one value per sample): {listed}{more}. "
-                "A lipid name that contains a comma must be quoted.",
-            )
+            return StandardizationResult(False, misaligned)
         data_rows = parsed[2:]
 
         if not data_rows:
             return StandardizationResult(False, "No valid data rows found")
 
-        # Number samples condition by condition (stable within a condition):
-        # the experiment assigns s1..sN to conditions contiguously, so an
-        # interleaved factor order would otherwise put samples in the wrong
-        # condition.
-        first_seen = list(dict.fromkeys(cleaned_conditions))
-        order = sorted(
-            range(len(sample_names)),
-            key=lambda i: first_seen.index(cleaned_conditions[i]),
+        sample_names, cleaned_conditions, data_rows = _order_by_condition(
+            sample_names, cleaned_conditions, data_rows,
         )
-        sample_names = [sample_names[i] for i in order]
-        cleaned_conditions = [cleaned_conditions[i] for i in order]
-        data_rows = [[row[0]] + [row[i + 1] for i in order] for row in data_rows]
 
         columns = ['LipidMolec'] + [
             f'intensity[s{i + 1}]' for i in range(len(sample_names))
@@ -133,3 +96,67 @@ def process(
         return StandardizationResult(
             False, f"Error standardizing Metabolomics Workbench data: {e}"
         )
+
+
+def _parse_data_section(section: str) -> List[List[str]]:
+    """The non-empty lines between the markers, split into fields.
+
+    csv.reader keeps a quoted name such as "1,2-DAG 34:1" as one field; a
+    plain split on ',' silently dropped those rows.
+    """
+    lines = [line.strip() for line in section.strip().split('\n') if line.strip()]
+    lines = [line for line in lines if 'MS_METABOLITE_DATA_START' not in line]
+    return list(csv.reader(lines))
+
+
+def _condition_name(factor: str) -> str:
+    """The condition behind a Factors cell such as 'Condition:KO'."""
+    factor = factor.strip()
+    if factor.startswith('Condition:'):
+        factor = factor.replace('Condition:', '').strip()
+    return factor
+
+
+def _misaligned_rows_message(
+    data_rows: List[List[str]], n_fields: int,
+) -> Optional[str]:
+    """Why the data cannot be used when a row's field count is off, else None.
+
+    A row with another field count cannot be lined up with the samples;
+    dropping it silently lost that lipid from the analysis.
+    """
+    misaligned = [values for values in data_rows if len(values) != n_fields]
+    if not misaligned:
+        return None
+    listed = '; '.join(
+        f"'{values[0]}' ({len(values)} fields)" for values in misaligned[:5]
+    )
+    more = f" and {len(misaligned) - 5} more" if len(misaligned) > 5 else ""
+    return (
+        f"{len(misaligned)} data row(s) do not have {n_fields} fields "
+        f"(the lipid name plus one value per sample): {listed}{more}. "
+        "A lipid name that contains a comma must be quoted."
+    )
+
+
+def _order_by_condition(
+    sample_names: List[str],
+    conditions: List[str],
+    data_rows: List[List[str]],
+) -> Tuple[List[str], List[str], List[List[str]]]:
+    """Number samples condition by condition (stable within a condition).
+
+    The experiment assigns s1..sN to conditions contiguously, so an
+    interleaved factor order would otherwise put samples in the wrong
+    condition.
+    """
+    first_seen = list(dict.fromkeys(conditions))
+    order = sorted(
+        range(len(sample_names)),
+        key=lambda i: first_seen.index(conditions[i]),
+    )
+    return (
+        [sample_names[i] for i in order],
+        [conditions[i] for i in order],
+        [[row[0]] + [row[i + 1] for i in order] for row in data_rows],
+    )
