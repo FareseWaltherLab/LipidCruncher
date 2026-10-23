@@ -83,7 +83,7 @@ ALL_PROMPTS = [
     data_transform_system_prompt, data_questions_system_prompt,
     lipidcruncher_questions_system_prompt, _viz_system_prompt,
 ]
-AI_STUDIO_TABS = {  # the labels ai_studio_page passes to st.tabs
+AI_STUDIO_TABS = {  # the labels ui/ai_studio/tabs.py passes to st.tabs
     "LipidCruncher Questions", "Data Questions", "Transform to Generic",
     "Custom Visualization",
 }

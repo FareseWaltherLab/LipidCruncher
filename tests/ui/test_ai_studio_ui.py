@@ -12,15 +12,15 @@ DEFAULT_TIMEOUT = 15
 
 @pytest.fixture(autouse=True)
 def _real_chat_panels():
-    """Some scripts below replace the page's chat panels with recorders.
+    """Some scripts below replace the tabs' chat panels with recorders.
     AppTest runs them in this process, so put the real ones back for the
     tests that run after (a full-app Data Questions test got a recorder)."""
-    import app.ui.ai_studio_page as page
+    import app.ui.ai_studio.tabs as tabs
     names = ('display_data_questions_chat', 'display_transform_chat')
-    saved = {name: getattr(page, name) for name in names}
+    saved = {name: getattr(tabs, name) for name in names}
     yield
     for name, panel in saved.items():
-        setattr(page, name, panel)
+        setattr(tabs, name, panel)
 
 
 def studio_confirm_flow_script():
@@ -51,8 +51,8 @@ def studio_confirm_flow_script():
         # mistaken for a user removing their file (which would wipe state).
         st.session_state.chat_studio_file_id = '_pipeline_import_test'
 
-    from app.ui.ai_studio_page import _display_studio_sidebar
-    _display_studio_sidebar()
+    from app.ui.ai_studio.sidebar import display_studio_sidebar
+    display_studio_sidebar()
 
     is_unlocked = st.session_state.get('studio_applied_snapshot') is not None
     st.text(f"snapshot_set:{is_unlocked}")
@@ -112,7 +112,7 @@ def sample_columns_picker_script():
         'Sample1': [1.0, 2.0, 3.0],
         'Sample2': [4.0, 5.0, 6.0],
     })
-    from app.ui.ai_studio_page import _display_sample_columns_sidebar
+    from app.ui.ai_studio.sidebar import _display_sample_columns_sidebar
     result = _display_sample_columns_sidebar(df)
     st.text(f"result:{result is not None}")
 
@@ -177,7 +177,7 @@ def assign_conditions_script():
     StreamlitAdapter.initialize_session_state()
 
     names = st.session_state.get('_test_names', ['KO-1', 'KO-2', 'WT-1', 'WT-2'])
-    from app.ui.ai_studio_page import _display_assign_conditions_sidebar
+    from app.ui.ai_studio.sidebar import _display_assign_conditions_sidebar
     st.text(f"assignment:{_display_assign_conditions_sidebar(names)}")
 
 
@@ -306,11 +306,11 @@ def mw_block_script():
     StreamlitAdapter.initialize_session_state()
 
     from app.services.format_detection import DataFormat
-    from app.ui.ai_studio_page import _is_blocked_standard_format
+    from app.ui.ai_studio.data_source import is_blocked_standard_format
     st.session_state.chat_studio_detected_format = (
         DataFormat.METABOLOMICS_WORKBENCH.value
     )
-    st.text(f"blocked:{_is_blocked_standard_format()}")
+    st.text(f"blocked:{is_blocked_standard_format()}")
 
 
 class TestMetabolomicsWorkbenchBlocked:
@@ -398,8 +398,8 @@ def pipeline_import_script():
             conditions_list=['WT', 'KO'], number_of_samples_list=[2, 1],
         )
 
-    from app.ui.ai_studio_page import _offer_pipeline_import_sidebar
-    _offer_pipeline_import_sidebar()
+    from app.ui.ai_studio.data_source import offer_pipeline_import_sidebar
+    offer_pipeline_import_sidebar()
 
     imported = st.session_state.get('chat_studio_df')
     st.text(f"source:{st.session_state.get('chat_studio_pipeline_source')}")
@@ -495,8 +495,8 @@ def pipeline_import_no_qc_script():
             'concentration[s1]': [1.0], 'concentration[s2]': [3.0],
         })
 
-    from app.ui.ai_studio_page import _offer_pipeline_import_sidebar
-    _offer_pipeline_import_sidebar()
+    from app.ui.ai_studio.data_source import offer_pipeline_import_sidebar
+    offer_pipeline_import_sidebar()
 
 
 def pipeline_import_excluded_script():
@@ -528,8 +528,8 @@ def pipeline_import_excluded_script():
             st.session_state.experiment,
         )
 
-    from app.ui.ai_studio_page import _offer_pipeline_import_sidebar
-    _offer_pipeline_import_sidebar()
+    from app.ui.ai_studio.data_source import offer_pipeline_import_sidebar
+    offer_pipeline_import_sidebar()
 
     imported = st.session_state.get('chat_studio_df')
     n_cols = (
@@ -639,7 +639,8 @@ def data_questions_regroup_script():
         st.session_state.chat_studio_file_id = '_pipeline_import_test'
         st.session_state.chat_data_questions_session = 'stale session'
 
-    import app.ui.ai_studio_page as page
+    import app.ui.ai_studio.tabs as tabs
+    from app.ui.ai_studio_page import display_ai_studio_page
 
     def _record(source_df):
         experiment = st.session_state.chat_studio_experiment
@@ -648,8 +649,8 @@ def data_questions_regroup_script():
         st.text(f"dq_first_condition:{values}")
         st.text(f"dq_session:{st.session_state.chat_data_questions_session}")
 
-    page.display_data_questions_chat = _record
-    page.display_ai_studio_page()
+    tabs.display_data_questions_chat = _record
+    display_ai_studio_page()
 
 
 def _marker_value(at, prefix):
@@ -704,8 +705,8 @@ def studio_exclusion_script():
         st.session_state.chat_studio_df_original = df
         st.session_state.chat_studio_file_id = '_pipeline_import_test'
 
-    from app.ui.ai_studio_page import _display_studio_sidebar
-    _display_studio_sidebar()
+    from app.ui.ai_studio.sidebar import display_studio_sidebar
+    display_studio_sidebar()
 
     exp = st.session_state.get('chat_studio_experiment')
     st.text(f"conditions:{exp.conditions_list if exp else None}")
@@ -825,10 +826,11 @@ def transform_unlock_script():
         st.session_state.chat_studio_df_original = df
         st.session_state.chat_studio_file_id = '_pipeline_import_test'
 
-    import app.ui.ai_studio_page as page
-    page.display_transform_chat = lambda df: st.text("transform_chat_shown")
-    page.display_data_questions_chat = lambda df: st.text("dq_chat_shown")
-    page.display_ai_studio_page()
+    import app.ui.ai_studio.tabs as tabs
+    from app.ui.ai_studio_page import display_ai_studio_page
+    tabs.display_transform_chat = lambda df: st.text("transform_chat_shown")
+    tabs.display_data_questions_chat = lambda df: st.text("dq_chat_shown")
+    display_ai_studio_page()
 
 
 def test_transform_opens_before_the_experiment_is_confirmed():
@@ -858,7 +860,7 @@ def sample_families_script():
         'Area[KO-1]': [1.0], 'Area[KO-2]': [2.0], 'Area[WT-1]': [3.0],
         'Height[KO-1]': [10.0], 'Height[KO-2]': [20.0], 'Height[WT-1]': [30.0],
     })
-    from app.ui.ai_studio_page import _display_sample_columns_sidebar
+    from app.ui.ai_studio.sidebar import _display_sample_columns_sidebar
     st.text(f"result:{_display_sample_columns_sidebar(df)}")
 
 
@@ -924,7 +926,8 @@ def nonstandard_upload_script():
     upload = io.BytesIO(data)
     upload.name, upload.size = path.name, len(data)
 
-    import app.ui.ai_studio_page as page
+    import app.ui.ai_studio.tabs as tabs
+    from app.ui.ai_studio_page import display_ai_studio_page
 
     def _record(df):
         exp = st.session_state.chat_studio_experiment
@@ -932,11 +935,11 @@ def nonstandard_upload_script():
         st.text(f"dq_counts:{exp.number_of_samples_list}")
         st.text(f"dq_s4:{df['intensity[s4]'].iloc[0]}")
 
-    page.display_data_questions_chat = _record
-    page.display_transform_chat = lambda df: st.text("transform_chat_shown")
+    tabs.display_data_questions_chat = _record
+    tabs.display_transform_chat = lambda df: st.text("transform_chat_shown")
     st.sidebar.file_uploader = lambda *args, **kwargs: upload
     try:
-        page.display_ai_studio_page()
+        display_ai_studio_page()
     finally:
         del st.sidebar.file_uploader
     st.text(f"format:{st.session_state.get('chat_studio_detected_format')}")
