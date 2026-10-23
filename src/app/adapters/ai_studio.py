@@ -39,7 +39,7 @@ class AIStudioState:
     chat_transform_kept_columns: Tuple[str, ...] = ()
     chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
 
-    # --- AI Studio (owner: ai_studio_page.py; written by AIStudioAdapter) ---
+    # --- AI Studio (owner: ui/ai_studio/; written by AIStudioAdapter) ---
     # `chat_studio_df_original` holds the dataframe with the user's
     # original sample column names (what they uploaded / imported). It is
     # what the data preview, Data Questions, and Transform tabs read.

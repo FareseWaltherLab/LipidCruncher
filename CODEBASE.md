@@ -93,11 +93,12 @@ LipidCruncher follows a **layered architecture** with strict dependency rules �
 ```
 AI Studio                              Stable Isotope Tracing
 ─────────                              ──────────────────────
-ui/ai_studio_page.py + ui/ai_chat/     ui/isotope_tracing_page.py
+ui/ai_studio/ + ui/ai_chat/           ui/isotope_tracing_page.py
         │                                      │
    StreamlitAdapter                       StreamlitAdapter
         │                                      │
  workflows/ai_chat.py                  workflows/isotope_tracing.py
+ workflows/ai_studio.py                        │
  workflows/pipeline_api.py  (`lc`)             │
         │                                      │
  services/ai_chat/                     services/isotope_correction/
@@ -213,6 +214,7 @@ LipidCruncher/
 │       │   ├── quality_check.py             #   QualityCheckWorkflow
 │       │   ├── analysis.py                  #   AnalysisWorkflow
 │       │   ├── ai_chat.py                   #   AIChatWorkflow (transform / viz / data Q / LC Q)
+│       │   ├── ai_studio.py                 #   AIStudioWorkflow (the Studio's data setup)
 │       │   ├── pipeline_api.py              #   PipelineAPI — the `lc` object AI-generated code calls into
 │       │   └── isotope_tracing.py           #   IsotopeTracingWorkflow
 │       ├── adapters/
@@ -221,7 +223,7 @@ LipidCruncher/
 │       │   ├── module1_cache.py             #   cached Module 1 wrappers
 │       │   ├── qc_cache.py                  #   cached Quality Check wrappers
 │       │   ├── analysis_cache.py            #   cached analysis wrappers
-│       │   ├── ai_studio.py                 #   AI Studio state, stage keys, AI calls
+│       │   ├── ai_studio.py                 #   AI Studio state, stage keys, data writes, AI calls
 │       │   └── isotope.py                   #   isotope page state, stage keys, R calls
 │       └── ui/                              # Streamlit UI components
 │           ├── landing_page.py
@@ -233,7 +235,12 @@ LipidCruncher/
 │           ├── sample_labels.py             #   Sidebar switch: original sample names vs s1, s2, ... app-wide
 │           ├── sample_names.py              #   Sample display-name mapping helpers (pure logic)
 │           ├── st_helpers.py                #   Shared UI helpers (export buttons, section headers)
-│           ├── ai_studio_page.py            #   Standalone AI Studio page (4 tabs + sidebar data controls)
+│           ├── ai_studio_page.py            #   AI Studio entry point (main_app.py imports it)
+│           ├── ai_studio/                   #   Standalone AI Studio page
+│           │   ├── page.py                  #     Layout, notices, preview, navigation
+│           │   ├── data_source.py           #     Uploader, pipeline import, standard-format advisory
+│           │   ├── sidebar.py               #     Sample columns, conditions, exclusion, BQC, Confirm, apply
+│           │   └── tabs.py                  #     The four tabs and when each is open
 │           ├── ai_chat/                     #   AI chat panels (per-tab UI)
 │           │   ├── __init__.py              #     Re-exports tab-specific display_* functions
 │           │   ├── chat_panel.py            #     display_* entry points + helpers the tabs share
@@ -508,6 +515,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 | `QualityCheckWorkflow` | Individual step methods | Non-sequential: `validate_inputs()`, `high_cov_lipids()`, `apply_bqc_filter()`, `check_retention_time_availability()`, `get_eligible_correlation_conditions()`, `remove_samples()`. The QC plots are built by the adapter calling `BoxPlotService`, `BQCPlotterService`, `CorrelationPlotterService` and `PCAPlotterService`; `tests/integration/test_module2_pipeline.py` drives that same path. |
 | `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `compute_pathway_data()` (the pathway page draws the diagram itself, with the user's layout edits), `run_volcano()`, `run_heatmap()`. |
 | `AIChatWorkflow` | One method per chat mode | Orchestrates the AI Studio chat loop. `diagnose_format()` decides if a CSV needs transformation; `validate_module1_output()` gates the viz tab. Per-mode session starters (`start_transform_session`, `start_viz_session`, `start_data_questions_session`, `start_lc_questions_session`) and streaming message handlers (`stream_transform_message`, `stream_viz_message`, `stream_data_questions_message`, `stream_lc_questions_message`). Each appends the user message to an immutable `ChatSession` and returns `(text_generator, finalize)`: the UI streams the generator, then `finalize()` runs any returned code in the sandbox, appends the assistant message and returns a typed result (`TransformStepResult`, `VizStepResult`, `DataQuestionsStepResult`); the LC questions handler returns `(session, stream)` and the UI appends the answer. `diagnose_format()` / `validate_module1_output()` return `FormatDiagnosticResult` / `Module1ValidationResult`. Tests drive turns the same way (`tests/ai_turns.py`). |
+| `AIStudioWorkflow` | Individual step methods | The AI Studio's data setup: `read_upload()` (delimiter + format, Workbench recognised from its text), `is_blocked_standard_format()`, `raw_import_frame()` / `import_setup()` (which frame, experiment and BQC label a pipeline import brings over), `detected_sample_columns()`, `apply_user_experiment()` (renames each condition's samples to contiguous `{prefix}[s1..sN]`), `apply_snapshot()`, `derive_experiment()`. `AIStudioAdapter` and the `ui/ai_studio/` sidebar call it. |
 | `PipelineAPI` | Instance methods, injected as `lc` | Not a workflow but a workflow-layer facade: gives AI-generated sandbox code the pipeline's own analytics instead of re-invented heuristics — `conditions()`, `samples_for()`, `compare_species()`, `compare_classes()`, `class_summary()`, and one method per Module 3 analysis (`bar_chart()`, `pie_charts()`, `saturation()`, `chain_length()`, `fatty_acid_composition()`, `pathway()`, `volcano()`, `heatmap()`), each returning an `LCResult`; plus `colored_bars()`, a plotting helper that colors each bar from its own row (so a re-sort cannot miscolor it). |
 | `IsotopeTracingWorkflow` | `run()` → `IsotopeTracingResult` | Validate the three input files → run `IsotopeCorrectionService` → typed result (success + `CorrectionResult`, or `validation_errors` / `error_message`). Separate from the lipidomics pipeline. |
 
@@ -554,10 +562,13 @@ Located in `src/app/ui/`. Presentation layer that calls adapter/workflow (and in
 
 **Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV export helpers), `sample_labels.py` (original-name vs s-label display switch), `sample_names.py` (sample display-name mapping), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
 
-**AI Studio** (`ui/ai_studio_page.py` + `ui/ai_chat/`):
+**AI Studio** (`ui/ai_studio/` + `ui/ai_chat/`; `ui/ai_studio_page.py` is the entry point `main_app.py` imports). Data logic is in `AIStudioWorkflow`; the Studio's session-state writes (upload, import, applied experiment, reset, leaving the page) are `AIStudioAdapter` methods. The sidebar widgets handle their own keys.
 | File | Responsibility |
 |---|---|
-| `ai_studio_page.py` | Top-level page: data-source sidebar (upload / import from main pipeline), tab routing, round-trip navigation back to the main app. Locks data-dependent tabs behind a "Confirm" step. Carries the two page-level help expanders (*How to use the AI Studio*, *How the AI works — and its limits*); each tab module carries its own *About this tab* expander. |
+| `ai_studio/page.py` | Top-level page: notices, data preview, the tabs, round-trip navigation back to the main app. Carries the two page-level help expanders (*How to use the AI Studio*, *How the AI works — and its limits*); each tab module carries its own *About this tab* expander. |
+| `ai_studio/data_source.py` | Sidebar uploader and import from the main pipeline (QC-filtered / Normalized / Raw); the advisory that replaces the setup when an upload is LipidSearch, MS-DIAL or Metabolomics Workbench. |
+| `ai_studio/sidebar.py` | The rest of the sidebar, mirroring the main app's: Sample Columns, Assign Conditions, Exclude Samples, BQC, Confirm Inputs, and the apply step (re-applied only when its snapshot changes, which restarts the Data Questions and Custom Visualization chats). |
+| `ai_studio/tabs.py` | The four tabs and when each is open: Data Questions and Custom Visualization behind the "Confirm" step, Transform once there is a file (not for Normalized / QC-filtered imports), Custom Visualization closed to Raw imports and to data without Module 1's columns. |
 | `ai_chat/chat_panel.py` | The `display_*` entry points (start each tab's conversation, then delegate to its `_*_ui.py`) and the helpers the tabs share: `render_messages`, `render_example_prompts`, `usage_refused` / `start_turn_refused` (usage limits), `next_user_input`, and `run_code_turn` (one streamed turn of Data Questions / Transform / Viz: stream, `finalize()`, the tab's `on_result`, logging, Retry on failure). |
 | `ai_chat/_lipidcruncher_questions_ui.py` | Tab 1 — Q&A about LipidCruncher itself. |
 | `ai_chat/_data_questions_ui.py` | Tab 2 — natural-language exploration of the loaded DataFrame. |
@@ -763,7 +774,7 @@ The app runs on port 8501 by default. Server settings live in `.streamlit/config
 2. **Add a system prompt** in `services/ai_chat/prompt_templates.py` that defines scope and tone.
 3. **Add session start + handler methods** to `AIChatWorkflow` in `workflows/ai_chat.py`. Build it on `AIClientService.stream_tool_loop` / `stream_explanation` (pass `TOOL_DEFINITIONS` if the AI needs codebase / documentation tools) and return `(generator, finalize)` like the existing tabs.
 4. **Add a UI module** at `ui/ai_chat/_<tab>_ui.py` calling the workflow methods through the adapter.
-5. **Register the tab** in `ui/ai_studio_page.py` and re-export the display function from `ui/ai_chat/__init__.py`.
+5. **Register the tab** in `ui/ai_studio/tabs.py` and re-export the display function from `ui/ai_chat/__init__.py`.
 6. **Add session-state keys** with the `chat_*` prefix in `SessionState` in `streamlit_adapter.py`.
 7. **Add tests** under `tests/unit/test_ai_chat_*` for the workflow and `tests/integration/test_ai_tool_use.py` for any new tools.
 
