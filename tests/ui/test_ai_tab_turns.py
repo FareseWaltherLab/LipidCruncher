@@ -8,6 +8,7 @@ from collections import Counter
 import pandas as pd
 import plotly.graph_objects as go
 import pytest
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
@@ -249,6 +250,9 @@ def test_columns_refused_for_their_names_can_be_kept(logged, monkeypatch):
 @pytest.mark.parametrize("tab", ["dq", "transform", "viz"])
 def test_empty_turn_says_so(tab, logged, monkeypatch):
     _stub(monkeypatch, tab, empty=True)
+    # The notice is drawn by the run that then calls st.rerun(); AppTest
+    # (Streamlit >= 1.66) keeps only the rerun's elements, so stop instead.
+    monkeypatch.setattr(st, "rerun", st.stop)
     at = AppTest.from_function(tab_script, args=(tab,), default_timeout=30)
     at.run()
     at.chat_input(key=INPUT_KEY[tab]).set_value("q").run()
