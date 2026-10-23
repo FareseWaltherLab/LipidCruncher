@@ -41,9 +41,11 @@ class SessionState:
                              _msdial_override_samples, lipidsearch_sample_names
       experiment_config.py → workbench_conditions, workbench_samples
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
-                             processing_frame, _preserved_excluded_samples,
-                             original_column_order, regroup_origin,
-                             _preserved_grouping_radio, _preserved_regroup_selections
+                             processing_frame, _preserved_grouping_radio,
+                             _preserved_regroup_selections; the regroup
+                             snapshot (_pre_regroup_*, original_column_order,
+                             regroup_origin) and _preserved_excluded_* are
+                             written only through sidebar_state.py
       confirm_inputs.py    → _preserved_sidebar_bqc_radio, _preserved_sidebar_bqc_label_radio
       data_processing.py   → ingestion_result, grade_config, last_quality_config,
                              msdial_use_normalized, msdial_data_type_index

@@ -3,8 +3,9 @@ Streamlit adapter layer.
 
 Bridge between UI and services - handles session state management and caching.
 StreamlitAdapter is the one facade the UI calls. Its session state schema and
-stage registry live in session_state.py; its cached wrappers live in
-module1_cache.py, qc_cache.py and analysis_cache.py, which it inherits.
+stage registry live in session_state.py; the sidebar's regroup and exclusion
+memory in sidebar_state.py; its cached wrappers in module1_cache.py,
+qc_cache.py and analysis_cache.py. It inherits all of them.
 """
 from __future__ import annotations
 
@@ -27,9 +28,10 @@ from .session_state import (  # noqa: F401 (re-exported)
     SessionState, _ROUTING_FIELDS, _ROUTING_WIDGETS, _STAGE_NAMES, _STAGES,
     _fingerprint, _inputs_key,
 )
+from .sidebar_state import SidebarState
 
 
-class StreamlitAdapter(Module1Cache, QualityCheckCache, AnalysisCache):
+class StreamlitAdapter(SidebarState, Module1Cache, QualityCheckCache, AnalysisCache):
     """
     Adapter for managing Streamlit session state and caching.
 

@@ -12,6 +12,7 @@ from typing import List, Optional, Tuple
 import streamlit as st
 import pandas as pd
 
+from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import FORMAT_MSDIAL
 from app.models.experiment import ExperimentConfig
 from app.models.sample_frame import SampleFrame
@@ -151,31 +152,8 @@ def display_group_samples(df: pd.DataFrame, experiment: ExperimentConfig, data_f
 
     if grouping_correct == 'No':
         return _handle_manual_regrouping(df, group_df, experiment)
-    else:
-        st.session_state.grouping_complete = True
-        st.session_state.regroup_origin = None
-        st.session_state._preserved_regroup_selections = {}
-        # Restore the original pre-regrouping DataFrame if user previously
-        # reshuffled samples.  A simple reindex is insufficient because
-        # regrouping renames columns (e.g. intensity[s4] → intensity[s1]),
-        # so the column names are identical before and after — only the data
-        # underneath differs.
-        if st.session_state.get('_pre_regroup_df') is not None:
-            df = st.session_state['_pre_regroup_df'].copy()
-            # Commit the restored data now: if Confirm is unchecked this run,
-            # display_sample_grouping returns before writing standardized_df,
-            # and the next run would regroup-restore from the regrouped frame.
-            st.session_state.standardized_df = df
-            # Clean up regrouping state so it doesn't persist
-            del st.session_state['_pre_regroup_df']
-            st.session_state.pop('original_column_order', None)
-            # Restore the pre-regroup display names to match the restored order.
-            if '_pre_regroup_sample_names' in st.session_state:
-                st.session_state.sample_names = st.session_state.pop(
-                    '_pre_regroup_sample_names'
-                )
-
-    return group_df, df
+    # Undoes a previous regroup: the snapshot of the upload order comes back.
+    return group_df, StreamlitAdapter.undo_regroup(df)
 
 
 def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experiment: ExperimentConfig) -> tuple:
@@ -183,21 +161,9 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
 
     Returns (group_df, updated_df).
     """
-    if st.session_state.get('original_column_order') is None:
-        st.session_state.original_column_order = df.columns.tolist()
-        # Save the original pre-regrouping data so that regrouping is always
-        # applied to the untouched DataFrame.  Without this, every Streamlit
-        # re-run re-applies the swap to already-swapped data, corrupting the
-        # column assignments.
-        st.session_state['_pre_regroup_df'] = df.copy()
-        # Snapshot the pre-regroup display names too, so the remap below is
-        # always computed from this stable base rather than compounding on
-        # already-remapped names each rerun (which would churn sample_names,
-        # change the multiselect option labels, and reset the widgets).
-        st.session_state['_pre_regroup_sample_names'] = st.session_state.get('sample_names')
-
-    # Always regroup from the original data to make the operation idempotent
-    base_df = st.session_state.get('_pre_regroup_df', df)
+    # Always regroup from the upload-order snapshot so the operation is
+    # idempotent across reruns.
+    base_df, base_names = StreamlitAdapter.begin_regroup(df)
 
     st.session_state.grouping_complete = False
     selections = {}
@@ -208,10 +174,7 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
     # options and never changes during the regroup. NOT the live sample_names:
     # the regroup below rewrites those mid-run, which changed the option labels,
     # reset these widgets and wiped the user's selections.
-    shown = (
-        sample_display_map(st.session_state.get('_pre_regroup_sample_names'))
-        if showing_original_names() else {}
-    )
+    shown = sample_display_map(base_names) if showing_original_names() else {}
 
     for condition in experiment.conditions_list:
         st.sidebar.write(f"Select {expected_samples[condition]} samples for {condition}")
@@ -256,14 +219,10 @@ def _handle_manual_regrouping(df: pd.DataFrame, group_df: pd.DataFrame, experime
         # Keep display names in sync with the renumbered/reordered samples.
         # Renumber from the stable pre-regroup snapshot (not the live, possibly
         # already-remapped map) so the result is identical on every rerun.
-        regrouped = SampleFrame.from_upload(
-            base_df, experiment, st.session_state.get('_pre_regroup_sample_names'),
-        ).renumbered(
+        regrouped = SampleFrame.from_upload(base_df, experiment, base_names).renumbered(
             regroup_result.reordered_df, experiment, regroup_result.old_to_new,
         )
-        st.session_state.sample_names = regrouped.names
-        st.session_state.regroup_origin = regrouped.origin
-        st.session_state.grouping_complete = True
+        StreamlitAdapter.apply_regroup(regrouped)
         st.sidebar.write("New sample order after regrouping:")
         st.sidebar.dataframe(regroup_result.name_df, width='stretch')
         return regroup_result.group_df, regroup_result.reordered_df
@@ -313,16 +272,7 @@ def _display_sample_name_editor(experiment: ExperimentConfig) -> None:
             },
             key='sample_names_editor',
         )
-        names = names_from_editor(edited)
-        st.session_state.sample_names = names
-        # While regrouped, the names are rebuilt every run from the
-        # pre-regroup snapshot: store the edit there too, under each sample's
-        # upload label, or a changed or undone regroup drops it.
-        regroup_origin = st.session_state.get('regroup_origin')
-        if regroup_origin and '_pre_regroup_sample_names' in st.session_state:
-            st.session_state['_pre_regroup_sample_names'] = {
-                regroup_origin.get(s, s): name for s, name in names.items()
-            }
+        StreamlitAdapter.set_sample_names(names_from_editor(edited))
 
 
 def _display_sample_exclusion(
@@ -337,17 +287,8 @@ def _display_sample_exclusion(
     selection is invalid.
     """
     # Exclusions are kept by the sample's upload label, so a regroup that
-    # renumbers samples keeps excluding the same samples. When the regroup
-    # changed since they were saved, the widget's labels are stale: drop its
-    # key so it re-renders from the translated selection.
-    regroup_origin = st.session_state.get('regroup_origin') or {}
-    to_label = {origin: label for label, origin in regroup_origin.items()}
-    if (st.session_state.get('_preserved_excluded_regroup_origin') or {}) != regroup_origin:
-        st.session_state.pop('exclude_samples', None)
-    restored = st.session_state.get('exclude_samples', [
-        to_label.get(origin, origin)
-        for origin in st.session_state.get('_preserved_excluded_samples') or []
-    ])
+    # renumbers samples keeps excluding the same samples.
+    restored, regroup_origin = StreamlitAdapter.restore_excluded_samples()
     valid_restored = [s for s in restored if s in experiment.full_samples_list]
     with st.sidebar.expander('🚫 Exclude Samples (optional)', expanded=bool(valid_restored)):
         excluded = st.multiselect(
@@ -363,10 +304,7 @@ def _display_sample_exclusion(
             ),
             key='exclude_samples',
         )
-        st.session_state['_preserved_excluded_samples'] = [
-            regroup_origin.get(s, s) for s in excluded
-        ]
-        st.session_state['_preserved_excluded_regroup_origin'] = regroup_origin
+        StreamlitAdapter.save_excluded_samples(excluded, regroup_origin)
 
         frame = SampleFrame(
             df=df,

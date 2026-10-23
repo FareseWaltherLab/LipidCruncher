@@ -156,6 +156,7 @@ LipidCruncher/
 │       ├── adapters/
 │       │   ├── streamlit_adapter.py         #   StreamlitAdapter (facade: setup, resets, navigation)
 │       │   ├── session_state.py             #   SessionState, stage registry (_STAGES)
+│       │   ├── sidebar_state.py             #   regroup snapshot + exclusion memory
 │       │   ├── module1_cache.py             #   cached Module 1 wrappers
 │       │   ├── qc_cache.py                  #   cached Quality Check wrappers
 │       │   └── analysis_cache.py            #   cached analysis wrappers
@@ -354,7 +355,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 ### Adapter
 
-`src/app/adapters/streamlit_adapter.py` — the `StreamlitAdapter` class is the one facade the UI calls. `SessionState` and `_STAGES` live in `session_state.py`; the cached wrappers live in `module1_cache.py`, `qc_cache.py` and `analysis_cache.py`, whose classes `StreamlitAdapter` inherits (`tests/unit/test_adapter_facade.py` checks every `StreamlitAdapter.<name>` in use resolves). It provides:
+`src/app/adapters/streamlit_adapter.py` — the `StreamlitAdapter` class is the one facade the UI calls. `SessionState` and `_STAGES` live in `session_state.py`; the sidebar's manual-regroup snapshot and sample-exclusion memory (`begin_regroup` / `apply_regroup` / `undo_regroup`, `restore_excluded_samples` / `save_excluded_samples`) in `sidebar_state.py`; the cached wrappers in `module1_cache.py`, `qc_cache.py` and `analysis_cache.py`. `StreamlitAdapter` inherits all of their classes (`tests/unit/test_adapter_facade.py` checks every `StreamlitAdapter.<name>` in use resolves). It provides:
 
 - **`SessionState` dataclass** — defines all session state keys with defaults and documents ownership (which UI file manages which keys).
 - **`initialize_session_state()`** — populates `st.session_state` from `SessionState` defaults on first run.
