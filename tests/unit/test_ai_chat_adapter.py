@@ -132,7 +132,7 @@ class TestLogAiTurnContext:
         fig = go.Figure(data=[go.Bar(x=["a"], y=[1])])
         history = (ChatMessage(role="user", content="earlier"),)
 
-        with patch("app.adapters.ai_studio.st") as mock_st, \
+        with patch("app.adapters.ai_chat_calls.st") as mock_st, \
              patch("app.services.ai_chat.interaction_logger."
                    "InteractionLoggingService.log_turn") as log_turn:
             mock_st.session_state = {
@@ -158,7 +158,7 @@ class TestLogAiTurnContext:
     def test_pipeline_import_source_wins_over_file_id(self):
         from app.adapters.streamlit_adapter import StreamlitAdapter
 
-        with patch("app.adapters.ai_studio.st") as mock_st, \
+        with patch("app.adapters.ai_chat_calls.st") as mock_st, \
              patch("app.services.ai_chat.interaction_logger."
                    "InteractionLoggingService.log_turn") as log_turn:
             mock_st.session_state = {
@@ -182,7 +182,7 @@ class TestDataQuestionsUsesRenamedColumns:
             'chat_studio_sample_columns_renamed': ['intensity[s1]'],
             'chat_studio_experiment': None,
         }
-        with patch("app.adapters.ai_studio.st") as mock_st, \
+        with patch("app.adapters.ai_chat_calls.st") as mock_st, \
              patch("app.workflows.ai_chat.AIChatWorkflow."
                    "stream_data_questions_message") as stream:
             mock_st.session_state = session_state

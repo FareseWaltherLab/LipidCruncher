@@ -21,6 +21,7 @@ from app.constants import (
 )
 
 from ..services.format_detection import FormatDetectionService, DataFormat
+from .ai_chat_calls import AIChatCalls
 from .ai_studio import AIStudioAdapter
 from .isotope import IsotopeAdapter, _isocorrector_available  # noqa: F401 (re-exported)
 from .analysis_cache import AnalysisCache
@@ -35,7 +36,7 @@ from .sidebar_state import SidebarState
 
 class StreamlitAdapter(
     SidebarState, Module1Cache, QualityCheckCache, AnalysisCache,
-    AIStudioAdapter, IsotopeAdapter,
+    AIStudioAdapter, AIChatCalls, IsotopeAdapter,
 ):
     """
     Adapter for managing Streamlit session state and caching.

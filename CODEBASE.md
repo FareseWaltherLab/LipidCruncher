@@ -230,7 +230,8 @@ LipidCruncher/
 │       │   ├── module1_cache.py             #   cached Module 1 wrappers
 │       │   ├── qc_cache.py                  #   cached Quality Check wrappers
 │       │   ├── analysis_cache.py            #   cached analysis wrappers
-│       │   ├── ai_studio.py                 #   AI Studio state, stage keys, data writes, AI calls
+│       │   ├── ai_studio.py                 #   AI Studio state, stage keys, data writes
+│       │   ├── ai_chat_calls.py             #   the tabs' AI calls, usage limits, turn log
 │       │   └── isotope.py                   #   isotope page state, stage keys, R calls
 │       └── ui/                              # Streamlit UI components
 │           ├── landing_page.py
@@ -528,7 +529,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 
 ### Adapter
 
-`src/app/adapters/streamlit_adapter.py` — the `StreamlitAdapter` class is the one facade the UI calls. `SessionState` and `_STAGES` live in `session_state.py`; the sidebar's manual-regroup snapshot and sample-exclusion memory (`begin_regroup` / `apply_regroup` / `undo_regroup`, `restore_excluded_samples` / `save_excluded_samples`) in `sidebar_state.py`; the cached wrappers in `module1_cache.py`, `qc_cache.py` and `analysis_cache.py`; and the AI Studio's and isotope page's state, stage keys and calls in `ai_studio.py` and `isotope.py`. `StreamlitAdapter` inherits all of their classes (and `SessionState` the two pages' state classes) (`tests/unit/test_adapter_facade.py` checks every `StreamlitAdapter.<name>` in use resolves). It provides:
+`src/app/adapters/streamlit_adapter.py` — the `StreamlitAdapter` class is the one facade the UI calls. `SessionState` and `_STAGES` live in `session_state.py`; the sidebar's manual-regroup snapshot and sample-exclusion memory (`begin_regroup` / `apply_regroup` / `undo_regroup`, `restore_excluded_samples` / `save_excluded_samples`) in `sidebar_state.py`; the cached wrappers in `module1_cache.py`, `qc_cache.py` and `analysis_cache.py`; and the AI Studio's state and stage keys in `ai_studio.py`, its tabs' AI calls, usage limits and turn log in `ai_chat_calls.py`, and the isotope page's in `isotope.py`. `StreamlitAdapter` inherits all of their classes (and `SessionState` the two pages' state classes) (`tests/unit/test_adapter_facade.py` checks every `StreamlitAdapter.<name>` in use resolves). It provides:
 
 - **`SessionState` dataclass** — defines all session state keys with defaults and documents ownership (which UI file manages which keys).
 - **`initialize_session_state()`** — populates `st.session_state` from `SessionState` defaults on first run.
