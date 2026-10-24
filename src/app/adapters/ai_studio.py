@@ -110,9 +110,10 @@ AI_STUDIO_KEYS = dict(
         'chat_pending_prompt_dq', 'chat_pending_prompt_transform',
         'chat_pending_prompt_viz', 'chat_pending_prompt_lc',
         'chat_lc_retry_input',
-        'chat_dq_last_error', 'chat_dq_failed_input',
-        'chat_viz_last_error', 'chat_viz_failed_input',
+        'chat_dq_last_error', 'chat_dq_failed_input', 'chat_dq_notice',
+        'chat_viz_last_error', 'chat_viz_failed_input', 'chat_viz_notice',
         'chat_transform_last_error', 'chat_transform_failed_input',
+        'chat_transform_notice',
     }),
     # Per-turn feedback widgets (_interaction_log.py).
     prefixes=('fb_', 'note_', 'send_note_'),
@@ -278,11 +279,13 @@ class AIStudioAdapter:
         st.session_state.chat_transform_refused_metadata = ()
         st.session_state.chat_transform_kept_columns = ()
         st.session_state.chat_viz_figures = {}
-        # Each data tab's last failed turn, shown with a Retry, was on the old
-        # data (the keys of ui/ai_chat/_turn_errors.py).
+        # Each data tab's last failed turn, shown with a Retry, and any
+        # pending notice were about the old data (the keys of
+        # ui/ai_chat/_turn_errors.py).
         for tab in ('dq', 'transform', 'viz'):
             st.session_state.pop(f'chat_{tab}_last_error', None)
             st.session_state.pop(f'chat_{tab}_failed_input', None)
+            st.session_state.pop(f'chat_{tab}_notice', None)
 
     @classmethod
     def store_studio_upload(

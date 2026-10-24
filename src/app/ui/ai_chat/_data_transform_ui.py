@@ -9,7 +9,7 @@ and upload it to the main pipeline.
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from ._turn_errors import render_failure
+from ._turn_errors import record_notice, render_failure, render_notice
 from .chat_panel import (
     next_user_input,
     render_example_prompts,
@@ -179,10 +179,10 @@ def render_transform_chat(source_df) -> None:
         def on_result(result, streamed):
             t = result.transformation
             if not streamed.strip() and t is None:
-                st.info(
+                record_notice('transform', (
                     "I couldn't produce a result for that. "
                     "Please try rephrasing your request."
-                )
+                ))
             if t and t.code:
                 StreamlitAdapter.record_ai_execution()
             _store_result(result)
@@ -202,4 +202,5 @@ def render_transform_chat(source_df) -> None:
         )
 
     # Display persistent error from last attempt, with a one-click retry.
+    render_notice('transform')
     render_failure('transform', 'chat_pending_prompt_transform')

@@ -8,7 +8,7 @@ species, etc.
 import streamlit as st
 
 from app.adapters.streamlit_adapter import StreamlitAdapter
-from ._turn_errors import render_failure
+from ._turn_errors import record_notice, render_failure, render_notice
 from .chat_panel import (
     next_user_input,
     render_example_prompts,
@@ -105,10 +105,10 @@ def render_data_questions_chat(source_df) -> None:
             # than leaving a blank assistant bubble.
             if (not streamed.strip() and result.result_df is None
                     and not result.code):
-                st.info(
+                record_notice('dq', (
                     "I couldn't produce a result for that. "
                     "Please try rephrasing your question."
-                )
+                ))
             st.session_state.chat_data_questions_session = result.session
             if result.code:
                 StreamlitAdapter.record_ai_execution()
@@ -129,4 +129,5 @@ def render_data_questions_chat(source_df) -> None:
         )
 
     # Display persistent error from last attempt, with a one-click retry.
+    render_notice('dq')
     render_failure('dq', 'chat_pending_prompt_dq')

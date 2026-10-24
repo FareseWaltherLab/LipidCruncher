@@ -11,7 +11,7 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.workflows.ai_chat import figure_has_data
 from ._interaction_log import render_feedback
 from ._safe_markdown import safe_markdown
-from ._turn_errors import render_failure
+from ._turn_errors import record_notice, render_failure, render_notice
 from .chat_panel import (
     next_user_input,
     render_example_prompts,
@@ -130,10 +130,10 @@ def render_viz_chat(analysis_df, experiment) -> None:
         def on_result(result, streamed):
             sr = result.sandbox_result
             if not streamed.strip() and (sr is None or sr.figure is None):
-                st.info(
+                record_notice('viz', (
                     "I couldn't produce a visualization for that. "
                     "Please try rephrasing your request."
-                )
+                ))
             st.session_state.chat_viz_session = result.session
             # Count every run: failing code costs an execution too.
             if sr:
@@ -164,4 +164,5 @@ def render_viz_chat(analysis_df, experiment) -> None:
         )
 
     # Display persistent error from last attempt, with a one-click retry.
+    render_notice('viz')
     render_failure('viz', 'chat_pending_prompt_viz')
