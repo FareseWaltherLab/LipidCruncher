@@ -86,8 +86,6 @@ def render_lc_questions_chat() -> None:
         "chat_input_lc_questions",
     )
     if user_input:
-        from app.models.chat import ChatMessage
-
         if start_turn_refused(runs_code=False):
             return
 
@@ -108,81 +106,102 @@ def render_lc_questions_chat() -> None:
         )
 
         if cached_answer is not None:
-            with st.chat_message("assistant"):
-                st.markdown(safe_markdown(cached_answer))
+            _answer_from_cache(session, user_input, cached_answer)
+            st.rerun()
+
+        error_text = _run_live_turn(session, user_input, is_example)
+        if error_text:
+            _record_lc_failure(session, user_input, error_text)
+
+        st.rerun()
+
+
+def _answer_from_cache(session, user_input: str, cached_answer: str) -> None:
+    """Show and record a cached example answer; no API call."""
+    from app.models.chat import ChatMessage
+
+    with st.chat_message("assistant"):
+        st.markdown(safe_markdown(cached_answer))
+    st.session_state.chat_lc_questions_session = (
+        session
+        .add_message(ChatMessage(role="user", content=user_input))
+        .add_message(ChatMessage(role="assistant", content=cached_answer))
+    )
+    st.session_state.pop('chat_lc_retry_input', None)
+    record_turn(
+        "lc_questions", user_input, cached_answer,
+        assistant_msg=(
+            st.session_state.chat_lc_questions_session.messages[-1]
+        ),
+        history=session.messages,
+    )
+
+
+def _run_live_turn(session, user_input: str, is_example: bool):
+    """Stream the answer, record the turn; returns the error text, if any."""
+    from app.models.chat import ChatMessage
+
+    # Run AI (streamed token-by-token)
+    error_text = None
+    with st.chat_message("assistant"):
+        try:
+            # The spinner covers the gap before the first token (e.g.
+            # while the agent runs a codebase/doc tool call); once text
+            # starts arriving, st.write_stream renders it live.
+            with st.spinner("Thinking..."):
+                session_with_user, stream = (
+                    StreamlitAdapter.stream_ai_lc_questions(
+                        user_message=user_input,
+                        session=session,
+                    )
+                )
+                full_text = st.write_stream(safe_stream(stream))
+
+            if not (full_text or "").strip():
+                full_text = (
+                    "I wasn't able to generate a response. "
+                    "Please try rephrasing your question."
+                )
+                st.markdown(safe_markdown(full_text))
+            elif is_example and not session.messages:
+                # Cache the canonical answer for instant reuse.
+                StreamlitAdapter.set_cached_lc_answer(user_input, full_text)
+
+            # Persist the accumulated answer to the session.
+            assistant_msg = ChatMessage(role="assistant", content=full_text)
             st.session_state.chat_lc_questions_session = (
-                session
-                .add_message(ChatMessage(role="user", content=user_input))
-                .add_message(ChatMessage(role="assistant", content=cached_answer))
+                session_with_user.add_message(assistant_msg)
             )
             st.session_state.pop('chat_lc_retry_input', None)
             record_turn(
-                "lc_questions", user_input, cached_answer,
+                "lc_questions", user_input, full_text,
                 assistant_msg=(
                     st.session_state.chat_lc_questions_session.messages[-1]
                 ),
                 history=session.messages,
             )
-            st.rerun()
 
-        # Run AI (streamed token-by-token)
-        error_text = None
-        with st.chat_message("assistant"):
-            try:
-                # The spinner covers the gap before the first token (e.g.
-                # while the agent runs a codebase/doc tool call); once text
-                # starts arriving, st.write_stream renders it live.
-                with st.spinner("Thinking..."):
-                    session_with_user, stream = (
-                        StreamlitAdapter.stream_ai_lc_questions(
-                            user_message=user_input,
-                            session=session,
-                        )
-                    )
-                    full_text = st.write_stream(safe_stream(stream))
+        except Exception as e:
+            error_text = str(e)
+    return error_text
 
-                if not (full_text or "").strip():
-                    full_text = (
-                        "I wasn't able to generate a response. "
-                        "Please try rephrasing your question."
-                    )
-                    st.markdown(safe_markdown(full_text))
-                elif is_example and not session.messages:
-                    # Cache the canonical answer for instant reuse.
-                    StreamlitAdapter.set_cached_lc_answer(user_input, full_text)
 
-                # Persist the accumulated answer to the session.
-                assistant_msg = ChatMessage(role="assistant", content=full_text)
-                st.session_state.chat_lc_questions_session = (
-                    session_with_user.add_message(assistant_msg)
-                )
-                st.session_state.pop('chat_lc_retry_input', None)
-                record_turn(
-                    "lc_questions", user_input, full_text,
-                    assistant_msg=(
-                        st.session_state.chat_lc_questions_session.messages[-1]
-                    ),
-                    history=session.messages,
-                )
+def _record_lc_failure(session, user_input: str, error_text: str) -> None:
+    """Keep the failed turn in the transcript and arm the Retry button."""
+    from app.models.chat import ChatMessage
 
-            except Exception as e:
-                error_text = str(e)
-
-        if error_text:
-            user_msg = ChatMessage(role="user", content=user_input)
-            error_msg = ChatMessage(
-                role="assistant",
-                content=f"Sorry, I encountered an error: {error_text}",
-            )
-            current = st.session_state.chat_lc_questions_session
-            st.session_state.chat_lc_questions_session = (
-                current.add_message(user_msg).add_message(error_msg)
-            )
-            # Remember the failed input so the Retry button can re-fire it.
-            st.session_state.chat_lc_retry_input = user_input
-            record_turn(
-                "lc_questions", user_input, "", error=error_text,
-                history=session.messages,
-            )
-
-        st.rerun()
+    user_msg = ChatMessage(role="user", content=user_input)
+    error_msg = ChatMessage(
+        role="assistant",
+        content=f"Sorry, I encountered an error: {error_text}",
+    )
+    current = st.session_state.chat_lc_questions_session
+    st.session_state.chat_lc_questions_session = (
+        current.add_message(user_msg).add_message(error_msg)
+    )
+    # Remember the failed input so the Retry button can re-fire it.
+    st.session_state.chat_lc_retry_input = user_input
+    record_turn(
+        "lc_questions", user_input, "", error=error_text,
+        history=session.messages,
+    )

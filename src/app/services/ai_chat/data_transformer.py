@@ -220,65 +220,15 @@ class DataTransformerService:
             )
 
         if sandbox_result.result_df is None:
-            # Info-gathering turn (e.g. "list internal standards" before a
-            # custom normalization): the AI ran code that only printed.
-            # Treat as a success — the print output IS the answer — and
-            # let the handler/UI surface stdout.
-            stdout = sandbox_result.stdout or ""
-            if stdout.strip():
-                return TransformationResult(
-                    success=True,
-                    result_df=None,
-                    is_info_only=True,
-                    code=code,
-                    sandbox_result=sandbox_result,
-                )
-            return TransformationResult(
-                success=False,
-                code=code,
-                sandbox_result=sandbox_result,
-                validation_errors=(
-                    "Code executed successfully but did not produce a 'result_df'. "
-                    "Make sure the code assigns the transformed DataFrame to 'result_df'.",
-                ),
-            )
+            return DataTransformerService._result_without_table(code, sandbox_result)
 
         is_valid, errors = DataTransformerService.validate_generic_schema(
             sandbox_result.result_df
         )
         metadata = []
         if is_valid:
-            # A numeric metadata column passes the schema check, and the
-            # Generic reader would then analyse it as a sample.
-            result_df = sandbox_result.result_df
-            if sample_columns is not None:
-                metadata = DataTransformerService._unconfirmed_sample_columns(
-                    result_df, source_df, sample_columns,
-                )
-            else:
-                metadata = DataTransformerService.detect_metadata_columns(result_df)
-            metadata = [c for c in metadata if c not in keep_columns]
-            if metadata and sample_columns is not None:
-                shown = ", ".join(f"'{c}'" for c in list(sample_columns)[:5])
-                more = len(sample_columns) - 5
-                errors = [
-                    "Not among the user's confirmed sample columns: "
-                    + ", ".join(f"'{c}'" for c in metadata)
-                    + ". Every column after the lipid names (and ClassKey) "
-                    "is analysed as a sample, so keep only the confirmed "
-                    f"samples ({shown}{f', and {more} more' if more > 0 else ''}) "
-                    "and drop these from result_df."
-                ]
-            elif metadata:
-                errors = [
-                    "Metadata columns kept as samples: "
-                    + ", ".join(f"'{c}'" for c in metadata)
-                    + ". Every column after the lipid names (and ClassKey) "
-                    "is analysed as a sample, so drop these from result_df."
-                ]
-            errors += check_values_stay_with_their_lipid(
-                result_df.iloc[:, 0], result_df, source_df,
-                DataTransformerService._sample_columns(result_df),
+            metadata, errors = DataTransformerService._sample_column_errors(
+                sandbox_result.result_df, source_df, sample_columns, keep_columns,
             )
             is_valid = not errors
 
@@ -304,6 +254,80 @@ class DataTransformerService:
                 sandbox_result.result_df, source_df,
             ),
         )
+
+
+    @staticmethod
+    def _result_without_table(code: str, sandbox_result) -> TransformationResult:
+        """The code ran but assigned no result_df.
+
+        Info-gathering turn (e.g. "list internal standards" before a custom
+        normalization): the AI ran code that only printed. Treat as a
+        success — the print output IS the answer — and let the handler/UI
+        surface stdout. Silence is a failure.
+        """
+        stdout = sandbox_result.stdout or ""
+        if stdout.strip():
+            return TransformationResult(
+                success=True,
+                result_df=None,
+                is_info_only=True,
+                code=code,
+                sandbox_result=sandbox_result,
+            )
+        return TransformationResult(
+            success=False,
+            code=code,
+            sandbox_result=sandbox_result,
+            validation_errors=(
+                "Code executed successfully but did not produce a 'result_df'. "
+                "Make sure the code assigns the transformed DataFrame to 'result_df'.",
+            ),
+        )
+
+    @staticmethod
+    def _sample_column_errors(
+        result_df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        sample_columns: Optional[Sequence[str]],
+        keep_columns: Sequence[str],
+    ) -> Tuple[List[str], List[str]]:
+        """Columns kept as samples that should not be, and the errors to report.
+
+        A numeric metadata column passes the schema check, and the Generic
+        reader would then analyse it as a sample. Also refuses values that
+        moved to another lipid's row.
+        """
+        if sample_columns is not None:
+            metadata = DataTransformerService._unconfirmed_sample_columns(
+                result_df, source_df, sample_columns,
+            )
+        else:
+            metadata = DataTransformerService.detect_metadata_columns(result_df)
+        metadata = [c for c in metadata if c not in keep_columns]
+        errors: List[str] = []
+        if metadata and sample_columns is not None:
+            shown = ", ".join(f"'{c}'" for c in list(sample_columns)[:5])
+            more = len(sample_columns) - 5
+            errors = [
+                "Not among the user's confirmed sample columns: "
+                + ", ".join(f"'{c}'" for c in metadata)
+                + ". Every column after the lipid names (and ClassKey) "
+                "is analysed as a sample, so keep only the confirmed "
+                f"samples ({shown}{f', and {more} more' if more > 0 else ''}) "
+                "and drop these from result_df."
+            ]
+        elif metadata:
+            errors = [
+                "Metadata columns kept as samples: "
+                + ", ".join(f"'{c}'" for c in metadata)
+                + ". Every column after the lipid names (and ClassKey) "
+                "is analysed as a sample, so drop these from result_df."
+            ]
+        errors += check_values_stay_with_their_lipid(
+            result_df.iloc[:, 0], result_df, source_df,
+            DataTransformerService._sample_columns(result_df),
+        )
+        return metadata, errors
 
     @staticmethod
     def validate_generic_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:

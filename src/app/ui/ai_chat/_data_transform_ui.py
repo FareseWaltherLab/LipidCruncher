@@ -103,39 +103,7 @@ def render_transform_chat(source_df) -> None:
     # Show the last transformation result if successful (renders before
     # the example tiles so the full AI response — message, code,
     # preview — sits together; tiles come after as next-step prompts).
-    transform_result_df = st.session_state.get('chat_transform_result')
-    if transform_result_df is not None:
-        with st.expander("Preview transformed data", expanded=True):
-            st.dataframe(transform_result_df.head(10), width='stretch')
-            st.caption(
-                f"{len(transform_result_df)} rows, "
-                f"{len(transform_result_df.columns)} columns"
-            )
-            report = st.session_state.get('chat_transform_report')
-            if report is not None:
-                st.markdown(f"**Compared with your upload:** {report.summary()}.")
-                if report.lipids_removed:
-                    st.download_button(
-                        label=f"Download the {len(report.lipids_removed):,} "
-                              f"removed lipid names",
-                        data="\n".join(report.lipids_removed).encode("utf-8"),
-                        file_name="removed_lipids.txt",
-                        mime="text/plain",
-                        key="chat_download_removed_lipids",
-                    )
-
-            csv_data = transform_result_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="Download transformed CSV",
-                data=csv_data,
-                file_name="transformed_data.csv",
-                mime="text/csv",
-                key="chat_download_transform",
-            )
-            st.caption(
-                "Download this file, then upload it to LipidCruncher as a "
-                "**Generic** format dataset to run it through the analysis pipeline."
-            )
+    _render_transform_preview()
 
     # Example prompts (only for formats that need transforming)
     diagnostic = st.session_state.get('chat_transform_diagnostic')
@@ -146,26 +114,7 @@ def render_transform_chat(source_df) -> None:
     if usage_refused():
         return
 
-    # A transform refused only for keeping columns that are not the
-    # confirmed samples: the user, not the AI, may say they are samples.
-    refused = st.session_state.get('chat_transform_refused_metadata') or ()
-    if refused:
-        names = ", ".join(f"'{c}'" for c in refused)
-        one = len(refused) == 1
-        st.info(
-            f"{names} {'was' if one else 'were'} refused: "
-            f"{'it is' if one else 'they are'} not among the sample columns "
-            f"you confirmed in the sidebar (or the name looks like metadata). "
-            f"If {'it is a sample' if one else 'they are samples'}, you can "
-            f"keep {'it' if one else 'them'}, or add "
-            f"{'it' if one else 'them'} to your samples in the sidebar."
-        )
-        if st.button(f"Keep {names} as samples", key="chat_keep_metadata_columns"):
-            StreamlitAdapter.record_ai_execution()
-            _store_result(StreamlitAdapter.keep_ai_transform_columns(
-                session, source_df,
-            ))
-            st.rerun()
+    _offer_refused_columns(session, source_df)
 
     user_input = next_user_input(
         "chat_pending_prompt_transform",
@@ -204,3 +153,65 @@ def render_transform_chat(source_df) -> None:
     # Display persistent error from last attempt, with a one-click retry.
     render_notice('transform')
     render_failure('transform', 'chat_pending_prompt_transform')
+
+
+def _render_transform_preview() -> None:
+    """The last successful transformation: preview, change report, downloads."""
+    transform_result_df = st.session_state.get('chat_transform_result')
+    if transform_result_df is not None:
+        with st.expander("Preview transformed data", expanded=True):
+            st.dataframe(transform_result_df.head(10), width='stretch')
+            st.caption(
+                f"{len(transform_result_df)} rows, "
+                f"{len(transform_result_df.columns)} columns"
+            )
+            report = st.session_state.get('chat_transform_report')
+            if report is not None:
+                st.markdown(f"**Compared with your upload:** {report.summary()}.")
+                if report.lipids_removed:
+                    st.download_button(
+                        label=f"Download the {len(report.lipids_removed):,} "
+                              f"removed lipid names",
+                        data="\n".join(report.lipids_removed).encode("utf-8"),
+                        file_name="removed_lipids.txt",
+                        mime="text/plain",
+                        key="chat_download_removed_lipids",
+                    )
+
+            csv_data = transform_result_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="Download transformed CSV",
+                data=csv_data,
+                file_name="transformed_data.csv",
+                mime="text/csv",
+                key="chat_download_transform",
+            )
+            st.caption(
+                "Download this file, then upload it to LipidCruncher as a "
+                "**Generic** format dataset to run it through the analysis pipeline."
+            )
+
+
+def _offer_refused_columns(session, source_df) -> None:
+    """A transform refused only for keeping columns that are not the confirmed
+    samples: the user, not the AI, may say they are samples."""
+    # A transform refused only for keeping columns that are not the
+    # confirmed samples: the user, not the AI, may say they are samples.
+    refused = st.session_state.get('chat_transform_refused_metadata') or ()
+    if refused:
+        names = ", ".join(f"'{c}'" for c in refused)
+        one = len(refused) == 1
+        st.info(
+            f"{names} {'was' if one else 'were'} refused: "
+            f"{'it is' if one else 'they are'} not among the sample columns "
+            f"you confirmed in the sidebar (or the name looks like metadata). "
+            f"If {'it is a sample' if one else 'they are samples'}, you can "
+            f"keep {'it' if one else 'them'}, or add "
+            f"{'it' if one else 'them'} to your samples in the sidebar."
+        )
+        if st.button(f"Keep {names} as samples", key="chat_keep_metadata_columns"):
+            StreamlitAdapter.record_ai_execution()
+            _store_result(StreamlitAdapter.keep_ai_transform_columns(
+                session, source_df,
+            ))
+            st.rerun()
