@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, integration/ai-chat-on-main]
   pull_request:
     branches: [main]
 
@@ -62,6 +62,16 @@ jobs:
           pip install pip-audit==2.10.1
       - name: Audit them
         run: pip-audit --progress-spinner off
+
+  sandbox:
+    # The AI Studio's security is the image (non-root USER, rlimits, seccomp
+    # on Linux x86_64), so the isolation tests are run inside the image the
+    # deploy would ship, by the same script the deploy guide requires.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image with R and run the sandbox checks inside it
+        run: scripts/check_image.sh lipidcruncher-ci-sandbox
 
   image:
     # The deployed image: builds as production does, then the app must answer
