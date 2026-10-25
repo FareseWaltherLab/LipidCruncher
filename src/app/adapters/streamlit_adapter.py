@@ -155,11 +155,25 @@ class StreamlitAdapter(
         st.session_state[_inputs_key(stage)] = fingerprint
         if previous is None or previous == fingerprint:
             return False
+        StreamlitAdapter.invalidate_results_from(stage)
+        return True
+
+    @staticmethod
+    def invalidate_results_from(stage: str) -> None:
+        """Drop the results of ``stage`` and every later stage, keeping settings.
+
+        The ``derived`` fields go back to their defaults so the next run
+        recomputes them; widgets and the other fields are untouched. For a
+        callback that changes one of a stage's inputs itself (``track_inputs``
+        covers inputs read on the run).
+
+        Args:
+            stage: A ``_STAGES`` name.
+        """
         defaults = SessionState()
         for s in _STAGES[_STAGE_NAMES.index(stage):]:
             for name in s.derived:
                 st.session_state[name] = getattr(defaults, name)
-        return True
 
     @staticmethod
     def reset_data_state() -> None:

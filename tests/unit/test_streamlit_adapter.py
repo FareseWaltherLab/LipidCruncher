@@ -397,6 +397,57 @@ class TestStageRegistry:
         assert sorted(set(unregistered)) == []
 
 
+class TestInvalidateResultsFrom:
+    """invalidate_results_from(stage) drops the derived fields of that stage
+    and every later one, keeping settings. Regression: the MS-DIAL raw /
+    pre-normalized toggle kept its own list of keys to clear, outside the
+    registry, so a new result field would not have been cleared."""
+
+    @staticmethod
+    def _state():
+        return MockSessionState({
+            # standardize: results and settings
+            'standardized_df': 'std', 'column_mapping': 'map', 'n_intensity_cols': 4,
+            'format_type': 'MS-DIAL', 'msdial_use_normalized': True,
+            '_msdial_override_samples': ['s1'],
+            # experiment: settings
+            'experiment': 'exp', 'confirmed': True,
+            # processing: results and settings
+            'cleaned_df': 'clean', 'intsta_df': 'istd', 'normalized_df': 'norm',
+            'normalization_result': 'res', 'ingestion_result': 'ing',
+            'standards_consistency_figs': ['fig'],
+            'standards_source': 'Custom', 'custom_standards_df': 'custom',
+            '_preserved_non_bqc_zero_threshold': 0.5, 'selected_classes': ['PC'],
+            # analysis: results and settings
+            'analysis_all_plots': {'bar_chart': object()}, 'bar_conditions': ['WT'],
+        })
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_from_standardize_drops_results_and_keeps_settings(self, mock_st):
+        mock_st.session_state = state = self._state()
+        StreamlitAdapter.invalidate_results_from('standardize')
+        for key in ('standardized_df', 'column_mapping', 'n_intensity_cols',
+                    'cleaned_df', 'intsta_df', 'normalized_df',
+                    'normalization_result', 'ingestion_result'):
+            assert state[key] is None, key
+        assert state['standards_consistency_figs'] == []
+        assert state['analysis_all_plots'] == {}
+        for key in ('format_type', 'msdial_use_normalized', '_msdial_override_samples',
+                    'experiment', 'confirmed', 'standards_source', 'custom_standards_df',
+                    '_preserved_non_bqc_zero_threshold', 'selected_classes',
+                    'bar_conditions'):
+            assert state[key] == self._state()[key], key
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_from_processing_keeps_the_standardized_data(self, mock_st):
+        mock_st.session_state = state = self._state()
+        StreamlitAdapter.invalidate_results_from('processing')
+        assert state['standardized_df'] == 'std'
+        assert state['column_mapping'] == 'map'
+        assert state['cleaned_df'] is None
+        assert state['normalized_df'] is None
+
+
 class TestTrackInputs:
     """track_inputs(stage, ...) drops results computed from other inputs."""
 

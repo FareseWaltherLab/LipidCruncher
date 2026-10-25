@@ -270,13 +270,10 @@ Your MS-DIAL export contains both raw and pre-normalized intensity values:
             new_index = options.index(selection) if selection in options else 0
             st.session_state.msdial_data_type_index = new_index
             st.session_state.msdial_use_normalized = "Pre-normalized" in selection
-            # Clear cached data to force re-standardization with new selection
-            st.session_state.standardized_df = None
-            st.session_state.cleaned_df = None
-            # Clear column mapping so it gets rebuilt from fresh standardization
-            # (otherwise the stale override mapping causes incorrect column lookups)
-            st.session_state.column_mapping = None
-            st.session_state.n_intensity_cols = None
+            # The standardized data and everything computed from it are stale
+            # (the column mapping too: a stale override mapping gave wrong
+            # column lookups); the user's settings are kept.
+            StreamlitAdapter.invalidate_results_from('standardize')
             # Drop the sample-regroup snapshot. It was captured under the old
             # raw/normalized selection; left in place, the regroup step would
             # re-apply it and silently revert this toggle (showing raw values).
