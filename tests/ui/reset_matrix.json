@@ -14,6 +14,7 @@
    "_preserved_zero_filter_detection_threshold",
    "_sample_label_mode_radio",
    "_zero_filter_format",
+   "additional_dataset_standards",
    "additional_istd_select",
    "back_home_module1",
    "bqc_label",
@@ -59,9 +60,7 @@
    "using_sample_data",
    "zero_filter_detection_threshold"
   ],
-  "kept": [
-   "additional_dataset_standards"
-  ]
+  "kept": []
  },
  "module1/exclude_sample": {
   "added": [
@@ -398,6 +397,7 @@
    "_preserved_zero_filter_detection_threshold",
    "_sample_label_mode_radio",
    "_zero_filter_format",
+   "additional_dataset_standards",
    "additional_istd_select",
    "back_home_module1",
    "bqc_label",
@@ -430,7 +430,6 @@
   ],
   "kept": [
    "_dataset_source_id",
-   "additional_dataset_standards",
    "column_mapping",
    "format_type",
    "load_sample",
@@ -461,6 +460,7 @@
    "_preserved_zero_filter_detection_threshold",
    "_sample_label_mode_radio",
    "_zero_filter_format",
+   "additional_dataset_standards",
    "additional_istd_select",
    "back_home_module1",
    "bqc_label",
@@ -499,7 +499,6 @@
   ],
   "kept": [
    "_dataset_source_id",
-   "additional_dataset_standards",
    "load_sample",
    "page",
    "raw_df",
@@ -589,6 +588,7 @@
    "_preserved_zero_filter_detection_threshold",
    "_sample_label_mode_radio",
    "_zero_filter_format",
+   "additional_dataset_standards",
    "analysis_all_plots",
    "analysis_csv_bar",
    "analysis_radio",
@@ -682,9 +682,7 @@
    "standards_source",
    "using_sample_data"
   ],
-  "kept": [
-   "additional_dataset_standards"
-  ]
+  "kept": []
  },
  "module2/back_to_processing": {
   "added": [
@@ -1172,6 +1170,7 @@
    "_preserved_zero_filter_detection_threshold",
    "_sample_label_mode_radio",
    "_zero_filter_format",
+   "additional_dataset_standards",
    "analysis_all_plots",
    "analysis_csv_bar",
    "analysis_radio",
@@ -1252,7 +1251,6 @@
   ],
   "kept": [
    "_dataset_source_id",
-   "additional_dataset_standards",
    "column_mapping",
    "format_type",
    "load_sample",
@@ -1284,6 +1282,7 @@
    "_preserved_zero_filter_detection_threshold",
    "_sample_label_mode_radio",
    "_zero_filter_format",
+   "additional_dataset_standards",
    "analysis_all_plots",
    "analysis_csv_bar",
    "analysis_radio",
@@ -1370,7 +1369,6 @@
   ],
   "kept": [
    "_dataset_source_id",
-   "additional_dataset_standards",
    "load_sample",
    "page",
    "raw_df",

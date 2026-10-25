@@ -321,6 +321,49 @@ class TestStageRegistry:
                         unregistered.append(f"{path.name}:{key}")
         assert unregistered == []
 
+    def test_every_literal_session_key_in_the_ui_is_registered(self):
+        """Regression: ``_volcano_available_lipids`` was written with
+        ``st.session_state[...]`` but belonged to no stage, so a new upload
+        still offered the previous dataset's lipids to label. Scans the UI
+        for literal keys read or written on ``st.session_state`` directly."""
+        import ast
+        from pathlib import Path
+
+        src = Path(__file__).parents[2] / 'src'
+        files = list((src / 'app' / 'ui').rglob('*.py')) + [src / 'main_app.py']
+        registered = set(_ROUTING_FIELDS) | set(_ROUTING_WIDGETS)
+        prefixes = ('_inputs_',)
+        for stage in _STAGES:
+            registered |= _stage_keys(stage)
+            prefixes += stage.prefixes
+
+        def is_session_state(node):
+            return (isinstance(node, ast.Attribute) and node.attr == 'session_state'
+                    and isinstance(node.value, ast.Name) and node.value.id == 'st')
+
+        def literal_keys(tree):
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Subscript) and is_session_state(node.value)
+                        and isinstance(node.slice, ast.Constant)):
+                    yield node.slice.value
+                elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in ('get', 'pop', 'setdefault')
+                        and is_session_state(node.func.value)
+                        and node.args and isinstance(node.args[0], ast.Constant)):
+                    yield node.args[0].value
+                elif isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Attribute) and is_session_state(target.value):
+                            yield target.attr
+
+        unregistered = []
+        for path in files:
+            for key in literal_keys(ast.parse(path.read_text())):
+                if (isinstance(key, str) and key not in registered
+                        and not key.startswith(prefixes)):
+                    unregistered.append(f"{path.name}:{key}")
+        assert sorted(set(unregistered)) == []
+
 
 class TestTrackInputs:
     """track_inputs(stage, ...) drops results computed from other inputs."""

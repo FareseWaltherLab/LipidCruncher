@@ -245,7 +245,7 @@ _STAGES: Tuple[_Stage, ...] = (
         'upload',
         fields=frozenset({'raw_df', 'using_sample_data', 'sample_data_file'}),
         widgets=frozenset({'load_sample'}),
-        plain=frozenset({'_dataset_source_id'}),
+        plain=frozenset({'_dataset_source_id', 'lipidsearch_alignment_text'}),
         prefixes=('lipidsearch_alignment_uploader_',),
     ),
     # The upload read under the selected format. A format switch clears it.
@@ -306,6 +306,10 @@ _STAGES: Tuple[_Stage, ...] = (
             '_preserved_norm_method_selection', 'normalization_result',
             'class_standard_map', 'standard_concentrations', 'protein_df',
             'protein_input_method_prev',
+        }),
+        # The standards pages' remembered multiselect choices.
+        plain=frozenset({
+            'additional_dataset_standards', 'selected_dataset_standards',
         }),
         widgets=frozenset({
             # data_processing.py
@@ -417,6 +421,9 @@ _STAGES: Tuple[_Stage, ...] = (
             'heatmap_control_condition', 'heatmap_species_page',
             'heatmap_species_page_size', 'heatmap_species_sort',
         }),
+        # The volcano page's label options (set after its multiselect
+        # renders) and the pathway editor's config-applied latch.
+        plain=frozenset({'_volcano_available_lipids', '_pathway_config_applied'}),
         prefixes=('volcano_label_x_', 'volcano_label_y_', 'analysis_svg_',
                   'analysis_csv_'),
     ),
