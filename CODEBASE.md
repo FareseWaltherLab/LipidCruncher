@@ -81,7 +81,7 @@ LipidCruncher follows a **layered architecture** with strict dependency rules �
 
 - **Services and workflows are pure** — they have zero Streamlit dependencies, use only static methods, and are fully testable in isolation.
 - **Models are immutable** — Pydantic models with `frozen=True` make them hashable and safe for `@st.cache_data`.
-- **The adapter is the only bridge** — `StreamlitAdapter` is the sole point where Streamlit concerns (caching, session state) meet business logic.
+- **The adapter is the only bridge** — `StreamlitAdapter` is the sole point where Streamlit concerns (caching, session state) meet business logic. UI files may touch their own session-state keys directly, but every key belongs to a stage in the registry (`session_state.py`), and invalidation goes through the adapter.
 - **UI modules mostly render and collect input** — most logic lives in services and workflows, reached mostly through the adapter. Some orchestration still happens in `main_app.py` and the UI modules (the Module 1 step order and the zero-filtering call in `main_app.py`, the direct pathway plotter call in `analysis/_pathway.py`, picking the high-CoV lipids for the BQC filter in `quality_check.py`), and many UI modules import services or workflows directly.
 
 ---

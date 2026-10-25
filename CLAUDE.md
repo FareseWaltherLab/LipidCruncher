@@ -48,7 +48,7 @@ UI (src/main_app.py, src/app/ui/)
 **Load-bearing invariants — do not break:**
 
 - **Services, workflows, and models have zero Streamlit imports.** They use only static methods (services/workflows) or frozen Pydantic (models). This is what makes them unit-testable. If you find yourself wanting `st.something` in those layers, stop — the work belongs in the UI layer or the adapter.
-- **`StreamlitAdapter` is the only bridge** between Streamlit (session state, `@st.cache_data`) and business logic. UI modules call adapter/workflow methods and render results; data manipulation does not live in UI files.
+- **`StreamlitAdapter` is the only bridge** between Streamlit (session state, `@st.cache_data`) and business logic. UI modules call adapter/workflow methods and render results; data manipulation does not live in UI files. UI files may read and write their own session-state keys directly (widget keys, page-local values), but every key belongs to a stage in the registry in `src/app/adapters/session_state.py` (`tests/unit/test_streamlit_adapter.py` scans the UI for unregistered keys), and invalidation only ever goes through the adapter (`invalidate_from`, `invalidate_results_from`, `track_inputs`), never through hand-kept lists of keys to clear.
 - **Models are frozen Pydantic** (`ConfigDict(frozen=True)`) so they're hashable and safe to pass to `@st.cache_data`. Don't add mutable fields; use `.model_copy(update=...)` or builder methods like `ExperimentConfig.without_samples()`.
 
 ## Supported data formats
