@@ -387,7 +387,7 @@ class NormalizationService:
                 "Cannot apply protein normalization."
             )
 
-        result_df, skipped_samples = NormalizationService._normalize_by_protein(
+        result_df = NormalizationService._normalize_by_protein(
             result_df, cols_to_normalize, config
         )
 
@@ -395,8 +395,6 @@ class NormalizationService:
             result_df = NormalizationService._rename_intensity_to_concentration(result_df)
 
         method_desc = "Protein concentration normalization"
-        if skipped_samples:
-            method_desc += f" (skipped samples: {', '.join(skipped_samples)})"
 
         return NormalizationResult(
             normalized_df=result_df,
@@ -410,18 +408,28 @@ class NormalizationService:
         cols_to_normalize: List[str],
         config: NormalizationConfig,
     ) -> tuple:
-        """Divide each sample column by its protein concentration."""
-        skipped_samples = []
+        """Divide each sample column by its protein concentration.
+
+        Raises:
+            ValidationError: If a sample has no (positive) protein value.
+                Leaving it unnormalized would mix normalized and raw
+                columns in one table.
+        """
+        missing = []
         for col in cols_to_normalize:
             sample_name = col.split('[', 1)[1].rstrip(']')
             protein_conc = config.get_protein_concentration(sample_name)
-
             if protein_conc is None or protein_conc <= 0:
-                skipped_samples.append(sample_name)
-                continue
-
-            result_df[col] = result_df[col] / protein_conc
-        return result_df, skipped_samples
+                missing.append(sample_name)
+        if missing:
+            raise ValidationError(
+                "Protein normalization needs a protein concentration for "
+                f"every sample; missing for: {', '.join(missing)}"
+            )
+        for col in cols_to_normalize:
+            sample_name = col.split('[', 1)[1].rstrip(']')
+            result_df[col] = result_df[col] / config.get_protein_concentration(sample_name)
+        return result_df
 
     @staticmethod
     def _apply_both(

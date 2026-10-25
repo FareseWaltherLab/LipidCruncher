@@ -864,8 +864,11 @@ class TestProteinNormalizationZeroHandling:
                 }
             )
 
-    def test_protein_normalization_missing_sample_skipped(self, basic_lipid_df, simple_experiment_2x3):
-        """Test that samples without protein concentration are skipped."""
+    def test_protein_normalization_missing_sample_raises(self, basic_lipid_df, simple_experiment_2x3):
+        """Regression: a sample with no protein concentration was left
+        unnormalized, so the result mixed normalized and raw columns. The UI
+        validates first; the service is also called directly (AI pipeline)."""
+        from app.services.exceptions import ValidationError
         config = NormalizationConfig(
             method='protein',
             protein_concentrations={
@@ -877,8 +880,8 @@ class TestProteinNormalizationZeroHandling:
                 's6': 1.8,
             }
         )
-        result = NormalizationService.normalize(basic_lipid_df, config, simple_experiment_2x3)
-        assert result.normalized_df.loc[0, 'concentration[s2]'] == 1100.0
+        with pytest.raises(ValidationError, match="missing for: s2"):
+            NormalizationService.normalize(basic_lipid_df, config, simple_experiment_2x3)
 
 
 class TestProteinNormalizationClassFiltering:
