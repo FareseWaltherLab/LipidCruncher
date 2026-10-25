@@ -488,7 +488,9 @@ class TestParentHandlesTheChildsPipesAndWorkdir:
             "pd.compat.sys.stderr.flush()\n"
             "print('done')\n"
         )
-        res = run(code, df, config=SandboxConfig(execution_timeout=5))
+        # Default timeout: under a parallel test run the interpreter start-up
+        # alone can take seconds, and this test is about the pipe, not speed.
+        res = run(code, df)
         assert res.success, res.error_message
         assert res.stdout.strip() == "done"
 
