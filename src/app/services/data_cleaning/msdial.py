@@ -176,13 +176,18 @@ class MSDIALCleaner(BaseDataCleaner):
             )
             return df, messages
 
+        no_score = initial_count - valid_scores
         df = df[df['Total score'] >= threshold]
-        removed = initial_count - len(df)
+        removed = initial_count - no_score - len(df)
 
         if removed > 0:
             messages.append(
                 f"Quality filter: Removed {removed} entries with "
                 f"Total score < {threshold}"
+            )
+        if no_score > 0:
+            messages.append(
+                f"Quality filter: Removed {no_score} entries with no Total score"
             )
 
         return df, messages

@@ -7,6 +7,7 @@
 !src
 !sample_datasets
 !requirements.txt
+!constraints.txt
 !.streamlit/config.toml
 # Read at runtime by the AI Studio's documentation and source tools. Only the
 # tracked docs: docs/ also holds local, gitignored ops notes.

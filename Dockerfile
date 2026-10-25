@@ -53,8 +53,8 @@ RUN if [ "$WITH_R" = "1" ]; then \
 RUN useradd --create-home --uid 1000 app
 
 # Python deps.
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY requirements.txt constraints.txt .
+RUN pip install -r requirements.txt -c constraints.txt
 
 # Application.
 COPY . .

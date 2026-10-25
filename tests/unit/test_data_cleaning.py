@@ -1189,6 +1189,24 @@ class TestMSDIALQualityFiltering:
         cleaned, messages = MSDIALCleaner.clean(msdial_df, simple_experiment_2x2, config)
         assert len(cleaned) == 3
 
+    def test_score_filter_reports_missing_scores_separately(self, simple_experiment_2x2):
+        """Regression: rows with no Total score were dropped by the >= comparison
+        but counted in the 'Total score < threshold' message."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PE(18:0)', 'TG(16:0_18:1_18:2)'],
+            'ClassKey': ['PC', 'PE', 'TG'],
+            'Total score': [90.0, np.nan, 50.0],
+            'intensity[s1]': [1000, 2000, 3000],
+            'intensity[s2]': [1100, 2100, 3100],
+            'intensity[s3]': [1200, 2200, 3200],
+            'intensity[s4]': [1300, 2300, 3300],
+        })
+        config = QualityFilterConfig(total_score_threshold=60)
+        cleaned, messages = MSDIALCleaner.clean(df, simple_experiment_2x2, config)
+        assert list(cleaned['LipidMolec']) == ['PC(16:0)']
+        assert any("Removed 1 entries with Total score < 60" in m for m in messages)
+        assert any("Removed 1 entries with no Total score" in m for m in messages)
+
     def test_score_filter_message(self, simple_experiment_2x2):
         """Test that score filtering generates message."""
         df = pd.DataFrame({
@@ -1621,6 +1639,27 @@ class TestLipidSearchEdgeCases:
             'intensity[s4]': [1300.0, 2300.0],
         })
         with pytest.raises(EmptyDataError, match="FA"):
+            DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.LIPIDSEARCH)
+
+    def test_all_zero_intensities_raises_empty_data_error(self, simple_experiment_2x2):
+        """Regression: the adduct note ran before the empty check, so an upload
+        whose rows are all zero surfaced the standards detector's plain
+        ValueError instead of the 'non-zero intensity' EmptyDataError."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0_18:1)'],
+            'ClassKey': ['PC'],
+            'CalcMass': [760.5],
+            'BaseRt': [10.5],
+            'TotalGrade': ['A'],
+            'TotalSmpIDRate(%)': [100.0],
+            'FAKey': ['16:0_18:1'],
+            'MainIon': ['+H'],
+            'intensity[s1]': [0.0],
+            'intensity[s2]': [0.0],
+            'intensity[s3]': [0.0],
+            'intensity[s4]': [0.0],
+        })
+        with pytest.raises(EmptyDataError, match="non-zero"):
             DataCleaningService.clean_data(df, simple_experiment_2x2, DataFormat.LIPIDSEARCH)
 
     def test_only_cholesterol_data(self, simple_experiment_2x2):
