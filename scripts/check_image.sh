@@ -13,6 +13,8 @@
 # Builds from `git archive HEAD` (never the working tree), linux/amd64, with
 # R (WITH_R=1). Exits non-zero, saying why, if anything fails or any
 # isolation test is skipped (a skip means a protection was not checked).
+# The stable-isotope-tracing tests that need R + IsoCorrectoR run here too:
+# this is the only place in CI that has them, so a skip fails as well.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
@@ -36,19 +38,22 @@ case "$user" in
 esac
 echo "== Image user: $user"
 
-echo "== Sandbox isolation tests inside the image"
+echo "== Sandbox isolation and R-dependent isotope tests inside the image"
 # pytest is a dev tool, so it goes into this throwaway container only.
 log=$(mktemp)
 if ! docker run --rm --platform "$platform" -e PYTHONPATH=src \
         --entrypoint sh "$image" -c '
         pip install --quiet --user --no-warn-script-location pytest==9.0.3 &&
-        python -m pytest tests/unit/test_sandbox_isolation.py -q -rs -p no:cacheprovider
+        python -m pytest -q -rs -p no:cacheprovider \
+            tests/unit/test_sandbox_isolation.py \
+            tests/integration/test_isotope_tracing_golden.py \
+            tests/integration/test_isotope_tracing_warnings.py
     ' 2>&1 | tee "$log"; then
-    fail "sandbox isolation tests failed (see above)"
+    fail "in-image tests failed (see above)"
 fi
-grep -q " passed" "$log" || fail "the sandbox isolation tests did not run"
+grep -q " passed" "$log" || fail "the in-image tests did not run"
 if grep -qiE "[0-9]+ skipped" "$log"; then
-    fail "isolation tests were skipped, so those protections were not checked"
+    fail "in-image tests were skipped: a sandbox protection or the R runtime was not checked"
 fi
 rm -f "$log"
 
