@@ -110,6 +110,11 @@ class LipidSearchCleaner(BaseDataCleaner):
         if msg:
             messages.append(msg)
 
+        if df.empty:
+            raise EmptyDataError(
+                "No lipid species with non-zero intensity values found."
+            )
+
         # Say which adduct each class was quantified from, what was removed
         # for not matching its standard, and which classes still mix adducts.
         msg = LipidSearchCleaner._adduct_note(
@@ -118,11 +123,6 @@ class LipidSearchCleaner(BaseDataCleaner):
         )
         if msg:
             messages.append(msg)
-
-        if df.empty:
-            raise EmptyDataError(
-                "No lipid species with non-zero intensity values found."
-            )
 
         # Step 8: Final cleanup
         df = LipidSearchCleaner._final_cleanup(df)
