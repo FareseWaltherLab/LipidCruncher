@@ -1,6 +1,7 @@
 """Feature 7: Lipidomic Heatmap analysis."""
 
 import math
+from typing import List, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -35,54 +36,16 @@ def _display_lipidomic_heatmap(
             "a control condition."
         )
 
-        all_conditions = AnalysisWorkflow.get_all_conditions(experiment)
-        all_classes = AnalysisWorkflow.get_available_classes(df)
-
-        section_header("🎯 Data Selection")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            selected_conditions = st.multiselect(
-                "Conditions",
-                all_conditions,
-                default=all_conditions,
-                key='heatmap_conditions',
-            )
-        with col2:
-            selected_classes = st.multiselect(
-                "Lipid Classes",
-                all_classes,
-                default=all_classes,
-                key='heatmap_classes',
-            )
-
+        selected_conditions, selected_classes = _select_heatmap_data(df, experiment)
         if not selected_conditions or not selected_classes:
             st.warning("Please select at least one condition and one lipid class.")
             return
 
         section_header("⚙️ Heatmap Settings")
-        heatmap_type_value, n_clusters = _select_heatmap_type()
-
-        color_scale, control_condition = _select_color_scale(
-            selected_conditions, heatmap_type_value,
+        (heatmap_type_value, n_clusters, color_scale, control_condition,
+         sort_direction, species_total, species_page, page_size) = _select_heatmap_settings(
+            df, selected_conditions, selected_classes,
         )
-
-        sort_direction = 'desc'
-        if heatmap_type_value == 'class_grouped' and color_scale == 'log2fc':
-            sort_direction = _select_species_sort()
-
-        _display_method_explanation(
-            heatmap_type_value, color_scale, sort_direction,
-        )
-
-        species_total = LipidomicHeatmapPlotterService.count_species(
-            df, selected_classes,
-        )
-        species_page, page_size = 0, GROUPED_PAGE_SIZE
-        if heatmap_type_value == 'class_grouped':
-            species_page, page_size = _select_species_page(
-                species_total, sorted_by_fc=(color_scale == 'log2fc'),
-            )
 
         section_header("📈 Results")
 
@@ -132,6 +95,67 @@ def _display_lipidomic_heatmap(
                 result, df, experiment, selected_conditions, selected_classes,
                 n_clusters,
             )
+
+
+def _select_heatmap_data(
+    df: pd.DataFrame, experiment: ExperimentConfig,
+) -> Tuple[List[str], List[str]]:
+    """The condition and class pickers (all conditions: means need no replicates)."""
+    all_conditions = AnalysisWorkflow.get_all_conditions(experiment)
+    all_classes = AnalysisWorkflow.get_available_classes(df)
+
+    section_header("🎯 Data Selection")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_conditions = st.multiselect(
+            "Conditions",
+            all_conditions,
+            default=all_conditions,
+            key='heatmap_conditions',
+        )
+    with col2:
+        selected_classes = st.multiselect(
+            "Lipid Classes",
+            all_classes,
+            default=all_classes,
+            key='heatmap_classes',
+        )
+    return selected_conditions, selected_classes
+
+
+def _select_heatmap_settings(
+    df: pd.DataFrame, selected_conditions: List[str], selected_classes: List[str],
+) -> tuple:
+    """Type, clusters, color scale, control, sort order and species page.
+
+    Returns (heatmap_type, n_clusters, color_scale, control_condition,
+    sort_direction, species_total, species_page, page_size).
+    """
+    heatmap_type_value, n_clusters = _select_heatmap_type()
+
+    color_scale, control_condition = _select_color_scale(
+        selected_conditions, heatmap_type_value,
+    )
+
+    sort_direction = 'desc'
+    if heatmap_type_value == 'class_grouped' and color_scale == 'log2fc':
+        sort_direction = _select_species_sort()
+
+    _display_method_explanation(
+        heatmap_type_value, color_scale, sort_direction,
+    )
+
+    species_total = LipidomicHeatmapPlotterService.count_species(
+        df, selected_classes,
+    )
+    species_page, page_size = 0, GROUPED_PAGE_SIZE
+    if heatmap_type_value == 'class_grouped':
+        species_page, page_size = _select_species_page(
+            species_total, sorted_by_fc=(color_scale == 'log2fc'),
+        )
+    return (heatmap_type_value, n_clusters, color_scale, control_condition,
+            sort_direction, species_total, species_page, page_size)
 
 
 def _select_heatmap_type() -> tuple:

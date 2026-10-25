@@ -215,19 +215,8 @@ class FACHPlotterService:
         if not data_dict:
             return None
 
-        # Global axis and color ranges
-        all_proportions = pd.concat([d['Proportion'] for d in data_dict.values()])
-        vmax = all_proportions.max() if not all_proportions.empty else 1.0
-
-        all_db = pd.concat([d['DB'] for d in data_dict.values()])
-        all_carbon = pd.concat([d['Carbon'] for d in data_dict.values()])
-
-        max_db = int(all_db.max()) if not all_db.empty else DEFAULT_MAX_DB
-        min_carbon = int(all_carbon.min()) if not all_carbon.empty else DEFAULT_MIN_CARBON
-        max_carbon = int(all_carbon.max()) if not all_carbon.empty else DEFAULT_MAX_CARBON
-
-        db_values = list(range(0, max_db + 1))
-        carbon_values = list(range(min_carbon, max_carbon + 1))
+        vmax, db_values, carbon_values = _shared_ranges(data_dict)
+        max_db, min_carbon, max_carbon = db_values[-1], carbon_values[0], carbon_values[-1]
 
         n_conditions = len(data_dict)
         fig = make_subplots(
@@ -239,68 +228,16 @@ class FACHPlotterService:
 
         col_idx = 1
         for condition, cond_df in data_dict.items():
-            # Weighted averages
-            avg_db, avg_carbon = _compute_weighted_averages(cond_df)
-
-            # Build 2D matrix (rows=carbon, cols=db)
-            z_matrix = np.zeros((len(carbon_values), len(db_values)))
-
-            for _, row in cond_df.iterrows():
-                carbon_idx = int(row['Carbon']) - min_carbon
-                db_idx = int(row['DB'])
-                if 0 <= carbon_idx < len(carbon_values) and 0 <= db_idx < len(db_values):
-                    z_matrix[carbon_idx, db_idx] = row['Proportion']
-
-            heatmap = go.Heatmap(
-                x=db_values,
-                y=carbon_values,
-                z=z_matrix,
-                colorscale=CUSTOM_COLORSCALE,
-                zmin=0,
-                zmax=vmax,
-                colorbar=dict(
-                    title=dict(text='Proportion (%)', font=dict(color='black', size=15)),
-                    tickfont=dict(color='black', size=13),
-                ),
-                hovertemplate=(
-                    'Double Bonds: %{x}<br>Carbon: %{y}'
-                    '<br>Proportion: %{z:.2f}%<extra></extra>'
-                ),
-                xgap=1,
-                ygap=1,
+            fig.add_trace(
+                _condition_heatmap(cond_df, db_values, carbon_values, vmax),
+                row=1, col=col_idx,
             )
-            fig.add_trace(heatmap, row=1, col=col_idx)
-
-            # Average DB vertical line + annotation
+            avg_db, avg_carbon = _compute_weighted_averages(cond_df)
             _add_average_lines(
                 fig, col_idx, avg_db, avg_carbon,
                 max_db, min_carbon, max_carbon,
             )
-
-            # X-axis: all integer DB values
-            fig.update_xaxes(
-                tickmode='array',
-                tickvals=db_values,
-                ticktext=db_values,
-                tickangle=0,
-                title=dict(text='Double Bonds', font=dict(color='black', size=15)),
-                tickfont=dict(color='black', size=13),
-                range=[-0.5, max_db + 1.5],
-                row=1,
-                col=col_idx,
-            )
-
-            # Y-axis: title only on first subplot
-            y_kwargs = dict(
-                tickfont=dict(color='black', size=13),
-                range=[min_carbon - 0.5, max_carbon + 2.5],
-            )
-            if col_idx == 1:
-                y_kwargs['title'] = dict(
-                    text='Carbon Chain Length', font=dict(color='black', size=15),
-                )
-            fig.update_yaxes(row=1, col=col_idx, **y_kwargs)
-
+            _style_condition_axes(fig, col_idx, db_values, carbon_values)
             col_idx += 1
 
         # Style subplot titles
@@ -334,6 +271,80 @@ class FACHPlotterService:
 
 
 # ── Private helpers ────────────────────────────────────────────────────
+
+
+def _shared_ranges(data_dict: Dict[str, pd.DataFrame]) -> Tuple[float, List[int], List[int]]:
+    """Color maximum and the DB / carbon axis values every subplot shares."""
+    all_proportions = pd.concat([d['Proportion'] for d in data_dict.values()])
+    vmax = all_proportions.max() if not all_proportions.empty else 1.0
+
+    all_db = pd.concat([d['DB'] for d in data_dict.values()])
+    all_carbon = pd.concat([d['Carbon'] for d in data_dict.values()])
+
+    max_db = int(all_db.max()) if not all_db.empty else DEFAULT_MAX_DB
+    min_carbon = int(all_carbon.min()) if not all_carbon.empty else DEFAULT_MIN_CARBON
+    max_carbon = int(all_carbon.max()) if not all_carbon.empty else DEFAULT_MAX_CARBON
+
+    return vmax, list(range(0, max_db + 1)), list(range(min_carbon, max_carbon + 1))
+
+
+def _condition_heatmap(
+    cond_df: pd.DataFrame, db_values: List[int], carbon_values: List[int], vmax: float,
+) -> go.Heatmap:
+    """One condition's proportions on the shared carbon (rows) x DB (cols) grid."""
+    min_carbon = carbon_values[0]
+    z_matrix = np.zeros((len(carbon_values), len(db_values)))
+    for _, row in cond_df.iterrows():
+        carbon_idx = int(row['Carbon']) - min_carbon
+        db_idx = int(row['DB'])
+        if 0 <= carbon_idx < len(carbon_values) and 0 <= db_idx < len(db_values):
+            z_matrix[carbon_idx, db_idx] = row['Proportion']
+
+    return go.Heatmap(
+        x=db_values,
+        y=carbon_values,
+        z=z_matrix,
+        colorscale=CUSTOM_COLORSCALE,
+        zmin=0,
+        zmax=vmax,
+        colorbar=dict(
+            title=dict(text='Proportion (%)', font=dict(color='black', size=15)),
+            tickfont=dict(color='black', size=13),
+        ),
+        hovertemplate=(
+            'Double Bonds: %{x}<br>Carbon: %{y}'
+            '<br>Proportion: %{z:.2f}%<extra></extra>'
+        ),
+        xgap=1,
+        ygap=1,
+    )
+
+
+def _style_condition_axes(
+    fig: go.Figure, col_idx: int, db_values: List[int], carbon_values: List[int],
+) -> None:
+    """Integer DB ticks on x; carbon range on y, titled on the first subplot only."""
+    max_db, min_carbon, max_carbon = db_values[-1], carbon_values[0], carbon_values[-1]
+    fig.update_xaxes(
+        tickmode='array',
+        tickvals=db_values,
+        ticktext=db_values,
+        tickangle=0,
+        title=dict(text='Double Bonds', font=dict(color='black', size=15)),
+        tickfont=dict(color='black', size=13),
+        range=[-0.5, max_db + 1.5],
+        row=1,
+        col=col_idx,
+    )
+    y_kwargs = dict(
+        tickfont=dict(color='black', size=13),
+        range=[min_carbon - 0.5, max_carbon + 2.5],
+    )
+    if col_idx == 1:
+        y_kwargs['title'] = dict(
+            text='Carbon Chain Length', font=dict(color='black', size=15),
+        )
+    fig.update_yaxes(row=1, col=col_idx, **y_kwargs)
 
 
 def _compute_weighted_averages(

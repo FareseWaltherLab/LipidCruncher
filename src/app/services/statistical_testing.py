@@ -514,11 +514,7 @@ class StatisticalTestingService:
                 if fa_type not in fa_data[cls]:
                     continue
                 key = f"{cls}_{fa_type}"
-                groups = {
-                    cond: fa_data[cls][fa_type][cond]
-                    for cond in selected_conditions
-                    if cond in fa_data[cls][fa_type]
-                }
+                groups = _fa_groups(fa_data, cls, fa_type, selected_conditions)
                 if len(groups) < 2:
                     skipped_keys.append(key)
                     continue
@@ -538,25 +534,10 @@ class StatisticalTestingService:
         )
 
         if len(selected_conditions) > 2:
-            for key, res in results.items():
-                if not res.significant:
-                    continue
-                cls, fa_type = key.rsplit('_', 1)
-                if cls not in fa_data or fa_type not in fa_data[cls]:
-                    continue
-                groups = {
-                    cond: fa_data[cls][fa_type][cond]
-                    for cond in selected_conditions
-                    if cond in fa_data[cls][fa_type]
-                }
-                try:
-                    ph = StatisticalTestingService.run_posthoc(
-                        groups, posthoc_corr, config.alpha, config.auto_transform,
-                        global_small, test_type=test_type,
-                    )
-                    posthoc_results[key] = ph
-                except ValueError:
-                    continue
+            posthoc_results = StatisticalTestingService._saturation_posthoc(
+                results, fa_data, selected_conditions, posthoc_corr, config,
+                global_small, test_type,
+            )
 
         return StatisticalTestSummary(
             results=results,
@@ -575,6 +556,34 @@ class StatisticalTestingService:
                 'alpha': config.alpha,
             },
         )
+
+    @staticmethod
+    def _saturation_posthoc(
+        results: Dict[str, StatisticalTestResult],
+        fa_data: Dict[str, Dict[str, Dict[str, np.ndarray]]],
+        selected_conditions: List[str],
+        posthoc_corr: str,
+        config: StatisticalTestConfig,
+        global_small: Optional[float],
+        test_type: str,
+    ) -> Dict[str, List[PostHocResult]]:
+        """Post-hoc pairwise tests for every significant (class, FA type)."""
+        posthoc_results: Dict[str, List[PostHocResult]] = {}
+        for key, res in results.items():
+            if not res.significant:
+                continue
+            cls, fa_type = key.rsplit('_', 1)
+            if cls not in fa_data or fa_type not in fa_data[cls]:
+                continue
+            groups = _fa_groups(fa_data, cls, fa_type, selected_conditions)
+            try:
+                posthoc_results[key] = StatisticalTestingService.run_posthoc(
+                    groups, posthoc_corr, config.alpha, config.auto_transform,
+                    global_small, test_type=test_type,
+                )
+            except ValueError:
+                continue
+        return posthoc_results
 
     @staticmethod
     def run_species_level_tests(
@@ -929,6 +938,18 @@ class StatisticalTestingService:
         ctrl_adj = np.maximum(control, small_value)
         exp_adj = np.maximum(experimental, small_value)
         return float(np.log2(np.mean(exp_adj) / np.mean(ctrl_adj)))
+
+
+def _fa_groups(
+    fa_data: Dict[str, Dict[str, Dict[str, np.ndarray]]],
+    cls: str, fa_type: str, selected_conditions: List[str],
+) -> Dict[str, np.ndarray]:
+    """One (class, FA type)'s values per selected condition that has them."""
+    return {
+        cond: fa_data[cls][fa_type][cond]
+        for cond in selected_conditions
+        if cond in fa_data[cls][fa_type]
+    }
 
 
 def _tukey_pair_index(i: int, j: int, n_groups: int) -> int:
