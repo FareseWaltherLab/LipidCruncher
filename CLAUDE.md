@@ -26,7 +26,7 @@ pytest tests/ --cov=src/app --cov-report=term-missing
 ruff check src tests
 ```
 
-`pytest.ini` sets `pythonpath = src`, so tests import as `from app.services...` (not `src.app.services...`).
+`pytest.ini` sets `pythonpath = src scripts`, so tests import as `from app.services...` (not `src.app.services...`).
 
 ## Testing
 

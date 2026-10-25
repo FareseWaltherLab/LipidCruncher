@@ -309,7 +309,7 @@ LipidCruncher/
 ├── .streamlit/config.toml                   # Server settings (upload cap: maxUploadSize = 1024 MB)
 ├── requirements.txt
 ├── pytest.ini
-├── Dockerfile                               # Single image: app + AI Studio + R/IsoCorrectoR
+├── Dockerfile                               # Single image: app + AI Studio (+ R/IsoCorrectoR with WITH_R=1)
 └── README.md
 ```
 
@@ -646,7 +646,7 @@ The isotope tracing page owns the `iso_`-prefixed keys (`iso_measurement_df`, `i
 ```ini
 # pytest.ini
 [pytest]
-pythonpath = src
+pythonpath = src scripts
 testpaths = tests
 ```
 
@@ -697,14 +697,14 @@ pytest tests/ --cov=src/app --cov-report=term-missing
 ### Docker
 
 ```bash
-# Build
+# Build (add --build-arg WITH_R=1 for the stable isotope tracing page)
 docker build -t lipidcruncher .
 
 # Run
 docker run -p 8501:8501 lipidcruncher
 ```
 
-The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for `pdf2image`, which renders the landing page's module PDFs) plus R + Bioconductor + IsoCorrectoR + `jsonlite` (for the stable isotope tracing module), and runs `streamlit run src/main_app.py` as the unprivileged `app` user (the AI Studio sandbox refuses to run code as root).
+The Dockerfile uses `python:3.11-slim`, installs `poppler-utils` (for `pdf2image`, which renders the landing page's module PDFs) and, only with `--build-arg WITH_R=1`, R + Bioconductor + IsoCorrectoR + `jsonlite` (for the stable isotope tracing module; without it that page reports R as unavailable), and runs `streamlit run src/main_app.py` as the unprivileged `app` user (the AI Studio sandbox refuses to run code as root).
 
 **One image, many deployments.** There is a single Dockerfile; what an image contains is decided by the branch it is built from, and deployments are separated by ECR tag and ECS service rather than by a second Dockerfile. Build for Fargate with `--platform linux/amd64`. The R layer dominates a cold build but sits before the application `COPY`, so it stays cached across app changes. `ANTHROPIC_API_KEY` is injected at run time (ECS `secrets`), never baked into the image; without it every page works except the AI Studio.
 
