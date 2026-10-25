@@ -18,6 +18,7 @@ from ..services.ai_chat.prompt_templates import (
     answer_from_results_system_prompt,
     build_answer_request,
     build_experiment_context,
+    data_block,
     data_questions_system_prompt,
 )
 from ..services.ai_chat.sandbox import SandboxService
@@ -267,7 +268,7 @@ class DataQuestionsWorkflow:
         user_msg = ChatMessage(role="user", content=user_message)
         session = session.add_message(user_msg)
 
-        context = f"<dataframe_schema>\n{session.schema_context}\n</dataframe_schema>"
+        context = data_block('dataframe_schema', session.schema_context)
         exp_context = build_experiment_context(experiment)
         if exp_context:
             context = f"{context}\n\n{exp_context}"

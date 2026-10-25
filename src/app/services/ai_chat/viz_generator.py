@@ -18,6 +18,8 @@ from .prompt_templates import (
     METHODOLOGY_CLARIFICATION_RULES,
     PIPELINE_FIRST_RULES,
     analysis_modules_text,
+    data_block,
+    with_data_note,
 )
 from .sandbox import SandboxResult, SandboxService
 
@@ -26,7 +28,7 @@ def _viz_system_prompt() -> str:
     """System prompt for the visualization chat mode."""
     app_knowledge = get_app_knowledge()
 
-    return f"""\
+    return with_data_note(f"""\
 You are a lipidomics visualization assistant for LipidCruncher.
 
 {app_knowledge}
@@ -145,7 +147,7 @@ data into the LipidCruncher Generic format."
 to the **Data Questions** tab to explore and ask questions about your data."
 - Questions unrelated to LipidCruncher or lipidomics → "I can only help with creating \
 visualizations from lipidomic data. I cannot answer general questions."
-"""
+""")
 
 
 def _build_experiment_context(experiment: ExperimentConfig) -> str:
@@ -196,7 +198,7 @@ class VizGeneratorService:
         """
         experiment_context = _build_experiment_context(experiment)
         context = (
-            f"<dataframe_schema>\n{schema_context}\n</dataframe_schema>\n\n"
+            f"{data_block('dataframe_schema', schema_context)}\n\n"
             f"<experiment_structure>\n{experiment_context}\n</experiment_structure>"
         )
 
