@@ -110,8 +110,8 @@ class StatisticalTestingService:
             StatisticalTestResult with test name, statistic, and p-value.
 
         Raises:
-            ValueError: If either group has fewer than 2 values or
-                        all values are non-positive after filtering NaN.
+            ValidationError: If either group has fewer than 2 values after
+                filtering NaN.
         """
         small = global_small_value
         if small is None and auto_transform:
@@ -406,6 +406,7 @@ class StatisticalTestingService:
 
         results: Dict[str, StatisticalTestResult] = {}
         posthoc_results: Dict[str, List[PostHocResult]] = {}
+        skipped_classes: List[str] = []
 
         for cls in selected_classes:
             groups = StatisticalTestingService._extract_class_totals(
@@ -414,9 +415,13 @@ class StatisticalTestingService:
             if groups is None:
                 continue
 
-            result = StatisticalTestingService._run_test_for_groups(
-                groups, test_type, config.auto_transform, global_small
-            )
+            try:
+                result = StatisticalTestingService._run_test_for_groups(
+                    groups, test_type, config.auto_transform, global_small
+                )
+            except ValueError:  # e.g. a selected condition with one sample
+                skipped_classes.append(cls)
+                continue
             result.group_key = cls
             results[cls] = result
 
@@ -454,6 +459,7 @@ class StatisticalTestingService:
                 'n_conditions': len(selected_conditions),
                 'n_classes': len(selected_classes),
                 'n_tests': len(results),
+                'n_skipped': len(skipped_classes),
                 'alpha': config.alpha,
             },
         )
@@ -508,11 +514,7 @@ class StatisticalTestingService:
                 if fa_type not in fa_data[cls]:
                     continue
                 key = f"{cls}_{fa_type}"
-                groups = {
-                    cond: fa_data[cls][fa_type][cond]
-                    for cond in selected_conditions
-                    if cond in fa_data[cls][fa_type]
-                }
+                groups = _fa_groups(fa_data, cls, fa_type, selected_conditions)
                 if len(groups) < 2:
                     skipped_keys.append(key)
                     continue
@@ -532,25 +534,10 @@ class StatisticalTestingService:
         )
 
         if len(selected_conditions) > 2:
-            for key, res in results.items():
-                if not res.significant:
-                    continue
-                cls, fa_type = key.rsplit('_', 1)
-                if cls not in fa_data or fa_type not in fa_data[cls]:
-                    continue
-                groups = {
-                    cond: fa_data[cls][fa_type][cond]
-                    for cond in selected_conditions
-                    if cond in fa_data[cls][fa_type]
-                }
-                try:
-                    ph = StatisticalTestingService.run_posthoc(
-                        groups, posthoc_corr, config.alpha, config.auto_transform,
-                        global_small, test_type=test_type,
-                    )
-                    posthoc_results[key] = ph
-                except ValueError:
-                    continue
+            posthoc_results = StatisticalTestingService._saturation_posthoc(
+                results, fa_data, selected_conditions, posthoc_corr, config,
+                global_small, test_type,
+            )
 
         return StatisticalTestSummary(
             results=results,
@@ -569,6 +556,34 @@ class StatisticalTestingService:
                 'alpha': config.alpha,
             },
         )
+
+    @staticmethod
+    def _saturation_posthoc(
+        results: Dict[str, StatisticalTestResult],
+        fa_data: Dict[str, Dict[str, Dict[str, np.ndarray]]],
+        selected_conditions: List[str],
+        posthoc_corr: str,
+        config: StatisticalTestConfig,
+        global_small: Optional[float],
+        test_type: str,
+    ) -> Dict[str, List[PostHocResult]]:
+        """Post-hoc pairwise tests for every significant (class, FA type)."""
+        posthoc_results: Dict[str, List[PostHocResult]] = {}
+        for key, res in results.items():
+            if not res.significant:
+                continue
+            cls, fa_type = key.rsplit('_', 1)
+            if cls not in fa_data or fa_type not in fa_data[cls]:
+                continue
+            groups = _fa_groups(fa_data, cls, fa_type, selected_conditions)
+            try:
+                posthoc_results[key] = StatisticalTestingService.run_posthoc(
+                    groups, posthoc_corr, config.alpha, config.auto_transform,
+                    global_small, test_type=test_type,
+                )
+            except ValueError:
+                continue
+        return posthoc_results
 
     @staticmethod
     def run_species_level_tests(
@@ -602,13 +617,13 @@ class StatisticalTestingService:
         )
         test_type, correction, _ = resolved
 
-        # Compute one dataset-wide small value for all tests
-        global_small = (
-            StatisticalTestingService._compute_dataset_small_value(
-                df if dataset_df is None else dataset_df
-            )
-            if config.auto_transform else None
+        # One dataset-wide zero replacement: the log-transformed tests use
+        # it (when transforming) and so does every fold change, so a lipid
+        # absent in one group is floored the same way in both numbers.
+        dataset_small = StatisticalTestingService._compute_dataset_small_value(
+            df if dataset_df is None else dataset_df
         )
+        global_small = dataset_small if config.auto_transform else None
 
         results: Dict[str, StatisticalTestResult] = {}
         skipped_insufficient = []
@@ -654,9 +669,9 @@ class StatisticalTestingService:
                 skipped_test_error.append(lipid)
                 continue
 
-            # Compute fold change on zero-adjusted original values
+            # Fold change on the original values, zeros floored like the test's
             fc = StatisticalTestingService._compute_fold_change(
-                ctrl_clean, exp_clean
+                ctrl_clean, exp_clean, dataset_small
             )
             result.effect_size = fc
             result.group_key = lipid
@@ -913,27 +928,28 @@ class StatisticalTestingService:
 
     @staticmethod
     def _compute_fold_change(
-        control: np.ndarray, experimental: np.ndarray
+        control: np.ndarray, experimental: np.ndarray, small_value: float,
     ) -> float:
-        """Compute log2 fold change (experimental / control).
+        """Compute log2 fold change (experimental / control) of the means.
 
-        Uses zero-adjusted means. Returns 0.0 if control mean is zero.
+        Zeros are floored at ``small_value``, the dataset-wide replacement
+        (``_compute_dataset_small_value``) the p-value on the same row uses.
         """
-        positive = np.concatenate([control, experimental])
-        positive = positive[positive > 0]
-        min_pos = float(positive.min()) if len(positive) > 0 else MIN_POSITIVE_FALLBACK
-        small = min_pos / ZERO_REPLACEMENT_DIVISOR
+        ctrl_adj = np.maximum(control, small_value)
+        exp_adj = np.maximum(experimental, small_value)
+        return float(np.log2(np.mean(exp_adj) / np.mean(ctrl_adj)))
 
-        ctrl_adj = np.maximum(control, small)
-        exp_adj = np.maximum(experimental, small)
 
-        mean_ctrl = np.mean(ctrl_adj)
-        mean_exp = np.mean(exp_adj)
-
-        if mean_ctrl == 0:
-            return 0.0
-
-        return float(np.log2(mean_exp / mean_ctrl))
+def _fa_groups(
+    fa_data: Dict[str, Dict[str, Dict[str, np.ndarray]]],
+    cls: str, fa_type: str, selected_conditions: List[str],
+) -> Dict[str, np.ndarray]:
+    """One (class, FA type)'s values per selected condition that has them."""
+    return {
+        cond: fa_data[cls][fa_type][cond]
+        for cond in selected_conditions
+        if cond in fa_data[cls][fa_type]
+    }
 
 
 def _tukey_pair_index(i: int, j: int, n_groups: int) -> int:

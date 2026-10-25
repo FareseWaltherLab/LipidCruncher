@@ -56,7 +56,11 @@ class StreamlitAdapter(
     1. **Direct access** — for simple reads/writes of data keys owned by the
        current file. Use ``st.session_state['key']`` for reads that must exist
        and ``st.session_state['key'] = value`` for writes.  Use
-       ``st.session_state.get('key')`` when the key may be ``None``.
+       ``st.session_state.get('key')`` when the key may be ``None``. The key
+       must belong to a stage in ``_STAGES`` (``session_state.py``), which is
+       what clears it at the right time; a registry test scans the UI for
+       keys that are not. Never clear keys by hand: use ``invalidate_from``
+       or ``invalidate_results_from``.
 
     2. **``restore_widget_value`` / ``save_widget_value``** — for widget keys
        that must survive module navigation (Streamlit removes widget keys for

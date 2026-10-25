@@ -176,33 +176,7 @@ def _render_volcano_results(
     hide_nonsig: bool,
 ) -> None:
     """Render the volcano plot, concentration scatter, and distribution plot."""
-    # Labeling options
-    st.markdown("**Labeling Options**")
-    col1, col2 = st.columns(2)
-    with col1:
-        top_n = st.number_input(
-            "Top N lipids to label:",
-            min_value=0,
-            max_value=50,
-            value=0,
-            step=1,
-            key='volcano_top_n',
-        )
-    with col2:
-        enable_adjustment = st.checkbox(
-            "Enable label adjustment",
-            value=False,
-            key='volcano_enable_adjust',
-        )
-
-    # Additional lipids to label
-    available_lipids = st.session_state.get('_volcano_available_lipids', [])
-    additional_labels = st.multiselect(
-        "Additional lipids to label:",
-        available_lipids,
-        default=[],
-        key='volcano_additional_labels',
-    )
+    top_n, enable_adjustment, additional_labels = _labeling_options()
 
     # Determine which p-value column the plot will use
     use_adjusted = stat_config.correction_method != 'uncorrected'
@@ -261,20 +235,7 @@ def _render_volcano_results(
     _display_correction_scope(result.stat_summary, df, selected_classes, 'species')
     _display_detailed_statistics(result.stat_summary, 'volcano')
 
-    # Concentration vs Fold Change (stored only if rendered; see _clear_pdf_plots)
-    if result.concentration_plot is not None:
-        st.markdown("---")
-        st.markdown("###### Concentration vs. Fold Change")
-        st.plotly_chart(result.concentration_plot, width='stretch')
-        _publish('conc_vs_fc', result.concentration_plot)
-
-        if result.concentration_df is not None:
-            display_export_buttons(
-                result.concentration_plot, result.concentration_df,
-                f"conc_vs_fc_{experimental}_vs_{control}.svg",
-                f"conc_vs_fc_{experimental}_vs_{control}.csv",
-                "analysis_svg_conc_fc", "analysis_csv_conc_fc",
-            )
+    _display_concentration_plot(result, control, experimental)
 
     # Individual lipid analysis
     _display_individual_lipid_analysis(
@@ -283,6 +244,55 @@ def _render_volcano_results(
 
     # Excluded lipids
     _display_excluded_lipids(result, control, experimental)
+
+
+def _labeling_options() -> Tuple[int, bool, List[str]]:
+    """Top-N count, label adjustment switch and the extra lipids to label."""
+    st.markdown("**Labeling Options**")
+    col1, col2 = st.columns(2)
+    with col1:
+        top_n = st.number_input(
+            "Top N lipids to label:",
+            min_value=0,
+            max_value=50,
+            value=0,
+            step=1,
+            key='volcano_top_n',
+        )
+    with col2:
+        enable_adjustment = st.checkbox(
+            "Enable label adjustment",
+            value=False,
+            key='volcano_enable_adjust',
+        )
+
+    # Options come from the previous run's volcano table (set after this renders)
+    available_lipids = st.session_state.get('_volcano_available_lipids', [])
+    additional_labels = st.multiselect(
+        "Additional lipids to label:",
+        available_lipids,
+        default=[],
+        key='volcano_additional_labels',
+    )
+    return top_n, enable_adjustment, additional_labels
+
+
+def _display_concentration_plot(result, control: str, experimental: str) -> None:
+    """Concentration vs fold change (stored only if rendered; see _clear_pdf_plots)."""
+    if result.concentration_plot is None:
+        return
+    st.markdown("---")
+    st.markdown("###### Concentration vs. Fold Change")
+    st.plotly_chart(result.concentration_plot, width='stretch')
+    _publish('conc_vs_fc', result.concentration_plot)
+
+    if result.concentration_df is not None:
+        display_export_buttons(
+            result.concentration_plot, result.concentration_df,
+            f"conc_vs_fc_{experimental}_vs_{control}.svg",
+            f"conc_vs_fc_{experimental}_vs_{control}.csv",
+            "analysis_svg_conc_fc", "analysis_csv_conc_fc",
+        )
 
 
 def _collect_label_positions(

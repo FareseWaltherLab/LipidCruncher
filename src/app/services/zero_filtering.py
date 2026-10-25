@@ -8,7 +8,7 @@ from typing import List, Optional
 from ..models.experiment import ExperimentConfig
 
 
-@dataclass
+@dataclass(frozen=True)
 class ZeroFilterConfig:
     """
     Configuration for zero filtering thresholds.

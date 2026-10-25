@@ -13,7 +13,7 @@ Data flow:
     qc_df → rt (read-only) → correlation (read-only)
           → pca (may remove samples) → final_df, updated_experiment
 """
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -588,56 +588,7 @@ def _display_pca_analysis(
 
         # --- Settings ---
         settings_header()
-
-        # Exclude whole groups/conditions
-        restored_groups = StreamlitAdapter.restore_widget_value(
-            'pca_groups_remove', '_preserved_pca_groups_remove', []
-        )
-        valid_restored_groups = [
-            c for c in restored_groups if c in experiment.conditions_list
-        ]
-        groups_to_remove = st.multiselect(
-            'Exclude Groups (optional)',
-            experiment.conditions_list,
-            default=valid_restored_groups if valid_restored_groups else [],
-            help=(
-                "Exclude an entire condition/group (e.g. Blanks, a control "
-                "condition) from all downstream analyses."
-            ),
-            key='pca_groups_remove'
-        )
-        StreamlitAdapter.save_widget_value('pca_groups_remove', '_preserved_pca_groups_remove')
-
-        # Expand selected groups to their sample names
-        group_samples = []
-        for cond in groups_to_remove:
-            group_samples.extend(experiment.samples_for(cond))
-
-        restored_pca = StreamlitAdapter.restore_widget_value(
-            'pca_samples_remove', '_preserved_pca_samples_remove', []
-        )
-        # Filter preserved values to only include currently valid samples
-        valid_restored = [s for s in restored_pca if s in experiment.full_samples_list]
-        # Values stay s-labels; only the shown text follows the switch.
-        samples_to_remove = st.multiselect(
-            'Exclude Samples (optional)',
-            experiment.full_samples_list,
-            default=valid_restored if valid_restored else [],
-            format_func=labeler('qc_input'),
-            help=(
-                "Exclude suspected outliers, or technical runs you don't want "
-                "in the analysis (e.g. pooled QC, blanks). Excluded samples "
-                "are dropped from all downstream analyses."
-            ),
-            key='pca_samples_remove'
-        )
-        StreamlitAdapter.save_widget_value('pca_samples_remove', '_preserved_pca_samples_remove')
-
-        # Combine group- and sample-level exclusions (order-preserving union)
-        combined_removal = list(group_samples)
-        for s in samples_to_remove:
-            if s not in combined_removal:
-                combined_removal.append(s)
+        combined_removal = _pca_exclusion_pickers(experiment)
 
         if combined_removal:
             remaining_count = len(experiment.full_samples_list) - len(combined_removal)
@@ -666,19 +617,74 @@ def _display_pca_analysis(
 
         # --- Results ---
         results_header()
-
-        pca_plot, pca_df = StreamlitAdapter.run_pca(
-            df, experiment, display_names_for('qc'),
-        )
-        st.plotly_chart(pca_plot, width='stretch')
-        st.session_state.qc_pca_plot = pca_plot
-
-        # Download buttons
-        display_export_buttons(
-            pca_plot, pca_df,
-            "pca_plot.svg", "pca_data.csv",
-            "qc_pca_svg", "pca_csv_download",
-            sample_names=names_for('qc'),
-        )
+        _pca_results(df, experiment)
 
     return df, experiment
+
+
+def _pca_exclusion_pickers(experiment: 'ExperimentConfig') -> List[str]:
+    """Group and sample exclusion pickers; returns the samples to drop
+    (group members first, then the individually picked ones, no repeats)."""
+    restored_groups = StreamlitAdapter.restore_widget_value(
+        'pca_groups_remove', '_preserved_pca_groups_remove', []
+    )
+    valid_restored_groups = [
+        c for c in restored_groups if c in experiment.conditions_list
+    ]
+    groups_to_remove = st.multiselect(
+        'Exclude Groups (optional)',
+        experiment.conditions_list,
+        default=valid_restored_groups if valid_restored_groups else [],
+        help=(
+            "Exclude an entire condition/group (e.g. Blanks, a control "
+            "condition) from all downstream analyses."
+        ),
+        key='pca_groups_remove'
+    )
+    StreamlitAdapter.save_widget_value('pca_groups_remove', '_preserved_pca_groups_remove')
+
+    group_samples = []
+    for cond in groups_to_remove:
+        group_samples.extend(experiment.samples_for(cond))
+
+    restored_pca = StreamlitAdapter.restore_widget_value(
+        'pca_samples_remove', '_preserved_pca_samples_remove', []
+    )
+    # Filter preserved values to only include currently valid samples
+    valid_restored = [s for s in restored_pca if s in experiment.full_samples_list]
+    # Values stay s-labels; only the shown text follows the switch.
+    samples_to_remove = st.multiselect(
+        'Exclude Samples (optional)',
+        experiment.full_samples_list,
+        default=valid_restored if valid_restored else [],
+        format_func=labeler('qc_input'),
+        help=(
+            "Exclude suspected outliers, or technical runs you don't want "
+            "in the analysis (e.g. pooled QC, blanks). Excluded samples "
+            "are dropped from all downstream analyses."
+        ),
+        key='pca_samples_remove'
+    )
+    StreamlitAdapter.save_widget_value('pca_samples_remove', '_preserved_pca_samples_remove')
+
+    combined_removal = list(group_samples)
+    for s in samples_to_remove:
+        if s not in combined_removal:
+            combined_removal.append(s)
+    return combined_removal
+
+
+def _pca_results(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None:
+    """Draw the PCA plot, keep it for the report, offer the downloads."""
+    pca_plot, pca_df = StreamlitAdapter.run_pca(
+        df, experiment, display_names_for('qc'),
+    )
+    st.plotly_chart(pca_plot, width='stretch')
+    st.session_state.qc_pca_plot = pca_plot
+
+    display_export_buttons(
+        pca_plot, pca_df,
+        "pca_plot.svg", "pca_data.csv",
+        "qc_pca_svg", "pca_csv_download",
+        sample_names=names_for('qc'),
+    )

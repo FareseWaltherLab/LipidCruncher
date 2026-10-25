@@ -80,50 +80,10 @@ def _display_internal_standards_config(
         st.error("No internal standards available.")
         return None, None
 
-    internal_standards = {}
-    intsta_concentrations = {}
-
-    # Retrieve saved mappings for session state persistence
-    saved_mappings = st.session_state.get('class_standard_map', {})
-
     with st.expander("⚙️ Internal Standards Mapping", expanded=True):
-        # Show warnings for classes without specific standards
-        for lipid_class in selected_classes:
-            class_standards = standards_by_class.get(lipid_class, [])
-            if not class_standards:
-                if saved_mappings and lipid_class in saved_mappings and saved_mappings[lipid_class] in all_standards:
-                    default_standard = saved_mappings[lipid_class]
-                else:
-                    default_standard = all_standards[0]
-                st.warning(f"No specific standards available for {lipid_class}. Defaulting to {default_standard}.")
-
-        # Class-to-standard mapping (double-column layout)
-        for lipid_class in selected_classes:
-            # Determine default standard (saved mapping -> class-specific -> first available)
-            default_std = None
-            if saved_mappings and lipid_class in saved_mappings:
-                default_std = saved_mappings[lipid_class]
-                if default_std not in all_standards:
-                    default_std = None
-            if not default_std:
-                class_standards = standards_by_class.get(lipid_class, [])
-                default_std = class_standards[0] if class_standards else all_standards[0]
-
-            default_idx = all_standards.index(default_std) if default_std in all_standards else 0
-
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                st.text(lipid_class)
-            with col2:
-                selected_std = st.selectbox(
-                    f'Select internal standard for {lipid_class}',
-                    options=all_standards,
-                    index=default_idx,
-                    key=f'standard_selection_{lipid_class}',
-                    label_visibility="collapsed"
-                )
-                internal_standards[lipid_class] = selected_std
-
+        internal_standards = _class_standard_pickers(
+            selected_classes, standards_by_class, all_standards,
+        )
         # Save mapping to session state for persistence
         st.session_state.class_standard_map = internal_standards
 
@@ -141,39 +101,94 @@ def _display_internal_standards_config(
                 "in data processing."
             )
 
-        # Standard concentrations (always visible, not optional)
-        if st.session_state.get('standard_concentrations') is None:
-            st.session_state.standard_concentrations = {}
-
-        st.write("Enter the concentration of each selected internal standard (µM):")
-
-        all_concentrations_valid = True
-        for std in set(internal_standards.values()):
-            widget_key = f"conc_{std}"
-            # Initialize from preserved concentrations if not already set
-            if widget_key not in st.session_state:
-                st.session_state[widget_key] = st.session_state.standard_concentrations.get(std, 1.0)
-
-            conc = st.number_input(
-                f"Concentration (µM) for {std}",
-                min_value=0.0,
-                step=0.1,
-                key=widget_key
-            )
-
-            # Sync back for session preservation
-            st.session_state.standard_concentrations[std] = conc
-
-            if conc <= 0:
-                st.error(f"Please enter a valid concentration for {std}")
-                all_concentrations_valid = False
-            intsta_concentrations[std] = conc
-
-        if not all_concentrations_valid:
-            st.error("Please enter valid concentrations for all standards")
+        intsta_concentrations = _standard_concentration_inputs(internal_standards)
+        if intsta_concentrations is None:
             return None, None
 
     return internal_standards, intsta_concentrations
+
+
+def _class_standard_pickers(
+    selected_classes: list, standards_by_class: dict, all_standards: list,
+) -> dict:
+    """One standard picker per class; the default is the saved mapping, else
+    a standard of the class, else the first available (with a warning)."""
+    saved_mappings = st.session_state.get('class_standard_map', {})
+    internal_standards = {}
+
+    # Show warnings for classes without specific standards
+    for lipid_class in selected_classes:
+        class_standards = standards_by_class.get(lipid_class, [])
+        if not class_standards:
+            if saved_mappings and lipid_class in saved_mappings and saved_mappings[lipid_class] in all_standards:
+                default_standard = saved_mappings[lipid_class]
+            else:
+                default_standard = all_standards[0]
+            st.warning(f"No specific standards available for {lipid_class}. Defaulting to {default_standard}.")
+
+    # Class-to-standard mapping (double-column layout)
+    for lipid_class in selected_classes:
+        # Determine default standard (saved mapping -> class-specific -> first available)
+        default_std = None
+        if saved_mappings and lipid_class in saved_mappings:
+            default_std = saved_mappings[lipid_class]
+            if default_std not in all_standards:
+                default_std = None
+        if not default_std:
+            class_standards = standards_by_class.get(lipid_class, [])
+            default_std = class_standards[0] if class_standards else all_standards[0]
+
+        default_idx = all_standards.index(default_std) if default_std in all_standards else 0
+
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.text(lipid_class)
+        with col2:
+            selected_std = st.selectbox(
+                f'Select internal standard for {lipid_class}',
+                options=all_standards,
+                index=default_idx,
+                key=f'standard_selection_{lipid_class}',
+                label_visibility="collapsed"
+            )
+            internal_standards[lipid_class] = selected_std
+    return internal_standards
+
+
+def _standard_concentration_inputs(internal_standards: dict):
+    """A concentration input per selected standard; None if any is not positive."""
+    if st.session_state.get('standard_concentrations') is None:
+        st.session_state.standard_concentrations = {}
+
+    st.write("Enter the concentration of each selected internal standard (µM):")
+
+    intsta_concentrations = {}
+    all_concentrations_valid = True
+    for std in set(internal_standards.values()):
+        widget_key = f"conc_{std}"
+        # Initialize from preserved concentrations if not already set
+        if widget_key not in st.session_state:
+            st.session_state[widget_key] = st.session_state.standard_concentrations.get(std, 1.0)
+
+        conc = st.number_input(
+            f"Concentration (µM) for {std}",
+            min_value=0.0,
+            step=0.1,
+            key=widget_key
+        )
+
+        # Sync back for session preservation
+        st.session_state.standard_concentrations[std] = conc
+
+        if conc <= 0:
+            st.error(f"Please enter a valid concentration for {std}")
+            all_concentrations_valid = False
+        intsta_concentrations[std] = conc
+
+    if not all_concentrations_valid:
+        st.error("Please enter valid concentrations for all standards")
+        return None
+    return intsta_concentrations
 
 
 # =============================================================================

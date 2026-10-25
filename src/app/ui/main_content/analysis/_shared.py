@@ -215,6 +215,19 @@ def _display_statistical_options(
     )
 
 
+def _warn_if_nothing_selected(
+    selected_conditions: List[str], selected_classes: List[str],
+) -> bool:
+    """Warn and return True when a page's selectors leave nothing to analyse."""
+    if not selected_conditions:
+        st.warning("Please select at least one condition.")
+        return True
+    if not selected_classes:
+        st.warning("Please select at least one lipid class.")
+        return True
+    return False
+
+
 def _display_condition_class_selectors(
     experiment: ExperimentConfig,
     df: pd.DataFrame,

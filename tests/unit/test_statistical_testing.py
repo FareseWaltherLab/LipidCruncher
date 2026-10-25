@@ -614,35 +614,36 @@ class TestAutoMode:
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestFoldChange:
+    SMALL = 1.0  # the dataset-wide zero replacement, passed in by the caller
+
     def test_twofold_increase(self):
         ctrl = np.array([100.0, 100.0, 100.0])
         exp = np.array([200.0, 200.0, 200.0])
-        fc = StatisticalTestingService._compute_fold_change(ctrl, exp)
+        fc = StatisticalTestingService._compute_fold_change(ctrl, exp, self.SMALL)
         assert fc == pytest.approx(1.0)  # log2(2) = 1
 
     def test_twofold_decrease(self):
         ctrl = np.array([200.0, 200.0, 200.0])
         exp = np.array([100.0, 100.0, 100.0])
-        fc = StatisticalTestingService._compute_fold_change(ctrl, exp)
+        fc = StatisticalTestingService._compute_fold_change(ctrl, exp, self.SMALL)
         assert fc == pytest.approx(-1.0)  # log2(0.5) = -1
 
     def test_no_change(self):
         ctrl = np.array([100.0, 100.0])
         exp = np.array([100.0, 100.0])
-        fc = StatisticalTestingService._compute_fold_change(ctrl, exp)
+        fc = StatisticalTestingService._compute_fold_change(ctrl, exp, self.SMALL)
         assert fc == pytest.approx(0.0)
 
     def test_with_zeros(self):
         ctrl = np.array([0.0, 100.0])
         exp = np.array([200.0, 200.0])
-        fc = StatisticalTestingService._compute_fold_change(ctrl, exp)
-        # Zeros replaced; fold change > 0 since exp > ctrl
-        assert fc > 0
+        fc = StatisticalTestingService._compute_fold_change(ctrl, exp, self.SMALL)
+        assert fc == pytest.approx(np.log2(200 / 50.5))  # the zero became 1.0
 
     def test_all_zeros_both(self):
         ctrl = np.array([0.0, 0.0])
         exp = np.array([0.0, 0.0])
-        fc = StatisticalTestingService._compute_fold_change(ctrl, exp)
+        fc = StatisticalTestingService._compute_fold_change(ctrl, exp, self.SMALL)
         assert fc == pytest.approx(0.0)  # Same values after replacement
 
 
@@ -716,6 +717,26 @@ class TestClassLevelTests:
             auto_config,
         )
         assert summary.test_info['test_type'] == 'parametric'
+
+    def test_condition_with_one_sample_skips_the_class_instead_of_raising(
+        self, class_level_df, manual_parametric_config,
+    ):
+        """Regression: a selected condition with a single replicate raised
+        ValidationError out of run_class_level_tests and aborted the whole
+        bar-chart analysis; the saturation tests already skipped such keys.
+        The UI offers only eligible conditions, but callers of the service
+        (the AI's pipeline access) pass conditions straight through."""
+        from app.models.experiment import ExperimentConfig
+        experiment = ExperimentConfig(
+            n_conditions=2, conditions_list=['A', 'B'],
+            number_of_samples_list=[3, 1],
+        )
+        summary = StatisticalTestingService.run_class_level_tests(
+            class_level_df, experiment, ['A', 'B'], ['PC', 'PE'],
+            manual_parametric_config,
+        )
+        assert summary.results == {}
+        assert summary.parameters['n_skipped'] == 2
 
     def test_missing_class_skipped(self, class_level_df, experiment_2x3, manual_parametric_config):
         summary = StatisticalTestingService.run_class_level_tests(

@@ -8,7 +8,7 @@ Pure logic — no Streamlit dependencies.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -169,94 +169,14 @@ class BarChartPlotterService:
         if abundance_df.empty or not conditions:
             raise ValueError("No data available to create bar chart")
 
-        colors = BarChartPlotterService.generate_color_mapping(conditions)
         fig = go.Figure()
-
-        bar_width = 0.8 / len(conditions)
-
-        for i, condition in enumerate(conditions):
-            mean_col, std_col = _get_mode_columns(condition, mode)
-
-            mean_vals = abundance_df.get(mean_col, pd.Series(dtype=float)).fillna(0)
-            std_vals = abundance_df.get(std_col, pd.Series(dtype=float)).fillna(0)
-
-            if mean_vals.empty:
-                continue
-
-            y_positions = (
-                np.arange(len(abundance_df))
-                + (i - len(conditions) / 2 + 0.5) * bar_width
-            )
-
-            fig.add_trace(go.Bar(
-                y=y_positions,
-                x=mean_vals,
-                name=condition,
-                orientation='h',
-                error_x=dict(
-                    type='data',
-                    array=std_vals,
-                    visible=True,
-                    color='black',
-                    thickness=1,
-                    width=0,
-                ),
-                width=bar_width,
-                showlegend=True,
-                marker_color=colors[condition],
-            ))
+        _add_condition_bars(fig, abundance_df, conditions, mode)
 
         # Significance annotations
         if stat_results is not None and fig.data:
             _add_significance_annotations(fig, abundance_df, stat_results)
 
-        scale_label = "Linear" if mode == 'linear scale' else "Log10"
-        conditions_str = " vs ".join(conditions)
-
-        fig.update_layout(
-            title=dict(
-                text=(
-                    f"Class Concentration Bar Chart ({scale_label} Scale)"
-                    f"<br>{conditions_str}"
-                ),
-                font=dict(color='black'),
-            ),
-            xaxis_title=dict(text='Mean Concentration', font=dict(color='black')),
-            yaxis_title=dict(text='Lipid Class', font=dict(color='black')),
-            xaxis=dict(
-                tickfont=dict(color='black'),
-                showgrid=True,
-                gridcolor='lightgray',
-            ),
-            yaxis=dict(
-                ticktext=abundance_df['ClassKey'].values,
-                tickvals=np.arange(len(abundance_df)),
-                autorange='reversed',
-                tickfont=dict(color='black'),
-                showgrid=True,
-                gridcolor='lightgray',
-            ),
-            barmode='group',
-            bargap=0.15,
-            bargroupgap=0.1,
-            showlegend=True,
-            legend=dict(
-                orientation='v',
-                yanchor='top',
-                y=1,
-                xanchor='left',
-                x=1.15,
-                font=dict(color='black'),
-                bgcolor='rgba(255,255,255,0.8)',
-                bordercolor='lightgray',
-                borderwidth=1,
-            ),
-            margin=dict(r=250),
-            height=max(MIN_CHART_HEIGHT, len(abundance_df) * HEIGHT_PER_CLASS),
-            width=CHART_WIDTH,
-            **BASE_LAYOUT,
-        )
-
+        fig.update_layout(**_bar_chart_layout(abundance_df, conditions, mode))
         return fig
 
     @staticmethod
@@ -293,6 +213,97 @@ def _compute_log10_stats(
     log_mean = log_vals.mean()
     log_std = log_vals.std(ddof=1) if len(log_vals) > 1 else 0.0
     return log_mean, log_std
+
+
+def _add_condition_bars(
+    fig: go.Figure, abundance_df: pd.DataFrame, conditions: List[str], mode: str,
+) -> None:
+    """One horizontal bar per class for each condition, with std error bars."""
+    colors = BarChartPlotterService.generate_color_mapping(conditions)
+    bar_width = 0.8 / len(conditions)
+
+    for i, condition in enumerate(conditions):
+        mean_col, std_col = _get_mode_columns(condition, mode)
+
+        mean_vals = abundance_df.get(mean_col, pd.Series(dtype=float)).fillna(0)
+        std_vals = abundance_df.get(std_col, pd.Series(dtype=float)).fillna(0)
+
+        if mean_vals.empty:
+            continue
+
+        y_positions = (
+            np.arange(len(abundance_df))
+            + (i - len(conditions) / 2 + 0.5) * bar_width
+        )
+
+        fig.add_trace(go.Bar(
+            y=y_positions,
+            x=mean_vals,
+            name=condition,
+            orientation='h',
+            error_x=dict(
+                type='data',
+                array=std_vals,
+                visible=True,
+                color='black',
+                thickness=1,
+                width=0,
+            ),
+            width=bar_width,
+            showlegend=True,
+            marker_color=colors[condition],
+        ))
+
+
+def _bar_chart_layout(
+    abundance_df: pd.DataFrame, conditions: List[str], mode: str,
+) -> Dict[str, Any]:
+    """Title, axes, legend and size of the class concentration bar chart."""
+    scale_label = "Linear" if mode == 'linear scale' else "Log10"
+    conditions_str = " vs ".join(conditions)
+    return dict(
+        title=dict(
+            text=(
+                f"Class Concentration Bar Chart ({scale_label} Scale)"
+                f"<br>{conditions_str}"
+            ),
+            font=dict(color='black'),
+        ),
+        xaxis_title=dict(text='Mean Concentration', font=dict(color='black')),
+        yaxis_title=dict(text='Lipid Class', font=dict(color='black')),
+        xaxis=dict(
+            tickfont=dict(color='black'),
+            showgrid=True,
+            gridcolor='lightgray',
+        ),
+        yaxis=dict(
+            ticktext=abundance_df['ClassKey'].values,
+            tickvals=np.arange(len(abundance_df)),
+            autorange='reversed',
+            tickfont=dict(color='black'),
+            showgrid=True,
+            gridcolor='lightgray',
+        ),
+        barmode='group',
+        bargap=0.15,
+        bargroupgap=0.1,
+        showlegend=True,
+        legend=dict(
+            orientation='v',
+            yanchor='top',
+            y=1,
+            xanchor='left',
+            x=1.15,
+            font=dict(color='black'),
+            bgcolor='rgba(255,255,255,0.8)',
+            bordercolor='lightgray',
+            borderwidth=1,
+        ),
+        margin=dict(r=250),
+        height=max(MIN_CHART_HEIGHT, len(abundance_df) * HEIGHT_PER_CLASS),
+        width=CHART_WIDTH,
+        **BASE_LAYOUT,
+    )
 
 
 def _get_mode_columns(condition: str, mode: str) -> Tuple[str, str]:

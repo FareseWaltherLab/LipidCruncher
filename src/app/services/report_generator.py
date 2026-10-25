@@ -355,7 +355,8 @@ def _build_analyses_list(plots: Dict[str, Any],
         )
 
     # QC analyses
-    if qc_plots.get('box_plot_fig1') or qc_plots.get('box_plot_fig2'):
+    # _render_qc_plots draws the two box plots on one page, or neither.
+    if qc_plots.get('box_plot_fig1') and qc_plots.get('box_plot_fig2'):
         items.append("Distribution Box Plots")
     if qc_plots.get('bqc_plot') is not None:
         items.append("BQC Quality Assessment")

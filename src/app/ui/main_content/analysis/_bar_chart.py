@@ -13,6 +13,7 @@ from app.ui.main_content.analysis._shared import (
     _clear_pdf_plots,
     _clear_statistics,
     _display_condition_class_selectors,
+    _warn_if_nothing_selected,
     _display_correction_scope,
     _display_statistical_options,
     _display_detailed_statistics,
@@ -38,11 +39,7 @@ def _display_bar_chart(
             experiment, df, 'bar', bqc_label=bqc_label,
         )
 
-        if not selected_conditions:
-            st.warning("Please select at least one condition.")
-            return
-        if not selected_classes:
-            st.warning("Please select at least one lipid class.")
+        if _warn_if_nothing_selected(selected_conditions, selected_classes):
             return
 
         stat_config = _display_statistical_options(

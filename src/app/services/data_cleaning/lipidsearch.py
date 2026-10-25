@@ -65,7 +65,8 @@ class LipidSearchCleaner(BaseDataCleaner):
             Tuple of (cleaned_df, messages_list).
 
         Raises:
-            ValueError: If dataset is empty or becomes empty after cleaning.
+            EmptyDataError: If dataset is empty or becomes empty after cleaning.
+            ConfigurationError: If no species remain after grade filtering.
         """
         messages = []
         initial_count = len(df)
@@ -94,7 +95,8 @@ class LipidSearchCleaner(BaseDataCleaner):
         df = LipidSearchCleaner._standardize_lipid_names(df)
 
         # Step 5: Quantify classes with an internal standard in its adduct
-        candidates = df[LipidSearchCleaner._build_eligibility_mask(df, grade_dict)]
+        # (every row left is grade-eligible: step 3 applied the same mask)
+        candidates = df
         keep_other = config.keep_other_adducts if config else False
         df, anchors, removed = LipidSearchCleaner._match_standard_adducts(
             candidates, keep_other, config.class_adducts if config else None,
@@ -489,17 +491,9 @@ class LipidSearchCleaner(BaseDataCleaner):
                 columns=['LipidMolec', 'ClassKey', 'CalcMass', 'BaseRt', 'TotalSmpIDRate(%)'] + sample_cols
             )
 
-        # Sort by best grade first, then highest quality rate
-        df['_grade_priority'] = df['TotalGrade'].map(LipidSearchCleaner._GRADE_PRIORITY).fillna(99)
-        df = df.sort_values(
-            ['_grade_priority', 'TotalSmpIDRate(%)'],
-            ascending=[True, False]
-        )
-
-        # Keep first (best) entry per lipid
+        # Keep the best entry (grade, then identification rate) per lipid
+        df = LipidSearchCleaner._best_first(df)
         df = df.drop_duplicates(subset=['LipidMolec'], keep='first')
-        df = df.drop(columns=['_grade_priority'])
-
         return df.reset_index(drop=True)
 
     @staticmethod
