@@ -506,6 +506,50 @@ class TestParentHandlesTheChildsPipesAndWorkdir:
         assert workdirs() - before == set()
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="Linux forbids the fork itself (RLIMIT_NPROC)")
+class TestKillReachesForkedGrandchildren:
+    """On macOS RLIMIT_NPROC does not stop a fork, so generated code could
+    leave a grandchild running after the child was killed, holding the
+    result pipe open. The child now runs in its own process group and the
+    parent kills the group."""
+
+    def test_grandchild_is_gone_after_the_run(self, df, monkeypatch):
+        import subprocess
+        import time
+
+        from app.services.ai_chat import sandbox
+
+        spawned = []
+        real_popen = subprocess.Popen
+
+        def recording_popen(*args, **kwargs):
+            proc = real_popen(*args, **kwargs)
+            spawned.append((proc, kwargs))
+            return proc
+
+        monkeypatch.setattr(sandbox.subprocess, "Popen", recording_popen)
+        code = (
+            "os = pd.compat.os\n"
+            "if os.fork() == 0:\n"
+            "    while True:\n"
+            "        pass\n"
+            "print('parent done')\n"
+        )
+        run(code, df, config=SandboxConfig(execution_timeout=3))
+
+        (proc, kwargs), = spawned
+        assert kwargs.get("start_new_session") is True
+        for _ in range(50):  # the kill is asynchronous
+            try:
+                os.killpg(proc.pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            os.killpg(proc.pid, 9)
+            pytest.fail("the child's process group (a forked grandchild) survived the run")
+
+
 class TestDockerImage:
     def test_image_does_not_run_as_root(self):
         from pathlib import Path

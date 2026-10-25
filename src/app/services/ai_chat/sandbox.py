@@ -16,6 +16,7 @@ import os
 import pickle
 import re
 import shutil
+import signal
 import statistics
 import subprocess
 import sys
@@ -412,6 +413,16 @@ def _child_env() -> Dict[str, str]:
 _STDERR_TAIL_BYTES = 64 * 1024
 
 
+def _kill_group(proc: subprocess.Popen) -> None:
+    """SIGKILL the child's whole process group (it is the group leader)."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass  # already gone
+    except PermissionError:
+        proc.kill()
+
+
 def _run_in_subprocess(
     code: str,
     df: pd.DataFrame,
@@ -455,6 +466,10 @@ def _run_in_subprocess(
         env=_child_env(),
         cwd=workdir,
         close_fds=True,
+        # Its own session and process group, so a kill reaches anything it
+        # managed to fork as well (Linux forbids that via RLIMIT_NPROC; macOS
+        # does not), instead of leaving an orphan holding the result pipe.
+        start_new_session=True,
     )
     os.close(write_fd)
 
@@ -500,7 +515,7 @@ def _run_in_subprocess(
     reader.join(timeout=config.execution_timeout)
 
     if reader.is_alive():
-        proc.kill()
+        _kill_group(proc)
         proc.wait(timeout=5)
         shutil.rmtree(workdir, ignore_errors=True)
         raise _SandboxTimeout(
@@ -508,7 +523,7 @@ def _run_in_subprocess(
         )
 
     if overflow.is_set():
-        proc.kill()
+        _kill_group(proc)
         proc.wait(timeout=5)
         shutil.rmtree(workdir, ignore_errors=True)
         raise _SandboxCrash(
@@ -518,6 +533,7 @@ def _run_in_subprocess(
         )
 
     proc.wait(timeout=5)
+    _kill_group(proc)  # stragglers it forked, if any; nothing to do normally
     stderr_reader.join(timeout=5)
     shutil.rmtree(workdir, ignore_errors=True)
 
