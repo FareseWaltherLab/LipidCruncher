@@ -12,7 +12,7 @@ source lipidcruncher_env/bin/activate
 # Run the app
 streamlit run src/main_app.py
 
-# Run all tests
+# Run all tests (add -n auto to use every core; CI does)
 pytest tests/ -v
 
 # Run a single test file / test
