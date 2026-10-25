@@ -494,18 +494,25 @@ class TestParentHandlesTheChildsPipesAndWorkdir:
         assert res.success, res.error_message
         assert res.stdout.strip() == "done"
 
-    def test_timeout_removes_the_workdir(self, df):
-        import tempfile
-        from pathlib import Path
+    def test_timeout_removes_the_workdir(self, df, monkeypatch):
+        # Record the workdir this run creates rather than diffing the temp
+        # directory: other test workers create their own lc_sandbox_* dirs.
+        from app.services.ai_chat import sandbox
 
-        def workdirs():
-            return set(Path(tempfile.gettempdir()).glob("lc_sandbox_*"))
+        created = []
+        real_mkdtemp = sandbox.tempfile.mkdtemp
 
-        before = workdirs()
+        def recording_mkdtemp(*args, **kwargs):
+            path = real_mkdtemp(*args, **kwargs)
+            created.append(path)
+            return path
+
+        monkeypatch.setattr(sandbox.tempfile, "mkdtemp", recording_mkdtemp)
         res = run("while True:\n    pass", df, config=SandboxConfig(execution_timeout=1))
         assert not res.success
         assert "timed out" in res.error_message
-        assert workdirs() - before == set()
+        assert len(created) == 1
+        assert not os.path.exists(created[0])
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Linux forbids the fork itself (RLIMIT_NPROC)")
