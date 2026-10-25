@@ -43,7 +43,7 @@ class GenericCleaner(BaseDataCleaner):
             Tuple of (cleaned_df, messages_list).
 
         Raises:
-            ValueError: If dataset is empty or becomes empty after cleaning.
+            EmptyDataError: If dataset is empty or becomes empty after cleaning.
         """
         messages = []
         initial_count = len(df)

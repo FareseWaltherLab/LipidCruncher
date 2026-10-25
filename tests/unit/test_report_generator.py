@@ -228,6 +228,12 @@ class TestBuildAnalysesList:
         assert "Principal Component Analysis (PCA)" in items
         assert "Pairwise Correlation (2 condition(s))" in items
 
+    def test_one_box_plot_is_not_listed(self, plotly_fig):
+        """Regression: the cover promised 'Distribution Box Plots' when either
+        figure existed, but _render_qc_plots draws the page only with both."""
+        items = _build_analyses_list({}, {'box_plot_fig1': plotly_fig, 'box_plot_fig2': None})
+        assert "Distribution Box Plots" not in items
+
     def test_analysis_only(self, plotly_fig):
         plots = {
             'bar_chart': plotly_fig,

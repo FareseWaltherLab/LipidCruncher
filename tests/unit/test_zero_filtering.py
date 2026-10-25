@@ -132,6 +132,14 @@ def df_with_bqc(experiment_with_bqc):
 class TestZeroFilterConfigDefaults:
     """Tests for ZeroFilterConfig default values."""
 
+    def test_config_is_frozen(self):
+        """Like the other configs: a value passed to @st.cache_data must not
+        change after the call was keyed on it."""
+        import dataclasses
+        config = ZeroFilterConfig()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            config.bqc_threshold = 0.9
+
     def test_default_detection_threshold(self):
         """Test default detection threshold is 0."""
         config = ZeroFilterConfig()
