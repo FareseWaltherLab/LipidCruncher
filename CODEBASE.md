@@ -33,7 +33,7 @@ python3.11 -m venv lipidcruncher_env
 source lipidcruncher_env/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r requirements.txt -c constraints.txt
 
 # Run the application
 streamlit run src/main_app.py
