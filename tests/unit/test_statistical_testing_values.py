@@ -92,13 +92,31 @@ class TestPinnedFoldChange:
 
     def test_uses_means_not_medians(self):
         # mean(ctrl) = 200 = mean(exp) -> 0.0; medians 100 vs 200 would give 1.0
-        fc = S._compute_fold_change(np.array([100.0, 100, 400]), np.array([200.0, 200, 200]))
+        fc = S._compute_fold_change(np.array([100.0, 100, 400]), np.array([200.0, 200, 200]), 1.0)
         assert fc == pytest.approx(0.0)
 
-    def test_zero_floor_comes_from_both_groups(self):
-        # floor = min positive of both groups (50) / 10 = 5 -> ctrl [5, 100]
-        fc = S._compute_fold_change(np.array([0.0, 100]), np.array([50.0, 50]))
-        assert fc == pytest.approx(np.log2(50 / 52.5))
+    def test_zero_floor_is_the_value_passed_in(self):
+        # the caller passes the dataset-wide floor (here 0.5) -> ctrl [0.5, 100]
+        fc = S._compute_fold_change(np.array([0.0, 100]), np.array([50.0, 50]), 0.5)
+        assert fc == pytest.approx(np.log2(50 / 50.25))
+
+    def test_species_fold_change_floors_zeros_at_the_dataset_wide_value(self):
+        """Regression: the fold change floored a zero at one-tenth of the
+        lipid's own smallest positive value while the p-value on the same
+        row used the dataset-wide floor (S2, supplementary methods)."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 34:1', 'PE 36:2'],
+            'ClassKey': ['PC', 'PE'],
+            # PE's 10 is the dataset's smallest positive value -> floor 1.0
+            'concentration[s1]': [0.0, 10.0], 'concentration[s2]': [100.0, 10.0],
+            'concentration[s3]': [100.0, 10.0], 'concentration[s4]': [200.0, 10.0],
+            'concentration[s5]': [200.0, 10.0], 'concentration[s6]': [200.0, 10.0],
+        })
+        summary = S.run_species_level_tests(
+            df, ['s1', 's2', 's3'], ['s4', 's5', 's6'], _manual(),
+        )
+        ctrl_mean = (1.0 + 100 + 100) / 3          # not (10 + 100 + 100) / 3
+        assert summary.results['PC 34:1'].effect_size == pytest.approx(np.log2(200 / ctrl_mean))
 
 
 class TestPinnedSpeciesSkipCounts:

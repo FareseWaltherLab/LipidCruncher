@@ -364,11 +364,10 @@ class TestClassLevel:
 class TestSpeciesLevel:
 
     def test_volcano_fold_change_and_welch_on_log10(self, captured_downloads):
-        """S5.4: log2 of the ratio of means, each lipid's zeros floored at
-        its smallest positive value in the two groups / 10 (as S6.4 says of
-        these fold changes); Welch's t-test on log10 values, zeros floored
-        at the smallest non-zero value in the data / 10 (S2); BH adjustment
-        when chosen."""
+        """S5.4: log2 of the ratio of means, zeros floored at the smallest
+        non-zero value in the data / 10, the same floor as the test (S2.5);
+        Welch's t-test on log10 values with that floor; BH adjustment when
+        chosen."""
         at = _to_analysis()
         _show(at, VOLCANO)
         at.selectbox(key='volcano_correction').set_value('fdr_bh').run()
@@ -380,17 +379,15 @@ class TestSpeciesLevel:
         control = df.loc[volcano.index, _columns(SAMPLES['WT'])].astype(float)
         treated = df.loc[volcano.index, _columns(SAMPLES['ADGAT-DKO'])].astype(float)
 
-        both = pd.concat([control, treated], axis=1)
-        row_floor = both.where(both > 0).min(axis=1) / 10
+        everything = df[_columns(sum(SAMPLES.values(), []))].to_numpy(float)
+        data_floor = everything[everything > 0].min() / 10
         np.testing.assert_allclose(
             volcano['FoldChange'],
             np.log2(
-                treated.clip(lower=row_floor, axis=0).mean(axis=1)
-                / control.clip(lower=row_floor, axis=0).mean(axis=1)
+                treated.clip(lower=data_floor).mean(axis=1)
+                / control.clip(lower=data_floor).mean(axis=1)
             ),
         )
-        everything = df[_columns(sum(SAMPLES.values(), []))].to_numpy(float)
-        data_floor = everything[everything > 0].min() / 10
         p = stats.ttest_ind(
             np.log10(treated.clip(lower=data_floor)),
             np.log10(control.clip(lower=data_floor)),
