@@ -40,7 +40,8 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt -c constraints.txt
 
       - name: Run tests
-        run: pytest tests/ -v
+        # In parallel: the suite takes ~16 min serially, ~half that on 4 workers.
+        run: pytest tests/ -n auto
 
   audit:
     # Known vulnerabilities in the pinned dependencies (PyPI advisory
