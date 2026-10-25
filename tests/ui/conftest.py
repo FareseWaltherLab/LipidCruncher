@@ -211,6 +211,11 @@ def override_preservation_script():
     st.text(f"pre_regroup_cleared:{st.session_state.get('_pre_regroup_df') is None}")
     st.text(f"col_order_cleared:{st.session_state.get('original_column_order') is None}")
     st.text(f"sample_names:{st.session_state.get('sample_names')}")
+    st.text(f"norm_df_cleared:{st.session_state.get('normalized_df') is None}")
+    st.text(f"cleaned_df_cleared:{st.session_state.get('cleaned_df') is None}")
+    st.text(f"experiment:{st.session_state.get('experiment')}")
+    st.text(f"standards_source:{st.session_state.get('standards_source')}")
+    st.text(f"non_bqc_threshold:{st.session_state.get('_preserved_non_bqc_zero_threshold')}")
 
 
 def override_reset_script():

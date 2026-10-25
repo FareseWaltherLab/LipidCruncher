@@ -229,7 +229,9 @@ class _Stage:
 
     ``derived`` names the ``fields`` computed from the stage's input rather
     than chosen by the user. ``StreamlitAdapter.track_inputs`` resets them
-    (and every later stage's) when that input changes, keeping the settings.
+    (and every later stage's) when that input changes, keeping the settings;
+    ``StreamlitAdapter.invalidate_results_from`` does the same for a callback
+    that changes an input itself.
     """
     name: str
     fields: frozenset = frozenset()
@@ -261,6 +263,10 @@ _STAGES: Tuple[_Stage, ...] = (
             'sample_label_mode', 'msdial_use_normalized',
             'msdial_data_type_index',
         }),
+        # Read from the upload under the format and, for MS-DIAL, the raw /
+        # pre-normalized choice. The sample names and features describe the
+        # file itself and survive that choice.
+        derived=frozenset({'standardized_df', 'column_mapping', 'n_intensity_cols'}),
     ),
     # Define Experiment, sample names, grouping, exclusion, BQC, Confirm.
     # "Reset session" clears from here.
@@ -306,6 +312,12 @@ _STAGES: Tuple[_Stage, ...] = (
             '_preserved_norm_method_selection', 'normalization_result',
             'class_standard_map', 'standard_concentrations', 'protein_df',
             'protein_input_method_prev',
+        }),
+        # Module 1's results, recomputed from the standardized data on every
+        # run; the rest are the user's settings.
+        derived=frozenset({
+            'cleaned_df', 'intsta_df', 'ingestion_result', 'normalized_df',
+            'normalization_result', 'standards_consistency_figs',
         }),
         # The standards pages' remembered multiselect choices.
         plain=frozenset({

@@ -329,6 +329,32 @@ class TestMSDIALOverridePreservation:
         assert any("col_mapping_cleared:True" in v for v in text_values)
         assert any("n_intensity_cleared:True" in v for v in text_values)
 
+    def test_data_type_switch_drops_results_and_keeps_settings(self, msdial_features_dict):
+        """Switching data type drops Module 1's computed frames but keeps the
+        experiment and the user's Module 1 settings.
+
+        Regression: the toggle kept its own list of keys to clear, outside the
+        stage registry; it now invalidates the registry's derived fields from
+        the standardize stage on, which must not reach the settings.
+        """
+        at = AppTest.from_function(override_preservation_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['msdial_features'] = msdial_features_dict
+        at.session_state['cleaned_df'] = 'stale_cleaned'
+        at.session_state['normalized_df'] = 'stale_normalized'
+        at.session_state['experiment'] = 'the_experiment'
+        at.session_state['standards_source'] = 'Custom'
+        at.session_state['_preserved_non_bqc_zero_threshold'] = 0.25
+        at.run()
+        radio = at.radio(key='msdial_data_type_radio')
+        norm_option = [o for o in radio.options if "Pre-normalized" in o][0]
+        radio.set_value(norm_option).run()
+        text_values = [t.value for t in at.text]
+        assert any("cleaned_df_cleared:True" in v for v in text_values)
+        assert any("norm_df_cleared:True" in v for v in text_values)
+        assert any("experiment:the_experiment" in v for v in text_values)
+        assert any("standards_source:Custom" in v for v in text_values)
+        assert any("non_bqc_threshold:0.25" in v for v in text_values)
+
     def test_data_type_switch_clears_regroup_snapshot(self, msdial_features_dict):
         """Switching data type drops the sample-regroup snapshot.
 
