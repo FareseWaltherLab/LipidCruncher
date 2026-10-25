@@ -515,12 +515,13 @@ class TestParentHandlesTheChildsPipesAndWorkdir:
         assert not os.path.exists(created[0])
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Linux forbids the fork itself (RLIMIT_NPROC)")
 class TestKillReachesForkedGrandchildren:
     """On macOS RLIMIT_NPROC does not stop a fork, so generated code could
     leave a grandchild running after the child was killed, holding the
     result pipe open. The child now runs in its own process group and the
-    parent kills the group."""
+    parent kills the group. On Linux the fork itself fails (RLIMIT_NPROC);
+    the group handling is checked all the same, and the image check
+    refuses skipped tests."""
 
     def test_grandchild_is_gone_after_the_run(self, df, monkeypatch):
         import subprocess
