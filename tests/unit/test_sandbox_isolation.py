@@ -472,6 +472,40 @@ class TestConcurrencyIsBounded:
         assert run("print('again')", df).stdout.strip() == "again"
 
 
+class TestParentHandlesTheChildsPipesAndWorkdir:
+    """The parent drains the result pipe but, until this, read stderr only
+    after the child exited: a child that wrote more than a pipe buffer of
+    library chatter blocked on stderr before it could write its result and
+    was reported as a timeout. The timeout branch also left the child's
+    temp workdir behind."""
+
+    def test_large_stderr_does_not_stall_the_result(self, df):
+        # pd.compat exposes sys, so generated code can reach stderr without
+        # importing anything the allowlist refuses; a warnings flood from a
+        # library has the same effect.
+        code = (
+            "pd.compat.sys.stderr.write('x' * 300_000)\n"
+            "pd.compat.sys.stderr.flush()\n"
+            "print('done')\n"
+        )
+        res = run(code, df, config=SandboxConfig(execution_timeout=5))
+        assert res.success, res.error_message
+        assert res.stdout.strip() == "done"
+
+    def test_timeout_removes_the_workdir(self, df):
+        import tempfile
+        from pathlib import Path
+
+        def workdirs():
+            return set(Path(tempfile.gettempdir()).glob("lc_sandbox_*"))
+
+        before = workdirs()
+        res = run("while True:\n    pass", df, config=SandboxConfig(execution_timeout=1))
+        assert not res.success
+        assert "timed out" in res.error_message
+        assert workdirs() - before == set()
+
+
 class TestDockerImage:
     def test_image_does_not_run_as_root(self):
         from pathlib import Path

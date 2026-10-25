@@ -408,6 +408,10 @@ def _child_env() -> Dict[str, str]:
     }
 
 
+# How much of the child's stderr the parent keeps for the crash message.
+_STDERR_TAIL_BYTES = 64 * 1024
+
+
 def _run_in_subprocess(
     code: str,
     df: pd.DataFrame,
@@ -473,6 +477,20 @@ def _run_in_subprocess(
     reader = threading.Thread(target=_drain, daemon=True)
     reader.start()
 
+    # Drain stderr as it is written, keeping only the tail for the crash
+    # message. Left unread until the child exits, a flood of library
+    # warnings filled the pipe and blocked the child before it could write
+    # its result, which the parent then reported as a timeout.
+    stderr_tail = bytearray()
+
+    def _drain_stderr():
+        for block in iter(lambda: proc.stderr.read(65536), b""):
+            stderr_tail.extend(block)
+            del stderr_tail[:-_STDERR_TAIL_BYTES]
+
+    stderr_reader = threading.Thread(target=_drain_stderr, daemon=True)
+    stderr_reader.start()
+
     try:
         proc.stdin.write(request)
         proc.stdin.close()
@@ -484,6 +502,7 @@ def _run_in_subprocess(
     if reader.is_alive():
         proc.kill()
         proc.wait(timeout=5)
+        shutil.rmtree(workdir, ignore_errors=True)
         raise _SandboxTimeout(
             f"Execution timed out after {config.execution_timeout} seconds"
         )
@@ -499,6 +518,7 @@ def _run_in_subprocess(
         )
 
     proc.wait(timeout=5)
+    stderr_reader.join(timeout=5)
     shutil.rmtree(workdir, ignore_errors=True)
 
     if not chunks:
@@ -510,7 +530,7 @@ def _run_in_subprocess(
             raise _SandboxTimeout(
                 f"Execution timed out after {config.execution_timeout} seconds"
             )
-        stderr = (proc.stderr.read() or b"").decode("utf-8", "replace")
+        stderr = bytes(stderr_tail).decode("utf-8", "replace")
         raise _SandboxCrash(stderr.strip()[-500:] or "no output")
 
     return _decode_response(b"".join(chunks))
