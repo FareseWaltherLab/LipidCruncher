@@ -11,6 +11,7 @@ from app.ui.st_helpers import display_export_buttons, section_header
 from app.ui.main_content.analysis._shared import (
     _clear_pdf_plots,
     _display_condition_class_selectors,
+    _warn_if_nothing_selected,
     _publish,
 )
 
@@ -56,11 +57,7 @@ def _display_chain_length_plots(
             conditions=AnalysisWorkflow.get_all_conditions(experiment),
         )
 
-        if not selected_conditions:
-            st.warning("Please select at least one condition.")
-            return
-        if not selected_classes:
-            st.warning("Please select at least one lipid class.")
+        if _warn_if_nothing_selected(selected_conditions, selected_classes):
             return
 
         section_header("Results")
