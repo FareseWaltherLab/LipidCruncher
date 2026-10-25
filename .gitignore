@@ -32,6 +32,16 @@ src/.streamlit/
 docs/isotope_deployment.md
 docs/isotope_tracing_plan.md
 
+# AI Studio interaction logs pulled from CloudWatch (local analysis only)
+ai_studio_logs.jsonl
+*.jsonl
+docs/ai_studio_feedback.md
+docs/integration_deployment.md
+review_feedback.command
+
+# Ad-hoc datasets, vendor PDFs and other one-off material (see local/README.md)
+local/
+
 # IDE/editor config
 .idea/
 .vscode/
