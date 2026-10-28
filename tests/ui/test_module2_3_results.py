@@ -416,6 +416,8 @@ class TestSpeciesLevel:
         """S6.2: row-wise (x - mean) / SD."""
         at = _to_analysis()
         _show(at, HEATMAP)
+        at.radio(key='heatmap_type').set_value('Clustered').run()
+        _ok(at)
         heatmap = _csv(captured_downloads, 'analysis_csv_heatmap').set_index('LipidMolec')
         columns = _columns(sum(SAMPLES.values(), []))
         raw = _analysed(at).loc[heatmap.index, columns].astype(float)

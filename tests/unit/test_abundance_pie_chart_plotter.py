@@ -531,6 +531,110 @@ class TestCreatePieChartEdgeCases:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Styling
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestStyling:
+
+    def _fig(self, simple_df, experiment):
+        pie_data = PieChartPlotterService.calculate_total_abundance(
+            simple_df, experiment, ['PC', 'PE']
+        )
+        colors = PieChartPlotterService.generate_color_mapping(['PC', 'PE'])
+        return PieChartPlotterService.create_pie_chart(
+            pie_data, 'Control', ['s1', 's2', 's3'], colors
+        )[0]
+
+    def test_slices_have_black_borders(self, simple_df, experiment_2x3):
+        line = self._fig(simple_df, experiment_2x3).data[0].marker.line
+        assert line.color == 'black'
+        assert all(w > 0 for w in line.width)
+
+    def test_tiny_slices_have_no_border(self, experiment_2x3):
+        """Borders on many sub-1% slices would merge into a black wedge."""
+        df = _make_df(['PC', 'PE'], [[99.5, 0.5]] * 6)
+        pie_data = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, ['PC', 'PE']
+        )
+        colors = PieChartPlotterService.generate_color_mapping(['PC', 'PE'])
+        fig, _ = PieChartPlotterService.create_pie_chart(
+            pie_data, 'Control', ['s1', 's2', 's3'], colors
+        )
+        assert list(fig.data[0].marker.line.width) == [1, 0]
+
+    def test_chart_grows_to_fit_legend(self, experiment_2x3):
+        """The larger legend font must not cut off a 20-class legend."""
+        classes = [f'C{i}' for i in range(20)]
+        df = _make_df(classes, [[1.0] * 20] * 6)
+        pie_data = PieChartPlotterService.calculate_total_abundance(
+            df, experiment_2x3, classes
+        )
+        colors = PieChartPlotterService.generate_color_mapping(classes)
+        fig, _ = PieChartPlotterService.create_pie_chart(
+            pie_data, 'Control', ['s1', 's2', 's3'], colors
+        )
+        assert fig.layout.height >= 20 * 21
+
+    def test_legend_font_larger_than_default(self, simple_df, experiment_2x3):
+        """Plotly's default legend font is 12."""
+        assert self._fig(simple_df, experiment_2x3).layout.legend.font.size > 12
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# calculate_species_abundance (species within a class)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def species_df():
+    """Three PE species and a PC; per sample PE totals are 10."""
+    return pd.DataFrame({
+        'LipidMolec': ['PE 16:0_18:1', 'PE 18:0_22:6', 'PE 22:6_22:6', 'PC 16:0_18:1'],
+        'ClassKey': ['PE', 'PE', 'PE', 'PC'],
+        **{f'concentration[s{i}]': [2.0, 7.0, 1.0, 50.0] for i in range(1, 7)},
+    })
+
+
+class TestSpeciesAbundance:
+
+    def test_only_the_class_species(self, species_df, experiment_2x3):
+        pie_data = PieChartPlotterService.calculate_species_abundance(
+            species_df, experiment_2x3, 'PE'
+        )
+        assert set(pie_data.classes) == {'PE 16:0_18:1', 'PE 18:0_22:6', 'PE 22:6_22:6'}
+        assert pie_data.lipid_class == 'PE'
+
+    def test_ordered_by_abundance(self, species_df, experiment_2x3):
+        pie_data = PieChartPlotterService.calculate_species_abundance(
+            species_df, experiment_2x3, 'PE'
+        )
+        assert pie_data.classes == ['PE 18:0_22:6', 'PE 16:0_18:1', 'PE 22:6_22:6']
+
+    def test_percent_of_class_total(self, species_df, experiment_2x3):
+        pie_data = PieChartPlotterService.calculate_species_abundance(
+            species_df, experiment_2x3, 'PE'
+        )
+        colors = PieChartPlotterService.generate_color_mapping(pie_data.classes)
+        fig, summary = PieChartPlotterService.create_pie_chart(
+            pie_data, 'Control', ['s1', 's2', 's3'], colors
+        )
+        assert dict(zip(summary['LipidMolec'], summary['Percentage'])) == {
+            'PE 18:0_22:6': pytest.approx(70.0),
+            'PE 16:0_18:1': pytest.approx(20.0),
+            'PE 22:6_22:6': pytest.approx(10.0),
+        }
+        assert fig.layout.title.text == 'PE Species Distribution - Control'
+        assert fig.layout.legend.title.text == 'PE Species'
+
+    def test_unknown_class_raises(self, species_df, experiment_2x3):
+        with pytest.raises(ValueError, match='No species found'):
+            PieChartPlotterService.calculate_species_abundance(
+                species_df, experiment_2x3, 'TG'
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # generate_color_mapping
 # ═══════════════════════════════════════════════════════════════════════
 

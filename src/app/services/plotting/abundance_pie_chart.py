@@ -1,13 +1,14 @@
 """
 Abundance pie chart plotting service.
 
-Creates pie charts showing lipid class proportions per condition.
+Creates pie charts showing lipid class proportions per condition, or the
+proportions of the species within one class.
 
 Pure logic — no Streamlit dependencies.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -22,17 +23,30 @@ CHART_HEIGHT = 300
 # Threshold for switching to scientific notation
 SCIENTIFIC_NOTATION_THRESHOLD = 0.001
 
+LEGEND_FONT_SIZE = 14
+# The chart grows to fit this many legend rows (of about LEGEND_ROW_PX each);
+# a longer legend scrolls.
+MAX_LEGEND_ROWS = 30
+LEGEND_ROW_PX = 21
+# Slices smaller than this get no border: on a class with many low-abundance
+# species the borders would merge into a black wedge.
+BORDER_MIN_PERCENT = 1.0
+
 
 @dataclass
 class PieChartData:
     """Computed abundance data for pie chart rendering.
 
     Attributes:
-        abundance_df: DataFrame indexed by ClassKey with concentration columns.
-        classes: Lipid classes included.
+        abundance_df: DataFrame indexed by ClassKey (or, within a class, by
+            LipidMolec) with concentration columns.
+        classes: Lipid classes included (or the class's species).
+        lipid_class: The class whose species are the slices; None when the
+            slices are classes.
     """
     abundance_df: pd.DataFrame
     classes: List[str]
+    lipid_class: Optional[str] = None
 
 
 class PieChartPlotterService:
@@ -80,6 +94,43 @@ class PieChartPlotterService:
         return PieChartData(
             abundance_df=grouped,
             classes=ordered_classes,
+        )
+
+    @staticmethod
+    def calculate_species_abundance(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        lipid_class: str,
+    ) -> PieChartData:
+        """Concentration of each species of one class across all samples.
+
+        Species are ordered by their total over every sample, most abundant
+        first, so a species keeps its color in every condition's chart.
+
+        Raises:
+            ValueError: If the class has no species or there are no sample
+                columns.
+        """
+        sample_cols = [
+            f"concentration[{s}]" for s in experiment.full_samples_list
+            if f"concentration[{s}]" in df.columns
+        ]
+        if not sample_cols:
+            raise ValueError("No sample columns found in the dataset")
+
+        filtered = df[df['ClassKey'] == lipid_class]
+        if filtered.empty:
+            raise ValueError(f"No species found for class {lipid_class}")
+
+        grouped = filtered.groupby('LipidMolec', sort=False)[sample_cols].sum()
+        grouped = grouped.loc[
+            grouped.sum(axis=1).sort_values(ascending=False, kind='stable').index
+        ]
+
+        return PieChartData(
+            abundance_df=grouped,
+            classes=grouped.index.tolist(),
+            lipid_class=lipid_class,
         )
 
     @staticmethod
@@ -138,27 +189,42 @@ class PieChartPlotterService:
         fig = go.Figure(data=[go.Pie(
             values=sorted_sizes,
             labels=custom_labels,
-            marker=dict(colors=colors),
+            marker=dict(colors=colors, line=dict(
+                color='black',
+                width=[1 if pct >= BORDER_MIN_PERCENT else 0 for pct in percentages],
+            )),
             textinfo='none',
             hovertemplate='%{label}<extra></extra>',
             sort=False,  # Already sorted
         )])
 
+        if pie_data.lipid_class is None:
+            title = f'Total Abundance Pie Chart - {condition}'
+            legend_title = "Lipid Classes"
+            label_column = 'ClassKey'
+        else:
+            title = f'{pie_data.lipid_class} Species Distribution - {condition}'
+            legend_title = f"{pie_data.lipid_class} Species"
+            label_column = 'LipidMolec'
+
         fig.update_layout(
-            title=dict(
-                text=f'Total Abundance Pie Chart - {condition}',
-                font=dict(color='black'),
+            title=dict(text=title, font=dict(color='black')),
+            legend=dict(
+                title=dict(text=legend_title),
+                font=dict(size=LEGEND_FONT_SIZE),
             ),
-            legend_title="Lipid Classes",
             margin=dict(l=10, r=100, t=40, b=10),
             width=CHART_WIDTH,
-            height=CHART_HEIGHT,
+            height=max(
+                CHART_HEIGHT,
+                min(len(sorted_labels), MAX_LEGEND_ROWS) * LEGEND_ROW_PX + 60,
+            ),
             **BASE_LAYOUT,
         )
 
         # Build summary DataFrame for export
         summary_df = pd.DataFrame({
-            'ClassKey': sorted_labels,
+            label_column: sorted_labels,
             'Total Abundance': sorted_sizes,
             'Percentage': percentages,
         })

@@ -169,7 +169,7 @@ def _select_heatmap_type() -> tuple:
         heatmap_type = st.radio(
             "Heatmap Type",
             ["Clustered", "Regular", "Grouped by Class", "Aggregated by Class"],
-            index=0,
+            index=3,
             key='heatmap_type',
             help=(
                 "Clustered: one row per species, ordered by hierarchical "

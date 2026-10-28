@@ -4,7 +4,7 @@ Normalization UI Components for LipidCruncher main content area.
 This module contains:
 - display_normalization_ui: Main normalization orchestration UI
 - _display_class_selection: Lipid class selection widget
-- _display_internal_standards_config: Standards mapping and concentrations
+- _display_internal_standards_config: Standards mapping and amounts
 - _display_protein_config: Protein concentration input (manual or CSV)
 - _run_normalization: Cached normalization workflow execution
 """
@@ -20,6 +20,9 @@ from app.workflows.normalization import NormalizationWorkflow, NormalizationWork
 from app.constants import FORMAT_MSDIAL, resolve_format_enum
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.services.normalization import NormalizationService
+from app.services.standard_mixes import (
+    DEFAULT_SPIKE_VOLUME_UL, STANDARD_MIXES, StandardMixService,
+)
 from app.ui.content import NORMALIZATION_METHODS_DOCS, PROTEIN_CSV_HELP
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_labels import labeler, names_for, processing_names
@@ -101,7 +104,9 @@ def _display_internal_standards_config(
                 "in data processing."
             )
 
-        intsta_concentrations = _standard_concentration_inputs(internal_standards)
+        intsta_concentrations = _standard_concentration_inputs(
+            internal_standards, intsta_df,
+        )
         if intsta_concentrations is None:
             return None, None
 
@@ -155,40 +160,113 @@ def _class_standard_pickers(
     return internal_standards
 
 
-def _standard_concentration_inputs(internal_standards: dict):
-    """A concentration input per selected standard; None if any is not positive."""
+def _premade_mix_amounts(intsta_df: pd.DataFrame) -> tuple:
+    """The premade-mix picker and a µL input per picked mix.
+
+    Returns (amounts, refill): each dataset standard's MixAmount from the
+    picked mixes, and whether the mixes or volumes changed since the amounts
+    were last written into the inputs.
+    """
+    applied = st.session_state.get('is_mix_applied', {})
+    mixes = st.multiselect(
+        "Premade standard mixes spiked into the samples (optional):",
+        list(STANDARD_MIXES),
+        default=[m for m in applied if m in STANDARD_MIXES],
+        key='is_mix_selection',
+        help=(
+            "Fills in the amount of every standard in your data that one of "
+            "these mixes contains, from the vendor's stock concentration "
+            "(µg/mL) and the volume you spiked. Pick several if you spiked "
+            "several; a standard in more than one gets the sum."
+        ),
+    )
+    volumes = {}
+    for mix in mixes:
+        volumes[mix] = st.number_input(
+            f"µL of {mix} spiked into each sample",
+            min_value=0.0,
+            value=float(applied.get(mix, DEFAULT_SPIKE_VOLUME_UL)),
+            step=1.0,
+            key=f"is_mix_volume_{mix}",
+        )
+    if mixes:
+        st.caption(
+            "Amounts use Avanti's catalog concentrations. If your lot's "
+            "certificate of analysis differs, edit the amounts below."
+        )
+
+    standards = dict(zip(intsta_df['LipidMolec'], intsta_df['ClassKey']))
+    refill = volumes != applied
+    st.session_state.is_mix_applied = volumes
+    return StandardMixService.amounts(standards, volumes), refill
+
+
+def _standard_concentration_inputs(internal_standards: dict, intsta_df: pd.DataFrame):
+    """An amount input per selected standard; None if any is not positive."""
     if st.session_state.get('standard_concentrations') is None:
         st.session_state.standard_concentrations = {}
 
-    st.write("Enter the concentration of each selected internal standard (µM):")
+    amounts, refill = _premade_mix_amounts(intsta_df)
+    if refill:
+        for std, amount in amounts.items():
+            st.session_state.standard_concentrations[std] = amount.nmol
+
+    st.write("Enter the amount of each selected internal standard spiked into each sample (nmol):")
 
     intsta_concentrations = {}
     all_concentrations_valid = True
+    not_in_mixes = []
     for std in set(internal_standards.values()):
         widget_key = f"conc_{std}"
-        # Initialize from preserved concentrations if not already set
+        amount = amounts.get(std)
+        # Initialize from preserved amounts if not already set, and take the
+        # mixes' amount when the mixes or volumes have just changed
         if widget_key not in st.session_state:
-            st.session_state[widget_key] = st.session_state.standard_concentrations.get(std, 1.0)
+            st.session_state[widget_key] = st.session_state.standard_concentrations.get(
+                std, amount.nmol if amount else 1.0,
+            )
+        elif refill and amount:
+            st.session_state[widget_key] = amount.nmol
 
         conc = st.number_input(
-            f"Concentration (µM) for {std}",
+            f"Amount (nmol) for {std}",
             min_value=0.0,
             step=0.1,
-            key=widget_key
+            format="%.4f",
+            key=widget_key,
+            help=_mix_amount_help(amount),
         )
+        if st.session_state.is_mix_applied and amount is None:
+            not_in_mixes.append(std)
 
         # Sync back for session preservation
         st.session_state.standard_concentrations[std] = conc
 
         if conc <= 0:
-            st.error(f"Please enter a valid concentration for {std}")
+            st.error(f"Please enter a valid amount for {std}")
             all_concentrations_valid = False
         intsta_concentrations[std] = conc
 
+    if not_in_mixes:
+        st.caption(
+            f"Not found in the selected mixes, enter by hand: {', '.join(sorted(not_in_mixes))}"
+        )
     if not all_concentrations_valid:
-        st.error("Please enter valid concentrations for all standards")
+        st.error("Please enter valid amounts for all standards")
         return None
     return intsta_concentrations
+
+
+def _mix_amount_help(amount) -> Optional[str]:
+    """Where a mix-filled amount came from: µg/mL × µL ÷ MW per mix."""
+    if amount is None:
+        return None
+    applied = st.session_state.is_mix_applied
+    return "  \n".join(
+        f"{mix}: {c.name}, {c.ug_per_ml:g} µg/mL × {applied[mix]:g} µL "
+        f"÷ {c.mw:g} g/mol = {StandardMixService.nmol_per_sample(c, applied[mix]):.4g} nmol"
+        for mix, c in amount.sources
+    )
 
 
 # =============================================================================

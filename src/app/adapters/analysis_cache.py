@@ -55,10 +55,12 @@ class AnalysisCache:
         experiment: ExperimentConfig,
         selected_conditions: List[str],
         selected_classes: List[str],
+        species_class: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Cached pie chart analysis."""
         return AnalysisWorkflow.run_pie_charts(
             df, experiment, selected_conditions, selected_classes,
+            species_class,
         )
 
     @staticmethod
