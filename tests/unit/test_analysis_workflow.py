@@ -547,6 +547,25 @@ class TestRunPieCharts:
         )
         assert len(results) == 3
 
+    def test_species_within_class(self, multi_species_df, exp_2x3):
+        """Slices are the class's species, with one color per species
+        shared by every condition."""
+        results = AnalysisWorkflow.run_pie_charts(
+            multi_species_df, exp_2x3,
+            selected_conditions=['Control', 'Treatment'],
+            selected_classes=['PC'],
+            species_class='PC',
+        )
+        pc_species = set(multi_species_df.loc[multi_species_df['ClassKey'] == 'PC', 'LipidMolec'])
+        for result in results.values():
+            assert set(result.data_df['LipidMolec']) == pc_species
+            assert result.data_df['Percentage'].sum() == pytest.approx(100)
+        colors = [
+            dict(zip(r.data_df['LipidMolec'], r.figure.data[0].marker.colors))
+            for r in results.values()
+        ]
+        assert colors[0] == colors[1]
+
 
 # =============================================================================
 # Saturation Tests

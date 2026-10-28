@@ -6,6 +6,7 @@ and settings that can must survive Next / Back.
 
 from pathlib import Path
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from app.constants import (
@@ -53,7 +54,7 @@ class TestInvalidSettingsClearOutput:
         at.radio(key='norm_method_selection').set_value('Internal Standards').run()
         assert at.session_state['normalized_df'] is not None
         at.number_input(key=f'conc_{STANDARD}').set_value(0.0).run()
-        assert f'Please enter a valid concentration for {STANDARD}' in _errors(at)
+        assert f'Please enter a valid amount for {STANDARD}' in _errors(at)
         assert at.session_state['normalized_df'] is None
 
     def test_protein_amount_not_positive(self, norm_no_standards_app):
@@ -77,6 +78,76 @@ class TestInvalidSettingsClearOutput:
         assert at.session_state['normalized_df'] is None
         assert at.session_state['normalization_result'] is None
         assert not _has_next(at)
+
+
+SPLASH = 'SPLASH LIPIDOMIX (330707)'
+# SPLASH's PC 15:0-18:1(d7) is 160 µg/mL, MW 753.11; its PE is 5 µg/mL, 711.03.
+SPLASH_PC_NMOL_PER_UL = 160 / 753.11
+SPLASH_PE_NMOL_PER_UL = 5 / 711.03
+
+
+class TestPremadeStandardMixes:
+
+    @staticmethod
+    def _amount(at, standard=STANDARD):
+        return at.number_input(key=f'conc_{standard}').value
+
+    @staticmethod
+    def _pick_splash(at):
+        at.radio(key='norm_method_selection').set_value('Internal Standards').run()
+        at.multiselect(key='is_mix_selection').set_value([SPLASH]).run()
+        assert not at.exception, at.exception
+        return at
+
+    def test_picking_a_mix_fills_its_standards(self, norm_with_standards_app):
+        at = self._pick_splash(norm_with_standards_app)
+        assert self._amount(at) == pytest.approx(10 * SPLASH_PC_NMOL_PER_UL)
+        config = at.session_state['normalization_result'].config
+        assert config.intsta_concentrations[STANDARD] == pytest.approx(
+            10 * SPLASH_PC_NMOL_PER_UL
+        )
+
+    def test_volume_scales_the_amounts(self, norm_with_standards_app):
+        at = self._pick_splash(norm_with_standards_app)
+        at.number_input(key=f'is_mix_volume_{SPLASH}').set_value(2.0).run()
+        assert self._amount(at) == pytest.approx(2 * SPLASH_PC_NMOL_PER_UL)
+
+    def test_hand_edit_kept_until_the_mixes_change(self, norm_with_standards_app):
+        at = self._pick_splash(norm_with_standards_app)
+        at.number_input(key=f'conc_{STANDARD}').set_value(3.0).run()
+        at.run()
+        assert self._amount(at) == 3.0
+        at.number_input(key=f'is_mix_volume_{SPLASH}').set_value(5.0).run()
+        assert self._amount(at) == pytest.approx(5 * SPLASH_PC_NMOL_PER_UL)
+
+    def test_standard_not_in_mix_left_for_hand_entry(self):
+        """The LipidSearch sample's standards are SPLASH's; the PE standard
+        is not in SphingoSPLASH and keeps its hand-entered default."""
+        at = _module1(FORMAT_LIPIDSEARCH)
+        at.radio(key='norm_method_selection').set_value('Internal Standards').run()
+        at.multiselect(key='is_mix_selection').set_value(['SphingoSPLASH I (330734)']).run()
+        assert not at.exception, at.exception
+        pe = at.selectbox(key='standard_selection_PE').value
+        assert self._amount(at, pe) == 1.0
+        assert any(pe in c.value for c in at.caption if c.value.startswith('Not found'))
+
+    def test_mixes_survive_next_and_back(self):
+        at = _module1(FORMAT_LIPIDSEARCH)
+        at.multiselect(key='temp_selected_classes').set_value(['PC', 'PE']).run()
+        at.radio(key='norm_method_selection').set_value('Internal Standards').run()
+        at.multiselect(key='is_mix_selection').set_value([SPLASH]).run()
+        at.number_input(key=f'is_mix_volume_{SPLASH}').set_value(5.0).run()
+        pe = at.selectbox(key='standard_selection_PE').value
+        assert self._amount(at, pe) == pytest.approx(5 * SPLASH_PE_NMOL_PER_UL)
+
+        for module in (MODULE_QC_ANALYSIS, MODULE_DATA_PROCESSING):
+            at.session_state['module'] = module
+            at.run()
+            assert not at.exception, at.exception
+
+        assert at.multiselect(key='is_mix_selection').value == [SPLASH]
+        assert at.number_input(key=f'is_mix_volume_{SPLASH}').value == 5.0
+        assert self._amount(at, pe) == pytest.approx(5 * SPLASH_PE_NMOL_PER_UL)
 
 
 class TestStandardMappingSurvivesNextAndBack:

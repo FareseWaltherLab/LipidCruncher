@@ -322,6 +322,8 @@ _STAGES: Tuple[_Stage, ...] = (
         # The standards pages' remembered multiselect choices.
         plain=frozenset({
             'additional_dataset_standards', 'selected_dataset_standards',
+            # normalization.py: the premade mixes and µL last filled in.
+            'is_mix_applied',
         }),
         widgets=frozenset({
             # data_processing.py
@@ -344,10 +346,10 @@ _STAGES: Tuple[_Stage, ...] = (
             # normalization.py (two of these are also SessionState fields)
             'temp_selected_classes', 'norm_method_selection',
             'protein_input_method', 'download_filtered_data',
-            'download_normalized_data',
+            'download_normalized_data', 'is_mix_selection',
         }),
         prefixes=('protein_', 'conc_', 'standard_selection_', 'grade_select_',
-                  'adduct_select_', 'standards_file_uploader_'),
+                  'adduct_select_', 'standards_file_uploader_', 'is_mix_volume_'),
     ),
     # The LSI compliance report's typed-in fields: kept across Next / Back,
     # cleared with the experiment they describe.
@@ -405,7 +407,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'bar_conditions', 'bar_classes', 'bar_scale_radio',
             'bar_stats_mode', 'bar_detailed_stats', 'bar_auto_transform',
             'bar_test_type', 'bar_correction', 'bar_posthoc',
-            'pie_classes',
+            'pie_classes', 'pie_view', 'pie_species_class',
             'sat_conditions', 'sat_classes', 'sat_plot_type',
             'sat_show_significance', 'sat_detailed_stats', 'sat_stats_mode',
             'sat_auto_transform', 'sat_test_type', 'sat_correction',

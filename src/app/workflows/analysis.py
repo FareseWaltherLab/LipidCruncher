@@ -430,6 +430,7 @@ class AnalysisWorkflow:
         experiment: ExperimentConfig,
         selected_conditions: List[str],
         selected_classes: List[str],
+        species_class: Optional[str] = None,
     ) -> Dict[str, PieChartResult]:
         """Run abundance pie chart analysis for each condition.
 
@@ -438,6 +439,8 @@ class AnalysisWorkflow:
             experiment: Experiment configuration.
             selected_conditions: Conditions to create charts for.
             selected_classes: Lipid classes to include.
+            species_class: When given, the slices are this class's species
+                (each as a share of the class) instead of the classes.
 
         Returns:
             Dict mapping condition name to PieChartResult.
@@ -450,11 +453,16 @@ class AnalysisWorkflow:
         if not selected_classes:
             raise ValueError("At least one lipid class must be selected")
 
-        pie_data = PieChartPlotterService.calculate_total_abundance(
-            df, experiment, selected_classes,
-        )
+        if species_class is None:
+            pie_data = PieChartPlotterService.calculate_total_abundance(
+                df, experiment, selected_classes,
+            )
+        else:
+            pie_data = PieChartPlotterService.calculate_species_abundance(
+                df, experiment, species_class,
+            )
         color_mapping = PieChartPlotterService.generate_color_mapping(
-            selected_classes,
+            pie_data.classes if species_class else selected_classes,
         )
 
         results = {}

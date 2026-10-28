@@ -15,7 +15,8 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
     _clear_pdf_plots('pie_')
     with st.expander("Class Concentration Pie Chart", expanded=False):
         st.markdown(
-            "View the proportional distribution of lipid classes per condition."
+            "View the proportional distribution of lipid classes per "
+            "condition, or of the species within one class."
         )
 
         all_classes = AnalysisWorkflow.get_available_classes(df)
@@ -23,23 +24,44 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
 
         section_header("🎯 Data Selection")
 
-        selected_classes = st.multiselect(
-            "Lipid Classes",
-            all_classes,
-            default=all_classes,
-            key='pie_classes',
+        view = st.radio(
+            "Show",
+            ["Lipid classes", "Species within a class"],
+            horizontal=True,
+            key='pie_view',
+            help=(
+                "Species within a class: each species of the chosen class "
+                "as a percentage of that class's total."
+            ),
         )
 
-        if not selected_classes:
-            st.warning("Please select at least one lipid class to create the pie charts.")
-            return
+        species_class = None
+        if view == "Lipid classes":
+            selected_classes = st.multiselect(
+                "Lipid Classes",
+                all_classes,
+                default=all_classes,
+                key='pie_classes',
+            )
+            if not selected_classes:
+                st.warning("Please select at least one lipid class to create the pie charts.")
+                return
+        else:
+            species_class = st.selectbox(
+                "Lipid Class", all_classes, key='pie_species_class',
+            )
+            selected_classes = [species_class]
 
         section_header("📊 Results")
 
         results = StreamlitAdapter.run_pie_charts(
-            df, experiment, all_conditions, selected_classes,
+            df, experiment, all_conditions, selected_classes, species_class,
         )
 
+        file_stem = (
+            f"{species_class}_species_pie_chart" if species_class
+            else "abundance_pie_chart"
+        )
         for condition, pie_result in results.items():
             st.markdown(f"###### {condition}")
             st.plotly_chart(pie_result.figure, width='stretch')
@@ -47,7 +69,7 @@ def _display_pie_charts(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
 
             display_export_buttons(
                 pie_result.figure, pie_result.data_df,
-                f"abundance_pie_chart_{condition}.svg",
-                f"abundance_pie_chart_{condition}.csv",
+                f"{file_stem}_{condition}.svg",
+                f"{file_stem}_{condition}.csv",
                 f"analysis_svg_pie_{condition}", f"analysis_csv_pie_{condition}",
             )

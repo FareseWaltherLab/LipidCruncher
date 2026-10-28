@@ -6,12 +6,21 @@ NORMALIZATION_METHODS_DOCS = """
 | Method | Formula | Use Case |
 |--------|---------|----------|
 | **None** | Raw values | Data already normalized externally |
-| **Internal Standards** | `(Intensity_lipid / Intensity_standard) × Conc_standard` | Correct for extraction/ionization variability |
+| **Internal Standards** | `(Intensity_lipid / Intensity_standard) × Amount_standard` | Correct for extraction/ionization variability |
 | **Protein-based** | `Intensity_lipid / Protein_conc` | Normalize to starting material (e.g., BCA assay) |
-| **Internal Standards + Protein** | `(Intensity_lipid / Intensity_standard) × (Conc_standard / Protein_conc)` | Combined correction |
+| **Internal Standards + Protein** | `(Intensity_lipid / Intensity_standard) × (Amount_standard / Protein_conc)` | Combined correction |
 | **Total Intensity** | `(Intensity_lipid / Total_intensity_sample) × Median_total` | Equalize total signal across samples |
 
 After normalization, `intensity[...]` columns become `concentration[...]` columns.
+
+**Standard amounts.** `Amount_standard` is the nmol of the standard spiked into
+each sample, so Internal Standards gives nmol per sample and Internal Standards +
+Protein gives nmol per unit of protein. For Avanti's SPLASH LIPIDOMIX,
+SphingoSPLASH I, UltimateSPLASH ONE and EquiSPLASH, pick the mixes you spiked and
+the µL of each: every standard in your data that a mix contains is filled in as
+`stock µg/mL × µL ÷ molecular weight`, summed over the mixes that contain it.
+The stock values are the catalog targets; edit an amount if your lot's
+certificate of analysis differs.
 
 **Choosing a standard for a class.** The Internal Standards formula assumes the
 standard and the class's species ionise alike, so pick a standard of the same

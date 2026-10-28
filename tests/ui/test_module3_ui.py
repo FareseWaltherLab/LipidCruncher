@@ -238,6 +238,16 @@ class TestPieChartUI:
         assert 'pie_Control' in plots
         assert 'pie_Treatment' in plots
 
+    def test_pie_species_within_class(self, analysis_generic_app):
+        """The species view shows the chosen class's species as slices."""
+        at = self._switch_to_pie(analysis_generic_app)
+        at.radio(key='pie_view').set_value("Species within a class").run()
+        at.selectbox(key='pie_species_class').set_value('PC').run()
+        assert not at.exception, at.exception
+        fig = at.session_state['analysis_all_plots']['pie_Control']
+        assert fig.layout.legend.title.text == 'PC Species'
+        assert all(label.startswith('PC') for label in fig.data[0].labels)
+
     def test_pie_deselect_class_updates_figures(self, analysis_generic_app):
         """Deselecting a class re-renders pie charts with remaining classes."""
         at = self._switch_to_pie(analysis_generic_app)
@@ -746,17 +756,23 @@ class TestHeatmapUI:
         at.radio(key='analysis_radio').set_value(hm_option).run()
         return at
 
+    def _switch_to_clustered(self, at):
+        at = self._switch_to_heatmap(at)
+        at.radio(key='heatmap_type').set_value("Clustered").run()
+        return at
+
     def test_heatmap_renders_without_error(self, analysis_generic_app):
         """Heatmap section renders without exceptions."""
         at = self._switch_to_heatmap(analysis_generic_app)
         assert not at.exception
 
-    def test_heatmap_type_radio_default_clustered(self, analysis_generic_app):
-        """Heatmap type radio defaults to Clustered."""
+    def test_heatmap_type_radio_default_aggregated(self, analysis_generic_app):
+        """Heatmap type radio defaults to Aggregated by Class (the class
+        overview users asked to see first)."""
         at = self._switch_to_heatmap(analysis_generic_app)
         radio = at.radio(key='heatmap_type')
         assert radio is not None
-        assert radio.value == "Clustered"
+        assert radio.value == "Aggregated by Class"
 
     def test_heatmap_type_radio_has_four_modes(self, analysis_generic_app):
         """Two original modes plus the two class-oriented ones."""
@@ -1145,14 +1161,14 @@ class TestHeatmapUI:
 
     def test_heatmap_cluster_slider_defaults(self, analysis_generic_app):
         """Cluster slider defaults to 5 in Clustered mode."""
-        at = self._switch_to_heatmap(analysis_generic_app)
+        at = self._switch_to_clustered(analysis_generic_app)
         slider = at.slider(key='heatmap_n_clusters')
         assert slider is not None
         assert slider.value == 5
 
     def test_heatmap_cluster_view_radio(self, analysis_generic_app):
         """Cluster composition view radio defaults to Species Count."""
-        at = self._switch_to_heatmap(analysis_generic_app)
+        at = self._switch_to_clustered(analysis_generic_app)
         radio = at.radio(key='heatmap_cluster_view')
         assert radio is not None
         assert radio.value == "Species Count"
@@ -1178,7 +1194,7 @@ class TestHeatmapUI:
 
     def test_heatmap_total_concentration_view(self, analysis_generic_app, captured_downloads):
         """Switching cluster view to Total Concentration renders without error."""
-        at = self._switch_to_heatmap(analysis_generic_app)
+        at = self._switch_to_clustered(analysis_generic_app)
         captured_downloads.clear()
         at.radio(key='heatmap_cluster_view').set_value("Total Concentration").run()
         assert not at.exception
@@ -1192,7 +1208,7 @@ class TestHeatmapUI:
     def test_heatmap_cluster_composition_offered(self, analysis_generic_app, captured_downloads):
         """The cluster composition table is offered as a CSV."""
         captured_downloads.clear()
-        self._switch_to_heatmap(analysis_generic_app)
+        self._switch_to_clustered(analysis_generic_app)
         assert 'analysis_csv_cluster' in captured_downloads
 
 

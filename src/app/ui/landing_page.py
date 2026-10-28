@@ -215,6 +215,11 @@ def _display_whats_new() -> None:
           turning each block into a gradient that lines up with the colour bar
         - **Internal Standards from Your Dataset**: Choose standards already present in your
           data alongside the automatically detected ones
+        - **Premade Internal Standard Mixes**: Pick the Avanti mixes you spiked (SPLASH
+          LIPIDOMIX, SphingoSPLASH I, UltimateSPLASH ONE, EquiSPLASH) and the µL per sample, and
+          the amount of every standard they contain is filled in for you
+        - **Species Within a Class Pie Charts**: Show each species of one class as a percentage
+          of that class's total, per condition
 
         ### Bug Fixes
         - Fixed sample regrouping being re-applied on every page interaction, and undo restoring
@@ -245,6 +250,9 @@ def _display_whats_new() -> None:
           re-uploading your data
         - **Collapsed Analysis Sections**: Landing on Visualize and Analyze no longer opens a
           section on its own
+        - **Class Overview Heatmap by Default**: The lipidomic heatmap opens on Aggregated by
+          Class
+        - **Cleaner Pie Charts**: Black borders between slices and a larger legend font
         - **Sample Names in the Sidebar**: The Group Samples table shows each sample's original
           column header next to its label, so you can group without cross-referencing your file
         - **Blanket Grade Filtering**: Relax LipidSearch grades to A/B/C for every lipid class
