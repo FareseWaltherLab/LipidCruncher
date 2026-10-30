@@ -220,7 +220,8 @@ def _display_whats_new() -> None:
           the amount of every standard they contain is filled in for you
         - **Units for Internal Standards and Protein**: Standard amounts are now entered as pmol
           spiked into each sample (previously µM of the stock) and protein as µg per sample, so
-          results read as pmol per sample, or pmol/µg protein with protein normalization
+          results read as pmol per sample, or pmol/µg protein with protein normalization. Protein
+          CSVs take a `Protein_ug` column; files with the old `Concentration` column still work
         - **Species Within a Class Pie Charts**: Show each species of one class as a percentage
           of that class's total, per condition
 

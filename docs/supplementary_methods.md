@@ -196,7 +196,7 @@ Protein-based normalization: Users must independently determine the protein amou
 
 - Manual entry: Users enter the protein amount (µg) for each sample individually through the interface
 
-- File upload: Users upload a CSV file with a column named "Concentration" holding each sample's protein amount in µg. An optional "Sample" column (each sample's label or name) assigns rows to samples; without it, rows are taken in sample order
+- File upload: Users upload a CSV file with a column named "Protein_ug" holding each sample's protein amount in µg. An optional "Sample" column (each sample's label or name) assigns rows to samples; without it, rows are taken in sample order
 
 The lipid concentration is calculated by dividing the lipid intensity by the protein amount.
 
