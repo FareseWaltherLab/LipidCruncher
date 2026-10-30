@@ -127,3 +127,50 @@ class TestDistributionPlot:
         fig, _ = _plot(fractions, molecule='PC_34:1')
         assert [t.name for t in fig.data] == ['0', '1']
         assert tuple(fig.layout.yaxis.range) == (0, 1)
+
+
+class TestGroupsFromTable:
+
+    def test_same_condition_makes_replicates_in_table_order(self):
+        groups = IsotopologuePlotterService.groups_from_table(
+            ['HepG2_neg', 'HMC3_neg', 'HepG2_glucose'], ['Neg', 'Neg', 'Glucose'],
+        )
+        assert groups == {'Neg': ['HepG2_neg', 'HMC3_neg'], 'Glucose': ['HepG2_glucose']}
+
+    @pytest.mark.parametrize('blank', ['', '  ', None])
+    def test_blank_condition_leaves_the_sample_on_its_own(self, blank):
+        groups = IsotopologuePlotterService.groups_from_table(['A_1', 'B_1'], ['A', blank])
+        assert groups == {'A': ['A_1'], 'B_1': ['B_1']}
+
+    def test_regrouped_sample_is_labelled_by_its_name(self, fractions):
+        groups = {'Pooled': ['GRN_13C_1', 'WT_neg_1']}
+        fig, _ = IsotopologuePlotterService.create_distribution_plot(
+            fractions, 'BMP_22:6_22:6', groups, ['0'],
+        )
+        assert list(fig.data[0].x[1]) == ['GRN_13C_1', 'WT_neg_1']
+
+
+class TestRescale:
+
+    def test_shown_isotopologues_fill_each_bar(self, fractions):
+        fig, data = _plot_rescaled(fractions, ['1', '2'])
+        assert data['GRN_13C_1'].tolist() == pytest.approx([2 / 3, 1 / 3])
+        assert tuple(fig.layout.yaxis.range) == (0, 1)
+        assert fig.layout.yaxis.title.text == 'Isotope Distribution (of shown)'
+
+    def test_sample_with_none_of_them_gets_an_empty_bar(self, fractions):
+        _, data = _plot_rescaled(fractions, ['2'])
+        assert data['WT_neg_1'].tolist() == [0.0]
+        assert data['GRN_13C_1'].tolist() == [1.0]
+
+    def test_off_by_default(self, fractions):
+        fig, data = _plot(fractions, labels=['1', '2'])
+        assert data['GRN_13C_1'].sum() == pytest.approx(0.3)
+        assert fig.layout.yaxis.title.text == 'Isotope Distribution'
+
+
+def _plot_rescaled(fractions, labels):
+    groups = IsotopologuePlotterService.sample_groups(list(fractions.columns))
+    return IsotopologuePlotterService.create_distribution_plot(
+        fractions, 'BMP_22:6_22:6', groups, labels, rescale=True,
+    )

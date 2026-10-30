@@ -41,8 +41,12 @@ ISOTOPE_KEYS = dict(
         'iso_calculate_mean_enrichment', 'iso_ultra_high_res',
         'iso_correct_also_monoisotopic', 'iso_calculation_threshold_uhr',
         'iso_plot_molecule', 'iso_plot_conditions', 'iso_plot_isotopologues',
+        'iso_plot_rescale',
     }),
-    prefixes=('iso_dl_',),
+    # The conditions the plot's condition picker last offered.
+    plain=frozenset({'iso_plot_condition_options'}),
+    # iso_plot_groups_<digest>: the sample/condition table, one per sample set.
+    prefixes=('iso_dl_', 'iso_plot_groups_'),
 )
 
 

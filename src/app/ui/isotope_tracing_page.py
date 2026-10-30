@@ -44,8 +44,10 @@ _HOW_TO_RUN_DOC = """
 4. **Click Run correction.** The three files are checked structurally first,
    so most mistakes are reported before IsoCorrectoR is invoked.
 5. **Read the outputs.** The isotopologue distribution plot comes first: pick
-   a lipid, the conditions (in plot order) and the isotopologues to show. The
-   corrected intensities follow; the remaining IsoCorrectoR tables and the run
+   a lipid, the conditions (in plot order) and the isotopologues to show, and
+   optionally rescale the shown isotopologues to 100%. Regroup samples under
+   *Sample conditions* if their names don't follow `<condition>_<replicate>`.
+   The corrected intensities follow; the remaining IsoCorrectoR tables and the run
    log are in expanders, each downloadable as CSV.
 
 **If the run is rejected**
@@ -84,7 +86,8 @@ PC_34:1_C0,85698314,77001200
 **Sample names set the conditions in the plots.** Name each sample
 `<condition>_<replicate>`, e.g. `WT_13C_1`, `WT_13C_2`, `WT_13C_3`: samples that
 differ only in the trailing number are replicates of one condition (`WT_13C`).
-A name without a trailing `_<number>` is a condition of its own.
+A name without a trailing `_<number>` is a condition of its own. Either way,
+the grouping can be edited by hand on the results page (*Sample conditions*).
 
 **2. Molecule file** — one row per molecule
 
@@ -373,20 +376,61 @@ def _display_results(result) -> None:
             st.code(correction.log_text)
 
 
-def _keep_valid(key: str, options: list) -> None:
+def _keep_valid(key: str, options: list, default: Optional[list] = None) -> None:
     """Drop a stored selection that a new result no longer offers, so the
-    widget falls back to its default instead of failing."""
+    widget falls back to its default instead of failing. A multiselect's
+    default is seeded here rather than passed to the widget, which
+    Streamlit warns about once its key has been set."""
     value = st.session_state.get(key)
-    if value is None:
-        return
     if isinstance(value, list):
         kept = [v for v in value if v in options]
         if kept or not value:  # an empty selection is the user's choice
             st.session_state[key] = kept
         else:
-            del st.session_state[key]
+            st.session_state[key] = default
+    elif value is None:
+        if default is not None:
+            st.session_state[key] = default
     elif value not in options:
         del st.session_state[key]
+
+
+def _sync_conditions(options: list) -> None:
+    """Keep the condition picker in step with the conditions on offer:
+    drop ones that are gone, and add new ones (a condition renamed in the
+    table, or a new dataset's) at the end."""
+    previous = st.session_state.get("iso_plot_condition_options")
+    st.session_state.iso_plot_condition_options = options
+    value = st.session_state.get("iso_plot_conditions")
+    if value is None or previous is None:
+        _keep_valid("iso_plot_conditions", options, default=options)
+        return
+    kept = [v for v in value if v in options]
+    kept += [o for o in options if o not in previous and o not in kept]
+    st.session_state.iso_plot_conditions = kept
+
+
+def _sample_groups(samples: list) -> dict:
+    """Condition -> samples: read from the names, then editable by hand."""
+    auto = IsotopeTracingWorkflow.sample_groups(samples)
+    table = pd.DataFrame(
+        [(s, c) for c, members in auto.items() for s in members],
+        columns=["Sample", "Condition"],
+    )
+    # One table per sample set, so a new dataset never inherits old edits.
+    digest = hashlib.sha256("\x00".join(samples).encode()).hexdigest()[:12]
+    with st.expander("Sample conditions", expanded=False):
+        st.caption(
+            "Read from the sample names. Type a condition to regroup a "
+            "sample; give samples the same condition to make them replicates."
+        )
+        edited = st.data_editor(
+            table, key=f"iso_plot_groups_{digest}", disabled=["Sample"],
+            hide_index=True, width='stretch',
+        )
+    return IsotopeTracingWorkflow.groups_from_table(
+        edited["Sample"].tolist(), edited["Condition"].tolist(),
+    )
 
 
 def _display_distribution_plot(fractions: pd.DataFrame) -> None:
@@ -396,27 +440,37 @@ def _display_distribution_plot(fractions: pd.DataFrame) -> None:
         "Each bar is one sample's corrected fractions, stacked from the "
         "unlabelled form (_0) up; bars are grouped by condition. Conditions "
         "are read from the sample names: a trailing `_1`, `_2`, `_3` marks "
-        "replicates of the same condition."
+        "replicates of the same condition. Regroup samples under **Sample "
+        "conditions**."
     )
 
     molecules = IsotopeTracingWorkflow.molecules(fractions)
-    groups = IsotopeTracingWorkflow.sample_groups(list(fractions.columns))
+    groups = _sample_groups(list(fractions.columns))
     labels = IsotopeTracingWorkflow.isotopologue_labels(fractions)
     _keep_valid("iso_plot_molecule", molecules)
-    _keep_valid("iso_plot_conditions", list(groups))
-    _keep_valid("iso_plot_isotopologues", labels)
+    _sync_conditions(list(groups))
+    _keep_valid("iso_plot_isotopologues", labels, default=labels)
 
     molecule = st.selectbox("Lipid", molecules, key="iso_plot_molecule")
     conditions = st.multiselect(
-        "Conditions, in plot order", list(groups), default=list(groups),
-        key="iso_plot_conditions",
+        "Conditions, in plot order", list(groups), key="iso_plot_conditions",
         help="Remove conditions to hide them; re-add one to move it to the end.",
     )
     chosen_labels = st.multiselect(
-        "Isotopologues", labels, default=labels, key="iso_plot_isotopologues",
+        "Isotopologues", labels, key="iso_plot_isotopologues",
         help=(
             "Leave some out to focus on others. The bars then show only the "
-            "chosen fractions and no longer reach 1."
+            "chosen fractions and no longer reach 1, unless you rescale them."
+        ),
+    )
+    rescale = st.checkbox(
+        "Rescale bars to 100% of the shown isotopologues",
+        key="iso_plot_rescale",
+        help=(
+            "Each bar becomes the shown isotopologues' share of their own "
+            "total, e.g. how the label is spread over +1 to +6. Where the "
+            "shown fractions are tiny (unlabelled controls), rescaling "
+            "magnifies noise."
         ),
     )
     st.caption(" · ".join(
@@ -428,7 +482,7 @@ def _display_distribution_plot(fractions: pd.DataFrame) -> None:
         return
 
     fig, data = IsotopeTracingWorkflow.distribution_plot(
-        fractions, molecule, {c: groups[c] for c in conditions}, chosen_labels,
+        fractions, molecule, {c: groups[c] for c in conditions}, chosen_labels, rescale,
     )
     st.plotly_chart(fig, width='stretch')
     stem = f"{molecule}_isotopologue_distribution".replace(':', '-')

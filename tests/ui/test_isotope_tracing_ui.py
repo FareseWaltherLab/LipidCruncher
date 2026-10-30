@@ -7,6 +7,8 @@ these are skipped where Rscript/IsoCorrectoR isn't installed (CI without R still
 passes). The pure-Python validation logic itself is covered by
 tests/unit/test_isotope_tracing_validation.py.
 """
+import hashlib
+
 import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -120,3 +122,25 @@ class TestDistributionPlot:
         assert not at.exception, at.exception
         assert at.selectbox(key="iso_plot_molecule").value == "BMP_18:1_18:1"
         assert at.multiselect(key="iso_plot_isotopologues").value == [f"C{i}" for i in range(7)]
+
+    def test_regrouping_samples_in_the_table(self):
+        at = self._run_sample()
+        samples = list(at.session_state["iso_result"].correction.corrected_fractions.columns)
+        digest = hashlib.sha256("\x00".join(samples).encode()).hexdigest()[:12]
+        at.session_state[f"iso_plot_groups_{digest}"] = {
+            "edited_rows": {0: {"Condition": "HepG2"}, 3: {"Condition": "HepG2"}},
+            "added_rows": [], "deleted_rows": [],
+        }
+        at.run()
+        assert not at.exception, at.exception
+        conditions = at.multiselect(key="iso_plot_conditions").value
+        assert conditions[-1] == "HepG2"  # a new condition joins at the end
+        assert "HepG2_neg" not in conditions and "HepG2_PTPMT1_neg" not in conditions
+        assert len(at.get("plotly_chart")) == 1
+
+    def test_rescaling_the_shown_isotopologues(self):
+        at = self._run_sample()
+        at.multiselect(key="iso_plot_isotopologues").set_value(["C1", "C2", "C3"]).run()
+        at.checkbox(key="iso_plot_rescale").check().run()
+        assert not at.exception, at.exception
+        assert len(at.get("plotly_chart")) == 1

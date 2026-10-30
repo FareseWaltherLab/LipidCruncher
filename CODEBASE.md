@@ -509,7 +509,7 @@ Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strin
 | `SaturationPlotterService` | Saturation degree distribution |
 | `ChainLengthPlotterService` | Carbon chain length and double bond bubble charts |
 | `FACHPlotterService` | Fatty acid composition heatmap |
-| `IsotopologuePlotterService` | Isotope tracing: one molecule's corrected fractions as stacked bars per sample, grouped by condition; conditions and replicates are read from sample names (`WT_13C_1` is replicate 1 of `WT_13C`) |
+| `IsotopologuePlotterService` | Isotope tracing: one molecule's corrected fractions as stacked bars per sample, grouped by condition; conditions and replicates are read from sample names (`WT_13C_1` is replicate 1 of `WT_13C`) and can be regrouped in an editable table; optionally rescales the shown isotopologues to 100% |
 | `PathwayVizPlotterService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
 | `VolcanoPlotterService` | Fold-change vs. p-value scatter |
 | `LipidomicHeatmapPlotterService` | Heatmaps in four modes — `regular`, `clustered` (Ward hierarchical clustering), `class_grouped` (one row per species, blocked by class, paged), `class_aggregated` (one row per class) — coloured by row Z-score or by log2 fold change against a control condition; under `class_grouped` + log2FC, species are sorted within each block by mean fold change |

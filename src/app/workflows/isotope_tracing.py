@@ -84,6 +84,11 @@ class IsotopeTracingWorkflow:
         return IsotopologuePlotterService.sample_groups(samples)
 
     @staticmethod
+    def groups_from_table(samples: List[str], conditions: List[str]) -> Dict[str, List[str]]:
+        """Condition -> its samples from a hand-edited sample/condition table."""
+        return IsotopologuePlotterService.groups_from_table(samples, conditions)
+
+    @staticmethod
     def molecules(fractions: pd.DataFrame) -> List[str]:
         """The molecules in a result table."""
         return IsotopologuePlotterService.molecules(fractions)
@@ -99,8 +104,9 @@ class IsotopeTracingWorkflow:
         molecule: str,
         groups: Dict[str, List[str]],
         labels: List[str],
+        rescale: bool = False,
     ) -> Tuple[go.Figure, pd.DataFrame]:
         """Stacked isotopologue-distribution bars for one molecule."""
         return IsotopologuePlotterService.create_distribution_plot(
-            fractions, molecule, groups, labels,
+            fractions, molecule, groups, labels, rescale,
         )

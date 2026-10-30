@@ -51,6 +51,17 @@ class IsotopologuePlotterService:
         return {c: [s for _, s in sorted(reps)] for c, reps in groups.items()}
 
     @staticmethod
+    def groups_from_table(samples: List[str], conditions: List[str]) -> Dict[str, List[str]]:
+        """Condition -> its samples from a sample/condition table (the
+        sample names' grouping as edited by hand), in table order. A blank
+        condition leaves the sample as a condition of its own."""
+        groups: Dict[str, List[str]] = {}
+        for sample, condition in zip(samples, conditions):
+            condition = str(condition).strip() if pd.notna(condition) else ''
+            groups.setdefault(condition or sample, []).append(sample)
+        return groups
+
+    @staticmethod
     def molecules(fractions: pd.DataFrame) -> List[str]:
         """The molecules in the table, in order."""
         return list(dict.fromkeys(
@@ -71,6 +82,7 @@ class IsotopologuePlotterService:
         molecule: str,
         groups: Dict[str, List[str]],
         labels: List[str],
+        rescale: bool = False,
     ) -> Tuple[go.Figure, pd.DataFrame]:
         """Stacked bars of one molecule's isotopologue fractions.
 
@@ -81,6 +93,9 @@ class IsotopologuePlotterService:
             groups: Condition -> samples, in plot order.
             labels: The isotopologue labels to stack. Unselected ones are
                 left out, not shared out, so the bars then sum to less than 1.
+            rescale: Divide each sample's chosen fractions by their sum, so
+                every bar reaches 1. A sample with none of the chosen
+                isotopologues gets an empty bar.
 
         Returns:
             (figure, the plotted fractions: an ``Isotopologue`` column and
@@ -95,6 +110,10 @@ class IsotopologuePlotterService:
         }
         data = fractions.loc[list(rows.values()), samples]
         data.index = list(rows)
+        if rescale:
+            totals = data.sum()
+            data = data.div(totals.where(totals > 0)).fillna(0.0)
+        full_stack = rescale or len(data.index) == _count_labels(fractions, molecule)
 
         # Replicates sit under their condition on a two-level axis; without
         # replicates the bars are just the samples.
@@ -118,10 +137,13 @@ class IsotopologuePlotterService:
             bargap=0.15,
             title=dict(text=molecule, x=0.5, xanchor='center', font=dict(size=20, color='black')),
             yaxis=dict(
-                title=dict(text='Isotope Distribution', font=dict(size=16, color='black')),
+                title=dict(
+                    text='Isotope Distribution' + (' (of shown)' if rescale else ''),
+                    font=dict(size=16, color='black'),
+                ),
                 tickfont=dict(size=14, color='black'),
                 # A full stack sums to 1; a partial one gets its own scale.
-                range=[0, 1] if len(data.index) == _count_labels(fractions, molecule) else None,
+                range=[0, 1] if full_stack else None,
             ),
             xaxis=dict(tickfont=dict(size=14, color='black')),
             legend=dict(traceorder='reversed', font=dict(size=14, color='black')),
@@ -150,6 +172,11 @@ def _count_labels(fractions: pd.DataFrame, molecule: str) -> int:
 
 
 def _replicate_label(sample: str, condition: str) -> str:
-    """The bar's label under its condition: the replicate number, or nothing
-    for a sample that is a condition of its own."""
-    return sample[len(condition) + 1:] if sample != condition else ''
+    """The bar's label under its condition: the replicate number for a name
+    like ``<condition>_<n>``, nothing for a sample that is a condition of its
+    own, and the full name for a sample regrouped by hand."""
+    if sample == condition:
+        return ''
+    if sample.startswith(condition + '_'):
+        return sample[len(condition) + 1:]
+    return sample

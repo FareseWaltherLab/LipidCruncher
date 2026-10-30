@@ -258,8 +258,9 @@ def _display_whats_new() -> None:
           correction with the real IsoCorrectoR package, then view and download the corrected
           intensities, fractions, mean enrichment, and residuals
         - **Isotopologue Distribution Plots**: Each lipid's corrected fractions as stacked bars,
-          one per sample, grouped by condition (read from sample names like `WT_13C_1`), with a
-          choice of which isotopologues to show
+          one per sample, grouped by condition (read from sample names like `WT_13C_1`, or
+          regrouped by hand), with a choice of which isotopologues to show and an option to
+          rescale them to 100%
         - **AI Studio**: A conversational workspace with four tabs—questions about LipidCruncher,
           questions about your own data, converting an unsupported CSV into the Generic format,
           and custom visualizations—working either on an uploaded file or on data imported from
