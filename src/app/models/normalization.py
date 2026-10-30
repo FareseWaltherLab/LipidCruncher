@@ -16,8 +16,8 @@ class NormalizationConfig(BaseModel):
         method: Normalization method to apply
         selected_classes: Lipid classes to normalize (filters the dataset)
         internal_standards: Mapping of lipid class -> standard lipid molecule name
-        intsta_concentrations: Amount of each internal standard spiked into each sample (nmol)
-        protein_concentrations: Protein concentration for each sample (for BCA normalization)
+        intsta_concentrations: Amount of each internal standard spiked into each sample (pmol)
+        protein_concentrations: Protein amount in each sample (µg, e.g. from a BCA assay)
     """
     model_config = {"frozen": True}
 

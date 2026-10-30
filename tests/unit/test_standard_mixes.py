@@ -12,24 +12,24 @@ SPHINGO = 'SphingoSPLASH I (330734)'
 ULTIMATE = 'UltimateSPLASH ONE (330820)'
 
 # SPLASH PC 15:0-18:1(d7): 160 µg/mL, MW 753.11.
-SPLASH_PC_NMOL_10UL = 160 * 10 / 753.11
+SPLASH_PC_PMOL_10UL = 160 * 10 / 753.11 * 1000
 
 
-def _nmol(standards, volumes):
-    return {k: v.nmol for k, v in StandardMixService.amounts(standards, volumes).items()}
+def _pmol(standards, volumes):
+    return {k: v.pmol for k, v in StandardMixService.amounts(standards, volumes).items()}
 
 
-class TestNmolPerSample:
+class TestPmolPerSample:
 
     def test_ug_per_ml_times_ul_over_mw(self):
-        """µg/mL × µL = ng; ng ÷ g/mol = nmol."""
+        """µg/mL × µL = ng; ng ÷ g/mol = nmol; × 1000 = pmol."""
         pc = STANDARD_MIXES[SPLASH][0]
-        assert StandardMixService.nmol_per_sample(pc, 10) == pytest.approx(2.1245, abs=1e-4)
+        assert StandardMixService.pmol_per_sample(pc, 10) == pytest.approx(2124.5, abs=0.1)
 
     def test_scales_with_volume(self):
         pc = STANDARD_MIXES[SPLASH][0]
-        assert StandardMixService.nmol_per_sample(pc, 2) == pytest.approx(
-            StandardMixService.nmol_per_sample(pc, 10) / 5
+        assert StandardMixService.pmol_per_sample(pc, 2) == pytest.approx(
+            StandardMixService.pmol_per_sample(pc, 10) / 5
         )
 
 
@@ -62,8 +62,8 @@ class TestMatching:
         ('PC 15:0-18:1-d7', 'PC'),
     ])
     def test_format_spellings_match_the_same_component(self, name, cls):
-        assert _nmol({name: cls}, {SPLASH: 10}) == {
-            name: pytest.approx(SPLASH_PC_NMOL_10UL)
+        assert _pmol({name: cls}, {SPLASH: 10}) == {
+            name: pytest.approx(SPLASH_PC_PMOL_10UL)
         }
 
     @pytest.mark.parametrize('name,cls,component', [
@@ -81,27 +81,27 @@ class TestMatching:
 
     def test_label_must_match(self):
         """UltimateSPLASH's PC 17:0_16:1(d5) is also PC 33:1, but d5."""
-        assert _nmol({'PC 15:0_18:1(d7)': 'PC'}, {ULTIMATE: 10}) == {}
-        assert _nmol({'PC 17:0_16:1(d5)': 'PC'}, {ULTIMATE: 10}) == {
-            'PC 17:0_16:1(d5)': pytest.approx(100 * 10 / 751.09)
+        assert _pmol({'PC 15:0_18:1(d7)': 'PC'}, {ULTIMATE: 10}) == {}
+        assert _pmol({'PC 17:0_16:1(d5)': 'PC'}, {ULTIMATE: 10}) == {
+            'PC 17:0_16:1(d5)': pytest.approx(100 * 10 / 751.09 * 1000)
         }
 
     def test_unlabelled_name_not_matched(self):
-        assert _nmol({'PC 15:0_18:1': 'PC'}, {SPLASH: 10}) == {}
+        assert _pmol({'PC 15:0_18:1': 'PC'}, {SPLASH: 10}) == {}
 
     def test_standard_in_no_mix_not_matched(self):
-        assert _nmol({'SPLASH FA 20:4(d11)': 'FA'}, {SPLASH: 10}) == {}
+        assert _pmol({'SPLASH FA 20:4(d11)': 'FA'}, {SPLASH: 10}) == {}
 
     def test_hexcer_matches_glccer_by_composition(self):
-        amounts = _nmol({'HexCer d18:1/15:0(d7)': 'HexCer'}, {SPHINGO: 5})
-        assert amounts == {'HexCer d18:1/15:0(d7)': pytest.approx(6.93 * 5 / 693.06)}
+        amounts = _pmol({'HexCer d18:1/15:0(d7)': 'HexCer'}, {SPHINGO: 5})
+        assert amounts == {'HexCer d18:1/15:0(d7)': pytest.approx(6.93 * 5 / 693.06 * 1000)}
 
     def test_standard_in_two_mixes_gets_the_sum(self):
         """Spiking SPLASH and EquiSPLASH puts both mixes' PC in the sample."""
-        amounts = _nmol({'PC 15:0_18:1(d7)': 'PC'}, {SPLASH: 10, EQUI: 5})
+        amounts = _pmol({'PC 15:0_18:1(d7)': 'PC'}, {SPLASH: 10, EQUI: 5})
         assert amounts['PC 15:0_18:1(d7)'] == pytest.approx(
-            SPLASH_PC_NMOL_10UL + 100 * 5 / 753.11
+            SPLASH_PC_PMOL_10UL + 100 * 5 / 753.11 * 1000
         )
 
     def test_no_mixes_no_amounts(self):
-        assert _nmol({'PC 15:0_18:1(d7)': 'PC'}, {}) == {}
+        assert _pmol({'PC 15:0_18:1(d7)': 'PC'}, {}) == {}
