@@ -195,8 +195,8 @@ def _display_modules_overview() -> None:
     **A separate workflow for stable isotope (e.g. ¹³C) tracing experiments.** Upload IsoCorrectoR's three
     input files (Measurement, Molecule, Element) and run natural-isotope-abundance correction with the real
     IsoCorrectoR package—removing the naturally-occurring heavy-isotope background so the remaining signal
-    reflects only the label you fed in. View and download the corrected intensities, fractions, mean
-    enrichment, and residuals.
+    reflects only the label you fed in. Plot each lipid's isotopologue distribution by condition, and view
+    and download the corrected intensities, fractions, mean enrichment, and residuals.
     """)
 
     st.markdown("#### 🤖 AI Studio")
@@ -257,6 +257,9 @@ def _display_whats_new() -> None:
           experiments—upload IsoCorrectoR's three input files and run natural-isotope-abundance
           correction with the real IsoCorrectoR package, then view and download the corrected
           intensities, fractions, mean enrichment, and residuals
+        - **Isotopologue Distribution Plots**: Each lipid's corrected fractions as stacked bars,
+          one per sample, grouped by condition (read from sample names like `WT_13C_1`), with a
+          choice of which isotopologues to show
         - **AI Studio**: A conversational workspace with four tabs—questions about LipidCruncher,
           questions about your own data, converting an unsupported CSV into the Generic format,
           and custom visualizations—working either on an uploaded file or on data imported from

@@ -205,6 +205,7 @@ LipidCruncher/
 │       │       ├── saturation_plot.py
 │       │       ├── chain_length_plot.py
 │       │       ├── fach.py
+│       │       ├── isotopologue_distribution.py  # isotope tracing: stacked corrected fractions
 │       │       ├── pathway_viz.py
 │       │       ├── volcano_plot.py
 │       │       ├── lipidomic_heatmap.py
@@ -373,14 +374,14 @@ In-app guidance sits alongside the tabs: page-level *How to use the AI Studio* a
 Reached from the landing-page mode choice (`Page.ISOTOPE_TRACING`); fully independent of Modules 1–2.
 
 ```
-Upload 3 files (Measurement, Molecule, Element) → Validate → IsoCorrectoR (Rscript) → Corrected tables + CSV download
+Upload 3 files (Measurement, Molecule, Element) → Validate → IsoCorrectoR (Rscript) → Distribution plot + corrected tables + CSV download
 ```
 
 1. **Upload / sample data** — three IsoCorrectoR CSVs, or the bundled example.
 2. **Settings** — `IsotopeCorrectionConfig` (tracer-impurity, UHR mode, etc.).
 3. **Validation** — pure-Python structural checks before R is invoked.
 4. **Correction** — `IsotopeCorrectionService` runs the real IsoCorrectoR via an `Rscript` subprocess.
-5. **Results** — corrected intensities, fractions, mean enrichment, residuals, raw data — viewed and downloaded as CSV; run log shown.
+5. **Results** — an isotopologue-distribution plot (stacked corrected fractions per sample, grouped by condition, via `IsotopologuePlotterService`), then corrected intensities, fractions, mean enrichment, residuals, raw data — viewed and downloaded as CSV; run log shown.
 
 Requires R + IsoCorrectoR; degrades gracefully (clear notice) where R is absent.
 
@@ -508,6 +509,7 @@ Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strin
 | `SaturationPlotterService` | Saturation degree distribution |
 | `ChainLengthPlotterService` | Carbon chain length and double bond bubble charts |
 | `FACHPlotterService` | Fatty acid composition heatmap |
+| `IsotopologuePlotterService` | Isotope tracing: one molecule's corrected fractions as stacked bars per sample, grouped by condition; conditions and replicates are read from sample names (`WT_13C_1` is replicate 1 of `WT_13C`) |
 | `PathwayVizPlotterService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
 | `VolcanoPlotterService` | Fold-change vs. p-value scatter |
 | `LipidomicHeatmapPlotterService` | Heatmaps in four modes — `regular`, `clustered` (Ward hierarchical clustering), `class_grouped` (one row per species, blocked by class, paged), `class_aggregated` (one row per class) — coloured by row Z-score or by log2 fold change against a control condition; under `class_grouped` + log2FC, species are sorted within each block by mean fold change |

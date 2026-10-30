@@ -7,9 +7,10 @@ owns success/error state, the service raises typed exceptions. No Streamlit
 dependencies.
 """
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
+import plotly.graph_objects as go
 
 from ..models.isotope_tracing import IsotopeCorrectionConfig
 from ..services.isotope_correction import (
@@ -18,6 +19,7 @@ from ..services.isotope_correction import (
     validate_inputs,
     IsotopeError,
 )
+from ..services.plotting.isotopologue_distribution import IsotopologuePlotterService
 
 
 @dataclass
@@ -75,3 +77,30 @@ class IsotopeTracingWorkflow:
             return IsotopeTracingResult(success=False, error_message=str(e))
 
         return IsotopeTracingResult(success=True, correction=correction)
+
+    @staticmethod
+    def sample_groups(samples: List[str]) -> Dict[str, List[str]]:
+        """Condition -> its replicates, read from names like ``WT_13C_1``."""
+        return IsotopologuePlotterService.sample_groups(samples)
+
+    @staticmethod
+    def molecules(fractions: pd.DataFrame) -> List[str]:
+        """The molecules in a result table."""
+        return IsotopologuePlotterService.molecules(fractions)
+
+    @staticmethod
+    def isotopologue_labels(fractions: pd.DataFrame) -> List[str]:
+        """The isotopologue labels in a result table (``0``, ``1``, ...)."""
+        return IsotopologuePlotterService.labels(fractions)
+
+    @staticmethod
+    def distribution_plot(
+        fractions: pd.DataFrame,
+        molecule: str,
+        groups: Dict[str, List[str]],
+        labels: List[str],
+    ) -> Tuple[go.Figure, pd.DataFrame]:
+        """Stacked isotopologue-distribution bars for one molecule."""
+        return IsotopologuePlotterService.create_distribution_plot(
+            fractions, molecule, groups, labels,
+        )

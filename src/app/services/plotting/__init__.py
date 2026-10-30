@@ -12,6 +12,7 @@ from app.services.plotting.box_plot import BoxPlotService
 from app.services.plotting.bqc_plotter import BQCPlotterService
 from app.services.plotting.correlation import CorrelationPlotterService
 from app.services.plotting.fach import FACHPlotterService
+from app.services.plotting.isotopologue_distribution import IsotopologuePlotterService
 from app.services.plotting.lipidomic_heatmap import LipidomicHeatmapPlotterService
 from app.services.plotting.pathway_viz import PathwayVizPlotterService
 from app.services.plotting.pca import PCAPlotterService
@@ -24,6 +25,7 @@ __all__ = [
     'BarChartPlotterService',
     'ChainLengthPlotterService',
     'FACHPlotterService',
+    'IsotopologuePlotterService',
     'LipidomicHeatmapPlotterService',
     'PathwayVizPlotterService',
     'PieChartPlotterService',

@@ -78,3 +78,45 @@ class TestValidationPath:
         assert result.success is False
         assert result.validation_errors
         assert len(at.error) > 0
+
+
+class TestDistributionPlot:
+    """The stacked corrected-fraction bars under a successful run."""
+
+    @staticmethod
+    def _run_sample():
+        at = _make_app().run()
+        at.button(key="iso_load_sample").click().run()
+        at.button(key="iso_run").click().run()
+        assert not at.exception, at.exception
+        return at
+
+    def test_plot_offers_each_molecule_and_isotopologue(self):
+        at = self._run_sample()
+        assert at.selectbox(key="iso_plot_molecule").options == ["BMP_18:1_18:1", "PC_34:1"]
+        assert at.multiselect(key="iso_plot_isotopologues").value == [f"C{i}" for i in range(7)]
+        assert len(at.get("plotly_chart")) == 1
+
+    def test_switching_molecule_and_isotopologues(self):
+        at = self._run_sample()
+        at.selectbox(key="iso_plot_molecule").set_value("PC_34:1").run()
+        at.multiselect(key="iso_plot_isotopologues").set_value(["C1", "C2"]).run()
+        assert not at.exception, at.exception
+        assert len(at.get("plotly_chart")) == 1
+
+    def test_nothing_selected_warns_instead_of_plotting(self):
+        at = self._run_sample()
+        at.multiselect(key="iso_plot_isotopologues").set_value([]).run()
+        assert any("at least one" in w.value for w in at.warning)
+        assert len(at.get("plotly_chart")) == 0
+
+    def test_selections_from_an_earlier_dataset_fall_back_to_all(self):
+        at = _make_app()
+        at.session_state["iso_plot_molecule"] = "Gone_1:0"
+        at.session_state["iso_plot_isotopologues"] = ["9"]
+        at.run()
+        at.button(key="iso_load_sample").click().run()
+        at.button(key="iso_run").click().run()
+        assert not at.exception, at.exception
+        assert at.selectbox(key="iso_plot_molecule").value == "BMP_18:1_18:1"
+        assert at.multiselect(key="iso_plot_isotopologues").value == [f"C{i}" for i in range(7)]

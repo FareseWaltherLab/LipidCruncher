@@ -40,6 +40,7 @@ ISOTOPE_KEYS = dict(
         'iso_correct_tracer_impurity', 'iso_correct_tracer_element_core',
         'iso_calculate_mean_enrichment', 'iso_ultra_high_res',
         'iso_correct_also_monoisotopic', 'iso_calculation_threshold_uhr',
+        'iso_plot_molecule', 'iso_plot_conditions', 'iso_plot_isotopologues',
     }),
     prefixes=('iso_dl_',),
 )

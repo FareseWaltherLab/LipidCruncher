@@ -19,6 +19,8 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.constants import PAGE_LANDING
 from app.models.isotope_tracing import IsotopeCorrectionConfig
 from app.ui.landing_page import display_logo
+from app.ui.st_helpers import display_export_buttons
+from app.workflows.isotope_tracing import IsotopeTracingWorkflow
 
 # Golden sample dataset shipped with the repo (this file: src/app/ui/...).
 _SAMPLE_DIR = Path(__file__).parents[3] / "sample_datasets" / "isotope_tracing"
@@ -41,9 +43,10 @@ _HOW_TO_RUN_DOC = """
    suit most tracing experiments.
 4. **Click Run correction.** The three files are checked structurally first,
    so most mistakes are reported before IsoCorrectoR is invoked.
-5. **Read the outputs.** Corrected intensities appear first; the remaining
-   IsoCorrectoR tables and the run log follow in expanders, each downloadable
-   as CSV.
+5. **Read the outputs.** The isotopologue distribution plot comes first: pick
+   a lipid, the conditions (in plot order) and the isotopologues to show. The
+   corrected intensities follow; the remaining IsoCorrectoR tables and the run
+   log are in expanders, each downloadable as CSV.
 
 **If the run is rejected**
 
@@ -77,6 +80,11 @@ BMP_18:1_18:1_C0,26588314,24796338
 BMP_18:1_18:1_C1,11962732,10856478
 PC_34:1_C0,85698314,77001200
 ```
+
+**Sample names set the conditions in the plots.** Name each sample
+`<condition>_<replicate>`, e.g. `WT_13C_1`, `WT_13C_2`, `WT_13C_3`: samples that
+differ only in the trailing number are replicates of one condition (`WT_13C`).
+A name without a trailing `_<number>` is a condition of its own.
 
 **2. Molecule file** — one row per molecule
 
@@ -122,8 +130,10 @@ background, leaving the signal that reflects **only the label you fed in**.
   fractions); the main correction is unchanged.
 - **UHR calculation limit** — advanced; the default is appropriate for most data.
 
-**Outputs** — corrected intensities, corrected fractions, mean enrichment, residuals,
-and raw data (plus the monoisotopic tables when asked for), each downloadable as CSV.
+**Outputs** — an isotopologue distribution plot (each sample's corrected fractions as a
+stacked bar, grouped by condition), then corrected intensities, corrected fractions, mean
+enrichment, residuals, and raw data (plus the monoisotopic tables when asked for), each
+downloadable as CSV.
 """
 
 
@@ -339,6 +349,9 @@ def _display_results(result) -> None:
     with st.expander("📖 How to Read These Tables", expanded=False):
         st.markdown(_OUTPUTS_DOC)
 
+    if correction.corrected_fractions is not None:
+        _display_distribution_plot(correction.corrected_fractions)
+
     # Primary output: the corrected intensities.
     st.markdown("#### Corrected intensities")
     st.dataframe(correction.corrected, width='stretch')
@@ -358,6 +371,71 @@ def _display_results(result) -> None:
     if correction.log_text:
         with st.expander("IsoCorrectoR run log", expanded=False):
             st.code(correction.log_text)
+
+
+def _keep_valid(key: str, options: list) -> None:
+    """Drop a stored selection that a new result no longer offers, so the
+    widget falls back to its default instead of failing."""
+    value = st.session_state.get(key)
+    if value is None:
+        return
+    if isinstance(value, list):
+        kept = [v for v in value if v in options]
+        if kept or not value:  # an empty selection is the user's choice
+            st.session_state[key] = kept
+        else:
+            del st.session_state[key]
+    elif value not in options:
+        del st.session_state[key]
+
+
+def _display_distribution_plot(fractions: pd.DataFrame) -> None:
+    """Stacked bars of a molecule's corrected fractions, by condition."""
+    st.markdown("#### Isotopologue distribution")
+    st.markdown(
+        "Each bar is one sample's corrected fractions, stacked from the "
+        "unlabelled form (_0) up; bars are grouped by condition. Conditions "
+        "are read from the sample names: a trailing `_1`, `_2`, `_3` marks "
+        "replicates of the same condition."
+    )
+
+    molecules = IsotopeTracingWorkflow.molecules(fractions)
+    groups = IsotopeTracingWorkflow.sample_groups(list(fractions.columns))
+    labels = IsotopeTracingWorkflow.isotopologue_labels(fractions)
+    _keep_valid("iso_plot_molecule", molecules)
+    _keep_valid("iso_plot_conditions", list(groups))
+    _keep_valid("iso_plot_isotopologues", labels)
+
+    molecule = st.selectbox("Lipid", molecules, key="iso_plot_molecule")
+    conditions = st.multiselect(
+        "Conditions, in plot order", list(groups), default=list(groups),
+        key="iso_plot_conditions",
+        help="Remove conditions to hide them; re-add one to move it to the end.",
+    )
+    chosen_labels = st.multiselect(
+        "Isotopologues", labels, default=labels, key="iso_plot_isotopologues",
+        help=(
+            "Leave some out to focus on others. The bars then show only the "
+            "chosen fractions and no longer reach 1."
+        ),
+    )
+    st.caption(" · ".join(
+        f"{c}: {len(groups[c])} replicate{'s' if len(groups[c]) != 1 else ''}"
+        for c in conditions
+    ))
+    if not conditions or not chosen_labels:
+        st.warning("Select at least one condition and one isotopologue.")
+        return
+
+    fig, data = IsotopeTracingWorkflow.distribution_plot(
+        fractions, molecule, {c: groups[c] for c in conditions}, chosen_labels,
+    )
+    st.plotly_chart(fig, width='stretch')
+    stem = f"{molecule}_isotopologue_distribution".replace(':', '-')
+    display_export_buttons(
+        fig, data, f"{stem}.svg", f"{stem}.csv",
+        "iso_dl_plot_svg", "iso_dl_plot_csv",
+    )
 
 
 def display_isotope_tracing_page() -> None:
