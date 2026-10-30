@@ -7,18 +7,19 @@ NORMALIZATION_METHODS_DOCS = """
 |--------|---------|----------|
 | **None** | Raw values | Data already normalized externally |
 | **Internal Standards** | `(Intensity_lipid / Intensity_standard) × Amount_standard` | Correct for extraction/ionization variability |
-| **Protein-based** | `Intensity_lipid / Protein_conc` | Normalize to starting material (e.g., BCA assay) |
-| **Internal Standards + Protein** | `(Intensity_lipid / Intensity_standard) × (Amount_standard / Protein_conc)` | Combined correction |
+| **Protein-based** | `Intensity_lipid / Protein_µg` | Normalize to starting material (e.g., BCA assay) |
+| **Internal Standards + Protein** | `(Intensity_lipid / Intensity_standard) × (Amount_standard / Protein_µg)` | Combined correction |
 | **Total Intensity** | `(Intensity_lipid / Total_intensity_sample) × Median_total` | Equalize total signal across samples |
 
 After normalization, `intensity[...]` columns become `concentration[...]` columns.
 
-**Standard amounts.** `Amount_standard` is the nmol of the standard spiked into
-each sample, so Internal Standards gives nmol per sample and Internal Standards +
-Protein gives nmol per unit of protein. For Avanti's SPLASH LIPIDOMIX,
-SphingoSPLASH I, UltimateSPLASH ONE and EquiSPLASH, pick the mixes you spiked and
-the µL of each: every standard in your data that a mix contains is filled in as
-`stock µg/mL × µL ÷ molecular weight`, summed over the mixes that contain it.
+**Units.** `Amount_standard` is the pmol of the standard spiked into each
+sample and `Protein_µg` is the µg of protein in each sample, so Internal
+Standards gives pmol per sample and Internal Standards + Protein gives pmol/µg
+protein. For Avanti's SPLASH LIPIDOMIX, SphingoSPLASH I, UltimateSPLASH ONE and
+EquiSPLASH, pick the mixes you spiked and the µL of each: every standard in your
+data that a mix contains is filled in as
+`stock µg/mL × µL ÷ molecular weight × 1000`, summed over the mixes that contain it.
 The stock values are the catalog targets; edit an amount if your lot's
 certificate of analysis differs.
 

@@ -3,8 +3,9 @@ Premade internal standard mixes.
 
 The commercial mixes users spike into every sample, and the amount of each
 of their standards that ends up in a sample: vendor stock (µg/mL) × volume
-spiked (µL) ÷ molecular weight (g/mol) = nmol. The amounts are matched to
-the dataset's standards by class, total chain composition and isotope label,
+spiked (µL) ÷ molecular weight (g/mol) = nmol, × 1000 = pmol. The amounts
+are matched to the dataset's standards by class, total chain composition and
+isotope label,
 since each format writes a standard's name its own way
 (``PC(15:0_18:1)+D7:(s)``, ``PC 15:0_18:1(d7)``, ``PC(33:1)+D7:(s)``).
 
@@ -30,7 +31,7 @@ class MixComponent:
 class MixAmount:
     """A dataset standard's amount per sample, summed over the mixes that
     contain it, and the (mix, component) pairs it came from."""
-    nmol: float
+    pmol: float
     sources: Tuple[Tuple[str, MixComponent], ...]
 
 
@@ -188,9 +189,9 @@ class StandardMixService:
     """Amounts of premade-mix standards in each sample."""
 
     @staticmethod
-    def nmol_per_sample(component: MixComponent, volume_ul: float) -> float:
-        """µg/mL × µL = ng; ng ÷ (g/mol) = nmol."""
-        return component.ug_per_ml * volume_ul / component.mw
+    def pmol_per_sample(component: MixComponent, volume_ul: float) -> float:
+        """µg/mL × µL = ng; ng ÷ (g/mol) = nmol; × 1000 = pmol."""
+        return component.ug_per_ml * volume_ul / component.mw * 1000
 
     @staticmethod
     def amounts(
@@ -212,13 +213,13 @@ class StandardMixService:
             key = _match_key(name, lipid_class)
             if key is None:
                 continue
-            nmol, sources = 0.0, []
+            pmol, sources = 0.0, []
             for mix, volume in volumes.items():
                 for component in STANDARD_MIXES[mix]:
                     if _match_key(component.name, component.lipid_class) == key:
-                        nmol += StandardMixService.nmol_per_sample(component, volume)
+                        pmol += StandardMixService.pmol_per_sample(component, volume)
                         sources.append((mix, component))
                         break
             if sources:
-                amounts[name] = MixAmount(nmol, tuple(sources))
+                amounts[name] = MixAmount(pmol, tuple(sources))
         return amounts

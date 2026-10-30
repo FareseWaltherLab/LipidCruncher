@@ -82,8 +82,8 @@ class TestInvalidSettingsClearOutput:
 
 SPLASH = 'SPLASH LIPIDOMIX (330707)'
 # SPLASH's PC 15:0-18:1(d7) is 160 µg/mL, MW 753.11; its PE is 5 µg/mL, 711.03.
-SPLASH_PC_NMOL_PER_UL = 160 / 753.11
-SPLASH_PE_NMOL_PER_UL = 5 / 711.03
+SPLASH_PC_PMOL_PER_UL = 160 / 753.11 * 1000
+SPLASH_PE_PMOL_PER_UL = 5 / 711.03 * 1000
 
 
 class TestPremadeStandardMixes:
@@ -101,16 +101,17 @@ class TestPremadeStandardMixes:
 
     def test_picking_a_mix_fills_its_standards(self, norm_with_standards_app):
         at = self._pick_splash(norm_with_standards_app)
-        assert self._amount(at) == pytest.approx(10 * SPLASH_PC_NMOL_PER_UL)
+        assert at.number_input(key=f'conc_{STANDARD}').label == f'Amount (pmol) for {STANDARD}'
+        assert self._amount(at) == pytest.approx(10 * SPLASH_PC_PMOL_PER_UL)
         config = at.session_state['normalization_result'].config
         assert config.intsta_concentrations[STANDARD] == pytest.approx(
-            10 * SPLASH_PC_NMOL_PER_UL
+            10 * SPLASH_PC_PMOL_PER_UL
         )
 
     def test_volume_scales_the_amounts(self, norm_with_standards_app):
         at = self._pick_splash(norm_with_standards_app)
         at.number_input(key=f'is_mix_volume_{SPLASH}').set_value(2.0).run()
-        assert self._amount(at) == pytest.approx(2 * SPLASH_PC_NMOL_PER_UL)
+        assert self._amount(at) == pytest.approx(2 * SPLASH_PC_PMOL_PER_UL)
 
     def test_hand_edit_kept_until_the_mixes_change(self, norm_with_standards_app):
         at = self._pick_splash(norm_with_standards_app)
@@ -118,7 +119,7 @@ class TestPremadeStandardMixes:
         at.run()
         assert self._amount(at) == 3.0
         at.number_input(key=f'is_mix_volume_{SPLASH}').set_value(5.0).run()
-        assert self._amount(at) == pytest.approx(5 * SPLASH_PC_NMOL_PER_UL)
+        assert self._amount(at) == pytest.approx(5 * SPLASH_PC_PMOL_PER_UL)
 
     def test_standard_not_in_mix_left_for_hand_entry(self):
         """The LipidSearch sample's standards are SPLASH's; the PE standard
@@ -138,7 +139,7 @@ class TestPremadeStandardMixes:
         at.multiselect(key='is_mix_selection').set_value([SPLASH]).run()
         at.number_input(key=f'is_mix_volume_{SPLASH}').set_value(5.0).run()
         pe = at.selectbox(key='standard_selection_PE').value
-        assert self._amount(at, pe) == pytest.approx(5 * SPLASH_PE_NMOL_PER_UL)
+        assert self._amount(at, pe) == pytest.approx(5 * SPLASH_PE_PMOL_PER_UL)
 
         for module in (MODULE_QC_ANALYSIS, MODULE_DATA_PROCESSING):
             at.session_state['module'] = module
@@ -147,7 +148,7 @@ class TestPremadeStandardMixes:
 
         assert at.multiselect(key='is_mix_selection').value == [SPLASH]
         assert at.number_input(key=f'is_mix_volume_{SPLASH}').value == 5.0
-        assert self._amount(at, pe) == pytest.approx(5 * SPLASH_PE_NMOL_PER_UL)
+        assert self._amount(at, pe) == pytest.approx(5 * SPLASH_PE_PMOL_PER_UL)
 
 
 class TestStandardMappingSurvivesNextAndBack:

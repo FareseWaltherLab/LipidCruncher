@@ -188,19 +188,19 @@ Before normalization, LipidCruncher organizes the internal standards and generat
 
 ## S3.4 Normalization Calculations
 
-Internal standard-based normalization: The platform prompts users to assign the appropriate internal standard to each lipid class and input the amount of that standard spiked into each sample (nmol). The lipid concentration is calculated by dividing the lipid intensity by the internal standard intensity, then multiplying by the known standard amount, giving nmol per sample.
+Internal standard-based normalization: The platform prompts users to assign the appropriate internal standard to each lipid class and input the amount of that standard spiked into each sample (pmol). The lipid concentration is calculated by dividing the lipid intensity by the internal standard intensity, then multiplying by the known standard amount, giving pmol per sample.
 
-For premade mixtures (Avanti SPLASH LIPIDOMIX®, SphingoSPLASH I, UltimateSPLASH ONE and EquiSPLASH), users select the mixtures they spiked and the volume of each (µL per sample). Each standard in the dataset that a selected mixture contains is identified by lipid class, total chain composition (carbons and double bonds) and isotope label, so that the different naming conventions of each input format match the same component. Its amount is the vendor stock concentration (µg/mL) multiplied by the spiked volume (µL) and divided by the labelled compound's molecular weight (g/mol), which gives nmol; a standard present in several selected mixtures receives the sum. Stock concentrations are the vendor's catalog targets, and users can edit any amount to match a lot's certificate of analysis.
+For premade mixtures (Avanti SPLASH LIPIDOMIX®, SphingoSPLASH I, UltimateSPLASH ONE and EquiSPLASH), users select the mixtures they spiked and the volume of each (µL per sample). Each standard in the dataset that a selected mixture contains is identified by lipid class, total chain composition (carbons and double bonds) and isotope label, so that the different naming conventions of each input format match the same component. Its amount is the vendor stock concentration (µg/mL) multiplied by the spiked volume (µL) and divided by the labelled compound's molecular weight (g/mol), which gives nmol, reported as pmol; a standard present in several selected mixtures receives the sum. Stock concentrations are the vendor's catalog targets, and users can edit any amount to match a lot's certificate of analysis.
 
-Protein-based normalization: Users must independently determine protein concentrations (e.g., via BCA assay) and input these values. LipidCruncher provides two methods for entering protein concentrations:
+Protein-based normalization: Users must independently determine the protein amount in each sample in µg (e.g., via BCA assay) and input these values. LipidCruncher provides two methods for entering protein amounts:
 
-- Manual entry: Users enter the protein concentration for each sample individually through the interface
+- Manual entry: Users enter the protein amount (µg) for each sample individually through the interface
 
-- File upload: Users upload a CSV file with a column named "Concentration" holding one protein value per sample. An optional "Sample" column (each sample's label or name) assigns rows to samples; without it, rows are taken in sample order
+- File upload: Users upload a CSV file with a column named "Concentration" holding each sample's protein amount in µg. An optional "Sample" column (each sample's label or name) assigns rows to samples; without it, rows are taken in sample order
 
-The lipid concentration is calculated by dividing the lipid intensity by the protein concentration.
+The lipid concentration is calculated by dividing the lipid intensity by the protein amount.
 
-Combined internal standards and protein normalization: The lipid concentration is calculated by first dividing the lipid intensity by the internal standard intensity, multiplying by the known standard amount, and then dividing by the protein concentration.
+Combined internal standards and protein normalization: The lipid concentration is calculated by first dividing the lipid intensity by the internal standard intensity, multiplying by the known standard amount, and then dividing by the protein amount, giving pmol/µg protein.
 
 Total intensity normalization: For each sample, the intensity of every lipid species is divided by the total intensity of all lipid species in that sample. Values are then scaled by the median total intensity across all samples to preserve the original order of magnitude. This approach equalizes total lipid signal across samples and is useful when internal standards are unavailable or when a global normalization approach is preferred [19, 20].
 

@@ -209,9 +209,9 @@ def _standard_concentration_inputs(internal_standards: dict, intsta_df: pd.DataF
     amounts, refill = _premade_mix_amounts(intsta_df)
     if refill:
         for std, amount in amounts.items():
-            st.session_state.standard_concentrations[std] = amount.nmol
+            st.session_state.standard_concentrations[std] = amount.pmol
 
-    st.write("Enter the amount of each selected internal standard spiked into each sample (nmol):")
+    st.write("Enter the amount of each selected internal standard spiked into each sample (pmol):")
 
     intsta_concentrations = {}
     all_concentrations_valid = True
@@ -223,16 +223,16 @@ def _standard_concentration_inputs(internal_standards: dict, intsta_df: pd.DataF
         # mixes' amount when the mixes or volumes have just changed
         if widget_key not in st.session_state:
             st.session_state[widget_key] = st.session_state.standard_concentrations.get(
-                std, amount.nmol if amount else 1.0,
+                std, amount.pmol if amount else 1.0,
             )
         elif refill and amount:
-            st.session_state[widget_key] = amount.nmol
+            st.session_state[widget_key] = amount.pmol
 
         conc = st.number_input(
-            f"Amount (nmol) for {std}",
+            f"Amount (pmol) for {std}",
             min_value=0.0,
-            step=0.1,
-            format="%.4f",
+            step=1.0,
+            format="%.2f",
             key=widget_key,
             help=_mix_amount_help(amount),
         )
@@ -264,7 +264,7 @@ def _mix_amount_help(amount) -> Optional[str]:
     applied = st.session_state.is_mix_applied
     return "  \n".join(
         f"{mix}: {c.name}, {c.ug_per_ml:g} µg/mL × {applied[mix]:g} µL "
-        f"÷ {c.mw:g} g/mol = {StandardMixService.nmol_per_sample(c, applied[mix]):.4g} nmol"
+        f"÷ {c.mw:g} g/mol × 1000 = {StandardMixService.pmol_per_sample(c, applied[mix]):.4g} pmol"
         for mix, c in amount.sources
     )
 
@@ -330,6 +330,8 @@ def _display_manual_protein_input(sample_names: list) -> dict:
         widget_key = f"protein_{_protein_key(sample)}"
         if widget_key not in st.session_state:
             st.session_state[widget_key] = float(preserved_values.get(_protein_key(sample), 1.0))
+
+    st.write("Enter the protein amount in each sample (µg):")
 
     # Bulk fill, for the common case where every sample was prepared at the
     # same protein amount. Rendered before the grid so the per-sample widgets
@@ -445,7 +447,7 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
             st.success(f"✓ Using previously loaded {len(preserved_protein_df)} concentration values")
             return {s: preserved_protein_df[k] for s, k in zip(sample_names, keys)}
 
-    st.info("Please upload a CSV file with protein concentrations.")
+    st.info("Please upload a CSV file with each sample's protein amount (µg).")
     return None
 
 
@@ -454,7 +456,7 @@ def _display_protein_config(experiment: ExperimentConfig) -> dict:
 
     sample_names = experiment.full_samples_list
 
-    with st.expander("⚙️ Protein Concentration Data", expanded=True):
+    with st.expander("⚙️ Protein Amount per Sample (µg)", expanded=True):
         # Restore method selection from preserved state (lost during module navigation)
         if st.session_state.get('protein_input_method') is None:
             preserved = st.session_state.get('protein_input_method_prev')
@@ -679,7 +681,7 @@ def _collect_method_config(
         if zero_samples:
             shown = labeler('processing')
             st.error(
-                f"Protein concentration must be greater than zero for all samples. "
+                f"Protein amount must be greater than zero for all samples. "
                 f"The following samples have zero or negative values: "
                 f"{', '.join(shown(s) for s in zero_samples)}"
             )
