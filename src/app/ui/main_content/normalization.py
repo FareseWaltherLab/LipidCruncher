@@ -377,17 +377,19 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
         try:
             csv_df = pd.read_csv(uploaded_file)
 
-            if 'Concentration' not in csv_df.columns:
-                st.error(f"CSV must contain a column named 'Concentration'. Found: {list(csv_df.columns)}")
+            # 'Concentration' is the column's name from before amounts were in µg
+            column = next((c for c in ('Protein_ug', 'Concentration') if c in csv_df.columns), None)
+            if column is None:
+                st.error(f"CSV must contain a column named 'Protein_ug'. Found: {list(csv_df.columns)}")
                 return None
 
             if len(csv_df) != len(sample_names):
                 st.error(f"Row count ({len(csv_df)}) doesn't match sample count ({len(sample_names)})")
                 return None
 
-            csv_df['Concentration'] = pd.to_numeric(csv_df['Concentration'], errors='coerce')
-            if csv_df['Concentration'].isna().any():
-                st.error("Some concentration values couldn't be converted to numbers.")
+            csv_df[column] = pd.to_numeric(csv_df[column], errors='coerce')
+            if csv_df[column].isna().any():
+                st.error("Some protein amounts couldn't be converted to numbers.")
                 return None
 
             rows = None
@@ -400,7 +402,7 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
                     st.error(str(e))
                     return None
             protein_concentrations = dict(zip(
-                rows or sample_names, csv_df['Concentration'].tolist(),
+                rows or sample_names, csv_df[column].tolist(),
             ))
             protein_concentrations = {s: protein_concentrations[s] for s in sample_names}
             st.session_state.protein_df = {
@@ -408,7 +410,7 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
             }
             matched_by = "the Sample column" if rows else "row order"
             st.success(
-                f"✓ Loaded {len(protein_concentrations)} concentration values "
+                f"✓ Loaded {len(protein_concentrations)} protein amounts "
                 f"(matched by {matched_by})"
             )
             return protein_concentrations
@@ -433,7 +435,7 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
             return None
         except KeyError as e:
             logger.error("Protein CSV missing column: %s", e)
-            st.error(f"Missing required column in protein CSV: {e}. Expected a 'Concentration' column.")
+            st.error(f"Missing required column in protein CSV: {e}. Expected a 'Protein_ug' column.")
             return None
         except ValueError as e:
             logger.error("Protein CSV value error: %s", e)
@@ -444,7 +446,7 @@ def _display_csv_protein_upload(sample_names: list) -> dict:
     if preserved_protein_df is not None and isinstance(preserved_protein_df, dict):
         keys = [_protein_key(s) for s in sample_names]
         if len(preserved_protein_df) == len(sample_names) and all(k in preserved_protein_df for k in keys):
-            st.success(f"✓ Using previously loaded {len(preserved_protein_df)} concentration values")
+            st.success(f"✓ Using previously loaded {len(preserved_protein_df)} protein amounts")
             return {s: preserved_protein_df[k] for s, k in zip(sample_names, keys)}
 
     st.info("Please upload a CSV file with each sample's protein amount (µg).")
