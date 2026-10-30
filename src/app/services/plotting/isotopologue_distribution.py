@@ -40,13 +40,17 @@ class IsotopologuePlotterService:
         """Condition -> its samples, read from the names.
 
         A name ending in ``_<number>`` is that replicate of the condition
-        before it; any other name is a condition of its own. Conditions keep
-        the order they first appear in; replicates are sorted by number.
+        before it; any other name is a condition of its own. Case is ignored
+        (``WT_Neg_1`` and ``WT_neg_2`` are one condition, spelled as it first
+        appears). Conditions keep the order they first appear in; replicates
+        are sorted by number.
         """
+        spelling: Dict[str, str] = {}
         groups: Dict[str, List[Tuple[int, str]]] = {}
         for sample in samples:
             match = _REPLICATE.match(sample)
             condition, replicate = (match.group(1), int(match.group(2))) if match else (sample, 0)
+            condition = spelling.setdefault(condition.lower(), condition)
             groups.setdefault(condition, []).append((replicate, sample))
         return {c: [s for _, s in sorted(reps)] for c, reps in groups.items()}
 
@@ -54,11 +58,14 @@ class IsotopologuePlotterService:
     def groups_from_table(samples: List[str], conditions: List[str]) -> Dict[str, List[str]]:
         """Condition -> its samples from a sample/condition table (the
         sample names' grouping as edited by hand), in table order. A blank
-        condition leaves the sample as a condition of its own."""
+        condition leaves the sample as a condition of its own; case is
+        ignored, as in ``sample_groups``."""
+        spelling: Dict[str, str] = {}
         groups: Dict[str, List[str]] = {}
         for sample, condition in zip(samples, conditions):
             condition = str(condition).strip() if pd.notna(condition) else ''
-            groups.setdefault(condition or sample, []).append(sample)
+            condition = spelling.setdefault((condition or sample).lower(), condition or sample)
+            groups.setdefault(condition, []).append(sample)
         return groups
 
     @staticmethod
@@ -175,8 +182,8 @@ def _replicate_label(sample: str, condition: str) -> str:
     """The bar's label under its condition: the replicate number for a name
     like ``<condition>_<n>``, nothing for a sample that is a condition of its
     own, and the full name for a sample regrouped by hand."""
-    if sample == condition:
+    if sample.lower() == condition.lower():
         return ''
-    if sample.startswith(condition + '_'):
+    if sample.lower().startswith(condition.lower() + '_'):
         return sample[len(condition) + 1:]
     return sample

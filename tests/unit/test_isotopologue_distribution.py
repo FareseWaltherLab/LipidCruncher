@@ -54,6 +54,18 @@ class TestSampleGroups:
         groups = IsotopologuePlotterService.sample_groups(['A_10', 'A_2', 'A_1'])
         assert groups == {'A': ['A_1', 'A_2', 'A_10']}
 
+    def test_case_is_ignored_and_first_spelling_kept(self):
+        groups = IsotopologuePlotterService.sample_groups(['WT_Neg_1', 'WT_neg_2', 'WT_NEG_3'])
+        assert groups == {'WT_Neg': ['WT_Neg_1', 'WT_neg_2', 'WT_NEG_3']}
+
+    def test_mixed_case_replicates_keep_their_number_labels(self):
+        groups = IsotopologuePlotterService.sample_groups(['WT_Neg_1', 'WT_neg_2'])
+        fractions = pd.DataFrame({'WT_Neg_1': [1.0], 'WT_neg_2': [1.0]}, index=['PC_34:1_0'])
+        fig, _ = IsotopologuePlotterService.create_distribution_plot(
+            fractions, 'PC_34:1', groups, ['0'],
+        )
+        assert list(fig.data[0].x[1]) == ['1', '2']
+
     def test_name_without_replicate_number_is_its_own_condition(self):
         groups = IsotopologuePlotterService.sample_groups(
             ['HepG2_neg', 'HMC3_PTPMT1-1_glucose', 'HepG2_0_5mM-glycerol'],
@@ -136,6 +148,12 @@ class TestGroupsFromTable:
             ['HepG2_neg', 'HMC3_neg', 'HepG2_glucose'], ['Neg', 'Neg', 'Glucose'],
         )
         assert groups == {'Neg': ['HepG2_neg', 'HMC3_neg'], 'Glucose': ['HepG2_glucose']}
+
+    def test_typed_conditions_ignore_case(self):
+        groups = IsotopologuePlotterService.groups_from_table(
+            ['A_1', 'B_1', 'C_1'], ['Control', 'control', 'CONTROL'],
+        )
+        assert groups == {'Control': ['A_1', 'B_1', 'C_1']}
 
     @pytest.mark.parametrize('blank', ['', '  ', None])
     def test_blank_condition_leaves_the_sample_on_its_own(self, blank):

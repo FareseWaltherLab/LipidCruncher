@@ -86,6 +86,7 @@ PC_34:1_C0,85698314,77001200
 **Sample names set the conditions in the plots.** Name each sample
 `<condition>_<replicate>`, e.g. `WT_13C_1`, `WT_13C_2`, `WT_13C_3`: samples that
 differ only in the trailing number are replicates of one condition (`WT_13C`).
+Capitals don't matter: `WT_Neg_1` and `WT_neg_2` are the same condition.
 A name without a trailing `_<number>` is a condition of its own. Either way,
 the grouping can be edited by hand on the results page (*Sample conditions*).
 
