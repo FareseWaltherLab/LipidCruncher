@@ -102,6 +102,7 @@ class TestPremadeStandardMixes:
     def test_picking_a_mix_fills_its_standards(self, norm_with_standards_app):
         at = self._pick_splash(norm_with_standards_app)
         assert at.number_input(key=f'conc_{STANDARD}').label == f'Amount (pmol) for {STANDARD}'
+        assert 'Values are pmol per sample.' in [c.value for c in at.caption]
         assert self._amount(at) == pytest.approx(10 * SPLASH_PC_PMOL_PER_UL)
         config = at.session_state['normalization_result'].config
         assert config.intsta_concentrations[STANDARD] == pytest.approx(
@@ -197,3 +198,13 @@ class TestMsdialPrenormalized:
         assert any(
             'using pre-normalized MS-DIAL data' in m.value for m in at.markdown
         )
+
+
+def test_every_method_says_what_its_values_are():
+    from typing import get_args
+
+    from app.models.normalization import NormalizationConfig
+    from app.ui.main_content.normalization import NORMALIZED_VALUE_UNITS
+
+    methods = get_args(NormalizationConfig.model_fields['method'].annotation)
+    assert set(NORMALIZED_VALUE_UNITS) == set(methods)

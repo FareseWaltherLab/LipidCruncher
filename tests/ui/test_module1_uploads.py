@@ -32,6 +32,7 @@ class TestProteinCsv:
             'Sample,Protein_ug\n' + ''.join(f's{i},{a}\n' for i, a in enumerate(AMOUNTS, 1))
         ))
         assert any('Loaded 6 protein amounts' in s.value for s in at.success)
+        assert any(c.value.startswith('Values are intensity per µg protein') for c in at.caption)
         cleaned = at.session_state['_test_cleaned_df'].set_index('LipidMolec')
         normalized = at.session_state['normalized_df'].set_index('LipidMolec')
         for i, amount in enumerate(AMOUNTS, 1):

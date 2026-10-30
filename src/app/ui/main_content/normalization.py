@@ -692,10 +692,20 @@ def _collect_method_config(
     return internal_standards, intsta_concentrations, protein_concentrations
 
 
+NORMALIZED_VALUE_UNITS = {
+    'none': "Values are your input data as uploaded.",
+    'internal_standard': "Values are pmol per sample.",
+    'protein': "Values are intensity per µg protein (relative, not molar).",
+    'both': "Values are pmol/µg protein.",
+    'total_intensity': "Values are relative intensities scaled to the median total.",
+}
+
+
 def _display_normalization_results(result) -> None:
     """Display normalization results or errors."""
     if result and result.success:
         st.markdown("##### 📊 Final Normalized Data")
+        st.caption(NORMALIZED_VALUE_UNITS[result.config.method])
         if result.normalized_df is not None:
             named_dataframe(
                 result.normalized_df, sample_names=names_for('processing'),
