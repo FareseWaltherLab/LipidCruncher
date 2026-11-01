@@ -212,6 +212,13 @@ def _standard_concentration_inputs(internal_standards: dict, intsta_df: pd.DataF
             st.session_state.standard_concentrations[std] = amount.pmol
 
     st.write("Enter the amount of each selected internal standard spiked into each sample (pmol):")
+    # Amounts were the stock's µM until November 2026; remove once returning
+    # users have adjusted.
+    st.info(
+        "**Changed:** enter the amount spiked into each sample in **pmol**, not the "
+        "stock concentration in µM. To convert: µM × µL of standard added = pmol "
+        "(e.g. 15 µM × 10 µL = 150 pmol)."
+    )
 
     intsta_concentrations = {}
     all_concentrations_valid = True

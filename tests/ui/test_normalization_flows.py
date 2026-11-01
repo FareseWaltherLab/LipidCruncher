@@ -109,6 +109,11 @@ class TestPremadeStandardMixes:
             10 * SPLASH_PC_PMOL_PER_UL
         )
 
+    def test_old_um_users_told_how_to_convert(self, norm_with_standards_app):
+        at = norm_with_standards_app
+        at.radio(key='norm_method_selection').set_value('Internal Standards').run()
+        assert any('µM × µL of standard added = pmol' in i.value for i in at.info)
+
     def test_volume_scales_the_amounts(self, norm_with_standards_app):
         at = self._pick_splash(norm_with_standards_app)
         at.number_input(key=f'is_mix_volume_{SPLASH}').set_value(2.0).run()
