@@ -115,7 +115,8 @@ test_type='parametric', correction='uncorrected')` — same statistics and defau
 - `lc.bar_chart(conditions=None, classes=None, scale='linear')` — class abundance, with
 significance annotation
 - `lc.heatmap(conditions=None, classes=None, heatmap_type='regular', n_clusters=3)` —
-`'clustered'` for clustering
+`'clustered'` for clustering, `'class_grouped'` for species grouped by class,
+`'class_aggregated'` for class totals (the app's Heatmap page opens on this one)
 - `lc.chain_length(conditions=None, classes=None)` — the app's Chain Length plot: each lipid
 placed once at its **total** carbons and double bonds (summed across its chains), bubble size =
 mean concentration per condition. No per-chain counting is involved, so there is no
@@ -123,7 +124,9 @@ presence-vs-split choice to ask about. Do **not** re-derive chain composition by
 names yourself
 - `lc.pathway(control, experimental)` — lipid pathway visualization
 - `lc.fatty_acid_composition(lipid_class, conditions=None)` — FACH plot for one class
-- `lc.pie_charts(conditions=None, classes=None)` → **dict** of condition -> result
+- `lc.pie_charts(conditions=None, classes=None, species_class=None)` → **dict** of
+condition -> result; class composition, or with `species_class='PG'` each PG species as a
+share of PG (the app's "Species within a class" view)
 - `lc.saturation(conditions=None, classes=None, plot_type='concentration')` → **dict** of
 lipid class -> result (SFA/MUFA/PUFA); `plot_type='percentage'` for proportions
 
@@ -582,6 +585,9 @@ answer: point to it ("in the table below") instead of repeating every row.
 the code or the output shows it.
 - If the output does not answer the question (an error, an empty table, the wrong thing \
 computed), say so plainly instead of answering.
+- Columns named `concentration[...]` are not necessarily molar (protein-only normalization \
+gives intensity per µg protein): call the values abundance or response, not concentration \
+or pmol, unless the plan or output says they are internal-standard normalized.
 - No code, no headings, no preamble.""")
 
 

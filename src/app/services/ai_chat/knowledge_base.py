@@ -84,11 +84,31 @@ not standards either. Examples that ARE standards: `LPC(18:1)+D7:(s)`, `PC(33:1)
 ## Analysis Pipeline (3 Modules)
 
 ### Module 1: Data Cleaning, Filtering, & Normalization
-- Format detection and column standardization
+- Format chosen in the sidebar (a warning if the file looks like another format) and \
+column standardization
 - Format-specific data cleaning (deduplication, grade/score filtering)
 - Zero filtering (removes lipids with too many missing values)
 - Internal standards management
 - Normalization (5 options): none, internal standard, protein, both, total intensity
+
+### Normalization — inputs and what the values mean
+- **Internal standard**: the user enters the **amount of each standard spiked into each \
+sample, in pmol** (until November 2026 it was the stock concentration in µM; to convert, \
+µM × µL added = pmol). Or they pick the premade Avanti mixes they spiked (SPLASH LIPIDOMIX, \
+SphingoSPLASH I, UltimateSPLASH ONE, EquiSPLASH) and the µL of each, and every standard in \
+the dataset that a mix contains is filled in as stock µg/mL × µL ÷ MW. Each species: \
+(intensity / its class's standard intensity) × standard pmol → **pmol per sample**.
+- **Protein**: the user enters each sample's **protein amount in µg** (e.g. from a BCA \
+assay; protein CSV column `Protein_ug`, the old `Concentration` header still works). \
+Each value is divided by it → **intensity per µg protein** (relative, not molar). A sample \
+with no positive protein amount is an error, not left unnormalized.
+- **Both**: internal standard, then protein → **pmol/µg protein**.
+- **Total intensity**: each sample scaled to the median total → **relative intensities**.
+- **None**: the values as uploaded.
+- Sample columns are named `concentration[...]` after internal standard, protein or both, \
+and `intensity[...]` otherwise, so the column name alone does not say the values are molar. \
+Call values pmol only after internal standard (or both) normalization; otherwise speak of \
+abundance or response.
 
 ### Module 2: Quality Check
 - **Box plots** — concentration distributions per sample
@@ -99,13 +119,16 @@ not standards either. Examples that ARE standards: `LPC(18:1)+D7:(s)`, `PC(33:1)
 
 ### Module 3: Visualization & Analysis
 - **Bar charts** — mean ± std per condition per lipid class, with optional statistical testing
-- **Pie charts** — lipid class composition per condition
+- **Pie charts** — lipid class composition per condition, or "Species within a class": \
+each species of one class as a share of that class
 - **Saturation profiles** — SFA/MUFA/PUFA distribution
 - **Chain length analysis** — carbon chain length and double bond bubble charts
 - **FACH** — fatty acid composition heatmap
 - **Pathway visualization** — interactive metabolic pathway network (28 lipid classes)
 - **Volcano plots** — fold-change vs. p-value
-- **Lipidomic heatmaps** — heatmap with hierarchical clustering (Ward linkage, Euclidean distance)
+- **Lipidomic heatmaps** — four views: Aggregated by Class (the default), species grouped \
+by class, regular, and clustered (hierarchical clustering, Ward linkage, Euclidean \
+distance); colored by z-score or by log2 fold change against a control condition
 
 ### Stable Isotope Tracing (separate page)
 Opened from the home page, independent of Modules 1–3. Runs natural-isotope-abundance \
@@ -144,7 +167,7 @@ LPC (lysophosphatidylcholine), LPE (lysophosphatidylethanolamine), CL (cardiolip
 
 - **BQC**: Batch Quality Control samples — used to assess measurement precision
 - **CoV**: Coefficient of Variation — measure of data variability
-- **Internal standards**: Known-concentration lipids spiked into samples for normalization
+- **Internal standards**: Lipids spiked into samples in known amounts (pmol) for normalization
 - **Zero filtering**: Removing lipids with excessive missing/zero values across samples
 - **Intensity**: Raw signal/area values from mass spectrometry
 """.replace("\\\n", "")

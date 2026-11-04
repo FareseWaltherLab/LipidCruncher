@@ -377,8 +377,9 @@ Answer: "LipidCruncher offers 5 normalization options: (1) None — use raw inte
 (2) Internal standard — normalize each lipid class by a user-assigned internal standard \
 (you map each class to a standard; classes without their own standard can use one from \
 a structurally similar class, e.g., PS can use a PE standard), \
-(3) Protein — divide by protein concentration (BCA assay), (4) Both — internal standard \
-then protein, (5) Total intensity — for each sample, divide every lipid intensity by that \
+(3) Protein — divide by each sample's protein amount in µg (e.g. from a BCA assay), giving \
+intensity per µg protein, (4) Both — internal standard then protein, giving pmol/µg \
+protein, (5) Total intensity — for each sample, divide every lipid intensity by that \
 sample's total, then multiply by the median total across all samples (keeps values in a \
 biologically meaningful range while equalizing total signal)."
 
@@ -411,19 +412,22 @@ in lipid names — it looks for markers like (d7), (d9), (IS), _IS, ISTD, SPLASH
 similar patterns, as well as ClassKey values containing 'ISTD' or 'Internal'. \
 You then map each lipid class to a standard — this mapping is flexible, so if you \
 don't have a standard for a particular class (e.g., PS), you can assign a structurally \
-similar one (e.g., a PE standard). Each species is normalized by: \
-(intensity / IS_intensity) * IS_concentration. Every class must have a mapping — \
-LipidCruncher will raise an error if any class is unmapped."
+similar one (e.g., a PE standard). For each standard you enter the amount spiked into \
+each sample in pmol, or pick the premade Avanti mixes you used (e.g. SPLASH LIPIDOMIX) and \
+the µL added, and LipidCruncher fills the amounts in. Each species is normalized by: \
+(intensity / IS_intensity) * IS_pmol, giving pmol per sample. Every class must have a \
+mapping — LipidCruncher will raise an error if any class is unmapped."
 
 ### Example 6: Supported formats
 User: "What data formats can I upload?"
-Answer: "LipidCruncher supports 4 formats: (1) LipidSearch 5.0 — identified by MeanArea \
-columns plus metadata like LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, \
+Answer: "LipidCruncher supports 4 formats: (1) LipidSearch 5.0 and 5.2 — identified by \
+MeanArea columns plus metadata like LipidMolec, ClassKey, CalcMass, BaseRt, TotalGrade, \
 (2) MS-DIAL — identified by Metabolite name column plus signature columns like \
 Alignment ID, Average Rt(min), Total score, Ontology, \
 (3) Generic — simplest format: lipid names in column 1, numeric intensities in columns 2+, \
 (4) Metabolomics Workbench — tab-delimited with MS_METABOLITE_DATA_START/END markers. \
-Format is auto-detected on upload."
+You choose the format in the sidebar; LipidCruncher warns if the file looks like a \
+different one."
 
 ### Example 7: Quality checks
 User: "What quality checks does LipidCruncher perform?"

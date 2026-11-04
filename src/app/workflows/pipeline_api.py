@@ -463,8 +463,14 @@ class PipelineAPI:
         self,
         conditions: Optional[List[str]] = None,
         classes: Optional[List[str]] = None,
+        species_class: Optional[str] = None,
     ) -> Dict[str, LCResult]:
         """Class-composition pie charts, one per condition.
+
+        Args:
+            species_class: When given (e.g. 'PG'), the slices are that
+                class's species, each as a share of the class — the app's
+                "Species within a class" view.
 
         Returns:
             Dict of condition name -> LCResult.
@@ -474,6 +480,7 @@ class PipelineAPI:
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
+            species_class=species_class,
         )
         return {
             cond: LCResult(r.figure, r.data_df, r) for cond, r in out.items()
@@ -611,7 +618,9 @@ class PipelineAPI:
         """Lipidomic heatmap of z-scores.
 
         Args:
-            heatmap_type: 'regular' or 'clustered'.
+            heatmap_type: 'regular', 'clustered', 'class_grouped' (species
+                grouped by class) or 'class_aggregated' (class totals; the
+                app's page opens on this one).
             n_clusters: Cluster count when clustered.
         """
         res = self._analysis().run_heatmap(

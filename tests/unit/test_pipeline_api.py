@@ -451,6 +451,19 @@ class TestAnalysisPlotsUseTheAppsOwnCode:
         assert set(out) == {"WT", "KO"}
         assert all(r.figure is not None for r in out.values())
 
+    def test_species_within_a_class_pie(self, lc, df):
+        """The app's "Species within a class" view (2026-10-28); the AI had
+        no way to draw it and hand-built an unreadable all-PG pie."""
+        cls = df["ClassKey"].iloc[0]
+        out = lc.pie_charts(species_class=cls)
+        species = set(df.loc[df["ClassKey"] == cls, "LipidMolec"])
+        for res in out.values():
+            labels = {lab.split(" - ")[0] for lab in res.figure.data[0].labels}
+            assert labels and labels <= species
+
+    def test_class_aggregated_heatmap(self, lc):
+        assert lc.heatmap(heatmap_type="class_aggregated").figure is not None
+
     def test_saturation_keyed_by_class(self, lc, df):
         out = lc.saturation()
         assert set(out) <= set(df["ClassKey"].unique())
