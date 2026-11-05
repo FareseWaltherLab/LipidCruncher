@@ -1,12 +1,14 @@
 """
 Child-process entry point for sandboxed execution.
 
-Run as ``python -m app.services.ai_chat.sandbox_runner <result_fd>``:
+Run as ``python -m app.services.ai_chat.sandbox_runner <result_fd> <ready_fd>``:
 
 1. reads a pickled request from **stdin**,
 2. applies process-level hardening (see ``_harden``),
-3. executes the AI-generated code against the restricted globals,
-4. writes a JSON response to **<result_fd>**.
+3. writes one byte to **<ready_fd>** and closes it, which starts the
+   parent's timeout,
+4. executes the AI-generated code against the restricted globals,
+5. writes a JSON response to **<result_fd>**.
 
 The response goes to a dedicated pipe rather than stdout because stdout can
 be polluted by library chatter, and because ``RLIMIT_FSIZE`` is set to 0 —
@@ -23,6 +25,7 @@ import ctypes
 import errno
 import importlib
 import json
+import math
 import os
 import pickle
 import platform
@@ -193,6 +196,9 @@ def _harden(cpu_seconds: int, memory_bytes: int) -> None:
     if os.geteuid() == 0:
         raise RuntimeError("running as root, which ignores the process limit")
 
+    used = resource.getrusage(resource.RUSAGE_SELF)
+    cpu = math.ceil(used.ru_utime + used.ru_stime) + cpu_seconds
+
     limits = {
         # --- No filesystem writes -----------------------------------------
         # RLIMIT_FSIZE caps the size of files the process may create; 0
@@ -202,8 +208,10 @@ def _harden(cpu_seconds: int, memory_bytes: int) -> None:
         "RLIMIT_FSIZE": (0, 0),
         # --- Bounded CPU --------------------------------------------------
         # Backstop for the parent's wall-clock timeout: a busy loop that
-        # ignores signals still dies here.
-        "RLIMIT_CPU": (cpu_seconds, cpu_seconds),
+        # ignores signals still dies here. The limit counts the process's
+        # whole life, so it sits on top of the CPU start-up has used, as
+        # the parent's clock starts only once start-up is done.
+        "RLIMIT_CPU": (cpu, cpu),
         # --- No new processes ---------------------------------------------
         # Blocks os.system / subprocess even if the code reaches them
         # through a library's module attributes (e.g. pd.compat.os), which
@@ -259,7 +267,7 @@ def _harden(cpu_seconds: int, memory_bytes: int) -> None:
 
 
 def main() -> int:
-    result_fd = int(sys.argv[1])
+    result_fd, ready_fd = int(sys.argv[1]), int(sys.argv[2])
 
     request = pickle.loads(sys.stdin.buffer.read())
 
@@ -302,6 +310,8 @@ def main() -> int:
             f"so the code was not run."
         )
     else:
+        os.write(ready_fd, b"1")
+        os.close(ready_fd)
         try:
             exec(compile(request["code"], "<sandbox>", "exec"), exec_globals)
             response["ok"] = True

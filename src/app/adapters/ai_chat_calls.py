@@ -233,6 +233,7 @@ class AIChatCalls:
         experiment: Optional[ExperimentConfig] = None,
         figure=None,
         unverified_numbers=(),
+        sandbox=None,
     ) -> str:
         """Log one completed AI Studio turn. Returns the turn_id so the UI
         can attach a later 👍/👎 feedback record to it.
@@ -240,7 +241,8 @@ class AIChatCalls:
         ``history`` is the chat's messages *before* this turn; ``df`` /
         ``experiment`` describe the data the tab ran against (the upload's
         name and detected format come from session state); ``figure`` is
-        the Plotly figure the turn produced, if any.
+        the Plotly figure the turn produced, if any; ``sandbox`` the
+        SandboxResult of the code it ran.
         """
         from ..models.chat import AIConfig
         from ..services.ai_chat.interaction_logger import InteractionLoggingService
@@ -269,6 +271,7 @@ class AIChatCalls:
             history=history,
             figure=InteractionLoggingService.summarize_figure(figure),
             unverified_numbers=unverified_numbers,
+            sandbox=InteractionLoggingService.describe_sandbox(sandbox),
         )
         return turn_id
 

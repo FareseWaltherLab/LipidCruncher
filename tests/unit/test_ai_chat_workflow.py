@@ -229,6 +229,21 @@ class TestStatisticalChoicesAreShown:
         )
         assert "Statistical choices" not in result.assistant_message
 
+    def test_the_result_carries_how_the_code_ran_for_the_log(self):
+        """2026-10-27: a timed-out turn was logged as error-free; the
+        sandbox's outcome now goes back with the result to be logged."""
+        from app.models.chat import ChatMode, ChatSession, SandboxConfig
+        from app.workflows.ai_chat import AIChatWorkflow
+        from tests.evals import reference_analysis as ref
+
+        result = AIChatWorkflow._finalize_data_questions(
+            ChatSession(mode=ChatMode.DATA_QUESTIONS),
+            "Dividing.\n\n```python\nprint(1 / 0)\n```",
+            ref.load_canonical(), SandboxConfig(), None, None,
+        )
+        assert "ZeroDivisionError" in result.sandbox_result.error_message
+        assert result.sandbox_result.startup_time > 0
+
 
 class TestFigureHasData:
     """Regression (AQ2): only x/y were checked, so pies, treemaps, heatmaps

@@ -115,7 +115,8 @@ def render_data_questions_chat(source_df) -> None:
             st.session_state.chat_questions_result_df = result.result_df
             return {"code": result.code or None,
                     "produced_table": result.result_df is not None,
-                    "unverified_numbers": result.unverified_numbers}
+                    "unverified_numbers": result.unverified_numbers,
+                    "sandbox": result.sandbox_result}
 
         run_code_turn(
             "dq", "data_questions", user_input, session.messages,

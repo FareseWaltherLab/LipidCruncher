@@ -17,9 +17,11 @@ injected into the sandbox globals as ``lc``.
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from scipy import stats
 
 from ..models.experiment import ExperimentConfig
 from ..models.statistics import StatisticalTestConfig
@@ -310,6 +312,117 @@ class PipelineAPI:
         return out.sort_values(
             'n_species', ascending=False
         ).reset_index(drop=True)
+
+    def correlations(
+        self,
+        classes: Optional[List[str]] = None,
+        partner_classes: Optional[List[str]] = None,
+        min_abs_r: float = 0.0,
+        correction: str = VOLCANO_STATS.correction_method,
+    ) -> pd.DataFrame:
+        """Pearson correlation between species across all samples.
+
+        Correlates each species of ``classes`` with each species of
+        ``partner_classes`` the way the main app's QC correlation treats
+        values: as they are, with a zero meaning not detected, so each pair
+        is correlated over the samples where both were detected. All pairs
+        at once, as matrix products: 30 x 872 species takes milliseconds,
+        where a loop of ``scipy.stats.pearsonr`` overran the sandbox's time
+        limit (2026-10-27).
+
+        Args:
+            classes: Lipid classes whose species to correlate. Defaults to all.
+            partner_classes: Classes to correlate them with. Defaults to all.
+            min_abs_r: Keep pairs with ``|r|`` at least this, of either sign.
+            correction: 'uncorrected' (the Volcano page's default),
+                'fdr_bh' or 'bonferroni', over every pair tested, before
+                the ``min_abs_r`` filter.
+
+        Returns:
+            DataFrame with one row per pair (each pair once) and columns
+            ``LipidMolec``, ``ClassKey``, ``PartnerMolec``, ``PartnerClass``,
+            ``r`` (signed: negative is an inverse relationship),
+            ``n_samples``, ``p_value``, ``adj_p_value``, sorted by ``|r|``
+            descending. Pairs detected together in fewer than 3 samples
+            are left out.
+        """
+        if correction not in _CORRECTION_TEXT:
+            raise ValueError(
+                f"Unknown correction '{correction}'. "
+                f"Use one of {sorted(_CORRECTION_TEXT)}."
+            )
+        frame = self._frame()
+        sample_cols = _sample_columns(frame, 'concentration')
+        if (classes or partner_classes) and 'ClassKey' not in frame.columns:
+            raise ValueError(
+                "This dataset has no 'ClassKey' column, so species cannot "
+                "be chosen by class."
+            )
+        keys = (frame['ClassKey'].to_numpy() if 'ClassKey' in frame.columns
+                else np.full(len(frame), None))
+        in_a = np.isin(keys, classes) if classes else np.ones(len(frame), bool)
+        in_b = (np.isin(keys, partner_classes) if partner_classes
+                else np.ones(len(frame), bool))
+        ia, ib = np.flatnonzero(in_a), np.flatnonzero(in_b)
+
+        values = frame[sample_cols].to_numpy(float)
+        values[values == 0] = np.nan
+        # Centring each species changes no r, and keeps the sums of
+        # squares below small enough not to lose precision.
+        with np.errstate(all='ignore'):
+            values = values - np.nanmean(values, axis=1, keepdims=True)
+        seen = ~np.isnan(values)
+        filled = np.where(seen, values, 0.0)
+        a, b = filled[ia], filled[ib]
+        sa, sb = seen[ia].astype(float), seen[ib].astype(float)
+
+        # Sums over the samples each pair shares.
+        n = sa @ sb.T
+        sx, sy = a @ sb.T, sa @ b.T
+        with np.errstate(all='ignore'):
+            r = (n * (a @ b.T) - sx * sy) / np.sqrt(
+                (n * ((a ** 2) @ sb.T) - sx ** 2)
+                * (n * (sa @ (b ** 2).T) - sy ** 2)
+            )
+        r = np.clip(r, -1.0, 1.0)
+
+        row, col = ia[:, None], ib[None, :]
+        # Each pair once: a pair whose two species are both in both sets
+        # appears twice, so keep the one with the earlier species first.
+        keep = (n >= 3) & np.isfinite(r) & (row != col) & ~(
+            in_a[col] & in_b[row] & (col < row)
+        )
+        r, n = r[keep], n[keep].astype(int)
+        first = np.broadcast_to(row, keep.shape)[keep]
+        second = np.broadcast_to(col, keep.shape)[keep]
+
+        with np.errstate(all='ignore'):
+            t = r * np.sqrt((n - 2) / (1 - r ** 2))
+        p = 2 * stats.t.sf(np.abs(t), n - 2)
+        _, adj_p = StatisticalTestingService.apply_correction(p, correction)
+
+        names = frame['LipidMolec'].to_numpy()
+        out = pd.DataFrame({
+            'LipidMolec': names[first],
+            'ClassKey': keys[first],
+            'PartnerMolec': names[second],
+            'PartnerClass': keys[second],
+            'r': r,
+            'n_samples': n,
+            'p_value': p,
+            'adj_p_value': adj_p,
+        })
+        self._note(
+            f"Species correlations: Pearson r across {len(sample_cols)} "
+            f"samples on the values as they are, zeros counted as not "
+            f"detected (as in the main app's QC correlation), pairs detected "
+            f"together in fewer than 3 samples left out; "
+            f"{_CORRECTION_TEXT[correction]} over {len(out)} pairs."
+        )
+        out = out[out['r'].abs() >= min_abs_r]
+        return out.iloc[
+            np.argsort(-out['r'].abs().to_numpy(), kind='stable')
+        ].reset_index(drop=True)
 
     # -- internals ----------------------------------------------------
 

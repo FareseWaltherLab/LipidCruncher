@@ -15,6 +15,7 @@ import math
 import os
 import pickle
 import re
+import select
 import shutil
 import signal
 import statistics
@@ -50,7 +51,11 @@ class SandboxResult:
         result_df: DataFrame produced by the code, if any.
         stdout: Captured print output.
         error_message: Error description if execution failed.
-        execution_time: Wall-clock seconds the code took to run.
+        execution_time: Wall-clock seconds the code took to run, from the
+            moment the child was ready.
+        startup_time: Seconds the child took to start (interpreter,
+            imports, limits) before the code began; not counted against
+            the timeout.
         methods: One line per statistical analysis the code ran through
             ``lc``, saying which choices (test, correction, ...) were made.
     """
@@ -60,6 +65,7 @@ class SandboxResult:
     stdout: str = ""
     error_message: str = ""
     execution_time: float = 0.0
+    startup_time: float = 0.0
     methods: Tuple[str, ...] = ()
 
 
@@ -412,6 +418,11 @@ def _child_env() -> Dict[str, str]:
 # How much of the child's stderr the parent keeps for the crash message.
 _STDERR_TAIL_BYTES = 64 * 1024
 
+# How long the child may take to start (interpreter, imports, limits)
+# before the code runs. Our own start-up, not the AI's code, so it is not
+# charged to ``execution_timeout``: it took ~2.9 s of the 10 s locally.
+_STARTUP_TIMEOUT = 30
+
 
 def _kill_group(proc: subprocess.Popen) -> None:
     """SIGKILL the child's whole process group (it is the group leader)."""
@@ -432,18 +443,27 @@ def _run_in_subprocess(
 ) -> Dict[str, Any]:
     """Execute code in a separate, hardened process and return its response.
 
-    The child cannot outlive ``config.execution_timeout``: if the result
-    pipe has not closed by then the process is killed outright. Unlike the
+    The child cannot outlive ``config.execution_timeout`` once its code
+    starts, nor take longer than ``_STARTUP_TIMEOUT`` to get there: if the
+    child has not signalled ready, or then not closed the result pipe, in
+    time, the process is killed outright. Unlike the
     previous in-thread approach, a hung or runaway execution cannot survive
     in the app process. Nor can its output: at most
     ``config.max_output_bytes`` are read back before the child is killed.
 
+    Returns:
+        The child's response, plus ``startup_time`` (seconds until it was
+        ready) and ``execution_time`` (seconds from then to its result).
+
     Raises:
         _SandboxTimeout: if the child overran its timeout.
-        _SandboxCrash: if the child died without returning a response, or
-            its response was too large.
+        _SandboxCrash: if the child died without returning a response, did
+            not start in time, or its response was too large.
     """
     read_fd, write_fd = os.pipe()
+    # The child writes one byte here once its limits are in place and the
+    # code is about to run: the timeout starts then.
+    ready_read, ready_write = os.pipe()
     workdir = tempfile.mkdtemp(prefix="lc_sandbox_")
 
     request = pickle.dumps({
@@ -456,13 +476,14 @@ def _run_in_subprocess(
         "memory_bytes": config.max_memory_bytes,
     }, protocol=pickle.HIGHEST_PROTOCOL)
 
+    started = time.monotonic()
     proc = subprocess.Popen(
         [sys.executable, "-m", "app.services.ai_chat.sandbox_runner",
-         str(write_fd)],
+         str(write_fd), str(ready_write)],
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
-        pass_fds=(write_fd,),
+        pass_fds=(write_fd, ready_write),
         env=_child_env(),
         cwd=workdir,
         close_fds=True,
@@ -472,6 +493,7 @@ def _run_in_subprocess(
         start_new_session=True,
     )
     os.close(write_fd)
+    os.close(ready_write)
 
     chunks: List[bytes] = []
     overflow = threading.Event()
@@ -512,6 +534,19 @@ def _run_in_subprocess(
     except (BrokenPipeError, OSError):
         pass  # child died early; handled below
 
+    # A child that exits before it is ready (it could not apply its limits,
+    # or crashed) closes the pipe, which ends the wait as well.
+    ready, _, _ = select.select([ready_read], [], [], _STARTUP_TIMEOUT)
+    os.close(ready_read)
+    if not ready:
+        _kill_group(proc)
+        proc.wait(timeout=5)
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise _SandboxCrash(
+            f"the sandbox took longer than {_STARTUP_TIMEOUT} seconds to start"
+        )
+    running = time.monotonic()
+
     reader.join(timeout=config.execution_timeout)
 
     if reader.is_alive():
@@ -519,7 +554,8 @@ def _run_in_subprocess(
         proc.wait(timeout=5)
         shutil.rmtree(workdir, ignore_errors=True)
         raise _SandboxTimeout(
-            f"Execution timed out after {config.execution_timeout} seconds"
+            f"Execution timed out after {config.execution_timeout} seconds",
+            startup_time=running - started,
         )
 
     if overflow.is_set():
@@ -544,12 +580,16 @@ def _run_in_subprocess(
         # crash — to the user it is the same situation.
         if proc.returncode is not None and proc.returncode < 0:
             raise _SandboxTimeout(
-                f"Execution timed out after {config.execution_timeout} seconds"
+                f"Execution timed out after {config.execution_timeout} seconds",
+                startup_time=running - started,
             )
         stderr = bytes(stderr_tail).decode("utf-8", "replace")
         raise _SandboxCrash(stderr.strip()[-500:] or "no output")
 
-    return _decode_response(b"".join(chunks))
+    response = _decode_response(b"".join(chunks))
+    response["startup_time"] = running - started
+    response["execution_time"] = time.monotonic() - running
+    return response
 
 
 # How many sandbox children may run at once in this app process. Each is a
@@ -591,7 +631,9 @@ def make_this_process_private() -> bool:
 
 
 class _SandboxTimeout(Exception):
-    pass
+    def __init__(self, message: str, startup_time: float = 0.0):
+        super().__init__(message)
+        self.startup_time = startup_time
 
 
 class _SandboxCrash(Exception):
@@ -680,7 +722,8 @@ class SandboxService:
             return SandboxResult(
                 success=False,
                 error_message=str(e),
-                execution_time=time.monotonic() - start_time,
+                execution_time=config.execution_timeout,
+                startup_time=e.startup_time,
             )
         except _SandboxCrash as e:
             return SandboxResult(
@@ -697,14 +740,17 @@ class SandboxService:
         finally:
             _SLOTS.release()
 
-        elapsed = time.monotonic() - start_time
+        timing = {
+            "execution_time": response["execution_time"],
+            "startup_time": response["startup_time"],
+        }
 
         if not response.get("ok"):
             return SandboxResult(
                 success=False,
                 error_message=f"Runtime error: {response.get('error', '')}",
                 stdout=response.get("stdout", ""),
-                execution_time=elapsed,
+                **timing,
             )
 
         return SandboxResult(
@@ -712,7 +758,7 @@ class SandboxService:
             figure=response.get("figure"),
             result_df=response.get("result_df"),
             stdout=response.get("stdout", ""),
-            execution_time=elapsed,
+            **timing,
             methods=tuple(
                 m for m in response.get("methods") or () if isinstance(m, str)
             ),

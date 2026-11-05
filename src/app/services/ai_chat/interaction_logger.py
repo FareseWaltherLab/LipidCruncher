@@ -28,7 +28,9 @@ from typing import Optional
 #       turn's code never produced (Data Questions, Visualization)
 #   5 — `dataset.normalization`: the main pipeline's normalization method
 #       for imported data (absent for an upload)
-SCHEMA_VERSION = 5
+#   6 — `sandbox`: the code's start-up and run seconds and the sandbox's
+#       error (a timeout was only in the answer text, with `error` None)
+SCHEMA_VERSION = 6
 
 # Size guards. The awslogs driver splits a stdout line above 256 KB into
 # several CloudWatch events, which would break the JSON (and the pull script
@@ -155,6 +157,20 @@ class InteractionLoggingService:
         return desc
 
     @staticmethod
+    def describe_sandbox(result) -> Optional[dict]:
+        """How the turn's code ran (a SandboxResult): seconds the child took
+        to start and the code to run, and the sandbox's error if it failed.
+        The answer text carries that error too, but ``error`` is the turn's
+        own failure, so a timed-out turn was logged as error-free."""
+        if result is None:
+            return None
+        return {
+            "startup_s": round(result.startup_time, 2),
+            "run_s": round(result.execution_time, 2),
+            "error": None if result.success else result.error_message[:500],
+        }
+
+    @staticmethod
     def summarize_figure(fig) -> Optional[dict]:
         """What a Plotly figure showed, without the plotted values: each
         trace's type, name and point count, and the titles. The values (and
@@ -210,13 +226,15 @@ class InteractionLoggingService:
         history=None,
         figure: Optional[dict] = None,
         unverified_numbers=(),
+        sandbox: Optional[dict] = None,
     ) -> dict:
         """Build the turn record dict (pure — no I/O). Broken out so it can
         be unit-tested without capturing stdout.
 
         ``history`` is the conversation *before* this turn (so the record is
         self-contained when read back); ``dataset`` comes from
-        ``describe_dataset``; ``figure`` from ``summarize_figure``."""
+        ``describe_dataset``; ``figure`` from ``summarize_figure``;
+        ``sandbox`` from ``describe_sandbox``."""
         return _fit({
             "event": "ai_turn",
             "schema": SCHEMA_VERSION,
@@ -235,6 +253,7 @@ class InteractionLoggingService:
             "history": InteractionLoggingService._compact_history(history),
             "figure": figure,
             "unverified_numbers": list(unverified_numbers)[:50],
+            "sandbox": sandbox,
         }, ("question", "answer", "code", "error"))
 
     @staticmethod
@@ -273,10 +292,11 @@ class InteractionLoggingService:
         history=None,
         figure: Optional[dict] = None,
         unverified_numbers=(),
+        sandbox: Optional[dict] = None,
     ) -> None:
         """Emit one turn record (question, answer, tab, code, outcome, plus
         the model, dataset descriptor, prior conversation and a summary of
-        the figure)."""
+        the figure and how the code ran)."""
         _emit(InteractionLoggingService.build_turn_record(
             turn_id=turn_id,
             session_id=session_id,
@@ -292,6 +312,7 @@ class InteractionLoggingService:
             history=history,
             figure=figure,
             unverified_numbers=unverified_numbers,
+            sandbox=sandbox,
         ))
 
     @staticmethod

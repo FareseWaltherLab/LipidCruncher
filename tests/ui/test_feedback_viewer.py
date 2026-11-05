@@ -142,6 +142,39 @@ def test_schema3_figure_turn_shows_the_summary(log_file):
     ) in [c.value for c in at.caption]
 
 
+def test_schema6_sandbox_timeout_counts_as_an_error(log_file):
+    """2026-10-27: timed-out turns had error None and slipped past "Only
+    errored turns"; schema 6 logs the sandbox's error and timings."""
+    records = [json.loads(line) for line in log_file.read_text().splitlines()]
+    records[1].update(schema=6, sandbox={
+        "startup_s": 2.91, "run_s": 10,
+        "error": "Execution timed out after 10 seconds",
+    })
+    log_file.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+
+    at = _run(log_file)
+    assert {m.label: m.value for m in at.metric}["Errors"] == "1"
+    at.sidebar.checkbox[1].check().run()   # "Only errored turns"
+    assert not at.exception
+    assert {m.label: m.value for m in at.metric}["Turns"] == "1"
+
+    def script(path):
+        import sys
+        sys.path.insert(0, "scripts")
+        from ai_feedback_records import join_feedback, parse_records
+        from feedback_viewer import _detail
+        with open(path) as fh:
+            turns = join_feedback(parse_records(fh))
+        _detail(turns[1], turns)
+
+    at = AppTest.from_function(script, args=(str(log_file),), default_timeout=30)
+    at.run()
+    assert not at.exception
+    assert at.error[0].value == "Execution timed out after 10 seconds"
+    assert "Sandbox: start-up 2.91 s, code 10 s" in " ".join(
+        m.value for m in at.markdown)
+
+
 def test_missing_file_shows_hint(tmp_path):
     at = _run(tmp_path / "nope.jsonl")
     assert not at.exception

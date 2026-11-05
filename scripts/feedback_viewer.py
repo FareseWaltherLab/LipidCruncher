@@ -40,6 +40,12 @@ def _sidebar():
     return path
 
 
+def _error(r):
+    """The turn's failure, or its code's: a sandbox timeout (schema 6+) was
+    logged with ``error`` None."""
+    return r.get("error") or (r.get("sandbox") or {}).get("error")
+
+
 def _filters(turns):
     tabs = sorted({t.record.get("tab", "") for t in turns})
     st.sidebar.subheader("Filter")
@@ -60,7 +66,7 @@ def _filters(turns):
             continue
         if only_comments and not t.notes:
             continue
-        if only_errors and not r.get("error"):
+        if only_errors and not _error(r):
             continue
         if q and q not in " ".join(
             [r.get("question", ""), r.get("answer", ""), *t.notes]
@@ -76,7 +82,7 @@ def _metrics(turns):
     cols[1].metric("👍", sum(t.verdict == "up" for t in turns))
     cols[2].metric("👎", sum(t.verdict == "down" for t in turns))
     cols[3].metric("Comments", sum(len(t.notes) for t in turns))
-    cols[4].metric("Errors", sum(bool(t.record.get("error")) for t in turns))
+    cols[4].metric("Errors", sum(bool(_error(t.record)) for t in turns))
 
 
 def _table(turns):
@@ -87,7 +93,7 @@ def _table(turns):
         "verdict": VERDICT_ICON[t.verdict],
         "comment": " | ".join(t.notes),
         "question": t.record.get("question", ""),
-        "error": "⚠️" if t.record.get("error") else "",
+        "error": "⚠️" if _error(t.record) else "",
     } for t in reversed(turns)]
     event = st.dataframe(
         pd.DataFrame(rows),
@@ -143,8 +149,8 @@ def _detail(turn, all_turns):
                 f"{VERDICT_ICON.get(fb.get('verdict'), '·')}{note}"
             )
 
-    if r.get("error"):
-        st.error(r["error"])
+    if _error(r):
+        st.error(_error(r))
 
     left, right = st.columns([3, 2])
     with left:
@@ -185,6 +191,10 @@ def _detail(turn, all_turns):
                 st.write(ds.get("columns"))
         elif r.get("schema", 1) < 2:
             st.caption("No dataset context (schema-1 record).")
+        sandbox = r.get("sandbox")
+        if sandbox:
+            st.write(f"Sandbox: start-up {sandbox.get('startup_s')} s, "
+                     f"code {sandbox.get('run_s')} s")
         flags = []
         if r.get("produced_table"):
             flags.append("table")

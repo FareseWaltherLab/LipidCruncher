@@ -153,6 +153,47 @@ class TestTimeoutKills:
         assert not res.success
         assert "timed out" in res.error_message.lower()
 
+    @staticmethod
+    def _slow_start(monkeypatch, tmp_path, cpu_seconds):
+        """Make the child burn ``cpu_seconds`` of CPU before it is ready: a
+        sitecustomize on its path runs at interpreter start."""
+        from app.services.ai_chat import sandbox
+
+        (tmp_path / "sitecustomize.py").write_text(
+            "import time\n"
+            f"while time.process_time() < {cpu_seconds}:\n"
+            "    pass\n"
+        )
+        real_env = sandbox._child_env
+
+        def env():
+            out = real_env()
+            out["PYTHONPATH"] = f"{tmp_path}{os.pathsep}{out['PYTHONPATH']}"
+            return out
+
+        monkeypatch.setattr(sandbox, "_child_env", env)
+
+    def test_start_up_is_not_charged_to_the_code(self, df, monkeypatch, tmp_path):
+        """2026-11-05: the clock (and RLIMIT_CPU) started at spawn, so the
+        child's ~2.9 s of imports came out of the AI code's 10 s, and a
+        correlation loop that needed the rest timed out. Start-up here takes
+        3 s of CPU, more than the whole 2 s budget."""
+        self._slow_start(monkeypatch, tmp_path, cpu_seconds=3)
+        res = run("print('ran')", df, config=SandboxConfig(execution_timeout=2))
+        assert res.success, res.error_message
+        assert res.stdout.strip() == "ran"
+        assert res.startup_time >= 3
+        assert res.execution_time < 2
+
+    def test_a_child_that_never_gets_ready_is_killed(self, df, monkeypatch, tmp_path):
+        from app.services.ai_chat import sandbox
+
+        self._slow_start(monkeypatch, tmp_path, cpu_seconds=60)
+        monkeypatch.setattr(sandbox, "_STARTUP_TIMEOUT", 1)
+        res = run("print('ran')", df)
+        assert not res.success
+        assert "longer than 1 seconds to start" in res.error_message
+
     def test_parent_survives_a_child_that_hard_exits(self, df):
         before = os.getpid()
         res = run("pd.io.common.os._exit(1)", df)
@@ -295,7 +336,8 @@ class TestHardeningFailsClosed:
             "os.geteuid = lambda: 0\n"
             "from app.services.ai_chat import sandbox_runner\n"
             "r, w = os.pipe()\n"
-            "sys.argv = ['runner', str(w)]\n"
+            "ready_r, ready_w = os.pipe()\n"
+            "sys.argv = ['runner', str(w), str(ready_w)]\n"
             "request = {'code': \"print('ran')\", 'df': pd.DataFrame({'a': [1]})}\n"
             "sys.stdin = io.TextIOWrapper(io.BytesIO(pickle.dumps(request)))\n"
             "sandbox_runner.main()\n"

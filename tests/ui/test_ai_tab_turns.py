@@ -93,7 +93,8 @@ def _result(tab, session, empty=False):
         return DataQuestionsStepResult(
             session=new, assistant_message="answer",
             result_df=pd.DataFrame({"n": [1]}), code=CODE,
-            unverified_numbers=("30",))
+            unverified_numbers=("30",),
+            sandbox_result=SandboxResult(success=True, startup_time=2.5))
     if tab == "transform":
         return TransformStepResult(
             session=new, assistant_message="answer",
@@ -102,8 +103,8 @@ def _result(tab, session, empty=False):
                 code=CODE))
     return VizStepResult(
         session=new, assistant_message="answer",
-        sandbox_result=SandboxResult(success=True, figure=go.Figure(
-            go.Bar(x=["a"], y=[1]))),
+        sandbox_result=SandboxResult(success=True, startup_time=2.5,
+                                     figure=go.Figure(go.Bar(x=["a"], y=[1]))),
         unverified_numbers=("30",))
 
 
@@ -132,6 +133,16 @@ def _turn(tab, text="q"):
 def _executions():
     return sum(n for (scope, _, kind), n in usage_limits._counts.items()
                if scope == "session" and kind == "executions")
+
+
+@pytest.mark.parametrize("tab", ["dq", "viz"])
+def test_data_tabs_log_how_the_code_ran(tab, logged, monkeypatch):
+    """2026-11-05: the sandbox's start-up and run time are logged, to see
+    on the server how much of the time limit start-up takes."""
+    _stub(monkeypatch, tab)
+    _turn(tab)
+    (log,) = logged
+    assert log["sandbox"].startup_time == 2.5
 
 
 @pytest.mark.parametrize("tab", ["dq", "transform", "viz"])

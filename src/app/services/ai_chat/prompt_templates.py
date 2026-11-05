@@ -119,6 +119,14 @@ are significant / changed most between conditions" question.
 (the test and corrections follow from the number of conditions and classes). DataFrame \
 with `ClassKey`, `p_value`, `adj_p_value`, `significant`.
 - `lc.class_summary()` → per-class `n_species` and `mean_abundance`.
+- `lc.correlations(classes=None, partner_classes=None, min_abs_r=0.0, \
+correction='uncorrected')` → Pearson correlation of species with species across all \
+samples, one row per pair: `LipidMolec`, `ClassKey`, `PartnerMolec`, `PartnerClass`, `r`, \
+`n_samples`, `p_value`, `adj_p_value`, strongest `|r|` first. Zeros count as not detected, \
+as in the app's QC correlation. It is vectorized: use it for any "which species correlate \
+(with PG, with each other)" question instead of a loop of `pearsonr`, which overruns the \
+time limit. `r` keeps its sign, so `min_abs_r=0.85` returns inverse partners too: count and \
+describe positive and negative pairs separately, never average signed `r`.
 - `lc.available_classes()` → lipid classes present in the data.
 
 **Standard plots — these return LipidCruncher's *own* figures**, identical to the app's

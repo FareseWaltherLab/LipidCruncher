@@ -109,8 +109,31 @@ class TestSchema2Context:
     and the figure, so a record can be reviewed on its own (schema 3: a
     summary of the figure)."""
 
-    def test_schema_version_is_5(self):
-        assert SCHEMA_VERSION == 5
+    def test_schema_version_is_6(self):
+        assert SCHEMA_VERSION == 6
+
+    def test_a_sandbox_timeout_is_logged_as_its_error(self):
+        """2026-10-27: two correlation turns timed out and were logged with
+        error None (the timeout was only in the answer text), so the
+        viewer's "Only errored turns" filter missed them. Schema 6 logs the
+        sandbox's outcome and timings."""
+        from app.services.ai_chat.sandbox import SandboxResult
+        describe = InteractionLoggingService.describe_sandbox
+        timed_out = SandboxResult(
+            success=False, error_message="Execution timed out after 10 seconds",
+            execution_time=10, startup_time=2.912,
+        )
+        assert describe(timed_out) == {
+            "startup_s": 2.91, "run_s": 10,
+            "error": "Execution timed out after 10 seconds",
+        }
+        assert describe(SandboxResult(success=True))["error"] is None
+        assert describe(None) is None
+        rec = InteractionLoggingService.build_turn_record(
+            turn_id="t", session_id="s", tab="data_questions",
+            question="q", answer="a", sandbox=describe(timed_out),
+        )
+        assert rec["sandbox"]["error"].startswith("Execution timed out")
 
     def test_turn_record_carries_unverified_numbers(self):
         """Schema 4: numbers the answer states that its code never
@@ -268,7 +291,7 @@ class TestSchema2Context:
         finally:
             logging.getLogger(_LOGGER_NAME).removeHandler(handler)
         payload = json.loads(handler.records[0])
-        assert payload["schema"] == 5
+        assert payload["schema"] == 6
         assert payload["model"] == "claude-x"
         assert payload["dataset"] == {"rows": 1}
         assert payload["history"] == [{"role": "user", "content": "hi"}]

@@ -147,6 +147,65 @@ class TestClassSummary:
         assert "mean_abundance" in lc.class_summary().columns
 
 
+class TestCorrelations:
+    """2026-10-27: asked which species correlate with PG on 872 x 21, the AI
+    looped scipy.pearsonr over every pair and overran the 10 s sandbox limit
+    twice, then averaged signed r and missed the inverse partners."""
+
+    @pytest.fixture
+    def pg(self):
+        return ref.load_pg_correlation()
+
+    def test_matches_the_eval_reference_on_inverse_pairs(self, pg):
+        out = PipelineAPI(pg).correlations(classes=["PG"], min_abs_r=0.85)
+        inverse = out[(out["PartnerClass"] != "PG") & (out["r"] <= -0.85)]
+        assert len(inverse) == ref.pg_partner_pairs(pg, below=-0.85)
+
+    def test_each_pair_once_and_never_with_itself(self, pg):
+        out = PipelineAPI(pg).correlations(classes=["PG"])
+        assert (out["LipidMolec"] != out["PartnerMolec"]).all()
+        pairs = {frozenset(p) for p in zip(out["LipidMolec"], out["PartnerMolec"])}
+        assert len(pairs) == len(out) == 30 * 29 // 2 + 30 * 842
+
+    def test_zeros_are_not_detected_and_p_matches_pearsonr(self, pg):
+        from scipy import stats
+        cols = [c for c in pg.columns if c.startswith("concentration[")]
+        values = pg[cols].to_numpy()
+        values[np.random.default_rng(0).random(values.shape) < 0.2] = 0
+        pg[cols] = values
+        out = PipelineAPI(pg).correlations(classes=["PG"])
+        row = out.iloc[100]
+        x = pg.set_index("LipidMolec").loc[row["LipidMolec"], cols].to_numpy(float)
+        y = pg.set_index("LipidMolec").loc[row["PartnerMolec"], cols].to_numpy(float)
+        both = (x != 0) & (y != 0)
+        expected = stats.pearsonr(x[both], y[both])
+        assert row["n_samples"] == both.sum()
+        assert row["r"] == pytest.approx(expected.statistic)
+        assert row["p_value"] == pytest.approx(expected.pvalue)
+
+    def test_sorted_strongest_first_with_sign_kept(self, pg):
+        out = PipelineAPI(pg).correlations(classes=["PG"], min_abs_r=0.85)
+        assert out["r"].abs().is_monotonic_decreasing
+        assert (out["r"] > 0).any() and (out["r"] < 0).any()
+
+    def test_uncorrected_by_default_and_corrected_on_request(self, pg):
+        lc = PipelineAPI(pg)
+        plain = lc.correlations(classes=["PG"])
+        assert (plain["adj_p_value"] == plain["p_value"]).all()
+        fdr = lc.correlations(classes=["PG"], correction="fdr_bh")
+        assert (fdr["adj_p_value"] >= fdr["p_value"]).all()
+        assert "Benjamini-Hochberg" in lc.methods_used[-1]
+
+    def test_the_request_that_timed_out_now_finishes_in_the_sandbox(self, pg):
+        from app.services.ai_chat.sandbox import SandboxService
+        res = SandboxService.execute(
+            "result_df = lc.correlations(classes=['PG'], min_abs_r=0.85)",
+            pg, lc=PipelineAPI(pg),
+        )
+        assert res.success, res.error_message
+        assert "Species correlations: Pearson r" in res.methods[0]
+
+
 class TestCompareClasses:
     def test_returns_expected_columns(self, lc):
         out = lc.compare_classes()

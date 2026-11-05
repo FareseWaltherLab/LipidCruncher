@@ -22,7 +22,7 @@ from ..services.ai_chat.prompt_templates import (
     data_block,
     data_questions_system_prompt,
 )
-from ..services.ai_chat.sandbox import SandboxService
+from ..services.ai_chat.sandbox import SandboxResult, SandboxService
 from ..services.ai_chat.schema_extractor import SchemaExtractorService
 from ..services.format_detection import DataFormat, FormatDetectionService
 from .ai_chat_shared import _methods_note, _repeated_lipids_note, _unverified_numbers
@@ -42,12 +42,14 @@ class DataQuestionsStepResult:
         code: Optional code that was executed to compute the answer.
         unverified_numbers: Numbers the explanation states that the code
             never produced (logged, not shown; see ``_unverified_numbers``).
+        sandbox_result: How the code ran (None if there was no code).
     """
     session: ChatSession
     assistant_message: str = ""
     result_df: Optional[pd.DataFrame] = None
     code: str = ""
     unverified_numbers: Tuple[str, ...] = ()
+    sandbox_result: Optional[SandboxResult] = None
 
 
 def _answer_from_results(
@@ -155,6 +157,7 @@ class DataQuestionsWorkflow:
         result_df = None
         stdout = ""
         answer = None
+        sandbox_result = None
 
         if code:
             sandbox_result = SandboxService.execute(
@@ -243,6 +246,7 @@ class DataQuestionsWorkflow:
                 session, f"{explanation}\n\n{answer or ''}", code,
                 stdout=stdout, result_df=result_df,
             ),
+            sandbox_result=sandbox_result,
         )
 
     @staticmethod
