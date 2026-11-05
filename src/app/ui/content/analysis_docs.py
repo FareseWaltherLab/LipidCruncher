@@ -120,15 +120,15 @@ Counts double bonds in each chain:
 ### 3. Weighted Contribution Calculation
 Multiplies lipid concentration by fatty acid ratio.
 
-**Example:** `PC 16:0_18:1` at 100 µM contributes:
-- SFA: 100 × 0.5 = 50 µM (1 of 2 chains is saturated)
-- MUFA: 100 × 0.5 = 50 µM (1 of 2 chains is monounsaturated)
-- PUFA: 100 × 0 = 0 µM (no polyunsaturated chains)
+**Example:** `PC 16:0_18:1` at 100 pmol contributes:
+- SFA: 100 × 0.5 = 50 pmol (1 of 2 chains is saturated)
+- MUFA: 100 × 0.5 = 50 pmol (1 of 2 chains is monounsaturated)
+- PUFA: 100 × 0 = 0 pmol (no polyunsaturated chains)
 
-**Why consolidated format fails:** `PC 36:2` at 100 µM could be:
-- `PC 18:0_18:2`: 50 µM SFA + 50 µM PUFA
-- `PC 18:1_18:1`: 100 µM MUFA
-- `PC 16:0_20:2`: 50 µM SFA + 50 µM PUFA
+**Why consolidated format fails:** `PC 36:2` at 100 pmol could be:
+- `PC 18:0_18:2`: 50 pmol SFA + 50 pmol PUFA
+- `PC 18:1_18:1`: 100 pmol MUFA
+- `PC 16:0_20:2`: 50 pmol SFA + 50 pmol PUFA
 - **Same total, completely different saturation profiles** — algorithm cannot determine which
 
 ### 4. Class-Level Summation
