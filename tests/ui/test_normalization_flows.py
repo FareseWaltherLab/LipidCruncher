@@ -209,7 +209,7 @@ def test_every_method_says_what_its_values_are():
     from typing import get_args
 
     from app.models.normalization import NormalizationConfig
-    from app.ui.main_content.normalization import NORMALIZED_VALUE_UNITS
+    from app.models.normalization import NORMALIZED_VALUE_UNITS
 
     methods = get_args(NormalizationConfig.model_fields['method'].annotation)
     assert set(NORMALIZED_VALUE_UNITS) == set(methods)

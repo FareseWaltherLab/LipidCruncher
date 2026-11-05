@@ -6,6 +6,17 @@ from typing import Dict, List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+# What a normalized frame's sample values are, per method: shown under
+# Final Normalized Data and given to the AI Studio with imported data.
+NORMALIZED_VALUE_UNITS = {
+    'none': "Values are your input data as uploaded.",
+    'internal_standard': "Values are pmol per sample.",
+    'protein': "Values are intensity per µg protein (relative, not molar).",
+    'both': "Values are pmol/µg protein.",
+    'total_intensity': "Values are relative intensities scaled to the median total.",
+}
+
+
 class NormalizationConfig(BaseModel):
     """
     Configuration for data normalization.
