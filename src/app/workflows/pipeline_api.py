@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from scipy import stats
 
 from ..models.experiment import ExperimentConfig
@@ -598,6 +599,61 @@ class PipelineAPI:
         return {
             cond: LCResult(r.figure, r.data_df, r) for cond, r in out.items()
         }
+
+    @staticmethod
+    def combine_pies(pies: Dict[str, LCResult]) -> LCResult:
+        """The app's pie charts stacked into one figure, as the Pie Charts
+        page lays them out: each pie unchanged (slices, colors, title) with
+        its own legend beside it.
+
+        A turn shows one figure, and copying the traces into plain subplots
+        would merge every pie's legend into one list (each label carries its
+        condition's percentage), so this does the stacking.
+
+        Args:
+            pies: What ``pie_charts`` returned, or some of its entries.
+
+        Returns:
+            LCResult whose ``data`` is the pies' tables with a
+            ``Condition`` column.
+        """
+        figures = [r.figure for r in pies.values()]
+        if not figures or any(
+            len(f.data) != 1 or f.data[0].type != 'pie' for f in figures
+        ):
+            raise ValueError(
+                "combine_pies takes the dict lc.pie_charts returned"
+            )
+        heights = [f.layout.height for f in figures]
+        gap = 40
+        total = sum(heights) + gap * (len(figures) - 1)
+        fig = make_subplots(
+            rows=len(figures), cols=1,
+            specs=[[{'type': 'domain'}]] * len(figures),
+            row_heights=heights,
+            vertical_spacing=gap / total,
+            subplot_titles=[f.layout.title.text for f in figures],
+        )
+        for row, source in enumerate(figures, start=1):
+            name = 'legend' if row == 1 else f'legend{row}'
+            fig.add_trace(source.data[0], row=row, col=1)
+            fig.data[-1].legend = name
+            top = fig.get_subplot(row, 1).y[1]
+            fig.update_layout({name: source.layout.legend.to_plotly_json()})
+            fig.update_layout({name: dict(x=1.02, xanchor='left',
+                                          y=top, yanchor='top')})
+        first = figures[0].layout
+        fig.update_layout(
+            width=first.width, height=total + 50,
+            margin=first.margin, plot_bgcolor=first.plot_bgcolor,
+            paper_bgcolor=first.paper_bgcolor,
+        )
+        fig.update_annotations(font_color='black')
+        data = pd.concat(
+            [r.data.assign(Condition=c) for c, r in pies.items()],
+            ignore_index=True,
+        )
+        return LCResult(fig, data, pies)
 
     def saturation(
         self,

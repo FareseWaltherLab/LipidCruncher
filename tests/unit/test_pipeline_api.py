@@ -551,6 +551,33 @@ class TestAnalysisPlotsUseTheAppsOwnCode:
             labels = {lab.split(" - ")[0] for lab in res.figure.data[0].labels}
             assert labels and labels <= species
 
+    def test_combined_pies_are_the_apps_pies(self, lc, df):
+        """First eval of species_within_class_pie (2026-11-05): asked for one
+        pie per condition, the AI redrew them with go.Pie from lc's data.
+        combine_pies stacks the app's own pies, each keeping its legend."""
+        cls = df["ClassKey"].iloc[0]
+        pies = lc.pie_charts(species_class=cls)
+        combined = lc.combine_pies(pies)
+        fig = combined.figure
+        assert len(fig.data) == len(pies)
+        for i, (trace, res) in enumerate(zip(fig.data, pies.values())):
+            source = res.figure.data[0]
+            assert list(trace.values) == list(source.values)
+            assert list(trace.labels) == list(source.labels)
+            assert list(trace.marker.colors) == list(source.marker.colors)
+            name = "legend" if i == 0 else f"legend{i + 1}"
+            assert trace.legend == name
+            assert (fig.layout[name].title.text
+                    == res.figure.layout.legend.title.text)
+        titles = [a.text for a in fig.layout.annotations]
+        assert titles == [r.figure.layout.title.text for r in pies.values()]
+        assert list(combined.data["Condition"].unique()) == list(pies)
+        assert len(combined.data) == sum(len(r.data) for r in pies.values())
+
+    def test_combine_pies_refuses_other_figures(self, lc):
+        with pytest.raises(ValueError, match="lc.pie_charts"):
+            lc.combine_pies({"WT": lc.bar_chart()})
+
     def test_class_aggregated_heatmap(self, lc):
         assert lc.heatmap(heatmap_type="class_aggregated").figure is not None
 
@@ -565,7 +592,8 @@ class TestAnalysisPlotsUseTheAppsOwnCode:
         analogy with every other helper — and hit an AttributeError."""
         singles = [lc.volcano("WT", "KO"), lc.bar_chart(), lc.heatmap(),
                    lc.chain_length(), lc.pathway("WT", "KO"),
-                   lc.fatty_acid_composition("PC")]
+                   lc.fatty_acid_composition("PC"),
+                   lc.combine_pies(lc.pie_charts())]
         for res in singles:
             assert res.figure is not None
 
@@ -606,6 +634,14 @@ class TestPlotsReachTheSandbox:
         assert res.success, res.error_message
         assert res.figure is not None
 
+    def test_combined_pies_cross_the_process_boundary(self, df, lc):
+        from app.services.ai_chat.sandbox import SandboxService
+        res = SandboxService.execute(
+            "fig = lc.combine_pies(lc.pie_charts()).figure", df, lc=lc,
+        )
+        assert res.success, res.error_message
+        assert len(res.figure.data) == 2
+
     def test_prompt_lists_the_plot_catalog(self):
         from app.services.ai_chat.prompt_templates import (
             data_questions_system_prompt,
@@ -613,7 +649,8 @@ class TestPlotsReachTheSandbox:
         prompt = data_questions_system_prompt()
         for fn in ("lc.volcano", "lc.bar_chart", "lc.heatmap",
                    "lc.chain_length", "lc.pathway", "lc.saturation",
-                   "lc.pie_charts", "lc.fatty_acid_composition"):
+                   "lc.pie_charts", "lc.combine_pies",
+                   "lc.fatty_acid_composition"):
             assert fn in prompt, f"{fn} missing from prompt catalog"
 
 

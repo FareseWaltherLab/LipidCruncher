@@ -339,7 +339,7 @@ CASES = (
         ),
         dataset=CANONICAL,
         tab="visualization",
-        expect_lc_all=("lc.pie_charts", "species_class"),
+        expect_lc_all=("lc.pie_charts", "species_class", "lc.combine_pies"),
         forbid=("go.Pie(",),
         expect=("figure",),
         note=(

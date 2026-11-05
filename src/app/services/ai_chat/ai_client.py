@@ -23,6 +23,11 @@ _DEFAULT_MAX_TOOL_ITERATIONS = 4
 _MAX_RETRIES = 4
 _REQUEST_TIMEOUT_SECONDS = 120.0
 
+# SDK 0.96 cannot read some message_start events the API sends now (about 1
+# stream in 8, 2026-11-05): it parses the message as only `diagnostics` and
+# fails with an AttributeError on the first content block, before any text.
+_STREAM_ATTEMPTS = 3
+
 
 def _friendly_error(exc: Exception, context: str = "") -> AIClientError:
     """Map a low-level Anthropic SDK exception to a user-friendly AIClientError.
@@ -212,27 +217,35 @@ class AIClientService:
 
         def _stream_turn():
             nonlocal wrote_text
-            try:
-                with client.messages.stream(
-                    model=config.model,
-                    max_tokens=config.max_tokens,
-                    temperature=config.temperature,
-                    system=AIClientService._system_blocks(system_prompt),
-                    messages=loop_messages,
-                    tools=tools,
-                ) as stream:
-                    first = True
-                    for text in stream.text_stream:
-                        if first and wrote_text:
-                            yield "\n\n"
-                        first = False
-                        wrote_text = True
-                        yield text
-                    _stream_turn.final = stream.get_final_message()
-            except AIClientError:
-                raise
-            except Exception as e:
-                raise _friendly_error(e, context="streaming") from e
+            for attempt in range(_STREAM_ATTEMPTS):
+                first = True
+                try:
+                    with client.messages.stream(
+                        model=config.model,
+                        max_tokens=config.max_tokens,
+                        temperature=config.temperature,
+                        system=AIClientService._system_blocks(system_prompt),
+                        messages=loop_messages,
+                        tools=tools,
+                    ) as stream:
+                        for text in stream.text_stream:
+                            if first and wrote_text:
+                                yield "\n\n"
+                            first = False
+                            wrote_text = True
+                            yield text
+                        _stream_turn.final = stream.get_final_message()
+                    return
+                except AIClientError:
+                    raise
+                except AttributeError as e:
+                    # Nothing of this turn was shown yet, so send it again.
+                    if first and attempt + 1 < _STREAM_ATTEMPTS:
+                        logger.warning("Stream unreadable, resending: %s", e)
+                        continue
+                    raise _friendly_error(e, context="streaming") from e
+                except Exception as e:
+                    raise _friendly_error(e, context="streaming") from e
 
         for iteration in range(max_iterations):
             logger.info(

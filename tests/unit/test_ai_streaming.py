@@ -8,10 +8,12 @@ their results fed back, and that the system prompt is sent as a cached block.
 import types
 
 import pandas as pd
+import pytest
 
 from app.models.chat import AIConfig, ChatMode, ChatSession
 from app.models.experiment import ExperimentConfig
 from app.services.ai_chat.ai_client import AIClientService
+from app.services.ai_chat.exceptions import AIClientError
 from app.workflows.ai_chat import AIChatWorkflow
 
 
@@ -31,6 +33,8 @@ class _FakeStreamCtx:
     @property
     def text_stream(self):
         for chunk in self._chunks:
+            if isinstance(chunk, Exception):
+                raise chunk
             yield chunk
 
     def get_final_message(self):
@@ -313,6 +317,53 @@ class TestNarrationBeforeAToolCall:
             (["Done."], _final([_text_block("Done.")])),
         ])
         assert text == "Checking.\n\nDone."
+
+
+class TestUnreadableStream:
+    """Regression (eval run 2026-11-05): about 1 stream in 8 opens with a
+    message_start that SDK 0.96 reads as only `diagnostics`, and its
+    accumulator raises "'NoneType' object has no attribute 'append'" on the
+    first content block. The turn failed with "Unexpected error contacting
+    the AI service" though nothing had been shown."""
+
+    _BROKEN = AttributeError("'NoneType' object has no attribute 'append'")
+
+    def _run(self, monkeypatch, turns):
+        fake = _FakeClient(turns)
+        monkeypatch.setattr(
+            AIClientService, "create_client", staticmethod(lambda: fake)
+        )
+        gen = AIClientService.stream_tool_loop(
+            messages=[{"role": "user", "content": "hi"}],
+            system_prompt="SYS",
+            config=AIConfig(),
+            tools=[],
+            tool_executor=lambda name, inp: "",
+        )
+        return fake, gen
+
+    def test_a_turn_that_broke_before_any_text_is_sent_again(self, monkeypatch):
+        fake, gen = self._run(monkeypatch, [
+            ([self._BROKEN], None),
+            (["Hello"], _final([_text_block("Hello")])),
+        ])
+        assert list(gen) == ["Hello"]
+        assert len(fake.messages.calls) == 2
+
+    def test_it_gives_up_after_three_tries(self, monkeypatch):
+        fake, gen = self._run(monkeypatch, [([self._BROKEN], None)] * 3)
+        with pytest.raises(AIClientError, match="Unexpected error"):
+            list(gen)
+        assert len(fake.messages.calls) == 3
+
+    def test_a_turn_that_broke_after_its_text_is_not_repeated(self, monkeypatch):
+        fake, gen = self._run(monkeypatch, [
+            (["Hello", self._BROKEN], None),
+            (["Hello"], _final([_text_block("Hello")])),
+        ])
+        with pytest.raises(AIClientError):
+            list(gen)
+        assert len(fake.messages.calls) == 1
 
 
 class TestStreamToolLoopExhaustion:

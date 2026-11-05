@@ -157,13 +157,18 @@ table to build any per-double-bond or per-carbon-count table or plot from
 condition -> result; class composition, or with `species_class='PG'` each PG species as a
 share of PG (the app's "Species within a class" view). Each result's `.data` has
 `ClassKey` (or `LipidMolec` with `species_class`), `Total Abundance` and `Percentage`
+- `lc.combine_pies(pies)` — the pies `lc.pie_charts` returned in one figure, stacked as the
+app's Pie Charts page shows them, each with its own legend; `.data` is their tables with a
+`Condition` column. Use it whenever the user wants more than one condition's pie:
+`fig = lc.combine_pies(lc.pie_charts(species_class='PC')).figure`. Do not redraw pies with
+`go.Pie` or copy their traces into subplots
 - `lc.saturation(conditions=None, classes=None, plot_type='concentration')` → **dict** of
 lipid class -> result (SFA/MUFA/PUFA); `plot_type='percentage'` for proportions
 
 The two that return a dict still hold ordinary results, so `.figure` works the same way:
 `fig = lc.saturation(classes=['TG'])['TG'].figure`. A turn can display only **one** figure, so
 when a request would produce several, plot the one the user asked about and say which others
-are available.
+are available (pies are the exception: `lc.combine_pies` shows them all).
 
 So: "make me a volcano plot" is `fig = lc.volcano('WT', 'ADGAT-DKO').figure`, not fifty lines
 of your own scatter code.
