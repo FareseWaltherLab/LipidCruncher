@@ -26,6 +26,7 @@ CHAIN_CONSOLIDATED = "chain_consolidated"  # must refuse: sum composition
 STUDIO = "studio"                # ai_studio_test_dataset.csv: raw, with metadata
 RAW_REPEATS = "raw_repeats"      # canonical + 4 lipids seen again as another adduct
 APP = "app"                      # no data: questions about LipidCruncher itself
+PG_CORRELATION = "pg_correlation"  # 872 species x 21 samples, as on 2026-10-27
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,10 @@ class EvalCase:
         expect_mentions: Words the answer must contain (case-insensitive),
             for questions about how LipidCruncher works; "a|b" accepts
             either.
+        forbid_mentions: Regular expressions the answer must not match
+            (case-insensitive).
+        normalization: The main pipeline's normalization method the tab
+            is told the data went through (None: an upload).
     """
     id: str
     question: str
@@ -70,6 +75,8 @@ class EvalCase:
     pipeline_number: Optional[Callable[[pd.DataFrame], float]] = None
     expect_table: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None
     expect_mentions: Tuple[str, ...] = ()
+    forbid_mentions: Tuple[str, ...] = ()
+    normalization: Optional[str] = None
 
 
 # Analysis the pipeline already implements; writing it by hand means the
@@ -321,6 +328,98 @@ CASES = (
             "Sum-composition data cannot resolve individual chains, so the "
             "correct answer is to say so — not a number."
         ),
+    ),
+
+    # ---- Mined from power-user feedback (2026-10-21 / 10-27) -----------
+    EvalCase(
+        id="species_within_class_pie",
+        question=(
+            "Pie chart of the PC species, showing each species' share of "
+            "total PC, one pie per condition."
+        ),
+        dataset=CANONICAL,
+        tab="visualization",
+        expect_lc_all=("lc.pie_charts", "species_class"),
+        forbid=("go.Pie(",),
+        expect=("figure",),
+        note=(
+            "2026-10-27: the AI hand-built an all-PG pie the user could not "
+            "read. The app has a 'Species within a class' pie since 10-28."
+        ),
+    ),
+    EvalCase(
+        id="double_bonds_summed",
+        question=(
+            "Plot mean PC abundance against the total number of double "
+            "bonds, summed over all chains, one line per condition."
+        ),
+        dataset=CANONICAL,
+        tab="visualization",
+        expect_lc=("lc.chain_length",),
+        forbid=("re.findall", "re.search", "split(':')", 'split(":")'),
+        expect=("figure",),
+        note=(
+            "2026-10-21: the AI's regex took the first chain's double bonds "
+            "only (PC 16:0_18:1 -> 0) until the user corrected it twice. "
+            "lc.chain_length's records already hold TotalDoubleBonds."
+        ),
+    ),
+    EvalCase(
+        id="pg_negative_correlations",
+        question=(
+            "How many pairs of a PG species with a non-PG species have a "
+            "Pearson correlation of -0.85 or lower across all samples, on "
+            "the values as they are?"
+        ),
+        dataset=PG_CORRELATION,
+        expect=("method_stated",),
+        pipeline_number=lambda df: ref.pg_partner_pairs(df, below=-0.85),
+        note=(
+            "2026-10-27: a PG-vs-all loop of scipy.pearsonr timed out twice "
+            "at 10 s on 872 x 21, and the summary then averaged signed r "
+            "and missed every inverse partner."
+        ),
+    ),
+    EvalCase(
+        id="standard_amounts_input",
+        question="How do I enter my internal standard amounts for normalization?",
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("pmol", "per sample|each sample|spiked"),
+        note=(
+            "2026-10-30: amounts are pmol spiked per sample (or a premade "
+            "mix), no longer the stock's µM; the AI still described µM."
+        ),
+    ),
+    EvalCase(
+        id="protein_normalization_units",
+        question="After protein normalization, what units are my values in?",
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("µg|ug|microgram", "relative|not molar|intensity per"),
+        note="Protein amounts are µg per sample; the values are not molar.",
+    ),
+    EvalCase(
+        id="protein_normalized_wording",
+        question="What are the 3 most abundant lipids in WT?",
+        dataset=CANONICAL,
+        normalization="protein",
+        expect=("table",),
+        forbid_mentions=(r"concentration(?!\[)", r"\bpmol\b"),
+        note=(
+            "2026-10-27 feedback: 'don't say concentration unless the data "
+            "has been properly normalized'. Protein-only values are "
+            "intensity per µg protein, though the columns say concentration."
+        ),
+    ),
+    EvalCase(
+        id="standard_normalized_units",
+        question="What is the mean total PC amount per sample in each condition?",
+        dataset=CANONICAL,
+        normalization="internal_standard",
+        expect=("table",),
+        expect_mentions=("pmol",),
+        note="Internal-standard values are pmol per sample: say so.",
     ),
 )
 

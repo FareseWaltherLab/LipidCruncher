@@ -380,7 +380,7 @@ def test_every_case_is_scored_against_the_pipeline_where_it_can_be():
     """Cases with a pipeline answer must run on a dataset that has one."""
     for case in C.CASES:
         if case.pipeline_answer or case.pipeline_number:
-            assert case.dataset in (C.CANONICAL, C.RAW_REPEATS), case.id
+            assert case.dataset in (C.CANONICAL, C.RAW_REPEATS, C.PG_CORRELATION), case.id
         if case.expect_table:
             assert case.tab == "transform" and case.dataset == C.STUDIO, case.id
 
@@ -419,3 +419,30 @@ def test_app_questions_must_mention_the_rule():
            "automatically.")
     failures = score_usability("", old, case)
     assert len(failures) == 1 and "standard's adduct" in failures[0]
+
+
+class TestForbiddenWording:
+    """2026-10-27 feedback: protein-normalized values are not concentrations."""
+
+    CASE = C.by_id("protein_normalized_wording")
+
+    def test_calling_the_values_concentrations_fails(self):
+        failures = score_usability(
+            "", "PC 18:0_18:1 has the highest mean concentration (410).",
+            self.CASE, result_df=pd.DataFrame({"a": [1]}),
+        )
+        assert any("concentration" in f for f in failures)
+
+    def test_naming_the_columns_passes(self):
+        failures = score_usability(
+            "", "Ranked by mean abundance over the concentration[s1..s3] "
+            "columns; PC 18:0_18:1 is highest.",
+            self.CASE, result_df=pd.DataFrame({"a": [1]}),
+        )
+        assert failures == []
+
+
+def test_pg_correlation_reference_counts_the_planted_inverse_pairs():
+    df = ref.load_pg_correlation()
+    assert df.shape == (872, 23)
+    assert ref.pg_partner_pairs(df, below=-0.85) == 30 * 100

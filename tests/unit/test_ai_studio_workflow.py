@@ -177,3 +177,28 @@ class TestApplySnapshot:
         one = W.apply_snapshot('f', 'intensity', ['a', 'b'], ['WT'], [['a', 'b']], None)
         two = W.apply_snapshot('f', 'intensity', ['a', 'b'], ['WT', 'KO'], [['a'], ['b']], None)
         assert one != two
+
+
+class TestImportedNormalization:
+    """The method behind a pipeline import, which the AI is told."""
+
+    def _result(self, method, success=True):
+        from app.models.normalization import NormalizationConfig
+        from app.workflows.normalization import NormalizationWorkflowResult
+        return NormalizationWorkflowResult(
+            success=success, config=NormalizationConfig.model_construct(method=method),
+        )
+
+    def test_raw_import_is_unnormalized(self):
+        assert W.imported_normalization(
+            'raw', self._result('both')) == 'none'
+
+    def test_normalized_and_qc_imports_carry_module1s_method(self):
+        for source in ('normalized', 'qc_filtered'):
+            assert W.imported_normalization(
+                source, self._result('protein')) == 'protein'
+
+    def test_no_successful_result_says_nothing(self):
+        assert W.imported_normalization('normalized', None) is None
+        assert W.imported_normalization(
+            'normalized', self._result('protein', success=False)) is None

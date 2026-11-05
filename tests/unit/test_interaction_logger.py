@@ -109,8 +109,8 @@ class TestSchema2Context:
     and the figure, so a record can be reviewed on its own (schema 3: a
     summary of the figure)."""
 
-    def test_schema_version_is_4(self):
-        assert SCHEMA_VERSION == 4
+    def test_schema_version_is_5(self):
+        assert SCHEMA_VERSION == 5
 
     def test_turn_record_carries_unverified_numbers(self):
         """Schema 4: numbers the answer states that its code never
@@ -201,6 +201,15 @@ class TestSchema2Context:
         }
         json.loads(json.dumps(desc))
 
+    def test_describe_dataset_records_the_normalization(self):
+        import pandas as pd
+        df = pd.DataFrame({"LipidMolec": ["a"], "concentration[s1]": [1.0]})
+        desc = InteractionLoggingService.describe_dataset(
+            df, normalization="protein",
+        )
+        assert desc["normalization"] == "protein"
+        assert "normalization" not in InteractionLoggingService.describe_dataset(df)
+
     def test_describe_dataset_caps_column_names_and_handles_none(self):
         import pandas as pd
         from app.services.ai_chat.interaction_logger import DATASET_MAX_COLUMNS
@@ -259,7 +268,7 @@ class TestSchema2Context:
         finally:
             logging.getLogger(_LOGGER_NAME).removeHandler(handler)
         payload = json.loads(handler.records[0])
-        assert payload["schema"] == 4
+        assert payload["schema"] == 5
         assert payload["model"] == "claude-x"
         assert payload["dataset"] == {"rows": 1}
         assert payload["history"] == [{"role": "user", "content": "hi"}]

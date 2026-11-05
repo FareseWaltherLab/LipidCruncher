@@ -130,6 +130,11 @@ def score_usability(
         if not any(w.lower() in lowered for w in words.split("|")):
             failures.append(f"the answer does not mention {words!r}")
 
+    for pattern in case.forbid_mentions:
+        hit = re.search(pattern, answer, re.IGNORECASE)
+        if hit:
+            failures.append(f"the answer says {hit.group(0)!r}, which it should not")
+
     if "refusal" in case.expect and not _is_refusal(answer):
         failures.append(
             "should have explained that the data cannot answer this, "

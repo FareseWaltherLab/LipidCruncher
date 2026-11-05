@@ -26,7 +26,9 @@ from typing import Optional
 #       `figure_json`: the plotted values are the user's data
 #   4 — adds `unverified_numbers`: numbers the answer states that the
 #       turn's code never produced (Data Questions, Visualization)
-SCHEMA_VERSION = 4
+#   5 — `dataset.normalization`: the main pipeline's normalization method
+#       for imported data (absent for an upload)
+SCHEMA_VERSION = 5
 
 # Size guards. The awslogs driver splits a stdout line above 256 KB into
 # several CloudWatch events, which would break the JSON (and the pull script
@@ -123,11 +125,13 @@ class InteractionLoggingService:
         source: Optional[str] = None,
         data_format: Optional[str] = None,
         experiment=None,
+        normalization: Optional[str] = None,
     ) -> Optional[dict]:
         """Describe the dataset a turn ran against: its shape and column
         names (which can carry sample names), not the table's values.
         ``experiment`` (an ExperimentConfig) adds the condition →
-        sample-count map when the tab has one.
+        sample-count map when the tab has one; ``normalization`` is the
+        main pipeline's method for imported data.
 
         The rest of the turn record is not value-free: the answer, printed
         output and earlier messages can quote numbers from the data."""
@@ -141,6 +145,8 @@ class InteractionLoggingService:
             "n_columns": len(columns),
             "columns": columns[:DATASET_MAX_COLUMNS],
         }
+        if normalization is not None:
+            desc["normalization"] = normalization
         if experiment is not None:
             desc["conditions"] = dict(zip(
                 experiment.conditions_list,

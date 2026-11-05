@@ -126,6 +126,19 @@ class AIStudioWorkflow:
         return experiment, bqc_label
 
     @staticmethod
+    def imported_normalization(source_key: str, normalization_result) -> Optional[str]:
+        """The normalization method behind a pipeline import, for the AI's
+        description of the values: 'none' for the raw frame, the method of
+        Module 1's result for the normalized and QC-filtered frames (None
+        if there is no successful result to say)."""
+        if source_key == 'raw':
+            return 'none'
+        if normalization_result is None or not normalization_result.success \
+                or normalization_result.config is None:
+            return None
+        return normalization_result.config.method
+
+    @staticmethod
     def derive_experiment(df: pd.DataFrame) -> ExperimentConfig:
         """Create a minimal single-condition ExperimentConfig from numeric columns.
 

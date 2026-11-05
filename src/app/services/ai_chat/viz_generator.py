@@ -18,6 +18,7 @@ from .prompt_templates import (
     METHODOLOGY_CLARIFICATION_RULES,
     PIPELINE_FIRST_RULES,
     analysis_modules_text,
+    build_values_context,
     data_block,
     with_data_note,
 )
@@ -187,6 +188,7 @@ class VizGeneratorService:
         config: AIConfig,
         holder: dict,
         on_tool_call: Optional[Callable[[str, dict], None]] = None,
+        normalization: Optional[str] = None,
     ):
         """Ask the AI for visualization code, streaming its explanation.
 
@@ -199,7 +201,8 @@ class VizGeneratorService:
         experiment_context = _build_experiment_context(experiment)
         context = (
             f"{data_block('dataframe_schema', schema_context)}\n\n"
-            f"<experiment_structure>\n{experiment_context}\n</experiment_structure>"
+            f"<experiment_structure>\n{experiment_context}\n</experiment_structure>\n\n"
+            f"{build_values_context(normalization)}"
         )
 
         augmented_message = f"{context}\n\n{user_request}"

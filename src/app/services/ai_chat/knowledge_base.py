@@ -4,6 +4,9 @@ LipidCruncher knowledge base for AI system prompts.
 Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
+
+Checked against main at 9c02543 (2026-11-04); see CLAUDE.md, "Keep the
+AI's knowledge in step with main".
 """
 
 
@@ -135,7 +138,11 @@ Opened from the home page, independent of Modules 1–3. Runs natural-isotope-ab
 correction with the IsoCorrectoR R package on three uploaded files — Measurement \
 (isotopologue intensities per sample), Molecule (formulas) and Element (isotope abundances, \
 tracer purity) — and returns corrected intensities, corrected fractions, mean enrichment and \
-residuals. Needs R with IsoCorrectoR on the server; a sample dataset is built in.
+residuals. Needs R with IsoCorrectoR on the server; a sample dataset is built in. A stacked \
+isotopologue distribution plot shows one lipid's corrected fractions per sample, grouped by \
+condition: conditions come from sample names (a trailing _<number> marks a replicate, \
+capitals ignored) or are edited by hand in a Sample conditions table, and the user picks \
+the conditions, their order and the isotopologues shown (optionally rescaled to fill each bar).
 
 ## Statistical Testing
 

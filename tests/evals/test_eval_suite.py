@@ -62,6 +62,10 @@ def load_dataset(name: str):
         return pd.concat([df, again], ignore_index=True), ExperimentConfig(
             conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
         )
+    if name == C.PG_CORRELATION:
+        return ref.load_pg_correlation(), ExperimentConfig(
+            conditions_list=["All"], number_of_samples_list=[21],
+        )
     if name == C.APP:
         return None, None
     if name == C.STUDIO:
@@ -107,6 +111,7 @@ def run_case(case: C.EvalCase) -> dict:
                 session=session,
                 analysis_df=df,
                 experiment=experiment,
+                normalization=case.normalization,
             ))
             outcome["answer"] = result.assistant_message
             outcome["unverified_numbers"] = result.unverified_numbers
@@ -123,6 +128,7 @@ def run_case(case: C.EvalCase) -> dict:
                 session=session,
                 source_df=df,
                 experiment=experiment,
+                normalization=case.normalization,
             ))
             outcome["answer"] = result.assistant_message
             outcome["code"] = result.code or ""

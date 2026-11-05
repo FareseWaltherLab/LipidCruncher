@@ -6,6 +6,7 @@ All functions return plain strings — no Streamlit, no side effects.
 import re
 from typing import List, Optional
 
+from ...models.normalization import NORMALIZED_VALUE_UNITS
 from .knowledge_base import get_app_knowledge
 from .prompt_examples import (
     get_data_questions_examples,
@@ -69,6 +70,23 @@ def build_experiment_context(experiment) -> str:
     return "\n".join(lines)
 
 
+def build_values_context(normalization: Optional[str]) -> str:
+    """Say what the sample values are, from the main pipeline's
+    normalization method (None: an upload LipidCruncher did not normalize).
+
+    The column names cannot say it: protein-only normalization also writes
+    ``concentration[...]`` columns, and its values are not molar.
+    """
+    if normalization is None:
+        units = ("Values are from a file uploaded to the AI Studio; "
+                 "LipidCruncher did not normalize them, so their units are "
+                 "unknown.")
+    else:
+        units = (f"{NORMALIZED_VALUE_UNITS[normalization]} (main pipeline "
+                 f"normalization: {normalization})")
+    return f"<values>\n{units}\n</values>"
+
+
 PIPELINE_FIRST_RULES = """\
 ## Pipeline first — use LipidCruncher's own methods before writing your own
 
@@ -121,7 +139,9 @@ significance annotation
 placed once at its **total** carbons and double bonds (summed across its chains), bubble size =
 mean concentration per condition. No per-chain counting is involved, so there is no
 presence-vs-split choice to ask about. Do **not** re-derive chain composition by parsing lipid
-names yourself
+names yourself. Its `.data` is a dict of condition -> an object whose `.records` lists, per lipid,
+`ClassKey`, `TotalCarbons`, `TotalDoubleBonds` and `MeanConcentration`: build any per-double-bond
+or per-carbon-count table or plot from those records
 - `lc.pathway(control, experimental)` — lipid pathway visualization
 - `lc.fatty_acid_composition(lipid_class, conditions=None)` — FACH plot for one class
 - `lc.pie_charts(conditions=None, classes=None, species_class=None)` → **dict** of
@@ -585,18 +605,21 @@ answer: point to it ("in the table below") instead of repeating every row.
 the code or the output shows it.
 - If the output does not answer the question (an error, an empty table, the wrong thing \
 computed), say so plainly instead of answering.
-- Columns named `concentration[...]` are not necessarily molar (protein-only normalization \
-gives intensity per µg protein): call the values abundance or response, not concentration \
-or pmol, unless the plan or output says they are internal-standard normalized.
+- The <values> block says what the sample values are. Use its units: say pmol only when \
+it says pmol; otherwise call the values abundance or response, not concentration, even \
+though the columns are named `concentration[...]`.
 - No code, no headings, no preamble.""")
 
 
 def build_answer_request(
     question: str, plan: str, code: str, stdout: str, table: Optional[str],
+    values: str = "",
 ) -> str:
-    """The second call's message: everything the answer may draw on."""
+    """The second call's message: everything the answer may draw on.
+    ``values`` is the ``build_values_context`` block."""
     parts = [
         f"<question>\n{question}\n</question>",
+        *([values] if values else []),
         f"<plan>\n{plan.strip() or '(none)'}\n</plan>",
         f"<code>\n{code}\n</code>",
         data_block('printed_output', stdout.strip()[:6000] or '(nothing printed)'),

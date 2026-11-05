@@ -105,6 +105,7 @@ class AIChatCalls:
                 'chat_studio_sample_columns_renamed'
             ),
             bqc_label=st.session_state.get('chat_studio_bqc_label'),
+            normalization=st.session_state.get('chat_studio_normalization'),
         )
 
     @staticmethod
@@ -128,6 +129,7 @@ class AIChatCalls:
             ),
             experiment=st.session_state.get('chat_studio_experiment'),
             bqc_label=st.session_state.get('chat_studio_bqc_label'),
+            normalization=st.session_state.get('chat_studio_normalization'),
         )
 
     @staticmethod
@@ -262,6 +264,7 @@ class AIChatCalls:
                 ),
                 data_format=st.session_state.get("chat_studio_detected_format"),
                 experiment=experiment,
+                normalization=st.session_state.get("chat_studio_normalization"),
             ),
             history=history,
             figure=InteractionLoggingService.summarize_figure(figure),

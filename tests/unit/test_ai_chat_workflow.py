@@ -587,3 +587,57 @@ def test_data_questions_lc_knows_the_bqc_condition(mock_loop):
         "compare classes", session, df, experiment=experiment, bqc_label="QC",
     ))
     assert "BQC samples (QC) are left out" in result.assistant_message
+
+
+class TestTheModelIsToldWhatTheValuesAre:
+    """Power-user feedback 2026-10-27: the AI called protein-normalized
+    values concentrations. `concentration[...]` columns come from protein
+    normalization too, so the main pipeline's method is now passed in."""
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_data_questions_question_and_answer_get_the_units(
+        self, mock_loop, source_df, monkeypatch,
+    ):
+        from app.services.ai_chat.ai_client import AIClientService
+        sent = {}
+
+        def _complete(messages, system_prompt, config):
+            sent["request"] = messages[0]["content"]
+            return "Done."
+
+        monkeypatch.setattr(AIClientService, "complete", staticmethod(_complete))
+        mock_loop.side_effect = canned_stream(
+            "Rows.\n\n```python\nresult_df = df.head(2)\n```"
+        )
+        session = AIChatWorkflow.start_data_questions_session(source_df)
+        finish(AIChatWorkflow.stream_data_questions_message(
+            "top lipids?", session, source_df, normalization="protein",
+        ))
+        question = mock_loop.call_args.kwargs["messages"][-1]["content"]
+        assert "intensity per µg protein (relative, not molar)" in question
+        assert "intensity per µg protein (relative, not molar)" in sent["request"]
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_an_upload_is_said_to_have_unknown_units(self, mock_loop, source_df):
+        mock_loop.side_effect = canned_stream("No code needed.")
+        session = AIChatWorkflow.start_data_questions_session(source_df)
+        finish(AIChatWorkflow.stream_data_questions_message(
+            "describe", session, source_df,
+        ))
+        question = mock_loop.call_args.kwargs["messages"][-1]["content"]
+        assert "units are unknown" in question
+
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_visualization_gets_the_units(self, mock_loop):
+        from tests.evals import reference_analysis as ref
+        df = ref.load_canonical()
+        experiment = ExperimentConfig(conditions_list=["WT", "KO"],
+                                      number_of_samples_list=[3, 3])
+        mock_loop.side_effect = canned_stream("No code needed.")
+        session = AIChatWorkflow.start_viz_session(df, experiment)
+        finish(AIChatWorkflow.stream_viz_message(
+            user_message="plot", session=session, analysis_df=df,
+            experiment=experiment, normalization="internal_standard",
+        ))
+        question = mock_loop.call_args.kwargs["messages"][-1]["content"]
+        assert "Values are pmol per sample." in question

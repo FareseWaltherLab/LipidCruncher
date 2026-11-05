@@ -267,6 +267,7 @@ class VizWorkflow:
         sandbox_config: Optional[SandboxConfig] = None,
         numeric_columns: Optional[List[str]] = None,
         bqc_label: Optional[str] = None,
+        normalization: Optional[str] = None,
     ):
         """Handle one user message in the visualization chat.
 
@@ -291,6 +292,7 @@ class VizWorkflow:
             history=history,
             config=ai_config,
             holder=holder,
+            normalization=normalization,
         )
 
         def finalize() -> VizStepResult:

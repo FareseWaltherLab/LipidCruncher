@@ -18,6 +18,7 @@ from ..services.ai_chat.prompt_templates import (
     answer_from_results_system_prompt,
     build_answer_request,
     build_experiment_context,
+    build_values_context,
     data_block,
     data_questions_system_prompt,
 )
@@ -56,6 +57,7 @@ def _answer_from_results(
     stdout: str,
     result_df: Optional[pd.DataFrame],
     ai_config: AIConfig,
+    values: str = "",
 ) -> Optional[str]:
     """A second, small call that writes the Data Questions answer from the
     code's actual output, so its numbers are results, not guesses.
@@ -76,7 +78,7 @@ def _answer_from_results(
     try:
         answer = AIClientService.complete(
             messages=[{"role": "user", "content": build_answer_request(
-                question, plan, code, stdout, table,
+                question, plan, code, stdout, table, values,
             )}],
             system_prompt=answer_from_results_system_prompt(),
             config=ai_config.model_copy(update={"max_tokens": 1024}),
@@ -143,6 +145,7 @@ class DataQuestionsWorkflow:
         experiment: Optional[ExperimentConfig] = None,
         ai_config: Optional[AIConfig] = None,
         bqc_label: Optional[str] = None,
+        values: str = "",
     ) -> DataQuestionsStepResult:
         """Extract/execute any code in the AI response, have the answer
         written from the code's output, append it to the session, and
@@ -182,7 +185,7 @@ class DataQuestionsWorkflow:
                 question = session.messages[-1].content if session.messages else ""
                 answer = _answer_from_results(
                     question, explanation, code,
-                    stdout, result_df, ai_config or AIConfig(),
+                    stdout, result_df, ai_config or AIConfig(), values,
                 )
                 parts = []
                 if answer:
@@ -252,13 +255,15 @@ class DataQuestionsWorkflow:
         numeric_columns: Optional[List[str]] = None,
         experiment: Optional[ExperimentConfig] = None,
         bqc_label: Optional[str] = None,
+        normalization: Optional[str] = None,
     ):
         """Handle one user message in the data questions chat.
 
         Appends the user message, then returns ``(explanation_generator,
         finalize)``. The caller streams the explanation, then calls
         ``finalize()`` to execute any code and obtain a
-        ``DataQuestionsStepResult``.
+        ``DataQuestionsStepResult``. ``normalization`` is the main
+        pipeline's method for imported data (None for an upload).
         """
         if ai_config is None:
             ai_config = AIConfig()
@@ -272,6 +277,8 @@ class DataQuestionsWorkflow:
         exp_context = build_experiment_context(experiment)
         if exp_context:
             context = f"{context}\n\n{exp_context}"
+        values = build_values_context(normalization)
+        context = f"{context}\n\n{values}"
         augmented_message = f"{context}\n\n{user_message}"
         history = session.to_api_messages()[:-1]
         messages = history + [{"role": "user", "content": augmented_message}]
@@ -291,7 +298,7 @@ class DataQuestionsWorkflow:
             return DataQuestionsWorkflow._finalize_data_questions(
                 session, holder["full"], source_df,
                 sandbox_config, numeric_columns, experiment, ai_config,
-                bqc_label=bqc_label,
+                bqc_label=bqc_label, values=values,
             )
 
         return generator, finalize

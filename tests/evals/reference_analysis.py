@@ -24,6 +24,7 @@ Two sources of ground truth, deliberately kept separate:
 from pathlib import Path
 from typing import List, Optional
 
+import numpy as np
 import pandas as pd
 
 from app.models.statistics import StatisticalTestConfig
@@ -120,3 +121,38 @@ def significant_lipids(df: pd.DataFrame) -> pd.DataFrame:
 def top_n_by_significance(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
     """The n lipids with the smallest adjusted p-value (stable order)."""
     return species_stats(df).sort_values("adj_p", kind="stable").head(n)
+
+
+def load_pg_correlation() -> pd.DataFrame:
+    """872 species x 21 samples, the size of the 2026-10-27 dataset that
+    timed out: 30 PG species follow one profile across the samples, 100 TG
+    species follow its mirror image, the rest are independent noise."""
+    rng = np.random.default_rng(20261027)
+    n_samples = 21
+    profile = rng.normal(size=n_samples)
+    rows = []
+
+    def add(name, cls, values):
+        rows.append([name, cls, *np.round(values, 3)])
+
+    for i in range(30):
+        add(f"PG {30 + i}:1", "PG",
+            1000 + 300 * profile + rng.normal(scale=60, size=n_samples))
+    for i in range(100):
+        add(f"TG {40 + i}:2", "TG",
+            2000 - 300 * profile + rng.normal(scale=60, size=n_samples))
+    for i in range(742):
+        add(f"PC {i}:0", "PC", 1500 + rng.normal(scale=300, size=n_samples))
+    columns = ["LipidMolec", "ClassKey"] + [
+        f"concentration[s{k}]" for k in range(1, n_samples + 1)
+    ]
+    return pd.DataFrame(rows, columns=columns)
+
+
+def pg_partner_pairs(df: pd.DataFrame, below: float) -> int:
+    """Pairs of a PG and a non-PG species whose Pearson r across all
+    samples (raw values) is at most ``below``."""
+    values = df[_conc_cols(df)].to_numpy(float)
+    r = np.corrcoef(values)
+    pg = (df["ClassKey"] == "PG").to_numpy()
+    return int((r[np.ix_(pg, ~pg)] <= below).sum())

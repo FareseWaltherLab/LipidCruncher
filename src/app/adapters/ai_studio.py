@@ -103,6 +103,7 @@ AI_STUDIO_KEYS = dict(
     plain=frozenset({
         'studio_conditions', 'studio_applied_snapshot',
         'chat_studio_file_id', 'chat_studio_upload_kept',
+        'chat_studio_normalization',
         'chat_studio_bqc_label',
         'chat_questions_result_df', 'chat_transform_diagnostic',
         'chat_viz_validation', 'chat_turn_ids',
@@ -225,6 +226,7 @@ class AIStudioAdapter:
         st.session_state.chat_studio_upload_kept = False
         st.session_state.chat_studio_experiment = None
         st.session_state.chat_studio_pipeline_source = None
+        st.session_state.chat_studio_normalization = None
         st.session_state.chat_studio_bqc_label = None
         st.session_state.chat_studio_detected_format = None
         st.session_state.chat_studio_sample_columns_original = None
@@ -325,6 +327,9 @@ class AIStudioAdapter:
             st.session_state.get('qc_input_bqc_label'),
             st.session_state.get('qc_experiment'),
         )
+        normalization = AIStudioWorkflow.imported_normalization(
+            source_key, st.session_state.get('normalization_result'),
+        )
 
         # Reset all studio state + sidebar widgets so the import starts
         # clean (no stale conditions, sample counts, or BQC selections
@@ -336,6 +341,7 @@ class AIStudioAdapter:
         st.session_state.chat_studio_df_original = imported
         st.session_state.chat_studio_file_id = "_pipeline_import"
         st.session_state.chat_studio_pipeline_source = source_key
+        st.session_state.chat_studio_normalization = normalization
         if pipeline_experiment is not None:
             st.session_state.chat_studio_experiment = pipeline_experiment
         if pipeline_bqc_label is not None:

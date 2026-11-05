@@ -177,6 +177,8 @@ def _detail(turn, all_turns):
             st.markdown("**Dataset**")
             st.write(f"{ds.get('source') or '?'} · {ds.get('format') or '?'} · "
                      f"{ds.get('rows')} rows × {ds.get('n_columns')} columns")
+            if ds.get("normalization"):
+                st.write("Normalization:", ds["normalization"])
             if ds.get("conditions"):
                 st.write("Conditions:", ds["conditions"])
             with st.expander("Columns"):

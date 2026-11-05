@@ -112,6 +112,16 @@ class TestImportAfterSidebarChange:
         assert at.session_state['chat_studio_bqc_label'] == 'BQC'
 
 
+    def test_import_records_module1s_normalization_method(self):
+        at = _to_quality_check()
+        _open_studio(at)
+        _import(at, 'Normalized data (from pipeline)')
+        method = at.session_state['normalization_result'].config.method
+        assert at.session_state['chat_studio_normalization'] == method
+        _import(at, 'Raw uploaded data (from pipeline)')
+        assert at.session_state['chat_studio_normalization'] == 'none'
+
+
 OWN_CSV = (
     "Lipid,WT_1,WT_2,KO_1,KO_2\n"
     "PC 34:1,1.0,1.1,5.0,5.5\n"
