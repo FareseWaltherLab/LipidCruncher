@@ -32,7 +32,7 @@ from app.services.ai_chat.output_checks import check_direction_colors
 # is enough — we are checking that a method was stated, not policing wording.
 _METHOD_MARKERS = (
     "welch", "t-test", "ttest", "benjamini", "hochberg", "fdr",
-    "log10", "log2", "false discovery",
+    "log10", "log2", "false discovery", "pearson", "spearman",
 )
 
 # A refusal has to decline *and* pin the blame on the data. Checking only
@@ -169,7 +169,8 @@ def _is_introspection_only(code: str) -> bool:
     produces = ("result_df", "fig", "lc.compare", "lc.volcano", "lc.bar_chart",
                 "lc.heatmap", "lc.saturation", "lc.chain_length",
                 "lc.pathway", "lc.pie_charts", "lc.class_summary",
-                "lc.fatty_acid_composition")
+                "lc.fatty_acid_composition", "lc.correlations",
+                ".sum(", ".mean(", ".groupby(")
     return not any(
         any(token in line for token in produces) for line in meaningful
     )

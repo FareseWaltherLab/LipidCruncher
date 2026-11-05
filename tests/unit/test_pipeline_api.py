@@ -358,6 +358,37 @@ class TestPromptsAdvertisePipelineFirst:
         assert "never summed" in transform
         assert "adduct matching" in data_questions_system_prompt()
 
+    def test_no_prompt_suggests_parsing_chains_from_names(self):
+        """First eval of double_bonds_summed (2026-11-05): 4 of 4 runs
+        parsed double bonds from the names with re.findall. Both prompts
+        listed `re` as "useful for ... extracting fatty acid chain
+        composition", against the catalog's own rule."""
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        from app.services.ai_chat.viz_generator import _viz_system_prompt
+        for prompt in (data_questions_system_prompt(), _viz_system_prompt()):
+            assert "extracting fatty acid chain composition" not in prompt
+            assert "for carbons or double bonds use `lc.chain_length`" in prompt
+
+    def test_prompt_names_the_pie_data_columns(self):
+        """The same eval run crashed twice guessing the pie data's columns
+        ('MeanConcentration', 'Mean')."""
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        assert "`Total Abundance` and `Percentage`" in data_questions_system_prompt()
+
+    def test_prompt_says_chain_length_records_are_dicts(self):
+        """With the regex hint gone, 3 of 3 eval runs used lc.chain_length
+        and then read `rec.TotalDoubleBonds`: the records are dicts."""
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        prompt = data_questions_system_prompt()
+        assert "is a list of\n**dicts**" in prompt
+        assert ".data['WT'].records)" in prompt
+
     def test_lc_settles_chain_length_before_any_question_is_listed(self):
         """First eval run (2026-10-21): asked to compare the chain length
         distribution, the model asked presence-vs-chain-split. The rule not

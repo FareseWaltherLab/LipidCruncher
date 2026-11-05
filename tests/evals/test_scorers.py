@@ -108,6 +108,29 @@ class TestUsability:
         )
         assert not any("inspection step" in f for f in failures)
 
+    def test_column_lookups_while_computing_are_not_inspection(self):
+        """First eval of standard_normalized_units (2026-11-05): code that
+        picked the sample columns with df.columns, then summed and averaged
+        them, was called an inspection step."""
+        code = (
+            "cols = [c for c in df.columns if c.startswith('concentration')]\n"
+            "totals = df[df['ClassKey'] == 'PC'][cols].sum()\n"
+            "print(totals.mean())"
+        )
+        failures = score_usability(code, "Summed, then averaged.", TOP10)
+        assert not any("inspection step" in f for f in failures)
+
+    def test_a_pearson_correlation_states_its_method(self):
+        """First eval of pg_negative_correlations (2026-11-05): an answer
+        saying "Pearson r ... on the raw abundances" counted as no method."""
+        failures = score_usability(
+            "result_df = lc.correlations(classes=['PG'], min_abs_r=0.85)",
+            "3,000 pairs; Pearson r on the values as they are.",
+            C.by_id("pg_negative_correlations"),
+            result_df=pd.DataFrame({"a": [1]}),
+        )
+        assert failures == []
+
     def test_catches_a_printed_table(self):
         """The real third failure: printed instead of returned."""
         failures = score_usability(

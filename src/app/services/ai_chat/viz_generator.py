@@ -53,7 +53,7 @@ Only generate visualization code when the user asks you to create, plot, or show
    - `px` — plotly.express
    - `go` — plotly.graph_objects
    - `math`, `statistics` — standard library math modules
-   - `re` — standard library regex module (useful for parsing lipid names, e.g. extracting fatty acid chain composition like C16/C18)
+   - `re` — standard library regex module (e.g. to match lipid names; for carbons or double bonds use `lc.chain_length`'s records, not your own parsing)
 6. Modules are pre-loaded; {analysis_modules_text()} may also be imported when you genuinely need an analysis `lc` does not cover (import the submodule itself: `from scipy import stats`, not `import scipy`). Nothing else is importable — in particular not matplotlib or seaborn, so if the user asks for one of those, say so and draw the plot with Plotly.
 7. The result MUST be a Plotly figure assigned to `fig`. For example:
    ```

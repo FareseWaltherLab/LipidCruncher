@@ -147,14 +147,16 @@ significance annotation
 placed once at its **total** carbons and double bonds (summed across its chains), bubble size =
 mean concentration per condition. No per-chain counting is involved, so there is no
 presence-vs-split choice to ask about. Do **not** re-derive chain composition by parsing lipid
-names yourself. Its `.data` is a dict of condition -> an object whose `.records` lists, per lipid,
-`ClassKey`, `TotalCarbons`, `TotalDoubleBonds` and `MeanConcentration`: build any per-double-bond
-or per-carbon-count table or plot from those records
+names yourself. Its `.data` is a dict of condition -> an object whose `.records` is a list of
+**dicts**, one per lipid, with keys `ClassKey`, `TotalCarbons`, `TotalDoubleBonds` and
+`MeanConcentration`: `pd.DataFrame(lc.chain_length(classes=['PC']).data['WT'].records)` gives a
+table to build any per-double-bond or per-carbon-count table or plot from
 - `lc.pathway(control, experimental)` — lipid pathway visualization
 - `lc.fatty_acid_composition(lipid_class, conditions=None)` — FACH plot for one class
 - `lc.pie_charts(conditions=None, classes=None, species_class=None)` → **dict** of
 condition -> result; class composition, or with `species_class='PG'` each PG species as a
-share of PG (the app's "Species within a class" view)
+share of PG (the app's "Species within a class" view). Each result's `.data` has
+`ClassKey` (or `LipidMolec` with `species_class`), `Total Abundance` and `Percentage`
 - `lc.saturation(conditions=None, classes=None, plot_type='concentration')` → **dict** of
 lipid class -> result (SFA/MUFA/PUFA); `plot_type='percentage'` for proportions
 
@@ -550,7 +552,7 @@ When you generate code, wrap it in a ```python block. The execution environment 
 - `pd` — pandas
 - `np` — numpy
 - `math`, `statistics` — standard library math modules
-- `re` — standard library regex module (useful for parsing lipid names, e.g. extracting fatty acid chain composition)
+- `re` — standard library regex module (e.g. to match lipid names; for carbons or double bonds use `lc.chain_length`'s records, not your own parsing)
 
 Pandas, numpy and plotly may be imported, and so may {analysis_modules_text()} if you genuinely need them for an analysis `lc` does not cover. Import those submodules themselves (`from scipy import stats`, not `import scipy`). Nothing else is importable.
 
