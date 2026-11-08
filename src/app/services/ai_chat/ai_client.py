@@ -296,17 +296,31 @@ class AIClientService:
         _check_refusal(_stream_turn.final)
 
     @staticmethod
-    def complete(messages: list, system_prompt: str, config: AIConfig) -> str:
-        """One plain call (no tools, no streaming); returns the reply text."""
+    def complete(
+        messages: list,
+        system_prompt: str,
+        config: AIConfig,
+        on_text: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        """One plain call (no tools); returns the reply text. With
+        ``on_text``, the reply streams and each piece is passed to it as it
+        arrives, so the caller can show the answer while it is written."""
         client = AIClientService.create_client()
+        request = dict(
+            model=config.model,
+            max_tokens=config.max_tokens,
+            output_config={"effort": config.effort},
+            system=system_prompt,
+            messages=messages,
+        )
         try:
-            reply = client.messages.create(
-                model=config.model,
-                max_tokens=config.max_tokens,
-                output_config={"effort": config.effort},
-                system=system_prompt,
-                messages=messages,
-            )
+            if on_text is None:
+                reply = client.messages.create(**request)
+            else:
+                with client.messages.stream(**request) as stream:
+                    for text in stream.text_stream:
+                        on_text(text)
+                    reply = stream.get_final_message()
         except Exception as e:
             raise _friendly_error(e, context="answer") from e
         _check_refusal(reply)

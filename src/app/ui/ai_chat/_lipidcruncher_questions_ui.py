@@ -145,17 +145,31 @@ def _run_live_turn(session, user_input: str, is_example: bool):
     error_text = None
     with st.chat_message("assistant"):
         try:
-            # The spinner covers the gap before the first token (e.g.
-            # while the agent runs a codebase/doc tool call); once text
-            # starts arriving, st.write_stream renders it live.
-            with st.spinner("Thinking..."):
-                session_with_user, stream = (
-                    StreamlitAdapter.stream_ai_lc_questions(
-                        user_message=user_input,
-                        session=session,
-                    )
+            # Reading the docs takes a few seconds before the first token;
+            # the status names each lookup as it starts, then the answer
+            # streams below it.
+            status = st.status(":shimmer[Thinking]", type="compact")
+            lookups = []
+
+            def on_tool_call(name, tool_input):
+                lookups.append(_lookup_label(name, tool_input))
+                status.update(label=f":shimmer[{lookups[-1]}]")
+                status.caption(lookups[-1])
+
+            session_with_user, stream = (
+                StreamlitAdapter.stream_ai_lc_questions(
+                    user_message=user_input,
+                    session=session,
+                    on_tool_call=on_tool_call,
                 )
-                full_text = st.write_stream(safe_stream(stream))
+            )
+            full_text = st.write_stream(safe_stream(stream))
+            status.update(
+                label=(f"Looked up {len(lookups)} source"
+                       f"{'' if len(lookups) == 1 else 's'}"
+                       if lookups else "Answered"),
+                state="complete",
+            )
 
             if not (full_text or "").strip():
                 full_text = (
@@ -184,6 +198,18 @@ def _run_live_turn(session, user_input: str, is_example: bool):
         except Exception as e:
             error_text = str(e)
     return error_text
+
+
+def _lookup_label(name: str, tool_input: dict) -> str:
+    """What a documentation or code tool call is doing, in plain words."""
+    if name == "read_documentation":
+        doc = str(tool_input.get("doc_name", "")).replace("_", " ")
+        return f"Reading the documentation: {doc}"
+    if name == "search_codebase":
+        return f'Searching the code for "{tool_input.get("query", "")}"'
+    if name == "read_file_section":
+        return f"Reading {tool_input.get('file_path', 'a file')}"
+    return "Looking through the project files"
 
 
 def _record_lc_failure(session, user_input: str, error_text: str) -> None:

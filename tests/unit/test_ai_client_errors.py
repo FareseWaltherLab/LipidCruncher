@@ -146,3 +146,32 @@ def test_a_refusal_is_an_error_not_an_answer(monkeypatch):
     monkeypatch.setattr(AIClientService, "create_client", staticmethod(lambda: client))
     with pytest.raises(AIClientError, match="declined this request \\(its bio safeguard\\)"):
         AIClientService.complete([], "sys", AIConfig())
+
+
+def test_complete_streams_the_reply_to_on_text(monkeypatch):
+    """The Data Questions answer streams so the user sees it being written."""
+    from types import SimpleNamespace
+
+    from app.models.chat import AIConfig
+    from app.services.ai_chat.ai_client import AIClientService
+
+    monkeypatch.undo()
+    final = SimpleNamespace(content=[SimpleNamespace(type="text", text="24 species.")])
+
+    class _Stream:
+        text_stream = iter(["24 ", "species."])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def get_final_message(self):
+            return final
+
+    client = SimpleNamespace(messages=SimpleNamespace(stream=lambda **kw: _Stream()))
+    monkeypatch.setattr(AIClientService, "create_client", staticmethod(lambda: client))
+    pieces = []
+    text = AIClientService.complete([], "sys", AIConfig(), on_text=pieces.append)
+    assert pieces == ["24 ", "species."] and text == "24 species."

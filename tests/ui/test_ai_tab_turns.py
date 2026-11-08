@@ -117,9 +117,18 @@ def _stub(monkeypatch, tab, empty=False, fail=False):
             return (session.add_message(ChatMessage(role="user", content="q")),
                     iter(["" if empty else "answer"]))
         result = _result(tab, session, empty=empty)
-        return iter(["" if empty else "answer"]), lambda: result
 
+        def finalize(**kwargs):
+            finalized.append(kwargs)
+            if "on_answer" in kwargs:
+                kwargs["on_answer"]("answer")
+            return result
+
+        return iter(["" if empty else "answer"]), finalize
+
+    finalized = []
     monkeypatch.setattr(StreamlitAdapter, STREAM[tab], staticmethod(_stream))
+    return finalized
 
 
 def _turn(tab, text="q"):
@@ -147,11 +156,14 @@ def test_data_tabs_log_how_the_code_ran(tab, logged, monkeypatch):
 
 @pytest.mark.parametrize("tab", ["dq", "transform", "viz"])
 def test_successful_code_turn(tab, logged, monkeypatch):
-    _stub(monkeypatch, tab)
+    finalized = _stub(monkeypatch, tab)
     at = _turn(tab)
     assert not at.exception
     assert len(at.session_state[SESSION_KEY[tab]].messages) == 2
     assert _executions() == 1
+    # Data Questions shows its written answer as it streams (2026-11-08:
+    # about 3 s of it had passed under a bare "Running the code..." spinner).
+    assert ("on_answer" in finalized[0]) is (tab == "dq")
     stored = {
         "dq": lambda: at.session_state.chat_questions_result_df,
         "transform": lambda: at.session_state.chat_transform_result,

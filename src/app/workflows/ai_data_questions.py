@@ -4,7 +4,7 @@ for the Data Questions tab. Pure logic — no Streamlit dependencies.
 """
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import pandas as pd
 
@@ -60,9 +60,11 @@ def _answer_from_results(
     result_df: Optional[pd.DataFrame],
     ai_config: AIConfig,
     values: str = "",
+    on_answer: Optional[Callable[[str], None]] = None,
 ) -> Optional[str]:
     """A second, small call that writes the Data Questions answer from the
     code's actual output, so its numbers are results, not guesses.
+    ``on_answer`` receives the answer's text as it streams.
 
     None if the call fails: the turn then keeps the plan and the printed
     output, as before, rather than losing a computed result.
@@ -84,6 +86,7 @@ def _answer_from_results(
             )}],
             system_prompt=answer_from_results_system_prompt(),
             config=ai_config.model_copy(update={"max_tokens": 1024}),
+            on_text=on_answer,
         )
     except AIClientError as e:
         logger.warning("Writing the answer from results failed: %s", e)
@@ -148,10 +151,11 @@ class DataQuestionsWorkflow:
         ai_config: Optional[AIConfig] = None,
         bqc_label: Optional[str] = None,
         values: str = "",
+        on_answer: Optional[Callable[[str], None]] = None,
     ) -> DataQuestionsStepResult:
         """Extract/execute any code in the AI response, have the answer
-        written from the code's output, append it to the session, and
-        return the step result.
+        written from the code's output (streamed to ``on_answer``), append
+        it to the session, and return the step result.
         """
         explanation, code = AIClientService.extract_code_block(response_text)
         result_df = None
@@ -189,6 +193,7 @@ class DataQuestionsWorkflow:
                 answer = _answer_from_results(
                     question, explanation, code,
                     stdout, result_df, ai_config or AIConfig(), values,
+                    on_answer,
                 )
                 parts = []
                 if answer:
@@ -266,7 +271,8 @@ class DataQuestionsWorkflow:
         Appends the user message, then returns ``(explanation_generator,
         finalize)``. The caller streams the explanation, then calls
         ``finalize()`` to execute any code and obtain a
-        ``DataQuestionsStepResult``. ``normalization`` is the main
+        ``DataQuestionsStepResult``; ``finalize(on_answer=...)`` also
+        streams the written answer to ``on_answer``. ``normalization`` is the main
         pipeline's method for imported data (None for an upload).
         """
         if ai_config is None:
@@ -298,11 +304,11 @@ class DataQuestionsWorkflow:
             holder=holder,
         )
 
-        def finalize() -> DataQuestionsStepResult:
+        def finalize(on_answer=None) -> DataQuestionsStepResult:
             return DataQuestionsWorkflow._finalize_data_questions(
                 session, holder["full"], source_df,
                 sandbox_config, numeric_columns, experiment, ai_config,
-                bqc_label=bqc_label, values=values,
+                bqc_label=bqc_label, values=values, on_answer=on_answer,
             )
 
         return generator, finalize

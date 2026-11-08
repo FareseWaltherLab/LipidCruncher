@@ -136,6 +136,7 @@ class AIChatCalls:
     def stream_ai_lc_questions(
         user_message: str,
         session,
+        on_tool_call=None,
     ):
         """Stream one turn of the LipidCruncher questions chat.
 
@@ -147,6 +148,7 @@ class AIChatCalls:
         return AIChatWorkflow.stream_lc_questions_message(
             user_message=user_message,
             session=session,
+            on_tool_call=on_tool_call,
         )
 
     @staticmethod

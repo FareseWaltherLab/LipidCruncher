@@ -72,6 +72,7 @@ def run_code_turn(
     stream,
     on_result,
     spinner: str = "Thinking...",
+    answer_streams: bool = False,
     **log_context,
 ) -> None:
     """Run one turn of a code-writing tab, then rerun.
@@ -81,7 +82,8 @@ def run_code_turn(
     streamed_text)`` stores the tab's result and returns the tab's own
     ``record_turn`` fields (code, produced_table, ...). A failure is kept
     for the tab's Retry. Either way the turn is logged, with
-    ``log_context`` (df, experiment).
+    ``log_context`` (df, experiment). With ``answer_streams``, ``finalize``
+    takes ``on_answer`` and the answer it writes shows as it streams.
     """
     with st.chat_message("user"):
         st.markdown(user_input)
@@ -93,10 +95,22 @@ def run_code_turn(
             with st.spinner(spinner):
                 generator, finalize = stream()
                 streamed = st.write_stream(safe_stream(generator))
-            # Runs the code (and, in Data Questions, writes the answer
-            # from its output): seconds with nothing else on screen.
-            with st.spinner("Running the code..."):
-                result = finalize()
+            if answer_streams:
+                # Data Questions writes the answer from the code's output
+                # (about 3 s after the code's own few): show it as it is
+                # written, above the spinner.
+                answer = st.empty()
+                written = []
+
+                def on_answer(text):
+                    written.append(text)
+                    answer.markdown(safe_markdown("".join(written)))
+
+                with st.spinner("Running the code, then writing the answer..."):
+                    result = finalize(on_answer=on_answer)
+            else:
+                with st.spinner("Running the code..."):
+                    result = finalize()
             clear_failure(tab)
             fields = on_result(result, streamed or "")
             record_turn(

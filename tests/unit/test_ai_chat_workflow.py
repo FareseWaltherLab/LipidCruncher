@@ -505,7 +505,7 @@ class TestAnswerWrittenFromResults:
     def test_the_answer_comes_from_the_output(self, mock_loop, source_df, monkeypatch):
         sent = {}
 
-        def _complete(messages, system_prompt, config):
+        def _complete(messages, system_prompt, config, on_text=None):
             sent["request"] = messages[0]["content"]
             sent["max_tokens"] = config.max_tokens
             return "There are 3 lipids; the table shows the first two."
@@ -616,7 +616,7 @@ class TestTheModelIsToldWhatTheValuesAre:
         from app.services.ai_chat.ai_client import AIClientService
         sent = {}
 
-        def _complete(messages, system_prompt, config):
+        def _complete(messages, system_prompt, config, on_text=None):
             sent["request"] = messages[0]["content"]
             return "Done."
 

@@ -38,7 +38,8 @@ def lc_example_script(with_history):
 def cache_writes(monkeypatch):
     writes = []
 
-    def _stream(user_message, session):
+    def _stream(user_message, session, on_tool_call=None):
+        on_tool_call("read_documentation", {"doc_name": "paper"})
         return session, iter(["Answer text."])
 
     monkeypatch.setattr(StreamlitAdapter, "get_cached_lc_answer",
@@ -77,7 +78,7 @@ def test_a_failed_call_shows_the_error_and_a_retry(monkeypatch):
         lookups.append(question)
         return None
 
-    def _down(user_message, session):
+    def _down(user_message, session, on_tool_call=None):
         raise RuntimeError("API down")
 
     monkeypatch.setattr(StreamlitAdapter, "get_cached_lc_answer", staticmethod(_lookup))
@@ -89,3 +90,15 @@ def test_a_failed_call_shows_the_error_and_a_retry(monkeypatch):
     assert messages[-1].content == "Sorry, I encountered an error: API down"
     assert at.session_state['chat_lc_retry_input'] == EXAMPLE
     assert [b for b in at.button if b.label == "Retry last question"]
+
+
+def test_each_lookup_is_named_while_the_answer_waits():
+    """The docs lookup is a few seconds before the first token (measured
+    2026-11-08); the status names what the AI is reading meanwhile."""
+    from app.ui.ai_chat._lipidcruncher_questions_ui import _lookup_label
+
+    assert _lookup_label("read_documentation", {"doc_name": "supplementary_methods"}) \
+        == "Reading the documentation: supplementary methods"
+    assert _lookup_label("search_codebase", {"query": "zero filter"}) \
+        == 'Searching the code for "zero filter"'
+    assert _lookup_label("list_files", {}) == "Looking through the project files"

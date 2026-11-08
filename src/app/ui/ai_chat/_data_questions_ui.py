@@ -126,6 +126,7 @@ def render_data_questions_chat(source_df) -> None:
                 source_df=source_df,
             ),
             on_result,
+            answer_streams=True,
             df=source_df,
         )
 

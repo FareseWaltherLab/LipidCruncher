@@ -2,7 +2,7 @@
 LipidCruncher Questions: the AI chat workflow's conversational tab about
 the app. Pure logic — no Streamlit dependencies.
 """
-from typing import Optional
+from typing import Callable, Optional
 
 from ..models.chat import AIConfig, ChatMessage, ChatMode, ChatSession
 from ..services.ai_chat.ai_client import AIClientService
@@ -34,6 +34,7 @@ class LCQuestionsWorkflow:
         user_message: str,
         session: ChatSession,
         ai_config: Optional[AIConfig] = None,
+        on_tool_call: Optional[Callable[[str, dict], None]] = None,
     ):
         """Handle one user message in the LipidCruncher questions chat.
 
@@ -42,7 +43,8 @@ class LCQuestionsWorkflow:
         session, then returns a generator that streams the assistant's
         answer token-by-token. The caller (UI) consumes the generator —
         e.g. via ``st.write_stream`` — and appends the assistant message to
-        the session from the accumulated text.
+        the session from the accumulated text. ``on_tool_call(name,
+        input)`` is called as each tool call starts.
 
         Returns:
             Tuple of (session_with_user_message, text_chunk_generator).
@@ -63,5 +65,6 @@ class LCQuestionsWorkflow:
             config=ai_config,
             tools=TOOL_DEFINITIONS,
             tool_executor=execute_tool,
+            on_tool_call=on_tool_call,
         )
         return session, generator
