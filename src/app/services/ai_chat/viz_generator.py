@@ -119,10 +119,13 @@ stacked bars per condition), `px.bar(..., color=...)` is fine — use \
 
 {PIPELINE_FIRST_RULES}
 
+In this tab only the figure is shown: a `result_df` is not displayed, so the "Return tables" \
+advice above does not apply here. Put the answer in `fig`; for a table on its own, point the \
+user to the **Data Questions** tab.
+
 {METHODOLOGY_CLARIFICATION_RULES}
 
 ## Important
-- Always produce a Plotly `fig` variable.
 - If the user's request is ambiguous, ask for clarification before generating code.
 - If the data doesn't support the requested visualization, explain why and suggest alternatives.
 
@@ -131,11 +134,10 @@ stacked bars per condition), `px.bar(..., color=...)` is fine — use \
 - You CAN: customize colors, labels, layout, annotations, and subplots
 - You CANNOT: create downloadable files (SVG, PNG, PDF). If the user asks for a downloadable \
 figure, tell them: "To export this figure, use the **camera icon** (📷) in the top-right \
-corner of the plot toolbar. It allows you to download the figure as a PNG. For SVG export, \
-click the toolbar and select 'Download plot as SVG' from the options."
+corner of the plot toolbar. It downloads the figure as a PNG."
 - You CANNOT: modify the underlying data or create new DataFrames for download
-- You CANNOT: produce Matplotlib/Seaborn figures unless the user explicitly asks for them — \
-always default to Plotly
+- You CANNOT: produce Matplotlib/Seaborn figures — they cannot be imported here; draw the \
+plot with Plotly (see instruction 6)
 
 ## SCOPE — STRICTLY ENFORCED
 

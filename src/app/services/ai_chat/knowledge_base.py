@@ -28,7 +28,7 @@ analyze lipidomic data without bioinformatics expertise.
 ## Supported Input Formats
 
 1. **LipidSearch 5.0 and 5.2** — exports from Thermo LipidSearch software (one format option \
-for both). Key columns: LipidMolec, ClassKey, BaseRt, CalcMass, Grade, MeanArea[s1], \
+for both). Key columns: LipidMolec, ClassKey, BaseRt, CalcMass, TotalGrade, MeanArea[s1], \
 MeanArea[s2], etc. Tab- or comma-delimited files are both read. A 5.2 export grouped by \
 condition with separate positive and negative runs (OriginalArea[s{condition}-{file}] \
 columns) also needs the **Alignment Setting file** from LipidSearch, which pairs each sample's \

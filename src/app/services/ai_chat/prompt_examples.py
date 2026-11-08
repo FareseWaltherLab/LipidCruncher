@@ -147,9 +147,7 @@ User: "How many columns does my data have?"
 ### Example 2: Species count per class
 User: "How many lipid species are in each class?"
 ```python
-lipid_col = df.columns[0]
-classes = df[lipid_col].str.extract(r'^([A-Za-z]+)')[0]
-result_df = classes.value_counts().reset_index()
+result_df = lc.class_summary()[['ClassKey', 'n_species']]
 result_df.columns = ['Lipid Class', 'Species Count']
 ```
 
@@ -255,7 +253,7 @@ top15 = df_plot.nlargest(15, '_mean')
 fig = px.bar(top15, x='LipidMolec', y='_mean',
              title='Top 15 Most Abundant Lipids',
              color_discrete_sequence=['#1f77b4'])
-fig.update_layout(xaxis_title='Lipid', yaxis_title='Mean Concentration',
+fig.update_layout(xaxis_title='Lipid', yaxis_title='Mean Abundance',
                   xaxis_tickangle=-45)
 # Pin axis order — DataFrame sort is not enough for categorical bars.
 fig.update_xaxes(categoryorder='array',
@@ -350,18 +348,19 @@ fig.update_layout(xaxis_title='CV (%)', yaxis_title='Number of Lipids')
 ### Example 8: Class-level intensity comparison (dot plot)
 User: "Dot plot comparing mean intensity of each class between two conditions"
 ```python
-ko_cols = [c for c in df.columns if c.startswith('intensity[s1') or c.startswith('intensity[s2')]
-wt_cols = [c for c in df.columns if c.startswith('intensity[s3') or c.startswith('intensity[s4')]
+# Samples per condition come from the experiment block — never guess
+# them from sample numbers.
+samples = {'WT': ['s1', 's2', 's3'], 'KO': ['s4', 's5', 's6']}
 df_plot = df.copy()
-df_plot['KO'] = df_plot[ko_cols].mean(axis=1)
-df_plot['WT'] = df_plot[wt_cols].mean(axis=1)
-class_means = df_plot.groupby('ClassKey')[['KO', 'WT']].mean().reset_index()
-melted = class_means.melt(id_vars='ClassKey', var_name='Condition', value_name='Mean Intensity')
-fig = px.scatter(melted, x='ClassKey', y='Mean Intensity', color='Condition',
-                 title='Class-Level Intensity: KO vs WT',
+for condition, names in samples.items():
+    df_plot[condition] = df_plot[[f'intensity[{s}]' for s in names]].mean(axis=1)
+class_means = df_plot.groupby('ClassKey')[list(samples)].mean().reset_index()
+melted = class_means.melt(id_vars='ClassKey', var_name='Condition', value_name='Mean Abundance')
+fig = px.scatter(melted, x='ClassKey', y='Mean Abundance', color='Condition',
+                 title='Class-Level Abundance: KO vs WT',
                  color_discrete_sequence=['#1f77b4', '#ff7f0e'])
 fig.update_traces(marker_size=12)
-fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Mean Intensity')
+fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Mean Abundance')
 ```
 """
 

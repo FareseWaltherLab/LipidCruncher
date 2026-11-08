@@ -174,8 +174,8 @@ So: "make me a volcano plot" is `fig = lc.volcano('WT', 'ADGAT-DKO').figure`, no
 of your own scatter code.
 
 Pass **condition names**, not column lists: `lc.compare_species('WT', 'ADGAT-DKO')`. The \
-available condition names are given to you in the `<experiment>` block with every message — \
-use them directly.
+available condition names come with every message, in the `<experiment>` or \
+`<experiment_structure>` block — use them directly.
 
 ### Presenting an `lc` result
 
@@ -329,7 +329,7 @@ so it can be analyzed by the application.
    - `src/app/services/data_cleaning/lipidsearch.py` → `_match_standard_adducts`, then `_select_best_auc`. First, a class with its own internal standard in the export is quantified in the standard's adduct (`MainIon`): only that adduct's rows compete, and species seen only in other adducts are dropped (unless the user keeps them). Then grade priority A>B>C>D via `_GRADE_PRIORITY`, then highest `TotalSmpIDRate(%)`, one row per `LipidMolec`. Rows of different adducts are never summed.
    - `src/app/services/zero_filtering.py` (thresholds: 75% for non-BQC, 50% for BQC by default)
    - `src/app/lipid_nomenclature.py` (class extraction, chain parsing, sphingolipid handling)
-   Cap codebase use at one search + one targeted read per turn so we don't slow down obvious transforms. Skip the codebase for trivial shape transforms (column renames, pivots, dtype coercion) — only consult when the operation has a methodology component.
+   Skip the codebase for trivial shape transforms (column renames, pivots, dtype coercion) so they stay fast. Consult it when the operation has a methodology component, and read enough of the implementation to mirror it.
 
 <examples>
 {get_transform_examples()}
@@ -470,8 +470,8 @@ check 'release_notes' for features added after the paper, then use search_codeba
 the feature by name in the code. Some features may have been added after the paper was \
 written, so the code is the most up-to-date source. Do NOT guess or map the question to \
 a different feature — search for the exact feature name instead.
-4. Be efficient: read ONE document or do ONE search, then answer. Do NOT chain multiple \
-tool calls — answer as soon as you have enough information.
+4. Answer as soon as what you have read covers the question. When it does not, go on to the \
+next source in the order above rather than answering from memory.
 5. You may include relevant scientific context from the paper. Do NOT add general knowledge \
 beyond what the paper and code say.
 6. You do NOT have access to the user's data in this tab. If they ask data-specific questions, \
@@ -543,9 +543,9 @@ is NOT a deuterium label). Useful starting paths: \
 `src/app/services/zero_filtering.py`, `src/app/services/quality_check.py`, \
 `src/app/services/normalization.py`, `src/app/lipid_nomenclature.py`, \
 `src/app/constants.py` (regex patterns and thresholds).
-7. Be efficient with tools: at most one search + one targeted read before answering. Skip the \
-codebase entirely for plain data exploration ("how many rows?", "list classes", "mean of \
-intensity[s1]") — only consult it when the question hinges on a LipidCruncher algorithm.
+7. Skip the codebase for plain data exploration ("how many rows?", "list classes", "mean of \
+intensity[s1]"). Consult it when the question hinges on a LipidCruncher algorithm, and read \
+enough of the implementation to mirror it exactly.
 8. If the user's question is ambiguous, ask for clarification.
 9. Be concise. Do not over-explain.
 
