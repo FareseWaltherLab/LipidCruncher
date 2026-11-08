@@ -114,19 +114,6 @@ class TestSampleColumns:
         assert W.detected_sample_columns(df) == (None, [])
 
 
-class TestDeriveExperiment:
-    def test_one_condition_over_the_intensity_columns(self):
-        df = pd.DataFrame({'LipidMolec': ['a'], 'intensity[s1]': [1], 'intensity[s2]': [2], 'x': [3]})
-        assert W.derive_experiment(df) == _exp(['All Samples'], [2])
-
-    def test_numeric_columns_without_intensity_ones(self):
-        df = pd.DataFrame({'Lipid': ['a'], 'A': [1.0], 'B': [2], 'C': [3]})
-        assert W.derive_experiment(df) == _exp(['All Samples'], [3])
-
-    def test_at_least_one_sample(self):
-        assert W.derive_experiment(pd.DataFrame({'Lipid': ['a']})) == _exp(['All Samples'], [1])
-
-
 class TestApplyUserExperiment:
     DF = pd.DataFrame({
         'Lipid': ['PC 34:1'], 'WT_1': [1.0], 'KO_1': [2.0], 'WT_2': [3.0], 'KO_2': [4.0],

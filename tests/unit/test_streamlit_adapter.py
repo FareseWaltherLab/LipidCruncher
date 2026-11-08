@@ -259,8 +259,7 @@ class TestAIStudioKeysFollowTheReset:
 
     DATA_KEYS = (
         'chat_studio_file_id', 'chat_studio_bqc_label', 'studio_applied_snapshot',
-        'chat_questions_result_df', 'chat_transform_diagnostic',
-        'chat_viz_validation', 'chat_turn_ids', 'chat_pending_prompt_dq',
+        'chat_transform_diagnostic', 'chat_turn_ids', 'chat_pending_prompt_dq',
         'chat_dq_last_error', 'chat_dq_failed_input', 'fb_turn1',
     )
 
@@ -273,6 +272,14 @@ class TestAIStudioKeysFollowTheReset:
         left = [key for key in self.DATA_KEYS
                 if mock_st.session_state.get(key) is not None]
         assert left == []
+
+    @patch('app.adapters.streamlit_adapter.st')
+    def test_new_upload_drops_the_tables_and_figures_shown(self, mock_st):
+        mock_st.session_state = MockSessionState(
+            {'chat_questions_outputs': {1: (object(), object())}}
+        )
+        StreamlitAdapter.reset_data_state()
+        assert mock_st.session_state['chat_questions_outputs'] == {}
 
     @patch('app.adapters.streamlit_adapter.st')
     def test_the_lipidcruncher_questions_chat_survives(self, mock_st):

@@ -206,7 +206,8 @@ def _ask(at, question):
     at.chat_input(key='chat_input_questions').set_value(question).run()
     at.run()  # the turn's st.rerun()
     _ok(at)
-    return at.session_state['chat_questions_result_df']
+    outputs = at.session_state['chat_questions_outputs']
+    return outputs[max(outputs)][0]  # this turn's table
 
 
 class TestDataQuestionsOnPipelineData:
@@ -233,7 +234,7 @@ class TestDataQuestionsOnPipelineData:
 
         at.run()
         assert len(at.session_state['chat_data_questions_session'].messages) == 2
-        assert at.session_state['chat_questions_result_df'] is not None
+        assert at.session_state['chat_questions_outputs'][1][0] is not None
 
     def test_compare_species_matches_the_volcano(self, ai_replies, captured_downloads):
         ai_replies("Comparing.\n\n```python\nresult_df = lc.compare_species('WT', 'ADGAT-DKO')\n```")

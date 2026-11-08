@@ -9,10 +9,10 @@ import re
 
 import pytest
 
+import pandas as pd
+
 from app.models.chat import AIConfig
-from app.models.experiment import ExperimentConfig
 from app.services.ai_chat import data_transformer as dt
-from app.services.ai_chat import viz_generator as viz
 from app.services.ai_chat.ai_client import AIClientService
 from app.services.ai_chat.prompt_templates import (
     build_transform_context,
@@ -20,7 +20,7 @@ from app.services.ai_chat.prompt_templates import (
     data_transform_system_prompt,
     lipidcruncher_questions_system_prompt,
 )
-from app.services.ai_chat.viz_generator import _viz_system_prompt
+from app.workflows.ai_chat import AIChatWorkflow
 from tests.ai_turns import canned_stream
 
 
@@ -33,13 +33,9 @@ class TestPromptScopeEnforcement:
         prompt = data_transform_system_prompt()
         assert "## SCOPE" in prompt
 
-    def test_transform_prompt_redirects_to_viz(self):
+    def test_transform_prompt_redirects_to_ask_your_data(self):
         prompt = data_transform_system_prompt()
-        assert "Custom Visualization" in prompt
-
-    def test_transform_prompt_redirects_to_data_questions(self):
-        prompt = data_transform_system_prompt()
-        assert "Data Questions" in prompt
+        assert "Ask Your Data" in prompt
 
     def test_data_questions_prompt_has_scope_section(self):
         prompt = data_questions_system_prompt()
@@ -50,9 +46,12 @@ class TestPromptScopeEnforcement:
         prompt = data_questions_system_prompt()
         assert "Transform to Generic" in prompt
 
-    def test_data_questions_prompt_redirects_to_viz(self):
+    def test_ask_your_data_draws_figures_itself(self):
+        """Custom Visualization merged in (2026-11-08): plots are in scope,
+        not redirected."""
         prompt = data_questions_system_prompt()
-        assert "Custom Visualization" in prompt
+        assert "## Figures" in prompt
+        assert "produces visualizations" not in prompt
 
     def test_lc_questions_prompt_has_scope_section(self):
         prompt = lipidcruncher_questions_system_prompt()
@@ -61,31 +60,16 @@ class TestPromptScopeEnforcement:
 
     def test_lc_questions_prompt_redirects_to_other_tabs(self):
         prompt = lipidcruncher_questions_system_prompt()
-        assert "Data Questions" in prompt
-        assert "Transform to Generic" in prompt
-        assert "Custom Visualization" in prompt
-
-    def test_viz_prompt_has_scope_section(self):
-        prompt = _viz_system_prompt()
-        assert "SCOPE" in prompt
-        assert "STRICTLY ENFORCED" in prompt
-
-    def test_viz_prompt_redirects_to_data_questions(self):
-        prompt = _viz_system_prompt()
-        assert "Data Questions" in prompt
-
-    def test_viz_prompt_redirects_to_transform(self):
-        prompt = _viz_system_prompt()
+        assert "Ask Your Data" in prompt
         assert "Transform to Generic" in prompt
 
 
 ALL_PROMPTS = [
     data_transform_system_prompt, data_questions_system_prompt,
-    lipidcruncher_questions_system_prompt, _viz_system_prompt,
+    lipidcruncher_questions_system_prompt,
 ]
 AI_STUDIO_TABS = {  # the labels ui/ai_studio/tabs.py passes to st.tabs
-    "LipidCruncher Questions", "Data Questions", "Transform to Generic",
-    "Custom Visualization",
+    "LipidCruncher Questions", "Ask Your Data", "Transform to Generic",
 }
 
 
@@ -108,6 +92,7 @@ class TestPromptExamplesIncluded:
     def test_data_questions_prompt_has_examples(self):
         prompt = data_questions_system_prompt()
         assert "Few-Shot Examples" in prompt
+        assert "Figure Examples" in prompt
         assert "Example 1" in prompt
         assert "Example 8" in prompt
 
@@ -117,11 +102,6 @@ class TestPromptExamplesIncluded:
         assert "Example 1" in prompt
         assert "Example 8" in prompt
 
-    def test_viz_prompt_has_examples(self):
-        prompt = _viz_system_prompt()
-        assert "Few-Shot Examples" in prompt
-        assert "Example 1" in prompt
-        assert "Example 8" in prompt
 
 
 class TestPromptExamplesXmlWrapped:
@@ -132,7 +112,6 @@ class TestPromptExamplesXmlWrapped:
         data_transform_system_prompt,
         data_questions_system_prompt,
         lipidcruncher_questions_system_prompt,
-        _viz_system_prompt,
     ])
     def test_examples_block_is_xml_tagged(self, prompt_fn):
         prompt = prompt_fn()
@@ -164,21 +143,16 @@ class TestDataContextStructure:
         assert "<source_data_schema>" in content
         assert content.index("SRC_SCHEMA_MARKER") < content.index("USER_QUESTION_MARKER")
 
-    def test_viz_message_puts_schema_before_question(self, monkeypatch):
-        stream = canned_stream("ok\n```python\nfig = None\n```")
+    def test_data_questions_message_puts_schema_before_question(self, monkeypatch):
+        stream = canned_stream("ok")
         monkeypatch.setattr(
             AIClientService, "stream_tool_loop", staticmethod(stream)
         )
-        experiment = ExperimentConfig(
-            conditions_list=["Control", "Treatment"],
-            number_of_samples_list=[2, 2],
+        df = pd.DataFrame({"SCHEMA_MARKER": [1]})
+        generator, _ = AIChatWorkflow.stream_data_questions_message(
+            "USER_REQUEST_MARKER", AIChatWorkflow.start_data_questions_session(df), df,
         )
-        list(viz.VizGeneratorService.stream_viz_code(
-            user_request="USER_REQUEST_MARKER",
-            schema_context="SCHEMA_MARKER",
-            experiment=experiment,
-            history=[], config=AIConfig(), holder={"full": ""},
-        ))
+        list(generator)
         content = stream.calls[-1]["messages"][-1]["content"]
         assert "<dataframe_schema>" in content
         assert content.index("SCHEMA_MARKER") < content.index("USER_REQUEST_MARKER")
@@ -194,3 +168,19 @@ class TestSystemPromptCaching:
             "text": "SYSTEM_TEXT",
             "cache_control": {"type": "ephemeral"},
         }]
+
+
+def test_every_variable_the_prompt_advertises_exists_in_the_sandbox():
+    """Regression (AQ6, from Custom Visualization): the prompt listed `plt`
+    and `sns`, which the sandbox neither binds nor imports, so a matplotlib
+    request was a guaranteed failed execution."""
+    from app.services.ai_chat.sandbox import build_sandbox_globals
+
+    section = data_questions_system_prompt().split(
+        "The execution environment provides:", 1)[1].split("\n\n", 1)[0]
+    advertised = set()
+    for line in re.findall(r"^- (.+)$", section, flags=re.M):
+        advertised.update(re.findall(r"`(\w+)`", line.split(" — ")[0]))
+    available = build_sandbox_globals(pd.DataFrame({"a": [1]}))
+    assert {"px", "go", "lc"} <= advertised
+    assert advertised <= set(available), advertised - set(available)

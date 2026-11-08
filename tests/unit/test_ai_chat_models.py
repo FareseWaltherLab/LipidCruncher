@@ -53,14 +53,14 @@ class TestChatSession:
         assert session.schema_context == ""
 
     def test_add_message_returns_new_session(self):
-        session = ChatSession(mode=ChatMode.VISUALIZATION)
+        session = ChatSession(mode=ChatMode.DATA_QUESTIONS)
         msg = ChatMessage(role="user", content="Show bar chart")
         new_session = session.add_message(msg)
 
         assert len(session.messages) == 0  # original unchanged
         assert len(new_session.messages) == 1
         assert new_session.messages[0].content == "Show bar chart"
-        assert new_session.mode == ChatMode.VISUALIZATION
+        assert new_session.mode == ChatMode.DATA_QUESTIONS
 
     def test_to_api_messages(self):
         session = ChatSession(mode=ChatMode.DATA_TRANSFORM)
@@ -73,7 +73,7 @@ class TestChatSession:
         assert api_msgs[1] == {"role": "assistant", "content": "Hi"}
 
     def test_to_api_messages_includes_assistant_code(self):
-        session = ChatSession(mode=ChatMode.VISUALIZATION)
+        session = ChatSession(mode=ChatMode.DATA_QUESTIONS)
         session = session.add_message(ChatMessage(role="user", content="Plot it"))
         session = session.add_message(ChatMessage(
             role="assistant",
@@ -87,7 +87,7 @@ class TestChatSession:
         assert "```python" in api_msgs[1]["content"]
 
     def test_to_api_messages_no_code_unchanged(self):
-        session = ChatSession(mode=ChatMode.VISUALIZATION)
+        session = ChatSession(mode=ChatMode.DATA_QUESTIONS)
         session = session.add_message(ChatMessage(
             role="assistant", content="Just text, no code",
         ))
@@ -97,7 +97,7 @@ class TestChatSession:
     def test_to_api_messages_user_code_field_ignored(self):
         # User messages don't normally have code, but if they do (defensive),
         # the user's content should be sent as-is, not wrapped.
-        session = ChatSession(mode=ChatMode.VISUALIZATION)
+        session = ChatSession(mode=ChatMode.DATA_QUESTIONS)
         session = session.add_message(ChatMessage(
             role="user", content="Question", code="some code",
         ))
@@ -107,7 +107,7 @@ class TestChatSession:
     def test_frozen(self):
         session = ChatSession(mode=ChatMode.DATA_TRANSFORM)
         with pytest.raises(Exception):
-            session.mode = ChatMode.VISUALIZATION
+            session.mode = ChatMode.DATA_QUESTIONS
 
     def test_hashable(self):
         session = ChatSession(mode=ChatMode.DATA_TRANSFORM, schema_context="cols: a, b")

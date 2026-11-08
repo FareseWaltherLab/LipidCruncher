@@ -2,7 +2,9 @@
 are stored, an execution is counted, and the turn is logged with the right
 flags; an empty turn says so; a failed turn is logged as an error.
 
-Pins the tab UIs' turn handling (AQ9) so the four copies can share code."""
+Pins the tab UIs' turn handling (AQ9) so the copies can share code. "fig"
+is an Ask Your Data turn that returns a figure (Custom Visualization's
+turns, since the merge of 2026-11-08)."""
 from collections import Counter
 
 import pandas as pd
@@ -22,7 +24,6 @@ from app.workflows.ai_chat import (
     AIChatWorkflow,
     DataQuestionsStepResult,
     TransformStepResult,
-    VizStepResult,
 )
 
 CODE = "result_df = df.head(1)"
@@ -38,24 +39,26 @@ def tab_script(tab):
 
     df = pd.DataFrame({'LipidMolec': ['PC 34:1'], 'ClassKey': ['PC'],
                        'intensity[s1]': [1.0], 'intensity[s2]': [2.0]})
-    if tab == "dq":
+    if tab in ("dq", "fig"):
+        if tab == "fig":
+            import streamlit as st
+            st.session_state.chat_studio_experiment = ExperimentConfig(
+                conditions_list=['A', 'B'], number_of_samples_list=[1, 1])
         ai_chat.display_data_questions_chat(df)
     elif tab == "transform":
         ai_chat.display_transform_chat(df)
-    elif tab == "viz":
-        ai_chat.display_viz_chat(df, ExperimentConfig(
-            conditions_list=['A', 'B'], number_of_samples_list=[1, 1]))
     else:
         ai_chat.display_lipidcruncher_questions_chat()
 
 
 INPUT_KEY = {"dq": "chat_input_questions", "transform": "chat_input_transform",
-             "viz": "chat_input_viz", "lc": "chat_input_lc_questions"}
+             "fig": "chat_input_questions", "lc": "chat_input_lc_questions"}
 STREAM = {"dq": "stream_ai_data_questions", "transform": "stream_ai_transform",
-          "viz": "stream_ai_viz", "lc": "stream_ai_lc_questions"}
+          "fig": "stream_ai_data_questions", "lc": "stream_ai_lc_questions"}
 SESSION_KEY = {"dq": "chat_data_questions_session",
                "transform": "chat_transform_session",
-               "viz": "chat_viz_session", "lc": "chat_lc_questions_session"}
+               "fig": "chat_data_questions_session",
+               "lc": "chat_lc_questions_session"}
 
 
 @pytest.fixture
@@ -87,7 +90,7 @@ def _result(tab, session, empty=False):
         new = _answer(session, text="")
         return {"dq": DataQuestionsStepResult(session=new),
                 "transform": TransformStepResult(session=new),
-                "viz": VizStepResult(session=new)}[tab]
+                "fig": DataQuestionsStepResult(session=new)}[tab]
     new = _answer(session, code=CODE)
     if tab == "dq":
         return DataQuestionsStepResult(
@@ -101,10 +104,11 @@ def _result(tab, session, empty=False):
             transformation=TransformationResult(
                 success=True, result_df=pd.DataFrame({"LipidMolec": ["x"]}),
                 code=CODE))
-    return VizStepResult(
-        session=new, assistant_message="answer",
+    figure = go.Figure(go.Bar(x=["a"], y=[1]))
+    return DataQuestionsStepResult(
+        session=new, assistant_message="answer", figure=figure, code=CODE,
         sandbox_result=SandboxResult(success=True, startup_time=2.5,
-                                     figure=go.Figure(go.Bar(x=["a"], y=[1]))),
+                                     figure=figure),
         unverified_numbers=("30",))
 
 
@@ -144,7 +148,7 @@ def _executions():
                if scope == "session" and kind == "executions")
 
 
-@pytest.mark.parametrize("tab", ["dq", "viz"])
+@pytest.mark.parametrize("tab", ["dq", "fig"])
 def test_data_tabs_log_how_the_code_ran(tab, logged, monkeypatch):
     """2026-11-05: the sandbox's start-up and run time are logged, to see
     on the server how much of the time limit start-up takes."""
@@ -154,7 +158,7 @@ def test_data_tabs_log_how_the_code_ran(tab, logged, monkeypatch):
     assert log["sandbox"].startup_time == 2.5
 
 
-@pytest.mark.parametrize("tab", ["dq", "transform", "viz"])
+@pytest.mark.parametrize("tab", ["dq", "transform", "fig"])
 def test_successful_code_turn(tab, logged, monkeypatch):
     finalized = _stub(monkeypatch, tab)
     at = _turn(tab)
@@ -163,29 +167,29 @@ def test_successful_code_turn(tab, logged, monkeypatch):
     assert _executions() == 1
     # Data Questions shows its written answer as it streams (2026-11-08:
     # about 3 s of it had passed under a bare "Running the code..." spinner).
-    assert ("on_answer" in finalized[0]) is (tab == "dq")
+    assert ("on_answer" in finalized[0]) is (tab != "transform")
     stored = {
-        "dq": lambda: at.session_state.chat_questions_result_df,
+        "dq": lambda: at.session_state.chat_questions_outputs[1][0],
         "transform": lambda: at.session_state.chat_transform_result,
-        "viz": lambda: at.session_state.chat_viz_figures["chat_viz_fig_1"],
+        "fig": lambda: at.session_state.chat_questions_outputs[1][1],
     }[tab]()
     assert stored is not None
 
     (log,) = logged
     assert log["tab"] == {"dq": "data_questions", "transform": "transform",
-                          "viz": "visualization"}[tab]
+                          "fig": "data_questions"}[tab]
     assert log["question"] == "q" and log["answer"] == "answer"
     assert log["error"] is None
     assert log["df"] is not None
     assert len(log["history"]) == 0
-    assert log["produced_table"] is (tab != "viz")
-    assert log["produced_figure"] is (tab == "viz")
-    assert (log["figure"] is not None) is (tab == "viz")
-    assert (log["experiment"] is not None) is (tab == "viz")
+    assert log["produced_table"] is (tab != "fig")
+    assert log["produced_figure"] is (tab == "fig")
+    assert (log["figure"] is not None) is (tab == "fig")
+    assert (log["experiment"] is not None) is (tab == "fig")
     assert log["code"] == CODE
     # B2: numbers the answer states that the code never produced
     assert tuple(log.get("unverified_numbers", ())) == (
-        ("30",) if tab in ("dq", "viz") else ())
+        ("30",) if tab in ("dq", "fig") else ())
 
 
 def test_transform_preview_shows_the_report(logged, monkeypatch):
@@ -269,7 +273,7 @@ def test_columns_refused_for_their_names_can_be_kept(logged, monkeypatch):
     assert seen == [("Reference_1",)]
 
 
-@pytest.mark.parametrize("tab", ["dq", "transform", "viz"])
+@pytest.mark.parametrize("tab", ["dq", "transform", "fig"])
 def test_empty_turn_says_so(tab, logged, monkeypatch):
     _stub(monkeypatch, tab, empty=True)
     at = AppTest.from_function(tab_script, args=(tab,), default_timeout=30)
@@ -284,7 +288,7 @@ def test_empty_turn_says_so(tab, logged, monkeypatch):
     assert not any("I couldn't produce" in i.value for i in at.info)
 
 
-@pytest.mark.parametrize("tab", ["dq", "transform", "viz", "lc"])
+@pytest.mark.parametrize("tab", ["dq", "transform", "fig", "lc"])
 def test_failed_turn_is_logged_as_an_error(tab, logged, monkeypatch):
     _stub(monkeypatch, tab, fail=True)
     at = _turn(tab)
@@ -339,3 +343,21 @@ def test_transform_tab_explains_a_raw_pipeline_import(source):
     else:
         assert diagnostic.is_supported
         assert "already in Generic shape" not in context
+
+
+def test_each_message_keeps_its_own_table_and_figure(logged, monkeypatch):
+    """Data Questions kept only its latest table, so an earlier answer lost
+    the table it pointed to; Custom Visualization kept each figure. The
+    merged tab keeps both, per message."""
+    _stub(monkeypatch, "dq")
+    at = _turn("dq")
+    _stub(monkeypatch, "fig")
+    at.chat_input(key=INPUT_KEY["fig"]).set_value("plot it").run()
+    at.run()
+    assert not at.exception
+    outputs = at.session_state.chat_questions_outputs
+    assert set(outputs) == {1, 3}
+    assert outputs[1][0] is not None and outputs[1][1] is None
+    assert outputs[3][0] is None and outputs[3][1] is not None
+    tables = [e for e in at.expander if e.label == "Result Table"]
+    assert len(tables) == 1

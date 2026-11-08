@@ -2,7 +2,7 @@
 Main chat panel UI for AI-powered interactions.
 
 The ``display_*`` entry points start each tab's conversation and delegate
-to the tab's UI module. The helpers below are what the four tab UIs share:
+to the tab's UI module. The helpers below are what the three tab UIs share:
 message rendering, example prompts, the usage-limit gate, the chat input,
 and one code-writing turn.
 """
@@ -14,11 +14,16 @@ from ._safe_markdown import safe_markdown, safe_stream
 from ._turn_errors import clear_failure, record_failure
 
 
-def render_messages(session) -> None:
-    """Each message, its code (if any) under "View code", and feedback."""
-    for msg in session.messages:
+def render_messages(session, outputs=None) -> None:
+    """Each message, its code (if any) under "View code", and feedback.
+
+    ``outputs(index)`` draws what that message's turn returned (a table, a
+    figure) under its text."""
+    for i, msg in enumerate(session.messages):
         with st.chat_message(msg.role):
             st.markdown(safe_markdown(msg.content))
+            if outputs is not None:
+                outputs(i)
             if msg.code:
                 with st.expander("View code"):
                     st.code(msg.code, language="python")
@@ -96,7 +101,7 @@ def run_code_turn(
                 generator, finalize = stream()
                 streamed = st.write_stream(safe_stream(generator))
             if answer_streams:
-                # Data Questions writes the answer from the code's output
+                # Ask Your Data writes the answer from the code's output
                 # (about 3 s after the code's own few): show it as it is
                 # written, above the spinner.
                 answer = st.empty()
@@ -153,30 +158,8 @@ def display_transform_chat(source_df) -> None:
     render_transform_chat(source_df)
 
 
-def display_viz_chat(analysis_df, experiment) -> None:
-    """Display the Custom Visualization tab's chat.
-
-    Creates a new viz session if one doesn't exist, then delegates to the
-    viz-specific UI.
-
-    Args:
-        analysis_df: The analysis-ready DataFrame.
-        experiment: Experiment configuration.
-    """
-    from app.workflows.ai_chat import AIChatWorkflow
-    from ._viz_generation_ui import render_viz_chat
-
-    # Initialize session if needed
-    if st.session_state.get('chat_viz_session') is None:
-        st.session_state.chat_viz_session = (
-            AIChatWorkflow.start_viz_session(analysis_df, experiment)
-        )
-
-    render_viz_chat(analysis_df, experiment)
-
-
 def display_data_questions_chat(source_df) -> None:
-    """Display the AI Data Questions chat panel.
+    """Display the Ask Your Data chat panel.
 
     Creates a new data questions session if one doesn't exist,
     then delegates to the questions-specific UI.

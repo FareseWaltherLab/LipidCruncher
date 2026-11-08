@@ -139,23 +139,6 @@ class AIStudioWorkflow:
         return normalization_result.config.method
 
     @staticmethod
-    def derive_experiment(df: pd.DataFrame) -> ExperimentConfig:
-        """Create a minimal single-condition ExperimentConfig from numeric columns.
-
-        This allows the visualization chat to work without the user manually
-        defining experimental conditions.
-        """
-        intensity_cols = [c for c in df.columns if c.startswith("intensity[")]
-        if not intensity_cols:
-            intensity_cols = df.select_dtypes(include="number").columns.tolist()
-
-        n_samples = max(len(intensity_cols), 1)
-        return ExperimentConfig(
-            conditions_list=["All Samples"],
-            number_of_samples_list=[n_samples],
-        )
-
-    @staticmethod
     def detect_sample_prefix(df: pd.DataFrame) -> Optional[str]:
         """Return 'intensity' or 'concentration' depending on which sample-column
         prefix the DataFrame uses. Module 1 emits one or the other depending on

@@ -37,8 +37,9 @@ class EvalCase:
         id: Stable identifier, used in test output.
         question: Verbatim user prompt.
         dataset: Fixture to load.
-        tab: 'data_questions', 'visualization', 'transform' or
-            'lc_questions'.
+        tab: 'data_questions' (the Ask Your Data tab, figures included;
+            Custom Visualization's cases joined it in 2026-11),
+            'transform' or 'lc_questions'.
         expect_lc: Substrings that must appear in the generated code —
             the pipeline calls this question should route to (any one).
         expect_lc_all: Calls that must all appear as well.
@@ -110,7 +111,6 @@ CASES = (
         id="saturation_tg",
         question="Show me the saturation profile for TG, comparing WT and KO.",
         dataset=CANONICAL,
-        tab="visualization",
         expect_lc=("lc.saturation",),
         expect=("figure",),
         note=(
@@ -126,7 +126,6 @@ CASES = (
             "showing log2 fold change, colored by direction."
         ),
         dataset=CANONICAL,
-        tab="visualization",
         expect_lc=("lc.compare_species", "lc.volcano"),
         expect_lc_all=("lc.colored_bars",),
         forbid=HAND_ROLLED_STATS,
@@ -143,7 +142,6 @@ CASES = (
         id="volcano_plot",
         question="Make a volcano plot comparing WT and KO.",
         dataset=CANONICAL,
-        tab="visualization",
         expect_lc=("lc.volcano",),
         forbid=HAND_ROLLED_STATS,
         expect=("figure",),
@@ -156,7 +154,6 @@ CASES = (
             "WT and KO."
         ),
         dataset=CANONICAL,
-        tab="visualization",
         expect_lc=("lc.chain_length",),
         # Parsing chain composition by hand re-invents the counting
         # convention the biologist is signing off on (see plan 3.D).
@@ -338,7 +335,6 @@ CASES = (
             "total PC, one pie per condition."
         ),
         dataset=CANONICAL,
-        tab="visualization",
         expect_lc_all=("lc.pie_charts", "species_class", "lc.combine_pies"),
         forbid=("go.Pie(",),
         expect=("figure",),
@@ -354,7 +350,6 @@ CASES = (
             "bonds, summed over all chains, one line per condition."
         ),
         dataset=CANONICAL,
-        tab="visualization",
         expect_lc=("lc.chain_length",),
         forbid=("re.findall", "re.search", "split(':')", 'split(":")'),
         expect=("figure",),
@@ -420,6 +415,18 @@ CASES = (
         expect=("table",),
         expect_mentions=("pmol",),
         note="Internal-standard values are pmol per sample: say so.",
+    ),
+    EvalCase(
+        id="class_count_without_classkey",
+        question="How many species per class?",
+        dataset=STUDIO,
+        expect=("table",),
+        note=(
+            "2026-11-08, found in the browser: the class-count example used "
+            "lc.class_summary() alone, which needs ClassKey; an upload named "
+            "its column 'Class' and the turn errored. This one says "
+            "'LipidClass'."
+        ),
     ),
 )
 

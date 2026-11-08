@@ -24,7 +24,6 @@ class AIStudioState:
 
     # --- AI Chat (owner: ai_chat/chat_panel.py) ---
     chat_transform_session: Optional[Any] = None
-    chat_viz_session: Optional[Any] = None
     chat_data_questions_session: Optional[Any] = None
     # About the app rather than the data, so no reset clears it (see
     # _ROUTING_FIELDS); the AI Studio's Back to Home does.
@@ -36,23 +35,24 @@ class AIStudioState:
     # turn / confirmed by the user as samples for this conversation.
     chat_transform_refused_metadata: Tuple[str, ...] = ()
     chat_transform_kept_columns: Tuple[str, ...] = ()
-    chat_viz_figures: Dict[str, Any] = field(default_factory=dict)
+    # Ask Your Data: message index -> (table, figure) that turn returned,
+    # either None, replayed under that message on every rerun.
+    chat_questions_outputs: Dict[int, Any] = field(default_factory=dict)
 
     # --- AI Studio (owner: ui/ai_studio/; written by AIStudioAdapter) ---
     # `chat_studio_df_original` holds the dataframe with the user's
     # original sample column names (what they uploaded / imported). It is
-    # what the data preview, Data Questions, and Transform tabs read.
-    # `chat_studio_df` holds a reordered/renamed copy with sample columns
-    # normalized to `intensity[s1..sN]` per condition — required by the
-    # Custom Visualization tab's plotters because ExperimentConfig
-    # generates its sample labels as s1..sN.
+    # what the data preview and Transform tab read. `chat_studio_df` holds
+    # a reordered/renamed copy with sample columns normalized to
+    # `intensity[s1..sN]` per condition — what Ask Your Data reads, because
+    # ExperimentConfig (and so `lc`) generates its sample labels as s1..sN.
     chat_studio_df: Optional[pd.DataFrame] = None
     chat_studio_df_original: Optional[pd.DataFrame] = None
     chat_studio_experiment: Optional[Any] = None
     # Tracks where the AI Studio data came from. None for direct upload,
-    # 'normalized' or 'raw' for the two pipeline-import options. Used to
-    # hard-lock Custom Visualization when the source is 'raw' regardless
-    # of whether the columns happen to satisfy the validation check.
+    # 'qc_filtered', 'normalized' or 'raw' for the pipeline imports. Ask
+    # Your Data tells the AI when the data are 'raw', so its answers and
+    # figures say so; Transform is pointless for the processed imports.
     chat_studio_pipeline_source: Optional[str] = None
     # Detected format string (DataFormat.value) for the uploaded file.
     # Used to block the AI Studio flow when a known standard format
@@ -66,19 +66,19 @@ class AIStudioState:
     # arithmetic when the raw CSV inferred string dtypes.
     chat_studio_sample_columns_original: Optional[List[str]] = None
     # Names of the same columns AFTER the apply-step rename to
-    # `{intensity|concentration}[s1..sN]`. Used when the Custom Viz
-    # tab pre-coerces `chat_studio_df` (the renamed copy).
+    # `{intensity|concentration}[s1..sN]`. Used when Ask Your Data
+    # pre-coerces `chat_studio_df` (the renamed copy).
     chat_studio_sample_columns_renamed: Optional[List[str]] = None
 
 
 # The 'ai_studio' stage of _STAGES (see _Stage).
 AI_STUDIO_KEYS = dict(
     fields=frozenset({
-        'chat_transform_session', 'chat_viz_session',
+        'chat_transform_session',
         'chat_data_questions_session', 'chat_mode', 'chat_transform_result',
         'chat_transform_report', 'chat_transform_refused_metadata',
         'chat_transform_kept_columns',
-        'chat_viz_figures',
+        'chat_questions_outputs',
         'chat_studio_df', 'chat_studio_df_original', 'chat_studio_experiment',
         'chat_studio_pipeline_source', 'chat_studio_detected_format',
         'chat_studio_sample_columns_original',
@@ -88,14 +88,14 @@ AI_STUDIO_KEYS = dict(
         'chat_input', 'chat_apply_transform', 'chat_download_transform',
         'chat_download_removed_lipids', 'chat_keep_metadata_columns',
         'chat_input_questions', 'chat_input_transform',
-        'chat_input_lc_questions', 'chat_retry_lc', 'chat_input_viz',
+        'chat_input_lc_questions', 'chat_retry_lc',
         'ai_studio_file_uploader', 'ai_studio_import_pipeline',
         'ai_studio_pipeline_choice', 'studio_sample_family',
         'studio_sample_cols_select', 'studio_conditions_editor',
         'studio_exclude_samples', 'studio_sample_cols_radio',
         'studio_bqc_radio', 'studio_bqc_label_radio',
         'studio_confirm_checkbox',
-        'chat_retry_dq', 'chat_retry_viz', 'chat_retry_transform',
+        'chat_retry_dq', 'chat_retry_transform',
     }),
     # The data the tabs work on and what they derived from it, cleared
     # with it (AQ13: these used to survive a reset that cleared
@@ -105,13 +105,11 @@ AI_STUDIO_KEYS = dict(
         'chat_studio_file_id', 'chat_studio_upload_kept',
         'chat_studio_normalization',
         'chat_studio_bqc_label',
-        'chat_questions_result_df', 'chat_transform_diagnostic',
-        'chat_viz_validation', 'chat_turn_ids',
+        'chat_transform_diagnostic', 'chat_turn_ids',
         'chat_pending_prompt_dq', 'chat_pending_prompt_transform',
-        'chat_pending_prompt_viz', 'chat_pending_prompt_lc',
+        'chat_pending_prompt_lc',
         'chat_lc_retry_input',
         'chat_dq_last_error', 'chat_dq_failed_input', 'chat_dq_notice',
-        'chat_viz_last_error', 'chat_viz_failed_input', 'chat_viz_notice',
         'chat_transform_last_error', 'chat_transform_failed_input',
         'chat_transform_notice',
     }),
@@ -258,18 +256,15 @@ class AIStudioAdapter:
         st.session_state.chat_data_questions_session = None
         st.session_state.chat_transform_session = None
         st.session_state.chat_transform_diagnostic = None
-        st.session_state.chat_viz_session = None
-        st.session_state.chat_viz_validation = None
-        st.session_state.chat_questions_result_df = None
+        st.session_state.chat_questions_outputs = {}
         st.session_state.chat_transform_result = None
         st.session_state.chat_transform_report = None
         st.session_state.chat_transform_refused_metadata = ()
         st.session_state.chat_transform_kept_columns = ()
-        st.session_state.chat_viz_figures = {}
         # Each data tab's last failed turn, shown with a Retry, and any
         # pending notice were about the old data (the keys of
         # ui/ai_chat/_turn_errors.py).
-        for tab in ('dq', 'transform', 'viz'):
+        for tab in ('dq', 'transform'):
             st.session_state.pop(f'chat_{tab}_last_error', None)
             st.session_state.pop(f'chat_{tab}_failed_input', None)
             st.session_state.pop(f'chat_{tab}_notice', None)
@@ -359,8 +354,8 @@ class AIStudioAdapter:
         #     QC-updated config, so the columns still match.
         #   • Raw imports use `standardized_df`, which has the same column
         #     rename applied, so auto-detection finds intensity[*] too.
-        # Custom Viz is still hard-locked for raw via pipeline_source ==
-        # 'raw' (the data hasn't been cleaned/zero-filtered/normalized).
+        # For 'raw' (not cleaned, zero-filtered or normalized), Ask Your
+        # Data tells the AI so, and its answers and figures say so.
         if pipeline_experiment is not None:
             st.session_state.studio_sample_cols_radio = "Yes"
             # The pipeline's columns are {prefix}[s1..sN], so the Assign
@@ -386,27 +381,25 @@ class AIStudioAdapter:
         snapshot: tuple,
     ) -> None:
         """The apply step's result: the renamed frame and its experiment,
-        which the Data Questions and Custom Visualization tabs work on."""
+        which the Ask Your Data tab works on."""
         st.session_state.chat_studio_df = df
         st.session_state.chat_studio_experiment = experiment
         st.session_state.chat_studio_bqc_label = bqc_label
         # Persist the sample-column names so the sandbox can pre-coerce
         # them to numeric before exposing `df` to AI code. Two lists — one
         # for the original df (used by Transform) and one for the renamed df
-        # (used by Data Questions and Custom Viz). The renamed names are
+        # (used by Ask Your Data). The renamed names are
         # always `{output_prefix}[s1..sN]` derived from the experiment.
         st.session_state.chat_studio_sample_columns_original = list(sample_columns)
         st.session_state.chat_studio_sample_columns_renamed = [
             f'{output_prefix}[{s}]' for s in experiment.full_samples_list
         ]
-        # Data Questions and Custom Viz read the renamed df, whose columns
-        # change on apply, so their sessions start over. Transform reads the
-        # original (which doesn't change on apply); it is still cleared on a
-        # fresh upload via clear_studio_data().
-        st.session_state.chat_viz_session = None
-        st.session_state.chat_viz_figures = {}
+        # Ask Your Data reads the renamed df, whose columns change on
+        # apply, so its session starts over. Transform reads the original
+        # (which doesn't change on apply); it is still cleared on a fresh
+        # upload via clear_studio_data().
         st.session_state.chat_data_questions_session = None
-        st.session_state.chat_questions_result_df = None
+        st.session_state.chat_questions_outputs = {}
         st.session_state.studio_applied_snapshot = snapshot
 
     @staticmethod
@@ -417,24 +410,9 @@ class AIStudioAdapter:
         st.session_state.studio_applied_snapshot = None
 
     @staticmethod
-    def studio_viz_validation(df: pd.DataFrame):
-        """Whether ``df`` has Module 1's columns, checked once per data
-        (cleared with it)."""
-        from ..workflows.ai_chat import AIChatWorkflow
-        validation = st.session_state.get('chat_viz_validation')
-        if validation is None:
-            validation = AIChatWorkflow.validate_module1_output(df)
-            st.session_state.chat_viz_validation = validation
-        return validation
-
-    @staticmethod
-    def studio_viz_experiment(df: pd.DataFrame) -> ExperimentConfig:
-        """The applied experiment, or a single-condition one over ``df``."""
-        experiment = st.session_state.get("chat_studio_experiment")
-        if experiment is None:
-            experiment = AIStudioWorkflow.derive_experiment(df)
-            st.session_state.chat_studio_experiment = experiment
-        return experiment
+    def studio_experiment() -> Optional[ExperimentConfig]:
+        """The experiment applied in the sidebar (None before Confirm)."""
+        return st.session_state.get("chat_studio_experiment")
 
     @classmethod
     def leave_studio_for_main_pipeline(cls) -> None:

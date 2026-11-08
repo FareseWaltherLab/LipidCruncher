@@ -229,6 +229,9 @@ _SAFE_BUILTINS: Dict[str, Any] = {
     "all": all,
     "reversed": reversed,
     "frozenset": frozenset,
+    # Exceptions to catch, e.g. a fallback when an `lc` helper refuses the
+    # data. Without `Exception`, `except Exception:` itself raised NameError.
+    "Exception": Exception,
     "KeyError": KeyError,
     "ValueError": ValueError,
     "TypeError": TypeError,

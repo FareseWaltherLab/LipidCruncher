@@ -285,47 +285,104 @@ class TestFigureHasData:
         assert not figure_has_data(go.Figure())
         assert not figure_has_data(None)
 
-    def test_lc_pie_chart_is_not_called_empty(self):
-        from app.models.chat import ChatMode, ChatSession, SandboxConfig
-        from app.models.experiment import ExperimentConfig
-        from app.workflows.ai_chat import AIChatWorkflow
-        from tests.evals import reference_analysis as ref
-
-        result = AIChatWorkflow._finalize_viz(
-            ChatSession(mode=ChatMode.VISUALIZATION),
-            "A pie chart of WT.",
-            "fig = lc.pie_charts()['WT'].figure",
-            ref.load_canonical(),
-            SandboxConfig(),
-            None,
-            ExperimentConfig(
-                conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
-            ),
-        )
-        assert result.sandbox_result.figure is not None
+    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+    def test_lc_pie_chart_is_not_called_empty(self, mock_loop):
+        result = _figure_turn(mock_loop, "fig = lc.pie_charts()['WT'].figure")
+        assert result.figure is not None
         assert "empty figure" not in result.assistant_message
-        assert "Here's the visualization" in result.assistant_message
 
 
-class TestVizKeepsPrintedOutput:
-    """Regression (AQ7): Custom Viz showed printed output only in an
-    expander drawn just before a rerun, and never put it in the message, so
-    it vanished at once and later turns could not see it."""
+def _figure_turn(mock_loop, code, plan="Plotting.", raw_import=False):
+    """One Ask Your Data turn over the canonical data whose code is ``code``."""
+    from app.models.experiment import ExperimentConfig
+    from tests.evals import reference_analysis as ref
+    df = ref.load_canonical()
+    mock_loop.side_effect = canned_stream(f"{plan}\n\n```python\n{code}\n```")
+    return finish(AIChatWorkflow.stream_data_questions_message(
+        "plot it", AIChatWorkflow.start_data_questions_session(df), df,
+        experiment=ExperimentConfig(conditions_list=["WT", "KO"],
+                                    number_of_samples_list=[3, 3]),
+        normalization="none" if raw_import else None, raw_import=raw_import,
+    ))
 
-    def test_printed_output_is_part_of_the_answer(self):
-        from app.models.chat import ChatMode, ChatSession, SandboxConfig
-        from app.workflows.ai_chat import AIChatWorkflow
-        from tests.evals import reference_analysis as ref
 
-        result = AIChatWorkflow._finalize_viz(
-            ChatSession(mode=ChatMode.VISUALIZATION),
-            "Plotting.",
+@patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
+class TestFiguresInAskYourData:
+    """Custom Visualization merged into Data Questions (2026-11-08): a turn
+    may return a figure, a table, or both, with the viz tab's checks."""
+
+    def test_a_figure_turn_returns_the_figure(self, mock_loop):
+        result = _figure_turn(
+            mock_loop, "fig = px.bar(df, x='ClassKey', y='concentration[s1]')",
+        )
+        assert result.figure is not None and result.result_df is None
+        assert result.session.messages[-1].code
+
+    def test_a_figure_and_a_table_together(self, mock_loop):
+        result = _figure_turn(
+            mock_loop,
+            "result_df = df.groupby('ClassKey').size().reset_index(name='n')\n"
+            "fig = px.bar(result_df, x='ClassKey', y='n')",
+        )
+        assert result.figure is not None and result.result_df is not None
+
+    def test_an_empty_figure_is_not_shown_and_says_why(self, mock_loop):
+        result = _figure_turn(
+            mock_loop,
+            "fig = px.bar(df[df['ClassKey'] == 'nope'], x='ClassKey', "
+            "y='concentration[s1]')",
+        )
+        assert result.figure is None
+        assert "empty figure" in result.assistant_message
+
+    def test_printed_output_is_part_of_the_answer(self, mock_loop):
+        """Regression (AQ7, from Custom Visualization): printed output
+        vanished with a rerun and later turns could not see it."""
+        result = _figure_turn(
+            mock_loop,
             "print('rows plotted: 24')\n"
             "fig = px.bar(df, x='ClassKey', y='concentration[s1]')",
-            ref.load_canonical(), SandboxConfig(), None, None,
         )
         assert "```\nrows plotted: 24\n```" in result.assistant_message
         assert "rows plotted: 24" in result.session.messages[-1].content
+
+    def test_the_answer_is_written_from_the_figure(self, mock_loop, monkeypatch):
+        """Custom Visualization's answers had no lead-in (feedback
+        2026-10-27); the answer call now sees what the figure holds."""
+        from app.services.ai_chat.ai_client import AIClientService
+        sent = {}
+
+        def _complete(messages, system_prompt, config, on_text=None):
+            sent["request"] = messages[0]["content"]
+            return "PC has the most species."
+
+        monkeypatch.setattr(AIClientService, "complete", staticmethod(_complete))
+        result = _figure_turn(
+            mock_loop,
+            "counts = df.groupby('ClassKey').size().reset_index(name='n')\n"
+            "fig = px.bar(counts, x='ClassKey', y='n', title='Species per class')",
+        )
+        assert "<figure>" in sent["request"]
+        assert "title: Species per class" in sent["request"]
+        assert result.assistant_message.startswith("PC has the most species.")
+
+    def test_raw_data_is_said_to_be_raw(self, mock_loop, monkeypatch):
+        """Raw pipeline imports were refused by Custom Visualization; now
+        they are plotted, and the model is told to say they are raw."""
+        from app.services.ai_chat.ai_client import AIClientService
+        sent = {}
+
+        def _complete(messages, system_prompt, config, on_text=None):
+            sent["request"] = messages[0]["content"]
+            return "Done."
+
+        monkeypatch.setattr(AIClientService, "complete", staticmethod(_complete))
+        _figure_turn(mock_loop, "fig = px.bar(df, x='ClassKey', y='concentration[s1]')",
+                     raw_import=True)
+        question = mock_loop.call_args.kwargs["messages"][-1]["content"]
+        for text in (question, sent["request"]):
+            assert "main pipeline's raw data" in text
+            assert "any figure's title" in text
 
 
 class TestRegressions:
@@ -460,12 +517,11 @@ def test_miscolored_direction_chart_is_flagged_in_the_answer(mock_loop):
     mock_loop.side_effect = canned_stream(
         f"Top 10 by significance.\n\n```python\n{MISCOLORED_BARS}```"
     )
-    session = AIChatWorkflow.start_viz_session(df, experiment)
-    result = finish(AIChatWorkflow.stream_viz_message(
-        user_message="top 10 colored by direction", session=session,
-        analysis_df=df, experiment=experiment,
+    session = AIChatWorkflow.start_data_questions_session(df)
+    result = finish(AIChatWorkflow.stream_data_questions_message(
+        "top 10 colored by direction", session, df, experiment=experiment,
     ))
-    assert result.sandbox_result.figure is not None
+    assert result.figure is not None
     assert "colors do not follow the direction" in result.assistant_message
 
 
@@ -642,17 +698,3 @@ class TestTheModelIsToldWhatTheValuesAre:
         question = mock_loop.call_args.kwargs["messages"][-1]["content"]
         assert "units are unknown" in question
 
-    @patch("app.services.ai_chat.ai_client.AIClientService.stream_tool_loop")
-    def test_visualization_gets_the_units(self, mock_loop):
-        from tests.evals import reference_analysis as ref
-        df = ref.load_canonical()
-        experiment = ExperimentConfig(conditions_list=["WT", "KO"],
-                                      number_of_samples_list=[3, 3])
-        mock_loop.side_effect = canned_stream("No code needed.")
-        session = AIChatWorkflow.start_viz_session(df, experiment)
-        finish(AIChatWorkflow.stream_viz_message(
-            user_message="plot", session=session, analysis_df=df,
-            experiment=experiment, normalization="internal_standard",
-        ))
-        question = mock_loop.call_args.kwargs["messages"][-1]["content"]
-        assert "Values are pmol per sample." in question

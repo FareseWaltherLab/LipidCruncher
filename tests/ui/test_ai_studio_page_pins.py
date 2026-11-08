@@ -131,18 +131,22 @@ def _groups(at):
 class TestTabsWithoutData:
     def test_every_data_tab_asks_for_an_upload(self, studio):
         assert any("Upload a CSV in the sidebar to begin" in i.value for i in studio.info)
-        assert _shows(studio, "Data Questions", "Upload a CSV file above to ask")
+        assert _shows(studio, "Ask Your Data", "Upload a CSV file above to ask")
         assert _shows(studio, "Transform to Generic", "Upload a CSV file above to transform")
-        assert _shows(studio, "Custom Visualization", "Upload a CSV file above to create")
         assert _chat_open(studio, "LipidCruncher Questions")
+
+    def test_three_tabs_ask_your_data_before_transform(self, studio):
+        """Data Questions and Custom Visualization merged (2026-11-08)."""
+        assert [t.label for t in studio.tabs] == [
+            "LipidCruncher Questions", "Ask Your Data", "Transform to Generic",
+        ]
 
 
 class TestOwnUpload:
     def test_before_confirm_only_transform_opens(self, studio):
         at = studio.upload('own.csv', OWN_CSV)
-        assert _shows(at, "Data Questions", NOT_CONFIRMED)
+        assert _shows(at, "Ask Your Data", NOT_CONFIRMED)
         assert _chat_open(at, "Transform to Generic")
-        assert _shows(at, "Custom Visualization", NOT_CONFIRMED)
         assert any(
             s.value.startswith("**own.csv** — 2 rows, 5 columns") for s in at.success
         )
@@ -156,13 +160,8 @@ class TestOwnUpload:
         assert at.session_state['chat_studio_sample_columns_renamed'] == [
             'intensity[s1]', 'intensity[s2]', 'intensity[s3]', 'intensity[s4]',
         ]
-        assert _chat_open(at, "Data Questions")
+        assert _chat_open(at, "Ask Your Data")
         assert _chat_open(at, "Transform to Generic")
-
-    def test_custom_viz_names_the_missing_module1_columns(self, studio):
-        at = _confirm(studio.upload('own.csv', OWN_CSV))
-        assert _shows(at, "Custom Visualization", "Missing columns: `LipidMolec`, `ClassKey`.")
-        assert not _chat_open(at, "Custom Visualization")
 
     def test_a_new_upload_starts_over(self, studio):
         at = _confirm(studio.upload('own.csv', OWN_CSV))
@@ -176,7 +175,7 @@ class TestOwnUpload:
         assert at.session_state['chat_studio_experiment'] is None
         assert at.session_state['chat_data_questions_session'] is None
         assert at.sidebar.checkbox(key='studio_confirm_checkbox').value is False
-        assert _shows(at, "Data Questions", NOT_CONFIRMED)
+        assert _shows(at, "Ask Your Data", NOT_CONFIRMED)
 
 
 class TestBadFiles:
@@ -196,7 +195,7 @@ class TestStandardFormatUpload:
         at = studio.upload('ls.csv', LIPIDSEARCH_CSV)
         assert any("**LipidSearch** dataset detected" in w.value for w in at.sidebar.warning)
         assert any("looks like a **LipidSearch** dataset" in w.value for w in at.warning)
-        for label in ("Data Questions", "Transform to Generic", "Custom Visualization"):
+        for label in ("Ask Your Data", "Transform to Generic"):
             assert _shows(at, label, BLOCKED), label
             assert not _chat_open(at, label), label
         assert "Sample Columns" not in [h.value for h in at.sidebar.subheader]
@@ -230,7 +229,7 @@ class TestSidebarSetup:
         at.run()
         assert any("Every sample needs a condition." in e.value for e in at.sidebar.error)
         assert "Confirm Inputs" not in [h.value for h in at.sidebar.subheader]
-        assert _shows(at, "Data Questions", NOT_CONFIRMED)
+        assert _shows(at, "Ask Your Data", NOT_CONFIRMED)
 
     def test_bqc_needs_a_condition_with_two_samples(self, studio):
         at = studio.upload('own.csv', OWN_CSV)
@@ -247,26 +246,26 @@ class TestSidebarSetup:
 
 
 class TestPipelineImports:
-    def test_raw_import_keeps_custom_viz_locked(self, pipeline):
+    def test_raw_import_opens_ask_your_data(self, pipeline):
+        """Custom Visualization refused raw imports; the merged tab takes
+        them, and the AI is told they are raw (see build_values_context)."""
         at = pipeline.import_('Raw uploaded data (from pipeline)')
         assert any(
             s.value.startswith("**Raw data from main pipeline (unfiltered, un-normalized")
             for s in at.success
         )
-        assert _chat_open(at, "Data Questions")
+        assert _chat_open(at, "Ask Your Data")
         assert _chat_open(at, "Transform to Generic")
-        assert _shows(at, "Custom Visualization", "You imported **raw** data")
-        assert not _chat_open(at, "Custom Visualization")
+        assert at.session_state['chat_studio_pipeline_source'] == 'raw'
 
-    def test_normalized_import_opens_custom_viz_not_transform(self, pipeline):
+    def test_normalized_import_opens_ask_your_data_not_transform(self, pipeline):
         at = pipeline.import_('Normalized data (from pipeline)')
         assert any(
             s.value.startswith("**Normalized data from main pipeline**") for s in at.success
         )
-        assert _chat_open(at, "Data Questions")
+        assert _chat_open(at, "Ask Your Data")
         assert _shows(at, "Transform to Generic", "imported as **normalized** data")
         assert not _chat_open(at, "Transform to Generic")
-        assert _chat_open(at, "Custom Visualization")
 
     def test_before_an_import_the_sidebar_offers_one(self, pipeline):
         assert "**Or import from the main pipeline:**" in [
@@ -366,7 +365,7 @@ class TestNewDataDropsOldErrors:
             at.chat_input(key=key).set_value('old question').run()
             at.run()  # the turn's rerun
             _ok(at)
-        for label in ("Data Questions", "Transform to Generic"):
+        for label in ("Ask Your Data", "Transform to Generic"):
             tab = next(t for t in at.tabs if t.label == label)
             assert any("API down" in e.value for e in tab.error), label
         return at
@@ -374,7 +373,7 @@ class TestNewDataDropsOldErrors:
     def test_a_new_upload_drops_them(self, studio, failing_ai):
         at = self._fail_both_tabs(studio)
         at = _confirm(studio.upload('other.csv', OWN_CSV.replace(b'KO', b'HET')))
-        for label in ("Data Questions", "Transform to Generic"):
+        for label in ("Ask Your Data", "Transform to Generic"):
             tab = next(t for t in at.tabs if t.label == label)
             assert not any("API down" in e.value for e in tab.error), label
             assert not [b for b in tab.button if b.label == "Retry"], label

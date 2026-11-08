@@ -1,8 +1,7 @@
 """
 Unit tests for AI Studio validation logic.
 
-Tests format diagnostic (transform tab) and Module 1 output
-validation (viz tab) — no AI calls needed.
+Tests the format diagnostic (transform tab) — no AI calls needed.
 """
 import pandas as pd
 import pytest
@@ -52,38 +51,6 @@ def unknown_df():
         "retention_time": [10.1, 11.2, 9.8],
         "area_1": [1000, 2000, 3000],
         "area_2": [1100, 1900, 3100],
-    })
-
-
-@pytest.fixture
-def module1_intensity_df():
-    """DataFrame that has been through Module 1 (intensity columns)."""
-    return pd.DataFrame({
-        "LipidMolec": ["PC 34:1", "PE 36:2"],
-        "ClassKey": ["PC", "PE"],
-        "intensity[s1]": [100.0, 200.0],
-        "intensity[s2]": [110.0, 190.0],
-    })
-
-
-@pytest.fixture
-def module1_concentration_df():
-    """DataFrame that has been through Module 1 (concentration columns)."""
-    return pd.DataFrame({
-        "LipidMolec": ["PC 34:1", "PE 36:2"],
-        "ClassKey": ["PC", "PE"],
-        "concentration[s1]": [10.0, 20.0],
-        "concentration[s2]": [11.0, 19.0],
-    })
-
-
-@pytest.fixture
-def raw_df():
-    """Raw DataFrame that has NOT been through Module 1."""
-    return pd.DataFrame({
-        "lipid_name": ["PC(34:1)", "PE(36:2)"],
-        "sample1": [100, 200],
-        "sample2": [110, 190],
     })
 
 
@@ -164,72 +131,3 @@ class TestDiagnosticInSession:
     def test_no_diagnostic_no_preanalysis(self, generic_df):
         session = AIChatWorkflow.start_transform_session(generic_df)
         assert "Pre-Analysis" not in session.schema_context
-
-
-# =========================================================================
-# Module 1 Validation Tests
-# =========================================================================
-
-class TestValidateModule1Output:
-
-    def test_valid_intensity_data(self, module1_intensity_df):
-        result = AIChatWorkflow.validate_module1_output(module1_intensity_df)
-        assert result.is_valid is True
-        assert result.has_lipid_molec is True
-        assert result.has_class_key is True
-        assert len(result.intensity_columns) == 2
-
-    def test_valid_concentration_data(self, module1_concentration_df):
-        result = AIChatWorkflow.validate_module1_output(
-            module1_concentration_df
-        )
-        assert result.is_valid is True
-        assert len(result.concentration_columns) == 2
-
-    def test_raw_data_invalid(self, raw_df):
-        result = AIChatWorkflow.validate_module1_output(raw_df)
-        assert result.is_valid is False
-        assert result.has_lipid_molec is False
-        assert result.has_class_key is False
-
-    def test_missing_classkey(self):
-        df = pd.DataFrame({
-            "LipidMolec": ["PC 34:1"],
-            "intensity[s1]": [100.0],
-        })
-        result = AIChatWorkflow.validate_module1_output(df)
-        assert result.is_valid is False
-        assert result.has_lipid_molec is True
-        assert result.has_class_key is False
-
-    def test_missing_lipidmolec(self):
-        df = pd.DataFrame({
-            "ClassKey": ["PC"],
-            "intensity[s1]": [100.0],
-        })
-        result = AIChatWorkflow.validate_module1_output(df)
-        assert result.is_valid is False
-        assert result.has_lipid_molec is False
-        assert result.has_class_key is True
-
-    def test_missing_sample_columns(self):
-        df = pd.DataFrame({
-            "LipidMolec": ["PC 34:1"],
-            "ClassKey": ["PC"],
-            "some_value": [100.0],
-        })
-        result = AIChatWorkflow.validate_module1_output(df)
-        assert result.is_valid is False
-        assert len(result.intensity_columns) == 0
-        assert len(result.concentration_columns) == 0
-
-    def test_valid_message_includes_counts(self, module1_intensity_df):
-        result = AIChatWorkflow.validate_module1_output(module1_intensity_df)
-        assert "2" in result.message  # 2 lipid species or 2 intensity columns
-        assert "intensity" in result.message
-
-    def test_invalid_message_lists_missing(self, raw_df):
-        result = AIChatWorkflow.validate_module1_output(raw_df)
-        assert "LipidMolec" in result.message
-        assert "ClassKey" in result.message
-        assert "Module 1" in result.message

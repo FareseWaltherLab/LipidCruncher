@@ -1,10 +1,12 @@
 """
-Data Questions: the AI chat workflow's code execution and answer writing
-for the Data Questions tab. Pure logic — no Streamlit dependencies.
+Ask Your Data: the AI chat workflow's code execution and answer writing
+for the Ask Your Data tab (internally still ``data_questions``), whose
+turns return a table, a figure, or both. Pure logic — no Streamlit
+dependencies.
 """
 import logging
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import pandas as pd
 
@@ -13,7 +15,7 @@ from ..models.experiment import ExperimentConfig
 from ..services.ai_chat.ai_client import AIClientService
 from ..services.ai_chat.codebase_tools import TOOL_DEFINITIONS, execute_tool
 from ..services.ai_chat.exceptions import AIClientError
-from ..services.ai_chat.output_checks import check_lipid_table
+from ..services.ai_chat.output_checks import check_direction_colors, check_lipid_table
 from ..services.ai_chat.prompt_templates import (
     answer_from_results_system_prompt,
     build_answer_request,
@@ -31,6 +33,55 @@ from .pipeline_api import PipelineAPI
 logger = logging.getLogger(__name__)
 
 
+# Trace attributes that carry plotted data. Only x/y was checked before, so
+# pies, sunbursts and treemaps (values/labels), heatmaps and images (z) and
+# parallel coordinates (dimensions) were all reported as empty figures.
+_TRACE_DATA_ATTRS = (
+    "x", "y", "z", "values", "labels", "r", "lat", "lon", "dimensions", "cells",
+)
+
+
+def figure_has_data(fig) -> bool:
+    """True if any trace of ``fig`` holds at least one data point."""
+    for trace in getattr(fig, "data", None) or ():
+        for attr in _TRACE_DATA_ATTRS:
+            value = getattr(trace, attr, None)
+            if attr == "cells":  # go.Table: the data is in cells.values
+                value = getattr(value, "values", None)
+            try:
+                if value is not None and len(value) > 0:
+                    return True
+            except TypeError:
+                continue
+    return False
+
+
+def _figure_summary(fig, limit: int = 6000) -> str:
+    """What the figure shows, for the answer call: its titles and each
+    trace's data (the first 50 points), so the answer can introduce it with
+    numbers the figure really holds."""
+    layout = fig.layout
+    lines = [f"title: {layout.title.text or '(none)'}"]
+    for axis in ("xaxis", "yaxis"):
+        title = getattr(layout, axis).title.text
+        if title:
+            lines.append(f"{axis[0]} axis: {title}")
+    for trace in fig.data:
+        lines.append(f"{trace.type} trace '{trace.name or ''}':")
+        for attr in ("x", "y", "z", "labels", "values"):
+            value = getattr(trace, attr, None)
+            try:
+                if value is None or len(value) == 0:
+                    continue
+            except TypeError:
+                continue
+            points = list(value)
+            shown = ", ".join(str(v) for v in points[:50])
+            more = f" … ({len(points)} in all)" if len(points) > 50 else ""
+            lines.append(f"  {attr}: {shown}{more}")
+    return "\n".join(lines)[:limit]
+
+
 @dataclass(frozen=True)
 class DataQuestionsStepResult:
     """Result of a single data questions conversation turn.
@@ -39,6 +90,8 @@ class DataQuestionsStepResult:
         session: Updated chat session with new messages appended.
         assistant_message: The full assistant response text for display.
         result_df: Optional DataFrame if the AI computed a summary table.
+        figure: Optional Plotly figure the code drew (None if it drew
+            nothing, or an empty figure).
         code: Optional code that was executed to compute the answer.
         unverified_numbers: Numbers the explanation states that the code
             never produced (logged, not shown; see ``_unverified_numbers``).
@@ -47,6 +100,7 @@ class DataQuestionsStepResult:
     session: ChatSession
     assistant_message: str = ""
     result_df: Optional[pd.DataFrame] = None
+    figure: Any = None
     code: str = ""
     unverified_numbers: Tuple[str, ...] = ()
     sandbox_result: Optional[SandboxResult] = None
@@ -61,8 +115,9 @@ def _answer_from_results(
     ai_config: AIConfig,
     values: str = "",
     on_answer: Optional[Callable[[str], None]] = None,
+    figure=None,
 ) -> Optional[str]:
-    """A second, small call that writes the Data Questions answer from the
+    """A second, small call that writes the Ask Your Data answer from the
     code's actual output, so its numbers are results, not guesses.
     ``on_answer`` receives the answer's text as it streams.
 
@@ -83,6 +138,7 @@ def _answer_from_results(
         answer = AIClientService.complete(
             messages=[{"role": "user", "content": build_answer_request(
                 question, plan, code, stdout, table, values,
+                _figure_summary(figure) if figure is not None else None,
             )}],
             system_prompt=answer_from_results_system_prompt(),
             config=ai_config.model_copy(update={"max_tokens": 1024}),
@@ -95,7 +151,7 @@ def _answer_from_results(
 
 
 class DataQuestionsWorkflow:
-    """The Data Questions tab: the model's pandas code run in the sandbox,
+    """The Ask Your Data tab: the model's code run in the sandbox,
     then the answer written from what it printed. Static methods only;
     AIChatWorkflow inherits them."""
 
@@ -159,6 +215,7 @@ class DataQuestionsWorkflow:
         """
         explanation, code = AIClientService.extract_code_block(response_text)
         result_df = None
+        figure = None
         stdout = ""
         answer = None
         sandbox_result = None
@@ -187,13 +244,28 @@ class DataQuestionsWorkflow:
                 )
             elif sandbox_result.success:
                 result_df = sandbox_result.result_df
+                notes = []
+                if sandbox_result.figure is not None:
+                    if figure_has_data(sandbox_result.figure):
+                        figure = sandbox_result.figure
+                        # Shown to the user, and seen by the model next turn.
+                        notes += check_direction_colors(figure)
+                    else:
+                        notes.append(
+                            "The code ran without errors but drew an empty "
+                            "figure (no data was plotted). This usually means "
+                            "a filter, group-by, or column-name mismatch "
+                            "removed every row before plotting. Open "
+                            "**View code** to see what was generated, then "
+                            "say what to fix and I'll adjust."
+                        )
                 # The explanation was written before the code ran; the
                 # answer is written from what the code actually produced.
                 question = session.messages[-1].content if session.messages else ""
                 answer = _answer_from_results(
                     question, explanation, code,
                     stdout, result_df, ai_config or AIConfig(), values,
-                    on_answer,
+                    on_answer, figure,
                 )
                 parts = []
                 if answer:
@@ -214,8 +286,9 @@ class DataQuestionsWorkflow:
                 # Without this lead-in the empty assistant_text triggers
                 # the "I wasn't able to generate a response" fallback,
                 # which contradicts the table rendered alongside it.
-                if not parts and result_df is not None:
+                if not parts and (result_df is not None or figure is not None):
                     parts.append("Here's the result:")
+                parts += notes
                 if sandbox_result.methods:
                     parts.append(_methods_note(sandbox_result.methods))
                 assistant_text = "\n\n".join(parts)
@@ -246,10 +319,11 @@ class DataQuestionsWorkflow:
             session=session,
             assistant_message=assistant_text,
             result_df=result_df,
+            figure=figure,
             code=code,
             unverified_numbers=_unverified_numbers(
                 session, f"{explanation}\n\n{answer or ''}", code,
-                stdout=stdout, result_df=result_df,
+                stdout=stdout, result_df=result_df, figure=figure,
             ),
             sandbox_result=sandbox_result,
         )
@@ -265,15 +339,17 @@ class DataQuestionsWorkflow:
         experiment: Optional[ExperimentConfig] = None,
         bqc_label: Optional[str] = None,
         normalization: Optional[str] = None,
+        raw_import: bool = False,
     ):
-        """Handle one user message in the data questions chat.
+        """Handle one user message in the Ask Your Data chat.
 
         Appends the user message, then returns ``(explanation_generator,
         finalize)``. The caller streams the explanation, then calls
         ``finalize()`` to execute any code and obtain a
         ``DataQuestionsStepResult``; ``finalize(on_answer=...)`` also
         streams the written answer to ``on_answer``. ``normalization`` is the main
-        pipeline's method for imported data (None for an upload).
+        pipeline's method for imported data (None for an upload);
+        ``raw_import`` marks the main pipeline's raw data.
         """
         if ai_config is None:
             ai_config = AIConfig()
@@ -287,7 +363,7 @@ class DataQuestionsWorkflow:
         exp_context = build_experiment_context(experiment)
         if exp_context:
             context = f"{context}\n\n{exp_context}"
-        values = build_values_context(normalization)
+        values = build_values_context(normalization, raw_import)
         context = f"{context}\n\n{values}"
         augmented_message = f"{context}\n\n{user_message}"
         history = session.to_api_messages()[:-1]

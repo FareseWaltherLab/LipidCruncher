@@ -194,8 +194,8 @@ def _display_sample_columns_sidebar(df: pd.DataFrame) -> Optional[tuple]:
 def _display_studio_exclusion_sidebar(sample_names: list) -> list:
     """Render the optional 'Exclude Samples' block, mirroring the main app.
 
-    Excluded samples are left out of the experiment and of the data the Data
-    Questions and Custom Visualization tabs see; excluding every sample of a
+    Excluded samples are left out of the experiment and of the data the Ask
+    Your Data tab sees; excluding every sample of a
     condition drops that condition. Returns the excluded sample names.
     """
     key = 'studio_exclude_samples'
@@ -213,7 +213,7 @@ def _display_studio_exclusion_sidebar(sample_names: list) -> list:
             'Samples to exclude',
             sample_names,
             help=(
-                "Left out of Data Questions and Custom Visualization. "
+                "Left out of Ask Your Data. "
                 "Excluding every sample of a condition drops that condition. "
                 "The remaining samples are renumbered s1, s2, …"
             ),

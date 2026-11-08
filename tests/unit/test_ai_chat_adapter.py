@@ -26,9 +26,9 @@ class TestSessionStateChatKeys:
         state = SessionState()
         assert state.chat_transform_session is None
 
-    def test_chat_viz_session_default_none(self):
+    def test_chat_data_questions_session_default_none(self):
         state = SessionState()
-        assert state.chat_viz_session is None
+        assert state.chat_data_questions_session is None
 
     def test_chat_mode_default_none(self):
         state = SessionState()
@@ -38,16 +38,16 @@ class TestSessionStateChatKeys:
         state = SessionState()
         assert state.chat_transform_result is None
 
-    def test_chat_viz_figures_default_empty_dict(self):
+    def test_chat_questions_outputs_default_empty_dict(self):
         state = SessionState()
-        assert state.chat_viz_figures == {}
+        assert state.chat_questions_outputs == {}
 
     def test_chat_keys_in_session_state_fields(self):
         """All chat_* fields exist in the SessionState dataclass."""
         field_names = {f.name for f in fields(SessionState)}
         expected = {
-            'chat_transform_session', 'chat_viz_session', 'chat_mode',
-            'chat_transform_result', 'chat_viz_figures',
+            'chat_transform_session', 'chat_data_questions_session',
+            'chat_mode', 'chat_transform_result', 'chat_questions_outputs',
         }
         assert expected.issubset(field_names)
 
@@ -68,21 +68,6 @@ class TestWorkflowSessionCreation:
         assert "lipid" in session.schema_context
         assert len(session.messages) == 0
 
-    def test_start_viz_session(self):
-        df = pd.DataFrame({
-            "LipidMolec": ["PC 34:1"],
-            "ClassKey": ["PC"],
-            "intensity[s1]": [100.0],
-            "intensity[s2]": [110.0],
-        })
-        experiment = ExperimentConfig(
-            conditions_list=["Control", "Treatment"],
-            number_of_samples_list=[1, 1],
-        )
-        session = AIChatWorkflow.start_viz_session(df, experiment)
-        assert session.mode == ChatMode.VISUALIZATION
-        assert "LipidMolec" in session.schema_context
-
     def test_transform_session_preserves_schema(self):
         """Schema context is set once and persists through messages."""
         df = pd.DataFrame({"col_a": [1, 2, 3], "col_b": [4, 5, 6]})
@@ -101,20 +86,20 @@ class TestModuleImports:
     def test_import_chat_panel(self):
         from app.ui.ai_chat import chat_panel
         assert hasattr(chat_panel, 'display_transform_chat')
-        assert hasattr(chat_panel, 'display_viz_chat')
+        assert hasattr(chat_panel, 'display_data_questions_chat')
 
     def test_import_data_transform_ui(self):
         from app.ui.ai_chat import _data_transform_ui
         assert hasattr(_data_transform_ui, 'render_transform_chat')
 
-    def test_import_viz_generation_ui(self):
-        from app.ui.ai_chat import _viz_generation_ui
-        assert hasattr(_viz_generation_ui, 'render_viz_chat')
+    def test_import_data_questions_ui(self):
+        from app.ui.ai_chat import _data_questions_ui
+        assert hasattr(_data_questions_ui, 'render_data_questions_chat')
 
     def test_import_ai_chat_package(self):
-        from app.ui.ai_chat import display_transform_chat, display_viz_chat
+        from app.ui.ai_chat import display_data_questions_chat, display_transform_chat
         assert callable(display_transform_chat)
-        assert callable(display_viz_chat)
+        assert callable(display_data_questions_chat)
 
 
 # ---------------------------------------------------------------------------

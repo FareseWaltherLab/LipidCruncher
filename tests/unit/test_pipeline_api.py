@@ -329,19 +329,20 @@ class TestPromptsAdvertisePipelineFirst:
         from app.services.ai_chat.prompt_templates import (
             data_questions_system_prompt,
         )
-        from app.services.ai_chat.viz_generator import _viz_system_prompt
-        for prompt in (data_questions_system_prompt(), _viz_system_prompt()):
+        for prompt in (data_questions_system_prompt(),):
             assert "Pipeline first" in prompt
             assert "lc.compare_species" in prompt
 
-    def test_viz_prompt_colors_bars_with_lc_colored_bars(self):
+    def test_figure_rules_color_bars_with_lc_colored_bars(self):
         """2026-10-21: 3 of 6 "colored by direction" charts listed the
         colors, then re-sorted the bars, so lipids got another lipid's
         direction color. The prompt and its worked example taught that
         list; they now use lc.colored_bars, which reads each bar's color
         from its own row, and say to build any other list last."""
-        from app.services.ai_chat.viz_generator import _viz_system_prompt
-        prompt = _viz_system_prompt()
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        prompt = data_questions_system_prompt()
         assert "use `lc.colored_bars`" in prompt
         assert "lc.colored_bars(top15, x='LipidMolec'" in prompt  # the example
         assert "bar_colors = [" not in prompt
@@ -366,10 +367,20 @@ class TestPromptsAdvertisePipelineFirst:
         from app.services.ai_chat.prompt_templates import (
             data_questions_system_prompt,
         )
-        from app.services.ai_chat.viz_generator import _viz_system_prompt
-        for prompt in (data_questions_system_prompt(), _viz_system_prompt()):
+        for prompt in (data_questions_system_prompt(),):
             assert "extracting fatty acid chain composition" not in prompt
             assert "for carbons or double bonds use `lc.chain_length`" in prompt
+
+    def test_class_count_example_works_without_classkey(self):
+        """2026-11-08, found driving the app: the example called
+        lc.class_summary() alone, which raises without a ClassKey column,
+        and an upload whose class column was 'Class' errored."""
+        from app.services.ai_chat.prompt_templates import (
+            data_questions_system_prompt,
+        )
+        prompt = data_questions_system_prompt()
+        assert "if 'ClassKey' in df.columns:" in prompt
+        assert "(needs a `ClassKey` column;" in prompt
 
     def test_prompt_names_the_pie_data_columns(self):
         """The same eval run crashed twice guessing the pie data's columns
@@ -397,8 +408,7 @@ class TestPromptsAdvertisePipelineFirst:
         from app.services.ai_chat.prompt_templates import (
             data_questions_system_prompt,
         )
-        from app.services.ai_chat.viz_generator import _viz_system_prompt
-        for prompt in (data_questions_system_prompt(), _viz_system_prompt()):
+        for prompt in (data_questions_system_prompt(),):
             exception = prompt.index("no methodology question when `lc`")
             assert exception < prompt.index("Common ambiguities to watch for")
             assert "**total** carbons and double bonds" in prompt

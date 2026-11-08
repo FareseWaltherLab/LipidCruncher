@@ -3,13 +3,12 @@ LipidCruncher AI Studio — standalone page for AI-powered data
 exploration, transformation, and custom visualization.
 
 Users can upload any CSV here (independent of the main pipeline)
-or import data already loaded in the pipeline. Four tabs provide
+or import data already loaded in the pipeline. Three tabs provide
 focused AI assistance:
 
 1. LipidCruncher Questions — app features, methods, analysis options
-2. Data Questions — explore and summarize the uploaded dataset
+2. Ask Your Data — explore, summarize and plot the uploaded dataset
 3. Transform to Generic — convert data to LipidCruncher Generic format
-4. Custom Visualization — create plots from processed data
 """
 import streamlit as st
 
@@ -53,8 +52,7 @@ conversation, so it is visible to the AI on later turns.)
 
 **How an answer is produced**
 
-Data Questions, Transform to Generic, and Custom Visualization do not answer from
-the model's memory. The AI writes **Python (pandas / Plotly)**, that code is
+Ask Your Data and Transform to Generic do not answer from the model's memory. The AI writes **Python (pandas / Plotly)**, that code is
 executed here against your data, and you are shown what it returned. Every such
 answer carries a **View code** expander — that code *is* the method. Read it
 before you trust the number.
@@ -80,13 +78,13 @@ which it reads with tools while composing the answer.
 - The main pipeline's methods are validated and documented; AI Studio is an
   exploration tool. When both could answer a question, prefer the pipeline.
 - Each browser session is capped at **50 messages** and **20 code
-  executions**, across all four tabs, and there are daily limits per visitor
+  executions**, across all three tabs, and there are daily limits per visitor
   and for the whole site (they reset at midnight UTC).
 """
 
 
 def display_ai_studio_page() -> None:
-    """Display the LipidCruncher AI Studio page with 4 tabs."""
+    """Display the LipidCruncher AI Studio page with 3 tabs."""
     # Restore any sidebar widget keys that Streamlit garbage-collected
     # while the user was on the main app page. Must run BEFORE the
     # sidebar widgets render so they see the restored values.
@@ -97,9 +95,9 @@ def display_ai_studio_page() -> None:
     display_studio_sidebar()
     # `studio_df_original` keeps the user's column names — used by the
     # Transform tab. `studio_df_processed` is the renamed-to-`s1..sN` view
-    # that matches `chat_studio_experiment`, used by the data preview, Data
-    # Questions and Custom Viz; it equals the original until the user
-    # confirms an experiment.
+    # that matches `chat_studio_experiment`, used by the data preview and
+    # Ask Your Data; it equals the original until the user confirms an
+    # experiment.
     studio_df_original = st.session_state.get("chat_studio_df_original")
     studio_df_processed = st.session_state.get("chat_studio_df")
 
@@ -122,25 +120,22 @@ def display_ai_studio_page() -> None:
 1. Upload your CSV in the sidebar (or import from the main pipeline).
 2. Define your experiment in the sidebar — sample columns, each
    sample's condition, any samples to exclude, and BQC label.
-3. Check **Confirm the inputs by checking this box** to unlock Data
-   Questions and Custom Visualization.
+3. Check **Confirm the inputs by checking this box** to unlock Ask Your
+   Data.
 
 **Tabs**
 
 - **LipidCruncher Questions** — Ask anything about the app's features,
   methods, or analyses. **No upload required.**
-- **Data Questions** — Explore your dataset with the AI (summaries,
-  filters, distributions). Requires data + confirm.
+- **Ask Your Data** — Explore and plot your dataset with the AI
+  (summaries, filters, distributions, custom Plotly figures). Requires
+  data + confirm. Figures of the main pipeline's raw data say they are
+  raw; import the normalized data for results you can report.
 - **Transform to Generic** — Ask the AI to convert non-LipidCruncher
   data into the Generic format the main pipeline accepts. Needs only
   the upload, no experiment setup, so you can reshape a file before its
   samples are defined. Use this when your data isn't ready for the main
   pipeline yet.
-- **Custom Visualization** — Generate custom Plotly charts beyond what
-  the built-in modules offer. Requires data that has been **processed
-  through Module 1** of the main pipeline. Run your data through
-  *Start Crunching* on the home page first, then come back here and
-  use **Import from main pipeline** in the sidebar.
                 """
             )
 

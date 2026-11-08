@@ -47,7 +47,7 @@ your data — so it works with nothing uploaded.
 - *Which normalization should I use if I have no internal standards?*
 - *How does LipidCruncher decide which duplicate lipid row to keep?*
 
-**It cannot** compute anything on your dataset — that's the **Data Questions**
+**It cannot** compute anything on your dataset — that's the **Ask Your Data**
 tab.
 """
 

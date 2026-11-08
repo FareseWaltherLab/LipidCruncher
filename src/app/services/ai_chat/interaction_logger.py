@@ -25,7 +25,9 @@ from typing import Optional
 #   3 — `figure` (trace types, names, point counts, titles) replaces
 #       `figure_json`: the plotted values are the user's data
 #   4 — adds `unverified_numbers`: numbers the answer states that the
-#       turn's code never produced (Data Questions, Visualization)
+#       turn's code never produced (Data Questions — since 2026-11 the Ask
+#       Your Data tab, still logged as `data_questions` — and Visualization,
+#       the Custom Visualization tab it absorbed)
 #   5 — `dataset.normalization`: the main pipeline's normalization method
 #       for imported data (absent for an upload)
 #   6 — `sandbox`: the code's start-up and run seconds and the sandbox's

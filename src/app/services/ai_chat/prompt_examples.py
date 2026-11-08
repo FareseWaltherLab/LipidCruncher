@@ -136,7 +136,7 @@ result_df = transform(df)
 
 
 def get_data_questions_examples() -> str:
-    """Few-shot examples for the Data Questions tab."""
+    """Few-shot examples for the Ask Your Data tab."""
     return """\
 ## Few-Shot Examples
 
@@ -147,7 +147,12 @@ User: "How many columns does my data have?"
 ### Example 2: Species count per class
 User: "How many lipid species are in each class?"
 ```python
-result_df = lc.class_summary()[['ClassKey', 'n_species']]
+# lc.class_summary() needs a ClassKey column; an upload may name its class
+# column differently (take the name from the schema), or have none.
+if 'ClassKey' in df.columns:
+    result_df = lc.class_summary()[['ClassKey', 'n_species']]
+else:
+    result_df = df.groupby('Class').size().reset_index(name='n_species')
 result_df.columns = ['Lipid Class', 'Species Count']
 ```
 
@@ -217,8 +222,8 @@ print(f"Found {len(classes)} lipid classes: {', '.join(sorted(classes))}")
 """
 
 
-def get_viz_examples() -> str:
-    """Few-shot examples for the Custom Visualization tab.
+def get_figure_examples() -> str:
+    """Few-shot figure examples for the Ask Your Data tab.
 
     NOTE: LipidCruncher Module 3 already provides bar charts (class-level
     mean ± std), pie charts (class composition), saturation profiles,
@@ -227,7 +232,7 @@ def get_viz_examples() -> str:
     the built-in pipeline does NOT offer.
     """
     return """\
-## Few-Shot Examples
+## Figure Examples
 
 ### Example 1: Species count per class
 User: "Plot the total number of species in each lipid class"

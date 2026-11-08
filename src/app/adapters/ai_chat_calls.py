@@ -84,37 +84,12 @@ class AIChatCalls:
         )
 
     @staticmethod
-    def stream_ai_viz(
-        user_message: str,
-        session,
-        analysis_df: pd.DataFrame,
-        experiment: ExperimentConfig,
-    ):
-        """Stream one turn of the AI visualization chat.
-
-        Returns (explanation_generator, finalize). The UI streams the
-        explanation, then calls finalize() for a VizStepResult.
-        """
-        from ..workflows.ai_chat import AIChatWorkflow
-        return AIChatWorkflow.stream_viz_message(
-            user_message=user_message,
-            session=session,
-            analysis_df=analysis_df,
-            experiment=experiment,
-            numeric_columns=st.session_state.get(
-                'chat_studio_sample_columns_renamed'
-            ),
-            bqc_label=st.session_state.get('chat_studio_bqc_label'),
-            normalization=st.session_state.get('chat_studio_normalization'),
-        )
-
-    @staticmethod
     def stream_ai_data_questions(
         user_message: str,
         session,
         source_df: pd.DataFrame,
     ):
-        """Stream one turn of the AI data questions chat.
+        """Stream one turn of the Ask Your Data chat.
 
         Returns (explanation_generator, finalize). The UI streams the
         explanation, then calls finalize() for a DataQuestionsStepResult.
@@ -130,6 +105,9 @@ class AIChatCalls:
             experiment=st.session_state.get('chat_studio_experiment'),
             bqc_label=st.session_state.get('chat_studio_bqc_label'),
             normalization=st.session_state.get('chat_studio_normalization'),
+            raw_import=(
+                st.session_state.get('chat_studio_pipeline_source') == 'raw'
+            ),
         )
 
     @staticmethod

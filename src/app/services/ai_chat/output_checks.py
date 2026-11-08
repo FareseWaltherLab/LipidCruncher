@@ -1,8 +1,8 @@
 """
 Checks that an AI-produced answer still matches the data it came from.
 
-Shared by the Transform to Generic, Data Questions and Custom
-Visualization tabs. Pure functions over DataFrames — no Streamlit imports.
+Shared by the Transform to Generic and Ask Your Data tabs. Pure functions
+over DataFrames — no Streamlit imports.
 """
 import re
 from typing import List, Tuple

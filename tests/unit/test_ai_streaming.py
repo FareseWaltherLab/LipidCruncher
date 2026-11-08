@@ -11,7 +11,6 @@ import pandas as pd
 import pytest
 
 from app.models.chat import AIConfig, ChatMode, ChatSession
-from app.models.experiment import ExperimentConfig
 from app.services.ai_chat.ai_client import AIClientService
 from app.services.ai_chat.exceptions import AIClientError
 from app.workflows.ai_chat import AIChatWorkflow
@@ -235,47 +234,6 @@ class TestStreamingWorkflowEndToEnd:
         assert result.transformation is not None
         assert result.transformation.success
         assert result.transformation.code == "result_df = df"
-        assert len(result.session.messages) == 2
-
-    def test_viz_stream_then_execute(self, monkeypatch):
-        full = (
-            "Plotting.\n\n"
-            "```python\nfig = px.bar(df, x='ClassKey', y='intensity[s1]')\n```"
-        )
-        chunks = [
-            "Plotting.\n\n",
-            "```python\nfig = px.bar(df, x='ClassKey', y='intensity[s1]')\n```",
-        ]
-        fake = _FakeClient([(chunks, _final([_text_block(full)]))])
-        monkeypatch.setattr(
-            AIClientService, "create_client", staticmethod(lambda: fake)
-        )
-
-        session = ChatSession(
-            mode=ChatMode.VISUALIZATION, schema_context="ClassKey, intensity[s1]"
-        )
-        analysis_df = pd.DataFrame(
-            {"ClassKey": ["PC", "PE"], "intensity[s1]": [1.0, 2.0]}
-        )
-        experiment = ExperimentConfig(
-            conditions_list=["A"], number_of_samples_list=[1]
-        )
-
-        gen, finalize = AIChatWorkflow.stream_viz_message(
-            user_message="Bar chart by class",
-            session=session,
-            analysis_df=analysis_df,
-            experiment=experiment,
-        )
-
-        streamed = "".join(gen)
-        assert streamed == "Plotting.\n\n"
-        assert "```" not in streamed
-
-        result = finalize()
-        assert result.sandbox_result is not None
-        assert result.sandbox_result.success
-        assert result.sandbox_result.figure is not None
         assert len(result.session.messages) == 2
 
 

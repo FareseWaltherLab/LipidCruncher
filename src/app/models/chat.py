@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field, field_validator
 class ChatMode(str, Enum):
     """Chat interaction mode."""
     DATA_TRANSFORM = "data_transform"
-    VISUALIZATION = "visualization"
     DATA_QUESTIONS = "data_questions"
     LIPIDCRUNCHER_QUESTIONS = "lipidcruncher_questions"
 

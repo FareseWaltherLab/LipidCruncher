@@ -51,7 +51,6 @@ def stored_answer_script(tab):
 
     from app.adapters.streamlit_adapter import StreamlitAdapter
     from app.models.chat import ChatMessage, ChatMode, ChatSession
-    from app.models.experiment import ExperimentConfig
     StreamlitAdapter.initialize_session_state()
 
     session = ChatSession(mode=ChatMode.DATA_QUESTIONS).add_message(
@@ -69,12 +68,6 @@ def stored_answer_script(tab):
         from app.ui.ai_chat._data_transform_ui import render_transform_chat
         st.session_state.chat_transform_session = session
         render_transform_chat(df)
-    elif tab == "viz":
-        from app.ui.ai_chat._viz_generation_ui import render_viz_chat
-        st.session_state.chat_viz_session = session
-        render_viz_chat(df, ExperimentConfig(
-            conditions_list=["A"], number_of_samples_list=[1],
-        ))
     elif tab == "lc_questions":
         from app.ui.ai_chat._lipidcruncher_questions_ui import (
             render_lc_questions_chat,
@@ -84,7 +77,7 @@ def stored_answer_script(tab):
 
 
 @pytest.mark.parametrize(
-    "tab", ["data_questions", "transform", "viz", "lc_questions"],
+    "tab", ["data_questions", "transform", "lc_questions"],
 )
 def test_stored_answers_render_without_images(tab):
     at = AppTest.from_function(

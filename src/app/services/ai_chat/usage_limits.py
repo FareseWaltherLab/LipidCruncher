@@ -7,7 +7,7 @@ live here, in the app process, not in Streamlit session state, so nothing a
 visitor does in the browser ("Reset Chat", opening another tab, starting a
 new conversation, reloading the page) hands them a fresh allowance:
 
-- **session** — a conversation-length cap across all four tabs; a reload
+- **session** — a conversation-length cap across all three tabs; a reload
   starts a new session;
 - **client** — a daily cap per client address, which survives reloads (the
   adapter supplies the address; see ``StreamlitAdapter._ai_client_id``);

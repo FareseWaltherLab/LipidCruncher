@@ -303,6 +303,21 @@ class TestSafeExecution:
         assert "5" in result.stdout
         assert "14" in result.stdout
 
+    def test_a_fallback_can_catch_exception(self, sample_df, default_config):
+        """2026-11-08, found driving the app: a figure turn wrapped an `lc`
+        call that refused the upload in `try/except Exception`, and the
+        sandbox had no `Exception`, so the fallback itself raised
+        NameError and the turn failed."""
+        code = (
+            "try:\n"
+            "    raise ValueError('no ClassKey')\n"
+            "except Exception as e:\n"
+            "    print('fell back:', e)\n"
+        )
+        result = SandboxService.execute(code, sample_df, default_config)
+        assert result.success is True, result.error_message
+        assert "fell back: no ClassKey" in result.stdout
+
 
 # ---------------------------------------------------------------------------
 # Runtime Error Handling

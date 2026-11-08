@@ -99,27 +99,12 @@ def test_client_limit_survives_a_reload(turns, monkeypatch):
     assert turns == ["one", "two"]
 
 
-def viz_script():
-    import pandas as pd
-
-    from app.adapters.streamlit_adapter import StreamlitAdapter
-    from app.models.experiment import ExperimentConfig
-    from app.ui.ai_chat import display_viz_chat
-    StreamlitAdapter.initialize_session_state()
-
-    df = pd.DataFrame({'LipidMolec': ['PC 34:1'], 'ClassKey': ['PC'],
-                       'intensity[s1]': [1.0], 'intensity[s2]': [2.0]})
-    display_viz_chat(df, ExperimentConfig(
-        conditions_list=['A', 'B'], number_of_samples_list=[1, 1],
-    ))
-
-
-def test_failed_viz_code_counts_as_an_execution(monkeypatch):
-    """Regression (AQ9): the Viz tab counted only successful runs, so code
-    that kept failing never reached the execution limit."""
+def test_failed_figure_code_counts_as_an_execution(monkeypatch):
+    """Regression (AQ9, from Custom Visualization): only successful runs
+    were counted, so code that kept failing never reached the limit."""
     from app.models.chat import ChatMessage
     from app.services.ai_chat.sandbox import SandboxResult
-    from app.workflows.ai_chat import VizStepResult
+    from app.workflows.ai_chat import DataQuestionsStepResult
 
     monkeypatch.setattr(usage_limits, "_counts", Counter())
     monkeypatch.setattr(usage_limits, "SESSION_EXECUTIONS", 1)
@@ -128,21 +113,22 @@ def test_failed_viz_code_counts_as_an_execution(monkeypatch):
     monkeypatch.setattr(StreamlitAdapter, "log_ai_turn",
                         staticmethod(lambda *a, **k: None))
 
-    def _stream(user_message, session, analysis_df, experiment):
-        result = VizStepResult(
+    def _stream(user_message, session, source_df):
+        result = DataQuestionsStepResult(
             session=session
             .add_message(ChatMessage(role="user", content=user_message))
             .add_message(ChatMessage(role="assistant", content="failed",
                                      code="fig = px.bar(df, x='nope')")),
+            code="fig = px.bar(df, x='nope')",
             sandbox_result=SandboxResult(success=False, error_message="boom"),
             assistant_message="failed",
         )
-        return iter(["failed"]), lambda: result
+        return iter(["failed"]), lambda **kwargs: result
 
-    monkeypatch.setattr(StreamlitAdapter, "stream_ai_viz",
+    monkeypatch.setattr(StreamlitAdapter, "stream_ai_data_questions",
                         staticmethod(_stream))
-    at = AppTest.from_function(viz_script, default_timeout=30).run()
-    at.chat_input(key="chat_input_viz").set_value("plot").run()
+    at = AppTest.from_function(dq_script, default_timeout=30).run()
+    at.chat_input(key="chat_input_questions").set_value("plot").run()
     at.run()
     assert not at.chat_input
     assert any("run generated code 1 times" in w.value for w in at.warning)

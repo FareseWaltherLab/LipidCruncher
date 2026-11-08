@@ -5,7 +5,7 @@ Shared helpers for AI Studio interaction logging + feedback UI.
 and remembers its turn_id against the assistant message so `render_feedback`
 can draw a 👍/👎 widget next to that message and log the user's verdict.
 
-Kept in one place so each of the four tab UIs wires it in with one line.
+Kept in one place so each of the three tab UIs wires it in with one line.
 """
 import streamlit as st
 

@@ -261,9 +261,9 @@ def _display_whats_new() -> None:
           one per sample, grouped by condition (read from sample names like `WT_13C_1`, or
           regrouped by hand), with a choice of which isotopologues to show and an option to
           rescale them to 100%
-        - **AI Studio**: A conversational workspace with four tabs—questions about LipidCruncher,
-          questions about your own data, converting an unsupported CSV into the Generic format,
-          and custom visualizations—working either on an uploaded file or on data imported from
+        - **AI Studio**: A conversational workspace with three tabs—questions about LipidCruncher,
+          questions about and custom figures of your own data, and converting an unsupported CSV
+          into the Generic format—working either on an uploaded file or on data imported from
           the main pipeline (raw, normalized, or QC-filtered)
         - **LipidSearch 5.2 Support**: The LipidSearch format (renamed from "LipidSearch 5.0")
           now covers both 5.0 and 5.2 exports—tab and comma delimiters are detected automatically,

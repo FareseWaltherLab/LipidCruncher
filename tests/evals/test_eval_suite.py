@@ -104,23 +104,6 @@ def run_case(case: C.EvalCase) -> dict:
                 outcome["result_df"] = t.result_df
                 if not t.success:
                     outcome["error"] = "; ".join(t.validation_errors)
-        elif case.tab == "visualization":
-            session = AIChatWorkflow.start_viz_session(df, experiment)
-            result = finish(AIChatWorkflow.stream_viz_message(
-                user_message=case.question,
-                session=session,
-                analysis_df=df,
-                experiment=experiment,
-                normalization=case.normalization,
-            ))
-            outcome["answer"] = result.assistant_message
-            outcome["unverified_numbers"] = result.unverified_numbers
-            last = result.session.messages[-1]
-            outcome["code"] = last.code or ""
-            if result.sandbox_result is not None:
-                outcome["figure"] = result.sandbox_result.figure
-                if not result.sandbox_result.success:
-                    outcome["error"] = result.sandbox_result.error_message
         else:
             session = AIChatWorkflow.start_data_questions_session(df)
             result = finish(AIChatWorkflow.stream_data_questions_message(
@@ -133,7 +116,11 @@ def run_case(case: C.EvalCase) -> dict:
             outcome["answer"] = result.assistant_message
             outcome["code"] = result.code or ""
             outcome["result_df"] = result.result_df
+            outcome["figure"] = result.figure
             outcome["unverified_numbers"] = result.unverified_numbers
+            if (result.sandbox_result is not None
+                    and not result.sandbox_result.success):
+                outcome["error"] = result.sandbox_result.error_message
     except Exception as e:  # a crash is a graded failure, not a test error
         outcome["error"] = f"{type(e).__name__}: {e}"
 
