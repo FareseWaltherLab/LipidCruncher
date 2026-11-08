@@ -6,7 +6,7 @@ and sandbox execution settings.
 """
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -103,17 +103,20 @@ class AIConfig(BaseModel):
 
     Attributes:
         model: Anthropic model identifier.
-        max_tokens: Maximum tokens in the response.
-        temperature: Sampling temperature (0.0 = deterministic).
+        max_tokens: Maximum tokens in the response, thinking included.
+        effort: How much the model thinks before answering. API version
+            2026-10-21 (anthropic SDK 2.x) refuses `temperature`.
     """
     model_config = {"frozen": True}
 
-    model: str = Field(default="claude-sonnet-4-6", description="Anthropic model ID")
+    model: str = Field(default="claude-sonnet-5-5", description="Anthropic model ID")
     max_tokens: int = Field(default=4096, ge=1, le=8192, description="Max response tokens")
-    temperature: float = Field(default=0.0, ge=0.0, le=1.0, description="Sampling temperature")
+    effort: Literal["low", "medium", "high", "xhigh", "max"] = Field(
+        default="low", description="output_config.effort"
+    )
 
     def __hash__(self) -> int:
-        return hash((self.model, self.max_tokens, self.temperature))
+        return hash((self.model, self.max_tokens, self.effort))
 
 
 class SandboxConfig(BaseModel):

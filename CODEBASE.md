@@ -402,7 +402,7 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 | `ChatMessage` | `chat.py` | A single chat message: `role` ("user" / "assistant"), `content`, optional `code`, optional `figure_key`. Implements `__hash__` so `ChatSession` (which holds a tuple of messages) stays hashable for caching. |
 | `ChatSession` | `chat.py` | Immutable chat history: `mode` (`ChatMode` enum), tuple of `ChatMessage`, and `schema_context` (pre-computed DataFrame schema). `add_message()` returns a new session; `to_api_messages()` formats history for the Anthropic API and re-injects each assistant message's stored `code` so the model sees its own previous attempts. |
 | `ChatMode` | `chat.py` | Enum: `DATA_TRANSFORM`, `VISUALIZATION`, `DATA_QUESTIONS`, `LIPIDCRUNCHER_QUESTIONS`. |
-| `AIConfig` | `chat.py` | Anthropic API config: `model`, `max_tokens` (1–8192), `temperature` (0.0–1.0). Defaults to a deterministic Sonnet call. |
+| `AIConfig` | `chat.py` | Anthropic API config: `model` (default `claude-sonnet-5-5`), `max_tokens` (1–8192, thinking included), `effort` (`output_config.effort`, default `low`). API version 2026-10-21 refuses `temperature`; a reply with `stop_reason` `refusal` becomes an `AIClientError`. |
 | `SandboxConfig` | `chat.py` | Limits for sandboxed execution: `execution_timeout` (seconds), `max_output_rows`, `max_output_bytes`, `max_memory_bytes`. |
 | `IsotopeCorrectionConfig` | `isotope_tracing.py` | One field per IsoCorrectoR `IsoCorrection()` setting (`correct_tracer_impurity`, `correct_tracer_element_core`, `calculate_mean_enrichment`, `ultra_high_res`, `correct_also_monoisotopic`, `calculation_threshold_uhr`). Used by the stable isotope tracing workflow. |
 
@@ -835,6 +835,6 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 | reportlab | 3.6.13 | PDF generation |
 | pdf2image | 1.17.0 | PDF to image conversion (landing-page module images; needs Poppler) |
 | pillow | 13.0.0 | Image processing |
-| anthropic | 0.96.0 | Claude API SDK for the AI Studio (chat completion + tool use). Reads `ANTHROPIC_API_KEY` from environment or `st.secrets`. |
+| anthropic | 2.6.0 | Claude API SDK (2.x sends API version 2026-10-21; HTTP via `httpx2`) for the AI Studio (chat completion + tool use). Reads `ANTHROPIC_API_KEY` from environment or `st.secrets`. |
 | pydantic | 2.11.3 | Frozen data models and configs |
 | pyarrow | 23.0.1 | Streamlit dependency, pinned to stay on numpy 1.x |

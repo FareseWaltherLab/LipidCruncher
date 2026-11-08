@@ -75,7 +75,7 @@ def test_installed_sdk_accepts_our_call_kwargs():
 
     from anthropic.resources.messages import Messages
 
-    our_kwargs = {"model", "max_tokens", "temperature", "system", "messages"}
+    our_kwargs = {"model", "max_tokens", "output_config", "system", "messages"}
     for method in (Messages.create, Messages.stream):
         params = inspect.signature(method).parameters
         takes_var_kwargs = any(
@@ -114,6 +114,8 @@ def test_complete_returns_the_reply_text_and_maps_errors(monkeypatch):
     assert AIClientService.complete([{"role": "user", "content": "q"}], "sys", config) \
         == "24 species in 6 classes."
     assert sent["max_tokens"] == 1024 and sent["system"] == "sys"
+    assert sent["output_config"] == {"effort": config.effort}
+    assert "temperature" not in sent
 
     def _fail(**kwargs):
         raise ValueError("boom")
@@ -121,3 +123,26 @@ def test_complete_returns_the_reply_text_and_maps_errors(monkeypatch):
     client.messages.create = _fail
     with pytest.raises(AIClientError, match="boom"):
         AIClientService.complete([], "sys", config)
+
+
+def test_a_refusal_is_an_error_not_an_answer(monkeypatch):
+    """Claude Sonnet 5.5 declines some requests with an ordinary reply
+    (stop_reason "refusal") whose text is empty or cut off; it must not
+    reach the user as the answer."""
+    from types import SimpleNamespace
+
+    import pytest
+
+    from app.models.chat import AIConfig
+    from app.services.ai_chat.ai_client import AIClientService
+
+    monkeypatch.undo()
+    reply = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="I can")],
+        stop_reason="refusal",
+        stop_details=SimpleNamespace(category="bio"),
+    )
+    client = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: reply))
+    monkeypatch.setattr(AIClientService, "create_client", staticmethod(lambda: client))
+    with pytest.raises(AIClientError, match="declined this request \\(its bio safeguard\\)"):
+        AIClientService.complete([], "sys", AIConfig())

@@ -30,7 +30,7 @@ from typing import Optional
 # (scripts/pull_ai_logs.py): turns per session_id, turns per day, and how
 # often a refusal is hit. Things to weigh: everyone behind one institutional
 # NAT shares one client allowance; the global cap bounds the daily API bill
-# (claude-sonnet-4-6, at most 4 round trips per turn) only per process.
+# (claude-sonnet-5-5, at most 4 round trips per turn) only per process.
 SESSION_MESSAGES = 50
 SESSION_EXECUTIONS = 20
 CLIENT_DAILY_MESSAGES = 150

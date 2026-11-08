@@ -118,26 +118,24 @@ class TestAIConfig:
 
     def test_defaults(self):
         config = AIConfig()
-        assert config.model == "claude-sonnet-4-6"
+        assert config.model == "claude-sonnet-5-5"
         assert config.max_tokens == 4096
-        assert config.temperature == 0.0
+        assert config.effort == "low"
 
     def test_custom_values(self):
-        config = AIConfig(model="claude-haiku-4-5-20251001", max_tokens=1024, temperature=0.5)
-        assert config.model == "claude-haiku-4-5-20251001"
+        config = AIConfig(model="claude-haiku-5-5", max_tokens=1024, effort="medium")
+        assert config.model == "claude-haiku-5-5"
         assert config.max_tokens == 1024
-        assert config.temperature == 0.5
+        assert config.effort == "medium"
 
-    def test_temperature_bounds(self):
+    def test_effort_levels(self):
         with pytest.raises(ValueError):
-            AIConfig(temperature=-0.1)
-        with pytest.raises(ValueError):
-            AIConfig(temperature=1.1)
+            AIConfig(effort="none")
 
     def test_frozen(self):
         config = AIConfig()
         with pytest.raises(Exception):
-            config.temperature = 0.5
+            config.effort = "high"
 
     def test_hashable(self):
         config = AIConfig()
