@@ -22,18 +22,22 @@ from app.services.plotting._shared import (
     BASE_LAYOUT,
     frame_axes,
     get_effective_p_value,
+    outlined_marker,
     p_value_to_marker,
 )
 from app.services.statistical_testing import StatisticalTestSummary
 
 
-# Fixed FA type colors
-FA_COLORS = {'SFA': '#c9d9d3', 'MUFA': '#718dbf', 'PUFA': '#e84d60'}
+# Fixed FA type colors. Bars fill with a tint of each and are outlined in it,
+# so SFA is a sage dark enough to show as an outline.
+FA_COLORS = {'SFA': '#7f9c90', 'MUFA': '#718dbf', 'PUFA': '#e84d60'}
 FA_TYPES = ['SFA', 'MUFA', 'PUFA']
 
 CHART_HEIGHT = 500
 CHART_WIDTH = 800
 BAR_WIDTH = 0.25
+# Each sample's dot sits within this fraction of its bar's width.
+POINT_SPREAD = 0.6
 Y_PADDING_FACTOR = 1.1
 ANNOTATION_INCREMENT_FACTOR = 0.15
 ANNOTATION_TEXT_OFFSET = 0.1
@@ -280,7 +284,8 @@ class SaturationPlotterService:
                 x=[c + offsets[fa] for c in range(len(plot_df))],
                 y=plot_df[f'{fa}_AUC'],
                 name=fa,
-                marker_color=FA_COLORS[fa],
+                legendgroup=fa,
+                marker=outlined_marker(FA_COLORS[fa]),
                 error_y=dict(
                     type='data',
                     array=plot_df[f'{fa}_std'],
@@ -292,8 +297,15 @@ class SaturationPlotterService:
                 width=BAR_WIDTH,
                 offset=0,
             ))
+            _add_sample_points(
+                fig, sat_data.fa_data[lipid_class][fa], plot_df, fa,
+                offsets[fa],
+            )
 
-        y_max = _compute_y_max(plot_df)
+        y_max = max(
+            _compute_y_max(plot_df),
+            _sample_max(sat_data.fa_data[lipid_class], plot_df),
+        )
 
         fig.update_layout(
             title=dict(
@@ -325,7 +337,9 @@ class SaturationPlotterService:
         frame_axes(fig)
 
         if show_significance and stat_results is not None:
-            _add_significance_annotations(fig, plot_df, stat_results, lipid_class)
+            _add_significance_annotations(
+                fig, plot_df, stat_results, lipid_class, y_max,
+            )
 
         return fig
 
@@ -362,7 +376,7 @@ class SaturationPlotterService:
                 x=pct_df['Condition'],
                 y=pct_df[f'{fa}_AUC'],
                 name=fa,
-                marker_color=FA_COLORS[fa],
+                marker=outlined_marker(FA_COLORS[fa]),
             ))
 
         fig.update_layout(
@@ -411,6 +425,52 @@ def _compute_y_max(plot_df: pd.DataFrame) -> float:
     return y_max if y_max > 0 else 1.0
 
 
+def _condition_name(label: str) -> str:
+    """The condition behind a plot_data label such as 'WT (n=3)'."""
+    return label.split(' (n=')[0]
+
+
+def _sample_max(
+    class_fa_data: Dict[str, Dict[str, np.ndarray]], plot_df: pd.DataFrame,
+) -> float:
+    """The largest sample value drawn as a dot, 0 when there is none."""
+    values = [
+        np.nanmax(class_fa_data[fa][_condition_name(label)])
+        for fa in FA_TYPES for label in plot_df['Condition']
+        if class_fa_data[fa].get(_condition_name(label)) is not None
+        and len(class_fa_data[fa][_condition_name(label)])
+    ]
+    return float(max(values)) if values else 0.0
+
+
+def _add_sample_points(
+    fig: go.Figure,
+    condition_values: Dict[str, np.ndarray],
+    plot_df: pd.DataFrame,
+    fa: str,
+    offset: float,
+) -> None:
+    """One dot per sample on each of ``fa``'s bars, spread evenly across the
+    bar so replicates with equal values stay visible."""
+    half = BAR_WIDTH * POINT_SPREAD / 2
+    xs: List[float] = []
+    ys: List[float] = []
+    for i, label in enumerate(plot_df['Condition']):
+        values = condition_values.get(_condition_name(label))
+        if values is None or not len(values):
+            continue
+        centre = i + offset + BAR_WIDTH / 2
+        spread = np.linspace(-half, half, len(values)) if len(values) > 1 else [0.0]
+        xs.extend(centre + d for d in spread)
+        ys.extend(values.tolist())
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys, mode='markers',
+        name=fa, legendgroup=fa, showlegend=False,
+        marker=dict(color=FA_COLORS[fa], size=6, opacity=0.8),
+        hovertemplate=f'{fa}: %{{y:.3g}}<extra></extra>',
+    ))
+
+
 def _calculate_percentage_df(plot_df: pd.DataFrame) -> pd.DataFrame:
     """Convert absolute FA concentrations to percentage distribution.
 
@@ -434,9 +494,10 @@ def _add_significance_annotations(
     plot_df: pd.DataFrame,
     stat_results: StatisticalTestSummary,
     lipid_class: str,
+    y_max: float,
 ) -> None:
-    """Add significance lines and *, **, *** symbols to the concentration plot."""
-    y_max = _compute_y_max(plot_df)
+    """Add significance lines and *, **, *** symbols to the concentration
+    plot, above ``y_max`` (the tallest bar or dot)."""
     y_range = y_max
     y_increment = y_range * ANNOTATION_INCREMENT_FACTOR
 
@@ -484,7 +545,7 @@ def _add_significance_annotations(
 
             # Build condition-to-index mapping (strip sample count)
             clean_conditions = [
-                cond.split(' (n=')[0] for cond in plot_df['Condition']
+                _condition_name(cond) for cond in plot_df['Condition']
             ]
 
             for ph in stat_results.posthoc_results[key]:

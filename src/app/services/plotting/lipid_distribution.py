@@ -29,7 +29,9 @@ PANEL_WIDTH_PX = 220
 PANEL_HEIGHT_PX = 320
 MARGIN = dict(t=90, b=120, l=80, r=30)
 ROW_GAP_PX = 90
-COLUMN_GAP_PX = 70
+COLUMN_GAP_PX = 90
+# Panel titles sit this far above their panel's frame.
+TITLE_LIFT_PX = 10
 BAR_WIDTH = 0.6
 # Each condition's dots spread evenly across this much of the x axis.
 POINT_SPREAD = 0.3
@@ -145,6 +147,7 @@ def _place_columns(
             fig.update_xaxes(domain=[x0, x1], row=row, col=col + 1)
     for k, title in enumerate(fig.layout.annotations[:n_panels]):
         title.x = centres[k % n_cols]
+        title.yshift = TITLE_LIFT_PX
 
 
 def _add_condition(

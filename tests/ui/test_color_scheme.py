@@ -57,3 +57,24 @@ class TestColorSchemePicker:
         at.sidebar.selectbox(key=_PICKER).set_value('Soft').run()
         assert not at.exception, at.exception
         assert 'bar_chart' not in at.session_state['analysis_all_plots']
+
+    def test_has_its_own_sidebar_section_after_confirm_inputs(self):
+        """2026-11-19 feedback: placed inside Group Samples, the picker read
+        as a grouping option. It is its own section, after Confirm Inputs."""
+        at = _run_to_analysis('None (pre-normalized data)')
+        headers = [h.value for h in at.sidebar.subheader]
+        assert 'Plot Colors' in headers
+        assert headers.index('Plot Colors') > headers.index('Confirm Inputs')
+        assert headers[-1] == 'Plot Colors'
+
+    def test_choice_survives_unconfirming(self):
+        """Unchecking Confirm Inputs hides the section; checking it again
+        brings back the scheme chosen before."""
+        at = _run_to_analysis('None (pre-normalized data)')
+        at.sidebar.selectbox(key=_PICKER).set_value('Soft').run()
+        at.sidebar.checkbox(key='confirm_checkbox').uncheck().run()
+        assert not at.exception, at.exception
+        assert not [s for s in at.sidebar.selectbox if s.key == _PICKER]
+        at.sidebar.checkbox(key='confirm_checkbox').check().run()
+        assert not at.exception, at.exception
+        assert at.sidebar.selectbox(key=_PICKER).value == 'Soft'

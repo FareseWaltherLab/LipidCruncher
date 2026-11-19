@@ -22,7 +22,8 @@ def current_palette() -> str:
 
 
 def render_color_scheme_picker() -> None:
-    """Sidebar selectbox choosing the condition color scheme.
+    """Sidebar section, below Confirm Inputs, choosing the condition color
+    scheme.
 
     The choice lives in ``condition_palette`` rather than the widget key, so it
     survives pages where the sidebar is not drawn.
@@ -31,6 +32,7 @@ def render_color_scheme_picker() -> None:
         st.session_state.condition_palette = st.session_state[_SELECT_KEY]
 
     options = list(CONDITION_PALETTES)
+    st.sidebar.subheader("Plot Colors")
     st.sidebar.selectbox(
         'Color scheme',
         options,

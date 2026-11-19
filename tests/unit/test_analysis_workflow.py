@@ -726,10 +726,10 @@ class TestRunSaturation:
             show_significance=True,
         )
         # Both conditions should appear in plot despite NaN in Control
-        fig = result.plots['PC']
-        assert len(fig.data) == 3, "Should have 3 traces (SFA, MUFA, PUFA)"
+        bars = [t for t in result.plots['PC'].data if t.type == 'bar']
+        assert len(bars) == 3, "Should have 3 bar traces (SFA, MUFA, PUFA)"
         # Each trace should have 2 bars (2 conditions)
-        assert len(fig.data[0].x) == 2, "Each trace should have 2 condition bars"
+        assert len(bars[0].x) == 2, "Each trace should have 2 condition bars"
 
     def test_nan_concentrations_with_significant_data(self):
         """Significance annotations appear despite NaN in some samples."""
