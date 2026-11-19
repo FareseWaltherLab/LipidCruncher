@@ -5,7 +5,7 @@ Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
 
-Checked against main at 0a13f38 (2026-11-19); see CLAUDE.md, "Keep the
+Checked against main at 32f0262 (2026-11-19); see CLAUDE.md, "Keep the
 AI's knowledge in step with main".
 """
 
