@@ -136,7 +136,8 @@ def _detail(turn, all_turns):
     head[0].subheader(f"{VERDICT_ICON[turn.verdict]} {r.get('question', '')}")
     head[1].caption(
         f"{_fmt_ts(r.get('ts'))} · {r.get('tab')} · "
-        f"{r.get('model') or 'model n/a'}\n\n"
+        f"{r.get('model') or 'model n/a'} · "
+        f"build {r.get('build') or 'n/a'}\n\n"
         f"session {r.get('session_id', '')[:8]} · turn {turn.turn_id[:8]}"
     )
 

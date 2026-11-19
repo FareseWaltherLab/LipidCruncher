@@ -30,13 +30,19 @@ fi
 
 echo "== Building $image from $commit ($platform, WITH_R=1)"
 git archive --format=tar HEAD |
-    docker build --platform "$platform" --build-arg WITH_R=1 -t "$image" -
+    docker build --platform "$platform" --build-arg WITH_R=1 \
+        --build-arg BUILD_COMMIT="$commit" -t "$image" -
 
 user=$(docker image inspect -f '{{.Config.User}}' "$image")
 case "$user" in
     ''|root|0|0:*) fail "the image runs as '${user:-root}', not a non-root user" ;;
 esac
 echo "== Image user: $user"
+
+build=$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$image" |
+    sed -n 's/^LIPIDCRUNCHER_BUILD=//p')
+[ "$build" = "$commit" ] || fail "the image records build '$build', not $commit"
+echo "== Image build: $build"
 
 echo "== Sandbox isolation and R-dependent isotope tests inside the image"
 # pytest is a dev tool, so it goes into this throwaway container only.

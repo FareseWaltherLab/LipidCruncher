@@ -81,7 +81,14 @@ def _render_outputs(index: int) -> None:
         st.plotly_chart(figure, width='stretch', key=f"dq_figure_{index}")
     if table is not None:
         with st.expander("Result Table", expanded=index == max(outputs)):
-            st.dataframe(table, width='stretch', key=f"dq_table_{index}")
+            # Numbers left-aligned with the text (power-user feedback 2026-10-27).
+            st.dataframe(
+                table, width='stretch', key=f"dq_table_{index}",
+                column_config={
+                    c: st.column_config.Column(alignment='left')
+                    for c in table.columns
+                },
+            )
             st.caption(f"{len(table)} rows, {len(table.columns)} columns")
 
 

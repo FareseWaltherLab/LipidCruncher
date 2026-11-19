@@ -130,10 +130,14 @@ def score_usability(
         if not any(w.lower() in lowered for w in words.split("|")):
             failures.append(f"the answer does not mention {words!r}")
 
+    labels = _figure_labels(figure)
     for pattern in case.forbid_mentions:
         hit = re.search(pattern, answer, re.IGNORECASE)
         if hit:
             failures.append(f"the answer says {hit.group(0)!r}, which it should not")
+        hit = re.search(pattern, labels, re.IGNORECASE)
+        if hit:
+            failures.append(f"the figure says {hit.group(0)!r}, which it should not")
 
     if "refusal" in case.expect and not _is_refusal(answer):
         failures.append(
@@ -142,6 +146,19 @@ def score_usability(
         )
 
     return failures
+
+
+def _figure_labels(figure: Any) -> str:
+    """The text a figure shows about its values: its title, every axis
+    title and the legend title, one per line ('' without a figure)."""
+    if figure is None:
+        return ""
+    layout = figure.to_plotly_json().get("layout", {})
+    parts = [layout.get("title"), (layout.get("legend") or {}).get("title")]
+    parts += [v.get("title") for k, v in layout.items()
+              if re.fullmatch(r"[xy]axis\d*", k)]
+    texts = [p.get("text") if isinstance(p, dict) else p for p in parts]
+    return "\n".join(t for t in texts if t)
 
 
 def _is_introspection_only(code: str) -> bool:

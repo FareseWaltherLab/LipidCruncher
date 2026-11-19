@@ -53,3 +53,30 @@ def test_answer_writer_does_not_call_every_value_a_concentration():
     assert "call the values abundance or response" in (
         answer_from_results_system_prompt()
     )
+
+
+def test_figure_labels_follow_the_values_units():
+    """2026-11-10: the answer said raw units but the code titled the y-axis
+    'Mean concentration'; the units rule was only in the answer writer."""
+    from app.services.ai_chat.prompt_templates import data_questions_system_prompt
+    assert "titles, axis labels and legends" in data_questions_system_prompt()
+
+
+def test_bqc_samples_are_left_out_of_summaries():
+    """2026-11-10: a top-abundance mean silently included the BQC samples."""
+    from app.services.ai_chat.prompt_templates import (
+        answer_from_results_system_prompt, data_questions_system_prompt,
+    )
+    assert "Leave BQC samples out" in data_questions_system_prompt()
+    assert "BQC samples out of a mean" in answer_from_results_system_prompt()
+
+
+def test_suspect_annotations_are_framed_calmly():
+    """Power-user feedback 2026-10-27: misannotation answers would alarm a
+    general user; much of it is LipidSearch's annotation."""
+    from app.services.ai_chat.prompt_templates import (
+        answer_from_results_system_prompt, data_questions_system_prompt,
+    )
+    for prompt in (data_questions_system_prompt(),
+                   answer_from_results_system_prompt()):
+        assert "identification software's annotation" in prompt

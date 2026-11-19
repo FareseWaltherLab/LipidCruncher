@@ -66,6 +66,14 @@ def load_dataset(name: str):
         return ref.load_pg_correlation(), ExperimentConfig(
             conditions_list=["All"], number_of_samples_list=[21],
         )
+    if name == C.CANONICAL_BQC:
+        return ref.load_canonical_bqc(), ExperimentConfig(
+            conditions_list=["WT", "KO", "BQC"], number_of_samples_list=[3, 3, 2],
+        )
+    if name == C.SUSPECT:
+        return ref.load_canonical_suspect(), ExperimentConfig(
+            conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
+        )
     if name == C.APP:
         return None, None
     if name == C.STUDIO:
@@ -111,6 +119,7 @@ def run_case(case: C.EvalCase) -> dict:
                 session=session,
                 source_df=df,
                 experiment=experiment,
+                bqc_label="BQC" if case.dataset == C.CANONICAL_BQC else None,
                 normalization=case.normalization,
             ))
             outcome["answer"] = result.assistant_message

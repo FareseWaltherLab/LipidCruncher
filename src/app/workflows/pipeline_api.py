@@ -775,7 +775,7 @@ class PipelineAPI:
             f"Volcano plot ({experimental} vs {control})",
             res.stat_summary, config,
         )
-        return LCResult(res.figure, res.volcano_data, res)
+        return LCResult(res.figure, res.volcano_data.volcano_df, res)
 
     def heatmap(
         self,

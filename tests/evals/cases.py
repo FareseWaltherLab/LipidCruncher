@@ -27,6 +27,8 @@ STUDIO = "studio"                # ai_studio_test_dataset.csv: raw, with metadat
 RAW_REPEATS = "raw_repeats"      # canonical + 4 lipids seen again as another adduct
 APP = "app"                      # no data: questions about LipidCruncher itself
 PG_CORRELATION = "pg_correlation"  # 872 species x 21 samples, as on 2026-10-27
+CANONICAL_BQC = "canonical_bqc"  # canonical + 2 BQC samples (condition "BQC")
+SUSPECT = "suspect"              # canonical + 3 doubtful annotations (ether TGs)
 
 
 @dataclass(frozen=True)
@@ -58,7 +60,8 @@ class EvalCase:
         expect_mentions: Words the answer must contain (case-insensitive),
             for questions about how LipidCruncher works; "a|b" accepts
             either.
-        forbid_mentions: Regular expressions the answer must not match
+        forbid_mentions: Regular expressions the answer, and the figure's
+            title, axis and legend titles, must not match
             (case-insensitive).
         normalization: The main pipeline's normalization method the tab
             is told the data went through (None: an upload).
@@ -426,6 +429,41 @@ CASES = (
             "lc.class_summary() alone, which needs ClassKey; an upload named "
             "its column 'Class' and the turn errored. This one says "
             "'LipidClass'."
+        ),
+    ),
+    EvalCase(
+        id="top_abundant_plot_unnormalized_with_bqc",
+        question="Plot the top 5 most abundant lipids by mean abundance",
+        dataset=CANONICAL_BQC,
+        normalization="none",
+        expect=("table", "figure"),
+        pipeline_answer=lambda df: ref.top_n_by_mean_without_bqc(df, 5),
+        expect_mentions=("BQC",),
+        # "abundance, not concentration" / "rather than concentrations" pass.
+        forbid_mentions=(
+            r"(?<!not )(?<!not a )(?<!than )(?<!than a )concentration(?!\[)",
+        ),
+        note=(
+            "2026-11-10 ai-test turn on a QC-filtered import normalized with "
+            "'None': the answer said raw units but the y-axis said 'Mean "
+            "concentration', and the mean silently included the 4 BQC "
+            "samples."
+        ),
+    ),
+    EvalCase(
+        id="suspect_annotations_tone",
+        question=(
+            "Are there any species here that you suspect are likely "
+            "misannotated, wrong or should simply not exist in this dataset?"
+        ),
+        dataset=SUSPECT,
+        expect_mentions=("software|LipidSearch", "ether|TG O-|TG P-"),
+        forbid_mentions=(r"almost certainly",),
+        note=(
+            "2026-10-27 feedback: the misannotation answer ('almost "
+            "certainly misannotations', 533 of 872 flagged) would alarm a "
+            "general user; much of it is LipidSearch's annotation, e.g. "
+            "ether-linked TGs."
         ),
     ),
 )

@@ -360,7 +360,7 @@ class DataQuestionsWorkflow:
         session = session.add_message(user_msg)
 
         context = data_block('dataframe_schema', session.schema_context)
-        exp_context = build_experiment_context(experiment)
+        exp_context = build_experiment_context(experiment, bqc_label)
         if exp_context:
             context = f"{context}\n\n{exp_context}"
         values = build_values_context(normalization, raw_import)

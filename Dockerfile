@@ -64,6 +64,11 @@ COPY . .
 # override that lives outside this repo.
 ENV STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1024
 
+# The commit the image was built from, recorded on the AI Studio's turn
+# records (the image has no .git). scripts/check_image.sh passes it.
+ARG BUILD_COMMIT=
+ENV LIPIDCRUNCHER_BUILD=$BUILD_COMMIT
+
 EXPOSE 8501
 
 # Never run as root. Root is exempt from RLIMIT_NPROC, so the AI Studio

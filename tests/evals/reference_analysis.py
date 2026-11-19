@@ -47,6 +47,38 @@ def _conc_cols(df: pd.DataFrame) -> List[str]:
     return [c for c in df.columns if c.startswith("concentration[")]
 
 
+# Two BQC samples appended to the canonical dataset. Their values (twice
+# the WT mean) reorder the ranking if they are averaged in.
+BQC_COLUMNS = ["concentration[s7]", "concentration[s8]"]
+
+
+def load_canonical_bqc() -> pd.DataFrame:
+    """The canonical dataset plus the two BQC samples."""
+    df = load_canonical()
+    wt_mean = df[[f"concentration[{s}]" for s in CONTROL_SAMPLES]].mean(axis=1)
+    return df.assign(**{c: 2 * wt_mean for c in BQC_COLUMNS})
+
+
+def load_canonical_suspect() -> pd.DataFrame:
+    """The canonical dataset plus three annotations a lipidomics reviewer
+    would doubt: two ether-linked TGs, the kind LipidSearch assigns, and a
+    PC with two 7-carbon chains."""
+    extra = pd.DataFrame(
+        [[name, name.split()[0], 40, 42, 41, 43, 40, 44] for name in (
+            "TG O-16:0_18:1_18:1", "TG P-18:0_18:1_20:4", "PC 7:0_7:0",
+        )],
+        columns=load_canonical().columns,
+    )
+    return pd.concat([load_canonical(), extra], ignore_index=True)
+
+
+def top_n_by_mean_without_bqc(df: pd.DataFrame, n: int = 5) -> pd.Series:
+    """The n most abundant lipids by mean over the biological samples."""
+    cols = [c for c in _conc_cols(df) if c not in BQC_COLUMNS]
+    means = df.set_index("LipidMolec")[cols].mean(axis=1)
+    return means.sort_values(ascending=False, kind="stable").head(n)
+
+
 # ── Descriptive / aggregation (independent pandas) ─────────────────────────
 
 def n_species(df: pd.DataFrame) -> int:

@@ -157,6 +157,28 @@ class TestUsability:
         )
         assert any("expected a figure" in f for f in failures)
 
+    def test_catches_a_forbidden_word_on_the_figure(self):
+        """2026-11-10: the answer said raw units, the y-axis 'Mean
+        concentration'."""
+        import plotly.graph_objects as go
+        case = C.by_id("top_abundant_plot_unnormalized_with_bqc")
+        fig = go.Figure(go.Bar(x=["a"], y=[1]))
+        fig.update_layout(title="Top lipids", yaxis_title="Mean concentration")
+        failures = score_usability("", "The BQC samples are left out.", case,
+                                   figure=fig)
+        assert any("the figure says 'concentration'" in f for f in failures)
+        fig.update_layout(yaxis_title="Mean abundance")
+        assert not any("figure says" in f for f in score_usability(
+            "", "The BQC samples are left out.", case, figure=fig))
+
+    def test_averaging_in_the_bqc_samples_is_caught(self):
+        case = C.by_id("top_abundant_plot_unnormalized_with_bqc")
+        df = ref.load_canonical_bqc()
+        conc = [c for c in df.columns if c.startswith("concentration[")]
+        with_bqc = (df.assign(Mean=df[conc].mean(axis=1))
+                    .nlargest(5, "Mean")[["LipidMolec", "Mean"]])
+        assert score_pipeline_parity(case, df, "", result_df=with_bqc)
+
     def test_catches_an_errored_turn(self):
         """The real fourth failure surfaced as an AttributeError."""
         failures = score_usability(
@@ -403,7 +425,9 @@ def test_every_case_is_scored_against_the_pipeline_where_it_can_be():
     """Cases with a pipeline answer must run on a dataset that has one."""
     for case in C.CASES:
         if case.pipeline_answer or case.pipeline_number:
-            assert case.dataset in (C.CANONICAL, C.RAW_REPEATS, C.PG_CORRELATION), case.id
+            assert case.dataset in (
+                C.CANONICAL, C.RAW_REPEATS, C.PG_CORRELATION, C.CANONICAL_BQC,
+            ), case.id
         if case.expect_table:
             assert case.tab == "transform" and case.dataset == C.STUDIO, case.id
 

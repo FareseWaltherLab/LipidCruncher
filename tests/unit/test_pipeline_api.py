@@ -431,6 +431,17 @@ class TestExperimentContextReachesTheModel:
         assert "s1, s2, s3" in ctx
         assert "do not call lc.conditions()" in ctx
 
+    def test_context_names_the_bqc_condition(self):
+        """2026-11-10: a top-abundance mean averaged in the BQC samples; the
+        model is told which condition is the BQC so it can leave it out."""
+        from app.services.ai_chat.prompt_templates import (
+            build_experiment_context,
+        )
+        exp = ExperimentConfig(conditions_list=["WT", "QC"],
+                               number_of_samples_list=[2, 2])
+        assert "QC is the BQC" in build_experiment_context(exp, "QC")
+        assert "BQC" not in build_experiment_context(exp)
+
     def test_no_experiment_yields_empty_context(self):
         from app.services.ai_chat.prompt_templates import (
             build_experiment_context,
@@ -776,9 +787,18 @@ class TestArgumentsAreHonoured:
         assert loose.loc[first["ClassKey"], "significant"]
 
     def test_volcano_keeps_only_the_requested_classes(self, lc):
-        data = lc.volcano("WT", "KO", classes=["PC"]).data.volcano_df
+        data = lc.volcano("WT", "KO", classes=["PC"]).data
         assert len(data) > 0
         assert set(data["ClassKey"]) == {"PC"}
+
+    def test_volcano_data_is_the_frame_behind_it(self, lc):
+        """2026-11-19 eval: the catalog says `.data` is the frame behind the
+        figure, but volcano's was a VolcanoData, so the model's
+        `pd.DataFrame(res.data)` raised and the turn lost its figure."""
+        res = lc.volcano("WT", "KO")
+        assert isinstance(res.data, pd.DataFrame)
+        assert {"LipidMolec", "FoldChange", "pValue"} <= set(res.data.columns)
+        assert res.raw.volcano_data.volcano_df is res.data
 
     def test_volcano_p_value_does_not_depend_on_the_classes(self):
         """M1 / AQ5: the zero floor is the whole dataset's, as on the main

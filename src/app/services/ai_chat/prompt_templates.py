@@ -46,13 +46,15 @@ def with_data_note(system_prompt: str) -> str:
     return f"{system_prompt.rstrip()}\n\n{UNTRUSTED_DATA_NOTE}"
 
 
-def build_experiment_context(experiment) -> str:
+def build_experiment_context(experiment, bqc_label: Optional[str] = None) -> str:
     """Describe the experiment's conditions and their samples for the prompt.
 
     Supplied with every message so the model can name conditions directly.
     Without it the model has to *ask* the sandbox what the conditions are —
     and since a turn ends when its code runs, that burns the whole turn
     printing condition names instead of answering the question.
+    ``bqc_label`` names the BQC condition, which the model cannot tell
+    from its name.
 
     Returns an empty string when no experiment is defined.
     """
@@ -63,6 +65,11 @@ def build_experiment_context(experiment) -> str:
     for condition, samples in zip(experiment.conditions_list,
                                   experiment.individual_samples_list):
         lines.append(f"- {condition}: {', '.join(samples)}")
+    if bqc_label in experiment.conditions_list:
+        lines.append(
+            f"{bqc_label} is the BQC: pooled quality-control samples, not a "
+            "biological group."
+        )
     lines.append(
         "Use these condition names directly in lc.* calls — do not call "
         "lc.conditions() to look them up."
@@ -508,7 +515,10 @@ CHART_RULES = """\
 
 Draw every figure with Plotly and assign it to `fig`. If the <values> block says the data \
 are the main pipeline's raw data, say "raw (not filtered or normalized)" in the figure's \
-title, as well as in the answer.
+title, as well as in the answer. In a figure you draw yourself, name the values in titles, \
+axis labels and legends with the <values> block's units: pmol only when it says pmol, \
+otherwise abundance or intensity, never concentration, even though the columns are named \
+`concentration[...]`. Leave the labels of an `lc` figure as they are.
 
 ## App Color Palette
 
@@ -615,6 +625,17 @@ intensity[s1]"). Consult it when the question hinges on a LipidCruncher algorith
 enough of the implementation to mirror it exactly.
 8. If the user's question is ambiguous, ask for clarification.
 9. Be concise. Do not over-explain.
+10. **Leave BQC samples out of summaries across samples.** If the <experiment> block names \
+a BQC condition, its samples are pooled quality-control injections, not biology: drop their \
+columns before averaging, summing or ranking across samples (most abundant lipids, class \
+totals, distributions), as the main app's analysis pages do, and say so. Keep them only when \
+the question is about quality control (CoV, drift) or the user asks for them.
+11. **Suspected misannotations: calm, and name the cause.** When asked which species look \
+misannotated, implausible or should not exist, present them as candidates to check, not as \
+errors in the user's data. Say that most come from the identification software's annotation \
+(LipidSearch, for example, assigns ether-linked O-/P- triglycerides that are very unlikely to \
+be real), and that the MS2 spectra settle each one. Lead with the clear-cut cases; do not \
+headline a large count from loose heuristics.
 
 ## Code Execution Rules
 
@@ -699,6 +720,12 @@ computed), say so plainly instead of answering.
 - The <values> block says what the sample values are. Use its units: say pmol only when \
 it says pmol; otherwise call the values abundance or response, not concentration, even \
 though the columns are named `concentration[...]`. If it says the data are raw, say so.
+- If the code left BQC samples out of a mean, total or ranking across samples, or kept them \
+in, say which.
+- Species flagged as possibly misannotated or implausible are candidates to check, not \
+errors in the user's data: say so calmly, note that most such flags come from the \
+identification software's annotation (e.g. LipidSearch's ether-linked TG assignments), and \
+suggest checking the MS2 spectra. Do not open with a large flagged count.
 - No code, no headings, no preamble.""")
 
 

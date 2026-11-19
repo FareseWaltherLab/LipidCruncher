@@ -361,3 +361,14 @@ def test_each_message_keeps_its_own_table_and_figure(logged, monkeypatch):
     assert outputs[3][0] is None and outputs[3][1] is not None
     tables = [e for e in at.expander if e.label == "Result Table"]
     assert len(tables) == 1
+
+
+def test_result_table_numbers_are_left_aligned(logged, monkeypatch):
+    """Power-user feedback 2026-10-27: numbers in the Result Table sat at
+    the far right; they should line up with the text."""
+    import json
+    _stub(monkeypatch, "dq")
+    at = _turn("dq")
+    assert not at.exception
+    config = json.loads(at.dataframe[0].proto.columns)
+    assert config and all(c.get("alignment") == "left" for c in config.values())

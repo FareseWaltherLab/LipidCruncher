@@ -13,6 +13,7 @@ swallowed: logging must never break a chat turn.
 """
 import json
 import logging
+import os
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -32,7 +33,9 @@ from typing import Optional
 #       for imported data (absent for an upload)
 #   6 — `sandbox`: the code's start-up and run seconds and the sandbox's
 #       error (a timeout was only in the answer text, with `error` None)
-SCHEMA_VERSION = 6
+#   7 — `build`: the commit the deployed image was built from
+#       (LIPIDCRUNCHER_BUILD, set by the Dockerfile; None in local runs)
+SCHEMA_VERSION = 7
 
 # Size guards. The awslogs driver splits a stdout line above 256 KB into
 # several CloudWatch events, which would break the JSON (and the pull script
@@ -245,6 +248,7 @@ class InteractionLoggingService:
             "session_id": session_id,
             "tab": tab,
             "model": model,
+            "build": os.environ.get("LIPIDCRUNCHER_BUILD") or None,
             "question": question,
             "answer": answer,
             "code": code or None,

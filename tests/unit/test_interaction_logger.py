@@ -109,8 +109,23 @@ class TestSchema2Context:
     and the figure, so a record can be reviewed on its own (schema 3: a
     summary of the figure)."""
 
-    def test_schema_version_is_6(self):
-        assert SCHEMA_VERSION == 6
+    def test_schema_version_is_7(self):
+        assert SCHEMA_VERSION == 7
+
+    def test_turn_record_names_the_build(self, monkeypatch):
+        """Schema 7: records said nothing of which deployed build answered,
+        so a turn could not be placed before or after a fix."""
+        def record():
+            return InteractionLoggingService.build_turn_record(
+                turn_id="t", session_id="s", tab="lc_questions",
+                question="q", answer="a",
+            )
+        monkeypatch.setenv("LIPIDCRUNCHER_BUILD", "cd55358")
+        assert record()["build"] == "cd55358"
+        monkeypatch.setenv("LIPIDCRUNCHER_BUILD", "")  # the Dockerfile default
+        assert record()["build"] is None
+        monkeypatch.delenv("LIPIDCRUNCHER_BUILD")
+        assert record()["build"] is None
 
     def test_a_sandbox_timeout_is_logged_as_its_error(self):
         """2026-10-27: two correlation turns timed out and were logged with
@@ -291,7 +306,7 @@ class TestSchema2Context:
         finally:
             logging.getLogger(_LOGGER_NAME).removeHandler(handler)
         payload = json.loads(handler.records[0])
-        assert payload["schema"] == 6
+        assert payload["schema"] == SCHEMA_VERSION
         assert payload["model"] == "claude-x"
         assert payload["dataset"] == {"rows": 1}
         assert payload["history"] == [{"role": "user", "content": "hi"}]
