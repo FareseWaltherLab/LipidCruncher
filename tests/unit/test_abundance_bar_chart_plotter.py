@@ -342,7 +342,8 @@ class TestCreateBarChart:
             simple_df, experiment_2x3, ['Control', 'Treatment'], ['PC', 'PE']
         )
         fig = BarChartPlotterService.create_bar_chart(bar_data, 'linear scale')
-        assert len(fig.data) == 2  # One trace per condition
+        bars = [t for t in fig.data if t.type == 'bar']
+        assert len(bars) == 2  # One bar trace per condition
 
     def test_trace_names_match_conditions(self, simple_df, experiment_2x3):
         bar_data = BarChartPlotterService.create_mean_std_data(
@@ -765,7 +766,7 @@ class TestLargeDataset:
         )
         fig = BarChartPlotterService.create_bar_chart(bar_data, 'linear scale')
         assert isinstance(fig, go.Figure)
-        assert len(fig.data) == 2
+        assert len([t for t in fig.data if t.type == 'bar']) == 2
 
     def test_many_species_per_class(self, experiment_2x3):
         """50 species in one class — aggregation should work."""

@@ -14,7 +14,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from app.services.plotting._shared import BASE_LAYOUT, generate_condition_color_mapping
+from app.constants import DEFAULT_CONDITION_PALETTE
+from app.services.plotting._shared import (
+    BASE_LAYOUT,
+    generate_condition_color_mapping,
+    outlined_marker,
+)
 
 
 # Color palette for multiple standards in the same class
@@ -41,6 +46,7 @@ class StandardsPlotterService:
         samples: List[str],
         sample_conditions: Optional[List[str]] = None,
         display_names: Optional[Dict[str, str]] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> List[go.Figure]:
         """Create bar plots for each internal standard class.
 
@@ -58,6 +64,7 @@ class StandardsPlotterService:
             display_names: Optional ``{sample label -> text shown}`` for the
                 sample axis (unique per sample); unlisted samples show their
                 label. Intensities are still looked up by label.
+            palette: Condition color scheme (a CONDITION_PALETTES name).
 
         Returns:
             List of Plotly figures, one per lipid class.
@@ -107,12 +114,12 @@ class StandardsPlotterService:
             if n_standards == 1:
                 fig = _build_single_standard_plot(
                     class_df, standards[0], plot_samples, valid_intensity_cols,
-                    class_key, valid_conditions,
+                    class_key, valid_conditions, palette,
                 )
             else:
                 fig = _build_multi_standard_plot(
                     class_df, standards, plot_samples, valid_intensity_cols,
-                    class_key, valid_conditions,
+                    class_key, valid_conditions, palette,
                 )
 
             # Style all axes
@@ -151,6 +158,7 @@ def _build_single_standard_plot(
     intensity_cols: List[str],
     class_key: str,
     sample_conditions: Optional[List[str]] = None,
+    palette: str = DEFAULT_CONDITION_PALETTE,
 ) -> go.Figure:
     """Build a bar plot for a class with a single internal standard."""
     intensities = [class_df[col].values[0] for col in intensity_cols]
@@ -167,10 +175,10 @@ def _build_single_standard_plot(
         legend_title = 'Internal Standard'
     else:
         color_map = generate_condition_color_mapping(
-            list(dict.fromkeys(sample_conditions))
+            list(dict.fromkeys(sample_conditions)), palette,
         )
         fig = go.Figure(data=[
-            go.Bar(x=xs, y=ys, name=cond, marker_color=color_map[cond])
+            go.Bar(x=xs, y=ys, name=cond, marker=outlined_marker(color_map[cond]))
             for cond, xs, ys in _condition_groups(
                 samples, intensities, sample_conditions
             )
@@ -199,6 +207,7 @@ def _build_multi_standard_plot(
     intensity_cols: List[str],
     class_key: str,
     sample_conditions: Optional[List[str]] = None,
+    palette: str = DEFAULT_CONDITION_PALETTE,
 ) -> go.Figure:
     """Build a subplot figure for a class with multiple internal standards."""
     n_standards = len(standards)
@@ -212,7 +221,9 @@ def _build_multi_standard_plot(
     )
 
     color_map = (
-        generate_condition_color_mapping(list(dict.fromkeys(sample_conditions)))
+        generate_condition_color_mapping(
+            list(dict.fromkeys(sample_conditions)), palette,
+        )
         if sample_conditions is not None else None
     )
 
@@ -242,7 +253,7 @@ def _build_multi_standard_plot(
                 fig.add_trace(
                     go.Bar(
                         x=xs, y=ys, name=cond,
-                        marker_color=color_map[cond],
+                        marker=outlined_marker(color_map[cond]),
                         legendgroup=cond,
                         showlegend=(i == 0),
                     ),

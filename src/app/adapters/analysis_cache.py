@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-import matplotlib.figure
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
+from ..constants import DEFAULT_CONDITION_PALETTE
 from ..models.experiment import ExperimentConfig
 from ..models.statistics import StatisticalTestConfig
 from ..services.plotting.volcano_plot import VolcanoPlotterService
@@ -38,11 +39,12 @@ class AnalysisCache:
         selected_classes: List[str],
         stat_config: Optional[StatisticalTestConfig] = None,
         scale: str = 'linear',
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> BarChartResult:
         """Cached bar chart analysis."""
         return AnalysisWorkflow.run_bar_chart(
             df, experiment, selected_conditions, selected_classes,
-            stat_config=stat_config, scale=scale,
+            stat_config=stat_config, scale=scale, palette=palette,
         )
 
     @staticmethod
@@ -183,10 +185,15 @@ class AnalysisCache:
         selected_lipids: List[str],
         selected_conditions: List[str],
         experiment: ExperimentConfig,
-    ) -> matplotlib.figure.Figure:
-        """Cached per-lipid concentration distribution plot (volcano page)."""
+        p_values: Optional[Dict[str, float]] = None,
+        p_label: str = '',
+        style: str = 'bar',
+        palette: str = DEFAULT_CONDITION_PALETTE,
+    ) -> go.Figure:
+        """Cached per-lipid concentration panels (volcano page)."""
         return VolcanoPlotterService.create_distribution_plot(
             df, selected_lipids, selected_conditions, experiment,
+            p_values=p_values, p_label=p_label, style=style, palette=palette,
         )
 
     @staticmethod
@@ -207,11 +214,12 @@ class AnalysisCache:
         sort_direction: str = 'desc',
         display_names: Optional[Dict[str, str]] = None,
         species_page_size: int = GROUPED_PAGE_SIZE,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> HeatmapResult:
         """Cached lipidomic heatmap analysis.
 
-        ``display_names`` is part of the cache key, so switching between
-        original names and standardized labels redraws the sample axis.
+        ``display_names`` and ``palette`` are part of the cache key, so
+        switching sample names or the color scheme redraws the figure.
         """
         return AnalysisWorkflow.run_heatmap(
             df, experiment, selected_conditions, selected_classes,
@@ -221,4 +229,5 @@ class AnalysisCache:
             sort_direction=sort_direction,
             display_names=display_names,
             species_page_size=species_page_size,
+            palette=palette,
         )

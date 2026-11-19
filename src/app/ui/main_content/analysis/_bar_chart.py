@@ -7,6 +7,7 @@ import streamlit as st
 
 from app.models.experiment import ExperimentConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.ui.color_scheme import current_palette
 from app.ui.st_helpers import display_export_buttons, section_header
 
 from app.ui.main_content.analysis._shared import (
@@ -60,6 +61,7 @@ def _display_bar_chart(
         result = StreamlitAdapter.run_bar_chart(
             df, experiment, selected_conditions, selected_classes,
             stat_config=stat_config, scale=scale_value,
+            palette=current_palette(),
         )
 
         st.plotly_chart(result.figure, width='stretch')

@@ -723,10 +723,37 @@ class TestVolcanoUI:
         assert 'analysis_csv_conc_fc' in at.session_state
 
     def test_lipid_distribution_reaches_the_report(self, analysis_generic_app):
-        """Same omission for the individual-lipid distribution plot, which is
-        Matplotlib rather than Plotly."""
+        """Same omission for the individual-lipid distribution plot."""
         at = self._switch_to_volcano(analysis_generic_app)
         assert 'lipid_distribution' in at.session_state['analysis_all_plots']
+
+    def test_lipid_distribution_brackets_use_the_volcano_p_values(
+        self, analysis_generic_app,
+    ):
+        """Each panel's bracket marks the volcano test's p-value for that
+        lipid (adjusted under a correction, as the volcano plot uses)."""
+        from app.services.plotting._shared import p_value_to_marker
+        at = self._switch_to_volcano(analysis_generic_app)
+        at.selectbox(key='volcano_correction').set_value('fdr_bh').run()
+        assert not at.exception
+        fig = at.session_state['analysis_all_plots']['lipid_distribution']
+        vdf = at.session_state['analysis_volcano_data'].volcano_df.set_index('LipidMolec')
+        lipids = at.multiselect(key='volcano_detail_lipids').value
+        expected = [
+            p_value_to_marker(vdf.loc[lipid, 'adjusted_pValue']) or 'ns'
+            for lipid in lipids
+        ]
+        n = len(lipids)
+        # Panel titles first, then one bracket label per panel, then the caption.
+        assert [a.text for a in fig.layout.annotations][n:2 * n] == expected
+        assert 'adjusted p' in fig.layout.annotations[-1].text
+
+    def test_lipid_distribution_box_style(self, analysis_generic_app):
+        at = self._switch_to_volcano(analysis_generic_app)
+        at.radio(key='volcano_dist_style').set_value('Box').run()
+        assert not at.exception
+        fig = at.session_state['analysis_all_plots']['lipid_distribution']
+        assert {t.type for t in fig.data} == {'box'}
 
     def test_deselecting_lipids_drops_the_stale_distribution(
         self, analysis_generic_app,

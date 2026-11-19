@@ -196,3 +196,33 @@ CONDITION_COLORS: Tuple[str, ...] = (
     '#bcbd22',  # olive
     '#17becf',  # cyan
 )
+
+# The condition color schemes offered in the sidebar. Every figure colored
+# by condition draws from the chosen one; bars and boxes fill with a light
+# tint of each color and are outlined in the color itself.
+CONDITION_PALETTES: Dict[str, Tuple[str, ...]] = {
+    'Classic': CONDITION_COLORS,
+    'Soft': (
+        '#2f5597',  # blue
+        '#5b3a9b',  # purple
+        '#a02b5e',  # raspberry
+        '#2e7d5b',  # green
+        '#b8651b',  # amber
+        '#2b8a9e',  # teal
+        '#8a7a1f',  # olive
+        '#5f5f5f',  # gray
+    ),
+    # Okabe & Ito's palette, distinguishable under the common forms of
+    # color blindness.
+    'Colorblind-safe': (
+        '#0072b2',  # blue
+        '#d55e00',  # vermillion
+        '#009e73',  # bluish green
+        '#cc79a7',  # reddish purple
+        '#e69f00',  # orange
+        '#56b4e9',  # sky blue
+        '#f0e442',  # yellow
+        '#000000',  # black
+    ),
+}
+DEFAULT_CONDITION_PALETTE: str = 'Classic'

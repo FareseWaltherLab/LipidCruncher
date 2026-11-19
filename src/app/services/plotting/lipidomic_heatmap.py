@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+from app.constants import DEFAULT_CONDITION_PALETTE
 from app.models.experiment import ExperimentConfig
 from app.services.plotting.heatmap_layout import (  # noqa: F401 (re-exported)
     CELL_SIZE_PX, CLASS_LABEL_WIDTH, COLORSCALE, MARGIN_TOP, MAX_CELL_SIZE_PX,
@@ -491,6 +492,7 @@ class LipidomicHeatmapPlotterService:
         sample_conditions: Optional[List[str]] = None,
         value_label: str = 'Z-score',
         clustering: Optional[ClusteringResult] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> go.Figure:
         """Create a heatmap reordered by hierarchical clustering with cluster boundaries.
 
@@ -506,6 +508,8 @@ class LipidomicHeatmapPlotterService:
             value_label: Name of the plotted quantity, used for the colour bar.
             clustering: ``perform_clustering(z_scores_df, n_clusters)``, when
                 already computed.
+            palette: Condition color scheme of the strip (a
+                CONDITION_PALETTES name).
 
         Returns:
             Plotly Figure with clustered heatmap and dashed cluster boundary lines.
@@ -561,7 +565,7 @@ class LipidomicHeatmapPlotterService:
         extra_top = _add_condition_strip(
             fig, sample_conditions,
             STRETCHED_PLOT_WIDTH_PX / max(1, len(selected_samples)),
-            label_color=None,
+            label_color=None, palette=palette,
         )
 
         sample_axis, bottom = _sample_axis_layout(selected_samples, bottom=50)
@@ -585,6 +589,7 @@ class LipidomicHeatmapPlotterService:
         selected_samples: List[str],
         sample_conditions: Optional[List[str]] = None,
         value_label: str = 'Z-score',
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> go.Figure:
         """Create a regular heatmap without clustering.
 
@@ -594,6 +599,8 @@ class LipidomicHeatmapPlotterService:
             sample_conditions: Optional condition label per sample, index-aligned
                 with selected_samples. When given, a colour-coded condition strip
                 is drawn above the columns.
+            palette: Condition color scheme of the strip (a
+                CONDITION_PALETTES name).
 
         Returns:
             Plotly Figure with regular heatmap.
@@ -624,7 +631,7 @@ class LipidomicHeatmapPlotterService:
         extra_top = _add_condition_strip(
             fig, sample_conditions,
             STRETCHED_PLOT_WIDTH_PX / max(1, len(selected_samples)),
-            label_color=None,
+            label_color=None, palette=palette,
         )
 
         sample_axis, bottom = _sample_axis_layout(selected_samples, bottom=20)
@@ -647,6 +654,7 @@ class LipidomicHeatmapPlotterService:
         selected_samples: List[str],
         sample_conditions: Optional[List[str]] = None,
         value_label: str = 'Z-score',
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> go.Figure:
         """Create a heatmap with species grouped into lipid class blocks.
 
@@ -663,6 +671,8 @@ class LipidomicHeatmapPlotterService:
                 is drawn above the columns.
             value_label: Name of the plotted quantity, used for the colour bar
                 and the figure title.
+            palette: Condition color scheme of the strip (a
+                CONDITION_PALETTES name).
 
         Returns:
             Plotly Figure with class-grouped heatmap.
@@ -689,6 +699,7 @@ class LipidomicHeatmapPlotterService:
         extra_top = _add_condition_strip(
             fig, sample_conditions,
             _square_column_px(len(species), len(selected_samples)),
+            palette=palette,
         )
         _apply_square_layout(
             fig, f'Lipidomic Heatmap Grouped by Class ({value_label})',
@@ -717,6 +728,7 @@ class LipidomicHeatmapPlotterService:
         selected_samples: List[str],
         sample_conditions: Optional[List[str]] = None,
         value_label: str = 'Z-score',
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> go.Figure:
         """Create a heatmap with one row per lipid class.
 
@@ -730,6 +742,8 @@ class LipidomicHeatmapPlotterService:
                 is drawn above the columns.
             value_label: Name of the plotted quantity, used for the colour bar
                 and the figure title.
+            palette: Condition color scheme of the strip (a
+                CONDITION_PALETTES name).
 
         Returns:
             Plotly Figure with one row per lipid class.
@@ -749,6 +763,7 @@ class LipidomicHeatmapPlotterService:
         extra_top = _add_condition_strip(
             fig, sample_conditions,
             _square_column_px(len(classes), len(selected_samples)),
+            palette=palette,
         )
         _apply_square_layout(
             fig, f'Lipidomic Heatmap Aggregated by Class ({value_label})',

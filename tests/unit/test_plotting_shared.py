@@ -262,26 +262,6 @@ class TestMatplotlibFigureCleanup:
         # Figure should be closed (not in active figure list)
         assert fig.number not in plt.get_fignums()
 
-    def test_volcano_distribution_figure_is_closed(self):
-        """VolcanoPlotterService.create_distribution_plot closes its figure."""
-        experiment = make_experiment(2, 3)
-        df = pd.DataFrame({
-            'LipidMolec': ['PC 16:0', 'PE 18:1'],
-            'ClassKey': ['PC', 'PE'],
-            'concentration[s1]': [100, 200],
-            'concentration[s2]': [110, 210],
-            'concentration[s3]': [105, 205],
-            'concentration[s4]': [500, 400],
-            'concentration[s5]': [510, 410],
-            'concentration[s6]': [505, 405],
-        })
-        fig = VolcanoPlotterService.create_distribution_plot(
-            df, ['PC 16:0'], ['Control'], experiment
-        )
-        assert isinstance(fig, plt.Figure)
-        # Figure should be closed (not in active figure list)
-        assert fig.number not in plt.get_fignums()
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Fix #8: Hover text and annotation content validation

@@ -207,6 +207,7 @@ LipidCruncher/
 │       │       ├── isotopologue_distribution.py  # isotope tracing: stacked corrected fractions
 │       │       ├── pathway_viz.py
 │       │       ├── volcano_plot.py
+│       │       ├── lipid_distribution.py    #   volcano page's per-lipid panels
 │       │       ├── lipidomic_heatmap.py
 │       │       └── heatmap_layout.py        #   condition strip, class column, square cells
 │       ├── workflows/                       # Orchestration layer
@@ -489,7 +490,7 @@ The stable isotope tracing module. Runs the real **IsoCorrectoR** R/Bioconductor
 
 Each module provides a static service class that returns Plotly or Matplotlib figures. They share conventions: static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`.
 
-Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment: classes from the 20-color `CLASS_COLORS`, conditions from the 10-color `CONDITION_COLORS` in `constants.py`), and `validate_dataframe()` (non-null, non-empty, required columns).
+Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment: classes from the 20-color `CLASS_COLORS`, conditions from the named scheme in `CONDITION_PALETTES` in `constants.py`, chosen in the sidebar's "Color scheme" picker and passed down as `palette`), `tint()` / `outlined_marker()` (bars and boxes colored by condition fill with a light tint and are outlined in the color), and `validate_dataframe()` (non-null, non-empty, required columns).
 
 | Service | Output |
 |---|---|
@@ -506,7 +507,7 @@ Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strin
 | `FACHPlotterService` | Fatty acid composition heatmap |
 | `IsotopologuePlotterService` | Isotope tracing: one molecule's corrected fractions as stacked bars per sample, grouped by condition; conditions and replicates are read from sample names (`WT_13C_1` is replicate 1 of `WT_13C`) and can be regrouped in an editable table; optionally rescales the shown isotopologues to 100% |
 | `PathwayVizPlotterService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
-| `VolcanoPlotterService` | Fold-change vs. p-value scatter |
+| `VolcanoPlotterService` | Fold-change vs. p-value scatter; per-lipid bar/box panels with a dot per sample and a significance bracket (`lipid_distribution.py`) |
 | `LipidomicHeatmapPlotterService` | Heatmaps in four modes — `regular`, `clustered` (Ward hierarchical clustering), `class_grouped` (one row per species, blocked by class, paged), `class_aggregated` (one row per class) — coloured by row Z-score or by log2 fold change against a control condition; under `class_grouped` + log2FC, species are sorted within each block by mean fold change |
 
 ### Workflows
@@ -565,7 +566,7 @@ Located in `src/app/ui/`. Presentation layer that calls adapter/workflow (and in
 
 **Static content** (`ui/content/`): Documentation text for processing steps, normalization methods, sample data descriptions, standards help, and analysis methodology (statistical testing guide, saturation profile calculations).
 
-**Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV export helpers), `sample_labels.py` (original-name vs s-label display switch), `sample_names.py` (sample display-name mapping), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
+**Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV export helpers), `sample_labels.py` (original-name vs s-label display switch), `color_scheme.py` (the condition color scheme picker; pages pass `current_palette()` to the adapter), `sample_names.py` (sample display-name mapping), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
 
 **AI Studio** (`ui/ai_studio/` + `ui/ai_chat/`; `ui/ai_studio_page.py` is the entry point `main_app.py` imports). Data logic is in `AIStudioWorkflow`; the Studio's session-state writes (upload, import, applied experiment, reset, leaving the page) are `AIStudioAdapter` methods. The sidebar widgets handle their own keys.
 | File | Responsibility |
@@ -823,7 +824,7 @@ Sandbox changes are security-critical — review carefully. Never route AI code 
 | scikit-learn | 1.5.2 | PCA, StandardScaler |
 | statsmodels | 0.14.0 | Multiple testing correction (FDR, Bonferroni), Tukey HSD |
 | plotly | 5.18.0 | Interactive visualizations |
-| matplotlib | 3.7.1 | Static plots (correlation heatmaps, volcano concentration distribution plot) |
+| matplotlib | 3.7.1 | Static plots (correlation heatmaps) |
 | seaborn | 0.12.2 | Statistical plot styling |
 | kaleido | 0.2.1 | Plotly static image export |
 | reportlab | 3.6.13 | PDF generation |

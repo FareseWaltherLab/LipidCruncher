@@ -22,6 +22,7 @@ from app.constants import resolve_format_enum
 from app.models.sample_frame import SampleFrame
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.ui.color_scheme import current_palette
 from app.ui.download_utils import csv_download_button, named_dataframe
 from app.ui.sample_labels import display_names_for, labeler, names_for, qc_input_names
 from app.ui.st_helpers import (
@@ -124,6 +125,7 @@ def _display_box_plots(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None
         fig1, fig2, mean_area_df, zero_values_percent_list, current_samples = (
             StreamlitAdapter.run_box_plots(
                 df, experiment, display_names_for('qc_input'),
+                palette=current_palette(),
             )
         )
 
@@ -677,7 +679,7 @@ def _pca_exclusion_pickers(experiment: 'ExperimentConfig') -> List[str]:
 def _pca_results(df: pd.DataFrame, experiment: 'ExperimentConfig') -> None:
     """Draw the PCA plot, keep it for the report, offer the downloads."""
     pca_plot, pca_df = StreamlitAdapter.run_pca(
-        df, experiment, display_names_for('qc'),
+        df, experiment, display_names_for('qc'), palette=current_palette(),
     )
     st.plotly_chart(pca_plot, width='stretch')
     st.session_state.qc_pca_plot = pca_plot

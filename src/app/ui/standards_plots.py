@@ -6,6 +6,7 @@ import streamlit as st
 
 from ..adapters.streamlit_adapter import StreamlitAdapter
 from ..models.experiment import ExperimentConfig
+from .color_scheme import current_palette
 from .sample_labels import display_names_for
 from .st_helpers import keep_intsta_expander_open
 
@@ -83,6 +84,7 @@ def display_standards_consistency_plots(
         selected_samples_ordered,
         sample_conditions=sample_conditions,
         display_names=display_names_for('processing'),
+        palette=current_palette(),
     )
 
     if plots:

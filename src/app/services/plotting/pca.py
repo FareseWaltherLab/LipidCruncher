@@ -15,10 +15,11 @@ import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
+from app.constants import DEFAULT_CONDITION_PALETTE
 from app.services.plotting._shared import (
     BASE_LAYOUT,
     frame_axes,
-    generate_class_color_mapping,
+    generate_condition_color_mapping,
 )
 
 
@@ -31,6 +32,7 @@ class PCAPlotterService:
         full_samples_list: List[str],
         extensive_conditions_list: List[str],
         display_names: Optional[Dict[str, str]] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> Tuple[go.Figure, pd.DataFrame]:
         """Full PCA pipeline: compute PCA and create scatter plot.
 
@@ -42,6 +44,7 @@ class PCAPlotterService:
             display_names: Optional ``{sample label -> text shown}`` for the
                 hover text; unlisted samples show their label. The returned
                 DataFrame keeps the labels in its 'Sample' column.
+            palette: Condition color scheme (a CONDITION_PALETTES name).
 
         Returns:
             Tuple of (Plotly Figure, DataFrame with PC1/PC2/Sample/Condition).
@@ -54,7 +57,7 @@ class PCAPlotterService:
             for s in available_samples
         ]
 
-        color_mapping = _generate_color_mapping(pc_df['Condition'])
+        color_mapping = _generate_color_mapping(pc_df['Condition'], palette)
         fig = _create_scatter_plot(
             pc_df, pc_names, color_mapping, display_names,
         )
@@ -92,10 +95,12 @@ def _run_pca(
     return pc_df, pc_names, available_samples
 
 
-def _generate_color_mapping(conditions) -> Dict[str, str]:
-    """Map each unique condition to a Plotly qualitative color."""
+def _generate_color_mapping(
+    conditions, palette: str = DEFAULT_CONDITION_PALETTE,
+) -> Dict[str, str]:
+    """Map each unique condition to a color from the condition palette."""
     unique_conditions = sorted(set(conditions))
-    return generate_class_color_mapping(unique_conditions)
+    return generate_condition_color_mapping(unique_conditions, palette)
 
 
 def _create_scatter_plot(

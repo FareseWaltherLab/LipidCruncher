@@ -9,6 +9,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ..constants import DEFAULT_CONDITION_PALETTE
 from ..models.experiment import ExperimentConfig
 from ..models.normalization import NormalizationConfig
 from ..services.data_cleaning import GradeFilterConfig, QualityFilterConfig
@@ -132,9 +133,11 @@ class Module1Cache:
         samples: List[str],
         sample_conditions: Optional[List[str]] = None,
         display_names: Optional[Dict[str, str]] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> List[go.Figure]:
         """Cached internal-standards consistency plots."""
         return StandardsPlotterService.create_consistency_plots(
             intsta_df, samples,
             sample_conditions=sample_conditions, display_names=display_names,
+            palette=palette,
         )

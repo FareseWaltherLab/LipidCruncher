@@ -274,13 +274,13 @@ class TestBuildAnalysesList:
         items = _build_analyses_list(plots, {})
         assert "Saturation Profiles (2 class(es))" in items
 
-    def test_volcano_companion_plots_listed(self, plotly_fig, matplotlib_fig):
+    def test_volcano_companion_plots_listed(self, plotly_fig):
         """The two plots rendered underneath the volcano plot are reported
         separately, so the cover page reflects what the PDF contains."""
         plots = {
             'volcano': plotly_fig,
             'conc_vs_fc': plotly_fig,
-            'lipid_distribution': matplotlib_fig,
+            'lipid_distribution': plotly_fig,
         }
         items = _build_analyses_list(plots, {})
         assert "Concentration vs. Fold Change" in items
@@ -405,25 +405,35 @@ class TestPlotsReachThePdf:
             generate_pdf_report(**kwargs)
         return titles
 
-    def test_volcano_companion_plots_render(self, simple_metadata, plotly_fig,
-                                            matplotlib_fig):
+    def test_volcano_companion_plots_render(self, simple_metadata, plotly_fig):
         titles = self._rendered_titles(
             analysis_plots={
                 'volcano': plotly_fig,
                 'conc_vs_fc': plotly_fig,
-                'lipid_distribution': matplotlib_fig,
+                'lipid_distribution': plotly_fig,
             },
             metadata=simple_metadata,
         )
         assert "Concentration vs. Fold Change" in titles
         assert "Individual Lipid Concentration Distribution" in titles
 
-    def test_matplotlib_distribution_survives_export(self, simple_metadata,
-                                                     matplotlib_fig):
-        """The distribution plot is Matplotlib, not Plotly. Routing it to the
-        Plotly exporter raises, so this fails if is_matplotlib is wrong."""
+    def test_distribution_survives_export(self, simple_metadata):
+        """The distribution plot is Plotly (it was Matplotlib): routing it to
+        the Matplotlib exporter raises, so this fails if is_matplotlib is
+        wrong."""
+        import pandas as pd
+        from tests.conftest import make_experiment
+        from app.services.plotting.volcano_plot import VolcanoPlotterService
+        df = pd.DataFrame({
+            'LipidMolec': ['PC 16:0', 'PE 18:1'], 'ClassKey': ['PC', 'PE'],
+            **{f'concentration[s{i}]': [100.0 * i, 50.0 * i] for i in range(1, 7)},
+        })
+        fig = VolcanoPlotterService.create_distribution_plot(
+            df, ['PC 16:0', 'PE 18:1'], ['Control', 'Treatment'],
+            make_experiment(2, 3), p_values={'PC 16:0': 0.01, 'PE 18:1': 0.2},
+        )
         result = generate_pdf_report(
-            {'lipid_distribution': matplotlib_fig}, simple_metadata,
+            {'lipid_distribution': fig}, simple_metadata,
         )
         assert result is not None
         assert result.getbuffer().nbytes > 0
@@ -592,7 +602,7 @@ class TestEveryAnalysisPage:
             ('pathway', 'Lipid Pathway Visualization', 'landscape', False),
             ('volcano', 'Volcano Plot', 'landscape', False),
             ('conc_vs_fc', 'Concentration vs. Fold Change', 'landscape', False),
-            ('lipid_distribution', 'Individual Lipid Concentration Distribution', 'portrait', True),
+            ('lipid_distribution', 'Individual Lipid Concentration Distribution', 'landscape', False),
             ('heatmap', 'Lipidomic Heatmap', 'heatmap', None),
         ]
 

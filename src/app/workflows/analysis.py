@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import plotly.graph_objects as go
 
+from ..constants import DEFAULT_CONDITION_PALETTE
 from ..models.experiment import ExperimentConfig
 from ..models.statistics import StatisticalTestConfig
 from ..services.statistical_testing import (
@@ -373,6 +374,7 @@ class AnalysisWorkflow:
         selected_classes: List[str],
         stat_config: Optional[StatisticalTestConfig] = None,
         scale: str = 'linear',
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> BarChartResult:
         """Run abundance bar chart analysis.
 
@@ -386,6 +388,7 @@ class AnalysisWorkflow:
             selected_classes: Lipid classes to include.
             stat_config: Statistical test config (None to skip tests).
             scale: 'linear' or 'log10'.
+            palette: Condition color scheme (a CONDITION_PALETTES name).
 
         Returns:
             BarChartResult with figure, abundance data, and optional stats.
@@ -411,7 +414,7 @@ class AnalysisWorkflow:
 
         mode = 'log10 scale' if scale == 'log10' else 'linear scale'
         figure = BarChartPlotterService.create_bar_chart(
-            bar_data, mode, stat_summary,
+            bar_data, mode, stat_summary, palette,
         )
 
         return BarChartResult(
@@ -855,6 +858,7 @@ class AnalysisWorkflow:
         sort_direction: str = 'desc',
         display_names: Optional[Dict[str, str]] = None,
         species_page_size: int = GROUPED_PAGE_SIZE,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> HeatmapResult:
         """Run lipidomic heatmap analysis.
 
@@ -890,6 +894,8 @@ class AnalysisWorkflow:
                 sample axis (unique per sample); unlisted samples show their
                 label. Only the drawn labels change: the data, and the
                 Z-score/fold-change frames returned, stay keyed by label.
+            palette: Color scheme of the condition strip (a
+                CONDITION_PALETTES name).
 
         Returns:
             HeatmapResult with figure, Z-scores, and optional cluster info.
@@ -930,7 +936,7 @@ class AnalysisWorkflow:
         if heatmap_type == 'class_aggregated':
             return AnalysisWorkflow._class_aggregated_heatmap(
                 filtered_df, control_samples, color_scale, shown_samples,
-                sample_conditions, value_label,
+                sample_conditions, value_label, palette,
             )
 
         if color_scale == 'log2fc':
@@ -958,7 +964,7 @@ class AnalysisWorkflow:
             z_scores_df, heatmap_type, shown_samples, sample_conditions,
             value_label, n_clusters=n_clusters, sort_columns=sort_columns,
             ascending=(sort_direction == 'asc'), species_page=species_page,
-            species_page_size=species_page_size,
+            species_page_size=species_page_size, palette=palette,
         )
 
     @staticmethod
@@ -973,6 +979,7 @@ class AnalysisWorkflow:
         ascending: bool,
         species_page: int,
         species_page_size: int,
+        palette: str,
     ) -> HeatmapResult:
         """One row per species: the clustered, class-grouped or regular figure."""
         clustering = None
@@ -985,18 +992,21 @@ class AnalysisWorkflow:
                 sample_conditions=sample_conditions,
                 value_label=value_label,
                 clustering=clustering,
+                palette=palette,
             )
         elif heatmap_type == 'class_grouped':
             figure = AnalysisWorkflow._class_grouped_heatmap_figure(
                 z_scores_df, shown_samples, sample_conditions, value_label,
                 sort_columns=sort_columns, ascending=ascending,
                 species_page=species_page, species_page_size=species_page_size,
+                palette=palette,
             )
         else:
             figure = LipidomicHeatmapPlotterService.generate_regular_heatmap(
                 z_scores_df, shown_samples,
                 sample_conditions=sample_conditions,
                 value_label=value_label,
+                palette=palette,
             )
 
         # The clustered CSV lists species as the figure draws them.
@@ -1065,6 +1075,7 @@ class AnalysisWorkflow:
         shown_samples: List[str],
         sample_conditions: List[str],
         value_label: str,
+        palette: str,
     ) -> HeatmapResult:
         """One row per lipid class: class totals, not species, as the values."""
         if color_scale == 'log2fc':
@@ -1080,6 +1091,7 @@ class AnalysisWorkflow:
                 class_values_df, shown_samples,
                 sample_conditions=sample_conditions,
                 value_label=value_label,
+                palette=palette,
             ),
             z_scores_df=class_values_df,
         )
@@ -1094,6 +1106,7 @@ class AnalysisWorkflow:
         ascending: bool,
         species_page: int,
         species_page_size: int,
+        palette: str,
     ) -> go.Figure:
         """One page of species, in class blocks, optionally ranked in each.
 
@@ -1111,4 +1124,5 @@ class AnalysisWorkflow:
             ordered_df.iloc[start:end], shown_samples,
             sample_conditions=sample_conditions,
             value_label=value_label,
+            palette=palette,
         )

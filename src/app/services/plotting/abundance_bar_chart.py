@@ -7,18 +7,20 @@ across experimental conditions, with optional significance annotations.
 Pure logic — no Streamlit dependencies.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+from app.constants import DEFAULT_CONDITION_PALETTE
 from app.models.experiment import ExperimentConfig
 from app.services.plotting._shared import (
     BASE_LAYOUT,
     generate_condition_color_mapping,
     get_effective_p_value,
+    outlined_marker,
     p_value_to_marker,
 )
 from app.services.statistical_testing import StatisticalTestSummary
@@ -27,6 +29,8 @@ ZERO_REPLACEMENT_DIVISOR = 10
 MIN_CHART_HEIGHT = 400
 HEIGHT_PER_CLASS = 30
 CHART_WIDTH = 800
+# Each sample's dot sits within this fraction of its bar's thickness.
+POINT_SPREAD = 0.6
 
 
 @dataclass
@@ -39,10 +43,14 @@ class BarChartData:
                      log10_mean_AUC_{cond}, log10_std_AUC_{cond}
         conditions: Conditions included in the data.
         classes: Lipid classes included in the data.
+        sample_values: One row per (class, sample), the dots on the bars.
+            Columns: ClassKey, Condition, value, log10_value (zeros replaced
+            as for the log10 mean).
     """
     abundance_df: pd.DataFrame
     conditions: List[str]
     classes: List[str]
+    sample_values: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 class BarChartPlotterService:
@@ -78,6 +86,7 @@ class BarChartPlotterService:
             raise ValueError("At least one lipid class must be selected")
 
         condition_frames: List[pd.DataFrame] = []
+        sample_rows: List[Dict[str, Any]] = []
 
         for condition in selected_conditions:
             if condition not in experiment.conditions_list:
@@ -102,6 +111,16 @@ class BarChartPlotterService:
                 linear_std = totals.std(ddof=1) if len(totals) > 1 else 0.0
 
                 log10_mean, log10_std = _compute_log10_stats(totals)
+                log_vals = _log10_values(totals)
+                for sample_col, value in totals.items():
+                    sample_rows.append({
+                        'ClassKey': class_name,
+                        'Condition': condition,
+                        'value': value,
+                        'log10_value': (
+                            np.nan if log_vals is None else log_vals[sample_col]
+                        ),
+                    })
 
                 rows.append({
                     'ClassKey': class_name,
@@ -137,6 +156,7 @@ class BarChartPlotterService:
             abundance_df=merged,
             conditions=actual_conditions,
             classes=merged['ClassKey'].tolist(),
+            sample_values=pd.DataFrame(sample_rows),
         )
 
     @staticmethod
@@ -144,6 +164,7 @@ class BarChartPlotterService:
         bar_data: BarChartData,
         mode: str,
         stat_results: Optional[StatisticalTestSummary] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> go.Figure:
         """Create a horizontal grouped bar chart with error bars.
 
@@ -151,6 +172,7 @@ class BarChartPlotterService:
             bar_data: Pre-computed abundance statistics.
             mode: Scale mode — 'linear scale' or 'log10 scale'.
             stat_results: Optional statistical test results for annotations.
+            palette: Condition color scheme (a CONDITION_PALETTES name).
 
         Returns:
             Plotly Figure.
@@ -170,7 +192,9 @@ class BarChartPlotterService:
             raise ValueError("No data available to create bar chart")
 
         fig = go.Figure()
-        _add_condition_bars(fig, abundance_df, conditions, mode)
+        _add_condition_bars(
+            fig, abundance_df, conditions, mode, palette, bar_data.sample_values,
+        )
 
         # Significance annotations
         if stat_results is not None and fig.data:
@@ -180,19 +204,32 @@ class BarChartPlotterService:
         return fig
 
     @staticmethod
-    def generate_color_mapping(conditions: List[str]) -> Dict[str, str]:
+    def generate_color_mapping(
+        conditions: List[str], palette: str = DEFAULT_CONDITION_PALETTE,
+    ) -> Dict[str, str]:
         """Map each condition to a consistent color.
 
         Args:
             conditions: List of condition labels.
+            palette: Condition color scheme (a CONDITION_PALETTES name).
 
         Returns:
             Dict mapping condition name to hex color string.
         """
-        return generate_condition_color_mapping(conditions)
+        return generate_condition_color_mapping(conditions, palette)
 
 
 # ── Private helpers ────────────────────────────────────────────────────
+
+
+def _log10_values(totals: pd.Series) -> Optional[pd.Series]:
+    """log10 of sample totals, zeros replaced by a tenth of the smallest
+    positive total. None if all values are zero."""
+    positive = totals[totals > 0]
+    if positive.empty:
+        return None
+    small_value = positive.min() / ZERO_REPLACEMENT_DIVISOR
+    return np.log10(totals.replace(0, small_value))
 
 
 def _compute_log10_stats(
@@ -203,13 +240,10 @@ def _compute_log10_stats(
     Returns:
         (log10_mean, log10_std). Both NaN if all values are zero.
     """
-    positive = totals[totals > 0]
-    if positive.empty:
+    log_vals = _log10_values(totals)
+    if log_vals is None:
         return np.nan, np.nan
 
-    small_value = positive.min() / ZERO_REPLACEMENT_DIVISOR
-    adjusted = totals.replace(0, small_value)
-    log_vals = np.log10(adjusted)
     log_mean = log_vals.mean()
     log_std = log_vals.std(ddof=1) if len(log_vals) > 1 else 0.0
     return log_mean, log_std
@@ -217,9 +251,11 @@ def _compute_log10_stats(
 
 def _add_condition_bars(
     fig: go.Figure, abundance_df: pd.DataFrame, conditions: List[str], mode: str,
+    palette: str, sample_values: pd.DataFrame,
 ) -> None:
-    """One horizontal bar per class for each condition, with std error bars."""
-    colors = BarChartPlotterService.generate_color_mapping(conditions)
+    """One horizontal bar per class for each condition, with std error bars
+    and a dot for each sample."""
+    colors = BarChartPlotterService.generate_color_mapping(conditions, palette)
     bar_width = 0.8 / len(conditions)
 
     for i, condition in enumerate(conditions):
@@ -251,8 +287,50 @@ def _add_condition_bars(
             ),
             width=bar_width,
             showlegend=True,
-            marker_color=colors[condition],
+            legendgroup=condition,
+            marker=outlined_marker(colors[condition]),
         ))
+
+        if not sample_values.empty:
+            _add_sample_points(
+                fig, abundance_df, sample_values, condition, y_positions,
+                bar_width, mode, colors[condition],
+            )
+
+
+def _add_sample_points(
+    fig: go.Figure,
+    abundance_df: pd.DataFrame,
+    sample_values: pd.DataFrame,
+    condition: str,
+    y_positions: np.ndarray,
+    bar_width: float,
+    mode: str,
+    color: str,
+) -> None:
+    """One dot per sample on each of ``condition``'s bars, spread evenly
+    across the bar's thickness so replicates with equal values stay visible."""
+    value_col = 'value' if mode == 'linear scale' else 'log10_value'
+    cond_values = sample_values[sample_values['Condition'] == condition]
+    xs: List[float] = []
+    ys: List[float] = []
+    for class_name, y in zip(abundance_df['ClassKey'], y_positions):
+        values = cond_values.loc[
+            cond_values['ClassKey'] == class_name, value_col,
+        ].dropna()
+        if values.empty:
+            continue
+        half = bar_width * POINT_SPREAD / 2
+        offsets = np.linspace(-half, half, len(values)) if len(values) > 1 else [0.0]
+        xs.extend(values.tolist())
+        ys.extend(y + offset for offset in offsets)
+
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys, mode='markers',
+        name=condition, legendgroup=condition, showlegend=False,
+        marker=dict(color=color, size=6, opacity=0.8),
+        hovertemplate=f'{condition}: %{{x:.3g}}<extra></extra>',
+    ))
 
 
 def _bar_chart_layout(
