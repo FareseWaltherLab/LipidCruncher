@@ -429,25 +429,58 @@ class TestConcentrationPlot:
         fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
         assert isinstance(fig, go.Figure)
 
+    @staticmethod
+    def _bars(fig):
+        return [t for t in fig.data if t.type == 'bar']
+
+    @staticmethod
+    def _dots(fig):
+        return [t for t in fig.data if t.type == 'scatter']
+
     def test_three_traces(self, sat_data):
         """One bar trace per FA type (SFA, MUFA, PUFA)."""
         fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
-        assert len(fig.data) == 3
+        assert len(self._bars(fig)) == 3
 
     def test_trace_names(self, sat_data):
         fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
-        trace_names = [t.name for t in fig.data]
+        trace_names = [t.name for t in self._bars(fig)]
         assert trace_names == ['SFA', 'MUFA', 'PUFA']
 
     def test_trace_colors(self, sat_data):
+        """Bars fill with a tint of their FA color, outlined in the color."""
+        from app.services.plotting._shared import tint
         fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
-        for trace in fig.data:
-            assert trace.marker.color == FA_COLORS[trace.name]
+        for trace in self._bars(fig):
+            assert trace.marker.line.color == FA_COLORS[trace.name]
+            assert trace.marker.color == tint(FA_COLORS[trace.name])
 
     def test_error_bars_present(self, sat_data):
         fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
-        for trace in fig.data:
+        for trace in self._bars(fig):
             assert trace.error_y.visible is True
+
+    def test_a_dot_per_sample(self, sat_data):
+        """Each FA type's dots are its per-sample values, one per sample of
+        each condition, on that condition's bar."""
+        fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
+        bars, dots = self._bars(fig), self._dots(fig)
+        assert [d.name for d in dots] == ['SFA', 'MUFA', 'PUFA']
+        for bar, dot in zip(bars, dots):
+            expected = np.concatenate([
+                sat_data.fa_data['PC'][dot.name][c] for c in ('Control', 'Treatment')
+            ])
+            assert list(dot.y) == pytest.approx(list(expected))
+            n = len(sat_data.fa_data['PC'][dot.name]['Control'])
+            for i, start in enumerate(bar.x):
+                xs = dot.x[i * n:(i + 1) * n]
+                assert all(start <= x <= start + bar.width for x in xs)
+            assert dot.marker.color == FA_COLORS[dot.name]
+
+    def test_y_axis_fits_the_highest_dot(self, sat_data):
+        fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
+        highest = max(max(d.y) for d in self._dots(fig))
+        assert fig.layout.yaxis.range[1] > highest
 
     def test_title_contains_class_name(self, sat_data):
         fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
@@ -1022,4 +1055,4 @@ class TestLargeDataset:
         )
         fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
         assert isinstance(fig, go.Figure)
-        assert len(fig.data) == 3
+        assert len([t for t in fig.data if t.type == 'bar']) == 3

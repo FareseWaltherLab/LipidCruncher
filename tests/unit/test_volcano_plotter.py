@@ -981,6 +981,13 @@ class TestCreateDistributionPlot:
         assert fig.layout.xaxis4.domain == fig.layout.xaxis.domain
         assert fig.layout.yaxis4.domain[1] < fig.layout.yaxis.domain[0]
 
+    def test_panel_titles_clear_the_frame(self, simple_df, experiment_2x3):
+        """2026-11-19 feedback: in the app the titles overlapped each
+        panel's top frame line; they now sit above it."""
+        fig = self._fig(simple_df, experiment_2x3, lipids=['PC(16:0)', 'PE(18:1)'])
+        titles = fig.layout.annotations[:2]
+        assert all(t.yanchor == 'bottom' and t.yshift >= 8 for t in titles)
+
     def test_single_panel_is_centred(self, simple_df, experiment_2x3):
         fig = self._fig(simple_df, experiment_2x3)
         x0, x1 = fig.layout.xaxis.domain

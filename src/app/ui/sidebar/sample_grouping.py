@@ -22,7 +22,6 @@ from app.ui.sample_names import (
     names_from_editor,
     sample_display_map,
 )
-from app.ui.color_scheme import render_color_scheme_picker
 from app.ui.sample_labels import labeler, render_sample_label_switch, showing_original_names
 from app.ui.sidebar.experiment_config import detect_sample_columns, display_experiment_definition
 from app.ui.sidebar.confirm_inputs import display_bqc_section, display_confirm_inputs
@@ -391,11 +390,9 @@ def display_sample_grouping(df: pd.DataFrame, data_format: str) -> Tuple[Optiona
         st.sidebar.error("Please complete sample grouping before proceeding.")
         return None, None
 
-    # Step 2b: Optional sample display-name editing, which labels to show, and
-    # the condition colors
+    # Step 2b: Optional sample display-name editing, and which labels to show
     _display_sample_name_editor(experiment)
     render_sample_label_switch()
-    render_color_scheme_picker()
 
     # Step 2c: Optional sample exclusion. The sidebar keeps the full df and
     # experiment; Module 1 runs on the reduced frame.

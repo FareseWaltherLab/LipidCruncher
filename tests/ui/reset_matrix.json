@@ -520,6 +520,7 @@
    "confirm_checkbox"
   ],
   "cleared": [
+   "_condition_palette_select",
    "additional_istd_select",
    "back_home_module1",
    "bqc_zero_threshold",
@@ -533,7 +534,6 @@
    "zero_filter_detection_threshold"
   ],
   "kept": [
-   "_condition_palette_select",
    "_dataset_source_id",
    "_preserved_bqc_zero_threshold",
    "_preserved_excluded_regroup_origin",
@@ -1398,6 +1398,7 @@
    "confirm_checkbox"
   ],
   "cleared": [
+   "_condition_palette_select",
    "analysis_csv_bar",
    "analysis_radio",
    "analysis_svg_bar",
@@ -1448,7 +1449,6 @@
    "qc_pca_svg"
   ],
   "kept": [
-   "_condition_palette_select",
    "_dataset_source_id",
    "_inputs_analysis",
    "_preserved_bqc_zero_threshold",

@@ -39,6 +39,7 @@ from app.constants import (
     MODULE_DATA_PROCESSING, MODULE_QC_ANALYSIS, PAGE_LANDING, PAGE_APP, FORMAT_MSDIAL,
     FORMAT_METABOLOMICS_WORKBENCH,
 )
+from app.ui.color_scheme import render_color_scheme_picker
 from app.ui.landing_page import display_landing_page, display_logo
 from app.ui.format_requirements import display_format_requirements
 from app.ui.zero_filtering import display_zero_filtering_config
@@ -179,6 +180,9 @@ def display_app_page() -> None:
         with center:
             st.info("Configure your experiment in the sidebar and check 'Confirm Inputs' to proceed.")
         return
+
+    # Sidebar: the condition colors of every figure, once there are figures
+    render_color_scheme_picker()
 
     # After sample grouping, use the frame Module 1 should run on: the
     # (possibly regrouped) standardized data minus any samples excluded in
