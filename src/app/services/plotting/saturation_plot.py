@@ -277,6 +277,8 @@ class SaturationPlotterService:
             raise ValueError(f"Empty data for class '{lipid_class}'")
 
         fig = go.Figure()
+        # Each bar is centred on its x: MUFA on the condition's tick, SFA
+        # and PUFA a bar to either side.
         offsets = {fa: (i - 1) * BAR_WIDTH for i, fa in enumerate(FA_TYPES)}
 
         for fa in FA_TYPES:
@@ -295,7 +297,7 @@ class SaturationPlotterService:
                     width=0,
                 ),
                 width=BAR_WIDTH,
-                offset=0,
+                offset=-BAR_WIDTH / 2,
             ))
             _add_sample_points(
                 fig, sat_data.fa_data[lipid_class][fa], plot_df, fa,
@@ -459,7 +461,7 @@ def _add_sample_points(
         values = condition_values.get(_condition_name(label))
         if values is None or not len(values):
             continue
-        centre = i + offset + BAR_WIDTH / 2
+        centre = i + offset
         spread = np.linspace(-half, half, len(values)) if len(values) > 1 else [0.0]
         xs.extend(centre + d for d in spread)
         ys.extend(values.tolist())
