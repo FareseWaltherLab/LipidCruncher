@@ -5,7 +5,7 @@ Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
 
-Checked against main at 71e7061 (2026-11-19); see CLAUDE.md, "Keep the
+Checked against main at 0a13f38 (2026-11-19); see CLAUDE.md, "Keep the
 AI's knowledge in step with main".
 """
 
@@ -126,7 +126,8 @@ values per sample
 sample's class total, with optional statistical testing
 - **Pie charts** — lipid class composition per condition, or "Species within a class": \
 each species of one class as a share of that class
-- **Saturation profiles** — SFA/MUFA/PUFA distribution
+- **Saturation profiles** — SFA/MUFA/PUFA distribution per class: concentration (mean ± SD \
+with a dot per sample) or percentage
 - **Chain length analysis** — carbon chain length and double bond bubble charts
 - **FACH** — fatty acid composition heatmap
 - **Pathway visualization** — interactive metabolic pathway network (28 lipid classes)
@@ -140,15 +141,17 @@ by class, regular, and clustered (hierarchical clustering, Ward linkage, Euclide
 distance); colored by z-score or by log2 fold change against a control condition
 
 ### Figure colors
-A **Color scheme** picker in the sidebar (under "Show samples as") colors every figure \
+A **Color scheme** picker in the sidebar's **Plot Colors** section (the last section, shown \
+once inputs are confirmed) colors every figure \
 colored by condition: the Quality Check box plot, missing-values bars and PCA, the internal \
 standards bars, the class concentration bar chart, the lipidomic heatmap's condition strip \
 and the volcano page's individual-lipid panels, and the same figures in the PDF report. \
 Schemes: **Classic** (the default, Plotly's blue, orange, green, ...), **Soft** (muted blue, \
 purple, raspberry, ..., in the style of figures made for papers) and **Colorblind-safe** (the \
 Okabe-Ito palette). Bars and boxes colored by condition are drawn as a light fill outlined in \
-the condition's color. Saturation plots color by SFA/MUFA/PUFA and pies by class, so the \
-scheme does not change them.
+the condition's color. Saturation plots color by SFA/MUFA/PUFA (sage, blue, red) and pies by \
+class, so the scheme does not change them, but saturation bars are outlined the same way and \
+the concentration view shows a dot per sample.
 
 ### Stable Isotope Tracing (separate page)
 Opened from the home page, independent of Modules 1–3. Runs natural-isotope-abundance \
