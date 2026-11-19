@@ -5,7 +5,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from app.services.plotting.box_plot import BoxPlotService, _get_sample_colors, CONDITION_COLORS
+from app.constants import CONDITION_COLORS
+from app.services.plotting.box_plot import BoxPlotService, _get_sample_colors
 
 
 # =============================================================================

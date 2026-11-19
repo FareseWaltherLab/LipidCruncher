@@ -324,7 +324,7 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 
 Each module provides a static service class that returns Plotly or Matplotlib figures. They share conventions: static methods only, no Streamlit imports, validate inputs, return `go.Figure` or `plt.Figure`.
 
-Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment: classes from the 20-color `CLASS_COLORS`, conditions from the 10-color `CONDITION_COLORS` in `constants.py`), and `validate_dataframe()` (non-null, non-empty, required columns).
+Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strings), `generate_class_color_mapping()` / `generate_condition_color_mapping()` (consistent color assignment: classes from the 20-color `CLASS_COLORS`, conditions from the named scheme in `CONDITION_PALETTES` in `constants.py`, chosen in the sidebar's "Color scheme" picker and passed down as `palette`), `tint()` / `outlined_marker()` (bars and boxes colored by condition fill with a light tint and are outlined in the color), and `validate_dataframe()` (non-null, non-empty, required columns).
 
 | Service | Output |
 |---|---|
@@ -391,7 +391,7 @@ Located in `src/app/ui/`. Presentation layer that calls adapter/workflow (and in
 
 **Static content** (`ui/content/`): Documentation text for processing steps, normalization methods, sample data descriptions, standards help, and analysis methodology (statistical testing guide, saturation profile calculations).
 
-**Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV export helpers), `sample_labels.py` (original-name vs s-label display switch), `sample_names.py` (sample display-name mapping), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
+**Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV export helpers), `sample_labels.py` (original-name vs s-label display switch), `color_scheme.py` (the condition color scheme picker; pages pass `current_palette()` to the adapter), `sample_names.py` (sample display-name mapping), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
 
 ---
 

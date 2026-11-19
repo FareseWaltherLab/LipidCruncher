@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import plotly.graph_objects as go
 
+from app.constants import DEFAULT_CONDITION_PALETTE
 from app.services.plotting._shared import BASE_LAYOUT, generate_condition_color_mapping
 
 
@@ -209,6 +210,7 @@ def _add_condition_strip(
     sample_conditions: Optional[List[str]],
     column_px: float,
     label_color: Optional[str] = 'black',
+    palette: str = DEFAULT_CONDITION_PALETTE,
 ) -> int:
     """Draw a colour-coded condition strip above the columns.
 
@@ -228,6 +230,7 @@ def _add_condition_strip(
         label_color: Colour of the condition names. None leaves it to the
             figure's font, so the names follow the Streamlit theme like the
             title does on a figure without a fixed white background.
+        palette: Condition color scheme (a CONDITION_PALETTES name).
 
     Returns:
         Extra top margin, in px, the caller must add so any rows of
@@ -242,7 +245,7 @@ def _add_condition_strip(
     rows = _label_rows(blocks, column_px)
 
     color_map = generate_condition_color_mapping(
-        list(dict.fromkeys(cond for cond, _, _ in blocks))
+        list(dict.fromkeys(cond for cond, _, _ in blocks)), palette,
     )
 
     for (condition, start, end), row in zip(blocks, rows):

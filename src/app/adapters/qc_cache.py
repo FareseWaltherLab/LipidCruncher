@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ..constants import DEFAULT_CONDITION_PALETTE
 from ..models.experiment import ExperimentConfig
 from ..services.plotting.box_plot import BoxPlotService
 from ..services.plotting.bqc_plotter import BQCPlotterService
@@ -29,11 +30,13 @@ class QualityCheckCache:
         df: pd.DataFrame,
         experiment: ExperimentConfig,
         display_names: Optional[Dict[str, str]] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> Tuple[go.Figure, go.Figure, pd.DataFrame, List[float], List[str]]:
         """Cached box plot computation.
 
         ``display_names`` (``{s-label -> text shown}``) labels the samples in
-        both figures; the returned data stays keyed by s-label.
+        both figures; the returned data stays keyed by s-label. ``palette``
+        names the condition color scheme.
 
         Returns:
             Tuple of (missing_values_fig, box_plot_fig, mean_area_df,
@@ -47,12 +50,12 @@ class QualityCheckCache:
         fig1 = BoxPlotService.plot_missing_values(
             samples, missing_pct,
             experiment.conditions_list, experiment.individual_samples_list,
-            display_names=display_names,
+            display_names=display_names, palette=palette,
         )
         fig2 = BoxPlotService.plot_box_plot(
             mean_area_df, samples,
             experiment.conditions_list, experiment.individual_samples_list,
-            display_names=display_names,
+            display_names=display_names, palette=palette,
         )
         return fig1, fig2, mean_area_df, missing_pct, samples
 
@@ -120,11 +123,13 @@ class QualityCheckCache:
         df: pd.DataFrame,
         experiment: ExperimentConfig,
         display_names: Optional[Dict[str, str]] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> Tuple[go.Figure, pd.DataFrame]:
         """Cached PCA computation.
 
         ``display_names`` (``{s-label -> text shown}``) labels the hover text;
-        ``pca_df`` keeps the s-labels.
+        ``pca_df`` keeps the s-labels. ``palette`` names the condition color
+        scheme.
 
         Returns:
             Tuple of (pca_plot, pca_df)
@@ -132,7 +137,7 @@ class QualityCheckCache:
         return PCAPlotterService.plot_pca(
             df, experiment.full_samples_list,
             experiment.extensive_conditions_list,
-            display_names=display_names,
+            display_names=display_names, palette=palette,
         )
 
     @staticmethod

@@ -13,7 +13,10 @@ import matplotlib.figure
 import pandas as pd
 import plotly.graph_objects as go
 
-from app.constants import COV_THRESHOLD_DEFAULT, PAGE_LANDING, MODULE_DATA_PROCESSING
+from app.constants import (
+    COV_THRESHOLD_DEFAULT, DEFAULT_CONDITION_PALETTE, PAGE_LANDING,
+    MODULE_DATA_PROCESSING,
+)
 
 from ..models.experiment import ExperimentConfig
 from ..models.sample_frame import SampleFrame
@@ -40,6 +43,7 @@ class SessionState:
                              format_type, msdial_features, msdial_sample_names,
                              _msdial_override_samples, lipidsearch_sample_names
       experiment_config.py → workbench_conditions, workbench_samples
+      color_scheme.py      → condition_palette
       sample_grouping.py   → experiment, bqc_label, confirmed, grouping_complete,
                              processing_frame, _preserved_grouping_radio,
                              _preserved_regroup_selections; the regroup
@@ -126,6 +130,9 @@ class SessionState:
     # 'original' shows those names in tables, plots, pickers and downloads;
     # 'standardized' shows s1, s2, ... instead (sidebar switch).
     sample_label_mode: str = 'original'
+    # The CONDITION_PALETTES scheme for figures colored by condition
+    # (sidebar picker, color_scheme.py).
+    condition_palette: str = DEFAULT_CONDITION_PALETTE
 
     # --- Data processing (owner: data_processing.py) ---
     cleaned_df: Optional[pd.DataFrame] = None
@@ -260,7 +267,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'workbench_conditions', 'workbench_samples',
             # Kept through "Reset session" with the standardized data they
             # describe (their widgets below are not, and re-seed from them).
-            'sample_label_mode', 'msdial_use_normalized',
+            'sample_label_mode', 'condition_palette', 'msdial_use_normalized',
             'msdial_data_type_index',
         }),
         # Read from the upload under the format and, for MS-DIAL, the raw /
@@ -285,7 +292,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'manual_sample_override', 'grouping_radio', 'exclude_samples',
             'bqc_radio', 'bqc_label_radio', 'confirm_checkbox',
             'sample_data_experiment', 'sample_names_editor',
-            '_sample_label_mode_radio',
+            '_sample_label_mode_radio', '_condition_palette_select',
         }),
         # The regroup snapshot (restored by the grouping step's "Yes"), and
         # the marker that stops the LipidSearch alignment pre-filling the

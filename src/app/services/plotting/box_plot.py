@@ -14,14 +14,21 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from app.constants import CONDITION_COLORS
-from app.services.plotting._shared import BASE_LAYOUT
+from app.constants import DEFAULT_CONDITION_PALETTE
+from app.services.plotting._shared import (
+    BASE_LAYOUT,
+    OUTLINE_WIDTH,
+    generate_condition_color_mapping,
+    outlined_marker,
+    tint,
+)
 
 
 def _get_sample_colors(
     full_samples_list: List[str],
     conditions_list: List[str],
     individual_samples_list: List[List[str]],
+    palette: str = DEFAULT_CONDITION_PALETTE,
 ) -> Tuple[List[str], dict, dict]:
     """Map each sample to a color based on its condition.
 
@@ -33,10 +40,9 @@ def _get_sample_colors(
         for sample in samples:
             sample_to_condition[sample] = conditions_list[cond_idx]
 
-    condition_to_color = {
-        cond: CONDITION_COLORS[i % len(CONDITION_COLORS)]
-        for i, cond in enumerate(conditions_list)
-    }
+    condition_to_color = generate_condition_color_mapping(
+        conditions_list, palette,
+    )
 
     colors = [
         condition_to_color[sample_to_condition.get(sample, conditions_list[0])]
@@ -131,6 +137,7 @@ class BoxPlotService:
         conditions_list: Optional[List[str]] = None,
         individual_samples_list: Optional[List[List[str]]] = None,
         display_names: Optional[Dict[str, str]] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> go.Figure:
         """Create horizontal bar chart of missing values percentage.
 
@@ -144,6 +151,7 @@ class BoxPlotService:
             display_names: Optional ``{sample label -> text shown}`` for the
                 axis labels (unique per sample); unlisted samples show their
                 label.
+            palette: Condition color scheme (a CONDITION_PALETTES name).
 
         Returns:
             Plotly Figure.
@@ -156,7 +164,8 @@ class BoxPlotService:
 
         if conditions_list and individual_samples_list:
             colors, _, condition_to_color = _get_sample_colors(
-                full_samples_list, conditions_list, individual_samples_list
+                full_samples_list, conditions_list, individual_samples_list,
+                palette,
             )
 
             # Individual bars (no legend)
@@ -168,7 +177,7 @@ class BoxPlotService:
                     text=[f'{zero_values_percent_list[i]:.1f}%'],
                     textposition='outside',
                     textfont=dict(size=12, color='black'),
-                    marker_color=colors[i],
+                    marker=outlined_marker(colors[i]),
                     showlegend=False,
                 ))
 
@@ -176,7 +185,7 @@ class BoxPlotService:
             for condition in conditions_list:
                 fig.add_trace(go.Bar(
                     y=[None], x=[None], orientation='h',
-                    marker_color=condition_to_color[condition],
+                    marker=outlined_marker(condition_to_color[condition]),
                     name=condition, showlegend=True,
                 ))
         else:
@@ -229,11 +238,13 @@ class BoxPlotService:
         conditions_list: Optional[List[str]] = None,
         individual_samples_list: Optional[List[List[str]]] = None,
         display_names: Optional[Dict[str, str]] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> go.Figure:
         """Create box plot of log10-transformed non-zero concentrations.
 
         ``display_names`` (optional ``{sample label -> text shown}``, unique
         per sample) labels the boxes; unlisted samples show their label.
+        ``palette`` names the condition color scheme.
         """
         log_transformed_data = [
             list(np.log10(mean_area_df[col][mean_area_df[col] > 0]))
@@ -244,7 +255,7 @@ class BoxPlotService:
         fig = go.Figure()
         BoxPlotService._add_box_traces(
             fig, log_transformed_data, full_samples_list,
-            conditions_list, individual_samples_list, shown,
+            conditions_list, individual_samples_list, shown, palette,
         )
         BoxPlotService._apply_box_plot_layout(
             fig, bool(conditions_list),
@@ -260,6 +271,7 @@ class BoxPlotService:
         conditions_list: Optional[List[str]],
         individual_samples_list: Optional[List[List[str]]],
         shown: List[str],
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> None:
         """Add box traces, colored by condition if available.
 
@@ -267,19 +279,21 @@ class BoxPlotService:
         """
         if conditions_list and individual_samples_list:
             colors, _, condition_to_color = _get_sample_colors(
-                samples, conditions_list, individual_samples_list
+                samples, conditions_list, individual_samples_list, palette,
             )
             for i, d in enumerate(data):
                 fig.add_trace(go.Box(
                     y=d, name=shown[i], boxpoints='outliers',
-                    marker_color=colors[i], line_color=colors[i],
+                    marker_color=colors[i], fillcolor=tint(colors[i]),
+                    line=dict(color=colors[i], width=OUTLINE_WIDTH),
                     showlegend=False,
                 ))
             for condition in conditions_list:
+                color = condition_to_color[condition]
                 fig.add_trace(go.Box(
                     y=[None], name=condition,
-                    marker_color=condition_to_color[condition],
-                    line_color=condition_to_color[condition],
+                    marker_color=color, fillcolor=tint(color),
+                    line=dict(color=color, width=OUTLINE_WIDTH),
                     showlegend=True,
                 ))
         else:

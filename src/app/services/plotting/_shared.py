@@ -12,7 +12,7 @@ from typing import Dict, List
 import numpy as np
 import pandas as pd
 
-from app.constants import CONDITION_COLORS
+from app.constants import CONDITION_PALETTES, DEFAULT_CONDITION_PALETTE
 
 
 # Extended qualitative palette for lipid classes (tab20-based, 20 distinct colors).
@@ -104,21 +104,44 @@ def get_effective_p_value(result) -> float:
 # ── Color utilities ───────────────────────────────────────────────────
 
 
-def generate_condition_color_mapping(conditions: List[str]) -> Dict[str, str]:
-    """Map each condition to a consistent color from CONDITION_COLORS.
+def generate_condition_color_mapping(
+    conditions: List[str], palette: str = DEFAULT_CONDITION_PALETTE,
+) -> Dict[str, str]:
+    """Map each condition to a consistent color from a condition palette.
 
-    Cycles through CONDITION_COLORS if there are more conditions than colors.
+    Cycles through the palette if there are more conditions than colors.
 
     Args:
         conditions: List of condition labels.
+        palette: Name of a scheme in CONDITION_PALETTES.
 
     Returns:
         Dict mapping condition name to hex color string.
     """
+    colors = CONDITION_PALETTES[palette]
     return {
-        cond: CONDITION_COLORS[i % len(CONDITION_COLORS)]
+        cond: colors[i % len(colors)]
         for i, cond in enumerate(conditions)
     }
+
+
+# Bars and boxes colored by condition fill with a light tint of the color and
+# are outlined in the color itself, the style of figures made for papers.
+FILL_STRENGTH = 0.3
+OUTLINE_WIDTH = 2
+
+
+def tint(color: str, strength: float = FILL_STRENGTH) -> str:
+    """Mix a ``#rrggbb`` color with white, keeping ``strength`` of the color."""
+    channels = (int(color[i:i + 2], 16) for i in (1, 3, 5))
+    return '#' + ''.join(
+        f'{round(255 - (255 - c) * strength):02x}' for c in channels
+    )
+
+
+def outlined_marker(color: str) -> Dict:
+    """Bar marker filled with a tint of ``color`` and outlined in ``color``."""
+    return dict(color=tint(color), line=dict(color=color, width=OUTLINE_WIDTH))
 
 
 def generate_class_color_mapping(classes: List[str]) -> Dict[str, str]:

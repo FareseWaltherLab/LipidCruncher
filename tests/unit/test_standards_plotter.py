@@ -409,10 +409,10 @@ class TestConditionColoring:
         assert list(fig.data[0].x) == ['s1', 's2']
         assert list(fig.data[0].y) == [100, 200]
         assert list(fig.data[1].x) == ['s3', 's4']
-        # Colored by the shared condition palette.
+        # Outlined in the shared condition palette.
         cmap = generate_condition_color_mapping(['A', 'B'])
-        assert fig.data[0].marker.color == cmap['A']
-        assert fig.data[1].marker.color == cmap['B']
+        assert fig.data[0].marker.line.color == cmap['A']
+        assert fig.data[1].marker.line.color == cmap['B']
         # Legend now labels conditions.
         assert fig.layout.legend.title.text == 'Condition'
 
