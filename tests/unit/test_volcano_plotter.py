@@ -1010,6 +1010,37 @@ class TestCreateDistributionPlot:
         assert list(fig.layout.xaxis.ticktext) == ['Control']
 
 
+class TestDistributionPValues:
+    """The volcano p-values behind the distribution plot's brackets."""
+
+    VDF = pd.DataFrame({
+        'LipidMolec': ['PC(16:0)', 'PE(18:1)', 'SM(d18:1)'],
+        'pValue': [0.01, 0.2, 0.03],
+        'adjusted_pValue': [0.03, 0.4, 0.06],
+        'test_method': ["Welch's t-test"] * 3,
+    })
+
+    def test_raw_p_values(self):
+        p_values, label = VolcanoPlotterService.distribution_p_values(
+            self.VDF, ['PC(16:0)', 'PE(18:1)'], use_adjusted_p=False,
+        )
+        assert p_values == {'PC(16:0)': 0.01, 'PE(18:1)': 0.2}
+        assert label == "Welch's t-test, unadjusted p (as in the volcano plot)"
+
+    def test_adjusted_p_values(self):
+        p_values, label = VolcanoPlotterService.distribution_p_values(
+            self.VDF, ['SM(d18:1)'], use_adjusted_p=True,
+        )
+        assert p_values == {'SM(d18:1)': 0.06}
+        assert 'adjusted p' in label and 'unadjusted' not in label
+
+    def test_lipids_outside_the_volcano_are_left_out(self):
+        p_values, _ = VolcanoPlotterService.distribution_p_values(
+            self.VDF, ['PC(16:0)', 'TG(50:1)'], use_adjusted_p=False,
+        )
+        assert p_values == {'PC(16:0)': 0.01}
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # generate_color_mapping
 # ═══════════════════════════════════════════════════════════════════════

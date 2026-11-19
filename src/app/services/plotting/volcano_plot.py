@@ -417,6 +417,31 @@ class VolcanoPlotterService:
         )
 
     @staticmethod
+    def distribution_p_values(
+        volcano_df: pd.DataFrame, lipids: List[str], use_adjusted_p: bool,
+    ) -> Tuple[Dict[str, float], str]:
+        """The volcano test's p-value for each of ``lipids``, for the
+        distribution plot's brackets, and the caption naming the test.
+
+        Args:
+            volcano_df: ``VolcanoData.volcano_df``.
+            lipids: Lipids to look up; those not in the volcano are left out.
+            use_adjusted_p: Use the adjusted p-values, as the volcano plot
+                does under a correction.
+
+        Returns:
+            (lipid -> p-value, caption text).
+        """
+        rows = volcano_df[volcano_df['LipidMolec'].isin(lipids)]
+        p_col = 'adjusted_pValue' if use_adjusted_p else 'pValue'
+        tests = ' / '.join(dict.fromkeys(rows['test_method']))
+        label = (
+            f"{tests}, {'adjusted' if use_adjusted_p else 'unadjusted'} p "
+            "(as in the volcano plot)"
+        )
+        return dict(zip(rows['LipidMolec'], rows[p_col])), label
+
+    @staticmethod
     def generate_color_mapping(classes: List[str]) -> Dict[str, str]:
         """Map each lipid class to a consistent color.
 

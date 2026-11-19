@@ -9,6 +9,7 @@ import streamlit as st
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
+from app.services.plotting.volcano_plot import VolcanoPlotterService
 from app.workflows.analysis import AnalysisWorkflow
 from app.ui.color_scheme import current_palette
 from app.ui.download_utils import csv_download_button
@@ -399,14 +400,13 @@ def _display_individual_lipid_analysis(
         key='volcano_dist_style',
     )
 
-    detail_df = vdf[vdf['LipidMolec'].isin(detail_lipids)]
-    p_col = 'adjusted_pValue' if use_adjusted else 'pValue'
-    tests = ' / '.join(dict.fromkeys(detail_df['test_method']))
+    p_values, p_label = VolcanoPlotterService.distribution_p_values(
+        vdf, detail_lipids, use_adjusted,
+    )
     selected_conditions = [control, experimental]
     dist_fig = StreamlitAdapter.run_distribution_plot(
         df, detail_lipids, selected_conditions, experiment,
-        p_values=dict(zip(detail_df['LipidMolec'], detail_df[p_col])),
-        p_label=f"{tests}, {'adjusted' if use_adjusted else 'unadjusted'} p (as in the volcano plot)",
+        p_values=p_values, p_label=p_label,
         style='box' if style == 'Box' else 'bar',
         palette=current_palette(),
     )
