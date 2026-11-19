@@ -3,7 +3,8 @@ Volcano plot plotting service.
 
 Prepares per-lipid statistical data (log2 fold change, -log10 p-value),
 creates Plotly volcano scatter plots with threshold lines and label placement,
-concentration-vs-fold-change scatter plots, and Seaborn distribution box plots.
+concentration-vs-fold-change scatter plots, and per-lipid concentration
+panels (lipid_distribution.py).
 
 Pure logic — no Streamlit dependencies.
 """
@@ -11,18 +12,22 @@ Pure logic — no Streamlit dependencies.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import seaborn as sns
 
+from app.constants import DEFAULT_CONDITION_PALETTE
 from app.models.experiment import ExperimentConfig
 from app.services.plotting._shared import (
     BASE_LAYOUT,
     MARKER_LINE,
     frame_axes,
     generate_class_color_mapping,
+    generate_condition_color_mapping,
+)
+from app.services.plotting.lipid_distribution import (
+    STYLES as DISTRIBUTION_STYLES,
+    build_distribution_figure,
 )
 from app.services.statistical_testing import (
     StatisticalTestSummary,
@@ -339,25 +344,43 @@ class VolcanoPlotterService:
         selected_lipids: List[str],
         selected_conditions: List[str],
         experiment: ExperimentConfig,
-    ) -> plt.Figure:
-        """Create a Seaborn box plot of concentration distributions.
+        p_values: Optional[Dict[str, float]] = None,
+        p_label: str = '',
+        style: str = 'bar',
+        palette: str = DEFAULT_CONDITION_PALETTE,
+    ) -> go.Figure:
+        """Create one concentration panel per selected lipid.
+
+        Each panel shows a bar (mean ± SD) or box per condition with a dot
+        for each sample, and, for two conditions, a bracket marking the
+        significance of their difference.
 
         Args:
             df: Full DataFrame with concentration[s*] columns and LipidMolec.
             selected_lipids: Lipid names to plot.
-            selected_conditions: Conditions to include.
+            selected_conditions: Conditions to include, in x-axis order.
             experiment: Experiment configuration.
+            p_values: Optional lipid -> p-value (the volcano test's) for the
+                brackets.
+            p_label: Where the p-values come from, for the caption.
+            style: 'bar' or 'box'.
+            palette: Condition color scheme (a CONDITION_PALETTES name);
+                colors follow the experiment's condition order, as in
+                Quality Check.
 
         Returns:
-            Matplotlib Figure.
+            Plotly Figure.
 
         Raises:
-            ValueError: If no valid data for selected lipids/conditions.
+            ValueError: If no valid data for selected lipids/conditions, or
+                style is unknown.
         """
         if not selected_lipids:
             raise ValueError("At least one lipid must be selected")
         if not selected_conditions:
             raise ValueError("At least one condition must be selected")
+        if style not in DISTRIBUTION_STYLES:
+            raise ValueError(f"Invalid style '{style}'. Must be 'bar' or 'box'")
 
         plot_rows: List[Dict] = []
         for lipid in selected_lipids:
@@ -374,6 +397,7 @@ class VolcanoPlotterService:
                         plot_rows.append({
                             'Lipid': lipid,
                             'Condition': condition,
+                            'Sample': sample,
                             'Concentration': float(val),
                         })
 
@@ -381,26 +405,16 @@ class VolcanoPlotterService:
             raise ValueError("No valid data for selected lipids and conditions")
 
         plot_df = pd.DataFrame(plot_rows)
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.set(style="whitegrid")
-        sns.boxplot(
-            x="Lipid", y="Concentration", hue="Condition",
-            data=plot_df, palette="Set2", ax=ax,
+        conditions = [
+            c for c in dict.fromkeys(selected_conditions)
+            if c in set(plot_df['Condition'])
+        ]
+        colors = generate_condition_color_mapping(
+            experiment.conditions_list, palette,
         )
-        ax.grid(False)
-        ax.set_title(
-            "Concentration Distribution for Selected Lipids", fontsize=20
+        return build_distribution_figure(
+            plot_df, conditions, colors, style, p_values, p_label,
         )
-        ax.set_xlabel("Lipid", fontsize=20)
-        ax.set_ylabel("Concentration", fontsize=20)
-        ax.tick_params(axis='x', labelsize=14, rotation=45)
-        ax.tick_params(axis='y', labelsize=14)
-        ax.legend(title='Condition', loc='upper right')
-        fig.tight_layout()
-
-        plt.close(fig)
-        return fig
 
     @staticmethod
     def generate_color_mapping(classes: List[str]) -> Dict[str, str]:

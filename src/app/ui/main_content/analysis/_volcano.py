@@ -10,6 +10,7 @@ from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.workflows.analysis import AnalysisWorkflow
+from app.ui.color_scheme import current_palette
 from app.ui.download_utils import csv_download_button
 from app.ui.st_helpers import display_export_buttons, section_header
 
@@ -239,7 +240,7 @@ def _render_volcano_results(
 
     # Individual lipid analysis
     _display_individual_lipid_analysis(
-        df, experiment, result, control, experimental,
+        df, experiment, result, control, experimental, use_adjusted,
     )
 
     # Excluded lipids
@@ -355,8 +356,10 @@ def _display_individual_lipid_analysis(
     result: 'VolcanoResult',
     control: str,
     experimental: str,
+    use_adjusted: bool,
 ) -> None:
-    """Display individual lipid distribution plots."""
+    """Display one concentration panel per chosen lipid, with the volcano
+    test's significance between the two conditions."""
     if result.volcano_data is None or result.volcano_data.volcano_df is None:
         return
 
@@ -389,12 +392,26 @@ def _display_individual_lipid_analysis(
     if not detail_lipids:
         return
 
+    style = st.radio(
+        "Show as:",
+        ['Bar (mean ± SD)', 'Box'],
+        horizontal=True,
+        key='volcano_dist_style',
+    )
+
+    detail_df = vdf[vdf['LipidMolec'].isin(detail_lipids)]
+    p_col = 'adjusted_pValue' if use_adjusted else 'pValue'
+    tests = ' / '.join(dict.fromkeys(detail_df['test_method']))
     selected_conditions = [control, experimental]
     dist_fig = StreamlitAdapter.run_distribution_plot(
         df, detail_lipids, selected_conditions, experiment,
+        p_values=dict(zip(detail_df['LipidMolec'], detail_df[p_col])),
+        p_label=f"{tests}, {'adjusted' if use_adjusted else 'unadjusted'} p (as in the volcano plot)",
+        style='box' if style == 'Box' else 'bar',
+        palette=current_palette(),
     )
 
-    st.pyplot(dist_fig)
+    st.plotly_chart(dist_fig, width='content')
     _publish('lipid_distribution', dist_fig)
 
     dist_data = _build_distribution_csv(
@@ -405,7 +422,6 @@ def _display_individual_lipid_analysis(
         f"conc_dist_{experimental}_vs_{control}.svg",
         f"conc_dist_data_{experimental}_vs_{control}.csv",
         "analysis_svg_dist", "analysis_csv_dist",
-        is_matplotlib=True,
         sample_names=names_for('qc'),
     )
 

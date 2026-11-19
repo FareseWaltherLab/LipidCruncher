@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-import matplotlib.figure
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from ..constants import DEFAULT_CONDITION_PALETTE
@@ -185,10 +185,15 @@ class AnalysisCache:
         selected_lipids: List[str],
         selected_conditions: List[str],
         experiment: ExperimentConfig,
-    ) -> matplotlib.figure.Figure:
-        """Cached per-lipid concentration distribution plot (volcano page)."""
+        p_values: Optional[Dict[str, float]] = None,
+        p_label: str = '',
+        style: str = 'bar',
+        palette: str = DEFAULT_CONDITION_PALETTE,
+    ) -> go.Figure:
+        """Cached per-lipid concentration panels (volcano page)."""
         return VolcanoPlotterService.create_distribution_plot(
             df, selected_lipids, selected_conditions, experiment,
+            p_values=p_values, p_label=p_label, style=style, palette=palette,
         )
 
     @staticmethod

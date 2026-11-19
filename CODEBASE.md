@@ -147,6 +147,7 @@ LipidCruncher/
 │       │       ├── fach.py
 │       │       ├── pathway_viz.py
 │       │       ├── volcano_plot.py
+│       │       ├── lipid_distribution.py    #   volcano page's per-lipid panels
 │       │       ├── lipidomic_heatmap.py
 │       │       └── heatmap_layout.py        #   condition strip, class column, square cells
 │       ├── workflows/                       # Orchestration layer
@@ -340,7 +341,7 @@ Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strin
 | `ChainLengthPlotterService` | Carbon chain length and double bond bubble charts |
 | `FACHPlotterService` | Fatty acid composition heatmap |
 | `PathwayVizPlotterService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
-| `VolcanoPlotterService` | Fold-change vs. p-value scatter |
+| `VolcanoPlotterService` | Fold-change vs. p-value scatter; per-lipid bar/box panels with a dot per sample and a significance bracket (`lipid_distribution.py`) |
 | `LipidomicHeatmapPlotterService` | Clustered heatmap (Ward hierarchical clustering) |
 
 ### Workflows
@@ -605,7 +606,7 @@ The app runs on port 8501 by default.
 | scikit-learn | 1.5.2 | PCA, StandardScaler |
 | statsmodels | 0.14.0 | Multiple testing correction (FDR, Bonferroni), Tukey HSD |
 | plotly | 5.18.0 | Interactive visualizations |
-| matplotlib | 3.7.1 | Static plots (correlation heatmaps, volcano concentration distribution plot) |
+| matplotlib | 3.7.1 | Static plots (correlation heatmaps) |
 | seaborn | 0.12.2 | Statistical plot styling |
 | kaleido | 0.2.1 | Plotly static image export |
 | reportlab | 3.6.13 | PDF generation |

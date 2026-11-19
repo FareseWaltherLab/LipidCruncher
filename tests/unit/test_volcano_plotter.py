@@ -10,9 +10,6 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import pytest
-import matplotlib
-matplotlib.use('Agg')  # non-interactive backend for CI
-import matplotlib.pyplot as plt
 
 from tests.conftest import make_experiment
 
@@ -847,99 +844,170 @@ class TestConcentrationVsFcPlot:
 
 
 class TestCreateDistributionPlot:
-    """Tests for concentration distribution box plot."""
+    """Tests for the per-lipid concentration panels."""
 
-    def test_returns_matplotlib_figure(self, simple_df, experiment_2x3):
-        fig = VolcanoPlotterService.create_distribution_plot(
-            simple_df,
-            selected_lipids=['PC(16:0)'],
-            selected_conditions=['Control'],
-            experiment=experiment_2x3,
+    def _fig(self, df, experiment, lipids=('PC(16:0)',),
+             conditions=('Control', 'Treatment'), **kwargs):
+        return VolcanoPlotterService.create_distribution_plot(
+            df, selected_lipids=list(lipids),
+            selected_conditions=list(conditions), experiment=experiment,
+            **kwargs,
         )
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+
+    @staticmethod
+    def _of_type(fig, kind):
+        return [t for t in fig.data if t.type == kind]
+
+    def test_returns_plotly_figure(self, simple_df, experiment_2x3):
+        assert isinstance(self._fig(simple_df, experiment_2x3), go.Figure)
 
     def test_title(self, simple_df, experiment_2x3):
-        fig = VolcanoPlotterService.create_distribution_plot(
-            simple_df,
-            selected_lipids=['PC(16:0)'],
-            selected_conditions=['Control'],
-            experiment=experiment_2x3,
-        )
-        ax = fig.axes[0]
-        assert 'Distribution' in ax.get_title()
-        plt.close(fig)
+        fig = self._fig(simple_df, experiment_2x3)
+        assert 'Distribution' in fig.layout.title.text
 
-    def test_axis_labels(self, simple_df, experiment_2x3):
-        fig = VolcanoPlotterService.create_distribution_plot(
-            simple_df,
-            selected_lipids=['PC(16:0)'],
-            selected_conditions=['Control'],
-            experiment=experiment_2x3,
-        )
-        ax = fig.axes[0]
-        assert 'Lipid' in ax.get_xlabel()
-        assert 'Concentration' in ax.get_ylabel()
-        plt.close(fig)
+    def test_one_titled_panel_per_lipid(self, simple_df, experiment_2x3):
+        fig = self._fig(simple_df, experiment_2x3, lipids=['PC(16:0)', 'PE(18:1)'])
+        titles = [a.text for a in fig.layout.annotations][:2]
+        assert titles == ['<b>PC(16:0)</b>', '<b>PE(18:1)</b>']
+        assert {t.xaxis for t in fig.data} == {'x', 'x2'}
 
-    def test_multiple_lipids(self, simple_df, experiment_2x3):
-        fig = VolcanoPlotterService.create_distribution_plot(
-            simple_df,
-            selected_lipids=['PC(16:0)', 'PE(18:1)'],
-            selected_conditions=['Control', 'Treatment'],
-            experiment=experiment_2x3,
+    def test_concentration_axis_title(self, simple_df, experiment_2x3):
+        fig = self._fig(simple_df, experiment_2x3)
+        assert fig.layout.yaxis.title.text == 'Concentration'
+
+    def test_conditions_label_the_x_axis(self, simple_df, experiment_2x3):
+        fig = self._fig(simple_df, experiment_2x3)
+        assert list(fig.layout.xaxis.ticktext) == ['Control', 'Treatment']
+
+    def test_bar_is_mean_with_sd(self, simple_df, experiment_2x3):
+        bars = self._of_type(self._fig(simple_df, experiment_2x3), 'bar')
+        assert [b.name for b in bars] == ['Control', 'Treatment']
+        assert bars[0].y[0] == pytest.approx(105)
+        assert bars[0].error_y.array[0] == pytest.approx(np.std([100, 110, 105], ddof=1))
+        assert bars[1].y[0] == pytest.approx(505)
+
+    def test_a_dot_per_sample(self, simple_df, experiment_2x3):
+        dots = self._of_type(self._fig(simple_df, experiment_2x3), 'scatter')
+        assert [list(d.y) for d in dots] == [[100, 110, 105], [500, 510, 505]]
+        # Spread around their bar, so equal values stay visible.
+        assert len(set(dots[0].x)) == 3
+        assert all(abs(x - 0) < 0.3 for x in dots[0].x)
+
+    def test_box_style(self, simple_df, experiment_2x3):
+        fig = self._fig(simple_df, experiment_2x3, style='box')
+        boxes = self._of_type(fig, 'box')
+        assert [list(b.y) for b in boxes] == [[100, 110, 105], [500, 510, 505]]
+        assert all(b.boxpoints == 'all' for b in boxes)
+        assert not self._of_type(fig, 'bar')
+
+    def test_invalid_style_raises(self, simple_df, experiment_2x3):
+        with pytest.raises(ValueError, match="style"):
+            self._fig(simple_df, experiment_2x3, style='violin')
+
+    def test_colors_follow_the_palette(self, simple_df, experiment_2x3):
+        from app.constants import CONDITION_PALETTES
+        soft = CONDITION_PALETTES['Soft']
+        bars = self._of_type(
+            self._fig(simple_df, experiment_2x3, palette='Soft'), 'bar',
         )
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert [b.marker.line.color for b in bars] == [soft[0], soft[1]]
+
+    def test_colors_keep_the_experiment_order(self, simple_df, experiment_2x3):
+        """A condition is the same color here as in Quality Check, whichever
+        conditions the volcano compares."""
+        from app.constants import CONDITION_PALETTES
+        bars = self._of_type(
+            self._fig(simple_df, experiment_2x3, conditions=['Treatment']), 'bar',
+        )
+        assert bars[0].marker.line.color == CONDITION_PALETTES['Classic'][1]
+
+    @pytest.mark.parametrize('p_value, text', [
+        (0.0001, '***'), (0.005, '**'), (0.03, '*'), (0.2, 'ns'),
+    ])
+    def test_bracket_marks_significance(self, simple_df, experiment_2x3, p_value, text):
+        fig = self._fig(
+            simple_df, experiment_2x3, p_values={'PC(16:0)': p_value},
+        )
+        assert [s.type for s in fig.layout.shapes] == ['path']
+        assert text in [a.text for a in fig.layout.annotations]
+
+    def test_bracket_clears_the_tallest_mark(self, simple_df, experiment_2x3):
+        fig = self._fig(simple_df, experiment_2x3, p_values={'PC(16:0)': 0.01})
+        bracket_y = float(fig.layout.shapes[0].path.split(' L 0,')[1].split(' ')[0])
+        assert bracket_y > 510
+        assert fig.layout.yaxis.range[1] > bracket_y
+
+    def test_no_bracket_without_a_p_value(self, simple_df, experiment_2x3):
+        fig = self._fig(simple_df, experiment_2x3, p_values={'PC(16:0)': float('nan')})
+        assert not fig.layout.shapes
+
+    def test_no_bracket_for_three_conditions(self, experiment_3x2):
+        df = _make_df(lipids=['PC(16:0)'], classes=['PC'], n_samples=6)
+        fig = self._fig(
+            df, experiment_3x2, conditions=['Control', 'Treatment', 'Vehicle'],
+            p_values={'PC(16:0)': 0.001},
+        )
+        assert not fig.layout.shapes
+        assert len(self._of_type(fig, 'bar')) == 3
+
+    def test_caption(self, simple_df, experiment_2x3):
+        fig = self._fig(
+            simple_df, experiment_2x3, p_values={'PC(16:0)': 0.01},
+            p_label="Welch's t-test",
+        )
+        caption = fig.layout.annotations[-1].text
+        assert 'ns p ≥ 0.05' in caption
+        assert 'Mean ± SD; n = 3 per group; Welch\'s t-test' in caption
+
+    def test_caption_without_brackets(self, simple_df, experiment_2x3):
+        caption = self._fig(simple_df, experiment_2x3, style='box').layout.annotations[-1].text
+        assert caption == 'Median and IQR, whiskers to 1.5 × IQR; n = 3 per group'
+
+    def test_caption_gives_unequal_group_sizes(self, simple_df):
+        from app.models.experiment import ExperimentConfig
+        experiment = ExperimentConfig(
+            n_conditions=2, conditions_list=['Control', 'Treatment'],
+            number_of_samples_list=[2, 4],
+        )
+        caption = self._fig(simple_df, experiment).layout.annotations[-1].text
+        assert 'n = 2 (Control), 4 (Treatment)' in caption
+
+    def test_panels_wrap_into_rows(self, experiment_2x3):
+        lipids = [f'PC({i}:0)' for i in range(4)]
+        df = _make_df(lipids=lipids, classes=['PC'] * 4, n_samples=6)
+        fig = self._fig(df, experiment_2x3, lipids=lipids)
+        assert {t.xaxis for t in fig.data} == {'x', 'x2', 'x3', 'x4'}
+        # Three per row: the fourth starts a second row in the first column.
+        assert fig.layout.xaxis4.domain == fig.layout.xaxis.domain
+        assert fig.layout.yaxis4.domain[1] < fig.layout.yaxis.domain[0]
+
+    def test_single_panel_is_centred(self, simple_df, experiment_2x3):
+        fig = self._fig(simple_df, experiment_2x3)
+        x0, x1 = fig.layout.xaxis.domain
+        assert (x0 + x1) / 2 == pytest.approx(0.5)
+        assert x1 - x0 < 0.5
+        assert fig.layout.annotations[0].x == pytest.approx(0.5)
 
     def test_empty_lipids_raises(self, simple_df, experiment_2x3):
         with pytest.raises(ValueError, match="lipid"):
-            VolcanoPlotterService.create_distribution_plot(
-                simple_df,
-                selected_lipids=[],
-                selected_conditions=['Control'],
-                experiment=experiment_2x3,
-            )
+            self._fig(simple_df, experiment_2x3, lipids=[])
 
     def test_empty_conditions_raises(self, simple_df, experiment_2x3):
         with pytest.raises(ValueError, match="condition"):
-            VolcanoPlotterService.create_distribution_plot(
-                simple_df,
-                selected_lipids=['PC(16:0)'],
-                selected_conditions=[],
-                experiment=experiment_2x3,
-            )
+            self._fig(simple_df, experiment_2x3, conditions=[])
 
     def test_nonexistent_lipid_skipped(self, simple_df, experiment_2x3):
-        """Non-existent lipid should not crash, just be omitted."""
-        fig = VolcanoPlotterService.create_distribution_plot(
-            simple_df,
-            selected_lipids=['PC(16:0)', 'NONEXISTENT'],
-            selected_conditions=['Control'],
-            experiment=experiment_2x3,
-        )
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        fig = self._fig(simple_df, experiment_2x3, lipids=['PC(16:0)', 'NONEXISTENT'])
+        assert [a.text for a in fig.layout.annotations][0] == '<b>PC(16:0)</b>'
+        assert {t.xaxis for t in fig.data} == {'x'}
 
     def test_all_nonexistent_lipids_raises(self, simple_df, experiment_2x3):
         with pytest.raises(ValueError, match="No valid data"):
-            VolcanoPlotterService.create_distribution_plot(
-                simple_df,
-                selected_lipids=['NONEXISTENT'],
-                selected_conditions=['Control'],
-                experiment=experiment_2x3,
-            )
+            self._fig(simple_df, experiment_2x3, lipids=['NONEXISTENT'])
 
     def test_nonexistent_condition_skipped(self, simple_df, experiment_2x3):
-        """Non-existent condition should be skipped gracefully."""
-        fig = VolcanoPlotterService.create_distribution_plot(
-            simple_df,
-            selected_lipids=['PC(16:0)'],
-            selected_conditions=['Control', 'FAKE'],
-            experiment=experiment_2x3,
-        )
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        fig = self._fig(simple_df, experiment_2x3, conditions=['Control', 'FAKE'])
+        assert list(fig.layout.xaxis.ticktext) == ['Control']
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1286,7 +1354,7 @@ class TestImmutability:
             experiment=experiment_2x3,
         )
         pd.testing.assert_frame_equal(simple_df, df_copy)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1475,8 +1543,7 @@ class TestMultiCondition:
             selected_conditions=['Control', 'Treatment', 'Vehicle'],
             experiment=experiment_3x2,
         )
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert len([t for t in fig.data if t.type == 'bar']) == 3
 
 
 # ═══════════════════════════════════════════════════════════════════════

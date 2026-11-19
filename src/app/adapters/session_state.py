@@ -436,7 +436,7 @@ _STAGES: Tuple[_Stage, ...] = (
             'volcano_top_n', 'volcano_additional_labels', 'volcano_stats_mode',
             'volcano_detailed_stats', 'volcano_correction',
             'volcano_auto_transform', 'volcano_enable_adjust',
-            'volcano_detail_class', 'volcano_detail_lipids',
+            'volcano_detail_class', 'volcano_detail_lipids', 'volcano_dist_style',
             'heatmap_conditions', 'heatmap_classes', 'heatmap_type',
             'heatmap_n_clusters', 'heatmap_cluster_view', 'heatmap_color_scale',
             'heatmap_control_condition', 'heatmap_species_page',
