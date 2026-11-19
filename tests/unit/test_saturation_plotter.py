@@ -472,10 +472,20 @@ class TestConcentrationPlot:
             ])
             assert list(dot.y) == pytest.approx(list(expected))
             n = len(sat_data.fa_data['PC'][dot.name]['Control'])
-            for i, start in enumerate(bar.x):
+            for i, centre in enumerate(bar.x):
                 xs = dot.x[i * n:(i + 1) * n]
-                assert all(start <= x <= start + bar.width for x in xs)
+                assert all(abs(x - centre) <= bar.width / 2 for x in xs)
             assert dot.marker.color == FA_COLORS[dot.name]
+
+    def test_bar_groups_centred_on_their_condition(self, sat_data):
+        """Regression: each bar started at its x (offset 0), so every
+        condition's SFA/MUFA/PUFA group sat half a bar right of its tick."""
+        fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
+        bars = self._bars(fig)
+        assert all(b.offset == -b.width / 2 for b in bars)
+        for i, tick in enumerate(fig.layout.xaxis.tickvals):
+            centres = [b.x[i] for b in bars]
+            assert sum(centres) / len(centres) == pytest.approx(tick)
 
     def test_y_axis_fits_the_highest_dot(self, sat_data):
         fig = SaturationPlotterService.create_concentration_plot(sat_data, 'PC')
