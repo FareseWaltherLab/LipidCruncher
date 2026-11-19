@@ -24,8 +24,11 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy import stats
 
+from ..constants import DEFAULT_CONDITION_PALETTE
 from ..models.experiment import ExperimentConfig
 from ..models.statistics import StatisticalTestConfig
+from ..services.plotting._shared import generate_condition_color_mapping
+from ..services.plotting.volcano_plot import VolcanoPlotterService
 from ..services.statistical_testing import StatisticalTestingService
 
 
@@ -123,10 +126,13 @@ class PipelineAPI:
         df: pd.DataFrame,
         experiment: Optional[ExperimentConfig] = None,
         bqc_label: Optional[str] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ):
         self._df = df
         self._experiment = experiment
         self._bqc_label = bqc_label
+        # The sidebar's condition color scheme, so lc's figures match the app's.
+        self._palette = palette
         self.methods_used: List[str] = []
 
     def with_dataframe(self, df: pd.DataFrame) -> "PipelineAPI":
@@ -136,7 +142,7 @@ class PipelineAPI:
         frame; this rebinds ``lc`` to that same prepared copy so both see
         identical data.
         """
-        return PipelineAPI(df, self._experiment, self._bqc_label)
+        return PipelineAPI(df, self._experiment, self._bqc_label, self._palette)
 
     # -- introspection ------------------------------------------------
 
@@ -144,6 +150,14 @@ class PipelineAPI:
         """Return the experiment's condition names."""
         self._require_experiment()
         return list(self._experiment.conditions_list)
+
+    def condition_colors(self) -> Dict[str, str]:
+        """Condition -> color in the user's chosen color scheme, as the
+        app's figures color each condition."""
+        self._require_experiment()
+        return generate_condition_color_mapping(
+            self._experiment.conditions_list, self._palette,
+        )
 
     def samples_for(self, condition: str) -> List[str]:
         """Return the sample names belonging to ``condition``."""
@@ -567,6 +581,7 @@ class PipelineAPI:
             selected_classes=self._classes_or_all(classes),
             stat_config=CLASS_STATS if with_stats else None,
             scale=scale,
+            palette=self._palette,
         )
         self._check(res, "Bar chart")
         if with_stats:
@@ -777,6 +792,40 @@ class PipelineAPI:
         )
         return LCResult(res.figure, res.volcano_data.volcano_df, res)
 
+    def lipid_distribution(
+        self,
+        control: str,
+        experimental: str,
+        lipids: List[str],
+        style: str = 'bar',
+        test_type: str = VOLCANO_STATS.test_type,
+        correction: str = VOLCANO_STATS.correction_method,
+    ) -> LCResult:
+        """The volcano page's Individual Lipid Analysis for ``lipids``.
+
+        One panel per lipid: a bar (mean ± SD) or, with ``style='box'``, a
+        box per condition, a dot for each sample, and a bracket with the
+        volcano test's significance for that lipid (same statistics and
+        defaults as ``volcano``).
+
+        Returns:
+            LCResult with ``figure`` and ``data`` (the lipids' volcano rows).
+        """
+        volcano = self.volcano(
+            control, experimental, test_type=test_type, correction=correction,
+        )
+        vdf = volcano.data
+        p_values, p_label = VolcanoPlotterService.distribution_p_values(
+            vdf, lipids, use_adjusted_p=correction != 'uncorrected',
+        )
+        figure = VolcanoPlotterService.create_distribution_plot(
+            self._frame(), list(lipids), [control, experimental],
+            self._experiment, p_values=p_values, p_label=p_label,
+            style=style, palette=self._palette,
+        )
+        rows = vdf[vdf['LipidMolec'].isin(lipids)].reset_index(drop=True)
+        return LCResult(figure, rows, volcano.raw)
+
     def heatmap(
         self,
         conditions: Optional[List[str]] = None,
@@ -799,6 +848,7 @@ class PipelineAPI:
             selected_classes=self._classes_or_all(classes),
             heatmap_type=heatmap_type,
             n_clusters=n_clusters,
+            palette=self._palette,
         )
         self._check(res, "Heatmap")
         return LCResult(res.figure, res.z_scores_df, res)

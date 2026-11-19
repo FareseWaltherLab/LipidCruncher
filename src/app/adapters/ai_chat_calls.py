@@ -14,6 +14,7 @@ from typing import Dict, Optional
 import pandas as pd
 import streamlit as st
 
+from ..constants import DEFAULT_CONDITION_PALETTE
 from ..models.experiment import ExperimentConfig
 
 
@@ -107,6 +108,9 @@ class AIChatCalls:
             normalization=st.session_state.get('chat_studio_normalization'),
             raw_import=(
                 st.session_state.get('chat_studio_pipeline_source') == 'raw'
+            ),
+            palette=st.session_state.get(
+                'condition_palette', DEFAULT_CONDITION_PALETTE,
             ),
         )
 

@@ -117,6 +117,9 @@ with what the app shows the user for the same data. Do not do that.
 
 - `lc.conditions()` → list of condition names in the experiment.
 - `lc.samples_for(condition)` → sample names for one condition.
+- `lc.condition_colors()` → `{condition: color}` in the color scheme the user chose in the \
+sidebar, the colors the app's figures give each condition. When your own figure colors by \
+condition, take the colors from here so it matches the rest of their figures.
 - `lc.compare_species(control, experimental, alpha=0.05, test_type='parametric', \
 correction='uncorrected')` → per-lipid comparison of two conditions, as a DataFrame with \
 `LipidMolec`, `ClassKey`, `p_value`, `adj_p_value`, `log2FC` (experimental / control), \
@@ -152,6 +155,12 @@ BQC samples left out):
 - `lc.volcano(control, experimental, classes=None, p_threshold=0.05, fc_threshold=1.0,
 test_type='parametric', correction='uncorrected')` — same statistics and defaults as
 `compare_species`
+- `lc.lipid_distribution(control, experimental, lipids, style='bar', test_type='parametric',
+correction='uncorrected')` — the volcano page's Individual Lipid Analysis: one panel per lipid,
+a bar (mean ± SD; `style='box'` for box plots) per condition, a dot per sample, and a bracket
+with the volcano test's significance for that lipid (*, **, ***, ns; same statistics as
+`volcano`). Use it for "bar graph / box plot of these lipids in WT vs KO, with significance".
+Two conditions only; `.data` is the lipids' volcano rows (p-values, log2FC)
 - `lc.bar_chart(conditions=None, classes=None, scale='linear')` — class abundance, with
 significance annotation
 - `lc.heatmap(conditions=None, classes=None, heatmap_type='regular', n_clusters=3)` —

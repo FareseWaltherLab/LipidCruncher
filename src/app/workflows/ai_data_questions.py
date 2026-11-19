@@ -10,6 +10,7 @@ from typing import Any, Callable, List, Optional, Tuple
 
 import pandas as pd
 
+from ..constants import DEFAULT_CONDITION_PALETTE
 from ..models.chat import AIConfig, ChatMessage, ChatMode, ChatSession, SandboxConfig
 from ..models.experiment import ExperimentConfig
 from ..services.ai_chat.ai_client import AIClientService
@@ -208,6 +209,7 @@ class DataQuestionsWorkflow:
         bqc_label: Optional[str] = None,
         values: str = "",
         on_answer: Optional[Callable[[str], None]] = None,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ) -> DataQuestionsStepResult:
         """Extract/execute any code in the AI response, have the answer
         written from the code's output (streamed to ``on_answer``), append
@@ -224,7 +226,7 @@ class DataQuestionsWorkflow:
             sandbox_result = SandboxService.execute(
                 code, source_df, sandbox_config,
                 numeric_columns=numeric_columns,
-                lc=PipelineAPI(source_df, experiment, bqc_label),
+                lc=PipelineAPI(source_df, experiment, bqc_label, palette),
             )
             if sandbox_result.success:
                 stdout = sandbox_result.stdout
@@ -340,6 +342,7 @@ class DataQuestionsWorkflow:
         bqc_label: Optional[str] = None,
         normalization: Optional[str] = None,
         raw_import: bool = False,
+        palette: str = DEFAULT_CONDITION_PALETTE,
     ):
         """Handle one user message in the Ask Your Data chat.
 
@@ -349,7 +352,8 @@ class DataQuestionsWorkflow:
         ``DataQuestionsStepResult``; ``finalize(on_answer=...)`` also
         streams the written answer to ``on_answer``. ``normalization`` is the main
         pipeline's method for imported data (None for an upload);
-        ``raw_import`` marks the main pipeline's raw data.
+        ``raw_import`` marks the main pipeline's raw data. ``palette`` is
+        the sidebar's condition color scheme, for ``lc``'s figures.
         """
         if ai_config is None:
             ai_config = AIConfig()
@@ -385,6 +389,7 @@ class DataQuestionsWorkflow:
                 session, holder["full"], source_df,
                 sandbox_config, numeric_columns, experiment, ai_config,
                 bqc_label=bqc_label, values=values, on_answer=on_answer,
+                palette=palette,
             )
 
         return generator, finalize

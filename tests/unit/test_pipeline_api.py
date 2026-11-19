@@ -671,7 +671,8 @@ class TestPlotsReachTheSandbox:
         for fn in ("lc.volcano", "lc.bar_chart", "lc.heatmap",
                    "lc.chain_length", "lc.pathway", "lc.saturation",
                    "lc.pie_charts", "lc.combine_pies",
-                   "lc.fatty_acid_composition"):
+                   "lc.fatty_acid_composition", "lc.lipid_distribution",
+                   "lc.condition_colors"):
             assert fn in prompt, f"{fn} missing from prompt catalog"
 
 
@@ -901,3 +902,106 @@ class TestBarChartLeavesBQCOut:
         data = PipelineAPI(df, experiment).bar_chart(with_stats=False).data
         assert not [c for c in data.columns if c.endswith("_One")]
         assert [c for c in data.columns if c.endswith("_KO")]
+
+
+class TestColorScheme:
+    """2026-11-19: the sidebar's color scheme colors the app's figures by
+    condition; lc's figures, and the colors it offers the AI's own
+    figures, must follow it."""
+
+    SOFT = None
+
+    @pytest.fixture(autouse=True)
+    def _soft(self):
+        from app.constants import CONDITION_PALETTES
+        self.SOFT = CONDITION_PALETTES['Soft']
+
+    def test_condition_colors_default_to_classic(self, lc):
+        from app.constants import CONDITION_PALETTES
+        classic = CONDITION_PALETTES['Classic']
+        assert lc.condition_colors() == {'WT': classic[0], 'KO': classic[1]}
+
+    def test_condition_colors_follow_the_scheme(self, df, experiment):
+        lc = PipelineAPI(df, experiment, palette='Soft')
+        assert lc.condition_colors() == {'WT': self.SOFT[0], 'KO': self.SOFT[1]}
+
+    def test_with_dataframe_keeps_the_scheme(self, df, experiment):
+        lc = PipelineAPI(df, experiment, palette='Soft').with_dataframe(df)
+        assert lc.condition_colors()['WT'] == self.SOFT[0]
+
+    def test_bar_chart_follows_the_scheme(self, df, experiment):
+        fig = PipelineAPI(df, experiment, palette='Soft').bar_chart().figure
+        bars = [t for t in fig.data if t.type == 'bar']
+        assert [b.marker.line.color for b in bars] == [self.SOFT[0], self.SOFT[1]]
+
+    def test_heatmap_strip_follows_the_scheme(self, df, experiment):
+        fig = PipelineAPI(df, experiment, palette='Soft').heatmap().figure
+        rects = [s for s in fig.layout.shapes if s.type == 'rect']
+        assert [r.fillcolor for r in rects] == [self.SOFT[0], self.SOFT[1]]
+
+    def test_scheme_crosses_the_process_boundary(self, df, experiment):
+        from app.services.ai_chat.sandbox import SandboxService
+        res = SandboxService.execute(
+            "result_df = pd.DataFrame([lc.condition_colors()])",
+            df, lc=PipelineAPI(df, experiment, palette='Soft'),
+        )
+        assert res.success, res.error_message
+        assert res.result_df.iloc[0].to_dict() == {
+            'WT': self.SOFT[0], 'KO': self.SOFT[1],
+        }
+
+    def test_data_questions_turn_uses_the_scheme(self, df, experiment, monkeypatch):
+        from app.services.ai_chat import ai_client
+        from app.workflows.ai_chat import AIChatWorkflow
+        monkeypatch.setattr(
+            ai_client.AIClientService, "stream_tool_loop",
+            canned_stream("Plotting.\n\n```python\nfig = lc.bar_chart().figure\n```"),
+        )
+        result = finish(AIChatWorkflow.stream_data_questions_message(
+            "bar chart", AIChatWorkflow.start_data_questions_session(df), df,
+            experiment=experiment, palette='Soft',
+        ))
+        bars = [t for t in result.figure.data if t.type == 'bar']
+        assert bars[0].marker.line.color == self.SOFT[0]
+
+
+class TestLipidDistribution:
+    """lc.lipid_distribution is the volcano page's Individual Lipid
+    Analysis: the same figure, with the volcano test's brackets."""
+
+    LIPIDS = ["PC 16:0_18:1", "SM d18:1_16:0", "PE 16:0_16:0"]
+
+    def test_one_panel_per_lipid(self, lc):
+        fig = lc.lipid_distribution("WT", "KO", self.LIPIDS).figure
+        titles = [a.text for a in fig.layout.annotations][:3]
+        assert titles == [f"<b>{name}</b>" for name in self.LIPIDS]
+
+    def test_brackets_use_the_volcano_p_values(self, lc):
+        from app.services.plotting._shared import p_value_to_marker
+        res = lc.lipid_distribution("WT", "KO", self.LIPIDS)
+        vdf = lc.volcano("WT", "KO").data.set_index("LipidMolec")
+        expected = [p_value_to_marker(vdf.loc[n, "pValue"]) or "ns" for n in self.LIPIDS]
+        assert [a.text for a in res.figure.layout.annotations][3:6] == expected
+        assert list(res.data["LipidMolec"]) == self.LIPIDS
+
+    def test_correction_uses_adjusted_p(self, lc):
+        res = lc.lipid_distribution("WT", "KO", self.LIPIDS, correction="fdr_bh")
+        assert "adjusted p" in res.figure.layout.annotations[-1].text
+        assert "unadjusted" not in res.figure.layout.annotations[-1].text
+
+    def test_box_style(self, lc):
+        fig = lc.lipid_distribution("WT", "KO", self.LIPIDS[:1], style="box").figure
+        assert {t.type for t in fig.data} == {"box"}
+
+    def test_states_the_method(self, lc):
+        lc.lipid_distribution("WT", "KO", self.LIPIDS[:1])
+        assert any("Volcano plot (KO vs WT)" in line for line in lc.methods_used)
+
+    def test_crosses_the_process_boundary(self, df, lc):
+        from app.services.ai_chat.sandbox import SandboxService
+        res = SandboxService.execute(
+            "fig = lc.lipid_distribution('WT', 'KO', ['PC 16:0_18:1']).figure",
+            df, lc=lc,
+        )
+        assert res.success, res.error_message
+        assert res.figure is not None

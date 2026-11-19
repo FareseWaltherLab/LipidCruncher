@@ -5,7 +5,7 @@ Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
 
-Checked against main at 9c02543 (2026-11-04); see CLAUDE.md, "Keep the
+Checked against main at 71e7061 (2026-11-19); see CLAUDE.md, "Keep the
 AI's knowledge in step with main".
 """
 
@@ -114,24 +114,41 @@ Call values pmol only after internal standard (or both) normalization; otherwise
 abundance or response.
 
 ### Module 2: Quality Check
-- **Box plots** — concentration distributions per sample
+- **Box plots** — concentration distributions per sample, and the percentage of missing \
+values per sample
 - **BQC assessment** — coefficient of variation across batch quality control samples
 - **Retention time plots** — RT consistency (LipidSearch/MS-DIAL only)
 - **Pairwise correlation** — Pearson correlation heatmaps between replicates
 - **PCA** — principal component analysis colored by condition, with confidence ellipses
 
 ### Module 3: Visualization & Analysis
-- **Bar charts** — mean ± std per condition per lipid class, with optional statistical testing
+- **Bar charts** — mean ± std per condition per lipid class, a dot on each bar for each \
+sample's class total, with optional statistical testing
 - **Pie charts** — lipid class composition per condition, or "Species within a class": \
 each species of one class as a share of that class
 - **Saturation profiles** — SFA/MUFA/PUFA distribution
 - **Chain length analysis** — carbon chain length and double bond bubble charts
 - **FACH** — fatty acid composition heatmap
 - **Pathway visualization** — interactive metabolic pathway network (28 lipid classes)
-- **Volcano plots** — fold-change vs. p-value
+- **Volcano plots** — fold-change vs. p-value. Below it, a concentration vs. fold-change \
+scatter and **Individual Lipid Analysis**: the user picks a class and lipids and gets one \
+panel per lipid, with a bar (mean ± SD) or, under "Show as: Box", a box per condition, a dot \
+per sample, and a bracket marking the volcano test's p-value for that lipid (*, **, ***, or ns \
+above 0.05; adjusted p when a correction is chosen). Each panel has its own y axis.
 - **Lipidomic heatmaps** — four views: Aggregated by Class (the default), species grouped \
 by class, regular, and clustered (hierarchical clustering, Ward linkage, Euclidean \
 distance); colored by z-score or by log2 fold change against a control condition
+
+### Figure colors
+A **Color scheme** picker in the sidebar (under "Show samples as") colors every figure \
+colored by condition: the Quality Check box plot, missing-values bars and PCA, the internal \
+standards bars, the class concentration bar chart, the lipidomic heatmap's condition strip \
+and the volcano page's individual-lipid panels, and the same figures in the PDF report. \
+Schemes: **Classic** (the default, Plotly's blue, orange, green, ...), **Soft** (muted blue, \
+purple, raspberry, ..., in the style of figures made for papers) and **Colorblind-safe** (the \
+Okabe-Ito palette). Bars and boxes colored by condition are drawn as a light fill outlined in \
+the condition's color. Saturation plots color by SFA/MUFA/PUFA and pies by class, so the \
+scheme does not change them.
 
 ### Stable Isotope Tracing (separate page)
 Opened from the home page, independent of Modules 1–3. Runs natural-isotope-abundance \

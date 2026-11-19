@@ -174,3 +174,21 @@ class TestDataQuestionsUsesRenamedColumns:
             StreamlitAdapter.stream_ai_data_questions("q", None, pd.DataFrame())
 
         assert stream.call_args.kwargs['numeric_columns'] == ['intensity[s1]']
+
+
+class TestDataQuestionsUsesTheColorScheme:
+    """lc's figures follow the sidebar's color scheme (2026-11-19)."""
+
+    def _palette_passed(self, session_state):
+        with patch("app.adapters.ai_chat_calls.st") as mock_st, \
+             patch("app.workflows.ai_chat.AIChatWorkflow."
+                   "stream_data_questions_message") as stream:
+            mock_st.session_state = session_state
+            StreamlitAdapter.stream_ai_data_questions("q", None, pd.DataFrame())
+        return stream.call_args.kwargs['palette']
+
+    def test_passes_the_chosen_scheme(self):
+        assert self._palette_passed({'condition_palette': 'Soft'}) == 'Soft'
+
+    def test_defaults_to_classic(self):
+        assert self._palette_passed({}) == 'Classic'

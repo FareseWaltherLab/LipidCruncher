@@ -361,11 +361,21 @@ for condition, names in samples.items():
     df_plot[condition] = df_plot[[f'intensity[{s}]' for s in names]].mean(axis=1)
 class_means = df_plot.groupby('ClassKey')[list(samples)].mean().reset_index()
 melted = class_means.melt(id_vars='ClassKey', var_name='Condition', value_name='Mean Abundance')
+# Each condition in the color the user's chosen scheme gives it in the app.
 fig = px.scatter(melted, x='ClassKey', y='Mean Abundance', color='Condition',
                  title='Class-Level Abundance: KO vs WT',
-                 color_discrete_sequence=['#1f77b4', '#ff7f0e'])
+                 color_discrete_map=lc.condition_colors())
 fig.update_traces(marker_size=12)
 fig.update_layout(xaxis_title='Lipid Class', yaxis_title='Mean Abundance')
+```
+
+### Example 9: Selected lipids with significance — lc.lipid_distribution
+User: "Bar graphs of PC 16:0_18:1 and SM d18:1_16:0, WT vs KO, with the individual points and stars"
+```python
+# The volcano page's Individual Lipid Analysis: a panel per lipid, mean ± SD
+# bars (style='box' for boxes), a dot per sample, and the volcano test's
+# significance bracket. Do not redraw this with px.bar and your own t-tests.
+fig = lc.lipid_distribution('WT', 'KO', ['PC 16:0_18:1', 'SM d18:1_16:0']).figure
 ```
 """
 

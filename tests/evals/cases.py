@@ -466,6 +466,34 @@ CASES = (
             "ether-linked TGs."
         ),
     ),
+
+    # ---- 2026-11-19: color scheme and individual-lipid panels on main ---
+    EvalCase(
+        id="lipid_panels_with_significance",
+        question=(
+            "Make a publication-style figure of PE 18:0_20:4 and "
+            "Cer d18:1_24:0 comparing KO to WT, showing each replicate and "
+            "whether the difference is significant."
+        ),
+        dataset=CANONICAL,
+        expect_lc_all=("lc.lipid_distribution",),
+        forbid=("ttest_ind", "mannwhitneyu"),
+        expect=("figure",),
+        note=(
+            "Power-user request (GraphPad-style panels with points and "
+            "stars): main's volcano page draws them since 2026-11-19, so "
+            "the AI must use that figure and its statistics, not its own "
+            "t-tests."
+        ),
+    ),
+    EvalCase(
+        id="color_scheme_option",
+        question="Can I change the colors used for my conditions in the plots?",
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("color scheme", "sidebar", "colorblind|okabe"),
+        note="The sidebar Color scheme picker is new on main (2026-11-19).",
+    ),
 )
 
 
