@@ -29,6 +29,7 @@ APP = "app"                      # no data: questions about LipidCruncher itself
 PG_CORRELATION = "pg_correlation"  # 872 species x 21 samples, as on 2026-10-27
 CANONICAL_BQC = "canonical_bqc"  # canonical + 2 BQC samples (condition "BQC")
 SUSPECT = "suspect"              # canonical + 3 doubtful annotations (ether TGs)
+THREE_GROUPS = "three_groups"    # canonical + KO2 (s7-s9, half of KO's values)
 
 
 @dataclass(frozen=True)
@@ -538,6 +539,23 @@ CASES = (
         note=(
             "2026-11-23: Dunnett's test vs a chosen control added as a fourth "
             "Level 2 option (power-user request)."
+        ),
+    ),
+    EvalCase(
+        id="lipid_panels_three_groups",
+        question=(
+            "Make a figure of the three most abundant PE species in every "
+            "condition, with each replicate shown and significance brackets "
+            "for the pairs that differ."
+        ),
+        dataset=THREE_GROUPS,
+        expect_lc_all=("lc.lipid_panels",),
+        forbid=("ttest_ind", "mannwhitneyu", "lc.lipid_distribution"),
+        expect=("figure",),
+        note=(
+            "2026-11-23: Individual Lipid Panels (any number of conditions) "
+            "added on main; for 3+ conditions the AI must use it, not "
+            "lc.lipid_distribution (two conditions) or its own t-tests."
         ),
     ),
 )

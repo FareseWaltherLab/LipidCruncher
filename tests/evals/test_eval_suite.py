@@ -74,6 +74,13 @@ def load_dataset(name: str):
         return ref.load_canonical_suspect(), ExperimentConfig(
             conditions_list=["WT", "KO"], number_of_samples_list=[3, 3],
         )
+    if name == C.THREE_GROUPS:
+        df = ref.load_canonical()
+        for ko, new in zip(("s4", "s5", "s6"), ("s7", "s8", "s9")):
+            df[f"concentration[{new}]"] = df[f"concentration[{ko}]"] * 0.5
+        return df, ExperimentConfig(
+            conditions_list=["WT", "KO", "KO2"], number_of_samples_list=[3, 3, 3],
+        )
     if name == C.APP:
         return None, None
     if name == C.STUDIO:

@@ -1005,3 +1005,57 @@ class TestLipidDistribution:
         )
         assert res.success, res.error_message
         assert res.figure is not None
+
+
+class TestThreeGroupsAndDunnett:
+    """lc.lipid_panels (the Individual Lipid Panels page) and the post-hoc
+    choice on the class-level helpers."""
+
+    @pytest.fixture
+    def lc3(self, df):
+        three = df.copy()
+        for ko, new in zip(("s4", "s5", "s6"), ("s7", "s8", "s9")):
+            three[f"concentration[{new}]"] = three[f"concentration[{ko}]"] * 0.5
+        return PipelineAPI(three, ExperimentConfig(
+            conditions_list=["WT", "KO", "KO2"], number_of_samples_list=[3, 3, 3],
+        ))
+
+    def test_lipid_panels_runs_the_pages_analysis(self, lc3):
+        res = lc3.lipid_panels(["PE 18:0_20:4", "PC 16:0_18:1"])
+        assert res.figure is not None
+        assert set(res.data["Condition"]) == {"WT", "KO", "KO2"}
+        summary = res.raw.stat_summary
+        assert set(summary.results) == {"PE 18:0_20:4", "PC 16:0_18:1"}
+        assert summary.test_info["posthoc"] == "tukey"  # Auto mode, 3 conditions
+        assert any("Lipid panel significance" in m and "Auto mode" in m
+                   for m in lc3.methods_used)
+
+    def test_lipid_panels_with_dunnett(self, lc3):
+        res = lc3.lipid_panels(["PE 18:0_20:4"], posthoc="dunnett", control="WT")
+        pairs = res.raw.stat_summary.posthoc_results["PE 18:0_20:4"]
+        assert [(p.group1, p.group2) for p in pairs] == [("WT", "KO"), ("WT", "KO2")]
+        note = next(m for m in lc3.methods_used if "Lipid panel" in m)
+        assert "Dunnett's post-hoc tests against WT" in note
+        assert "changed on request" in note
+
+    def test_saturation_takes_a_posthoc(self, lc3):
+        res = next(iter(lc3.saturation(posthoc="dunnett", control="KO").values()))
+        assert res.raw.stat_summary.test_info["control"] == "KO"
+
+    def test_bar_chart_takes_a_posthoc(self, lc3, monkeypatch):
+        from app.services.statistical_testing import StatisticalTestingService
+        seen = []
+        real = StatisticalTestingService.run_class_level_tests
+        monkeypatch.setattr(
+            StatisticalTestingService, "run_class_level_tests",
+            lambda *a, **k: seen.append(a[4] if len(a) > 4 else k["config"]) or real(*a, **k),
+        )
+        lc3.bar_chart(posthoc="dunnett", control="KO")
+        assert (seen[-1].posthoc_correction, seen[-1].control_condition) == ("dunnett", "KO")
+        assert seen[-1].mode == "manual"
+        lc3.bar_chart()
+        assert seen[-1].mode == "auto"
+
+    def test_dunnett_without_a_control_says_what_to_pass(self, lc3):
+        with pytest.raises(ValueError, match="control=<condition name>"):
+            lc3.bar_chart(posthoc="dunnett")

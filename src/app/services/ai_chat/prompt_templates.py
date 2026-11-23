@@ -158,11 +158,22 @@ test_type='parametric', correction='uncorrected')` — same statistics and defau
 - `lc.lipid_distribution(control, experimental, lipids, style='bar', test_type='parametric',
 correction='uncorrected')` — the volcano page's Individual Lipid Analysis: one panel per lipid,
 a bar (mean ± SD; `style='box'` for box plots) per condition, a dot per sample, and a bracket
-with the volcano test's significance for that lipid (*, **, ***, ns; same statistics as
-`volcano`). Use it for "bar graph / box plot of these lipids in WT vs KO, with significance".
-Two conditions only; `.data` is the lipids' volcano rows (p-values, log2FC)
-- `lc.bar_chart(conditions=None, classes=None, scale='linear')` — class abundance, with
-significance annotation
+with the volcano test's significance for that lipid (*, **, ***, ****, ns; same statistics
+as `volcano`). Use it for "bar graph / box plot of these lipids in WT vs KO, with
+significance". Two conditions only; `.data` is the lipids' volcano rows (p-values, log2FC)
+- `lc.lipid_panels(lipids, conditions=None, style='bar', posthoc=None, control=None)` — the
+app's Individual Lipid Panels page: the same panels for **any number of conditions** (WT,
+KO1, KO2), each lipid tested as the bar chart tests a class, with brackets on the pairs that
+differ. Use it whenever 3+ conditions are in the figure. `.data` has Lipid, Condition,
+Sample, Concentration; the p-values are in `.raw.stat_summary` (`results` per lipid,
+`posthoc_results` per lipid with `group1`, `group2`, `adjusted_p_value`)
+- `lc.bar_chart(conditions=None, classes=None, scale='linear', posthoc=None, control=None)`
+— class abundance, with significance annotation
+
+`bar_chart`, `saturation` and `lipid_panels` run in Auto mode, the app's default (Tukey's HSD
+for 3+ conditions). Pass `posthoc='dunnett', control='WT'` to compare each condition with
+one control only (Dunnett's test, Manual mode), or `posthoc='bonferroni'` / `'uncorrected'`
+when the user asks for those
 - `lc.heatmap(conditions=None, classes=None, heatmap_type='regular', n_clusters=3)` —
 `'clustered'` for clustering, `'class_grouped'` for species grouped by class,
 `'class_aggregated'` for class totals (the app's Heatmap page opens on this one)
@@ -185,7 +196,8 @@ app's Pie Charts page shows them, each with its own legend; `.data` is their tab
 `Condition` column. Use it whenever the user wants more than one condition's pie:
 `fig = lc.combine_pies(lc.pie_charts(species_class='PC')).figure`. Do not redraw pies with
 `go.Pie` or copy their traces into subplots
-- `lc.saturation(conditions=None, classes=None, plot_type='concentration')` → **dict** of
+- `lc.saturation(conditions=None, classes=None, plot_type='concentration', posthoc=None,
+control=None)` → **dict** of
 lipid class -> result (SFA/MUFA/PUFA); `plot_type='percentage'` for proportions
 
 The two that return a dict still hold ordinary results, so `.figure` works the same way:

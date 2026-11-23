@@ -53,6 +53,7 @@ _POSTHOC_TEXT = {
     'uncorrected': 'uncorrected pairwise post-hoc tests',
     'tukey': "Tukey's HSD post-hoc tests",
     'bonferroni': 'Bonferroni-corrected pairwise post-hoc tests',
+    'dunnett': "Dunnett's post-hoc tests against {control}",
 }
 
 
@@ -67,7 +68,8 @@ def describe_stats(what: str, summary, default_note: str) -> str:
     parts = [test]
     parts.append(_CORRECTION_TEXT.get(info.get('correction'), 'no correction'))
     if summary is not None and summary.posthoc_results:
-        parts.append(_POSTHOC_TEXT.get(info.get('posthoc'), 'post-hoc tests'))
+        parts.append(_POSTHOC_TEXT.get(info.get('posthoc'), 'post-hoc tests').format(
+            control=info.get('control')))
     alpha = (summary.parameters.get('alpha') if summary is not None else None)
     if alpha is not None:
         parts.append(f"significance at p < {alpha:g}")
@@ -491,13 +493,32 @@ class PipelineAPI:
                     "to a parametric test with no correction.")
         self._note(describe_stats(what, summary, note))
 
-    def _note_class(self, what: str, summary) -> None:
+    def _note_class(self, what: str, summary, posthoc: Optional[str] = None) -> None:
         self._note(describe_stats(
             what, summary,
             "Auto mode, the main app's default on the Bar Chart and "
             "Saturation pages, chose these from the number of conditions "
-            "and classes.",
+            "and classes." if posthoc is None else
+            "The post-hoc test was changed on request (Manual mode); the main "
+            "app's pages default to Auto mode, which uses Tukey's HSD for 3+ "
+            "conditions.",
         ))
+
+    @staticmethod
+    def _class_config(
+        posthoc: Optional[str], control: Optional[str],
+    ) -> StatisticalTestConfig:
+        """Auto mode, or the pages' Manual defaults with ``posthoc``."""
+        if posthoc is None:
+            return CLASS_STATS
+        if posthoc == 'dunnett' and not control:
+            raise ValueError(
+                "posthoc='dunnett' compares each condition with a control: "
+                "pass control=<condition name>."
+            )
+        return StatisticalTestConfig.create_manual(
+            posthoc_correction=posthoc, control_condition=control,
+        )
 
     def _require_experiment(self) -> None:
         if self._experiment is None:
@@ -561,6 +582,8 @@ class PipelineAPI:
         classes: Optional[List[str]] = None,
         scale: str = 'linear',
         with_stats: bool = True,
+        posthoc: Optional[str] = None,
+        control: Optional[str] = None,
     ) -> LCResult:
         """Class-level abundance bar chart (the app's Abundance Bar Chart).
 
@@ -570,6 +593,10 @@ class PipelineAPI:
             classes: Lipid classes to include. Defaults to all.
             scale: 'linear' or 'log10'.
             with_stats: Run the class-level tests and annotate significance.
+            posthoc: None for Auto mode (the page's default), or the
+                Level 2 test for 3+ conditions in Manual mode: 'tukey',
+                'bonferroni', 'uncorrected' or 'dunnett'.
+            control: The control condition, for posthoc='dunnett'.
 
         Returns:
             LCResult with ``figure`` and ``data`` (mean/std per class).
@@ -579,13 +606,13 @@ class PipelineAPI:
             experiment=self._experiment,
             selected_conditions=self._bar_chart_conditions(conditions),
             selected_classes=self._classes_or_all(classes),
-            stat_config=CLASS_STATS if with_stats else None,
+            stat_config=self._class_config(posthoc, control) if with_stats else None,
             scale=scale,
             palette=self._palette,
         )
         self._check(res, "Bar chart")
         if with_stats:
-            self._note_class("Bar chart significance", res.stat_summary)
+            self._note_class("Bar chart significance", res.stat_summary, posthoc)
         return LCResult(res.figure, res.abundance_df, res)
 
     def pie_charts(
@@ -676,11 +703,14 @@ class PipelineAPI:
         classes: Optional[List[str]] = None,
         plot_type: str = 'concentration',
         show_significance: bool = True,
+        posthoc: Optional[str] = None,
+        control: Optional[str] = None,
     ) -> Dict[str, LCResult]:
         """Saturation profile (SFA/MUFA/PUFA) per lipid class.
 
         Args:
             plot_type: 'concentration' or 'percentage'.
+            posthoc, control: As for ``bar_chart``.
 
         Returns:
             Dict of lipid class -> LCResult, matching every other plot
@@ -693,13 +723,13 @@ class PipelineAPI:
             experiment=self._experiment,
             selected_conditions=self._conditions_or_all(conditions),
             selected_classes=self._classes_or_all(classes),
-            stat_config=CLASS_STATS,
+            stat_config=self._class_config(posthoc, control),
             plot_type=plot_type,
             show_significance=show_significance,
         )
         self._check(res, "Saturation plot")
         if show_significance:
-            self._note_class("Saturation significance", res.stat_summary)
+            self._note_class("Saturation significance", res.stat_summary, posthoc)
         return {
             lipid_class: LCResult(figure, None, res)
             for lipid_class, figure in res.plots.items()
@@ -825,6 +855,40 @@ class PipelineAPI:
         )
         rows = vdf[vdf['LipidMolec'].isin(lipids)].reset_index(drop=True)
         return LCResult(figure, rows, volcano.raw)
+
+    def lipid_panels(
+        self,
+        lipids: List[str],
+        conditions: Optional[List[str]] = None,
+        style: str = 'bar',
+        posthoc: Optional[str] = None,
+        control: Optional[str] = None,
+    ) -> LCResult:
+        """The app's Individual Lipid Panels: one panel per lipid across
+        any number of conditions, each lipid tested as the bar chart tests a
+        class (Auto mode unless ``posthoc`` is given), brackets on the
+        significant pairs.
+
+        Args:
+            lipids: Lipid names, as in ``LipidMolec``.
+            conditions: Defaults to the page's: conditions with 2+ samples,
+                BQC left out.
+            style: 'bar' (mean ± SD) or 'box'.
+            posthoc, control: As for ``bar_chart``.
+
+        Returns:
+            LCResult with ``figure``, ``data`` (Lipid, Condition, Sample,
+            Concentration) and ``raw.stat_summary`` (``results`` per lipid,
+            ``posthoc_results`` per lipid: group1, group2, adjusted_p_value).
+        """
+        res = self._analysis().run_lipid_panels(
+            self._frame(), self._experiment, self._bar_chart_conditions(conditions),
+            list(lipids), self._class_config(posthoc, control),
+            style=style, palette=self._palette,
+        )
+        if res.stat_summary is not None:
+            self._note_class("Lipid panel significance", res.stat_summary, posthoc)
+        return LCResult(res.figure, res.data, res)
 
     def heatmap(
         self,

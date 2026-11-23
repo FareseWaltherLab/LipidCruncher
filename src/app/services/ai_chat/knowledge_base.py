@@ -5,7 +5,7 @@ Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
 
-Checked against main at 749abc6 (2026-11-23); see CLAUDE.md, "Keep the
+Checked against main at e0898a8 (2026-11-23); see CLAUDE.md, "Keep the
 AI's knowledge in step with main".
 """
 
@@ -165,8 +165,16 @@ with a dot per sample) or percentage
 - **Volcano plots** — fold-change vs. p-value. Below it, a concentration vs. fold-change \
 scatter and **Individual Lipid Analysis**: the user picks a class and lipids and gets one \
 panel per lipid, with a bar (mean ± SD) or, under "Show as: Box", a box per condition, a dot \
-per sample, and a bracket marking the volcano test's p-value for that lipid (*, **, ***, or ns \
-above 0.05; adjusted p when a correction is chosen). Each panel has its own y axis.
+per sample, and a bracket marking the volcano test's p-value for that lipid (*, **, ***, ****, \
+or ns above 0.05; adjusted p when a correction is chosen). Each panel has its own y axis. \
+Two conditions only.
+- **Individual Lipid Panels** — its own analysis ("Species Level Breakdown - Individual Lipid \
+Panels"): the same panels for 2 or more conditions (e.g. WT, KO1, KO2). The user picks \
+conditions, a class and lipids; each lipid is tested the way the bar chart tests a class, \
+with the same Statistical Options (Auto or Manual; Level 1 corrects across the chosen \
+lipids, Level 2 picks the pairs: tukey, bonferroni, uncorrected or dunnett vs a control). \
+Two conditions: one bracket per panel, ns included. Three or more: brackets only on the \
+pairs the post-hoc test finds significant, for lipids whose omnibus test is significant.
 - **Lipidomic heatmaps** — four views: Aggregated by Class (the default), species grouped \
 by class, regular, and clustered (hierarchical clustering, Ward linkage, Euclidean \
 distance); colored by z-score or by log2 fold change against a control condition
@@ -213,7 +221,9 @@ condition with one control the user picks in the "Control condition" box that ap
 (e.g. WT vs several knockouts) instead of testing every pair, so it has more power when \
 only comparisons with the control matter. With non-parametric tests, tukey and dunnett \
 become Mann-Whitney U, Bonferroni-corrected (dunnett: only the comparisons with the \
-control). Dunnett is in the main app only: lc runs class statistics in Auto mode.
+control). In lc: posthoc='dunnett', control=... on bar_chart, saturation and lipid_panels.
+- **Significance stars** on every plot: * p < 0.05, ** p < 0.01, *** p < 0.001, \
+**** p < 0.0001 (the GraphPad scale), ns otherwise; adjusted p when a correction applies.
 
 ## Lipid Nomenclature (LIPID MAPS)
 
