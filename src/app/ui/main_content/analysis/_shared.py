@@ -5,7 +5,7 @@ Provides common widgets for statistical options, condition/class selection,
 and detailed statistics tables.
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -141,6 +141,7 @@ def _display_statistical_options(
     key_prefix: str,
     n_classes: int,
     n_conditions: int,
+    conditions: Sequence[str] = (),
 ) -> StatisticalTestConfig:
     """Display statistical options panel (Auto/Manual mode).
 
@@ -148,6 +149,8 @@ def _display_statistical_options(
         key_prefix: Prefix for widget keys (e.g., 'bar', 'sat', 'volcano').
         n_classes: Number of selected lipid classes.
         n_conditions: Number of selected conditions.
+        conditions: The selected conditions, offered as the control when
+            Level 2 is Dunnett's test.
 
     Returns:
         Configured StatisticalTestConfig.
@@ -189,10 +192,21 @@ def _display_statistical_options(
     with col2:
         posthoc = st.selectbox(
             "Within-Class Correction (Level 2)",
-            ["uncorrected", "tukey", "bonferroni"],
+            ["uncorrected", "tukey", "bonferroni", "dunnett"],
             index=1,
             key=f'{key_prefix}_posthoc',
+            help="dunnett: compares each condition with one control condition "
+                 "instead of every pair (Dunnett's test; for non-parametric "
+                 "tests, Mann-Whitney U against the control, Bonferroni-"
+                 "corrected). Post-hoc tests run with 3 or more conditions.",
         )
+        control = None
+        if posthoc == "dunnett":
+            control = st.selectbox(
+                "Control condition", list(conditions),
+                key=f'{key_prefix}_control',
+                help="Every other condition is compared with this one.",
+            )
 
     auto_transform = st.checkbox(
         "Auto-transform data (log10)",
@@ -203,7 +217,8 @@ def _display_statistical_options(
     # Settings summary
     st.markdown(
         f"**Current Settings:** Test: {test_type} | "
-        f"Level 1: {correction} | Level 2: {posthoc} | "
+        f"Level 1: {correction} | Level 2: {posthoc}"
+        f"{f' (control: {control})' if control else ''} | "
         f"Auto-transform: {'Yes' if auto_transform else 'No'}"
     )
 
@@ -212,6 +227,7 @@ def _display_statistical_options(
         correction_method=correction,
         posthoc_correction=posthoc,
         auto_transform=auto_transform,
+        control_condition=control,
     )
 
 

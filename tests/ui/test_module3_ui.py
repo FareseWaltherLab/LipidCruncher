@@ -1301,6 +1301,78 @@ class TestEdgeCases:
         assert 'Vehicle' in ms.value
 
 
+class TestDunnettUI:
+    """Dunnett's test as a fourth Level 2 option, compared with a control."""
+
+    @pytest.fixture
+    def significant_three_cond_app(self):
+        from app.models.experiment import ExperimentConfig
+        at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['_test_df'] = make_analysis_dataframe(
+            n_lipids=20, n_samples=9, condition_effect=True,
+        )
+        at.session_state['_test_experiment'] = ExperimentConfig(
+            n_conditions=3,
+            conditions_list=['Control', 'Treatment', 'Vehicle'],
+            number_of_samples_list=[3, 3, 3],
+        )
+        at.session_state['_test_bqc_label'] = None
+        at.session_state['_test_format_type'] = 'Generic Format'
+        return at.run()
+
+    def test_existing_options_kept_and_dunnett_added(self, significant_three_cond_app):
+        at = significant_three_cond_app
+        at.radio(key='bar_stats_mode').set_value("Manual").run()
+        assert at.selectbox(key='bar_posthoc').options == [
+            "uncorrected", "tukey", "bonferroni", "dunnett"]
+        assert at.selectbox(key='bar_posthoc').value == "tukey"
+        assert not [s for s in at.selectbox if s.key == 'bar_control']
+
+    def test_bar_chart_compares_with_the_chosen_control(self, significant_three_cond_app):
+        at = significant_three_cond_app
+        at.radio(key='bar_stats_mode').set_value("Manual").run()
+        at.selectbox(key='bar_posthoc').set_value("dunnett").run()
+        control = at.selectbox(key='bar_control')
+        assert control.options == ['Control', 'Treatment', 'Vehicle']
+        assert control.value == 'Control'
+        control.set_value('Vehicle').run()
+        assert not at.exception
+        summary = at.session_state['analysis_statistics']['Abundance bar chart'].summary
+        assert summary.test_info['control'] == 'Vehicle'
+        assert summary.posthoc_results
+        for comparisons in summary.posthoc_results.values():
+            assert [(c.group1, c.group2) for c in comparisons] == [
+                ('Vehicle', 'Control'), ('Vehicle', 'Treatment')]
+            assert all(c.test_name == "Dunnett's test" for c in comparisons)
+        assert any("(control: Vehicle)" in m.value for m in at.markdown)
+
+    def test_deselecting_the_control_falls_back_to_a_selected_condition(
+        self, significant_three_cond_app,
+    ):
+        at = significant_three_cond_app
+        at.radio(key='bar_stats_mode').set_value("Manual").run()
+        at.selectbox(key='bar_posthoc').set_value("dunnett").run()
+        at.selectbox(key='bar_control').set_value('Vehicle').run()
+        at.multiselect(key='bar_conditions').set_value(['Control', 'Treatment']).run()
+        assert not at.exception
+        assert at.selectbox(key='bar_control').value in ('Control', 'Treatment')
+
+    def test_saturation_offers_dunnett(self, significant_three_cond_app):
+        at = significant_three_cond_app
+        radio = at.radio(key='analysis_radio')
+        at.radio(key='analysis_radio').set_value(
+            next(o for o in radio.options if "Saturation" in o)).run()
+        at.radio(key='sat_stats_mode').set_value("Manual").run()
+        at.selectbox(key='sat_posthoc').set_value("dunnett").run()
+        at.selectbox(key='sat_control').set_value('Treatment').run()
+        assert not at.exception
+        summary = at.session_state['analysis_statistics']['Saturation profile'].summary
+        assert summary.test_info['control'] == 'Treatment'
+        assert summary.posthoc_results
+        for comparisons in summary.posthoc_results.values():
+            assert all(c.group1 == 'Treatment' for c in comparisons)
+
+
 # =============================================================================
 # Group 11: LSI Compliance Report (6 tests)
 # =============================================================================

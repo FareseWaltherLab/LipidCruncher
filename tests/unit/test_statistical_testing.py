@@ -12,6 +12,7 @@ import pytest
 from scipy import stats as sp_stats
 
 from app.models.statistics import StatisticalTestConfig
+from app.services.exceptions import ValidationError
 from app.services.statistical_testing import (
     PostHocResult,
     StatisticalTestResult,
@@ -521,6 +522,48 @@ class TestPostHoc:
         for r in results:
             assert r.adjusted_p_value == pytest.approx(r.p_value)
 
+    def test_dunnett_compares_each_group_with_the_control(self, three_groups):
+        results = StatisticalTestingService.run_posthoc(
+            three_groups, 'dunnett', test_type='parametric', control='A',
+        )
+        assert [(r.group1, r.group2) for r in results] == [('A', 'B'), ('A', 'C')]
+        assert all(r.test_name == "Dunnett's test" for r in results)
+        expected = sp_stats.dunnett(
+            np.log10(three_groups['B']), np.log10(three_groups['C']),
+            control=np.log10(three_groups['A']), random_state=0,
+        ).pvalue
+        assert [r.p_value for r in results] == pytest.approx(list(expected))
+        assert [r.adjusted_p_value for r in results] == pytest.approx(list(expected))
+        assert not results[0].significant and results[1].significant
+
+    def test_dunnett_gives_the_same_p_values_every_run(self, three_groups):
+        """scipy's Dunnett integrates with random draws; unseeded, the third
+        decimal of p moves between runs."""
+        runs = [
+            [r.p_value for r in StatisticalTestingService.run_posthoc(
+                three_groups, 'dunnett', control='B')]
+            for _ in range(3)
+        ]
+        assert runs[0] == runs[1] == runs[2]
+
+    def test_dunnett_nonparametric_is_mann_whitney_against_the_control(self, three_groups):
+        results = StatisticalTestingService.run_posthoc(
+            three_groups, 'dunnett', test_type='non_parametric', control='C',
+        )
+        assert [(r.group1, r.group2) for r in results] == [('C', 'A'), ('C', 'B')]
+        assert all(r.test_name == "Mann-Whitney U (Bonferroni)" for r in results)
+        _, raw = sp_stats.mannwhitneyu(
+            np.log10(three_groups['C']), np.log10(three_groups['A']),
+            alternative='two-sided',
+        )
+        # Bonferroni over the two comparisons with the control, not all three pairs.
+        assert results[0].adjusted_p_value == pytest.approx(min(1.0, raw * 2))
+
+    @pytest.mark.parametrize("control", [None, 'Z'])
+    def test_dunnett_needs_its_control_among_the_groups(self, three_groups, control):
+        with pytest.raises(ValidationError, match="control"):
+            StatisticalTestingService.run_posthoc(three_groups, 'dunnett', control=control)
+
     def test_tukey_equal_groups(self, three_equal_groups):
         results = StatisticalTestingService.run_posthoc(
             three_equal_groups, 'tukey', 0.05, True
@@ -823,6 +866,34 @@ class TestClassLevelTests:
                 for r in summary.posthoc_results['PC']
             )
 
+    def test_dunnett_compares_with_the_chosen_control(self, experiment_3x3):
+        df = pd.DataFrame({
+            'LipidMolec': ['PC(16:0)', 'PC(18:0)'],
+            'ClassKey': ['PC', 'PC'],
+            'concentration[s1]': [100, 200],
+            'concentration[s2]': [110, 210],
+            'concentration[s3]': [105, 205],
+            'concentration[s4]': [100, 200],
+            'concentration[s5]': [110, 210],
+            'concentration[s6]': [105, 205],
+            'concentration[s7]': [500, 600],
+            'concentration[s8]': [510, 610],
+            'concentration[s9]': [520, 620],
+        })
+        config = StatisticalTestConfig.create_manual(
+            correction_method='uncorrected', posthoc_correction='dunnett',
+            control_condition='Vehicle',
+        )
+        summary = StatisticalTestingService.run_class_level_tests(
+            df, experiment_3x3, ['Control', 'Treatment', 'Vehicle'], ['PC'], config,
+        )
+        assert summary.results['PC'].significant
+        assert [(r.group1, r.group2) for r in summary.posthoc_results['PC']] == [
+            ('Vehicle', 'Control'), ('Vehicle', 'Treatment')]
+        assert all(r.significant for r in summary.posthoc_results['PC'])
+        assert summary.test_info['posthoc'] == 'dunnett'
+        assert summary.test_info['control'] == 'Vehicle'
+
     def test_nonparametric(self, class_level_df, experiment_2x3, manual_nonparam_config):
         summary = StatisticalTestingService.run_class_level_tests(
             class_level_df, experiment_2x3,
@@ -855,6 +926,26 @@ class TestSaturationTests:
                 },
             },
         }
+
+    def test_dunnett_compares_with_the_chosen_control(self, experiment_3x3):
+        fa_data = {'PC': {'SFA': {
+            'Control': np.array([100.0, 101.0, 99.0]),
+            'Treatment': np.array([300.0, 305.0, 298.0]),
+            'Vehicle': np.array([101.0, 99.5, 100.5]),
+        }}}
+        config = StatisticalTestConfig.create_manual(
+            correction_method='uncorrected', posthoc_correction='dunnett',
+            control_condition='Control',
+        )
+        summary = StatisticalTestingService.run_saturation_tests(
+            pd.DataFrame(), experiment_3x3,
+            ['Control', 'Treatment', 'Vehicle'], ['PC'], fa_data, config,
+        )
+        pairs = summary.posthoc_results['PC_SFA']
+        assert [(r.group1, r.group2) for r in pairs] == [
+            ('Control', 'Treatment'), ('Control', 'Vehicle')]
+        assert [r.significant for r in pairs] == [True, False]
+        assert summary.test_info['control'] == 'Control'
 
     def test_basic_run(self, fa_data, experiment_2x3, manual_parametric_config):
         summary = StatisticalTestingService.run_saturation_tests(

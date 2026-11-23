@@ -56,6 +56,7 @@ def _display_saturation_plots(
 
         stat_config = _display_statistical_options(
             'sat', len(selected_classes), len(selected_conditions),
+            selected_conditions,
         )
 
         section_header("📊 Results")

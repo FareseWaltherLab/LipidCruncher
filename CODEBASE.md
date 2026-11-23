@@ -275,7 +275,7 @@ Located in `src/app/models/`. All are frozen Pydantic `BaseModel` subclasses (im
 | `ExperimentConfig` | `experiment.py` | Defines experimental setup: number of conditions, condition labels, sample counts. Auto-derives `n_conditions` from `conditions_list` if omitted. Validates condition label uniqueness. Computed properties generate sample labels (s1, s2, ...) and group them by condition. Provides `without_samples()` for creating configs after sample removal. |
 | `NormalizationConfig` | `normalization.py` | Normalization method (`none`, `internal_standard`, `protein`, `both`, `total_intensity`), selected lipid classes, standard-to-class mappings, concentrations. |
 | `SampleFrame` | `sample_frame.py` | A frame whose samples are labelled s1..sN, with its `ExperimentConfig`, display names and each sample's `origin` (its label in the uploaded file). `renumbered(df, experiment, old_to_new)` moves names and origins through a regroup, sidebar exclusion or PCA exclusion; per-sample inputs such as protein amounts are keyed by origin, so renumbering cannot hand them to another sample. |
-| `StatisticalTestConfig` | `statistics.py` | Test type (`parametric`, `non_parametric`, `auto`), multiple-testing correction (`fdr_bh`, `bonferroni`), post-hoc method (`tukey`, `bonferroni`), `auto_transform` flag for log10 transformation. |
+| `StatisticalTestConfig` | `statistics.py` | Test type (`parametric`, `non_parametric`, `auto`), multiple-testing correction (`fdr_bh`, `bonferroni`), post-hoc method (`tukey`, `bonferroni`, `dunnett` with its `control_condition`), `auto_transform` flag for log10 transformation. |
 
 ### Services
 

@@ -366,6 +366,12 @@ def _statistics_fields(analysis: str, stats: AnalysisStatistics) -> Dict[str, An
         fields[f"{prefix}: post-hoc"] = _POSTHOC_DISPLAY.get(
             info.get('posthoc'), info.get('posthoc')
         )
+        if info.get('control'):
+            fields[f"{prefix}: post-hoc"] = (
+                f"Mann-Whitney U vs {info['control']}, Bonferroni-corrected"
+                if info.get('test_type') == 'non_parametric'
+                else f"Dunnett's test vs {info['control']}"
+            )
     fields[f"{prefix}: data transformation"] = (
         "log10" if info.get('transform') == 'log10' else "None"
     )

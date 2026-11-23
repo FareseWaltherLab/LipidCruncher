@@ -53,8 +53,9 @@ After a significant omnibus test (ANOVA/Kruskal-Wallis), post-hoc tests identify
 | **Uncorrected** | Raw pairwise p-values | Maximum discovery (higher false positive risk) |
 | **Tukey's HSD** | Controls family-wise error rate efficiently | Recommended for parametric tests |
 | **Bonferroni** | Most conservative pairwise correction | Maximum rigor |
+| **Dunnett** | Compares each condition with one control you choose, not every pair | Designs with a control (e.g. WT vs several knockouts) |
 
-**Note:** Tukey's HSD is only available for parametric tests. When you select non-parametric analysis, the "Tukey's HSD" option automatically switches to Bonferroni-corrected Mann-Whitney U pairwise tests.
+**Note:** Tukey's HSD is only available for parametric tests. When you select non-parametric analysis, the "Tukey's HSD" option automatically switches to Bonferroni-corrected Mann-Whitney U pairwise tests. Dunnett's test is parametric too: with non-parametric analysis it becomes Mann-Whitney U against the control, Bonferroni-corrected.
 
 ---
 

@@ -14,6 +14,8 @@ class StatisticalTestConfig(BaseModel):
         test_type: Type of statistical test to perform
         correction_method: Level 1 correction - between lipid classes
         posthoc_correction: Level 2 correction - within class for 3+ conditions
+        control_condition: The condition every other is compared with when
+            posthoc_correction is 'dunnett'
         alpha: Significance threshold (default 0.05)
         auto_transform: If True, applies log10 transformation to normalize data
         conditions_to_compare: List of condition pairs for pairwise comparison
@@ -23,7 +25,8 @@ class StatisticalTestConfig(BaseModel):
     mode: Literal['auto', 'manual'] = 'manual'
     test_type: Literal['parametric', 'non_parametric', 'auto'] = 'parametric'
     correction_method: Literal['uncorrected', 'fdr_bh', 'bonferroni', 'auto'] = 'fdr_bh'
-    posthoc_correction: Literal['uncorrected', 'tukey', 'bonferroni', 'auto'] = 'tukey'
+    posthoc_correction: Literal['uncorrected', 'tukey', 'bonferroni', 'dunnett', 'auto'] = 'tukey'
+    control_condition: Optional[str] = None
     alpha: float = Field(default=0.05, gt=0, lt=1)
     auto_transform: bool = True
     conditions_to_compare: List[Tuple[str, str]] = Field(default_factory=list)
@@ -31,8 +34,8 @@ class StatisticalTestConfig(BaseModel):
     def __hash__(self) -> int:
         return hash((
             self.mode, self.test_type, self.correction_method,
-            self.posthoc_correction, self.alpha, self.auto_transform,
-            tuple(self.conditions_to_compare),
+            self.posthoc_correction, self.control_condition, self.alpha,
+            self.auto_transform, tuple(self.conditions_to_compare),
         ))
 
     @model_validator(mode='after')
@@ -70,8 +73,15 @@ class StatisticalTestConfig(BaseModel):
             if self.posthoc_correction == 'auto':
                 raise ValueError(
                     "When mode is 'manual', posthoc_correction cannot be 'auto'. "
-                    "Choose 'uncorrected', 'tukey', or 'bonferroni'"
+                    "Choose 'uncorrected', 'tukey', 'bonferroni', or 'dunnett'"
                 )
+        return self
+
+    @model_validator(mode='after')
+    def validate_dunnett_control(self):
+        """Dunnett's test compares with a control, so it needs one."""
+        if self.posthoc_correction == 'dunnett' and not self.control_condition:
+            raise ValueError("Dunnett's test needs a control_condition")
         return self
 
     @field_validator('conditions_to_compare')
@@ -120,6 +130,7 @@ class StatisticalTestConfig(BaseModel):
             'uncorrected': 'Uncorrected',
             'tukey': "Tukey's HSD",
             'bonferroni': 'Bonferroni',
+            'dunnett': "Dunnett's test (vs control)",
             'auto': 'Auto'
         }
         return names.get(self.posthoc_correction, self.posthoc_correction)
@@ -148,10 +159,11 @@ class StatisticalTestConfig(BaseModel):
         cls,
         test_type: Literal['parametric', 'non_parametric'] = 'parametric',
         correction_method: Literal['uncorrected', 'fdr_bh', 'bonferroni'] = 'fdr_bh',
-        posthoc_correction: Literal['uncorrected', 'tukey', 'bonferroni'] = 'tukey',
+        posthoc_correction: Literal['uncorrected', 'tukey', 'bonferroni', 'dunnett'] = 'tukey',
         alpha: float = 0.05,
         auto_transform: bool = True,
-        conditions_to_compare: Optional[List[Tuple[str, str]]] = None
+        conditions_to_compare: Optional[List[Tuple[str, str]]] = None,
+        control_condition: Optional[str] = None,
     ) -> 'StatisticalTestConfig':
         """
         Factory method to create a manual-mode configuration.
@@ -163,6 +175,7 @@ class StatisticalTestConfig(BaseModel):
             alpha: Significance threshold (default 0.05)
             auto_transform: Whether to apply log10 transformation
             conditions_to_compare: Optional list of condition pairs
+            control_condition: The control, for Dunnett's test
 
         Returns:
             StatisticalTestConfig configured for manual mode
@@ -174,5 +187,6 @@ class StatisticalTestConfig(BaseModel):
             posthoc_correction=posthoc_correction,
             alpha=alpha,
             auto_transform=auto_transform,
-            conditions_to_compare=conditions_to_compare or []
+            conditions_to_compare=conditions_to_compare or [],
+            control_condition=control_condition,
         )
