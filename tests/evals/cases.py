@@ -509,6 +509,22 @@ CASES = (
             "was the main hurdle."
         ),
     ),
+    EvalCase(
+        id="zero_filter_single_detection",
+        question=(
+            "I have 3 replicates per condition. Why did LipidCruncher keep a "
+            "lipid that was only detected in one sample, and how do I make "
+            "the filter stricter?"
+        ),
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("75%", "non-BQC", "lower"),
+        note=(
+            "2026-11-23: the default zero filter keeps a lipid detected once "
+            "in 3 replicates; the app now explains and warns about it rather "
+            "than changing the default (power-user request)."
+        ),
+    ),
 )
 
 

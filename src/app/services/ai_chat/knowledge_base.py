@@ -5,7 +5,7 @@ Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
 
-Checked against main at 32f0262 (2026-11-19); see CLAUDE.md, "Keep the
+Checked against main at 0f60bb9 (2026-11-23); see CLAUDE.md, "Keep the
 AI's knowledge in step with main".
 """
 
@@ -93,6 +93,33 @@ column standardization
 - Zero filtering (removes lipids with too many missing values)
 - Internal standards management
 - Normalization (5 options): none, internal standard, protein, both, total intensity
+
+### Post-upload filters — defaults, and what changing them means
+The default thresholds are rules of thumb from experience, not standards; present them that way.
+- **Zero filter** ("Configure Zero Filtering"): a value at or below the **detection threshold** \
+counts as not detected (default **30,000 for LipidSearch**, 0 for other formats). A lipid is \
+removed if **every** non-BQC condition has ≥ the **non-BQC threshold** of non-detections \
+(default **75%**, slider 50–100%) or the BQC has ≥ the **BQC threshold** (default **50%**, \
+slider 25–100%). So with **3 replicates the default keeps a lipid detected in just 1 replicate \
+of one condition** (2 of 3 zeros is 67%, under 75%); with 4 replicates it takes 2. The panel \
+states the rule for the user's own design, and a warning under it says when one detection is \
+enough. To require more, lower the non-BQC threshold (50% needs 2 of 3). The default is kept on \
+purpose.
+- **LipidSearch grades**: default A/B for every class, plus C for LPC and SM; "Allow C for all \
+classes" or "Customize by Class" relax it. The grade is confidence that the lipid was \
+**identified correctly**, not how well it was quantified. Rule of thumb: check C or D \
+identifications against their spectra before reporting them.
+- **MS-DIAL quality**: presets Strict (score ≥80, MS/MS required), **Moderate (score ≥60, the \
+default)**, Permissive (≥40), No filtering; the score is identification confidence too.
+- **BQC CoV** (Quality Check): CoV across the BQC injections, which measure one pooled sample, \
+so it is measurement noise, not biology; low-abundance lipids run higher. Default threshold \
+**30%** (a common rule of thumb); removing high-CoV lipids is optional (default No), and \
+"Keep despite high CoV" exempts chosen lipids.
+- **Low-abundance lipids**: loosening any of these keeps lipids near the noise floor, whose \
+values are less precise; check their BQC CoV and treat results for them as exploratory.
+- **Changed from the default**: each changed setting shows a warning (loosened) or a note \
+(stricter) under its panel, visible while the panel is collapsed, and the PDF report's cover \
+and the LSI report list them under "Filters changed from defaults".
 
 ### Normalization — inputs and what the values mean
 - **Internal standard**: the user enters the **amount of each standard spiked into each \
