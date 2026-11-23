@@ -151,6 +151,16 @@ class ZeroFilteringService:
         )
 
     @staticmethod
+    def detections_needed(n_samples: int, threshold: float) -> int:
+        """How many of a condition's ``n_samples`` must be detected for it to
+        pass ``threshold``: the fewest k with (n - k) / n below it, the same
+        comparison ``filter_zeros`` makes (so 90% of 10 needs 2, not 1)."""
+        for detected in range(n_samples + 1):
+            if (n_samples - detected) / n_samples < threshold:
+                return detected
+        return n_samples + 1  # a threshold of 0 nothing passes
+
+    @staticmethod
     def _validate_input(df: pd.DataFrame, experiment: ExperimentConfig) -> None:
         """
         Validate that input DataFrame has required structure.

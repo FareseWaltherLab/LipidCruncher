@@ -323,3 +323,35 @@ class TestStatisticsReported:
         at.multiselect(key='bar_conditions').set_value(['WT']).run()
         assert not at.exception, at.exception
         assert _statistics(_report(captured_downloads), 'Abundance bar chart') == {}
+
+
+CHANGES_ITEM = 'Filters changed from defaults'
+
+
+class TestFilterChangesReported:
+    """Settings changed from their defaults are listed, so a reader sees
+    what was loosened."""
+
+    def test_none_at_the_defaults(self, captured_downloads):
+        _run_to_analysis('None (pre-normalized data)')
+        assert _report(captured_downloads)[CHANGES_ITEM] == 'None'
+
+    def test_zero_filter_and_cov_changes(self, captured_downloads):
+        def loosen_zero_filter(at):
+            at.slider(key='non_bqc_zero_threshold').set_value(90).run()
+
+        at = _run_to_analysis('None (pre-normalized data)', setup=loosen_zero_filter)
+        at.number_input(key='bqc_cov_threshold').set_value(40).run()
+        assert not at.exception, at.exception
+        report = _report(captured_downloads)
+        assert report[CHANGES_ITEM] == (
+            'Non-BQC zero threshold: 90% (default 75%); BQC CoV threshold: 40% (default 30%)'
+        )
+        assert report['Cleaning: Zero filter detection threshold'] == '0'
+
+    def test_lipidsearch_grades(self, captured_downloads):
+        def allow_c(at):
+            at.radio(key='grade_filter_mode_radio').set_value('Allow C for all classes').run()
+
+        _run_to_analysis('None (pre-normalized data)', FORMAT_LIPIDSEARCH, setup=allow_c)
+        assert _report(captured_downloads)[CHANGES_ITEM].startswith('Grades allowed: C for ')

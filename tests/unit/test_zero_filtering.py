@@ -1281,3 +1281,44 @@ class TestIntegration:
         assert result.filtered_df['intensity[s1]'].sum() > 0
         assert len(result.filtered_df.groupby('ClassKey')) > 0
         assert not result.filtered_df['LipidMolec'].isna().any()
+
+
+# =============================================================================
+# Detections needed to pass a threshold
+# =============================================================================
+
+class TestDetectionsNeeded:
+    """``detections_needed`` explains the filter to the user, so it must say
+    exactly what ``filter_zeros`` does."""
+
+    @pytest.mark.parametrize("n, threshold, needed", [
+        (3, 0.75, 1),   # the default with 3 replicates: one detection is enough
+        (4, 0.75, 2),
+        (3, 0.50, 2),
+        (5, 0.50, 3),
+        (3, 1.00, 1),
+        (10, 0.90, 2),  # floor(10 × 0.1) + 1 gives 1 in floating point
+    ])
+    def test_known_cases(self, n, threshold, needed):
+        assert ZeroFilteringService.detections_needed(n, threshold) == needed
+
+    @pytest.mark.parametrize("n", range(1, 11))
+    def test_matches_the_filter(self, n):
+        samples = [f's{i}' for i in range(1, n + 1)]
+        experiment = ExperimentConfig(
+            n_conditions=1, conditions_list=['A'], number_of_samples_list=[n],
+        )
+        for pct in range(25, 101, 5):
+            threshold = pct / 100
+            needed = ZeroFilteringService.detections_needed(n, threshold)
+            rows = {f'L{k}': [1.0] * k + [0.0] * (n - k) for k in range(n + 1)}
+            df = pd.DataFrame({
+                'LipidMolec': list(rows),
+                **{f'intensity[{s}]': [v[i] for v in rows.values()]
+                   for i, s in enumerate(samples)},
+            })
+            result = ZeroFilteringService.filter_zeros(
+                df, experiment, config=ZeroFilterConfig(non_bqc_threshold=threshold),
+            )
+            kept = set(result.filtered_df['LipidMolec'])
+            assert kept == {f'L{k}' for k in range(needed, n + 1)}, (n, pct)

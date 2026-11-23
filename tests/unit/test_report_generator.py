@@ -148,6 +148,50 @@ class TestBuildMetadataFromExperiment:
 
 # ── TestCoverSampleIds ──────────────────────────────────────────────────────
 
+class TestCoverFilterChanges:
+    """The cover lists the filter settings changed from their defaults."""
+
+    @staticmethod
+    def _cover_lines(metadata):
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        from app.services.report_generator import _render_cover_page
+
+        pdf = canvas.Canvas(io.BytesIO(), pagesize=letter)
+        drawn = []
+        original = pdf.drawString
+
+        def _record(x, y, text, *args, **kwargs):
+            drawn.append(text)
+            return original(x, y, text, *args, **kwargs)
+
+        pdf.drawString = _record
+        _render_cover_page(pdf, metadata, [])
+        return drawn
+
+    def test_changes_listed_and_long_ones_wrapped(self):
+        long = "Grades allowed: C for " + ", ".join(f"Class{i}" for i in range(30))
+        lines = self._cover_lines(ReportMetadata(
+            filter_changes=["Non-BQC zero threshold: 90% (default 75%)", long],
+        ))
+        start = lines.index("Filters Changed from Defaults")
+        listed = lines[start + 1:lines.index("Analyses Included in This Report")]
+        assert listed[0] == "\u2022 Non-BQC zero threshold: 90% (default 75%)"
+        assert len(listed) > 2
+        assert " ".join(listed[1:]).lstrip("\u2022 ") == long
+
+    def test_none_changed(self):
+        lines = self._cover_lines(ReportMetadata(filter_changes=[]))
+        assert "None: every filter is at its default." in lines
+
+    def test_not_collected(self):
+        assert "Filters Changed from Defaults" not in self._cover_lines(ReportMetadata())
+
+    def test_metadata_from_experiment_carries_them(self):
+        metadata = build_metadata_from_experiment(None, filter_changes=["x"])
+        assert metadata.filter_changes == ["x"]
+
+
 class TestCoverSampleIds:
     """The cover's Sample IDs column cut its text at 35 characters, which
     with original names left two and a half names (``"CLEANUP_BLANK_01,

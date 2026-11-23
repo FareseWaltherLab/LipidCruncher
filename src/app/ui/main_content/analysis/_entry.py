@@ -21,6 +21,7 @@ from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.models.experiment import ExperimentConfig
 from app.services.report_generator import generate_pdf_report, build_metadata_from_experiment
 from app.ui.color_scheme import current_palette
+from app.ui.filter_guidance import filter_changes
 from app.ui.main_content.lsi_report import display_lsi_report_section
 from app.ui.sample_labels import display_names_for, names_for
 from app.workflows.analysis import AnalysisWorkflow
@@ -116,7 +117,7 @@ def display_analysis_module(
         handler(df, experiment, bqc_label)
 
     # PDF Report Download
-    _display_pdf_report_section(experiment, format_type)
+    _display_pdf_report_section(experiment, format_type, bqc_label)
 
     # LSI Compliance Report
     display_lsi_report_section(df, experiment, format_type, bqc_label)
@@ -161,6 +162,7 @@ def _collect_qc_plots() -> Dict[str, Any]:
 def _display_pdf_report_section(
     experiment: ExperimentConfig,
     format_type: str,
+    bqc_label: Optional[str],
 ) -> None:
     """Display PDF report generation and download section."""
     analysis_plots = st.session_state.get('analysis_all_plots', {})
@@ -183,6 +185,7 @@ def _display_pdf_report_section(
                 metadata = build_metadata_from_experiment(
                     experiment, format_type,
                     display_names=display_names_for('qc'),
+                    filter_changes=filter_changes(experiment, bqc_label, format_type),
                 )
                 pdf_buffer = generate_pdf_report(
                     analysis_plots=analysis_plots,

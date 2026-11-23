@@ -7,15 +7,15 @@ import pandas as pd
 import streamlit as st
 
 from app.constants import (
-    FORMAT_LIPIDSEARCH,
-    LIPIDSEARCH_DETECTION_THRESHOLD,
     ZERO_FILTER_NON_BQC_DEFAULT,
     ZERO_FILTER_BQC_DEFAULT,
 )
 from ..models.experiment import ExperimentConfig
 from ..adapters.streamlit_adapter import StreamlitAdapter
+from ..services.filter_guidance import FilterGuidanceService
 from ..services.zero_filtering import ZeroFilterConfig
 from ..ui.download_utils import csv_download_button
+from ..ui.filter_guidance import default_detection_threshold, show_notices
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +98,42 @@ def _show_filter_result(filter_result) -> None:
         st.success("**Result:** No species will be removed")
 
 
+_HOW_IT_WORKS = (
+    "A lipid is removed when its values are at or below the detection threshold in "
+    "too many samples. It is kept if at least one condition passes the non-BQC "
+    "threshold and the BQC samples (if any) pass the BQC threshold."
+)
+
+_LOW_ABUNDANCE = (
+    "**Low-abundance lipids:** loosening these settings keeps lipids measured near "
+    "the noise floor. Their values are less precise, and a lipid seen in only one or "
+    "two samples can't be compared reliably between conditions. If you loosen the "
+    "filter, check those lipids' BQC CoV in Quality Check and treat results for them "
+    "as exploratory."
+)
+
+
+def _show_explanation(experiment: ExperimentConfig, bqc_label, config: ZeroFilterConfig) -> None:
+    """What the filter does, and what the current thresholds mean for this design."""
+    st.markdown(_HOW_IT_WORKS + " " + FilterGuidanceService.zero_filter_summary(
+        experiment, bqc_label, config,
+    ))
+    st.markdown(_LOW_ABUNDANCE)
+
+
+def _show_warnings(experiment: ExperimentConfig, bqc_label, config: ZeroFilterConfig,
+                   default_detection: float) -> None:
+    """Shown under the panel, so they're seen while it is collapsed."""
+    single = FilterGuidanceService.single_detection_warning(
+        experiment, bqc_label, config.non_bqc_threshold,
+    )
+    if single:
+        st.warning(single)
+    show_notices(FilterGuidanceService.zero_filter_notices(
+        experiment, bqc_label, config, default_detection,
+    ))
+
+
 def display_zero_filtering_config(
     cleaned_df: pd.DataFrame,
     experiment: ExperimentConfig,
@@ -117,9 +153,7 @@ def display_zero_filtering_config(
         tuple: (filtered_df, removed_species list, config dict)
     """
     has_bqc = bqc_label is not None and bqc_label in experiment.conditions_list
-
-    # Determine default detection threshold based on format
-    default_detection = LIPIDSEARCH_DETECTION_THRESHOLD if data_format == FORMAT_LIPIDSEARCH else 0.0
+    default_detection = default_detection_threshold(data_format)
 
     with st.expander("⚙️ Configure Zero Filtering", expanded=False):
         if cleaned_df is None or cleaned_df.empty:
@@ -127,6 +161,7 @@ def display_zero_filtering_config(
             return None, [], {}
 
         st.markdown("Adjust thresholds for removing lipid species with too many zero/below-detection values.")
+        explanation = st.container()
 
         _init_threshold_state(default_detection, data_format)
         non_bqc_threshold, bqc_threshold = _threshold_sliders(has_bqc, bqc_label)
@@ -138,20 +173,23 @@ def display_zero_filtering_config(
             bqc_threshold=bqc_threshold,
             non_bqc_threshold=non_bqc_threshold
         )
+        with explanation:
+            _show_explanation(experiment, bqc_label if has_bqc else None, zero_config)
 
         try:
             filter_result = StreamlitAdapter.run_zero_filter(
                 cleaned_df, experiment, zero_config, bqc_label,
             )
-
-            _show_filter_result(filter_result)
-            return filter_result.filtered_df, filter_result.removed_species, {
-                'detection_threshold': detection_threshold,
-                'bqc_threshold': bqc_threshold,
-                'non_bqc_threshold': non_bqc_threshold
-            }
-
         except ValueError as e:
             logger.error("Zero filtering error: %s", e)
             st.error(f"Zero filtering failed: {e}")
             return cleaned_df, [], {}
+
+        _show_filter_result(filter_result)
+
+    _show_warnings(experiment, bqc_label if has_bqc else None, zero_config, default_detection)
+    return filter_result.filtered_df, filter_result.removed_species, {
+        'detection_threshold': detection_threshold,
+        'bqc_threshold': bqc_threshold,
+        'non_bqc_threshold': non_bqc_threshold
+    }
