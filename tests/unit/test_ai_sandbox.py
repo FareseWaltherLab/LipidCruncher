@@ -318,6 +318,25 @@ class TestSafeExecution:
         assert result.success is True, result.error_message
         assert "fell back: no ClassKey" in result.stdout
 
+    def test_next_and_iter_are_available(self, sample_df, default_config):
+        """2026-11-23, eval lipid_panels_with_significance: the AI matched a
+        lipid name with `next((n for n in names if ...), None)` and the turn
+        failed with NameError: name 'next' is not defined."""
+        code = (
+            "names = ['PC 34:1', 'Cer 18:1;O2/24:0']\n"
+            "print(next((n for n in names if n.startswith('Cer')), None))\n"
+            "print(next((n for n in names if n.startswith('TG')), 'missing'))\n"
+            "it = iter(names)\n"
+            "next(it); next(it)\n"
+            "try:\n"
+            "    next(it)\n"
+            "except StopIteration:\n"
+            "    print('done')\n"
+        )
+        result = SandboxService.execute(code, sample_df, default_config)
+        assert result.success is True, result.error_message
+        assert result.stdout.split() == ["Cer", "18:1;O2/24:0", "missing", "done"]
+
 
 # ---------------------------------------------------------------------------
 # Runtime Error Handling

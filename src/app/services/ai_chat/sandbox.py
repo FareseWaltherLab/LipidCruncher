@@ -229,6 +229,9 @@ _SAFE_BUILTINS: Dict[str, Any] = {
     "all": all,
     "reversed": reversed,
     "frozenset": frozenset,
+    # `next(gen, None)` picks a first match; the AI writes it unprompted.
+    "next": next,
+    "iter": iter,
     # Exceptions to catch, e.g. a fallback when an `lc` helper refuses the
     # data. Without `Exception`, `except Exception:` itself raised NameError.
     "Exception": Exception,
@@ -236,6 +239,7 @@ _SAFE_BUILTINS: Dict[str, Any] = {
     "ValueError": ValueError,
     "TypeError": TypeError,
     "IndexError": IndexError,
+    "StopIteration": StopIteration,
 }
 
 
