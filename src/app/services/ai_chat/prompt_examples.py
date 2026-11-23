@@ -402,6 +402,8 @@ User: "What statistical test should I use for comparing 3 conditions?"
 Answer: "For 3+ conditions, LipidCruncher uses Alexander-Govern ANOVA (parametric) or \
 Kruskal-Wallis (non-parametric). Post-hoc pairwise comparisons use Tukey's HSD \
 (with parametric) or Bonferroni-corrected Mann-Whitney U (with non-parametric). \
+If only comparisons with one control matter (e.g. each knockout vs WT), choose Dunnett's \
+test in Manual mode and pick the control. \
 Multiple testing correction across all lipids is available via FDR (Benjamini-Hochberg) \
 or Bonferroni. Auto mode selects parametric testing with log10 transformation."
 

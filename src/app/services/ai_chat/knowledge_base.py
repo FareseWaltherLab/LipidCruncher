@@ -5,7 +5,7 @@ Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
 
-Checked against main at 4040831 (2026-11-23); see CLAUDE.md, "Keep the
+Checked against main at 749abc6 (2026-11-23); see CLAUDE.md, "Keep the
 AI's knowledge in step with main".
 """
 
@@ -206,7 +206,14 @@ the conditions, their order and the isotopologues shown (optionally rescaled to 
 - **Non-parametric**: Mann-Whitney U (2 conditions), Kruskal-Wallis (3+ conditions)
 - **Auto mode**: selects parametric with log10 transform
 - **Multiple testing correction**: FDR (Benjamini-Hochberg) or Bonferroni
-- **Post-hoc**: Tukey's HSD or Bonferroni
+- **Post-hoc** (3+ conditions, after a significant omnibus test; Bar Chart and Saturation \
+pages, Manual mode, "Within-Class Correction (Level 2)"): uncorrected, tukey (Tukey's HSD, \
+the default and Auto mode's choice), bonferroni, or dunnett. Dunnett's test compares each \
+condition with one control the user picks in the "Control condition" box that appears \
+(e.g. WT vs several knockouts) instead of testing every pair, so it has more power when \
+only comparisons with the control matter. With non-parametric tests, tukey and dunnett \
+become Mann-Whitney U, Bonferroni-corrected (dunnett: only the comparisons with the \
+control). Dunnett is in the main app only: lc runs class statistics in Auto mode.
 
 ## Lipid Nomenclature (LIPID MAPS)
 

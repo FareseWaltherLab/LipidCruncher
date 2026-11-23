@@ -525,6 +525,21 @@ CASES = (
             "than changing the default (power-user request)."
         ),
     ),
+    EvalCase(
+        id="dunnett_vs_control",
+        question=(
+            "I have WT, KO1 and KO2. I only care whether each knockout differs "
+            "from WT, not KO1 vs KO2. Which post-hoc test should I use in the "
+            "bar chart, and how do I set it?"
+        ),
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("Dunnett", "Manual", "control"),
+        note=(
+            "2026-11-23: Dunnett's test vs a chosen control added as a fourth "
+            "Level 2 option (power-user request)."
+        ),
+    ),
 )
 
 
