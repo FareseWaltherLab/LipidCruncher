@@ -512,6 +512,26 @@ class StatisticalTestingService:
         )
 
     @staticmethod
+    def run_lipid_level_tests(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_lipids: List[str],
+        config: StatisticalTestConfig,
+    ) -> StatisticalTestSummary:
+        """The bar chart's tests, with each selected lipid in place of a
+        class: an omnibus test per lipid, Level 1 correction across the
+        selected lipids, and Level 2 post-hoc tests for 3+ conditions.
+        Zeros are replaced with the dataset-wide value, as on every page.
+
+        Results are keyed by lipid name.
+        """
+        by_lipid = df.assign(ClassKey=df['LipidMolec'])
+        return StatisticalTestingService.run_class_level_tests(
+            by_lipid, experiment, selected_conditions, selected_lipids, config,
+        )
+
+    @staticmethod
     def run_saturation_tests(
         df: pd.DataFrame,
         experiment: ExperimentConfig,

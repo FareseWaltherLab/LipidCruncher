@@ -148,7 +148,7 @@ LipidCruncher/
 │       │       ├── fach.py
 │       │       ├── pathway_viz.py
 │       │       ├── volcano_plot.py
-│       │       ├── lipid_distribution.py    #   volcano page's per-lipid panels
+│       │       ├── lipid_distribution.py    #   per-lipid panels (volcano page, Individual Lipid Panels)
 │       │       ├── lipidomic_heatmap.py
 │       │       └── heatmap_layout.py        #   condition strip, class column, square cells
 │       ├── workflows/                       # Orchestration layer
@@ -257,7 +257,7 @@ Box Plots → BQC Assessment → Retention Time → Correlation → PCA
 
 **Analysis section:**
 ```
-Bar Charts | Pie Charts | Saturation | Chain Length | FACH | Pathway | Volcano | Heatmap
+Bar Charts | Pie Charts | Saturation | Chain Length | FACH | Pathway | Volcano | Heatmap | Lipid Panels
 ```
 
 Each analysis type is independent and user-selectable. All produce interactive plots with SVG and CSV export, and every analysis shown is included in the PDF report: each page calls `_clear_pdf_plots` on entry and `_publish(key, figure)` for each figure it draws (`analysis/_shared.py`); `_publish` accepts only keys listed in `ANALYSIS_PAGES` (`report_generator.py`), the table that also orders and captions the report's analysis pages. `tests/ui/test_pdf_keys.py` pins which keys each page leaves after each selection change.
@@ -343,7 +343,7 @@ Shared utilities live in `_shared.py`: `p_value_to_marker()` (significance strin
 | `ChainLengthPlotterService` | Carbon chain length and double bond bubble charts |
 | `FACHPlotterService` | Fatty acid composition heatmap |
 | `PathwayVizPlotterService` | Interactive Plotly metabolic pathway network (data-driven, editable layout, 28 lipid classes) |
-| `VolcanoPlotterService` | Fold-change vs. p-value scatter; per-lipid bar/box panels with a dot per sample and a significance bracket (`lipid_distribution.py`) |
+| `VolcanoPlotterService` | Fold-change vs. p-value scatter; per-lipid bar/box panels with a dot per sample and significance brackets, one for the volcano's two conditions or one per given pair (`lipid_distribution.py`) |
 | `LipidomicHeatmapPlotterService` | Clustered heatmap (Ward hierarchical clustering) |
 
 ### Workflows
@@ -355,7 +355,7 @@ Located in `src/app/workflows/`. These orchestrate multi-step pipelines by calli
 | `DataIngestionWorkflow` | `run()` → `IngestionResult` | Format detection (only if no format is given) → cleaning → standards validation. Returns cleaned DataFrame + internal standards + messages. Zero filtering is not part of it: it runs afterwards in `ui/zero_filtering.py`, called from `main_app.py`, with thresholds the user adjusts. |
 | `NormalizationWorkflow` | `run()` → `NormalizationWorkflowResult` | Validates inputs → preserves essential columns (CalcMass, BaseRt) → applies normalization → restores columns. `adduct_mismatches()` lists classes whose chosen standard was measured in another adduct (`MainIon`) than their species; the mapping UI shows them as warnings. |
 | `QualityCheckWorkflow` | Individual step methods | Non-sequential: `validate_inputs()`, `high_cov_lipids()`, `apply_bqc_filter()`, `check_retention_time_availability()`, `get_eligible_correlation_conditions()`, `remove_samples()`. The QC plots are built by the adapter calling `BoxPlotService`, `BQCPlotterService`, `CorrelationPlotterService` and `PCAPlotterService`; `tests/integration/test_module2_pipeline.py` drives that same path. |
-| `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `compute_pathway_data()` (the pathway page draws the diagram itself, with the user's layout edits), `run_volcano()`, `run_heatmap()`. |
+| `AnalysisWorkflow` | Individual analysis methods | Non-sequential: `run_bar_chart()`, `run_pie_charts()`, `run_saturation()`, `run_chain_length()`, `run_fach()`, `compute_pathway_data()` (the pathway page draws the diagram itself, with the user's layout edits), `run_volcano()`, `run_heatmap()`, `run_lipid_panels()` (per-lipid panels for any number of conditions, tested by `StatisticalTestingService.run_lipid_level_tests()`, the bar chart's tests with each lipid as a class). |
 
 ### Adapter
 

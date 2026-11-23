@@ -49,6 +49,7 @@ from ..services.plotting.volcano_plot import (
     VolcanoPlotterService,
     VolcanoData,
 )
+from ..services.plotting._shared import get_effective_p_value
 from ..services.plotting.lipidomic_heatmap import (
     GROUPED_PAGE_SIZE,
     ClusteringResult,
@@ -77,6 +78,24 @@ class BarChartResult:
     stat_summary: Optional[StatisticalTestSummary] = None
     success: bool = True
     validation_errors: List[str] = dataclass_field(default_factory=list)
+
+
+@dataclass
+class LipidPanelsResult:
+    """Result from the Individual Lipid Panels analysis.
+
+    Attributes:
+        figure: One panel per lipid, with brackets for significant pairs.
+        data: One row per (lipid, sample): Lipid, Condition, Sample,
+            Concentration.
+        stat_summary: The per-lipid tests (None with one condition).
+    """
+    figure: Optional[go.Figure] = None
+    data: Optional[pd.DataFrame] = None
+    stat_summary: Optional[StatisticalTestSummary] = None
+
+
+_LEVEL1_TEXT = {'fdr_bh': 'FDR-adjusted', 'bonferroni': 'Bonferroni-adjusted'}
 
 
 @dataclass
@@ -422,6 +441,49 @@ class AnalysisWorkflow:
             abundance_df=bar_data.abundance_df,
             stat_summary=stat_summary,
         )
+
+    # ------------------------------------------------------------------
+    # Individual Lipid Panels
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def run_lipid_panels(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_lipids: List[str],
+        stat_config: StatisticalTestConfig,
+        style: str = 'bar',
+        palette: str = DEFAULT_CONDITION_PALETTE,
+    ) -> LipidPanelsResult:
+        """One panel per lipid for any number of conditions, tested as the
+        bar chart tests classes (``run_lipid_level_tests``).
+
+        With two conditions each panel gets one bracket, significant or
+        ``ns``. With three or more, brackets mark the pairs the post-hoc
+        test finds significant, for lipids whose omnibus test is.
+        """
+        if not selected_lipids:
+            raise ValueError("At least one lipid must be selected")
+        if not selected_conditions:
+            raise ValueError("At least one condition must be selected")
+
+        data = _panel_data(df, experiment, selected_conditions, selected_lipids)
+        stat_summary = None
+        comparisons = None
+        p_label = ''
+        if len(selected_conditions) >= 2:
+            stat_summary = StatisticalTestingService.run_lipid_level_tests(
+                df, experiment, selected_conditions, selected_lipids, stat_config,
+            )
+            comparisons, p_label = _panel_comparisons(
+                stat_summary, selected_conditions, stat_config.alpha,
+            )
+        figure = VolcanoPlotterService.create_distribution_plot(
+            df, selected_lipids, selected_conditions, experiment,
+            p_label=p_label, style=style, palette=palette, comparisons=comparisons,
+        )
+        return LipidPanelsResult(figure=figure, data=data, stat_summary=stat_summary)
 
     # ------------------------------------------------------------------
     # Pie Charts
@@ -1126,3 +1188,59 @@ class AnalysisWorkflow:
             value_label=value_label,
             palette=palette,
         )
+
+
+def _panel_data(
+    df: pd.DataFrame,
+    experiment: ExperimentConfig,
+    conditions: List[str],
+    lipids: List[str],
+) -> pd.DataFrame:
+    """One row per (lipid, sample) of the chosen lipids and conditions."""
+    rows = []
+    for lipid in lipids:
+        lipid_rows = df[df['LipidMolec'] == lipid]
+        if lipid_rows.empty:
+            continue
+        for condition in conditions:
+            for sample in experiment.samples_for(condition):
+                col = f'concentration[{sample}]'
+                if col in df.columns:
+                    rows.append({
+                        'Lipid': lipid, 'Condition': condition, 'Sample': sample,
+                        'Concentration': float(lipid_rows[col].values[0]),
+                    })
+    return pd.DataFrame(rows, columns=['Lipid', 'Condition', 'Sample', 'Concentration'])
+
+
+def _panel_comparisons(
+    summary: StatisticalTestSummary, conditions: List[str], alpha: float,
+) -> Tuple[Dict[str, List[Tuple[str, str, float]]], str]:
+    """The brackets to draw per lipid, and the caption saying where their
+    p-values come from."""
+    info = summary.test_info
+    n = len(summary.results)
+    omnibus = ', '.join(sorted({r.test_name for r in summary.results.values()}))
+    adjusted = _LEVEL1_TEXT.get(info.get('correction')) if n > 1 else None
+    if len(conditions) == 2:
+        comparisons = {
+            lipid: [(conditions[0], conditions[1], get_effective_p_value(r))]
+            for lipid, r in summary.results.items()
+        }
+        across = f', {adjusted} across the {n} lipids' if adjusted else ''
+        return comparisons, f'p: {omnibus}{across}'
+
+    comparisons = {
+        lipid: [
+            (ph.group1, ph.group2, get_effective_p_value(ph))
+            for ph in summary.posthoc_results.get(lipid, [])
+            if get_effective_p_value(ph) < alpha
+        ]
+        for lipid in summary.results
+    }
+    posthoc = sorted({ph.test_name for phs in summary.posthoc_results.values() for ph in phs})
+    omnibus_p = f'{omnibus} p < {alpha:g}' + (f' ({adjusted}, {n} lipids)' if adjusted else '')
+    if not posthoc:
+        return comparisons, f'no lipid has {omnibus_p}, so no pairs were tested'
+    return comparisons, f'brackets: {", ".join(posthoc)}, for lipids with {omnibus_p}'
+

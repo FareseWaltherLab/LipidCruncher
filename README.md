@@ -27,7 +27,7 @@ Built by [The Farese & Walther Lab](https://www.mskcc.org/research/ski/labs/fare
 Import your data, define experimental conditions, and apply automatic standardization, filtering, and normalization (internal standards, protein concentration, both, or total intensity). Internal standards consistency plots verify sample prep quality.
 
 ### Step 2: Quality Check & Analysis
-Validate your data with box plots, BQC coefficient-of-variation analysis, correlation heatmaps, and PCA—then explore results with bar/pie charts, volcano plots, saturation profiles, chain length distributions, metabolic pathway maps, clustered heatmaps, and fatty acid composition analysis. All on a single integrated page.
+Validate your data with box plots, BQC coefficient-of-variation analysis, correlation heatmaps, and PCA—then explore results with bar/pie charts, volcano plots, saturation profiles, chain length distributions, metabolic pathway maps, clustered heatmaps, fatty acid composition analysis, and per-lipid panels with significance brackets for any number of conditions. All on a single integrated page.
 
 ---
 

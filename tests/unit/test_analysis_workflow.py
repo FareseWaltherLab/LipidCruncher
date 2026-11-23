@@ -23,6 +23,7 @@ from app.workflows.analysis import (
     PathwayDataResult,
     VolcanoResult,
     HeatmapResult,
+    LipidPanelsResult,
 )
 from app.models.experiment import ExperimentConfig
 from app.models.statistics import StatisticalTestConfig
@@ -2209,3 +2210,100 @@ class TestStatisticalConfigVariations:
             stat_config=config,
         )
         assert result.stat_summary is not None
+
+
+class TestRunLipidPanels:
+    """Individual Lipid Panels: the bar chart's tests per lipid, any number
+    of conditions."""
+
+    @pytest.fixture
+    def panels_df(self):
+        # Samples s1-s3 Control, s4-s6 Treatment, s7-s9 Vehicle.
+        return pd.DataFrame({
+            'LipidMolec': ['PE 18:0_20:4', 'PE 16:0_18:1'],
+            'ClassKey': ['PE', 'PE'],
+            **{f'concentration[s{i}]': [v, 50.0 + i % 3]
+               for i, v in enumerate([100, 102, 98, 101, 99, 103, 400, 410, 395], start=1)},
+        })
+
+    def _run(self, df, exp, conditions, config, lipids=('PE 18:0_20:4', 'PE 16:0_18:1')):
+        return AnalysisWorkflow.run_lipid_panels(df, exp, conditions, list(lipids), config)
+
+    def test_three_conditions_bracket_only_significant_pairs(self, panels_df, exp_3x3):
+        config = StatisticalTestConfig.create_manual(posthoc_correction='tukey')
+        result = self._run(panels_df, exp_3x3, ['Control', 'Treatment', 'Vehicle'], config)
+        assert isinstance(result, LipidPanelsResult)
+        summary = result.stat_summary
+        assert set(summary.results) == {'PE 18:0_20:4', 'PE 16:0_18:1'}
+        assert summary.results['PE 18:0_20:4'].significant
+        assert not summary.results['PE 16:0_18:1'].significant
+        # Control vs Treatment isn't significant, so only the two Vehicle pairs get brackets.
+        assert len(result.figure.layout.shapes) == 2
+        caption = result.figure.layout.annotations[-1].text
+        assert "brackets: Tukey's HSD, for lipids with Alexander-Govern p < 0.05 " \
+               "(FDR-adjusted, 2 lipids)" in caption
+        assert '**** p < 0.0001' in caption
+
+    def test_dunnett_brackets_compare_with_the_control(self, panels_df, exp_3x3):
+        config = StatisticalTestConfig.create_manual(
+            posthoc_correction='dunnett', control_condition='Treatment',
+        )
+        result = self._run(panels_df, exp_3x3, ['Control', 'Treatment', 'Vehicle'], config)
+        pairs = result.stat_summary.posthoc_results['PE 18:0_20:4']
+        assert [(p.group1, p.group2) for p in pairs] == [
+            ('Treatment', 'Control'), ('Treatment', 'Vehicle')]
+        # Only Treatment vs Vehicle differs: one bracket, from x=1 to x=2.
+        paths = [s.path for s in result.figure.layout.shapes]
+        assert len(paths) == 1
+        assert paths[0].startswith('M 1,') and ' L 2,' in paths[0]
+
+    def test_two_conditions_bracket_every_lipid(self, panels_df, exp_3x3):
+        config = StatisticalTestConfig.create_auto()
+        result = self._run(panels_df, exp_3x3, ['Control', 'Vehicle'], config)
+        assert len(result.figure.layout.shapes) == 2  # one per lipid, ns included
+        assert any(a.text == 'ns' for a in result.figure.layout.annotations)
+        assert "p: Welch's t-test, FDR-adjusted across the 2 lipids" in \
+            result.figure.layout.annotations[-1].text
+
+    def test_nothing_significant_says_no_pairs_were_tested(self, panels_df, exp_3x3):
+        result = self._run(
+            panels_df, exp_3x3, ['Control', 'Treatment', 'Vehicle'],
+            StatisticalTestConfig.create_auto(), lipids=['PE 16:0_18:1'],
+        )
+        assert not result.figure.layout.shapes
+        assert 'no lipid has Alexander-Govern p < 0.05, so no pairs were tested' in \
+            result.figure.layout.annotations[-1].text
+
+    def test_one_condition_draws_without_statistics(self, panels_df, exp_3x3):
+        result = self._run(panels_df, exp_3x3, ['Control'], StatisticalTestConfig.create_auto())
+        assert result.stat_summary is None
+        assert not result.figure.layout.shapes
+
+    def test_data_has_a_row_per_lipid_and_sample(self, panels_df, exp_3x3):
+        result = self._run(
+            panels_df, exp_3x3, ['Control', 'Vehicle'], StatisticalTestConfig.create_auto(),
+        )
+        assert list(result.data.columns) == ['Lipid', 'Condition', 'Sample', 'Concentration']
+        assert len(result.data) == 2 * 6
+        row = result.data.iloc[3]
+        assert (row['Lipid'], row['Condition'], row['Sample'], row['Concentration']) == (
+            'PE 18:0_20:4', 'Vehicle', 's7', 400.0)
+
+    def test_zero_replacement_is_dataset_wide(self, exp_3x3):
+        """A lipid's test uses the same zero floor as the volcano and the
+        bar chart: one-tenth of the smallest non-zero value in the dataset,
+        not just in the lipids chosen."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PE 18:0_20:4', 'TG 50:1'],
+            'ClassKey': ['PE', 'TG'],
+            **{f'concentration[s{i}]': [v, 0.5]
+               for i, v in enumerate([0, 0, 0, 10, 11, 12, 30, 31, 29], start=1)},
+        })
+        from app.services.statistical_testing import StatisticalTestingService
+        config = StatisticalTestConfig.create_auto()
+        conds = ['Control', 'Treatment', 'Vehicle']
+        with_tg = StatisticalTestingService.run_lipid_level_tests(
+            df, exp_3x3, conds, ['PE 18:0_20:4'], config)
+        alone = StatisticalTestingService.run_lipid_level_tests(
+            df.iloc[:1], exp_3x3, conds, ['PE 18:0_20:4'], config)
+        assert with_tg.results['PE 18:0_20:4'].p_value != alone.results['PE 18:0_20:4'].p_value

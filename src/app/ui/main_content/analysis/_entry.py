@@ -1,7 +1,7 @@
 """
 Entry point for Module 3: Visualize and Analyze UI.
 
-Provides 8 analysis features accessed via radio selector:
+Provides 9 analysis features accessed via radio selector:
 1. Abundance Bar Chart (class level)
 2. Abundance Pie Charts (class level)
 3. Saturation Plots (class level, requires detailed FA)
@@ -10,6 +10,7 @@ Provides 8 analysis features accessed via radio selector:
 6. Pathway Visualization (class level, requires detailed FA)
 7. Volcano Plot (species level)
 8. Lipidomic Heatmap (species level)
+9. Individual Lipid Panels (species level, any number of conditions)
 """
 
 from typing import Any, Dict, Optional
@@ -35,6 +36,7 @@ from app.ui.main_content.analysis._fach import _display_fach_heatmaps
 from app.ui.main_content.analysis._pathway import _display_pathway_viz
 from app.ui.main_content.analysis._volcano import _display_volcano_plot
 from app.ui.main_content.analysis._heatmap import _display_lipidomic_heatmap
+from app.ui.main_content.analysis._lipid_panels import _display_lipid_panels
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -50,6 +52,7 @@ ANALYSIS_OPTIONS = [
     "Class Level Breakdown - Pathway Visualization (requires detailed fatty acid composition)",
     "Species Level Breakdown - Volcano Plot",
     "Species Level Breakdown - Lipidomic Heatmap",
+    "Species Level Breakdown - Individual Lipid Panels",
 ]
 
 # Dispatch table: analysis option → rendering function.
@@ -63,6 +66,7 @@ _ANALYSIS_DISPATCH = {
     ANALYSIS_OPTIONS[5]: lambda df, exp, bqc: _display_pathway_viz(df, exp),
     ANALYSIS_OPTIONS[6]: lambda df, exp, bqc: _display_volcano_plot(df, exp),
     ANALYSIS_OPTIONS[7]: lambda df, exp, bqc: _display_lipidomic_heatmap(df, exp),
+    ANALYSIS_OPTIONS[8]: lambda df, exp, bqc: _display_lipid_panels(df, exp, bqc),
 }
 
 

@@ -348,6 +348,7 @@ class VolcanoPlotterService:
         p_label: str = '',
         style: str = 'bar',
         palette: str = DEFAULT_CONDITION_PALETTE,
+        comparisons: Optional[Dict[str, List[Tuple[str, str, float]]]] = None,
     ) -> go.Figure:
         """Create one concentration panel per selected lipid.
 
@@ -367,6 +368,8 @@ class VolcanoPlotterService:
             palette: Condition color scheme (a CONDITION_PALETTES name);
                 colors follow the experiment's condition order, as in
                 Quality Check.
+            comparisons: Lipid -> (condition, condition, p-value) per
+                bracket, in place of ``p_values`` (any number of conditions).
 
         Returns:
             Plotly Figure.
@@ -413,7 +416,7 @@ class VolcanoPlotterService:
             experiment.conditions_list, palette,
         )
         return build_distribution_figure(
-            plot_df, conditions, colors, style, p_values, p_label,
+            plot_df, conditions, colors, style, p_values, p_label, comparisons,
         )
 
     @staticmethod

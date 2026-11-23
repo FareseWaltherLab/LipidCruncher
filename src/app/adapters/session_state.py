@@ -437,6 +437,11 @@ _STAGES: Tuple[_Stage, ...] = (
             'volcano_detailed_stats', 'volcano_correction',
             'volcano_auto_transform', 'volcano_enable_adjust',
             'volcano_detail_class', 'volcano_detail_lipids', 'volcano_dist_style',
+            # individual lipid panels (keys built from a 'panels' prefix)
+            'panels_conditions', 'panels_class', 'panels_lipids', 'panels_style',
+            'panels_stats_mode', 'panels_auto_transform', 'panels_test_type',
+            'panels_correction', 'panels_posthoc', 'panels_control',
+            'panels_detailed_stats',
             'heatmap_conditions', 'heatmap_classes', 'heatmap_type',
             'heatmap_n_clusters', 'heatmap_cluster_view', 'heatmap_color_scale',
             'heatmap_control_condition', 'heatmap_species_page',

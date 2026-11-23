@@ -363,6 +363,10 @@ Circle diameter encodes the concentration fold change (mean experimental / mean 
 
 The layout is fully customizable: users can toggle individual classes via a multiselect, add custom nodes with user-defined coordinates, add or remove edges between any active classes, reposition nodes, and toggle a coordinate grid overlay for precise placement. Pathway configurations (active classes, custom nodes, added/removed edges, position overrides) can be saved as JSON files and reloaded in future sessions.
 
+## S6.6 Individual Lipid Panels
+
+The Individual Lipid Panels analysis draws one panel per chosen lipid for any number of conditions: a bar (mean ± SD) or a box per condition, with a dot for each sample. Each lipid is tested exactly as the abundance bar chart tests a lipid class (S5), with the lipid's concentrations in place of the class totals: the omnibus test across the chosen conditions (Welch's t-test or Mann-Whitney U for two, Alexander-Govern ANOVA or Kruskal-Wallis for three or more), Level 1 correction across the chosen lipids, and, with three or more conditions, the Level 2 post-hoc comparisons (Tukey's HSD, Bonferroni, uncorrected, or Dunnett's test against a chosen control) for lipids whose omnibus test is significant. Zero values are replaced with the dataset-wide value of S2, as in every log-transformed analysis. With two conditions each panel carries one bracket marked with its significance, or "ns". With three or more, brackets mark only the pairs the post-hoc test finds significant. Significance is marked * p < 0.05, ** p < 0.01, *** p < 0.001 and **** p < 0.0001, on adjusted p-values when a correction applies; the same scale is used on every plot.
+
 # S7. Best Practices for Experimental Design
 
 For optimal experimental design and reliable results in lipidomics studies, several best practices are suggested:
