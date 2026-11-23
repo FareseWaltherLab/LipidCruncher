@@ -28,8 +28,16 @@ class TestZeroFilterSummary:
 
     def test_three_replicates_at_the_defaults(self):
         assert Guidance.zero_filter_summary(THREE_REPLICATES, 'BQC', DEFAULTS) == (
-            "With your design, a lipid is kept if it is detected in **at least 1 of 3 "
+            "With the current settings (non-BQC 75%, BQC 50%) and 3 samples per "
+            "condition, a lipid is kept if it is detected in **at least 1 of 3 "
             "replicates in any one condition**, and in **at least 3 of 4 BQC samples**."
+        )
+
+    def test_unequal_sample_counts_are_named(self):
+        summary = Guidance.zero_filter_summary(_experiment(WT=3, KO=4, HFD=3), None, DEFAULTS)
+        assert summary.startswith(
+            "With the current settings (non-BQC 75%) and 3 samples in WT and HFD, "
+            "4 samples in KO, a lipid is kept"
         )
 
     def test_unequal_replicates_are_spelled_out(self):

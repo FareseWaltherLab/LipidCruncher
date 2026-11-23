@@ -32,18 +32,25 @@ def _init_threshold_state(default_detection: float, data_format: str) -> None:
         st.session_state._preserved_bqc_zero_threshold = ZERO_FILTER_BQC_DEFAULT
 
 
+_DIRECTION = (
+    "Higher is looser: more missing values are allowed, so more lipids are kept. "
+    "Lower is stricter."
+)
+
+
 def _threshold_sliders(has_bqc: bool, bqc_label: str) -> tuple:
     """The non-BQC and BQC sliders side by side; returns both as proportions."""
     col1, col2 = st.columns(2)
 
     with col1:
         non_bqc_pct = st.slider(
-            "Non-BQC threshold (%)",
+            "Non-BQC threshold: remove if missing in at least this % of samples, "
+            "in every condition",
             min_value=50,
             max_value=100,
             value=st.session_state._preserved_non_bqc_zero_threshold,
             step=5,
-            help="Remove species if ALL non-BQC conditions have ≥ this % zeros",
+            help=_DIRECTION,
             key="non_bqc_zero_threshold"
         )
         st.session_state._preserved_non_bqc_zero_threshold = non_bqc_pct
@@ -52,12 +59,12 @@ def _threshold_sliders(has_bqc: bool, bqc_label: str) -> tuple:
     with col2:
         if has_bqc:
             bqc_pct = st.slider(
-                f"BQC threshold (%) — {bqc_label}",
+                f"BQC threshold: remove if missing in at least this % of {bqc_label} samples",
                 min_value=25,
                 max_value=100,
                 value=st.session_state._preserved_bqc_zero_threshold,
                 step=5,
-                help="Remove species if BQC condition has ≥ this % zeros",
+                help=_DIRECTION,
                 key="bqc_zero_threshold"
             )
             st.session_state._preserved_bqc_zero_threshold = bqc_pct
@@ -101,7 +108,9 @@ def _show_filter_result(filter_result) -> None:
 _HOW_IT_WORKS = (
     "A lipid is removed when its values are at or below the detection threshold in "
     "too many samples. It is kept if at least one condition passes the non-BQC "
-    "threshold and the BQC samples (if any) pass the BQC threshold."
+    "threshold and the BQC samples (if any) pass the BQC threshold. "
+    "**Raising a threshold is looser** (more missing values are allowed, so more "
+    "lipids are kept); **lowering it is stricter**."
 )
 
 _LOW_ABUNDANCE = (
@@ -115,9 +124,8 @@ _LOW_ABUNDANCE = (
 
 def _show_explanation(experiment: ExperimentConfig, bqc_label, config: ZeroFilterConfig) -> None:
     """What the filter does, and what the current thresholds mean for this design."""
-    st.markdown(_HOW_IT_WORKS + " " + FilterGuidanceService.zero_filter_summary(
-        experiment, bqc_label, config,
-    ))
+    st.markdown(_HOW_IT_WORKS)
+    st.markdown(FilterGuidanceService.zero_filter_summary(experiment, bqc_label, config))
     st.markdown(_LOW_ABUNDANCE)
 
 
