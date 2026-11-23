@@ -33,7 +33,9 @@ from app.constants import (
 from app.services.data_cleaning import (
     ADDUCT_NOTE_PREFIX, ANY_ADDUCT, GradeFilterConfig, QualityFilterConfig,
 )
+from app.services.filter_guidance import FilterGuidanceService
 from app.ui.content import get_processing_docs, ZERO_FILTERING_DOCS
+from app.ui.filter_guidance import show_notices
 from app.ui.sample_labels import names_for
 
 logger = logging.getLogger(__name__)
@@ -73,7 +75,10 @@ def display_grade_filtering_config(df: pd.DataFrame) -> dict:
 
     with st.expander("⚙️ Configure Grade Filtering", expanded=False):
         st.info(
-            "ℹ️ The **default settings** (A/B for all classes, plus C for LPC and SM) "
+            "ℹ️ The grade measures how confident LipidSearch is that a lipid was "
+            "**identified correctly**, not how well it was quantified. Lower grades keep "
+            "more lipids at the cost of more misidentifications.\n\n"
+            "The **default settings** (A/B for all classes, plus C for LPC and SM) "
             "are recommended if you are unsure. Choose **Allow C for all classes** to "
             "relax quality across the board, or **Customize by Class** for finer control."
         )
@@ -316,6 +321,11 @@ def display_quality_filtering_config() -> dict:
         return None
 
     with st.expander("⚙️ Configure Quality Filtering", expanded=False):
+        st.markdown(
+            "The score measures how confident MS-DIAL is that a lipid was **identified "
+            "correctly**, not how well it was quantified. A lower threshold keeps more "
+            "lipids at the cost of more misidentifications."
+        )
         # Initialize session state
         if 'msdial_quality_level' not in st.session_state:
             st.session_state.msdial_quality_level = MSDIAL_DEFAULT_QUALITY_LEVEL
@@ -441,6 +451,7 @@ def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):
 
     if data_format == FORMAT_LIPIDSEARCH:
         grade_config_dict = display_grade_filtering_config(raw_df)
+        show_notices(FilterGuidanceService.grade_notices(grade_config_dict))
         keep_other_adducts, class_adducts = display_adduct_config(raw_df)
         if grade_config_dict is not None or keep_other_adducts or class_adducts:
             grade_config = GradeFilterConfig(
@@ -453,6 +464,12 @@ def build_filter_configs(data_format: str, raw_df: pd.DataFrame = None):
         display_msdial_data_type_selection()
         quality_config_dict = display_quality_filtering_config()
         if quality_config_dict is not None:
+            show_notices(FilterGuidanceService.quality_notices(
+                quality_config_dict['total_score_threshold'],
+                quality_config_dict['require_msms'],
+                has_score=getattr(st.session_state.get('msdial_features'),
+                                  'has_quality_score', False),
+            ))
             quality_config = QualityFilterConfig(
                 total_score_threshold=quality_config_dict.get('total_score_threshold', 0),
                 require_msms=quality_config_dict.get('require_msms', False)

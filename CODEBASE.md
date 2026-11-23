@@ -166,6 +166,7 @@ LipidCruncher/
 │       │   ├── standards.py                 #   Standards extraction/validation
 │       │   ├── validation.py                #   Data validation helpers
 │       │   ├── zero_filtering.py            #   ZeroFilteringService
+│       │   ├── filter_guidance.py           #   FilterGuidanceService (filter explanations, non-default notices)
 │       │   ├── sample_grouping.py           #   Sample assignment to conditions
 │       │   ├── report_generator.py          #   PDF report generation
 │       │   ├── lsi_report.py               #   LSI compliance checklist generation
@@ -445,6 +446,7 @@ Cleaning is dispatched via a **registry pattern** in `data_cleaning/__init__.py`
 | `QualityCheckService` | `quality_check.py` | The QC decisions that change the data or the choices: the BQC high-CoV rule (`high_cov_lipids`, CoV ≥ threshold) and filter, RT availability check, correlation-eligible conditions, PCA sample removal (with `old_to_new`). The QC plots and their data come from the plotter services (see below). |
 | `StatisticalTestingService` | `statistical_testing.py` | Parametric (Welch's t-test, Alexander-Govern ANOVA) and non-parametric (Mann-Whitney, Kruskal-Wallis) tests with two-level correction (between-class and post-hoc). Auto mode selects parametric with log10 transform, FDR for 2+ classes, Tukey for 3+ conditions. Uses dataset-wide zero replacement for consistent detection-floor handling. |
 | `ZeroFilteringService` | `zero_filtering.py` | Removes lipids exceeding configurable zero-value thresholds (default: 75% for non-BQC, 50% for BQC samples). |
+| `FilterGuidanceService` | `filter_guidance.py` | What the post-upload filters mean for a design ("kept if detected in at least 1 of 3 replicates in any one condition", computed with `ZeroFilteringService.detections_needed`, the filter's own comparison) and one `FilterNotice` per setting changed from its default: zero filter, LipidSearch grades, MS-DIAL score/MS/MS, BQC CoV. `ui/filter_guidance.py` shows the notices under each filter's panel (outside the expander, so they're seen while it is collapsed: warnings when loosened, notes when stricter) and lists them in the PDF cover and the LSI report as "Filters changed from defaults". The default thresholds are rules of thumb, and the wording says so. |
 | `StandardsService` | `standards.py` | Standards extraction, validation, and class-to-standard mapping. |
 | `ReportGeneratorService` | `report_generator.py` | Generates PDF reports from collected plots and analysis results; `ANALYSIS_PAGES` lists every analysis figure key with its page caption, cover entry and layout. |
 | `LSIReportService` | `lsi_report.py` | Generates Lipidomics Standards Initiative (LSI) compliance checklists with auto-filled fields from the analysis pipeline. Supports PDF and CSV export. |
@@ -568,7 +570,7 @@ Located in `src/app/ui/`. Presentation layer that calls adapter/workflow (and in
 
 **Static content** (`ui/content/`): Documentation text for processing steps, normalization methods, sample data descriptions, standards help, and analysis methodology (statistical testing guide, saturation profile calculations).
 
-**Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV export helpers), `sample_labels.py` (original-name vs s-label display switch), `color_scheme.py` (the condition color scheme picker; pages pass `current_palette()` to the adapter), `sample_names.py` (sample display-name mapping), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
+**Utilities**: `landing_page.py` (home page), `format_requirements.py` (format-specific column requirements), `zero_filtering.py` (interactive threshold sliders), `filter_guidance.py` (filter notices on screen and the reports' list of changed filters), `standards_plots.py` (standards visualization), `download_utils.py` (SVG/CSV export helpers), `sample_labels.py` (original-name vs s-label display switch), `color_scheme.py` (the condition color scheme picker; pages pass `current_palette()` to the adapter), `sample_names.py` (sample display-name mapping), `st_helpers.py` (shared UI helpers: export buttons, section headers, widget persistence).
 
 **AI Studio** (`ui/ai_studio/` + `ui/ai_chat/`; `ui/ai_studio_page.py` is the entry point `main_app.py` imports). Data logic is in `AIStudioWorkflow`; the Studio's session-state writes (upload, import, applied experiment, reset, leaving the page) are `AIStudioAdapter` methods. The sidebar widgets handle their own keys.
 | File | Responsibility |

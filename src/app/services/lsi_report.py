@@ -116,6 +116,7 @@ class LSIReportService:
         bqc_label: Optional[str],
         cleaning_params: Dict[str, Any],
         qc_summary: Dict[str, Any],
+        filter_changes: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Collect all auto-fillable fields into a structured dict.
 
@@ -129,6 +130,8 @@ class LSIReportService:
             bqc_label: BQC condition label, or None.
             cleaning_params: Data cleaning parameters used.
             qc_summary: QC metrics summary dict.
+            filter_changes: Filter settings changed from their defaults, one
+                line each; None when they weren't collected.
 
         Returns:
             Dict with LSI category keys and their auto-filled values.
@@ -195,6 +198,11 @@ class LSIReportService:
         if cleaning_params:
             for key, value in cleaning_params.items():
                 fields[f"Cleaning: {key}"] = str(value)
+
+        if filter_changes is not None:
+            fields["Filters changed from defaults"] = (
+                "; ".join(filter_changes) if filter_changes else "None"
+            )
 
         # ── Lipid Coverage ──
         if cleaned_df is not None and not cleaned_df.empty:

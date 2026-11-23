@@ -133,6 +133,27 @@ class TestCollectAutoFields:
         assert fields["Internal standards detected"] == "None detected"
         assert not [k for k in fields if k.startswith("Statistics")]
 
+    @pytest.mark.parametrize("changes, shown", [
+        (None, None),
+        ([], "None"),
+        (["Non-BQC zero threshold: 90% (default 75%)", "BQC CoV threshold: 40% (default 30%)"],
+         "Non-BQC zero threshold: 90% (default 75%); BQC CoV threshold: 40% (default 30%)"),
+    ])
+    def test_filters_changed_from_defaults(self, experiment, cleaned_df, changes, shown):
+        fields = LSIReportService.collect_auto_fields(
+            format_type="Generic Format",
+            experiment=experiment,
+            normalization_config=None,
+            statistics=None,
+            cleaned_df=cleaned_df,
+            intsta_df=None,
+            bqc_label=None,
+            cleaning_params={},
+            qc_summary={},
+            filter_changes=changes,
+        )
+        assert fields.get("Filters changed from defaults") == shown
+
     def test_bqc_label_present(self, experiment, cleaned_df):
         """BQC label is included when provided."""
         fields = LSIReportService.collect_auto_fields(

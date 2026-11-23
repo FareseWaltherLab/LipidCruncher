@@ -18,12 +18,14 @@ from typing import List, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
-from app.constants import resolve_format_enum
+from app.constants import COV_THRESHOLD_DEFAULT, resolve_format_enum
 from app.models.sample_frame import SampleFrame
+from app.services.filter_guidance import FilterGuidanceService
 from app.workflows.quality_check import QualityCheckWorkflow, QualityCheckConfig
 from app.adapters.streamlit_adapter import StreamlitAdapter
 from app.ui.color_scheme import current_palette
 from app.ui.download_utils import csv_download_button, named_dataframe
+from app.ui.filter_guidance import show_notices
 from app.ui.sample_labels import display_names_for, labeler, names_for, qc_input_names
 from app.ui.st_helpers import (
     display_export_buttons,
@@ -207,6 +209,12 @@ def _display_bqc_assessment(
         st.markdown("**Coefficient of Variation (CoV):**")
         st.code("CoV = (Standard_Deviation / Mean) × 100%", language=None)
         st.markdown("Blue points are below threshold (reliable), red points are above (variable).")
+        st.markdown(
+            "The BQC samples are repeated measurements of the same pooled sample, so CoV "
+            "shows measurement noise, not biology. Low-abundance lipids usually have higher "
+            f"CoV. {COV_THRESHOLD_DEFAULT}% is a common rule of thumb for the threshold, not "
+            "a fixed standard."
+        )
 
         cov_threshold, scatter_plot, prepared_df, reliable_data_percent = (
             _render_bqc_scatter(df, experiment, bqc_label)
@@ -241,6 +249,7 @@ def _render_bqc_scatter(
         key='bqc_cov_threshold'
     )
     st.session_state.qc_cov_threshold = cov_threshold
+    show_notices(FilterGuidanceService.cov_threshold_notices(cov_threshold))
 
     # --- Results ---
     results_header()
@@ -350,8 +359,8 @@ def _render_bqc_filtering(
     else:
         st.success("No lipids removed.")
 
-    if filter_cov == "Yes" and lipids_to_keep:
-        st.info(f"Retained {len(lipids_to_keep)} lipids despite high CoV.")
+    if filter_cov == "Yes":
+        show_notices(FilterGuidanceService.cov_kept_notices(cov_threshold, len(lipids_to_keep)))
 
     # Show filtered dataset
     st.markdown("###### Filtered Dataset")

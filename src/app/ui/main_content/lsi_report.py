@@ -19,6 +19,7 @@ from app.constants import (
 from app.models.experiment import ExperimentConfig
 from app.models.normalization import NormalizationConfig
 from app.services.lsi_report import LSIReportService
+from app.ui.filter_guidance import filter_changes
 from app.ui.sample_labels import labeler
 
 
@@ -136,6 +137,7 @@ def _collect_auto_fields(
         bqc_label=bqc_label,
         cleaning_params=cleaning_params,
         qc_summary=qc_summary,
+        filter_changes=filter_changes(experiment, bqc_label, format_type),
     )
 
 
@@ -162,6 +164,9 @@ def _build_cleaning_params(format_type: str, bqc_label: Optional[str]) -> dict:
         params["Quality filter (MS-DIAL)"] = str(quality_config)
 
     # Zero filtering thresholds
+    detection = st.session_state.get("_preserved_zero_filter_detection_threshold")
+    if detection is not None:
+        params["Zero filter detection threshold"] = f"{detection:,.10g}"
     non_bqc = st.session_state.get("_preserved_non_bqc_zero_threshold")
     bqc = st.session_state.get("_preserved_bqc_zero_threshold")
     if non_bqc is not None:
