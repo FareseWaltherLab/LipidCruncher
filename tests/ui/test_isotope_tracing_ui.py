@@ -63,6 +63,26 @@ class TestSampleRun:
         assert len(at.dataframe) >= 1
 
 
+class TestGeneratedInputsRun:
+    """IsoCorrectoR accepts the Molecule and Element files LipidCruncher
+    generates from the Measurement file."""
+
+    def test_generated_files_run_through_isocorrector(self):
+        at = _make_app().run()
+        at.button(key="iso_load_sample").click().run()
+        at.radio(key="iso_input_source").set_value("Generate from the Measurement file").run()
+        at.button(key="iso_run").click().run()
+        result = at.session_state["iso_result"]
+        assert result.success, result.error_message or result.validation_errors
+        fractions = result.correction.corrected_fractions
+        assert list(fractions.index) == [
+            f"{m}_C{i}" for m in ("BMP_18:1_18:1", "PC_34:1") for i in range(7)
+        ]
+        # Fractions of each molecule sum to 1 in every sample.
+        sums = fractions.groupby(fractions.index.str.rsplit("_", n=1).str[0]).sum()
+        assert ((sums - 1).abs() < 1e-6).all().all()
+
+
 class TestValidationPath:
     """Bad inputs surface validation errors in the UI without crashing."""
 

@@ -188,6 +188,7 @@ LipidCruncher/
 │       │   │   ├── service.py               #     IsotopeCorrectionService (Rscript subprocess)
 │       │   │   ├── run_isocorrector.R       #     Bundled trusted R wrapper
 │       │   │   ├── validation.py            #     Pure-Python input validation
+│       │   │   ├── input_builder.py         #     Molecule/Element files from the Measurement file
 │       │   │   ├── r_runtime.py             #     R/IsoCorrectoR availability detection
 │       │   │   └── exceptions.py            #     IsotopeError hierarchy
 │       │   └── plotting/                    #   Visualization services
@@ -371,10 +372,10 @@ In-app guidance sits alongside the tabs: page-level *How to use the AI Studio* a
 Reached from the landing-page mode choice (`Page.ISOTOPE_TRACING`); fully independent of Modules 1–2.
 
 ```
-Upload 3 files (Measurement, Molecule, Element) → Validate → IsoCorrectoR (Rscript) → Distribution plot + corrected tables + CSV download
+Upload 3 files (Measurement, Molecule, Element; or generate the last two) → Validate → IsoCorrectoR (Rscript) → Distribution plot + corrected tables + CSV download
 ```
 
-1. **Upload / sample data** — three IsoCorrectoR CSVs, or the bundled example.
+1. **Upload / sample data** — three IsoCorrectoR CSVs, or the bundled example. Or upload only the Measurement file and generate the Molecule and Element files from its lipids (`input_builder`): the user checks each lipid's formula, ion form and labelled-atom count, and picks the labelled element and its purity.
 2. **Settings** — `IsotopeCorrectionConfig` (tracer-impurity, UHR mode, etc.).
 3. **Validation** — pure-Python structural checks before R is invoked.
 4. **Correction** — `IsotopeCorrectionService` runs the real IsoCorrectoR via an `Rscript` subprocess.
@@ -483,6 +484,7 @@ The stable isotope tracing module. Runs the real **IsoCorrectoR** R/Bioconductor
 | `service.py` | `IsotopeCorrectionService.run_correction()` — writes the three input DataFrames + a JSON config to a temp dir, invokes the R wrapper, parses the CSV outputs back into a `CorrectionResult` (corrected intensities, fractions, mean enrichment, residuals, raw data, run log). |
 | `run_isocorrector.R` | **Bundled, trusted** R wrapper: reads the JSON config, calls `IsoCorrection()`, writes outputs. The executed R is *ours*; the user supplies data files, not code (so the AI-sandbox boundary does not apply). Passed file-path **arguments**, never shell-interpolated. |
 | `validation.py` | Pure-Python structural validation of the three files *before* R runs (molecule-name consistency, numeric intensities, and a resolution-mode/ID-format check that catches UHR-vs-standard mismatches with an actionable message). |
+| `input_builder.py` | Writes the Molecule and Element files from the Measurement file. `molecule_table()` lists its lipids with a suggested neutral formula (`lipid_formula()`: per-class backbone + chains, so the formula is the full one, labelled atoms included), ion form and labelled-atom count (the heaviest isotopologue measured); `build_input_files()` turns the user-checked table into the two files: ion formula + `Lab<element><n>`, and natural abundances (`NATURAL_ABUNDANCE`) for every element present plus the tracer's mass shift and purity. Unknown classes get a blank formula for the user to type in. |
 | `r_runtime.py` | `find_rscript()` / `check_isocorrector_available()` / `require_isocorrector()` — graceful detection so the rest of the app runs where R is absent. |
 | `exceptions.py` | `IsotopeError` → `RRuntimeError` (R missing, crashed or timed out; message ends with the tail of stderr) and `IsotopeInputError` (IsoCorrectoR rejected the inputs; message is its reason, from the wrapper's `ISOCORRECTOR_ERROR:` line). Structural problems are caught earlier by `validate_inputs`. |
 
@@ -580,7 +582,7 @@ Located in `src/app/ui/`. Presentation layer that calls adapter/workflow (and in
 | `ai_chat/_data_questions_ui.py` | Tab 2 — Ask Your Data: questions about and figures of the loaded DataFrame, each message with its own table and figure. |
 | `ai_chat/_data_transform_ui.py` | Tab 3 — CSV → Generic format transformation, with download of the result. |
 | `ai_chat/_interaction_log.py` | `record_turn()` (one structured log record per turn) and `render_feedback()` (thumbs up/down + optional comment under each assistant message). |
-**Isotope tracing page** (`isotope_tracing_page.py`): a standalone page (route `Page.ISOTOPE_TRACING`, reached from the landing-page mode choice) for the stable isotope tracing workflow — three file uploaders + sample-data loader, a settings panel mapping 1:1 to `IsotopeCorrectionConfig`, in-app help expanders (*How to Run a Correction* with a rejection-message → fix table, *Input File Requirements*, *About Isotope Correction*), run button, result tables with per-table CSV download and a *How to Read These Tables* expander explaining each IsoCorrectoR output and what a healthy run looks like, run-log expander, and a graceful "R runtime unavailable" notice.
+**Isotope tracing page** (`isotope_tracing_page.py`): a standalone page (route `Page.ISOTOPE_TRACING`, reached from the landing-page mode choice) for the stable isotope tracing workflow — three file uploaders (or the Measurement uploader plus an on-page builder that generates the Molecule and Element files) + sample-data loader, a settings panel mapping 1:1 to `IsotopeCorrectionConfig`, in-app help expanders (*How to Run a Correction* with a rejection-message → fix table, *Input File Requirements*, *About Isotope Correction*), run button, result tables with per-table CSV download and a *How to Read These Tables* expander explaining each IsoCorrectoR output and what a healthy run looks like, run-log expander, and a graceful "R runtime unavailable" notice.
 
 ---
 

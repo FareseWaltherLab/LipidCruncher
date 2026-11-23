@@ -494,6 +494,21 @@ CASES = (
         expect_mentions=("color scheme", "sidebar", "colorblind|okabe"),
         note="The sidebar Color scheme picker is new on main (2026-11-19).",
     ),
+    EvalCase(
+        id="isotope_generate_molecule_file",
+        question=(
+            "I have my isotope tracing Measurement file but no Molecule or "
+            "Element file. Do I have to write them by hand?"
+        ),
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("generate", "formula", "label"),
+        note=(
+            "2026-11-22: the isotope page can generate both files from the "
+            "Measurement file (power-user request); writing them by hand "
+            "was the main hurdle."
+        ),
+    ),
 )
 
 

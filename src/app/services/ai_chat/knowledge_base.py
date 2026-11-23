@@ -157,7 +157,12 @@ the concentration view shows a dot per sample.
 Opened from the home page, independent of Modules 1–3. Runs natural-isotope-abundance \
 correction with the IsoCorrectoR R package on three uploaded files — Measurement \
 (isotopologue intensities per sample), Molecule (formulas) and Element (isotope abundances, \
-tracer purity) — and returns corrected intensities, corrected fractions, mean enrichment and \
+tracer purity). Instead of uploading the Molecule and Element files, the user can generate \
+them from the Measurement file's lipids: the page suggests each lipid's full neutral formula \
+(from its class and chains, labelled atoms included), an ion form ([M-H]- by default) and \
+the number of atoms that can carry the label (the heaviest isotopologue measured), all \
+editable, plus the labelled element (13C, 2H or 15N) and tracer purity (0.99 by default). \
+It returns corrected intensities, corrected fractions, mean enrichment and \
 residuals. Needs R with IsoCorrectoR on the server; a sample dataset is built in. A stacked \
 isotopologue distribution plot shows one lipid's corrected fractions per sample, grouped by \
 condition: conditions come from sample names (a trailing _<number> marks a replicate, \

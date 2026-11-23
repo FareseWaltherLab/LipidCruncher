@@ -31,7 +31,7 @@ Import your data, define experimental conditions, and apply automatic standardiz
 Validate your data with box plots, BQC coefficient-of-variation analysis, correlation heatmaps, and PCA—then explore results with bar/pie charts, volcano plots, saturation profiles, chain length distributions, metabolic pathway maps, clustered heatmaps, and fatty acid composition analysis. All on a single integrated page.
 
 ### 🧪 Stable Isotope Tracing (separate workflow)
-A parallel workflow for stable isotope tracing experiments. Upload IsoCorrectoR's three input files (Measurement, Molecule, Element) and run natural-isotope-abundance correction with the real [IsoCorrectoR](https://bioconductor.org/packages/IsoCorrectoR/) package—removing the naturally-occurring heavy-isotope background so the remaining signal reflects only your label—then view and download the corrected intensities, fractions, mean enrichment, and residuals. *Requires R with IsoCorrectoR installed (see [Local Installation](#-local-installation)); the rest of the app runs without it.*
+A parallel workflow for stable isotope tracing experiments. Upload IsoCorrectoR's three input files (Measurement, Molecule, Element), or just the Measurement file and let LipidCruncher generate the other two from its lipids, and run natural-isotope-abundance correction with the real [IsoCorrectoR](https://bioconductor.org/packages/IsoCorrectoR/) package—removing the naturally-occurring heavy-isotope background so the remaining signal reflects only your label—then view and download the corrected intensities, fractions, mean enrichment, and residuals. *Requires R with IsoCorrectoR installed (see [Local Installation](#-local-installation)); the rest of the app runs without it.*
 
 ---
 

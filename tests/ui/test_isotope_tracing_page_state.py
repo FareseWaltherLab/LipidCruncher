@@ -169,3 +169,71 @@ def test_r_is_probed_once_per_process(monkeypatch):
         _isocorrector_available.clear()
     assert not at.exception
     assert len(probes) == 1
+
+
+class TestGeneratedInputFiles:
+    """The Molecule and Element files written from the Measurement file's
+    lipids (power-user request: users wrote them by hand)."""
+
+    @pytest.fixture
+    def frames(self, monkeypatch):
+        frames = []
+
+        def _run(measurement_df, molecule_df, element_df, config):
+            frames.append((molecule_df, element_df))
+            table = pd.DataFrame({"s1": [1.0]}, index=["PC_34:1_C0"])
+            return IsotopeTracingResult(success=True, correction=CorrectionResult(
+                corrected=table, raw_data=table,
+            ))
+
+        monkeypatch.setattr(StreamlitAdapter, "run_isotope_correction",
+                            staticmethod(_run))
+        monkeypatch.setattr(StreamlitAdapter, "isocorrector_available",
+                            staticmethod(lambda: True))
+        return frames
+
+    @staticmethod
+    def _generate(at):
+        at.sidebar.radio(key="iso_input_source").set_value(
+            "Generate from the Measurement file").run()
+        assert not at.exception, at.exception
+        return at
+
+    def test_run_uses_the_generated_files(self, frames):
+        at = AppTest.from_function(page_script, default_timeout=30).run()
+        at.button(key="iso_load_sample").click().run()
+        self._generate(at)
+        assert not at.sidebar.button(key="iso_run").disabled
+        at.sidebar.button(key="iso_run").click().run()
+        molecule_df, element_df = frames[-1]
+        assert molecule_df["MS ion or MS/MS product ion"].tolist() == [
+            "C42H78O10P1LabC6", "C42H81N1O8P1LabC6",
+        ]
+        assert sorted(element_df["Element"]) == ["C", "H", "N", "O", "P"]
+        assert _shows_results(at)
+
+    def test_purity_reaches_the_element_file(self, frames):
+        at = AppTest.from_function(page_script, default_timeout=30).run()
+        at.button(key="iso_load_sample").click().run()
+        self._generate(at)
+        at.number_input(key="iso_tracer_purity").set_value(0.95).run()
+        at.sidebar.button(key="iso_run").click().run()
+        element_df = frames[-1][1].set_index("Element")
+        assert element_df.loc["C", "Tracer purity"] == 0.95
+
+    def test_unknown_lipid_class_blocks_the_run(self, frames):
+        at = AppTest.from_function(page_script, default_timeout=30)
+        at.session_state["iso_measurement_df"] = pd.DataFrame({
+            "Measurements/Samples": ["Mystery_1:0_0", "Mystery_1:0_1"],
+            "s1": [1.0, 2.0],
+        })
+        at.run()
+        self._generate(at)
+        assert any("enter its formula" in w.value for w in at.warning)
+        assert at.sidebar.button(key="iso_run").disabled
+        assert frames == []
+
+    def test_without_a_measurement_file_it_asks_for_one(self, frames):
+        at = self._generate(AppTest.from_function(page_script, default_timeout=30).run())
+        assert any("Upload the Measurement file" in i.value for i in at.info)
+        assert at.sidebar.button(key="iso_run").disabled

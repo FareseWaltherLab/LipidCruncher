@@ -19,6 +19,7 @@ from ..services.isotope_correction import (
     validate_inputs,
     IsotopeError,
 )
+from ..services.isotope_correction import input_builder
 from ..services.plotting.isotopologue_distribution import IsotopologuePlotterService
 
 
@@ -36,6 +37,31 @@ class IsotopeTracingWorkflow:
 
     All methods are static — no instance state.
     """
+
+    # Labelled element -> heavy isotope, and the ion forms a generated
+    # Molecule file can use.
+    TRACERS = input_builder.TRACERS
+    ION_FORMS = list(input_builder.ION_FORMS)
+
+    @staticmethod
+    def molecule_table(measurement_df: pd.DataFrame) -> pd.DataFrame:
+        """The lipids of a Measurement file with suggested formula, ion form
+        and labelled atoms, for the user to check before generating files."""
+        return input_builder.molecule_table(measurement_df)
+
+    @staticmethod
+    def default_tracer(measurement_df: pd.DataFrame) -> str:
+        """The labelled element the isotopologue IDs name, else carbon."""
+        return input_builder.default_tracer(measurement_df)
+
+    @staticmethod
+    def build_input_files(
+        table: pd.DataFrame, tracer: str, purity: float,
+    ) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], List[str]]:
+        """The Molecule and Element files from the checked molecule table:
+        (molecule file, element file, problems); the files are None while
+        any row has a problem."""
+        return input_builder.build_input_files(table, tracer, purity)
 
     @staticmethod
     def run(

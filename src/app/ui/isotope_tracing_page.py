@@ -35,6 +35,8 @@ _HOW_TO_RUN_DOC = """
 
 1. **Load your inputs** in the sidebar — upload the Measurement, Molecule, and
    Element CSVs, or click **Load sample data** for the bundled ¹³C example.
+   No Molecule or Element file? Choose **Generate from the Measurement file**
+   and check the formulas, ion forms and labelled atoms on the page.
 2. **Match the resolution mode to your isotopologue IDs** under *Correction
    settings*: **Ultra-high-resolution mode** ON for element-specific IDs
    (`_C0`, `_C1`), OFF for plain mass-shift IDs (`_0`, `_1`).
@@ -90,15 +92,15 @@ Capitals don't matter: `WT_Neg_1` and `WT_neg_2` are the same condition.
 A name without a trailing `_<number>` is a condition of its own. Either way,
 the grouping can be edited by hand on the results page (*Sample conditions*).
 
-**2. Molecule file** — one row per molecule
+**2. Molecule file** — one row per molecule (or let LipidCruncher generate it)
 
 | Column | Content |
 |--------|---------|
 | `Molecule` | Name — must match the **prefix** of the measurement IDs |
-| `MS ion or MS/MS product ion` | Elemental formula of the measured ion (e.g. `C42H79O10P1LabC6`) |
+| `MS ion or MS/MS product ion` | Full elemental formula of the measured ion, labelled atoms included, then `Lab` + the labelled element + how many of its atoms can carry the label (e.g. `C42H78O10P1LabC6` for BMP 18:1_18:1 as [M-H]⁻) |
 | `MS/MS neutral loss` | Neutral-loss formula for MS/MS data (leave blank for MS) |
 
-**3. Element file** — one row per element
+**3. Element file** — one row per element (or let LipidCruncher generate it)
 
 | Column | Content |
 |--------|---------|
@@ -194,6 +196,27 @@ _OUTPUT_TABLES = [
 ]
 
 
+# Where the Molecule and Element files come from (the sidebar radio).
+_UPLOAD = "Upload my own"
+_GENERATE = "Generate from the Measurement file"
+
+_BUILDER_DOC = """
+One row per lipid in the Measurement file. Check each row; the files are
+written from it.
+
+- **Formula** — the neutral lipid's full formula, worked out from its class
+  and chains. Labelled atoms stay in it: BMP 22:6_22:6 is C50, not 50 − 6.
+  Blank when the class isn't known (or the name has modifications): type it in.
+- **Ion** — the ion you measured; the Molecule file holds the ion's formula.
+- **Labelled atoms** — how many atoms of the labelled element can carry the
+  label, which depends on your tracer and labelling approach. The suggestion
+  is the heaviest isotopologue in the Measurement file.
+
+The Element file uses natural isotope abundances plus the labelled element and
+its purity chosen here.
+"""
+
+
 def _go_home() -> None:
     """Clear isotope state and return to the landing page.
 
@@ -274,10 +297,12 @@ def _download_table(df: pd.DataFrame, label: str, key: str) -> None:
     )
 
 
-def _display_sidebar(r_available: bool):
-    """Render the sidebar (uploaders, sample data, settings, actions).
+def _display_inputs():
+    """Render the top of the sidebar: sample data and the input files.
 
-    Returns the (measurement_df, molecule_df, element_df, run_clicked) tuple.
+    Returns (measurement_df, molecule_df, element_df, generate): with
+    ``generate`` the Molecule and Element files come from the page's
+    builder instead, and the two frames returned here are None.
     """
     # Seed setting widgets once so the sample loader / Run can read them by key.
     for key, default in _SETTING_DEFAULTS.items():
@@ -291,13 +316,28 @@ def _display_sidebar(r_available: bool):
                   width='stretch', help="Load the bundled IsoCorrectoR example dataset.")
 
         measurement_up = st.file_uploader("Measurement file (CSV)", type="csv", key="iso_measurement_uploader")
+        measurement_df = _resolve_input(measurement_up, "iso_measurement_df")
+
+        source = st.radio(
+            "Molecule and Element files", [_UPLOAD, _GENERATE], key="iso_input_source",
+            help="LipidCruncher can write both files from the lipids in your "
+                 "Measurement file; you check them on the page.",
+        )
+        if source == _GENERATE:
+            return measurement_df, None, None, True
+
         molecule_up = st.file_uploader("Molecule file (CSV)", type="csv", key="iso_molecule_uploader")
         element_up = st.file_uploader("Element file (CSV)", type="csv", key="iso_element_uploader")
-
-        measurement_df = _resolve_input(measurement_up, "iso_measurement_df")
         molecule_df = _resolve_input(molecule_up, "iso_molecule_df")
         element_df = _resolve_input(element_up, "iso_element_df")
 
+    return measurement_df, molecule_df, element_df, False
+
+
+def _display_run(r_available: bool, have_all: bool, generate: bool) -> bool:
+    """Render the rest of the sidebar (settings, Run, Back); True when Run
+    was clicked."""
+    with st.sidebar:
         with st.expander("Correction settings", expanded=False):
             st.checkbox("Correct tracer impurity", key="iso_correct_tracer_impurity")
             st.checkbox("Correct tracer element in core molecule", key="iso_correct_tracer_element_core")
@@ -308,7 +348,6 @@ def _display_sidebar(r_available: bool):
                             key="iso_calculation_threshold_uhr",
                             help="Limit value used by the ultra-high-resolution calculation.")
 
-        have_all = measurement_df is not None and molecule_df is not None and element_df is not None
         run_clicked = st.button(
             "Run correction", type="primary", width='stretch',
             disabled=not (have_all and r_available),
@@ -316,13 +355,94 @@ def _display_sidebar(r_available: bool):
         )
         if not r_available:
             st.caption("Run is disabled: R runtime unavailable.")
+        elif not have_all and generate:
+            st.caption("Upload the Measurement file (or load sample data) and "
+                       "complete the Molecule and Element files on the page to enable.")
         elif not have_all:
             st.caption("Upload all three files (or load sample data) to enable.")
 
         st.markdown("---")
         st.button("← Back to Home", key="iso_back_home", on_click=_go_home, width='stretch')
 
-    return measurement_df, molecule_df, element_df, run_clicked
+    return run_clicked
+
+
+def _download_input(df: pd.DataFrame, file_name: str, key: str) -> None:
+    """Download a generated input file in IsoCorrectoR's format."""
+    st.download_button(
+        label=f"Download {file_name}",
+        data=df.to_csv(index=False).encode("utf-8"),
+        file_name=file_name, mime="text/csv", key=key,
+    )
+
+
+def _display_input_builder(measurement_df: Optional[pd.DataFrame]):
+    """Generate the Molecule and Element files from the Measurement file's
+    lipids, after the user checks them. Returns (molecule_df, element_df),
+    both None until every lipid is complete."""
+    st.markdown("#### Molecule and Element files")
+    if measurement_df is None:
+        st.info("Upload the Measurement file (or load sample data) to generate them.")
+        return None, None
+    st.markdown(_BUILDER_DOC)
+
+    table = IsotopeTracingWorkflow.molecule_table(measurement_df)
+    # One table and tracer per lipid set, so a new dataset never inherits old edits.
+    digest = hashlib.sha256("\x00".join(table["Molecule"]).encode()).hexdigest()[:12]
+    tracer_key = f"iso_build_tracer_{digest}"
+    if tracer_key not in st.session_state:
+        st.session_state[tracer_key] = IsotopeTracingWorkflow.default_tracer(measurement_df)
+
+    tracers = IsotopeTracingWorkflow.TRACERS
+    left, right = st.columns(2)
+    tracer = left.selectbox(
+        "Labelled element", list(tracers), key=tracer_key,
+        format_func=lambda e: f"{tracers[e]} ({e})",
+    )
+    purity = right.number_input(
+        "Tracer purity", min_value=0.0, max_value=1.0, step=0.001, format="%.3f",
+        value=0.99, key="iso_tracer_purity",
+        help="Isotopic purity of the labelled nutrient, e.g. 0.99 for 99% ¹³C.",
+    )
+    edited = st.data_editor(
+        table, key=f"iso_build_table_{digest}", disabled=["Molecule"],
+        hide_index=True, width='stretch',
+        column_config={
+            "Formula": st.column_config.TextColumn(
+                "Formula (neutral lipid)",
+                help="Every atom of the neutral lipid, labelled ones included; "
+                     "the ion form is added to it. Blank when LipidCruncher "
+                     "doesn't know the lipid class: type it in.",
+            ),
+            "Ion": st.column_config.SelectboxColumn(
+                "Ion", options=IsotopeTracingWorkflow.ION_FORMS, required=True,
+                help="The ion you measured. The Molecule file holds the ion's formula.",
+            ),
+            "Labelled atoms": st.column_config.NumberColumn(
+                f"Labelled {tracer} atoms", min_value=1, step=1,
+                help="How many atoms can carry the label (the 6 in LabC6). It "
+                     "depends on the tracer and the labelling approach. "
+                     "Suggested from the heaviest isotopologue measured.",
+            ),
+        },
+    )
+
+    molecule_df, element_df, problems = IsotopeTracingWorkflow.build_input_files(
+        edited, tracer, purity,
+    )
+    if problems:
+        st.warning("Complete the table to generate the files:\n\n"
+                   + "\n".join(f"- {p}" for p in problems))
+        return None, None
+
+    with st.expander("Generated files", expanded=False):
+        st.markdown("**Molecule file**")
+        st.dataframe(molecule_df, hide_index=True, width='stretch')
+        _download_input(molecule_df, "MoleculeFile.csv", "iso_dl_molecule_file")
+        st.markdown("**Element file**")
+        st.dataframe(element_df, hide_index=True, width='stretch')
+        _download_input(element_df, "ElementFile.csv", "iso_dl_element_file")
+    return molecule_df, element_df
 
 
 def _display_results(result) -> None:
@@ -499,7 +619,7 @@ def display_isotope_tracing_page() -> None:
 
     r_available = StreamlitAdapter.isocorrector_available()
 
-    measurement_df, molecule_df, element_df, run_clicked = _display_sidebar(r_available)
+    measurement_df, molecule_df, element_df, generate = _display_inputs()
 
     with center:
         display_logo(centered=True)
@@ -517,6 +637,11 @@ def display_isotope_tracing_page() -> None:
                 "with the IsoCorrectoR package installed. The rest of LipidCruncher is "
                 "unaffected — use **← Back to Home** to return to general lipidomics."
             )
+
+        if generate:
+            molecule_df, element_df = _display_input_builder(measurement_df)
+        have_all = measurement_df is not None and molecule_df is not None and element_df is not None
+        run_clicked = _display_run(r_available, have_all, generate)
 
         config = _config_from_widgets()
         current_key = _inputs_key(measurement_df, molecule_df, element_df, config)
