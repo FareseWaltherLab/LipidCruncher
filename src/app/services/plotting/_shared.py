@@ -67,11 +67,13 @@ def p_value_to_marker(p_value: float) -> str:
         p_value: The p-value to convert.
 
     Returns:
-        '***' for p < 0.001, '**' for p < 0.01, '*' for p < 0.05,
-        '' otherwise.
+        '****' for p < 0.0001, '***' for p < 0.001, '**' for p < 0.01,
+        '*' for p < 0.05, '' otherwise (the GraphPad Prism scale).
     """
     if np.isnan(p_value):
         return ''
+    if p_value < 0.0001:
+        return '****'
     if p_value < 0.001:
         return '***'
     if p_value < 0.01:

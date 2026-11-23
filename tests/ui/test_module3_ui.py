@@ -74,12 +74,12 @@ class TestAnalysisSectionsCollapsed:
 class TestAnalysisRadioSelection:
     """Tests for the main analysis type radio selector."""
 
-    def test_analysis_radio_exists_with_8_options(self, analysis_generic_app):
-        """Analysis radio renders with all 8 analysis options."""
+    def test_analysis_radio_exists_with_9_options(self, analysis_generic_app):
+        """Analysis radio renders with all 9 analysis options."""
         at = analysis_generic_app
         radio = at.radio(key='analysis_radio')
         assert radio is not None
-        assert len(radio.options) == 8
+        assert len(radio.options) == 9
 
     def test_default_selection_is_bar_chart(self, analysis_generic_app):
         """Default selection is the first option (Bar Chart)."""
@@ -1371,6 +1371,70 @@ class TestDunnettUI:
         assert summary.posthoc_results
         for comparisons in summary.posthoc_results.values():
             assert all(c.group1 == 'Treatment' for c in comparisons)
+
+
+class TestLipidPanelsUI:
+    """Individual Lipid Panels: per-lipid panels for 3+ conditions."""
+
+    @pytest.fixture
+    def panels_app(self):
+        from app.models.experiment import ExperimentConfig
+        at = AppTest.from_function(analysis_module_script, default_timeout=DEFAULT_TIMEOUT)
+        at.session_state['_test_df'] = make_analysis_dataframe(
+            n_lipids=20, n_samples=9, condition_effect=True,
+        )
+        at.session_state['_test_experiment'] = ExperimentConfig(
+            n_conditions=3,
+            conditions_list=['Control', 'Treatment', 'Vehicle'],
+            number_of_samples_list=[3, 3, 3],
+        )
+        at.session_state['_test_bqc_label'] = None
+        at.session_state['_test_format_type'] = 'Generic Format'
+        at.run()
+        radio = at.radio(key='analysis_radio')
+        return at.radio(key='analysis_radio').set_value(
+            next(o for o in radio.options if "Individual Lipid Panels" in o)).run()
+
+    def test_renders_with_all_conditions_and_three_lipids(self, panels_app):
+        at = panels_app
+        assert not at.exception
+        assert at.multiselect(key='panels_conditions').value == [
+            'Control', 'Treatment', 'Vehicle']
+        assert at.selectbox(key='panels_class').value == 'PC'
+        assert len(at.multiselect(key='panels_lipids').value) == 3
+        assert 'lipid_panels' in at.session_state['analysis_all_plots']
+        summary = at.session_state['analysis_statistics']['Individual lipid panels'].summary
+        assert set(summary.results) == set(at.multiselect(key='panels_lipids').value)
+
+    def test_dunnett_against_a_chosen_control(self, panels_app):
+        at = panels_app
+        at.radio(key='panels_stats_mode').set_value("Manual").run()
+        at.selectbox(key='panels_posthoc').set_value("dunnett").run()
+        at.selectbox(key='panels_control').set_value('Vehicle').run()
+        assert not at.exception
+        summary = at.session_state['analysis_statistics']['Individual lipid panels'].summary
+        assert summary.posthoc_results
+        for pairs in summary.posthoc_results.values():
+            assert [(p.group1, p.group2) for p in pairs] == [
+                ('Vehicle', 'Control'), ('Vehicle', 'Treatment')]
+
+    def test_box_style_and_other_class(self, panels_app):
+        at = panels_app
+        at.selectbox(key='panels_class').set_value('PE').run()
+        at.radio(key='panels_style').set_value('Box').run()
+        assert not at.exception
+        # Regression: the old class's picks emptied the selection on a switch.
+        picked = at.multiselect(key='panels_lipids').value
+        assert len(picked) == 3 and all(v.startswith('PE') for v in picked)
+        fig = at.session_state['analysis_all_plots']['lipid_panels']
+        assert any(t.type == 'box' for t in fig.data)
+
+    def test_no_lipid_selected_warns_and_leaves_the_report(self, panels_app):
+        at = panels_app
+        at.multiselect(key='panels_lipids').set_value([]).run()
+        assert not at.exception
+        assert any("lipid" in w.value.lower() for w in at.warning)
+        assert 'lipid_panels' not in at.session_state['analysis_all_plots']
 
 
 # =============================================================================

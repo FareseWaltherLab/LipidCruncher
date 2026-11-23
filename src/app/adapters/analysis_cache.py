@@ -18,6 +18,7 @@ from ..workflows.analysis import (
     ChainLengthResult,
     FACHResult,
     HeatmapResult,
+    LipidPanelsResult,
     PathwayDataResult,
     SaturationResult,
     VolcanoResult,
@@ -173,6 +174,26 @@ class AnalysisCache:
             hide_non_sig=hide_non_sig, top_n_labels=top_n_labels,
             custom_label_positions=custom_label_positions,
             additional_labels=list(additional_labels) if additional_labels else None,
+        )
+
+    @staticmethod
+    @st.cache_data(
+        show_spinner="Generating lipid panels...",
+        hash_funcs={ExperimentConfig: hash, StatisticalTestConfig: hash},
+    )
+    def run_lipid_panels(
+        df: pd.DataFrame,
+        experiment: ExperimentConfig,
+        selected_conditions: List[str],
+        selected_lipids: List[str],
+        stat_config: StatisticalTestConfig,
+        style: str = 'bar',
+        palette: str = DEFAULT_CONDITION_PALETTE,
+    ) -> LipidPanelsResult:
+        """Cached Individual Lipid Panels analysis."""
+        return AnalysisWorkflow.run_lipid_panels(
+            df, experiment, selected_conditions, selected_lipids, stat_config,
+            style=style, palette=palette,
         )
 
     @staticmethod

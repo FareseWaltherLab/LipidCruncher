@@ -51,7 +51,9 @@ class TestPValueToMarker:
     """Parametrized tests for p_value_to_marker — shared utility."""
 
     @pytest.mark.parametrize("p_value,expected", [
-        (0.0001, '***'),
+        (1e-8, '****'),
+        (0.00009, '****'),
+        (0.0001, '***'),  # boundary: 0.0001 is NOT < 0.0001
         (0.0005, '***'),
         (0.001, '**'),   # boundary: 0.001 is NOT < 0.001
         (0.005, '**'),

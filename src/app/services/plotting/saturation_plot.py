@@ -498,7 +498,7 @@ def _add_significance_annotations(
     lipid_class: str,
     y_max: float,
 ) -> None:
-    """Add significance lines and *, **, *** symbols to the concentration
+    """Add significance lines and *, **, ***, **** symbols to the concentration
     plot, above ``y_max`` (the tallest bar or dot)."""
     y_range = y_max
     y_increment = y_range * ANNOTATION_INCREMENT_FACTOR

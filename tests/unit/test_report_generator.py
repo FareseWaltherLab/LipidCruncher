@@ -613,7 +613,7 @@ class TestEveryAnalysisPage:
     entry it adds."""
 
     PLOTS = [
-        'heatmap', 'lipid_distribution', 'conc_vs_fc', 'volcano', 'pathway',
+        'lipid_panels', 'heatmap', 'lipid_distribution', 'conc_vs_fc', 'volcano', 'pathway',
         'fach', 'chain_length', 'sat_percentage_PE', 'sat_concentration_PE',
         'sat_percentage_PC', 'sat_concentration_PC', 'pie_Treatment',
         'pie_Control', 'bar_chart',
@@ -648,6 +648,7 @@ class TestEveryAnalysisPage:
             ('conc_vs_fc', 'Concentration vs. Fold Change', 'landscape', False),
             ('lipid_distribution', 'Individual Lipid Concentration Distribution', 'landscape', False),
             ('heatmap', 'Lipidomic Heatmap', 'heatmap', None),
+            ('lipid_panels', 'Individual Lipid Panels', 'landscape', False),
         ]
 
     def test_cover_entries(self):
@@ -663,6 +664,7 @@ class TestEveryAnalysisPage:
             "Concentration vs. Fold Change",
             "Individual Lipid Concentration Distribution",
             "Lipidomic Heatmap",
+            "Individual Lipid Panels",
         ]
 
 

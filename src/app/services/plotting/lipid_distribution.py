@@ -1,13 +1,14 @@
 """
-The volcano page's individual-lipid figure: one panel per lipid, with a bar
-(mean ± SD) or a box per condition, a dot for each sample, and a bracket
-marking the significance of the difference between the two conditions.
+The individual-lipid figure: one panel per lipid, with a bar (mean ± SD) or
+a box per condition, a dot for each sample, and brackets marking the
+significance of differences between conditions (the volcano page's two
+conditions, or the Individual Lipid Panels page's pairwise comparisons).
 
 Pure logic — no Streamlit dependencies.
 """
 
 import math
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -41,8 +42,11 @@ POINT_SIZE = 7
 BRACKET_GAP = 0.08
 BRACKET_TICK = 0.03
 HEADROOM = 1.15
+# Longest caption line, in characters, that fits under a full row of panels.
+CAPTION_CHARS = 110
 _FONT = dict(color='black')
-SIGNIFICANCE_KEY = 'ns p ≥ 0.05    * p < 0.05    ** p < 0.01    *** p < 0.001'
+SIGNIFICANCE_KEY = ('ns p ≥ 0.05    * p < 0.05    ** p < 0.01    *** p < 0.001    '
+                    '**** p < 0.0001')
 
 
 def build_distribution_figure(
@@ -52,6 +56,7 @@ def build_distribution_figure(
     style: str,
     p_values: Optional[Dict[str, float]] = None,
     p_label: str = '',
+    comparisons: Optional[Dict[str, List[Tuple[str, str, float]]]] = None,
 ) -> go.Figure:
     """Draw one panel per lipid of ``plot_df`` (Lipid, Condition, Concentration).
 
@@ -64,7 +69,14 @@ def build_distribution_figure(
             bracket is drawn for each lipid listed when there are two
             conditions.
         p_label: Where the p-values come from, for the caption.
+        comparisons: Lipid -> (condition, condition, p-value) for each
+            bracket to draw, stacked above the panel; used instead of
+            ``p_values``.
     """
+    if comparisons is None and p_values and len(conditions) == 2:
+        comparisons = {
+            lipid: [(conditions[0], conditions[1], p)] for lipid, p in p_values.items()
+        }
     lipids = list(dict.fromkeys(plot_df['Lipid']))
     n_cols = min(len(lipids), MAX_COLUMNS)
     n_rows = math.ceil(len(lipids) / n_cols)
@@ -80,7 +92,7 @@ def build_distribution_figure(
     )
     _place_columns(fig, n_cols, n_rows, plot_width, len(lipids))
 
-    brackets = bool(p_values) and len(conditions) == 2
+    brackets = bool(comparisons)
     for k, lipid in enumerate(lipids):
         row, col = k // n_cols + 1, k % n_cols + 1
         lipid_df = plot_df[plot_df['Lipid'] == lipid]
@@ -93,8 +105,8 @@ def build_distribution_figure(
                 top = max(top, _add_condition(
                     fig, values, j, condition, colors[condition], style, row, col,
                 ))
-        if brackets and lipid in p_values:
-            top = _add_bracket(fig, p_values[lipid], top, row, col)
+        if brackets and lipid in comparisons:
+            top = _add_brackets(fig, comparisons[lipid], conditions, top, row, col)
         fig.update_yaxes(range=[0, (top or 1) * HEADROOM], row=row, col=col)
 
     fig.update_xaxes(
@@ -193,22 +205,37 @@ def _add_condition(
     return max(mean + sd, float(values.max()))
 
 
-def _add_bracket(
-    fig: go.Figure, p_value: float, top: float, row: int, col: int,
+def _add_brackets(
+    fig: go.Figure,
+    pairs: List[Tuple[str, str, float]],
+    conditions: List[str],
+    top: float,
+    row: int,
+    col: int,
 ) -> float:
-    """Draw the significance bracket above ``top``; return its height."""
-    if p_value is None or np.isnan(p_value):
-        return top
-    y = top * (1 + BRACKET_GAP) if top > 0 else 1.0
-    drop = y * BRACKET_TICK
-    fig.add_shape(
-        type='path', path=f'M 0,{y - drop} L 0,{y} L 1,{y} L 1,{y - drop}',
-        line=dict(color='black', width=1.5), row=row, col=col,
-    )
-    fig.add_annotation(
-        x=0.5, y=y, text=p_value_to_marker(p_value) or 'ns',
-        showarrow=False, yanchor='bottom', row=row, col=col,
-    )
+    """Draw a significance bracket per pair above ``top``, narrower pairs
+    lower; return the height of the highest."""
+    spans = []
+    for a, b, p_value in pairs:
+        if a in conditions and b in conditions and p_value is not None \
+                and not np.isnan(p_value):
+            x0, x1 = sorted((conditions.index(a), conditions.index(b)))
+            spans.append((x1 - x0, x0, x1, p_value))
+    step = top * BRACKET_GAP if top > 0 else 1.0
+    y = top
+    for _, x0, x1, p_value in sorted(spans):
+        y += step
+        drop = y * BRACKET_TICK
+        fig.add_shape(
+            type='path', path=f'M {x0},{y - drop} L {x0},{y} L {x1},{y} L {x1},{y - drop}',
+            line=dict(color='black', width=1.5), row=row, col=col,
+        )
+        fig.add_annotation(
+            x=(x0 + x1) / 2, y=y, text=p_value_to_marker(p_value) or 'ns',
+            showarrow=False, yanchor='bottom', row=row, col=col,
+        )
+        if len(spans) > 1:
+            y += step * 0.6  # room for the stars above this bracket
     return y
 
 
@@ -230,7 +257,12 @@ def _add_caption(
     else:
         n_text = 'n = ' + ', '.join(f'{n} ({c})' for c, n in sizes.items())
     marks = 'Mean ± SD' if style == 'bar' else 'Median and IQR, whiskers to 1.5 × IQR'
-    lines = [f'{marks}; {n_text}' + (f'; {p_label}' if brackets and p_label else '')]
+    lines = [f'{marks}; {n_text}']
+    if brackets and p_label:
+        if len(lines[0]) + 2 + len(p_label) <= CAPTION_CHARS:
+            lines[0] += f'; {p_label}'
+        else:
+            lines.append(p_label)
     if brackets:
         lines.insert(0, SIGNIFICANCE_KEY)
     fig.add_annotation(

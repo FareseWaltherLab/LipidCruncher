@@ -315,7 +315,7 @@ def _display_detailed_statistics(
         return
 
     # Context-appropriate column label for the group key
-    group_col = {'bar': 'Class', 'sat': 'Class', 'volcano': 'Lipid'}.get(
+    group_col = {'bar': 'Class', 'sat': 'Class', 'volcano': 'Lipid', 'panels': 'Lipid'}.get(
         key_prefix, 'Group'
     )
 

@@ -950,6 +950,44 @@ class TestCreateDistributionPlot:
         assert not fig.layout.shapes
         assert len(self._of_type(fig, 'bar')) == 3
 
+    def test_comparisons_draw_a_bracket_per_pair(self, experiment_3x2):
+        """Individual Lipid Panels: any number of conditions, one bracket per
+        pair given, the narrower pair below the wider one."""
+        df = _make_df(lipids=['PC(16:0)'], classes=['PC'], n_samples=6)
+        fig = self._fig(
+            df, experiment_3x2, conditions=['Control', 'Treatment', 'Vehicle'],
+            comparisons={'PC(16:0)': [
+                ('Control', 'Vehicle', 0.00001), ('Treatment', 'Control', 0.004),
+            ]},
+        )
+        paths = [s.path for s in fig.layout.shapes]
+        assert len(paths) == 2
+        narrow, wide = paths
+        assert narrow.startswith('M 0,') and ' L 1,' in narrow
+        assert wide.startswith('M 0,') and ' L 2,' in wide
+        height = lambda path: float(path.split(' L ')[1].split(',')[1])  # noqa: E731
+        assert height(narrow) < height(wide) < fig.layout.yaxis.range[1]
+        stars = {a.text: a.x for a in fig.layout.annotations if '*' in a.text and '<br>' not in a.text}
+        assert stars == {'**': 0.5, '****': 1.0}
+
+    def test_comparisons_skip_conditions_not_shown(self, experiment_3x2):
+        df = _make_df(lipids=['PC(16:0)'], classes=['PC'], n_samples=6)
+        fig = self._fig(
+            df, experiment_3x2, conditions=['Control', 'Treatment'],
+            comparisons={'PC(16:0)': [('Control', 'Vehicle', 0.001)]},
+        )
+        assert not fig.layout.shapes
+
+    def test_long_statistics_label_gets_its_own_caption_line(self, experiment_3x2):
+        df = _make_df(lipids=['PC(16:0)'], classes=['PC'], n_samples=6)
+        label = 'brackets: ' + 'x' * 100
+        fig = self._fig(
+            df, experiment_3x2, conditions=['Control', 'Treatment', 'Vehicle'],
+            comparisons={'PC(16:0)': []}, p_label=label,
+        )
+        caption = fig.layout.annotations[-1].text.split('<br>')
+        assert caption[1:] == ['Mean ± SD; n = 2 per group', label]
+
     def test_caption(self, simple_df, experiment_2x3):
         fig = self._fig(
             simple_df, experiment_2x3, p_values={'PC(16:0)': 0.01},
