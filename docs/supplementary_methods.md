@@ -270,6 +270,8 @@ Level 2 correction (pairwise comparisons within multi-group tests): Controls fal
 
 - Bonferroni: Uses Bonferroni-corrected pairwise comparisons matching the omnibus test type (Welch's t-test for parametric, Mann-Whitney U for non-parametric)
 
+- Dunnett: Compares each condition with one control condition chosen by the user, instead of testing every pair. For parametric tests this is Dunnett's test (scipy.stats.dunnett), which controls the family-wise error rate over the comparisons with the control; its p-values come from a numerical integration with a fixed random seed, so the same data always gives the same p-values. For non-parametric tests it is Mann-Whitney U against the control, Bonferroni-corrected for the number of comparisons with the control. Because it makes fewer comparisons than Tukey's HSD, it has more power when only the comparisons with the control matter
+
 Auto mode correction behavior: When auto mode is selected, the correction methods are determined based on the analysis context:
 
 Level 1 (across lipid classes):

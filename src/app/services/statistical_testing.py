@@ -13,7 +13,7 @@ from typing_extensions import TypedDict
 import numpy as np
 import pandas as pd
 from scipy import stats
-from scipy.stats import alexandergovern, kruskal, mannwhitneyu
+from scipy.stats import alexandergovern, dunnett, kruskal, mannwhitneyu
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from statsmodels.stats.multitest import multipletests
 
@@ -53,6 +53,7 @@ class TestInfo(TypedDict, total=False):
     test_type: str
     correction: str
     posthoc: str
+    control: Optional[str]  # Dunnett's control condition
     transform: str
 
 
@@ -233,11 +234,12 @@ class StatisticalTestingService:
     @staticmethod
     def run_posthoc(
         groups_dict: Dict[str, np.ndarray],
-        correction: Literal['tukey', 'bonferroni', 'uncorrected'] = 'tukey',
+        correction: Literal['tukey', 'bonferroni', 'uncorrected', 'dunnett'] = 'tukey',
         alpha: float = 0.05,
         auto_transform: bool = True,
         global_small_value: Optional[float] = None,
         test_type: Literal['parametric', 'non_parametric'] = 'parametric',
+        control: Optional[str] = None,
     ) -> List[PostHocResult]:
         """Run pairwise post-hoc tests for 3+ groups.
 
@@ -247,7 +249,11 @@ class StatisticalTestingService:
                         non-parametric this is Bonferroni-corrected
                         Mann-Whitney U, per the methods doc),
                         'bonferroni' for Bonferroni-corrected pairwise tests,
-                        'uncorrected' for raw pairwise tests.
+                        'uncorrected' for raw pairwise tests,
+                        'dunnett' for Dunnett's test of each group against
+                        ``control`` (parametric only; for non-parametric this
+                        is Mann-Whitney U against the control,
+                        Bonferroni-corrected for those comparisons).
             alpha: Significance threshold.
             auto_transform: If True, apply zero replacement + log10.
             global_small_value: Dataset-wide zero-replacement threshold.
@@ -255,15 +261,22 @@ class StatisticalTestingService:
             test_type: Pairwise test matching the omnibus test:
                 'parametric' for Welch's t-test, 'non_parametric' for
                 Mann-Whitney U.
+            control: The control group, for 'dunnett'.
 
         Returns:
-            List of PostHocResult for each pairwise comparison.
+            List of PostHocResult for each pairwise comparison; for
+            'dunnett', one per group against the control (control first).
 
         Raises:
-            ValueError: If fewer than 2 groups.
+            ValueError: If fewer than 2 groups, or 'dunnett' without a
+                control among the groups.
         """
         if len(groups_dict) < 2:
             raise ValidationError("Need at least 2 groups for post-hoc tests")
+        if correction == 'dunnett' and control not in groups_dict:
+            raise ValidationError(
+                f"Dunnett's test needs its control ({control!r}) among the groups"
+            )
 
         small = global_small_value
         if small is None and auto_transform:
@@ -277,6 +290,13 @@ class StatisticalTestingService:
             for k, v in groups_dict.items()
         }
 
+        if correction == 'dunnett':
+            if test_type == 'parametric':
+                return StatisticalTestingService._run_dunnett(prepared, control, alpha)
+            pairs = [(control, g) for g in prepared if g != control]
+            return StatisticalTestingService._run_pairwise(
+                prepared, 'bonferroni', alpha, test_type, pairs,
+            )
         if correction == 'tukey':
             if test_type == 'parametric':
                 return StatisticalTestingService._run_tukey(prepared, alpha)
@@ -284,6 +304,29 @@ class StatisticalTestingService:
         return StatisticalTestingService._run_pairwise(
             prepared, correction, alpha, test_type
         )
+
+    @staticmethod
+    def _run_dunnett(
+        prepared: Dict[str, np.ndarray], control: str, alpha: float
+    ) -> List[PostHocResult]:
+        """Dunnett's test of each group against the control on prepared
+        data; its p-values are already adjusted for those comparisons."""
+        others = [g for g in prepared if g != control]
+        # scipy integrates the p-values numerically with random draws; a fixed
+        # seed keeps the same data giving the same p-values.
+        res = dunnett(*(prepared[g] for g in others), control=prepared[control],
+                      random_state=0)
+        return [
+            PostHocResult(
+                group1=control,
+                group2=g,
+                p_value=float(p),
+                adjusted_p_value=float(p),
+                significant=float(p) <= alpha,
+                test_name="Dunnett's test",
+            )
+            for g, p in zip(others, res.pvalue)
+        ]
 
     @staticmethod
     def _run_tukey(
@@ -323,10 +366,12 @@ class StatisticalTestingService:
         correction: Literal['bonferroni', 'uncorrected'],
         alpha: float,
         test_type: Literal['parametric', 'non_parametric'] = 'parametric',
+        pairs: Optional[List[Tuple[str, str]]] = None,
     ) -> List[PostHocResult]:
-        """Run pairwise Welch's t / Mann-Whitney U tests with optional Bonferroni."""
-        keys = list(prepared.keys())
-        pairs = list(combinations(keys, 2))
+        """Run pairwise Welch's t / Mann-Whitney U tests with optional
+        Bonferroni, over every pair unless ``pairs`` names them."""
+        if pairs is None:
+            pairs = list(combinations(prepared.keys(), 2))
         raw_p = []
 
         for g1, g2 in pairs:
@@ -443,6 +488,7 @@ class StatisticalTestingService:
                 ph = StatisticalTestingService.run_posthoc(
                     groups, posthoc_corr, config.alpha, config.auto_transform,
                     global_small, test_type=test_type,
+                    control=config.control_condition,
                 )
                 posthoc_results[cls] = ph
 
@@ -453,6 +499,7 @@ class StatisticalTestingService:
                 'test_type': test_type,
                 'correction': correction,
                 'posthoc': posthoc_corr,
+                'control': config.control_condition if posthoc_corr == 'dunnett' else None,
                 'transform': 'log10' if config.auto_transform else 'none',
             },
             parameters={
@@ -546,6 +593,7 @@ class StatisticalTestingService:
                 'test_type': test_type,
                 'correction': correction,
                 'posthoc': posthoc_corr,
+                'control': config.control_condition if posthoc_corr == 'dunnett' else None,
                 'transform': 'log10' if config.auto_transform else 'none',
             },
             parameters={
@@ -580,6 +628,7 @@ class StatisticalTestingService:
                 posthoc_results[key] = StatisticalTestingService.run_posthoc(
                     groups, posthoc_corr, config.alpha, config.auto_transform,
                     global_small, test_type=test_type,
+                    control=config.control_condition,
                 )
             except ValueError:
                 continue

@@ -45,6 +45,7 @@ def _display_bar_chart(
 
         stat_config = _display_statistical_options(
             'bar', len(selected_classes), len(selected_conditions),
+            selected_conditions,
         )
 
         section_header("📊 Results")

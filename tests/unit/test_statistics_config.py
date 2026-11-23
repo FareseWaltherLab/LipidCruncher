@@ -80,6 +80,23 @@ class TestStatisticalTestConfigCreation:
             config = StatisticalTestConfig(posthoc_correction=method)
             assert config.posthoc_correction == method
 
+    def test_dunnett_with_a_control(self):
+        config = StatisticalTestConfig.create_manual(
+            posthoc_correction='dunnett', control_condition='WT',
+        )
+        assert config.control_condition == 'WT'
+        assert config.get_posthoc_display_name() == "Dunnett's test (vs control)"
+
+    def test_dunnett_needs_a_control(self):
+        with pytest.raises(ValueError, match="control_condition"):
+            StatisticalTestConfig.create_manual(posthoc_correction='dunnett')
+
+    def test_control_is_part_of_the_hash(self):
+        """Cached results must not be reused across controls."""
+        wt, ko = (StatisticalTestConfig.create_manual(
+            posthoc_correction='dunnett', control_condition=c) for c in ('WT', 'KO1'))
+        assert hash(wt) != hash(ko)
+
 
 class TestStatisticalTestConfigValidation:
     """Tests for validation rules."""

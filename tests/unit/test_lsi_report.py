@@ -51,15 +51,17 @@ def norm_config():
     )
 
 
-def _summary(test_names, correction="fdr_bh", posthoc=None, transform="log10"):
+def _summary(test_names, correction="fdr_bh", posthoc=None, transform="log10",
+             test_type="parametric", control=None):
     results = {
         f"G{i}": StatisticalTestResult(test_name=name, statistic=1.0, p_value=0.01)
         for i, name in enumerate(test_names)
     }
-    info = {"test_type": "parametric", "correction": correction, "transform": transform}
+    info = {"test_type": test_type, "correction": correction, "transform": transform}
     posthoc_results = {}
     if posthoc is not None:
         info["posthoc"] = posthoc
+        info["control"] = control
         posthoc_results = {"G0": [PostHocResult(
             group1="A", group2="B", p_value=0.01, test_name="Tukey's HSD",
         )]}
@@ -212,6 +214,30 @@ class TestCollectAutoFields:
             "Statistics (Volcano plot): significance":
                 "p ≤ 0.01 and fold change > 2× up or down (B vs A)",
         }
+
+    @pytest.mark.parametrize("test_type, expected", [
+        ("parametric", "Dunnett's test vs WT"),
+        ("non_parametric", "Mann-Whitney U vs WT, Bonferroni-corrected"),
+    ])
+    def test_dunnett_post_hoc_names_the_control(
+        self, experiment, cleaned_df, test_type, expected,
+    ):
+        fields = LSIReportService.collect_auto_fields(
+            format_type="Generic Format",
+            experiment=experiment,
+            normalization_config=None,
+            statistics={"Abundance bar chart": AnalysisStatistics(
+                summary=_summary(["Welch's ANOVA"], posthoc="dunnett",
+                                 test_type=test_type, control="WT"),
+                significance="adjusted p ≤ 0.05",
+            )},
+            cleaned_df=cleaned_df,
+            intsta_df=None,
+            bqc_label=None,
+            cleaning_params={},
+            qc_summary={},
+        )
+        assert fields["Statistics (Abundance bar chart): post-hoc"] == expected
 
 
 # ── generate_checklist_csv ────────────────────────────────────────────────
