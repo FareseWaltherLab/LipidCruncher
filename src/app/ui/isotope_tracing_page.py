@@ -440,7 +440,9 @@ def _display_input_builder(measurement_df: Optional[pd.DataFrame]):
         st.dataframe(molecule_df, hide_index=True, width='stretch')
         _download_input(molecule_df, "MoleculeFile.csv", "iso_dl_molecule_file")
         st.markdown("**Element file**")
-        st.dataframe(element_df, hide_index=True, width='stretch')
+        # Blank, not "None", for the non-tracer elements, as in the CSV.
+        st.dataframe(element_df.astype(object).where(element_df.notna(), ""),
+                     hide_index=True, width='stretch')
         _download_input(element_df, "ElementFile.csv", "iso_dl_element_file")
     return molecule_df, element_df
 

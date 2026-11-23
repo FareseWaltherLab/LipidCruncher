@@ -82,6 +82,18 @@ class TestGeneratedInputsRun:
         sums = fractions.groupby(fractions.index.str.rsplit("_", n=1).str[0]).sum()
         assert ((sums - 1).abs() < 1e-6).all().all()
 
+    def test_element_table_shows_blanks_not_none(self):
+        at = _make_app().run()
+        at.button(key="iso_load_sample").click().run()
+        at.radio(key="iso_input_source").set_value("Generate from the Measurement file").run()
+        shown = next(d.value for d in at.dataframe if "Tracer purity" in d.value.columns)
+        others = shown[shown["Element"] != "C"]
+        assert len(others) > 0
+        assert (others[["Tracer isotope mass shift", "Tracer purity"]] == "").all().all()
+        carbon = shown[shown["Element"] == "C"].iloc[0]
+        assert str(carbon["Tracer isotope mass shift"]) == "1"
+        assert str(carbon["Tracer purity"]) == "0.99"
+
 
 class TestValidationPath:
     """Bad inputs surface validation errors in the UI without crashing."""
