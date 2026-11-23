@@ -11,6 +11,7 @@ from app.services.isotope_correction.input_builder import (
     lipid_formula,
     molecule_table,
     parse_formula,
+    untagged_ids,
 )
 
 SAMPLE_DIR = Path(__file__).parents[2] / "sample_datasets" / "isotope_tracing"
@@ -94,6 +95,16 @@ class TestMoleculeTable:
     def test_unknown_class_has_a_blank_formula(self):
         table = molecule_table(_measurement("Mystery_1:0_0", "Mystery_1:0_1"))
         assert table["Formula"].tolist() == [""]
+
+    def test_ids_without_an_isotopologue_tag_are_flagged(self):
+        # A bare lipid name was once read as BMP_22:6 with 226 labelled atoms.
+        assert untagged_ids(_measurement("BMP_22:6_22:6", "BMP_22:6_22:6")) == [
+            "BMP_22:6_22:6", "BMP_22:6_22:6"]
+        assert untagged_ids(_measurement("PC_34:1 M+1", "PC34:1")) == ["PC_34:1 M+1", "PC34:1"]
+
+    def test_tagged_ids_pass(self):
+        assert untagged_ids(_measurement("BMP_22:6_22:6_0", "PC_34:1_C6", "PC_34:1_N12")) == []
+        assert untagged_ids(pd.read_csv(SAMPLE_DIR / "MeasurementFile.csv")) == []
 
     def test_tracer_comes_from_uhr_ids(self):
         assert default_tracer(_measurement("PC_34:1_N0", "PC_34:1_N1")) == "N"

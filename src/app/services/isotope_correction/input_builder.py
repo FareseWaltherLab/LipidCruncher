@@ -86,6 +86,8 @@ _CHAIN = re.compile(r'^(O-|P-)?([dtm])?(\d+):(\d+)$')
 _FORMULA = re.compile(r'([A-Z][a-z]?)(\d*)')
 
 TABLE_COLUMNS = ['Molecule', 'Formula', 'Ion', 'Labelled atoms']
+# An isotopologue tag: ``3`` (standard resolution) or ``C3`` (ultra-high).
+_TAG = re.compile(r'^(?:[A-Z][a-z]?)?\d+$')
 
 
 def _hill(atoms: Dict[str, int], ones: bool) -> str:
@@ -151,6 +153,14 @@ def default_tracer(measurement_df: pd.DataFrame) -> str:
         if element in TRACERS:
             return element
     return 'C'
+
+
+def untagged_ids(measurement_df: pd.DataFrame) -> List[str]:
+    """IDs that don't end in an isotopologue tag (``_0``, ``_C0``), such as a
+    bare ``BMP_22:6_22:6``; their lipid can't be read from them."""
+    ids = measurement_df.iloc[:, 0].dropna().astype(str).str.strip()
+    return [i for i in ids
+            if not _TAG.match(IsotopologuePlotterService.split_id(i)[1])]
 
 
 def molecule_table(measurement_df: pd.DataFrame) -> pd.DataFrame:

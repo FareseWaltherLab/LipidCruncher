@@ -95,6 +95,17 @@ class TestGeneratedInputsRun:
         assert str(carbon["Tracer purity"]) == "0.99"
 
 
+    def test_ids_without_isotopologue_number_show_an_error(self):
+        at = _make_app()
+        at.session_state["iso_measurement_df"] = pd.DataFrame(
+            {"Measurements/Samples": ["BMP_22:6_22:6"], "s1": [1.0]})
+        at.run()
+        at.radio(key="iso_input_source").set_value("Generate from the Measurement file").run()
+        assert any("isotopologue number" in e.value for e in at.error)
+        assert not at.warning  # no "226 labelled C atoms" row to complete
+        assert at.button(key="iso_run").disabled
+
+
 class TestValidationPath:
     """Bad inputs surface validation errors in the UI without crashing."""
 

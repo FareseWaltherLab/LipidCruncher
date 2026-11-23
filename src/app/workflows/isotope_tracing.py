@@ -44,6 +44,11 @@ class IsotopeTracingWorkflow:
     ION_FORMS = list(input_builder.ION_FORMS)
 
     @staticmethod
+    def untagged_ids(measurement_df: pd.DataFrame) -> List[str]:
+        """Measurement IDs missing the isotopologue tag (``_0``, ``_C0``)."""
+        return input_builder.untagged_ids(measurement_df)
+
+    @staticmethod
     def molecule_table(measurement_df: pd.DataFrame) -> pd.DataFrame:
         """The lipids of a Measurement file with suggested formula, ion form
         and labelled atoms, for the user to check before generating files."""
