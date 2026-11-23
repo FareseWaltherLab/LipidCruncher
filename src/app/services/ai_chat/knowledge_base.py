@@ -5,7 +5,7 @@ Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
 
-Checked against main at 0f60bb9 (2026-11-23); see CLAUDE.md, "Keep the
+Checked against main at 4040831 (2026-11-23); see CLAUDE.md, "Keep the
 AI's knowledge in step with main".
 """
 
@@ -99,11 +99,15 @@ The default thresholds are rules of thumb from experience, not standards; presen
 - **Zero filter** ("Configure Zero Filtering"): a value at or below the **detection threshold** \
 counts as not detected (default **30,000 for LipidSearch**, 0 for other formats). A lipid is \
 removed if **every** non-BQC condition has ≥ the **non-BQC threshold** of non-detections \
-(default **75%**, slider 50–100%) or the BQC has ≥ the **BQC threshold** (default **50%**, \
-slider 25–100%). So with **3 replicates the default keeps a lipid detected in just 1 replicate \
+(default **75%**, slider 50–100%, labelled "remove if missing in at least this % of samples, \
+in every condition") or the BQC has ≥ the **BQC threshold** (default **50%**, slider \
+25–100%). **Raising a threshold is looser** (more missing values allowed, more lipids kept); \
+lowering it is stricter. So with **3 replicates the default keeps a lipid detected in just 1 replicate \
 of one condition** (2 of 3 zeros is 67%, under 75%); with 4 replicates it takes 2. The panel \
-states the rule for the user's own design, and a warning under it says when one detection is \
-enough. To require more, lower the non-BQC threshold (50% needs 2 of 3). The default is kept on \
+states the rule for the current settings and sample counts ("With the current settings \
+(non-BQC 75%, BQC 50%) and 4 samples per condition, a lipid is kept if it is detected in at \
+least 2 of 4 replicates in any one condition, ..."), and a warning under it appears whenever \
+one detection is enough (at the default: conditions with 2 or 3 samples). To require more, lower the non-BQC threshold (50% needs 2 of 3). The default is kept on \
 purpose.
 - **LipidSearch grades**: default A/B for every class, plus C for LPC and SM; "Allow C for all \
 classes" or "Customize by Class" relax it. The grade is confidence that the lipid was \
