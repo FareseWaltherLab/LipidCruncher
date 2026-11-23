@@ -396,7 +396,7 @@ def _add_significance_annotations(
     abundance_df: pd.DataFrame,
     stat_results: StatisticalTestSummary,
 ) -> None:
-    """Add *, **, *** annotations to the bar chart for significant classes."""
+    """Add *, **, ***, **** annotations to the bar chart for significant classes."""
     for i, class_name in enumerate(abundance_df['ClassKey']):
         if class_name not in stat_results.results:
             continue

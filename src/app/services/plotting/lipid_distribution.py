@@ -42,7 +42,8 @@ BRACKET_GAP = 0.08
 BRACKET_TICK = 0.03
 HEADROOM = 1.15
 _FONT = dict(color='black')
-SIGNIFICANCE_KEY = 'ns p ≥ 0.05    * p < 0.05    ** p < 0.01    *** p < 0.001'
+SIGNIFICANCE_KEY = ('ns p ≥ 0.05    * p < 0.05    ** p < 0.01    *** p < 0.001    '
+                    '**** p < 0.0001')
 
 
 def build_distribution_figure(
