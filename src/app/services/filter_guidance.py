@@ -103,12 +103,33 @@ class FilterGuidanceService:
     def zero_filter_summary(
         experiment: ExperimentConfig, bqc_label: Optional[str], config: ZeroFilterConfig,
     ) -> str:
-        """The rule the current thresholds apply to this design, as a sentence."""
+        """What the current thresholds require with these sample counts, e.g.
+        "With the current settings (non-BQC 75%, BQC 50%) and 4 samples per
+        condition, a lipid is kept if it is detected in at least 2 of 4
+        replicates in any one condition, and in at least 3 of 4 BQC samples."
+        """
         rule = FilterGuidanceService.detection_rule(
             experiment, bqc_label, config.non_bqc_threshold,
         )
-        sentence = f"With your design, a lipid is kept if it is detected in **{rule}**"
         n_bqc = _bqc_size(experiment, bqc_label)
+        settings = f"non-BQC {_pct(config.non_bqc_threshold)}%"
+        if n_bqc:
+            settings += f", BQC {_pct(config.bqc_threshold)}%"
+
+        sizes: Dict[int, List[str]] = {}
+        for condition, n in _non_bqc_conditions(experiment, bqc_label):
+            sizes.setdefault(n, []).append(condition)
+        if len(sizes) == 1:
+            n, = sizes
+            counts = f"{n} sample{'s' if n != 1 else ''} per condition"
+        else:
+            counts = ", ".join(
+                f"{n} sample{'s' if n != 1 else ''} in {_join(conditions)}"
+                for n, conditions in sizes.items()
+            )
+
+        sentence = (f"With the current settings ({settings}) and {counts}, "
+                    f"a lipid is kept if it is detected in **{rule}**")
         if n_bqc:
             k = ZeroFilteringService.detections_needed(n_bqc, config.bqc_threshold)
             sentence += f", and in **at least {k} of {n_bqc} {bqc_label} samples**"

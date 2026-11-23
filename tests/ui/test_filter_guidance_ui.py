@@ -37,6 +37,19 @@ class TestZeroFilter:
         explanation = " ".join(_texts(at.expander[0].markdown))
         assert "**at least 1 of 3 replicates in any one condition**" in explanation
         assert "Low-abundance lipids" in explanation
+        assert "With the current settings (non-BQC 75%) and 3 samples per condition" in explanation
+        assert "**Raising a threshold is looser**" in explanation
+
+    def test_sliders_say_what_they_remove(self, zero_filter_bqc_app):
+        at = zero_filter_bqc_app
+        assert at.slider(key='non_bqc_zero_threshold').label == (
+            "Non-BQC threshold: remove if missing in at least this % of samples, "
+            "in every condition"
+        )
+        assert at.slider(key='bqc_zero_threshold').label == (
+            "BQC threshold: remove if missing in at least this % of BQC samples"
+        )
+        assert "Higher is looser" in at.slider(key='non_bqc_zero_threshold').help
 
     def test_single_detection_warning_is_visible_while_collapsed(self, zero_filter_generic_app):
         """The default is kept; the user asked for a clear warning instead."""
