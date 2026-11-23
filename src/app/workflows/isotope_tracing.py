@@ -49,6 +49,11 @@ class IsotopeTracingWorkflow:
         return input_builder.untagged_ids(measurement_df)
 
     @staticmethod
+    def untagged_message(ids: List[str]) -> str:
+        """The error to show for ``untagged_ids``."""
+        return input_builder.untagged_message(ids)
+
+    @staticmethod
     def molecule_table(measurement_df: pd.DataFrame) -> pd.DataFrame:
         """The lipids of a Measurement file with suggested formula, ion form
         and labelled atoms, for the user to check before generating files."""

@@ -128,6 +128,18 @@ class TestValidateInputs:
         assert len(errors) == 1
         assert "do not match any molecule" in errors[0]
 
+    @pytest.mark.parametrize("ids", [
+        ["BMP_18:1_18:1", "BMP_18:1_18:1", "PC_34:1"],  # IsoCorrectoR: "duplicate identifier"
+        ["BMP_18:1_18:1 M+0", "BMP_18:1_18:1 M+1", "PC_34:1 M+0"],  # was "do not match any molecule"
+    ])
+    def test_ids_without_an_isotopologue_number_flagged(self, ids):
+        measurement, molecule, element = _valid_inputs()
+        measurement["Measurements/Samples"] = ids
+        errors = validate_inputs(measurement, molecule, element)
+        assert len(errors) == 1
+        assert "3 rows of the Measurement file have IDs that do not end in an isotopologue number" in errors[0]
+        assert "do not match any molecule" not in errors[0]
+
 
 class TestResolutionModeConsistency:
     """The UHR setting must match the isotopologue-ID labeling style."""

@@ -388,15 +388,7 @@ def _display_input_builder(measurement_df: Optional[pd.DataFrame]):
 
     untagged = IsotopeTracingWorkflow.untagged_ids(measurement_df)
     if untagged:
-        shown = ", ".join(f"`{i}`" for i in untagged[:3])
-        more = f" and {len(untagged) - 3} more" if len(untagged) > 3 else ""
-        st.error(
-            f"{len(untagged)} ID{'s' if len(untagged) != 1 else ''} in the Measurement "
-            f"file {'do' if len(untagged) != 1 else 'does'} not end in an isotopologue "
-            f"number: {shown}{more}. Each row is one isotopologue, so its ID is the "
-            "lipid plus `_0`, `_1`, … (or `_C0`, `_C1`, … in ultra-high resolution), "
-            "e.g. `BMP_22:6_22:6_0`."
-        )
+        st.error(IsotopeTracingWorkflow.untagged_message(untagged))
         return None, None
 
     table = IsotopeTracingWorkflow.molecule_table(measurement_df)

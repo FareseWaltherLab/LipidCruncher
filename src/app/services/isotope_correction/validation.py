@@ -16,6 +16,8 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
+from .input_builder import untagged_ids, untagged_message
+
 
 def _nonempty_first_column(df: pd.DataFrame) -> List[str]:
     """Return stripped, non-empty values of the first column."""
@@ -138,6 +140,14 @@ def validate_inputs(
                 f"Sample column '{col}' in the Measurement file contains "
                 "non-numeric intensity values."
             )
+
+    # --- Isotopologue tags -------------------------------------------------
+    # Without the _0/_C0 ending the IDs can't be matched to molecules
+    # (IsoCorrectoR reports a bare name as a duplicate identifier).
+    untagged = untagged_ids(measurement_df)
+    if untagged:
+        errors.append(untagged_message(untagged))
+        return errors
 
     # --- Molecule-name consistency ----------------------------------------
     # Every measurement ID must be claimed by a molecule name as a prefix.

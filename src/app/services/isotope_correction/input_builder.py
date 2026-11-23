@@ -163,6 +163,21 @@ def untagged_ids(measurement_df: pd.DataFrame) -> List[str]:
             if not _TAG.match(IsotopologuePlotterService.split_id(i)[1])]
 
 
+def untagged_message(ids: List[str]) -> str:
+    """What's wrong with the ``untagged_ids`` and the form they need."""
+    n = len(ids)
+    distinct = list(dict.fromkeys(ids))
+    shown = ", ".join(f"`{i}`" for i in distinct[:3])
+    more = f" and {len(distinct) - 3} more" if len(distinct) > 3 else ""
+    return (
+        f"{n} row{'s' if n != 1 else ''} of the Measurement file "
+        f"{'have IDs that do' if n != 1 else 'has an ID that does'} not end in an "
+        f"isotopologue number: {shown}{more}. Each row is one isotopologue, so its ID is the lipid "
+        "plus `_0`, `_1`, … (or `_C0`, `_C1`, … in ultra-high resolution), "
+        "e.g. `BMP_22:6_22:6_0`."
+    )
+
+
 def molecule_table(measurement_df: pd.DataFrame) -> pd.DataFrame:
     """One row per lipid in the Measurement file, for the user to check:
     its neutral formula (blank when the class isn't known), the ion form,

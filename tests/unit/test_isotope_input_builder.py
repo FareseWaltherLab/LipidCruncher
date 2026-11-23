@@ -12,6 +12,7 @@ from app.services.isotope_correction.input_builder import (
     molecule_table,
     parse_formula,
     untagged_ids,
+    untagged_message,
 )
 
 SAMPLE_DIR = Path(__file__).parents[2] / "sample_datasets" / "isotope_tracing"
@@ -101,6 +102,12 @@ class TestMoleculeTable:
         assert untagged_ids(_measurement("BMP_22:6_22:6", "BMP_22:6_22:6")) == [
             "BMP_22:6_22:6", "BMP_22:6_22:6"]
         assert untagged_ids(_measurement("PC_34:1 M+1", "PC34:1")) == ["PC_34:1 M+1", "PC34:1"]
+
+    def test_message_lists_each_id_once(self):
+        message = untagged_message(["BMP_22:6_22:6"] * 7)
+        assert message.startswith("7 rows of the Measurement file have IDs that do not end")
+        assert message.count("`BMP_22:6_22:6`") == 1
+        assert untagged_message(["PC34:1"]).startswith("1 row of the Measurement file has an ID that does")
 
     def test_tagged_ids_pass(self):
         assert untagged_ids(_measurement("BMP_22:6_22:6_0", "PC_34:1_C6", "PC_34:1_N12")) == []
