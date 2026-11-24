@@ -755,6 +755,20 @@ class TestVolcanoUI:
         fig = at.session_state['analysis_all_plots']['lipid_distribution']
         assert {t.type for t in fig.data} == {'box'}
 
+    def test_switching_class_picks_lipids_of_the_new_class(
+        self, analysis_generic_app,
+    ):
+        """Regression: the old class's picks are not options of the new one,
+        so the lipid multiselect used to come back empty after a switch."""
+        at = self._switch_to_volcano(analysis_generic_app)
+        box = at.selectbox(key='volcano_detail_class')
+        new_class = next(c for c in box.options if c != box.value)
+        box.set_value(new_class).run()
+        assert not at.exception
+        vdf = at.session_state['analysis_volcano_data'].volcano_df
+        expected = vdf[vdf['ClassKey'] == new_class]['LipidMolec'].tolist()[:3]
+        assert at.multiselect(key='volcano_detail_lipids').value == expected
+
     def test_deselecting_lipids_drops_the_stale_distribution(
         self, analysis_generic_app,
     ):
