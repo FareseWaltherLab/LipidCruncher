@@ -5,7 +5,7 @@ Provides a condensed reference about the application's capabilities,
 supported formats, terminology, and analysis features. Included in
 AI system prompts so the assistant can answer user questions accurately.
 
-Checked against main at c9d9840 (2026-11-24); see CLAUDE.md, "Keep the
+Checked against main at 865b0a9 (2026-11-24); see CLAUDE.md, "Keep the
 AI's knowledge in step with main".
 """
 
@@ -167,12 +167,17 @@ scatter and **Individual Lipid Analysis**: the user picks a class and lipids and
 panel per lipid, with a bar (mean ± SD) or, under "Show as: Box", a box per condition, a dot \
 per sample, and a bracket marking the volcano test's p-value for that lipid (*, **, ***, ****, \
 or ns above 0.05; adjusted p when a correction is chosen). Each panel has its own y axis. \
-Two conditions only.
+Two conditions only. The volcano's Multiple Testing Correction starts at uncorrected (raw p).
 - **Individual Lipid Panels** — its own analysis ("Species Level Breakdown - Individual Lipid \
 Panels"): the same panels for 2 or more conditions (e.g. WT, KO1, KO2). The user picks \
 conditions, a class and lipids; each lipid is tested the way the bar chart tests a class, \
-with the same Statistical Options (Auto or Manual; Level 1 corrects across the chosen \
-lipids, Level 2 picks the pairs: tukey, bonferroni, uncorrected or dunnett vs a control). \
+with the same Statistical Options. It comes right after the Volcano Plot in the menu and \
+starts in Manual with Level 1 ("Between-Lipid Correction") uncorrected, as on the Volcano \
+Plot: with the same two conditions it shows the same stars as the volcano's panels, and a \
+lipid's stars don't depend on which others are picked. A Level 1 correction counts only the \
+picked lipids (the page warns that the stars then change with the pick). Level 2 \
+("Within-Lipid Correction") picks the pairs: tukey (default), bonferroni, uncorrected or \
+dunnett vs a control. \
 Two conditions: one bracket per panel, ns included. Three or more: brackets only on the \
 pairs the post-hoc test finds significant, for lipids whose omnibus test is significant.
 - **Lipidomic heatmaps** — four views: Aggregated by Class (the default), species grouped \
@@ -212,10 +217,14 @@ the conditions, their order and the isotopologues shown (optionally rescaled to 
 
 - **Parametric**: Welch's t-test (2 conditions), Alexander-Govern ANOVA (3+ conditions)
 - **Non-parametric**: Mann-Whitney U (2 conditions), Kruskal-Wallis (3+ conditions)
-- **Auto mode**: selects parametric with log10 transform
+- **Auto mode**: selects parametric with log10 transform, FDR across the page's tests when \
+there is more than one (the selected classes; each class's SFA, MUFA and PUFA on Saturation; \
+the picked lipids on Individual Lipid Panels), and Tukey's HSD for 3+ conditions. It is the \
+default on the Bar Chart and Saturation pages; Individual Lipid Panels start in Manual.
 - **Multiple testing correction**: FDR (Benjamini-Hochberg) or Bonferroni
 - **Post-hoc** (3+ conditions, after a significant omnibus test; Bar Chart and Saturation \
-pages, Manual mode, "Within-Class Correction (Level 2)"): uncorrected, tukey (Tukey's HSD, \
+pages, Manual mode, "Within-Class Correction (Level 2)"; Individual Lipid Panels, \
+"Within-Lipid Correction (Level 2)"): uncorrected, tukey (Tukey's HSD, \
 the default and Auto mode's choice), bonferroni, or dunnett. Dunnett's test compares each \
 condition with one control the user picks in the "Control condition" box that appears \
 (e.g. WT vs several knockouts) instead of testing every pair, so it has more power when \

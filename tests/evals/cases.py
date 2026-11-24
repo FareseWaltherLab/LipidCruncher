@@ -527,6 +527,22 @@ CASES = (
         ),
     ),
     EvalCase(
+        id="panels_vs_volcano_panels",
+        question=(
+            "What's the difference between the Individual Lipid Panels page and "
+            "the Individual Lipid Analysis under the volcano plot? Will they "
+            "give the same stars for WT vs KO?"
+        ),
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("uncorrected", "volcano"),
+        note=(
+            "2026-11-24: the panels page starts in Manual with Level 1 "
+            "uncorrected, the volcano's default, so both show the same stars "
+            "for two conditions; it also takes 3+ conditions."
+        ),
+    ),
+    EvalCase(
         id="dunnett_vs_control",
         question=(
             "I have WT, KO1 and KO2. I only care whether each knockout differs "

@@ -1026,9 +1026,19 @@ class TestThreeGroupsAndDunnett:
         assert set(res.data["Condition"]) == {"WT", "KO", "KO2"}
         summary = res.raw.stat_summary
         assert set(summary.results) == {"PE 18:0_20:4", "PC 16:0_18:1"}
-        assert summary.test_info["posthoc"] == "tukey"  # Auto mode, 3 conditions
-        assert any("Lipid panel significance" in m and "Auto mode" in m
-                   for m in lc3.methods_used)
+        # The page's default: Manual, Level 1 uncorrected, Tukey for 3+ conditions.
+        assert summary.test_info["correction"] == "uncorrected"
+        assert summary.test_info["posthoc"] == "tukey"
+        note = next(m for m in lc3.methods_used if "Lipid panel significance" in m)
+        assert "no multiple-testing correction" in note
+        assert "Level 1 uncorrected, as on the Volcano Plot" in note
+        assert "changed on request" not in note
+
+    def test_lipid_panels_takes_a_level_1_correction(self, lc3):
+        res = lc3.lipid_panels(["PE 18:0_20:4", "PC 16:0_18:1"], correction="fdr_bh")
+        assert res.raw.stat_summary.test_info["correction"] == "fdr_bh"
+        note = next(m for m in lc3.methods_used if "Lipid panel" in m)
+        assert "Benjamini-Hochberg" in note and "changed on request" in note
 
     def test_lipid_panels_with_dunnett(self, lc3):
         res = lc3.lipid_panels(["PE 18:0_20:4"], posthoc="dunnett", control="WT")

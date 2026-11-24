@@ -505,19 +505,35 @@ class PipelineAPI:
         ))
 
     @staticmethod
+    def _require_control(posthoc: Optional[str], control: Optional[str]) -> None:
+        if posthoc == 'dunnett' and not control:
+            raise ValueError(
+                "posthoc='dunnett' compares each condition with a control: "
+                "pass control=<condition name>."
+            )
+
+    @staticmethod
     def _class_config(
         posthoc: Optional[str], control: Optional[str],
     ) -> StatisticalTestConfig:
         """Auto mode, or the pages' Manual defaults with ``posthoc``."""
         if posthoc is None:
             return CLASS_STATS
-        if posthoc == 'dunnett' and not control:
-            raise ValueError(
-                "posthoc='dunnett' compares each condition with a control: "
-                "pass control=<condition name>."
-            )
+        PipelineAPI._require_control(posthoc, control)
         return StatisticalTestConfig.create_manual(
             posthoc_correction=posthoc, control_condition=control,
+        )
+
+    @staticmethod
+    def _panels_config(
+        correction: Optional[str], posthoc: Optional[str], control: Optional[str],
+    ) -> StatisticalTestConfig:
+        """The Individual Lipid Panels page's default: Manual, Level 1
+        uncorrected (the volcano's default), Level 2 Tukey's HSD."""
+        PipelineAPI._require_control(posthoc, control)
+        return StatisticalTestConfig.create_manual(
+            correction_method=correction or 'uncorrected',
+            posthoc_correction=posthoc or 'tukey', control_condition=control,
         )
 
     def _require_experiment(self) -> None:
@@ -710,7 +726,9 @@ class PipelineAPI:
 
         Args:
             plot_type: 'concentration' or 'percentage'.
-            posthoc, control: As for ``bar_chart``.
+            posthoc, control: As for ``bar_chart``; posthoc defaults to 'tukey'.
+            correction: Level 1 across the given lipids, 'fdr_bh' or
+                'bonferroni'; default 'uncorrected'.
 
         Returns:
             Dict of lipid class -> LCResult, matching every other plot
@@ -863,18 +881,22 @@ class PipelineAPI:
         style: str = 'bar',
         posthoc: Optional[str] = None,
         control: Optional[str] = None,
+        correction: Optional[str] = None,
     ) -> LCResult:
         """The app's Individual Lipid Panels: one panel per lipid across
         any number of conditions, each lipid tested as the bar chart tests a
-        class (Auto mode unless ``posthoc`` is given), brackets on the
-        significant pairs.
+        class, brackets on the significant pairs. Defaults to the page's
+        Manual settings: Level 1 uncorrected, as on the volcano, and Tukey's
+        HSD for 3+ conditions.
 
         Args:
             lipids: Lipid names, as in ``LipidMolec``.
             conditions: Defaults to the page's: conditions with 2+ samples,
                 BQC left out.
             style: 'bar' (mean ± SD) or 'box'.
-            posthoc, control: As for ``bar_chart``.
+            posthoc, control: As for ``bar_chart``; posthoc defaults to 'tukey'.
+            correction: Level 1 across the given lipids, 'fdr_bh' or
+                'bonferroni'; default 'uncorrected'.
 
         Returns:
             LCResult with ``figure``, ``data`` (Lipid, Condition, Sample,
@@ -883,11 +905,16 @@ class PipelineAPI:
         """
         res = self._analysis().run_lipid_panels(
             self._frame(), self._experiment, self._bar_chart_conditions(conditions),
-            list(lipids), self._class_config(posthoc, control),
+            list(lipids), self._panels_config(correction, posthoc, control),
             style=style, palette=self._palette,
         )
         if res.stat_summary is not None:
-            self._note_class("Lipid panel significance", res.stat_summary, posthoc)
+            note = ("The Individual Lipid Panels page defaults to Manual mode "
+                    "with Level 1 uncorrected, as on the Volcano Plot, and "
+                    "Tukey's HSD for 3+ conditions.")
+            if correction or posthoc:
+                note = "Settings changed on request. " + note
+            self._note(describe_stats("Lipid panel significance", res.stat_summary, note))
         return LCResult(res.figure, res.data, res)
 
     def heatmap(

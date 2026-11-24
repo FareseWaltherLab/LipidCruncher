@@ -161,7 +161,7 @@ a bar (mean ± SD; `style='box'` for box plots) per condition, a dot per sample,
 with the volcano test's significance for that lipid (*, **, ***, ****, ns; same statistics
 as `volcano`). Use it for "bar graph / box plot of these lipids in WT vs KO, with
 significance". Two conditions only; `.data` is the lipids' volcano rows (p-values, log2FC)
-- `lc.lipid_panels(lipids, conditions=None, style='bar', posthoc=None, control=None)` — the
+- `lc.lipid_panels(lipids, conditions=None, style='bar', posthoc=None, control=None, correction=None)` — the
 app's Individual Lipid Panels page: the same panels for **any number of conditions** (WT,
 KO1, KO2), each lipid tested as the bar chart tests a class, with brackets on the pairs that
 differ. Use it whenever 3+ conditions are in the figure. `.data` has Lipid, Condition,
@@ -170,10 +170,14 @@ Sample, Concentration; the p-values are in `.raw.stat_summary` (`results` per li
 - `lc.bar_chart(conditions=None, classes=None, scale='linear', posthoc=None, control=None)`
 — class abundance, with significance annotation
 
-`bar_chart`, `saturation` and `lipid_panels` run in Auto mode, the app's default (Tukey's HSD
-for 3+ conditions). Pass `posthoc='dunnett', control='WT'` to compare each condition with
-one control only (Dunnett's test, Manual mode), or `posthoc='bonferroni'` / `'uncorrected'`
-when the user asks for those
+`bar_chart` and `saturation` run in Auto mode, the app's default there (Tukey's HSD for 3+
+conditions). `lipid_panels` runs the Individual Lipid Panels page's default: Manual, no
+correction across lipids (as on the volcano, so the stars match it and don't depend on which
+lipids are picked), Tukey's HSD for 3+ conditions; pass `correction='fdr_bh'` only when the
+user asks to correct across the lipids, and say it counts only the lipids plotted. On all
+three, pass `posthoc='dunnett', control='WT'` to compare each condition with one control
+only (Dunnett's test, Manual mode), or `posthoc='bonferroni'` / `'uncorrected'` when the
+user asks for those
 - `lc.heatmap(conditions=None, classes=None, heatmap_type='regular', n_clusters=3)` —
 `'clustered'` for clustering, `'class_grouped'` for species grouped by class,
 `'class_aggregated'` for class totals (the app's Heatmap page opens on this one)
