@@ -102,7 +102,7 @@ class TestLandingPageIntroducesEveryWorkflow:
         exactly the state this test exists to rule out."""
         text = self._page_text(landing_app)
         assert "#### 🤖 AI Studio" in text
-        assert "Four tabs" in text
+        assert "Three tabs" in text
 
     def test_isotope_tracing_is_introduced_before_its_button(self, landing_app):
         text = self._page_text(landing_app)

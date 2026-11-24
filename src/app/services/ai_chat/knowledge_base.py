@@ -201,7 +201,10 @@ the concentration view shows a dot per sample.
 Opened from the home page, independent of Modules 1–3. Runs natural-isotope-abundance \
 correction with the IsoCorrectoR R package on three uploaded files — Measurement \
 (isotopologue intensities per sample), Molecule (formulas) and Element (isotope abundances, \
-tracer purity). Instead of uploading the Molecule and Element files, the user can generate \
+tracer purity). Each Measurement row is one isotopologue, so its ID is the lipid plus \
+`_0`, `_1`, … (or `_C0`, `_C1`, … in ultra-high resolution), e.g. `BMP_22:6_22:6_0`; IDs \
+without that number are refused with an error naming them, both when generating the files \
+and when uploading them. Instead of uploading the Molecule and Element files, the user can generate \
 them from the Measurement file's lipids: the page suggests each lipid's full neutral formula \
 (from its class and chains, labelled atoms included), an ion form ([M-H]- by default) and \
 the number of atoms that can carry the label (the heaviest isotopologue measured), all \

@@ -511,6 +511,20 @@ CASES = (
         ),
     ),
     EvalCase(
+        id="isotope_ids_need_isotopologue_number",
+        question=(
+            "The isotope tracing page rejects my Measurement file. My IDs look "
+            "like BMP_22:6_22:6, one row per lipid. What's wrong?"
+        ),
+        dataset=APP,
+        tab="lc_questions",
+        expect_mentions=("_0", "isotopologue"),
+        note=(
+            "2026-11-23: IDs without an isotopologue number are refused "
+            "(Liz's screenshot read BMP_22:6 as 226 labelled atoms)."
+        ),
+    ),
+    EvalCase(
         id="zero_filter_single_detection",
         question=(
             "I have 3 replicates per condition. Why did LipidCruncher keep a "

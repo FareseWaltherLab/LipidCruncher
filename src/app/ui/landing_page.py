@@ -201,9 +201,9 @@ def _display_modules_overview() -> None:
 
     st.markdown("#### 🤖 AI Studio")
     st.markdown("""
-    **Explore any dataset through a conversation.** Four tabs: ask how LipidCruncher itself works; ask
-    questions about your own data and get the answer computed on the spot; convert an unsupported CSV into
-    the Generic format so the main pipeline can take it; or describe a figure and have it generated. Bring
+    **Explore any dataset through a conversation.** Three tabs: ask how LipidCruncher itself works; ask
+    questions about your own data and get the answer—a table, a figure, or both—computed on the spot; or
+    convert an unsupported CSV into the Generic format so the main pipeline can take it. Bring
     data in by uploading a CSV or by importing what the main pipeline is already holding—raw, normalized,
     or QC-filtered—and download transformed results to feed back into it.
     """)
@@ -265,6 +265,13 @@ def _display_whats_new() -> None:
           questions about and custom figures of your own data, and converting an unsupported CSV
           into the Generic format—working either on an uploaded file or on data imported from
           the main pipeline (raw, normalized, or QC-filtered)
+        - **Generated Isotope Input Files**: Instead of writing the Molecule and Element files by
+          hand, generate them from the Measurement file—the page suggests each lipid's formula,
+          ion and number of labelled atoms, all editable, plus the tracer and its purity
+        - **AI Studio in Step With the App**: Ask Your Data draws the app's own figures,
+          Individual Lipid Panels and Dunnett's test included, in your Plot Colors; it names
+          values in their units, and leaves BQC samples out of means and rankings as the
+          analysis pages do
         - **LipidSearch 5.2 Support**: The LipidSearch format (renamed from "LipidSearch 5.0")
           now covers both 5.0 and 5.2 exports—tab and comma delimiters are detected automatically,
           and condition-grouped dual-polarity exports are merged into single samples using the
@@ -368,6 +375,11 @@ def _display_whats_new() -> None:
           with a conversion: µM × µL of standard added = pmol
         - **Auto Mode Explained**: The statistical options say what Auto picks and what its
           correction counts
+        - **AI Studio Shows Progress**: Answers appear as they are written, and LipidCruncher
+          Questions names each document it reads
+        - **Isotopologue Numbers Checked**: Measurement IDs without an isotopologue number (`_0`,
+          `_1`, …) are refused with a message naming them, rather than read as wrong labelled
+          atom counts
         """)
 
     with st.expander("Version 1.3 (March 30, 2026)", expanded=False):
