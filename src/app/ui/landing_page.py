@@ -248,9 +248,59 @@ def _display_call_to_action() -> None:
 
 def _display_whats_new() -> None:
     """Display the What's New changelog section."""
-    st.markdown("#### ✨ What's New in Version 1.4 (August 19, 2026)")
+    st.markdown("#### ✨ What's New in Version 1.5 (November 24, 2026)")
 
     with st.expander("New Features & Improvements", expanded=False):
+        st.markdown("""
+        ### Major Features
+        - **Individual Lipid Panels**: A new species-level analysis, right after the Volcano
+          Plot—one panel per lipid for any number of conditions, a bar (mean ± SD) or box per
+          condition with a dot per sample, each lipid tested as the bar chart tests a class,
+          and brackets on the pairs that differ. It starts with no correction across lipids,
+          as the Volcano Plot does, so with two conditions both show the same stars
+        - **Lipid Panels on the Volcano Plot**: Individual Lipid Analysis draws one panel per
+          chosen lipid, as bars or boxes with a dot per sample, with a bracket for the volcano
+          test's p-value for that lipid
+        - **Dunnett's Test**: A fourth post-hoc option on the Bar Chart, Saturation Plots and
+          Individual Lipid Panels compares each condition with one control you pick instead of
+          every pair, which gives more power when only the comparisons with the control matter
+        - **Color Schemes**: A Plot Colors section in the sidebar picks the palette for every
+          figure colored by condition—Classic (the default), Soft or Colorblind-safe
+        - **Outlined Bars With Sample Dots**: Bar chart and saturation bars are outlined, with a
+          dot for each sample
+        - **Generated Isotope Input Files**: Instead of writing the Molecule and Element files by
+          hand, generate them from the Measurement file—the page suggests each lipid's formula,
+          ion and number of labelled atoms, all editable, plus the tracer and its purity
+        - **AI Studio in Step With the App**: Ask Your Data draws the app's own figures,
+          Individual Lipid Panels and Dunnett's test included, in your Plot Colors; it names
+          values in their units, and leaves BQC samples out of means and rankings as the
+          analysis pages do
+
+        ### Bug Fixes
+        - Fixed saturation plot bars sitting half a bar off their condition label, with the
+          significance lines joining bar edges instead of centres
+        - Fixed the volcano plot's lipid picker emptying when the lipid class changed
+
+        ### UI/UX Improvements
+        - **Four Significance Levels**: Stars go up to **** (p < 0.0001), the GraphPad scale, on
+          every plot
+        - **Filter Explanations**: The zero and quality filters say what they remove, when to
+          loosen them for low-abundance lipids and what that costs. Any setting changed from its
+          default gets a notice under its panel and is listed in the PDF and LSI reports
+        - **Units Under Final Normalized Data**: One line says what the normalized values
+          are—pmol per sample, pmol/µg protein, and so on
+        - **µM to pmol Help**: Standard amounts entered in µM before the switch to pmol come
+          with a conversion: µM × µL of standard added = pmol
+        - **Auto Mode Explained**: The statistical options say what Auto picks and what its
+          correction counts
+        - **AI Studio Shows Progress**: Answers appear as they are written, and LipidCruncher
+          Questions names each document it reads
+        - **Isotopologue Numbers Checked**: Measurement IDs without an isotopologue number (`_0`,
+          `_1`, …) are refused with a message naming them, rather than read as wrong labelled
+          atom counts
+        """)
+
+    with st.expander("Version 1.4 (August 19, 2026)", expanded=False):
         st.markdown("""
         ### Major Features
         - **Stable Isotope Tracing**: A separate workflow for stable isotope (e.g. ¹³C) tracing
@@ -265,13 +315,6 @@ def _display_whats_new() -> None:
           questions about and custom figures of your own data, and converting an unsupported CSV
           into the Generic format—working either on an uploaded file or on data imported from
           the main pipeline (raw, normalized, or QC-filtered)
-        - **Generated Isotope Input Files**: Instead of writing the Molecule and Element files by
-          hand, generate them from the Measurement file—the page suggests each lipid's formula,
-          ion and number of labelled atoms, all editable, plus the tracer and its purity
-        - **AI Studio in Step With the App**: Ask Your Data draws the app's own figures,
-          Individual Lipid Panels and Dunnett's test included, in your Plot Colors; it names
-          values in their units, and leaves BQC samples out of means and rankings as the
-          analysis pages do
         - **LipidSearch 5.2 Support**: The LipidSearch format (renamed from "LipidSearch 5.0")
           now covers both 5.0 and 5.2 exports—tab and comma delimiters are detected automatically,
           and condition-grouped dual-polarity exports are merged into single samples using the
@@ -302,21 +345,6 @@ def _display_whats_new() -> None:
           CSVs take a `Protein_ug` column; files with the old `Concentration` column still work
         - **Species Within a Class Pie Charts**: Show each species of one class as a percentage
           of that class's total, per condition
-        - **Individual Lipid Panels**: A new species-level analysis, right after the Volcano
-          Plot—one panel per lipid for any number of conditions, a bar (mean ± SD) or box per
-          condition with a dot per sample, each lipid tested as the bar chart tests a class,
-          and brackets on the pairs that differ. It starts with no correction across lipids,
-          as the Volcano Plot does, so with two conditions both show the same stars
-        - **Lipid Panels on the Volcano Plot**: Individual Lipid Analysis draws one panel per
-          chosen lipid, as bars or boxes with a dot per sample, with a bracket for the volcano
-          test's p-value for that lipid
-        - **Dunnett's Test**: A fourth post-hoc option on the Bar Chart, Saturation Plots and
-          Individual Lipid Panels compares each condition with one control you pick instead of
-          every pair, which gives more power when only the comparisons with the control matter
-        - **Color Schemes**: A Plot Colors section in the sidebar picks the palette for every
-          figure colored by condition—Classic (the default), Soft or Colorblind-safe
-        - **Outlined Bars With Sample Dots**: Bar chart and saturation bars are outlined, with a
-          dot for each sample
 
         ### Bug Fixes
         - Fixed sample regrouping being re-applied on every page interaction, and undo restoring
@@ -340,9 +368,6 @@ def _display_whats_new() -> None:
         - Fixed pathway visualization circle sizing and volcano plot label placement
         - Fixed lipid classes being indistinguishable in plots by expanding the class colour
           palette from 10 to 20 colours
-        - Fixed saturation plot bars sitting half a bar off their condition label, with the
-          significance lines joining bar edges instead of centres
-        - Fixed the volcano plot's lipid picker emptying when the lipid class changed
 
         ### UI/UX Improvements
         - **Reset Session**: One sidebar button clears your experiment setup, processing and
@@ -364,22 +389,6 @@ def _display_whats_new() -> None:
         - **Accurate Upload Limit**: The uploader tooltip claimed 800MB while the app was already
           accepting 1GB files. Both now agree on 1GB, and the limit is pinned to the app itself so
           the two cannot drift apart again
-        - **Four Significance Levels**: Stars go up to **** (p < 0.0001), the GraphPad scale, on
-          every plot
-        - **Filter Explanations**: The zero and quality filters say what they remove, when to
-          loosen them for low-abundance lipids and what that costs. Any setting changed from its
-          default gets a notice under its panel and is listed in the PDF and LSI reports
-        - **Units Under Final Normalized Data**: One line says what the normalized values
-          are—pmol per sample, pmol/µg protein, and so on
-        - **µM to pmol Help**: Standard amounts entered in µM before the switch to pmol come
-          with a conversion: µM × µL of standard added = pmol
-        - **Auto Mode Explained**: The statistical options say what Auto picks and what its
-          correction counts
-        - **AI Studio Shows Progress**: Answers appear as they are written, and LipidCruncher
-          Questions names each document it reads
-        - **Isotopologue Numbers Checked**: Measurement IDs without an isotopologue number (`_0`,
-          `_1`, …) are refused with a message naming them, rather than read as wrong labelled
-          atom counts
         """)
 
     with st.expander("Version 1.3 (March 30, 2026)", expanded=False):
