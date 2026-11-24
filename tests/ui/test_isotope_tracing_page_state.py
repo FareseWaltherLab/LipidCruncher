@@ -237,3 +237,21 @@ class TestGeneratedInputFiles:
         at = self._generate(AppTest.from_function(page_script, default_timeout=30).run())
         assert any("Upload the Measurement file" in i.value for i in at.info)
         assert at.sidebar.button(key="iso_run").disabled
+
+
+def test_element_table_converts_to_arrow():
+    """Regression: blanks in the Int64 mass-shift column made Streamlit's
+    Arrow conversion fail and print a traceback on every rerun."""
+    import pyarrow as pa
+    from app.services.isotope_correction.input_builder import build_input_files
+    from app.ui.isotope_tracing_page import _element_display
+    table = pd.DataFrame({
+        "Molecule": ["BMP_22:6_22:6"], "Formula": ["C50H77O10P"],
+        "Ion": ["[M-H]-"], "Labelled atoms": [6],
+    })
+    _, element_df, problems = build_input_files(table, "C", 0.99)
+    assert not problems
+    shown = _element_display(element_df)
+    pa.Table.from_pandas(shown)  # raised ArrowInvalid before the fix
+    assert (shown.loc[shown["Element"] != "C", "Tracer purity"] == "").all()
+    assert shown.loc[shown["Element"] == "C", "Tracer isotope mass shift"].item() == "1"

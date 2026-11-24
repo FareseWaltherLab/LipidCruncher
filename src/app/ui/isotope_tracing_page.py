@@ -445,11 +445,16 @@ def _display_input_builder(measurement_df: Optional[pd.DataFrame]):
         st.dataframe(molecule_df, hide_index=True, width='stretch')
         _download_input(molecule_df, "MoleculeFile.csv", "iso_dl_molecule_file")
         st.markdown("**Element file**")
-        # Blank, not "None", for the non-tracer elements, as in the CSV.
-        st.dataframe(element_df.astype(object).where(element_df.notna(), ""),
-                     hide_index=True, width='stretch')
+        st.dataframe(_element_display(element_df), hide_index=True, width='stretch')
         _download_input(element_df, "ElementFile.csv", "iso_dl_element_file")
     return molecule_df, element_df
+
+
+def _element_display(element_df: pd.DataFrame) -> pd.DataFrame:
+    """The Element file as shown: blank, not "None", for the non-tracer
+    elements, as in the CSV. All text, so Streamlit's Arrow conversion
+    doesn't fail on blanks in a number column."""
+    return element_df.astype(object).where(element_df.notna(), "").astype(str)
 
 
 def _display_results(result) -> None:
