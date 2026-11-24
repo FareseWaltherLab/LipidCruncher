@@ -34,10 +34,20 @@ def _display_lipid_panels(
         st.markdown(
             "One panel per lipid: a bar (mean ± SD) or box per condition, a dot "
             "per sample, and brackets for the pairs that differ significantly. "
-            "Each lipid is tested the way the bar chart tests a class: Level 1 "
-            "corrects across the lipids chosen here, and with 3 or more "
-            "conditions Level 2 picks out which pairs differ (Tukey's HSD, "
-            "Bonferroni, uncorrected, or Dunnett's test against a control)."
+            "Each lipid is tested the way the bar chart tests a class, and with "
+            "3 or more conditions Level 2 picks out which pairs differ (Tukey's "
+            "HSD by default, or Bonferroni, uncorrected, or Dunnett's test "
+            "against a control)."
+        )
+        st.markdown(
+            "**How this differs from the panels under the Volcano Plot:** those "
+            "compare the volcano's two conditions and show the volcano test's "
+            "own p-value for each lipid, so they always agree with its dots. "
+            "This page takes any number of conditions and runs its own tests. "
+            "Level 1 starts uncorrected, as the Volcano Plot does, so with the "
+            "same two conditions and test settings both show the same stars. "
+            "Choosing a Level 1 correction here corrects across only the lipids "
+            "you picked, so the stars then depend on the pick."
         )
 
         section_header("🎯 Data Selection")
@@ -69,6 +79,8 @@ def _display_lipid_panels(
 
         stat_config = _display_statistical_options(
             'panels', len(lipids), len(selected_conditions), selected_conditions,
+            family="the lipids picked here", default_mode="Manual",
+            default_correction="uncorrected",
         )
 
         section_header("📊 Results")
@@ -80,6 +92,15 @@ def _display_lipid_panels(
             style='box' if style == 'Box' else 'bar', palette=current_palette(),
         )
 
+        summary = result.stat_summary
+        if (summary is not None and len(lipids) < len(class_lipids)
+                and summary.test_info.get('correction', 'uncorrected') != 'uncorrected'):
+            st.warning(
+                f"The Level 1 correction covers only the {len(lipids)} "
+                f"lipid{'s' if len(lipids) != 1 else ''} picked here, out of {len(class_lipids)} in {lipid_class}. "
+                "Picking other lipids changes the correction, so adjusted "
+                "p-values and stars can change with the pick."
+            )
         st.plotly_chart(result.figure, width='content')
         _publish('lipid_panels', result.figure)
         display_export_buttons(

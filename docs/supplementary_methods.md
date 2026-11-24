@@ -274,17 +274,19 @@ Level 2 correction (pairwise comparisons within multi-group tests): Controls fal
 
 Auto mode correction behavior: When auto mode is selected, the correction methods are determined based on the analysis context:
 
-Level 1 (across lipid classes):
+Level 1 (across the tests on the page: the selected lipid classes on the abundance bar chart, each selected class's SFA, MUFA and PUFA tests on the saturation plots, and the chosen lipids on the Individual Lipid Panels):
 
-- Single class selected → Uncorrected (no between-class correction needed)
+- A single test → Uncorrected (no correction needed)
 
-- Multiple classes selected → FDR (Benjamini-Hochberg)
+- Multiple tests → FDR (Benjamini-Hochberg)
 
 Level 2 (pairwise comparisons):
 
 - Two conditions → Uncorrected (no post-hoc needed; only one comparison)
 
 - Three or more conditions → Tukey's HSD (controls FWER for any number of comparisons)
+
+Auto mode is the default on the abundance bar chart and the saturation plots. The Individual Lipid Panels start in manual mode instead (S6.6).
 
 ## S5.3 Scale-Appropriate Statistics
 
@@ -365,7 +367,9 @@ The layout is fully customizable: users can toggle individual classes via a mult
 
 ## S6.6 Individual Lipid Panels
 
-The Individual Lipid Panels analysis draws one panel per chosen lipid for any number of conditions: a bar (mean ± SD) or a box per condition, with a dot for each sample. Each lipid is tested exactly as the abundance bar chart tests a lipid class (S5), with the lipid's concentrations in place of the class totals: the omnibus test across the chosen conditions (Welch's t-test or Mann-Whitney U for two, Alexander-Govern ANOVA or Kruskal-Wallis for three or more), Level 1 correction across the chosen lipids, and, with three or more conditions, the Level 2 post-hoc comparisons (Tukey's HSD, Bonferroni, uncorrected, or Dunnett's test against a chosen control) for lipids whose omnibus test is significant. Zero values are replaced with the dataset-wide value of S2, as in every log-transformed analysis. With two conditions each panel carries one bracket marked with its significance, or "ns". With three or more, brackets mark only the pairs the post-hoc test finds significant. Significance is marked * p < 0.05, ** p < 0.01, *** p < 0.001 and **** p < 0.0001, on adjusted p-values when a correction applies; the same scale is used on every plot.
+The Individual Lipid Panels analysis draws one panel per chosen lipid for any number of conditions: a bar (mean ± SD) or a box per condition, with a dot for each sample. Each lipid is tested exactly as the abundance bar chart tests a lipid class (S5), with the lipid's concentrations in place of the class totals: the omnibus test across the chosen conditions (Welch's t-test or Mann-Whitney U for two, Alexander-Govern ANOVA or Kruskal-Wallis for three or more), Level 1 correction across the chosen lipids (none by default, see below), and, with three or more conditions, the Level 2 post-hoc comparisons (Tukey's HSD, Bonferroni, uncorrected, or Dunnett's test against a chosen control) for lipids whose omnibus test is significant. Zero values are replaced with the dataset-wide value of S2, as in every log-transformed analysis. With two conditions each panel carries one bracket marked with its significance, or "ns". With three or more, brackets mark only the pairs the post-hoc test finds significant. Significance is marked * p < 0.05, ** p < 0.01, *** p < 0.001 and **** p < 0.0001, on adjusted p-values when a correction applies; the same scale is used on every plot.
+
+The analysis starts in manual mode with Level 1 uncorrected and Level 2 Tukey's HSD. Uncorrected Level 1 matches the volcano plot's default, so with the same two conditions and test settings a lipid's p-value is the volcano plot's raw p-value for it, and the individual lipid panels on the volcano plot page show the same significance. It also keeps a lipid's significance independent of which other lipids are chosen. Level 2 corrects only across the comparisons within one lipid, so it does not depend on that choice either. When a Level 1 correction is chosen, it covers only the chosen lipids, so a lipid's adjusted p-value changes with the choice, and the analysis warns about this when fewer than all lipids of the class are chosen.
 
 # S7. Best Practices for Experimental Design
 

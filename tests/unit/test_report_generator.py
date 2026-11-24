@@ -647,8 +647,8 @@ class TestEveryAnalysisPage:
             ('volcano', 'Volcano Plot', 'landscape', False),
             ('conc_vs_fc', 'Concentration vs. Fold Change', 'landscape', False),
             ('lipid_distribution', 'Individual Lipid Concentration Distribution', 'landscape', False),
-            ('heatmap', 'Lipidomic Heatmap', 'heatmap', None),
             ('lipid_panels', 'Individual Lipid Panels', 'landscape', False),
+            ('heatmap', 'Lipidomic Heatmap', 'heatmap', None),
         ]
 
     def test_cover_entries(self):
@@ -663,8 +663,8 @@ class TestEveryAnalysisPage:
             "Volcano Plot Analysis",
             "Concentration vs. Fold Change",
             "Individual Lipid Concentration Distribution",
-            "Lipidomic Heatmap",
             "Individual Lipid Panels",
+            "Lipidomic Heatmap",
         ]
 
 

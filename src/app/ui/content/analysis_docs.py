@@ -64,10 +64,12 @@ After a significant omnibus test (ANOVA/Kruskal-Wallis), post-hoc tests identify
 Don't want to think about statistics? Auto mode applies field-standard choices:
 
 - **Test type:** Parametric (Welch's) with log10 transformation
-- **Level 1:** Uncorrected for single class → FDR for multiple classes
+- **Level 1:** Uncorrected for a single test → FDR across the tests on the page (the selected classes; each class's SFA, MUFA and PUFA on Saturation Plots; the picked lipids on Individual Lipid Panels)
 - **Level 2:** Uncorrected for ≤2 conditions → Tukey's HSD for 3+ conditions
 
-These defaults balance discovery power with false positive control for typical lipidomics experiments.
+These defaults balance discovery power with false positive control for typical lipidomics experiments. Auto is the default on the Bar Chart and Saturation Plots.
+
+**Individual Lipid Panels start in Manual instead,** with Level 1 uncorrected and Level 2 Tukey's HSD. Uncorrected Level 1 matches the Volcano Plot's default, so with the same two conditions a lipid gets the same stars on both pages, and its stars don't change with which other lipids you pick. If you choose a Level 1 correction there, it counts only the lipids you picked.
 
 ---
 

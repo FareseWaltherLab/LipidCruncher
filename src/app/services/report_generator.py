@@ -71,8 +71,8 @@ ANALYSIS_PAGES: Tuple[AnalysisPage, ...] = (
                  "Concentration vs. Fold Change"),
     AnalysisPage('lipid_distribution', "Individual Lipid Concentration Distribution",
                  "Individual Lipid Concentration Distribution"),
-    AnalysisPage('heatmap', "Lipidomic Heatmap", "Lipidomic Heatmap", None),
     AnalysisPage('lipid_panels', "Individual Lipid Panels", "Individual Lipid Panels"),
+    AnalysisPage('heatmap', "Lipidomic Heatmap", "Lipidomic Heatmap", None),
 )
 
 
