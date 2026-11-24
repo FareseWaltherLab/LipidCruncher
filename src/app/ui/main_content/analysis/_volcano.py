@@ -379,6 +379,9 @@ def _display_individual_lipid_analysis(
             "Lipid Class:",
             classes_in_data,
             key='volcano_detail_class',
+            # The old class's picks aren't options of the new class, so drop
+            # them and let the default (first 3 of the new class) apply.
+            on_change=lambda: st.session_state.pop('volcano_detail_lipids', None),
         )
     with col2:
         class_lipids = vdf[vdf['ClassKey'] == detail_class]['LipidMolec'].tolist()
