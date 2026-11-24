@@ -51,8 +51,8 @@ ANALYSIS_OPTIONS = [
     "Class Level Breakdown - Fatty Acid Composition Heatmaps",
     "Class Level Breakdown - Pathway Visualization (requires detailed fatty acid composition)",
     "Species Level Breakdown - Volcano Plot",
-    "Species Level Breakdown - Lipidomic Heatmap",
     "Species Level Breakdown - Individual Lipid Panels",
+    "Species Level Breakdown - Lipidomic Heatmap",
 ]
 
 # Dispatch table: analysis option → rendering function.
@@ -65,8 +65,8 @@ _ANALYSIS_DISPATCH = {
     ANALYSIS_OPTIONS[4]: lambda df, exp, bqc: _display_fach_heatmaps(df, exp),
     ANALYSIS_OPTIONS[5]: lambda df, exp, bqc: _display_pathway_viz(df, exp),
     ANALYSIS_OPTIONS[6]: lambda df, exp, bqc: _display_volcano_plot(df, exp),
-    ANALYSIS_OPTIONS[7]: lambda df, exp, bqc: _display_lipidomic_heatmap(df, exp),
-    ANALYSIS_OPTIONS[8]: lambda df, exp, bqc: _display_lipid_panels(df, exp, bqc),
+    ANALYSIS_OPTIONS[7]: lambda df, exp, bqc: _display_lipid_panels(df, exp, bqc),
+    ANALYSIS_OPTIONS[8]: lambda df, exp, bqc: _display_lipidomic_heatmap(df, exp),
 }
 
 

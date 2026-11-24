@@ -370,6 +370,14 @@ def _display_individual_lipid_analysis(
 
     st.markdown("---")
     st.markdown("#### Individual Lipid Analysis")
+    st.markdown(
+        "Each panel shows the volcano test's own p-value for that lipid (same "
+        "test and correction as the plot above), so its bracket always agrees "
+        "with the lipid's dot. For 3 or more conditions, or Level 2 post-hoc "
+        "tests such as Tukey or Dunnett, use **Species Level Breakdown - "
+        "Individual Lipid Panels**: with the same two conditions and its "
+        "default settings it shows the same stars."
+    )
 
     classes_in_data = sorted(vdf['ClassKey'].unique().tolist())
 

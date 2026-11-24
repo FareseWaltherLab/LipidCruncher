@@ -113,6 +113,16 @@ class TestBarChartUI:
         text_values = [t.value for t in at.text]
         assert any("analysis_rendered:ok" in v for v in text_values)
 
+    def test_stats_default_to_auto_and_say_what_auto_picks(self, analysis_generic_app):
+        """The bar chart keeps Auto as its default; the caption says what Auto
+        chose and what Level 1 corrects across."""
+        at = analysis_generic_app
+        assert at.radio(key='bar_stats_mode').value == "Auto"
+        assert any("FDR (Benjamini-Hochberg) across the selected classes" in c.value
+                   for c in at.caption)
+        at.radio(key='bar_stats_mode').set_value("Manual").run()
+        assert at.selectbox(key='bar_correction').value == "fdr_bh"
+
     def test_bar_conditions_multiselect(self, analysis_generic_app):
         """Bar chart condition multiselect has both conditions selected by default."""
         at = analysis_generic_app
@@ -282,6 +292,12 @@ class TestSaturationUI:
         """Saturation section renders without exceptions."""
         at = self._switch_to_saturation(analysis_generic_app)
         assert not at.exception
+
+    def test_saturation_stats_default_to_auto(self, analysis_generic_app):
+        at = self._switch_to_saturation(analysis_generic_app)
+        assert at.radio(key='sat_stats_mode').value == "Auto"
+        assert any("the SFA, MUFA and PUFA tests of the selected classes" in c.value
+                   for c in at.caption)
 
     def test_saturation_consolidated_warning(self, analysis_generic_app):
         """Consolidated lipid names trigger FA compatibility info message."""
@@ -1449,6 +1465,36 @@ class TestLipidPanelsUI:
         assert not at.exception
         assert any("lipid" in w.value.lower() for w in at.warning)
         assert 'lipid_panels' not in at.session_state['analysis_all_plots']
+
+    def test_defaults_to_manual_with_level_1_uncorrected(self, panels_app):
+        """Level 1 starts uncorrected, as on the Volcano Plot, so the stars
+        match the volcano's panels and don't move with the pick; Level 2
+        keeps Tukey."""
+        at = panels_app
+        assert at.radio(key='panels_stats_mode').value == "Manual"
+        assert at.selectbox(key='panels_correction').value == "uncorrected"
+        assert at.selectbox(key='panels_posthoc').value == "tukey"
+        summary = at.session_state['analysis_statistics']['Individual lipid panels'].summary
+        assert summary.test_info['correction'] == 'uncorrected'
+        assert not any("Level 1 correction covers" in w.value for w in at.warning)
+
+    def test_a_level_1_correction_warns_it_counts_only_the_pick(self, panels_app):
+        at = panels_app
+        at.selectbox(key='panels_correction').set_value("fdr_bh").run()
+        assert not at.exception
+        assert any("covers only the 3 lipids picked here" in w.value for w in at.warning)
+
+    def test_auto_says_what_it_picks(self, panels_app):
+        at = panels_app
+        at.radio(key='panels_stats_mode').set_value("Auto").run()
+        assert not at.exception
+        assert any("FDR (Benjamini-Hochberg) across the lipids picked here" in c.value
+                   for c in at.caption)
+
+    def test_comes_right_after_the_volcano_plot(self, panels_app):
+        options = panels_app.radio(key='analysis_radio').options
+        volcano = options.index("Species Level Breakdown - Volcano Plot")
+        assert options[volcano + 1] == "Species Level Breakdown - Individual Lipid Panels"
 
 
 # =============================================================================

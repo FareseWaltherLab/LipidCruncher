@@ -142,6 +142,9 @@ def _display_statistical_options(
     n_classes: int,
     n_conditions: int,
     conditions: Sequence[str] = (),
+    family: str = "the selected classes",
+    default_mode: str = "Auto",
+    default_correction: str = "fdr_bh",
 ) -> StatisticalTestConfig:
     """Display statistical options panel (Auto/Manual mode).
 
@@ -151,22 +154,36 @@ def _display_statistical_options(
         n_conditions: Number of selected conditions.
         conditions: The selected conditions, offered as the control when
             Level 2 is Dunnett's test.
+        family: What Level 1 corrects across, for the Auto description.
+        default_mode: "Auto" or "Manual", the mode a new page starts in.
+        default_correction: The Level 1 correction Manual starts with.
 
     Returns:
         Configured StatisticalTestConfig.
     """
     section_header("⚙️ Statistical Options")
 
+    modes = ["Manual", "Auto"]
     mode = st.radio(
         "Select Analysis Mode:",
-        ["Manual", "Auto"],
-        index=1,
+        modes,
+        index=modes.index(default_mode),
         horizontal=True,
         key=f'{key_prefix}_stats_mode',
+        help="Auto picks the test and both corrections from how many tests "
+             "and conditions there are (described below when selected). "
+             "Manual lets you choose each one.",
     )
 
     auto_transform = True
     if mode == "Auto":
+        st.caption(
+            "Auto: Welch's t-test for 2 conditions, the Alexander-Govern test "
+            f"for 3 or more. Level 1: FDR (Benjamini-Hochberg) across {family}, "
+            "or uncorrected when there is only one test. Level 2, with 3 or "
+            "more conditions: Tukey's HSD, run only where the overall test is "
+            "significant."
+        )
         auto_transform = st.checkbox(
             "Auto-transform data (log10)",
             value=True,
@@ -175,6 +192,7 @@ def _display_statistical_options(
         return StatisticalTestConfig.create_auto(auto_transform=auto_transform)
 
     # Manual mode
+    unit = 'Lipid' if key_prefix == 'panels' else 'Class'
     col1, col2 = st.columns(2)
     with col1:
         test_type = st.selectbox(
@@ -183,15 +201,16 @@ def _display_statistical_options(
             index=0,
             key=f'{key_prefix}_test_type',
         )
+        corrections = ["uncorrected", "fdr_bh", "bonferroni"]
         correction = st.selectbox(
-            "Between-Class Correction (Level 1)",
-            ["uncorrected", "fdr_bh", "bonferroni"],
-            index=1,
+            f"Between-{unit} Correction (Level 1)",
+            corrections,
+            index=corrections.index(default_correction),
             key=f'{key_prefix}_correction',
         )
     with col2:
         posthoc = st.selectbox(
-            "Within-Class Correction (Level 2)",
+            f"Within-{unit} Correction (Level 2)",
             ["uncorrected", "tukey", "bonferroni", "dunnett"],
             index=1,
             key=f'{key_prefix}_posthoc',

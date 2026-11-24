@@ -57,6 +57,7 @@ def _display_saturation_plots(
         stat_config = _display_statistical_options(
             'sat', len(selected_classes), len(selected_conditions),
             selected_conditions,
+            family="the SFA, MUFA and PUFA tests of the selected classes",
         )
 
         section_header("📊 Results")

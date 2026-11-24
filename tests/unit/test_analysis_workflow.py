@@ -2307,3 +2307,25 @@ class TestRunLipidPanels:
         alone = StatisticalTestingService.run_lipid_level_tests(
             df.iloc[:1], exp_3x3, conds, ['PE 18:0_20:4'], config)
         assert with_tg.results['PE 18:0_20:4'].p_value != alone.results['PE 18:0_20:4'].p_value
+
+    def test_default_p_values_match_the_volcano(self, exp_3x3):
+        """With two conditions and the page's default (Manual, Level 1
+        uncorrected), each lipid's p-value is the volcano's raw p for it, so
+        the two pages' panels show the same stars."""
+        df = pd.DataFrame({
+            'LipidMolec': ['PE 18:0_20:4', 'PE 16:0_18:1', 'TG 50:1'],
+            'ClassKey': ['PE', 'PE', 'TG'],
+            **{f'concentration[s{i}]': [a, b, 0.5]
+               for i, (a, b) in enumerate(
+                   [(0, 50), (12, 52), (11, 49), (30, 60), (31, 66), (29, 58),
+                    (5, 5), (5, 5), (5, 5)], start=1)},
+        })
+        lipids = ['PE 18:0_20:4', 'PE 16:0_18:1']
+        config = StatisticalTestConfig.create_manual(correction_method='uncorrected')
+        panels = self._run(df, exp_3x3, ['Control', 'Treatment'], config, lipids)
+        volcano = AnalysisWorkflow.run_volcano(
+            df, exp_3x3, 'Control', 'Treatment', ['PE'], config)
+        vdf = volcano.volcano_data.volcano_df.set_index('LipidMolec')
+        for lipid in lipids:
+            assert panels.stat_summary.results[lipid].p_value == pytest.approx(
+                vdf.loc[lipid, 'pValue'])
